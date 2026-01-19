@@ -43,13 +43,13 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
         return (
             <div className="flex items-center gap-4 bg-neon-void/90 border border-neon-blue/50 p-4 rounded-lg shadow-[0_0_15px_rgba(0,243,255,0.3)] animate-pulse">
                 <span className="text-neon-blue font-mono text-sm tracking-wider animate-pulse">
-                    WAITING FOR APPROVAL...
+                    等待批准中...
                 </span>
                 <button
                     onClick={() => moves.cancelRequest()}
                     className="px-3 py-1 bg-transparent border border-white/20 hover:bg-white/10 text-xs text-white/70 rounded transition-colors"
                 >
-                    CANCEL
+                    取消
                 </button>
             </div>
         );
@@ -61,7 +61,7 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
                 <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-neon-pink animate-ping"></span>
                     <span className="text-white font-bold text-sm tracking-wide">
-                        OPPONENT REQUESTS UNDO
+                        对手请求撤销
                     </span>
                 </div>
                 <div className="flex gap-2">
@@ -69,13 +69,13 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
                         onClick={() => moves.approveUndo()}
                         className="px-4 py-2 bg-neon-blue/20 hover:bg-neon-blue hover:text-black border border-neon-blue text-neon-blue rounded text-xs font-bold tracking-widest transition-all"
                     >
-                        ACCEPT
+                        接受
                     </button>
                     <button
                         onClick={() => moves.rejectUndo()}
                         className="px-4 py-2 bg-neon-pink/20 hover:bg-neon-pink hover:text-white border border-neon-pink text-neon-pink rounded text-xs font-bold tracking-widest transition-all"
                     >
-                        REJECT
+                        拒绝
                     </button>
                 </div>
             </div>
@@ -93,7 +93,7 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
                 <div className="absolute inset-0 bg-neon-blue/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
                 <span className="relative flex items-center gap-2 text-white/60 group-hover:text-neon-blue font-mono text-xs tracking-[0.2em] transition-colors">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
-                    UNDO_OP
+                    撤销操作
                 </span>
             </button>
         );

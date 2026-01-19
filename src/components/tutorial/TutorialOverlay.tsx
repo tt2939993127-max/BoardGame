@@ -68,6 +68,29 @@ export const TutorialOverlay: React.FC = () => {
         maskPath += ` M${left - p} ${top - p} v${(bottom - top) + p * 2} h${(right - left) + p * 2} v-${(bottom - top) + p * 2} z`;
     }
 
+    // Intelligent Positioning Logic
+    const getTooltipStyle = () => {
+        if (!targetRect) {
+            // Default: Bottom Center (to avoid obscuring the board in the middle)
+            return {
+                bottom: '10%',
+                left: '50%',
+                transform: 'translateX(-50%)'
+            };
+        }
+
+        // Check available space below the target
+        const spaceBelow = window.innerHeight - targetRect.bottom;
+        const placeAbove = spaceBelow < 250; // Threshold for tooltip height
+
+        return {
+            top: placeAbove ? 'auto' : targetRect.bottom + 20,
+            bottom: placeAbove ? (window.innerHeight - targetRect.top) + 20 : 'auto',
+            left: targetRect.left + (targetRect.width / 2),
+            transform: 'translateX(-50%)',
+        };
+    };
+
     return (
         <div className="fixed inset-0 z-50 pointer-events-none">
             {/* Mask Layer - SVG allows click-through on the hole */}
@@ -84,34 +107,37 @@ export const TutorialOverlay: React.FC = () => {
                 <>
                     <div
                         className="absolute left-0 top-0 w-full pointer-events-auto"
+                        data-tutorial-mask="top"
                         style={{ height: hole.top, backgroundColor: 'transparent' }}
                     />
                     <div
                         className="absolute left-0 pointer-events-auto"
+                        data-tutorial-mask="left"
                         style={{ top: hole.top, height: hole.bottom - hole.top, width: hole.left, backgroundColor: 'transparent' }}
                     />
                     <div
                         className="absolute pointer-events-auto"
+                        data-tutorial-mask="right"
                         style={{ top: hole.top, left: hole.right, height: hole.bottom - hole.top, width: viewportWidth - hole.right, backgroundColor: 'transparent' }}
                     />
                     <div
                         className="absolute left-0 w-full pointer-events-auto"
+                        data-tutorial-mask="bottom"
                         style={{ top: hole.bottom, bottom: 0, backgroundColor: 'transparent' }}
                     />
                 </>
             ) : (
-                <div className="absolute inset-0 pointer-events-auto" style={{ backgroundColor: 'transparent' }} />
+                <div
+                    className="absolute inset-0 pointer-events-auto"
+                    data-tutorial-mask="full"
+                    style={{ backgroundColor: 'transparent' }}
+                />
             )}
 
             {/* Tooltip / Dialog Layer */}
             <div
                 className="absolute pointer-events-auto transition-all duration-300 ease-out"
-                style={{
-                    top: targetRect ? targetRect.bottom + 20 : '50%',
-                    left: targetRect ? targetRect.left + (targetRect.width / 2) : '50%',
-                    transform: targetRect ? 'translateX(-50%)' : 'translate(-50%, -50%)',
-                    // Basic boundary checking could be added here
-                }}
+                style={getTooltipStyle()}
             >
                 <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-80 border border-gray-100 animate-bounce-in">
                     <div className="mb-4 text-gray-800 font-medium text-lg leading-relaxed">

@@ -1,32 +1,21 @@
-import { Client } from 'boardgame.io/react';
-import { TicTacToe } from './games/default/game';
-import { TicTacToeBoard } from './games/default/Board';
-import { DebugProvider, useDebug } from './contexts/DebugContext';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { DebugProvider } from './contexts/DebugContext';
 import { TutorialProvider } from './contexts/TutorialContext';
-import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
-
-const GameClient = Client({
-  game: TicTacToe,
-  board: TicTacToeBoard,
-  debug: false, // 隐藏右侧原生调试面板，使用自定义面板
-});
-
-const GameRoot = () => {
-  const { playerID } = useDebug();
-  return (
-    <>
-      {/* Pass playerID to Client to control the view */}
-      <GameClient playerID={playerID ?? undefined} />
-    </>
-  );
-};
+import { Home } from './pages/Home';
+import { MatchRoom } from './pages/MatchRoom';
 
 const App = () => {
   return (
     <DebugProvider>
       <TutorialProvider>
-        <GameRoot />
-        <TutorialOverlay />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/games/:gameId/match/:matchId" element={<MatchRoom />} />
+            {/* Fallback tutorial route if needed, or mapped to match */}
+            <Route path="/games/:gameId/tutorial" element={<MatchRoom />} />
+          </Routes>
+        </BrowserRouter>
       </TutorialProvider>
     </DebugProvider>
   );

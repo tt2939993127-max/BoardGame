@@ -392,6 +392,13 @@ Only add complexity with:
 - Reference specs as `specs/auth/spec.md`
 - Link related changes and PRs
 
+### 项目经验复盘：教程遮罩 / 点击 / 回合（boardgame.io）
+- **先证伪遮罩**：优先用 `document.elementFromPoint` / DevTools 命中测试确认点击落点，区分“UI 遮挡”与“业务逻辑拦截”，避免盲目改 `z-index` / `pointer-events`。
+- **`gameover` 不等于重置**：`events.endGame()` 会设置 `ctx.gameover` 并导致落子长期被拦截；需要清空对局时优先用 `reset()`（或重建 match），不要用 `endGame()` 充当 reset。
+- **教程建议用 hotseat**：教程包含 AI 自动落子或跨玩家步骤时，Client 不传 `playerID`（hotseat），避免 `not-your-turn` 阻断交互。
+- **交互规则单一来源**：`cursor/hover` 的 `isClickable` 判定必须与 `onClick` 共享同一套条件（回合、占用、gameover、教程步骤），避免“能点但光标禁用”。
+- **步骤推进必须显式**：教程按状态机设计，仅在“用户动作完成 / AI 动作完成 / 点击下一步”时推进；AI 定时器必须有 cleanup，且每步只执行一次（用 ref/标记防重复触发）。
+
 ### Capability Naming
 - Use verb-noun: `user-auth`, `payment-capture`
 - Single purpose per capability

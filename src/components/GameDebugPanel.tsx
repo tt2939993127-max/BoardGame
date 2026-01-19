@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDebug } from '../contexts/DebugContext';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 interface DebugPanelProps {
     G: any;
     ctx: any;
@@ -48,7 +49,7 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
             {/* Floating Toggle */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="fixed bottom-4 right-4 z-[9999] w-12 h-12 bg-gray-900/90 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-all border border-gray-700 hover:scale-105 active:scale-95 text-xl"
+                className="fixed bottom-24 right-4 z-[9999] w-12 h-12 bg-gray-900 text-white rounded-md shadow-lg flex items-center justify-center hover:bg-gray-800 transition-all border border-gray-700 hover:scale-105 active:scale-95 text-xl"
                 title="开发调试"
             >
                 {isOpen ? '✕' : '🛠️'}
@@ -56,9 +57,9 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
 
             {/* Main Panel */}
             {isOpen && (
-                <div className="fixed top-20 right-4 bottom-20 w-96 bg-white/95 backdrop-blur-md shadow-2xl rounded-xl border border-gray-200 z-[9998] flex flex-col overflow-hidden font-mono text-sm ring-1 ring-black/5">
+                <div className="fixed top-20 right-4 bottom-24 w-96 bg-white shadow-2xl rounded-xl border border-gray-200 z-[9998] flex flex-col overflow-hidden font-mono text-sm ring-1 ring-black/5">
                     {/* Header */}
-                    <div className="bg-gray-100/80 p-3 border-b border-gray-200 flex justify-between items-center backdrop-blur">
+                    <div className="bg-gray-100 p-3 border-b border-gray-200 flex justify-between items-center">
                         <h3 className="font-bold text-gray-700 flex items-center gap-2">
                             <span>🛠️ 调试控制台</span>
                         </h3>
@@ -69,8 +70,8 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                     key={String(pid)}
                                     onClick={() => setPlayerID(pid as string | null)}
                                     className={`px-2 py-0.5 text-xs rounded transition-colors font-medium ${String(playerID) === String(pid)
-                                            ? 'bg-blue-600 text-white shadow-sm'
-                                            : 'hover:bg-gray-100 text-gray-600'
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'hover:bg-gray-100 text-gray-600'
                                         }`}
                                 >
                                     {pid === null ? '旁观' : `P${pid}`}

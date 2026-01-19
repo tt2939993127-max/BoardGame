@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 // --- Types ---
 export interface TutorialStep {
@@ -24,7 +24,7 @@ interface TutorialContextType {
     isActive: boolean;
     currentStepIndex: number;
     currentStep: TutorialStep | null;
-    startTutorial: (manifest: TutorialManifest) => void;
+    startTutorial: (manifest?: TutorialManifest) => void;
     nextStep: () => void;
     closeTutorial: () => void;
     // Callback to execute game move (provided by Board component)
@@ -39,21 +39,38 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [manifest, setManifest] = useState<TutorialManifest | null>(null);
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [moveCallback, setMoveCallback] = useState<((cellId: number) => void) | null>(null);
+    const executedAiStepsRef = useRef<Set<number>>(new Set());
 
     const registerMoveCallback = useCallback((callback: (cellId: number) => void) => {
         setMoveCallback(() => callback);
     }, []);
 
-    const startTutorial = useCallback((newManifest: TutorialManifest) => {
-        setManifest(newManifest);
+
+    // --- Default TicTacToe Manifest (Quick Fix) ---
+    // In a real app, we'd fetch this based on gameId, but for now we hardcode it here
+    // or import it. Let's define a simple default so the button works.
+    const DEFAULT_MANIFEST: TutorialManifest = {
+        id: 'tictactoe-basics',
+        steps: [
+            { id: 'welcome', content: 'Welcome to Tic-Tac-Toe! The goal is to get 3 in a row.', position: 'center' },
+            { id: 'grid', content: 'This is the game grid. Click any empty cell to place your mark (X).', highlightTarget: 'board-grid', position: 'top', requireAction: false },
+            // More steps would go here
+        ]
+    };
+
+    const startTutorial = useCallback((newManifest?: TutorialManifest) => {
+        setManifest(newManifest || DEFAULT_MANIFEST);
         setCurrentStepIndex(0);
+        executedAiStepsRef.current = new Set();
         setIsActive(true);
     }, []);
+
 
     const closeTutorial = useCallback(() => {
         setIsActive(false);
         setManifest(null);
         setCurrentStepIndex(0);
+        executedAiStepsRef.current = new Set();
     }, []);
 
     const nextStep = useCallback(() => {
@@ -71,21 +88,27 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!isActive || !manifest) return;
 
         const currentStep = manifest.steps[currentStepIndex];
-        console.log(`[Tutorial] Step ${currentStepIndex}:`, currentStep);
 
         if (currentStep.aiMove !== undefined && moveCallback) {
-            // Delay AI move slightly for better UX
-            const timer = setTimeout(() => {
-                console.log(`[Tutorial AI] Auto-clicking cell ${currentStep.aiMove}`);
+            if (executedAiStepsRef.current.has(currentStepIndex)) return;
+            executedAiStepsRef.current.add(currentStepIndex);
+
+            let advanceTimer: number | undefined;
+
+            const moveTimer = window.setTimeout(() => {
                 moveCallback(currentStep.aiMove!);
-                // Auto-advance after AI move
-                setTimeout(() => {
+
+                advanceTimer = window.setTimeout(() => {
                     if (currentStepIndex < manifest.steps.length - 1) {
-                        setCurrentStepIndex(prev => prev + 1);
+                        setCurrentStepIndex(prev => (prev === currentStepIndex ? prev + 1 : prev));
                     }
                 }, 500);
             }, 1000);
-            return () => clearTimeout(timer);
+
+            return () => {
+                window.clearTimeout(moveTimer);
+                if (advanceTimer !== undefined) window.clearTimeout(advanceTimer);
+            };
         }
     }, [isActive, currentStepIndex, manifest, moveCallback]);
 
