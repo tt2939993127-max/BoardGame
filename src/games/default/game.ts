@@ -1,27 +1,78 @@
-import type { Game } from 'boardgame.io';
+import type { Game, Move } from 'boardgame.io';
 import { INVALID_MOVE } from 'boardgame.io/core';
+import { UndoManager, type UndoAwareState } from '../common/UndoManager';
 
 // 1. Define State (G)
-export interface TicTacToeState {
+export interface TicTacToeState extends UndoAwareState {
     cells: (string | null)[];
 }
 
 // 2. Define Moves
+const clickCell: Move<TicTacToeState> = ({ G, playerID, events }, id: number) => {
+    if (G.cells[id] !== null) {
+        return INVALID_MOVE;
+    }
+
+    // Save state before modification
+    UndoManager.saveSnapshot(G);
+
+    G.cells[id] = playerID;
+
+    // Explicitly end turn to ensure consistent stage transition
+    events.endTurn();
+};
+
+const requestUndo: Move<TicTacToeState> = ({ G, playerID, ctx }) => {
+    // Only allow if history exists
+    if (G.sys.history.length === 0) return INVALID_MOVE;
+
+    // Prevent duplicate requests
+    if (G.sys.undoRequest) return INVALID_MOVE;
+
+    UndoManager.requestUndo(G, playerID, ctx.turn);
+};
+
+const approveUndo: Move<TicTacToeState> = ({ G, events }) => {
+    if (!G.sys.undoRequest) return INVALID_MOVE;
+
+    const requester = G.sys.undoRequest.requester;
+
+    if (UndoManager.restoreSnapshot(G)) {
+        UndoManager.clearRequest(G);
+        // Pass control back to the player who requested (who made the move)
+        events.endTurn({ next: requester });
+    }
+};
+
+const rejectUndo: Move<TicTacToeState> = ({ G }) => {
+    UndoManager.clearRequest(G);
+};
+
+const cancelRequest: Move<TicTacToeState> = ({ G, playerID }) => {
+    if (G.sys.undoRequest?.requester === playerID) {
+        UndoManager.clearRequest(G);
+    }
+};
+
 export const TicTacToe: Game<TicTacToeState> = {
-    setup: () => ({ cells: Array(9).fill(null) }),
+    setup: () => ({
+        cells: Array(9).fill(null),
+        sys: UndoManager.createInitialState()
+    }),
 
     turn: {
-        minMoves: 1,
-        maxMoves: 1,
-    },
-
-    moves: {
-        clickCell: ({ G, playerID }, id: number) => {
-            if (G.cells[id] !== null) {
-                return INVALID_MOVE;
-            }
-            G.cells[id] = playerID;
+        activePlayers: {
+            currentPlayer: 'play',
+            others: 'wait'
         },
+        stages: {
+            play: {
+                moves: { clickCell, approveUndo, rejectUndo }
+            },
+            wait: {
+                moves: { requestUndo, cancelRequest }
+            }
+        }
     },
 
     endIf: ({ G, ctx }) => {
@@ -34,7 +85,7 @@ export const TicTacToe: Game<TicTacToeState> = {
     },
 };
 
-// Helper functions (Pure Logic)
+// Helper functions
 function IsVictory(cells: (string | null)[]) {
     const positions = [
         [0, 1, 2], [3, 4, 5], [6, 7, 8],

@@ -2,6 +2,8 @@ import { Client } from 'boardgame.io/react';
 import { TicTacToe } from './games/default/game';
 import { TicTacToeBoard } from './games/default/Board';
 import { DebugProvider, useDebug } from './contexts/DebugContext';
+import { TutorialProvider } from './contexts/TutorialContext';
+import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
 
 const GameClient = Client({
   game: TicTacToe,
@@ -14,7 +16,7 @@ const GameRoot = () => {
   return (
     <>
       {/* Pass playerID to Client to control the view */}
-      <GameClient playerID={playerID} />
+      <GameClient playerID={playerID ?? undefined} />
     </>
   );
 };
@@ -22,7 +24,10 @@ const GameRoot = () => {
 const App = () => {
   return (
     <DebugProvider>
-      <GameRoot />
+      <TutorialProvider>
+        <GameRoot />
+        <TutorialOverlay />
+      </TutorialProvider>
     </DebugProvider>
   );
 };
