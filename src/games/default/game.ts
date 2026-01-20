@@ -55,6 +55,7 @@ const cancelRequest: Move<TicTacToeState> = ({ G, playerID }) => {
 };
 
 export const TicTacToe: Game<TicTacToeState> = {
+    name: 'TicTacToe',
     setup: () => ({
         cells: Array(9).fill(null),
         sys: UndoManager.createInitialState()

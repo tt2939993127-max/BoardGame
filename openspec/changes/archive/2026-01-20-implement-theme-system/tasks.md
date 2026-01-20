@@ -1,0 +1,21 @@
+# Tasks
+
+- [x] Setup Theme Context & Assets <!-- id: 0 -->
+    - [x] Add Google Fonts (Press Start 2P, Crimson Text) to `index.html`
+    - [x] Create `ThemeContext.tsx` with persistence
+    - [x] Update `index.css` with `[data-theme]` variables and font families
+- [x] Implement Theme Switcher UI <!-- id: 1 -->
+    - [x] Create `ThemeToggle` component
+    - [x] Add to `Home` header or fixed position
+- [x] Implement Retro Theme <!-- id: 2 -->
+    - [x] Create `HomeHeroRetro` component (Pixel art style)
+    - [x] Style overrides for `Retro` mode in `index.css`
+- [x] Implement Classic Theme <!-- id: 3 -->
+    - [x] Create `HomeHeroClassic` component (Paper style)
+    - [x] Style overrides for `Classic` mode in `index.css`
+- [x] Update GameCard & Layout <!-- id: 4 -->
+    - [x] Refactor `HomeHero` to render specific hero based on context
+    - [x] Update `GameCard` to consume theme variables/styles
+- [x] Final Polish & Verification <!-- id: 5 -->
+    - [x] Verify persistence on reload
+    - [x] Check mobile responsiveness of switcher

@@ -7,43 +7,30 @@
     --color-neon-void: #0B0E14;
     --color-neon-grid: #1A1F2B;
 
+    --font-heading: 'Inter', sans-serif;
+    --font-pixel: 'Press Start 2P', cursive;
+    --font-serif: 'Crimson Text', serif;
+
     --shadow-neon-blue: 0 0 10px rgba(0, 243, 255, 0.5), 0 0 20px rgba(0, 243, 255, 0.3);
     --shadow-neon-pink: 0 0 10px rgba(188, 19, 254, 0.5), 0 0 20px rgba(188, 19, 254, 0.3);
 }
 
 @layer base {
     body {
-        @apply bg-neon-void text-white;
+        background-color: #f3f0e6;
+        color: #433422;
+        font-family: var(--font-serif);
         margin: 0;
     }
 }
 
-@keyframes glitch {
-    0% {
-        transform: translate(0);
-    }
-
-    20% {
-        transform: translate(-2px, 2px);
-    }
-
-    40% {
-        transform: translate(-2px, -2px);
-    }
-
-    60% {
-        transform: translate(2px, 2px);
-    }
-
-    80% {
-        transform: translate(2px, -2px);
-    }
-
-    100% {
-        transform: translate(0);
-    }
+/* Scrollbars - Classic style */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
 }
 
-.animate-glitch {
-    animation: glitch 0.3s cubic-bezier(.25, .46, .45, .94) both infinite;
+::-webkit-scrollbar-thumb {
+    background: #8c7b64;
+    border-radius: 2px;
 }

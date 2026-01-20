@@ -13,6 +13,9 @@ export interface TutorialStep {
 
     // AI opponent's automatic move (cell index). When set, AI will execute this move after a delay.
     aiMove?: number;
+
+    // Whether to show a dark overlay mask for this step (default: false/transparent)
+    showMask?: boolean;
 }
 
 export interface TutorialManifest {

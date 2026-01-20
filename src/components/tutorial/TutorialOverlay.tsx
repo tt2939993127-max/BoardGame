@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useTutorial } from '../../contexts/TutorialContext';
 
 export const TutorialOverlay: React.FC = () => {
-    const { isActive, currentStep, nextStep, currentStepIndex } = useTutorial();
+    const { isActive, currentStep, nextStep } = useTutorial();
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+
+
 
     // Update highlight position
     useEffect(() => {
@@ -11,29 +13,22 @@ export const TutorialOverlay: React.FC = () => {
 
         const updateRect = () => {
             if (currentStep.highlightTarget) {
-                // Try finding by data-tutorial-id first, then ID
                 const el = document.querySelector(`[data-tutorial-id="${currentStep.highlightTarget}"]`) ||
                     document.getElementById(currentStep.highlightTarget);
 
                 if (el) {
                     setTargetRect(el.getBoundingClientRect());
-                    // Scroll into view if needed
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 } else {
-                    setTargetRect(null); // Fallback: center overlay if target not found
+                    setTargetRect(null);
                 }
             } else {
                 setTargetRect(null);
             }
         };
 
-        // Initial update
         updateRect();
-
-        // Listen for Resize and Mutation (in case DOM changes)
         window.addEventListener('resize', updateRect);
-
-        // Simple polling for DOM readiness if mainly dealing with React renders
         const interval = setInterval(updateRect, 500);
 
         return () => {
@@ -42,139 +37,167 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [isActive, currentStep]);
 
+    // State for tooltip position and arrow class
+    const [tooltipStyles, setTooltipStyles] = useState<{
+        style: React.CSSProperties,
+        arrowClass: string
+    }>({ style: {}, arrowClass: '' });
+
+    // Calculate layout based on targetRect
+    useEffect(() => {
+        if (!targetRect) {
+            // Default: Bottom Center
+            setTooltipStyles({
+                style: {
+                    position: 'fixed',
+                    bottom: '10%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 100
+                },
+                arrowClass: 'hidden'
+            });
+            return;
+        }
+
+        const padding = 12; // Gap between target and tooltip
+        const tooltipWidth = 280; // Estimated width
+        const tooltipHeight = 160; // Estimated height
+
+        // Priority logic: Right -> Left -> Bottom -> Top
+        const spaceRight = window.innerWidth - targetRect.right;
+        const spaceLeft = targetRect.left;
+        const spaceBottom = window.innerHeight - targetRect.bottom;
+
+        let pos: 'right' | 'left' | 'bottom' | 'top';
+
+        if (spaceRight > tooltipWidth + 20) {
+            pos = 'right';
+        } else if (spaceLeft > tooltipWidth + 20) {
+            pos = 'left';
+        } else if (spaceBottom > tooltipHeight + 20) {
+            pos = 'bottom';
+        } else {
+            pos = 'top';
+        }
+
+        // Calculate specific coordinates
+        const styles: React.CSSProperties = {
+            position: 'absolute',
+            zIndex: 100,
+        };
+        let arrow = '';
+
+        switch (pos) {
+            case 'right':
+                styles.left = targetRect.right + padding;
+                styles.top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 3);
+                arrow = '-left-[6px] top-[40px] border-b border-l'; // Left-pointing on right side
+                break;
+            case 'left':
+                styles.left = targetRect.left - tooltipWidth - padding;
+                styles.top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 3);
+                arrow = '-right-[6px] top-[40px] border-t border-r'; // Right-pointing on left side
+                break;
+            case 'bottom':
+                styles.top = targetRect.bottom + padding;
+                styles.left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
+                arrow = '-top-[6px] left-1/2 -translate-x-1/2 border-t border-l'; // Up-pointing on bottom side
+                break;
+            case 'top':
+                styles.top = targetRect.top - tooltipHeight - padding;
+                styles.left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
+                arrow = '-bottom-[6px] left-1/2 -translate-x-1/2 border-b border-r'; // Down-pointing on top side
+                break;
+        }
+
+        // Add common base classes for the rotated square arrow
+        const arrowBase = "bg-white w-4 h-4 absolute rotate-45 border-gray-100 z-0";
+        setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
+
+    }, [targetRect]);
+
     if (!isActive || !currentStep) return null;
 
-    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const padding = 8;
+    // Don't show overlay during AI's turn - let the AI move happen silently
+    if (currentStep.aiMove !== undefined) return null;
 
-    const hole = targetRect
-        ? {
-            top: clamp(targetRect.top - padding, 0, viewportHeight),
-            left: clamp(targetRect.left - padding, 0, viewportWidth),
-            right: clamp(targetRect.right + padding, 0, viewportWidth),
-            bottom: clamp(targetRect.bottom + padding, 0, viewportHeight),
-        }
-        : null;
+
 
     // SVG Path for the mask with a hole
     let maskPath = `M0 0 h${window.innerWidth} v${window.innerHeight} h-${window.innerWidth} z`;
     if (targetRect) {
         // Anti-clockwise rect for the hole to create cutout (fill-rule: evenodd)
         const { left, top, right, bottom } = targetRect;
-        // Add some padding (8px)
         const p = 8;
         maskPath += ` M${left - p} ${top - p} v${(bottom - top) + p * 2} h${(right - left) + p * 2} v-${(bottom - top) + p * 2} z`;
     }
 
-    // Intelligent Positioning Logic
-    const getTooltipStyle = () => {
-        if (!targetRect) {
-            // Default: Bottom Center (to avoid obscuring the board in the middle)
-            return {
-                bottom: '10%',
-                left: '50%',
-                transform: 'translateX(-50%)'
-            };
-        }
-
-        // Check available space below the target
-        const spaceBelow = window.innerHeight - targetRect.bottom;
-        const placeAbove = spaceBelow < 250; // Threshold for tooltip height
-
-        return {
-            top: placeAbove ? 'auto' : targetRect.bottom + 20,
-            bottom: placeAbove ? (window.innerHeight - targetRect.top) + 20 : 'auto',
-            left: targetRect.left + (targetRect.width / 2),
-            transform: 'translateX(-50%)',
-        };
-    };
+    const maskOpacity = currentStep.showMask ? 0.6 : 0;
 
     return (
-        <div className="fixed inset-0 z-50 pointer-events-none">
-            {/* Mask Layer - SVG allows click-through on the hole */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+        <div className="fixed inset-0 z-[9999] pointer-events-none">
+            {/* Mask Layer - Only block clicks when showMask is true */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300">
                 <path
                     d={maskPath}
-                    fill="rgba(0, 0, 0, 0.6)"
-                    style={{ pointerEvents: 'none' }}
+                    fill={`rgba(0, 0, 0, ${maskOpacity})`}
+                    // When mask is transparent, allow all clicks through
+                    // When mask is visible, still need to allow clicks on the "hole" area
+                    style={{ pointerEvents: currentStep.showMask ? 'auto' : 'none' }}
                     fillRule="evenodd"
                 />
             </svg>
 
-            {hole ? (
-                <>
-                    <div
-                        className="absolute left-0 top-0 w-full pointer-events-auto"
-                        data-tutorial-mask="top"
-                        style={{ height: hole.top, backgroundColor: 'transparent' }}
-                    />
-                    <div
-                        className="absolute left-0 pointer-events-auto"
-                        data-tutorial-mask="left"
-                        style={{ top: hole.top, height: hole.bottom - hole.top, width: hole.left, backgroundColor: 'transparent' }}
-                    />
-                    <div
-                        className="absolute pointer-events-auto"
-                        data-tutorial-mask="right"
-                        style={{ top: hole.top, left: hole.right, height: hole.bottom - hole.top, width: viewportWidth - hole.right, backgroundColor: 'transparent' }}
-                    />
-                    <div
-                        className="absolute left-0 w-full pointer-events-auto"
-                        data-tutorial-mask="bottom"
-                        style={{ top: hole.bottom, bottom: 0, backgroundColor: 'transparent' }}
-                    />
-                </>
-            ) : (
+            {/* Target Highlight Ring (Apple-style blue glow) - Always visible when target exists */}
+            {targetRect && (
                 <div
-                    className="absolute inset-0 pointer-events-auto"
-                    data-tutorial-mask="full"
-                    style={{ backgroundColor: 'transparent' }}
+                    className="absolute pointer-events-none transition-all duration-300"
+                    style={{
+                        top: targetRect.top - 4,
+                        left: targetRect.left - 4,
+                        width: targetRect.width + 8,
+                        height: targetRect.height + 8,
+                        borderRadius: '12px',
+                        boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 12px rgba(59, 130, 246, 0.3)'
+                    }}
                 />
             )}
 
-            {/* Tooltip / Dialog Layer */}
+            {/* Tooltip Popover */}
             <div
-                className="absolute pointer-events-auto transition-all duration-300 ease-out"
-                style={getTooltipStyle()}
+                className="pointer-events-auto transition-all duration-300 ease-out flex flex-col items-center absolute"
+                style={tooltipStyles.style}
             >
-                <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-80 border border-gray-100 animate-bounce-in">
-                    <div className="mb-4 text-gray-800 font-medium text-lg leading-relaxed">
+                {/* CSS Triangle Arrow */}
+                <div className={`absolute w-0 h-0 border-solid ${tooltipStyles.arrowClass}`} />
+
+                {/* Content Card */}
+                <div className="bg-[#fcfbf9] rounded-sm shadow-[0_8px_30px_rgba(67,52,34,0.12)] p-5 border border-[#e5e0d0] max-w-sm w-72 animate-in fade-in zoom-in-95 duration-200 relative font-serif">
+                    {/* Decorative Corner (Top Right) */}
+                    <div className="absolute top-1.5 right-1.5 w-2 h-2 border-t border-r border-[#c0a080] opacity-40" />
+
+                    <div className="text-[#433422] font-bold text-lg mb-4 leading-relaxed text-left">
                         {currentStep.content}
                     </div>
 
                     {!currentStep.requireAction && (
-                        <div className="flex justify-end">
-                            <button
-                                onClick={nextStep}
-                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-transform active:scale-95 shadow-lg shadow-blue-200"
-                            >
-                                下一步 ({currentStepIndex + 1}) →
-                            </button>
-                        </div>
+                        <button
+                            onClick={nextStep}
+                            className="w-full py-2 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest transition-all cursor-pointer"
+                        >
+                            下一步
+                        </button>
                     )}
 
                     {currentStep.requireAction && (
-                        <div className="text-sm text-blue-500 font-bold flex items-center gap-2 animate-pulse">
-                            <span>👆 请按指示操作...</span>
+                        <div className="flex items-center gap-2 text-sm font-bold text-[#8c7b64] bg-[#f3f0e6]/50 p-2 border border-[#e5e0d0]/50 justify-center italic">
+                            <span className="animate-pulse w-2 h-2 rounded-full bg-[#c0a080]"></span>
+                            请点击高亮区域继续
                         </div>
                     )}
                 </div>
             </div>
-
-            {/* Highlight Border Animation (Optional visual clue) */}
-            {targetRect && (
-                <div
-                    className="absolute pointer-events-none border-4 border-yellow-400 rounded-lg animate-pulse"
-                    style={{
-                        top: targetRect.top - 8,
-                        left: targetRect.left - 8,
-                        width: targetRect.width + 16,
-                        height: targetRect.height + 16,
-                    }}
-                />
-            )}
         </div>
     );
 };

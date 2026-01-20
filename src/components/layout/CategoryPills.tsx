@@ -1,41 +1,46 @@
-import clsx from 'clsx';
-
-
-export type Category = 'All' | 'Strategy' | 'Casual' | 'Party' | 'Abstract';
+export type Category = 'All' | '策略' | '休闲' | '派对' | '抽象';
 
 interface CategoryPillsProps {
     activeCategory: Category;
     onSelect: (category: Category) => void;
 }
 
-const CATEGORIES: Category[] = ['All', 'Strategy', 'Casual', 'Party', 'Abstract'];
+const categories: Category[] = ['All', '策略', '休闲', '派对', '抽象'];
 
-const CATEGORY_NAMES: Record<Category, string> = {
-    'All': '全部游戏',
-    'Strategy': '策略',
-    'Casual': '休闲',
-    'Party': '派对',
-    'Abstract': '抽象'
+// 转换为中文显示
+const getCategoryLabel = (cat: Category): string => {
+    if (cat === 'All') return '全部游戏';
+    return cat;
 };
 
 export const CategoryPills = ({ activeCategory, onSelect }: CategoryPillsProps) => {
     return (
-        <div className="flex gap-3 overflow-x-auto pb-4 pt-2 no-scrollbar mask-gradient-x">
-            {CATEGORIES.map((cat) => (
-                <button
-                    key={cat}
-                    onClick={() => onSelect(cat)}
-                    className={clsx(
-                        'px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 whitespace-nowrap',
-                        'border active:scale-95',
-                        activeCategory === cat
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20'
-                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-800 hover:shadow-sm'
-                    )}
-                >
-                    {CATEGORY_NAMES[cat]}
-                </button>
-            ))}
+        <div className="flex items-center gap-6 font-serif">
+            {categories.map((category) => {
+                const isActive = activeCategory === category;
+                return (
+                    <button
+                        key={category}
+                        onClick={() => onSelect(category)}
+                        className={`
+                            relative text-sm tracking-wide transition-all duration-300 cursor-pointer
+                            ${isActive
+                                ? 'text-[#433422] font-bold'
+                                : 'text-[#8c7b64] hover:text-[#433422]'
+                            }
+                        `}
+                    >
+                        <span className="relative z-10">
+                            {getCategoryLabel(category)}
+                        </span>
+
+                        {/* Underline for active state */}
+                        {isActive && (
+                            <span className="absolute bottom-[-4px] left-0 right-0 h-0.5 bg-[#433422]" />
+                        )}
+                    </button>
+                );
+            })}
         </div>
     );
 };

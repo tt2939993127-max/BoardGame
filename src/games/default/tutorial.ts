@@ -7,7 +7,8 @@ export const TicTacToeTutorial: TutorialManifest = {
             id: 'intro',
             content: '欢迎来到井字棋！👋 这是一个经典的策略游戏。你的目标是率先将三个棋子连成一条直线（横、竖、斜）。',
             position: 'center',
-            requireAction: false
+            requireAction: false,
+            showMask: true
         },
         {
             id: 'center-strategy',
@@ -18,9 +19,7 @@ export const TicTacToeTutorial: TutorialManifest = {
         },
         {
             id: 'opponent-turn',
-            content: '现在AI对手（O）会自动落子...',
-            position: 'top',
-            requireAction: false, // AI will move automatically
+            content: '', // Hidden - AI moves automatically
             aiMove: 0 // AI clicks top-left cell
         },
         {

@@ -13,7 +13,7 @@ interface DebugPanelProps {
 export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, events, playerID }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'state' | 'actions' | 'controls'>('actions');
-    const { setPlayerID } = useDebug();
+    const { setPlayerID, testMode, setTestMode } = useDebug();
 
     // State for move arguments
     const [moveArgs, setMoveArgs] = useState<Record<string, string>>({});
@@ -23,6 +23,17 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
     const handleArgChange = (moveName: string, value: string) => {
         setMoveArgs(prev => ({ ...prev, [moveName]: value }));
     };
+
+    // 监听当前玩家变化，实现自动切换视角
+    React.useEffect(() => {
+        if (testMode && ctx.currentPlayer && ctx.currentPlayer !== playerID) {
+            // 延迟一点切换，让用户看到上一步的结果
+            const timer = setTimeout(() => {
+                setPlayerID(ctx.currentPlayer);
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [ctx.currentPlayer, testMode, setPlayerID, playerID]);
 
     const executeMove = (moveName: string) => {
         const rawArg = moveArgs[moveName];
@@ -38,7 +49,7 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
             // broad parsing:
             const arg = JSON.parse(rawArg);
             moves[moveName](arg);
-        } catch (e) {
+        } catch (_) {
             // Fallback to string if not valid JSON
             moves[moveName](rawArg);
         }
@@ -190,6 +201,39 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                         {/* Controls Tab */}
                         {activeTab === 'controls' && (
                             <div className="space-y-4">
+                                {/* 测试模式开关 */}
+                                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex-1">
+                                            <h4 className="font-bold text-gray-700 text-sm mb-1">🧪 测试模式</h4>
+                                            <p className="text-xs text-gray-500">执行行动后自动切换玩家视角</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setTestMode(!testMode)}
+                                            className={`relative w-14 h-7 rounded-full transition-all duration-300 shadow-inner ${testMode
+                                                ? 'bg-green-500 shadow-green-200'
+                                                : 'bg-gray-300 shadow-gray-200'
+                                                }`}
+                                        >
+                                            <span
+                                                className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 flex items-center justify-center ${testMode ? 'translate-x-7' : 'translate-x-0'
+                                                    }`}
+                                            >
+                                                {testMode ? '✓' : ''}
+                                            </span>
+                                        </button>
+                                    </div>
+                                    <div className={`text-xs px-2 py-1.5 rounded mt-3 ${testMode
+                                        ? 'bg-green-50 text-green-700 border border-green-200'
+                                        : 'bg-gray-50 text-gray-600 border border-gray-200'
+                                        }`}>
+                                        {testMode
+                                            ? '✅ 已开启 - 行动后自动切换视角'
+                                            : '⏸️ 已关闭 - 需手动切换视角'
+                                        }
+                                    </div>
+                                </div>
+
                                 <button
                                     onClick={() => { localStorage.removeItem('bgio_state'); window.location.reload(); }}
                                     className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95"

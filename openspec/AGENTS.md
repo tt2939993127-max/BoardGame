@@ -398,6 +398,7 @@ Only add complexity with:
 - **教程建议用 hotseat**：教程包含 AI 自动落子或跨玩家步骤时，Client 不传 `playerID`（hotseat），避免 `not-your-turn` 阻断交互。
 - **交互规则单一来源**：`cursor/hover` 的 `isClickable` 判定必须与 `onClick` 共享同一套条件（回合、占用、gameover、教程步骤），避免“能点但光标禁用”。
 - **步骤推进必须显式**：教程按状态机设计，仅在“用户动作完成 / AI 动作完成 / 点击下一步”时推进；AI 定时器必须有 cleanup，且每步只执行一次（用 ref/标记防重复触发）。
+- **路由不应主动关闭教程**：教程在普通对局页启动时，不要因为“非 /tutorial 路由”就 `closeTutorial()`；应在组件卸载时统一清理，避免落子后被误判为“退出教程”。
 
 ### Capability Naming
 - Use verb-noun: `user-auth`, `payment-capture`
