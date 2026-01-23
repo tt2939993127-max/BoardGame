@@ -1,0 +1,31 @@
+{
+  "title": {
+    "primary": "井字",
+    "secondary": "棋"
+  },
+  "player": {
+    "self": "我",
+    "guest": "游客 {{number}}"
+  },
+  "status": {
+    "win": "{{player}} 胜利!",
+    "draw": "平局!",
+    "turnSuffix": "的回合",
+    "thinking": "思考中..."
+  },
+  "rematch": {
+    "missingInfo": "无法再来一局：缺少对局信息或凭证。",
+    "failed": "再来一局失败，请稍后重试。",
+    "creating": "创建中...",
+    "playAgain": "再来一局",
+    "backToLobby": "返回大厅"
+  },
+  "tutorial": {
+    "steps": {
+      "intro": "欢迎来到井字棋！👋 这是一个经典的策略游戏。你的目标是率先将三个棋子连成一条直线（横、竖、斜）。",
+      "centerStrategy": "💡 策略提示：占据中心是最好的开局！点击中间的格子（X）。",
+      "blockStrategy": "注意观察对手的棋型！如果有两子连线，一定要堵住它。",
+      "finish": "祝你好运！尝试赢得胜利吧！🎉"
+    }
+  }
+}

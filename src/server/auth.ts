@@ -2,6 +2,9 @@ import Router from '@koa/router';
 import jwt from 'jsonwebtoken';
 import { User } from './models/User';
 import type { Context, Next } from 'koa';
+import type { SupportedLanguage } from '../lib/i18n/types';
+import { createServerI18n } from './i18n';
+
 
 // JWT 密钥（生产环境应使用环境变量）
 const JWT_SECRET = process.env.JWT_SECRET || 'boardgame-secret-key-change-in-production';
@@ -24,24 +27,26 @@ function generateToken(userId: string, username: string): string {
  * POST /auth/register - 用户注册
  */
 authRouter.post('/register', async (ctx: Context) => {
-    const { username, password } = ctx.request.body as { username?: string; password?: string };
+    const { t } = createServerI18n(ctx);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { username, password } = (ctx.request as any).body as { username?: string; password?: string };
 
     // 验证输入
     if (!username || !password) {
         ctx.status = 400;
-        ctx.body = { error: '用户名和密码不能为空' };
+        ctx.body = { error: t('auth.error.missingCredentials') };
         return;
     }
 
     if (username.length < 3 || username.length > 20) {
         ctx.status = 400;
-        ctx.body = { error: '用户名长度应在 3-20 个字符之间' };
+        ctx.body = { error: t('auth.error.usernameLength') };
         return;
     }
 
     if (password.length < 4) {
         ctx.status = 400;
-        ctx.body = { error: '密码长度至少为 4 个字符' };
+        ctx.body = { error: t('auth.error.passwordLength') };
         return;
     }
 
@@ -50,7 +55,7 @@ authRouter.post('/register', async (ctx: Context) => {
         const existingUser = await User.findOne({ username });
         if (existingUser) {
             ctx.status = 409;
-            ctx.body = { error: '用户名已被占用' };
+            ctx.body = { error: t('auth.error.usernameTaken') };
             return;
         }
 
@@ -63,7 +68,7 @@ authRouter.post('/register', async (ctx: Context) => {
 
         ctx.status = 201;
         ctx.body = {
-            message: '注册成功',
+            message: t('auth.success.register'),
             user: { id: user._id, username: user.username },
             token,
         };
@@ -79,7 +84,7 @@ authRouter.post('/register', async (ctx: Context) => {
         }
 
         ctx.status = 500;
-        ctx.body = { error: '服务器错误，请稍后重试' };
+        ctx.body = { error: t('auth.error.serverError') };
     }
 });
 
@@ -87,11 +92,13 @@ authRouter.post('/register', async (ctx: Context) => {
  * POST /auth/login - 用户登录
  */
 authRouter.post('/login', async (ctx: Context) => {
-    const { username, password } = ctx.request.body as { username?: string; password?: string };
+    const { t } = createServerI18n(ctx);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { username, password } = (ctx.request as any).body as { username?: string; password?: string };
 
     if (!username || !password) {
         ctx.status = 400;
-        ctx.body = { error: '用户名和密码不能为空' };
+        ctx.body = { error: t('auth.error.missingCredentials') };
         return;
     }
 
@@ -100,7 +107,7 @@ authRouter.post('/login', async (ctx: Context) => {
         const user = await User.findOne({ username });
         if (!user) {
             ctx.status = 401;
-            ctx.body = { error: '用户名或密码错误' };
+            ctx.body = { error: t('auth.error.invalidCredentials') };
             return;
         }
 
@@ -108,7 +115,7 @@ authRouter.post('/login', async (ctx: Context) => {
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             ctx.status = 401;
-            ctx.body = { error: '用户名或密码错误' };
+            ctx.body = { error: t('auth.error.invalidCredentials') };
             return;
         }
 
@@ -116,14 +123,14 @@ authRouter.post('/login', async (ctx: Context) => {
         const token = generateToken(user._id.toString(), user.username);
 
         ctx.body = {
-            message: '登录成功',
+            message: t('auth.success.login'),
             user: { id: user._id, username: user.username },
             token,
         };
     } catch (error) {
         console.error('登录失败:', error);
         ctx.status = 500;
-        ctx.body = { error: '服务器错误，请稍后重试' };
+        ctx.body = { error: t('auth.error.serverError') };
     }
 });
 
@@ -131,11 +138,12 @@ authRouter.post('/login', async (ctx: Context) => {
  * GET /auth/me - 获取当前用户信息（需要认证）
  */
 authRouter.get('/me', async (ctx: Context) => {
+    const { t } = createServerI18n(ctx);
     const authHeader = ctx.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         ctx.status = 401;
-        ctx.body = { error: '未提供认证令牌' };
+        ctx.body = { error: t('auth.error.missingToken') };
         return;
     }
 
@@ -147,7 +155,7 @@ authRouter.get('/me', async (ctx: Context) => {
 
         if (!user) {
             ctx.status = 404;
-            ctx.body = { error: '用户不存在' };
+            ctx.body = { error: t('auth.error.userNotFound') };
             return;
         }
 
@@ -162,7 +170,7 @@ authRouter.get('/me', async (ctx: Context) => {
         };
     } catch (error) {
         ctx.status = 401;
-        ctx.body = { error: '无效的认证令牌' };
+        ctx.body = { error: t('auth.error.invalidToken') };
     }
 });
 
@@ -170,11 +178,12 @@ authRouter.get('/me', async (ctx: Context) => {
  * POST /auth/send-email-code - 发送邮箱验证码
  */
 authRouter.post('/send-email-code', async (ctx: Context) => {
+    const { t, locale } = createServerI18n(ctx);
     const authHeader = ctx.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         ctx.status = 401;
-        ctx.body = { error: '请先登录' };
+        ctx.body = { error: t('auth.error.loginRequired') };
         return;
     }
 
@@ -182,11 +191,12 @@ authRouter.post('/send-email-code', async (ctx: Context) => {
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-        const { email } = ctx.request.body as { email?: string };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { email } = (ctx.request as any).body as { email?: string };
 
         if (!email) {
             ctx.status = 400;
-            ctx.body = { error: '请输入邮箱地址' };
+            ctx.body = { error: t('auth.error.missingEmail') };
             return;
         }
 
@@ -194,7 +204,7 @@ authRouter.post('/send-email-code', async (ctx: Context) => {
         const emailRegex = /^\S+@\S+\.\S+$/;
         if (!emailRegex.test(email)) {
             ctx.status = 400;
-            ctx.body = { error: '请输入有效的邮箱地址' };
+            ctx.body = { error: t('auth.error.invalidEmail') };
             return;
         }
 
@@ -202,13 +212,15 @@ authRouter.post('/send-email-code', async (ctx: Context) => {
         const existingUser = await User.findOne({ email, _id: { $ne: decoded.userId } });
         if (existingUser) {
             ctx.status = 409;
-            ctx.body = { error: '该邮箱已被其他账户绑定' };
+            ctx.body = { error: t('auth.error.emailAlreadyBound') };
             return;
         }
 
         // 动态导入邮件服务
-        const { sendVerificationEmail } = await import('./email');
-        const result = await sendVerificationEmail(email);
+        const { sendVerificationEmail } = await import('./email') as {
+            sendVerificationEmail: (email: string, locale?: SupportedLanguage) => Promise<{ success: boolean; message: string }>;
+        };
+        const result = await sendVerificationEmail(email, locale);
 
         if (result.success) {
             ctx.body = { message: result.message };
@@ -218,7 +230,7 @@ authRouter.post('/send-email-code', async (ctx: Context) => {
         }
     } catch (error) {
         ctx.status = 401;
-        ctx.body = { error: '无效的认证令牌' };
+        ctx.body = { error: t('auth.error.invalidToken') };
     }
 });
 
@@ -226,11 +238,12 @@ authRouter.post('/send-email-code', async (ctx: Context) => {
  * POST /auth/verify-email - 验证邮箱
  */
 authRouter.post('/verify-email', async (ctx: Context) => {
+    const { t } = createServerI18n(ctx);
     const authHeader = ctx.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         ctx.status = 401;
-        ctx.body = { error: '请先登录' };
+        ctx.body = { error: t('auth.error.loginRequired') };
         return;
     }
 
@@ -238,11 +251,12 @@ authRouter.post('/verify-email', async (ctx: Context) => {
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-        const { email, code } = ctx.request.body as { email?: string; code?: string };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { email, code } = (ctx.request as any).body as { email?: string; code?: string };
 
         if (!email || !code) {
             ctx.status = 400;
-            ctx.body = { error: '请输入邮箱和验证码' };
+            ctx.body = { error: t('auth.error.missingEmailCode') };
             return;
         }
 
@@ -252,7 +266,7 @@ authRouter.post('/verify-email', async (ctx: Context) => {
 
         if (!isValid) {
             ctx.status = 400;
-            ctx.body = { error: '验证码错误或已过期' };
+            ctx.body = { error: t('auth.error.invalidEmailCode') };
             return;
         }
 
@@ -265,12 +279,12 @@ authRouter.post('/verify-email', async (ctx: Context) => {
 
         if (!user) {
             ctx.status = 404;
-            ctx.body = { error: '用户不存在' };
+            ctx.body = { error: t('auth.error.userNotFound') };
             return;
         }
 
         ctx.body = {
-            message: '邮箱绑定成功',
+            message: t('auth.success.emailBound'),
             user: {
                 id: user._id,
                 username: user.username,
@@ -281,7 +295,7 @@ authRouter.post('/verify-email', async (ctx: Context) => {
     } catch (error) {
         console.error('验证邮箱失败:', error);
         ctx.status = 401;
-        ctx.body = { error: '无效的认证令牌' };
+        ctx.body = { error: t('auth.error.invalidToken') };
     }
 });
 
@@ -289,11 +303,12 @@ authRouter.post('/verify-email', async (ctx: Context) => {
  * JWT 验证中间件（用于保护其他路由）
  */
 export async function verifyToken(ctx: Context, next: Next): Promise<void> {
+    const { t } = createServerI18n(ctx);
     const authHeader = ctx.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         ctx.status = 401;
-        ctx.body = { error: '未提供认证令牌' };
+        ctx.body = { error: t('auth.error.missingToken') };
         return;
     }
 
@@ -305,7 +320,7 @@ export async function verifyToken(ctx: Context, next: Next): Promise<void> {
         await next();
     } catch (error) {
         ctx.status = 401;
-        ctx.body = { error: '无效的认证令牌' };
+        ctx.body = { error: t('auth.error.invalidToken') };
     }
 }
 

@@ -5,9 +5,15 @@
  */
 
 import { io, Socket } from 'socket.io-client';
+import { GAME_SERVER_URL } from '../config/server';
+import i18n from '../lib/i18n';
 
-// 服务器地址（与游戏服务器相同）
-const SERVER_URL = 'http://localhost:8000';
+const normalizeGameName = (name?: unknown) => {
+    if (typeof name === 'string') return name.toLowerCase();
+    if (name == null) return '';
+    console.warn('[LobbySocket]', tLobbySocket('invalidGameId', { value: String(name) }));
+    return '';
+};
 
 // 大厅事件类型
 export const LOBBY_EVENTS = {
@@ -20,7 +26,16 @@ export const LOBBY_EVENTS = {
     MATCH_CREATED: 'lobby:matchCreated',
     MATCH_UPDATED: 'lobby:matchUpdated',
     MATCH_ENDED: 'lobby:matchEnded',
+    HEARTBEAT: 'lobby:heartbeat',
 } as const;
+
+const tLobbySocket = (key: string, params?: Record<string, string | number>) => (
+    i18n.t(`lobby:socket.${key}`, params)
+);
+
+const formatErrorMessage = (error: unknown) => (
+    error instanceof Error ? error.message : String(error)
+);
 
 // 房间信息类型
 export interface LobbyMatch {
@@ -35,29 +50,78 @@ export interface LobbyMatch {
     updatedAt?: number;
 }
 
+interface LobbySnapshotPayload {
+    version: number;
+    matches: LobbyMatch[];
+}
+
+interface LobbyMatchPayload {
+    version: number;
+    match: LobbyMatch;
+}
+
+interface LobbyMatchEndedPayload {
+    version: number;
+    matchID: string;
+}
+
+interface LobbyHeartbeatPayload {
+    version: number;
+    timestamp: number;
+}
+
 // 大厅更新回调类型
 export type LobbyUpdateCallback = (matches: LobbyMatch[]) => void;
 
 class LobbySocketService {
     private socket: Socket | null = null;
     private subscribers: Set<LobbyUpdateCallback> = new Set();
+    private statusSubscribers: Set<(status: { connected: boolean; lastError?: string }) => void> = new Set();
     private isConnected = false;
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 5;
     private currentMatches: LobbyMatch[] = [];
+    private lobbyVersion = -1;
+    private subscribedGameId: string | null = null;
+
+    private upsertMatch(match: LobbyMatch): void {
+        const index = this.currentMatches.findIndex(m => m.matchID === match.matchID);
+        if (index >= 0) {
+            this.currentMatches = this.currentMatches.map(m =>
+                m.matchID === match.matchID ? match : m
+            );
+        } else {
+            this.currentMatches = [...this.currentMatches, match];
+        }
+    }
+
+    private removeMatch(matchID: string): void {
+        this.currentMatches = this.currentMatches.filter(m => m.matchID !== matchID);
+    }
+
+    private shouldAcceptVersion(version: number, allowEqual = false): boolean {
+        if (allowEqual) return version >= this.lobbyVersion;
+        return version > this.lobbyVersion;
+    }
+
+    private updateVersion(version: number): void {
+        if (version > this.lobbyVersion) {
+            this.lobbyVersion = version;
+        }
+    }
 
     /**
      * 连接到大厅 Socket 服务
      */
     connect(): void {
         if (this.socket?.connected) {
-            console.log('[LobbySocket] 已连接，跳过重复连接');
+            console.log('[LobbySocket]', tLobbySocket('alreadyConnected'));
             return;
         }
 
-        console.log('[LobbySocket] 正在连接到大厅服务器...');
+        console.log('[LobbySocket]', tLobbySocket('connecting'));
 
-        this.socket = io(SERVER_URL, {
+        this.socket = io(GAME_SERVER_URL, {
             path: '/lobby-socket',
             transports: ['websocket', 'polling'],
             reconnection: true,
@@ -76,52 +140,91 @@ class LobbySocketService {
         if (!this.socket) return;
 
         this.socket.on('connect', () => {
-            console.log('[LobbySocket] ✅ 连接成功');
+            console.log('[LobbySocket]', tLobbySocket('connected'));
             this.isConnected = true;
             this.reconnectAttempts = 0;
+            this.notifyStatusSubscribers({ connected: true });
 
-            // 自动订阅大厅更新
-            this.socket?.emit(LOBBY_EVENTS.SUBSCRIBE_LOBBY);
+            // 自动订阅大厅更新（仅当已指定 gameId）
+            if (this.subscribedGameId) {
+                this.socket?.emit(LOBBY_EVENTS.SUBSCRIBE_LOBBY, { gameId: this.subscribedGameId });
+            }
         });
 
         this.socket.on('disconnect', (reason) => {
-            console.log('[LobbySocket] ❌ 断开连接:', reason);
+            console.log('[LobbySocket]', tLobbySocket('disconnected', { reason }));
             this.isConnected = false;
+            this.notifyStatusSubscribers({ connected: false });
         });
 
         this.socket.on('connect_error', (error) => {
-            console.error('[LobbySocket] 连接错误:', error.message);
+            console.error('[LobbySocket]', tLobbySocket('connectError', { message: error.message }));
             this.reconnectAttempts++;
+            this.notifyStatusSubscribers({ connected: false, lastError: error.message });
         });
 
         // 接收完整的房间列表更新
-        this.socket.on(LOBBY_EVENTS.LOBBY_UPDATE, (matches: LobbyMatch[]) => {
-            console.log('[LobbySocket] 收到大厅更新:', matches.length, '个房间');
-            this.currentMatches = matches;
-            this.notifySubscribers(matches);
+        this.socket.on(LOBBY_EVENTS.LOBBY_UPDATE, (payload: LobbySnapshotPayload) => {
+            if (!this.shouldAcceptVersion(payload.version, true)) {
+                console.log('[LobbySocket]', tLobbySocket('ignoreSnapshot', { version: payload.version }));
+                return;
+            }
+
+            console.log('[LobbySocket]', tLobbySocket('snapshotReceived', { count: payload.matches.length, version: payload.version }));
+            this.currentMatches = payload.matches;
+            this.updateVersion(payload.version);
+            this.notifySubscribers(payload.matches);
         });
 
         // 接收单个房间创建事件
-        this.socket.on(LOBBY_EVENTS.MATCH_CREATED, (match: LobbyMatch) => {
-            console.log('[LobbySocket] 新房间创建:', match.matchID);
-            this.currentMatches = [...this.currentMatches, match];
+        this.socket.on(LOBBY_EVENTS.MATCH_CREATED, (payload: LobbyMatchPayload) => {
+            if (!this.shouldAcceptVersion(payload.version)) {
+                console.log('[LobbySocket]', tLobbySocket('ignoreMatchCreated', { version: payload.version, matchId: payload.match.matchID }));
+                return;
+            }
+
+            console.log('[LobbySocket]', tLobbySocket('matchCreated', { matchId: payload.match.matchID, version: payload.version }));
+            this.upsertMatch(payload.match);
+            this.updateVersion(payload.version);
             this.notifySubscribers(this.currentMatches);
         });
 
         // 接收单个房间更新事件（玩家加入/离开）
-        this.socket.on(LOBBY_EVENTS.MATCH_UPDATED, (match: LobbyMatch) => {
-            console.log('[LobbySocket] 房间更新:', match.matchID);
-            this.currentMatches = this.currentMatches.map(m =>
-                m.matchID === match.matchID ? match : m
-            );
+        this.socket.on(LOBBY_EVENTS.MATCH_UPDATED, (payload: LobbyMatchPayload) => {
+            if (!this.shouldAcceptVersion(payload.version)) {
+                console.log('[LobbySocket]', tLobbySocket('ignoreMatchUpdated', { version: payload.version, matchId: payload.match.matchID }));
+                return;
+            }
+
+            console.log('[LobbySocket]', tLobbySocket('matchUpdated', { matchId: payload.match.matchID, version: payload.version }));
+            this.upsertMatch(payload.match);
+            this.updateVersion(payload.version);
             this.notifySubscribers(this.currentMatches);
         });
 
         // 接收房间结束事件
-        this.socket.on(LOBBY_EVENTS.MATCH_ENDED, (matchID: string) => {
-            console.log('[LobbySocket] 房间结束:', matchID);
-            this.currentMatches = this.currentMatches.filter(m => m.matchID !== matchID);
+        this.socket.on(LOBBY_EVENTS.MATCH_ENDED, (payload: LobbyMatchEndedPayload) => {
+            if (!this.shouldAcceptVersion(payload.version)) {
+                console.log('[LobbySocket]', tLobbySocket('ignoreMatchEnded', { version: payload.version, matchId: payload.matchID }));
+                return;
+            }
+
+            console.log('[LobbySocket]', tLobbySocket('matchEnded', { matchId: payload.matchID, version: payload.version }));
+            this.removeMatch(payload.matchID);
+            this.updateVersion(payload.version);
             this.notifySubscribers(this.currentMatches);
+        });
+
+        this.socket.on(LOBBY_EVENTS.HEARTBEAT, (payload: LobbyHeartbeatPayload) => {
+            if (payload.version > this.lobbyVersion) {
+                console.log('[LobbySocket]', tLobbySocket('heartbeatStale', { version: payload.version, current: this.lobbyVersion }));
+                this.requestRefresh();
+                return;
+            }
+
+            if (payload.version === this.lobbyVersion) {
+                console.log('[LobbySocket]', tLobbySocket('heartbeatOk', { version: payload.version }));
+            }
         });
     }
 
@@ -133,15 +236,54 @@ class LobbySocketService {
             try {
                 callback(matches);
             } catch (error) {
-                console.error('[LobbySocket] 订阅者回调错误:', error);
+                console.error('[LobbySocket]', tLobbySocket('subscriberError', { message: formatErrorMessage(error) }));
             }
         });
     }
 
     /**
+     * 通知所有状态订阅者
+     */
+    private notifyStatusSubscribers(status: { connected: boolean; lastError?: string }): void {
+        this.statusSubscribers.forEach(callback => {
+            try {
+                callback(status);
+            } catch (error) {
+                console.error('[LobbySocket] Status subscriber error:', error);
+            }
+        });
+    }
+
+    /**
+     * 订阅连接状态
+     */
+    subscribeStatus(callback: (status: { connected: boolean; lastError?: string }) => void): () => void {
+        this.statusSubscribers.add(callback);
+        // 立即通知当前状态
+        callback({ connected: this.isConnected });
+        return () => {
+            this.statusSubscribers.delete(callback);
+        };
+    }
+
+    /**
      * 订阅大厅更新
      */
-    subscribe(callback: LobbyUpdateCallback): () => void {
+    subscribe(gameId: string, callback: LobbyUpdateCallback): () => void {
+        const normalizedGameId = normalizeGameName(gameId);
+        if (!normalizedGameId) {
+            console.warn('[LobbySocket]', tLobbySocket('subscribeMissingGameId'));
+            return () => {
+                this.subscribers.delete(callback);
+            };
+        }
+
+        if (this.subscribedGameId !== normalizedGameId) {
+            this.subscribedGameId = normalizedGameId;
+            this.currentMatches = [];
+            this.lobbyVersion = -1;
+        }
+
         this.subscribers.add(callback);
 
         // 如果已有房间数据，立即通知新订阅者
@@ -152,6 +294,8 @@ class LobbySocketService {
         // 确保已连接
         if (!this.socket?.connected) {
             this.connect();
+        } else {
+            this.socket.emit(LOBBY_EVENTS.SUBSCRIBE_LOBBY, { gameId: this.subscribedGameId });
         }
 
         // 返回取消订阅函数
@@ -160,7 +304,13 @@ class LobbySocketService {
 
             // 如果没有订阅者了，可选择断开连接以节省资源
             if (this.subscribers.size === 0) {
-                console.log('[LobbySocket] 无订阅者，保持连接待命');
+                console.log('[LobbySocket]', tLobbySocket('noSubscribers'));
+                if (this.socket?.connected) {
+                    this.socket.emit(LOBBY_EVENTS.UNSUBSCRIBE_LOBBY);
+                }
+                this.subscribedGameId = null;
+                this.currentMatches = [];
+                this.lobbyVersion = -1;
             }
         };
     }
@@ -168,9 +318,18 @@ class LobbySocketService {
     /**
      * 手动请求刷新房间列表
      */
-    requestRefresh(): void {
-        if (this.socket?.connected) {
-            this.socket.emit(LOBBY_EVENTS.SUBSCRIBE_LOBBY);
+    requestRefresh(gameId?: string): void {
+        if (gameId) {
+            const normalizedGameId = normalizeGameName(gameId);
+            if (normalizedGameId && this.subscribedGameId !== normalizedGameId) {
+                this.subscribedGameId = normalizedGameId;
+                this.currentMatches = [];
+                this.lobbyVersion = -1;
+            }
+        }
+
+        if (this.socket?.connected && this.subscribedGameId) {
+            this.socket.emit(LOBBY_EVENTS.SUBSCRIBE_LOBBY, { gameId: this.subscribedGameId });
         }
     }
 
@@ -184,6 +343,7 @@ class LobbySocketService {
             this.socket = null;
             this.isConnected = false;
             this.currentMatches = [];
+            this.lobbyVersion = -1;
         }
     }
 

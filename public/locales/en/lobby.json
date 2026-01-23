@@ -1,0 +1,134 @@
+{
+  "home": {
+    "title": "Board Game Learning & Play",
+    "logoAlt": "Board Game Platform Logo",
+    "audio": {
+      "mute": "Mute",
+      "unmute": "Unmute"
+    },
+    "activeMatch": {
+      "status": "In Progress",
+      "room": "Room #{{id}}",
+      "players": "{{count}} seated"
+    }
+  },
+  "confirm": {
+    "destroy": {
+      "title": "Destroy Room",
+      "description": "Are you sure you want to destroy this room?"
+    },
+    "leave": {
+      "title": "Leave Room",
+      "description": "Are you sure you want to leave this room?"
+    }
+  },
+  "actions": {
+    "destroy": "Destroy",
+    "leave": "Leave",
+    "reconnect": "Reconnect",
+    "reconnectEnter": "Rejoin",
+    "join": "Join",
+    "localPlay": "👥 Local",
+    "tutorial": "🎓 Tutorial",
+    "createRoom": "Create Room"
+  },
+  "button": {
+    "processing": "Processing..."
+  },
+  "activeMatch": {
+    "notice": "You are currently in a match",
+    "return": "Return to match (#{{id}})"
+  },
+  "rooms": {
+    "empty": "No active rooms",
+    "matchTitle": "Match #{{id}}",
+    "mine": "Mine",
+    "emptySlot": "Empty",
+    "inAnotherMatch": "You are already in another match",
+    "inProgress": "In match",
+    "full": "Full"
+  },
+  "tabs": {
+    "lobby": "Lobby",
+    "leaderboard": "Leaderboard"
+  },
+  "leaderboard": {
+    "loading": "Loading...",
+    "title": "Top Wins",
+    "empty": "No data",
+    "record": "{{wins}} W / {{matches}} G"
+  },
+  "player": {
+    "guest": "Guest{{id}}"
+  },
+  "gameDetails": {
+    "description": "Classic strategy play. Connect three symbols to win."
+  },
+  "games": {
+    "tictactoe": {
+      "title": "Tic-Tac-Toe",
+      "description": "Classic X and O game. Challenge the AI or face a friend.",
+      "players": "2 Players"
+    },
+    "dicethrone": {
+      "title": "Dice Throne",
+      "description": "Fast-paced dice duels. Lead a legendary hero in 1v1 combat.",
+      "players": "2 Players"
+    },
+    "assetslicer": {
+      "title": "Asset Slicer",
+      "description": "A toolkit for board game assets. Supports circular/square cuts and sprite exports.",
+      "players": "Solo Tool"
+    }
+  },
+  "matchRoom": {
+    "leaveFailed": "Failed to leave the room. Please try again.",
+    "destroy": {
+      "title": "Destroy Room",
+      "description": "Destroy this room? The match will end and cannot be restored.",
+      "missingCredentials": "Cannot destroy room: missing credentials. Please refresh or rejoin.",
+      "notAllowed": "Cannot destroy room: permission or credential error."
+    },
+    "autoExit": {
+      "message": "Host left, the room is closed. Returning to lobby…",
+      "title": "Auto Exit Notice",
+      "confirm": "Return Now"
+    },
+    "redirecting": "Returning to lobby...",
+    "returnHome": "Return to Home",
+    "noTutorial": "Tutorial not available for this game",
+    "noClient": "Game client not found",
+    "noGame": "Game not found"
+  },
+  "error": {
+    "createRoomFailed": "Failed to create room",
+    "roomFull": "Room is full",
+    "joinRoomFailed": "Failed to join room",
+    "actionFailed": "Action failed, please try again later.",
+    "serviceUnavailable": {
+      "title": "Service Unavailable",
+      "desc": "Unable to connect to backend services. Please check your connection and ensure the backend containers (MongoDB/Server) are running."
+    }
+  },
+  "socket": {
+    "invalidGameId": "Invalid gameId, subscription ignored: {{value}}",
+    "alreadyConnected": "Already connected, skipping duplicate connection",
+    "connecting": "Connecting to lobby server...",
+    "connected": "✅ Connected",
+    "disconnected": "❌ Disconnected: {{reason}}",
+    "connectError": "Connection error: {{message}}",
+    "ignoreSnapshot": "Ignoring outdated lobby snapshot: {{version}}",
+    "snapshotReceived": "Lobby update received: {{count}} rooms, version {{version}}",
+    "ignoreMatchCreated": "Ignoring outdated match creation event: {{version}} {{matchId}}",
+    "matchCreated": "Match created: {{matchId}}, version {{version}}",
+    "ignoreMatchUpdated": "Ignoring outdated match update event: {{version}} {{matchId}}",
+    "matchUpdated": "Match updated: {{matchId}}, version {{version}}",
+    "ignoreMatchEnded": "Ignoring outdated match end event: {{version}} {{matchId}}",
+    "matchEnded": "Match ended: {{matchId}}, version {{version}}",
+    "heartbeatStale": "Heartbeat indicates stale version, refreshing lobby: {{version}} current {{current}}",
+    "heartbeatOk": "Heartbeat ok, version {{version}}",
+    "subscriberError": "Subscriber callback error: {{message}}",
+    "subscribeMissingGameId": "Subscribe failed: missing gameId",
+    "noSubscribers": "No subscribers, unsubscribing from lobby"
+  }
+}

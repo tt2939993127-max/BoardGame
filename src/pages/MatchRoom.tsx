@@ -1,50 +1,93 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Client } from 'boardgame.io/react';
-import { TicTacToe } from '../games/default/game';
-import { TicTacToeBoard } from '../games/default/Board';
-import { TicTacToeTutorial } from '../games/default/tutorial';
+import { GAME_IMPLEMENTATIONS } from '../games/registry';
 import { useDebug } from '../contexts/DebugContext';
 import { TutorialOverlay } from '../components/tutorial/TutorialOverlay';
 import { useTutorial } from '../contexts/TutorialContext';
 import { useMatchStatus, leaveMatch } from '../hooks/useMatchStatus';
 import { ConfirmModal } from '../components/common/ConfirmModal';
-
+import { useModalStack } from '../contexts/ModalStackContext';
+import { useToast } from '../contexts/ToastContext';
 import { SocketIO } from 'boardgame.io/multiplayer';
+import { GAME_SERVER_URL } from '../config/server';
+import { GameHUD } from '../components/game/GameHUD';
 
-const GameClient = Client({
-    game: TicTacToe,
-    board: TicTacToeBoard,
-    debug: false,
-    multiplayer: SocketIO({ server: 'http://localhost:8000' }),
-});
-
-const TutorialClient = Client({
-    game: TicTacToe,
-    board: TicTacToeBoard,
-    debug: false,
-    numPlayers: 2,
-});
 
 export const MatchRoom = () => {
     const { playerID: debugPlayerID } = useDebug();
-    const { matchId } = useParams();
+    const { gameId, matchId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { startTutorial, closeTutorial, isActive } = useTutorial();
+    const { openModal, closeModal } = useModalStack();
+    const toast = useToast();
+    const { t, i18n } = useTranslation('lobby');
+
+    const GameClient = useMemo(() => {
+        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
+        const impl = GAME_IMPLEMENTATIONS[gameId];
+
+        // boardgame.io's SocketIO transport connects via socket.io (`/socket.io`).
+        // In dev we rely on Vite proxy to forward `/socket.io` to the game-server.
+        return Client({
+            game: impl.game,
+            board: impl.board,
+            debug: false,
+            multiplayer: SocketIO({ server: GAME_SERVER_URL }),
+        });
+    }, [gameId]);
+
+    const TutorialClient = useMemo(() => {
+        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
+        const impl = GAME_IMPLEMENTATIONS[gameId];
+        return Client({
+            game: impl.game,
+            board: impl.board,
+            debug: false,
+            numPlayers: 2,
+        });
+    }, [gameId]);
 
     const [isLeaving, setIsLeaving] = useState(false);
-    const [pendingDestroy, setPendingDestroy] = useState(false);
+    const [isGameNamespaceReady, setIsGameNamespaceReady] = useState(true);
     const [autoExitMessage, setAutoExitMessage] = useState<string | null>(null);
+    const [destroyModalId, setDestroyModalId] = useState<string | null>(null);
     const tutorialStartedRef = useRef(false);
     const autoExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const autoExitModalIdRef = useRef<string | null>(null);
+    const tutorialModalIdRef = useRef<string | null>(null);
 
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
 
-    // Get playerID from URL query params
+    useEffect(() => {
+        if (!gameId) return;
+        const namespace = `game-${gameId}`;
+        let isActive = true;
+
+        setIsGameNamespaceReady(false);
+        i18n.loadNamespaces(namespace)
+            .then(() => {
+                if (isActive) {
+                    setIsGameNamespaceReady(true);
+                }
+            })
+            .catch(() => {
+                if (isActive) {
+                    setIsGameNamespaceReady(true);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [gameId, i18n]);
+
+    // 从 URL 查询参数中获取 playerID
     const urlPlayerID = searchParams.get('playerID');
 
-    // Retrieve credentials
+    // 获取凭据 (Credentials)
     const credentials = useMemo(() => {
         if (matchId && urlPlayerID) {
             const stored = localStorage.getItem(`match_creds_${matchId}`);
@@ -58,6 +101,24 @@ export const MatchRoom = () => {
         return undefined;
     }, [matchId, urlPlayerID]);
 
+    useEffect(() => {
+        if (!matchId || !gameId) return;
+        const stored = localStorage.getItem(`match_creds_${matchId}`);
+        if (!stored) return;
+        try {
+            const data = JSON.parse(stored);
+            if (data.gameName !== gameId) {
+                localStorage.setItem(`match_creds_${matchId}`, JSON.stringify({
+                    ...data,
+                    matchID: data.matchID || matchId,
+                    gameName: gameId,
+                }));
+            }
+        } catch {
+            return;
+        }
+    }, [gameId, matchId]);
+
     const tutorialPlayerID = debugPlayerID ?? urlPlayerID ?? '0';
 
     // 联机对局优先使用 URL playerID，避免调试默认值覆盖真实身份
@@ -68,16 +129,19 @@ export const MatchRoom = () => {
     const statusPlayerID = urlPlayerID ?? debugPlayerID ?? null;
 
     // 使用房间状态 Hook（以真实玩家身份为准）
-    const matchStatus = useMatchStatus(matchId, statusPlayerID);
+    const matchStatus = useMatchStatus(gameId, matchId, statusPlayerID);
     const hostSlot = matchStatus.players.find(player => player.id === 0);
 
     useEffect(() => {
         if (!isTutorialRoute) return;
-        // Only start if not already active to avoid loops/resets on re-renders
+        // 只有当前未激活时才启动，避免重复渲染导致的循环/重置
         if (!isActive) {
-            startTutorial(TicTacToeTutorial);
+            const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
+            if (impl?.tutorial) {
+                startTutorial(impl.tutorial);
+            }
         }
-    }, [startTutorial, isTutorialRoute, isActive]);
+    }, [startTutorial, isTutorialRoute, isActive, gameId]);
 
     useEffect(() => {
         if (!isTutorialRoute) return;
@@ -103,6 +167,26 @@ export const MatchRoom = () => {
         };
     }, [closeTutorial, isActive]);
 
+    useEffect(() => {
+        if (isActive && !tutorialModalIdRef.current) {
+            tutorialModalIdRef.current = openModal({
+                closeOnBackdrop: false,
+                closeOnEsc: true,
+                lockScroll: true,
+                onClose: () => {
+                    tutorialModalIdRef.current = null;
+                    closeTutorial();
+                },
+                render: () => <TutorialOverlay />,
+            });
+        }
+
+        if (!isActive && tutorialModalIdRef.current) {
+            closeModal(tutorialModalIdRef.current);
+            tutorialModalIdRef.current = null;
+        }
+    }, [closeModal, closeTutorial, isActive, openModal]);
+
     const clearMatchCredentials = () => {
         if (matchId) {
             localStorage.removeItem(`match_creds_${matchId}`);
@@ -123,9 +207,9 @@ export const MatchRoom = () => {
         }
 
         setIsLeaving(true);
-        const success = await leaveMatch('TicTacToe', matchId, statusPlayerID, credentials);
+        const success = await leaveMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
         if (!success) {
-            alert('离开房间失败，请稍后重试。');
+            toast.error({ kind: 'i18n', key: 'matchRoom.leaveFailed', ns: 'lobby' });
             setIsLeaving(false);
             return;
         }
@@ -133,48 +217,56 @@ export const MatchRoom = () => {
         navigate('/');
     };
 
-    // 真正销毁房间（仅房主可用）
-    const handleDestroyRoom = async () => {
-        if (!matchId || !statusPlayerID || !credentials || !matchStatus.isHost) {
-            if (!credentials) {
-                alert('无法销毁房间：缺少凭证，请刷新或重新进入对局。');
-            }
-            return;
-        }
-
-        setPendingDestroy(true);
-    };
-
     const handleConfirmDestroy = async () => {
         if (!matchId || !statusPlayerID || !credentials || !matchStatus.isHost) {
-            alert('无法销毁房间：权限或凭证异常。');
-            setPendingDestroy(false);
+            toast.warning({ kind: 'i18n', key: 'matchRoom.destroy.notAllowed', ns: 'lobby' });
             return;
         }
 
         setIsLeaving(true);
         // 调用 leaveMatch 会让 boardgame.io 检查是否删除房间
-        await leaveMatch('TicTacToe', matchId, statusPlayerID, credentials);
-        setPendingDestroy(false);
+        await leaveMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
         navigate('/');
     };
 
-    const handleCancelDestroy = () => {
-        setPendingDestroy(false);
-    };
-
-    const handleExitRoom = async () => {
-        if (matchStatus.error) {
-            clearMatchCredentials();
-            navigate('/');
+    // 真正销毁房间（仅房主可用）
+    const handleDestroyRoom = async () => {
+        if (!matchId || !statusPlayerID || !credentials || !matchStatus.isHost) {
+            if (!credentials) {
+                toast.error({ kind: 'i18n', key: 'matchRoom.destroy.missingCredentials', ns: 'lobby' });
+            }
             return;
         }
 
-        if (matchStatus.isHost) {
-            await handleDestroyRoom();
-            return;
+        if (destroyModalId) {
+            closeModal(destroyModalId);
+            setDestroyModalId(null);
         }
-        await handleLeaveRoom();
+        const modalId = openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            lockScroll: true,
+            onClose: () => {
+                setDestroyModalId(null);
+            },
+            render: ({ close, closeOnBackdrop }) => (
+                <ConfirmModal
+                    open
+                    title={t('matchRoom.destroy.title')}
+                    description={t('matchRoom.destroy.description')}
+                    onConfirm={() => {
+                        close();
+                        handleConfirmDestroy();
+                    }}
+                    onCancel={() => {
+                        close();
+                    }}
+                    tone="cool"
+                    closeOnBackdrop={closeOnBackdrop}
+                />
+            ),
+        });
+        setDestroyModalId(modalId);
     };
 
     // 如果房间不存在，显示错误并自动跳转
@@ -198,9 +290,9 @@ export const MatchRoom = () => {
 
         clearMatchCredentials();
         if (matchId && statusPlayerID && credentials) {
-            void leaveMatch('TicTacToe', matchId, statusPlayerID, credentials);
+            void leaveMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
         }
-        setAutoExitMessage('房主已退出，房间已关闭，正在返回大厅…');
+        setAutoExitMessage(t('matchRoom.autoExit.message'));
         autoExitTimerRef.current = setTimeout(() => {
             navigate('/');
         }, 1600);
@@ -213,17 +305,89 @@ export const MatchRoom = () => {
         };
     }, [autoExitMessage, clearMatchCredentials, credentials, hostSlot, matchId, matchStatus.isHost, matchStatus.isLoading, isTutorialRoute, navigate, statusPlayerID]);
 
+    useEffect(() => {
+        if (autoExitMessage && !isTutorialRoute && !autoExitModalIdRef.current) {
+            autoExitModalIdRef.current = openModal({
+                closeOnBackdrop: false,
+                closeOnEsc: false,
+                lockScroll: true,
+                onClose: () => {
+                    autoExitModalIdRef.current = null;
+                },
+                render: ({ close, closeOnBackdrop }) => (
+                    <ConfirmModal
+                        open
+                        title={t('matchRoom.autoExit.title')}
+                        description={autoExitMessage}
+                        confirmText={t('matchRoom.autoExit.confirm')}
+                        showCancel={false}
+                        onConfirm={() => {
+                            close();
+                            navigate('/');
+                        }}
+                        onCancel={() => {
+                            close();
+                        }}
+                        tone="cool"
+                        panelClassName="bg-black/70 border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] font-sans"
+                        titleClassName="text-white/80 text-sm font-semibold tracking-wide"
+                        descriptionClassName="text-white/70 text-base"
+                        actionsClassName="justify-center"
+                        confirmClassName="px-4 py-2 text-xs font-bold uppercase tracking-wider bg-white/10 text-white/80 hover:bg-white/20 rounded-full"
+                        closeOnBackdrop={closeOnBackdrop}
+                    />
+                ),
+            });
+        }
+
+        if ((!autoExitMessage || isTutorialRoute) && autoExitModalIdRef.current) {
+            closeModal(autoExitModalIdRef.current);
+            autoExitModalIdRef.current = null;
+        }
+    }, [autoExitMessage, closeModal, isTutorialRoute, navigate, openModal]);
+
+    useEffect(() => {
+        return () => {
+            if (autoExitModalIdRef.current) {
+                closeModal(autoExitModalIdRef.current);
+                autoExitModalIdRef.current = null;
+            }
+            if (destroyModalId) {
+                closeModal(destroyModalId);
+                setDestroyModalId(null);
+            }
+            if (tutorialModalIdRef.current) {
+                closeModal(tutorialModalIdRef.current);
+                tutorialModalIdRef.current = null;
+            }
+        };
+    }, [closeModal, destroyModalId]);
+
+    if (!isGameNamespaceReady) {
+        return (
+            <div className="w-full h-screen bg-black flex items-center justify-center">
+                <div className="text-white/70 text-sm">正在加载对局资源...</div>
+            </div>
+        );
+    }
+
     if (matchStatus.error && !isTutorialRoute) {
+        toast.error(
+            { kind: 'text', text: matchStatus.error },
+            { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
+            { dedupeKey: `matchRoom.error.${gameId ?? 'unknown'}.${matchId ?? 'unknown'}` }
+        );
+
         return (
             <div className="w-full h-screen bg-black flex items-center justify-center">
                 <div className="text-center">
                     <div className="text-white/60 text-lg mb-4">{matchStatus.error}</div>
-                    <div className="text-white/40 text-sm mb-6 animate-pulse">即将自动返回大厅...</div>
+                    <div className="text-white/40 text-sm mb-6 animate-pulse">{t('matchRoom.redirecting')}</div>
                     <button
                         onClick={() => navigate('/')}
                         className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
                     >
-                        立即返回首页
+                        {t('matchRoom.returnHome')}
                     </button>
                 </div>
             </div>
@@ -233,109 +397,43 @@ export const MatchRoom = () => {
 
     return (
         <div className="relative w-full h-screen bg-black overflow-hidden font-sans">
-            {/* Top Left: Back Button */}
-            <div className="absolute top-4 left-4 z-50">
-                <button
-                    onClick={() => navigate('/')}
-                    className="bg-black/40 backdrop-blur-md text-white/90 px-4 py-2 rounded-full text-sm font-bold border border-white/10 hover:bg-white/10 hover:border-white/30 transition-all flex items-center gap-2 group disabled:opacity-50 shadow-lg"
-                >
-                    <span className="group-hover:-translate-x-1 transition-transform">←</span>
-                    返回大厅
-                </button>
-            </div>
+            {/* 统一的游戏 HUD */}
+            <GameHUD
+                mode={isTutorialRoute ? 'tutorial' : 'online'}
+                matchId={matchId}
+                isHost={matchStatus.isHost}
+                credentials={credentials}
+                myPlayerId={effectivePlayerID}
+                opponentName={matchStatus.opponentName}
+                opponentConnected={matchStatus.opponentConnected}
+                onLeave={handleLeaveRoom}
+                onDestroy={handleDestroyRoom}
+                isLoading={isLeaving}
+            />
 
-            {/* Top Right: Status & Actions */}
-            {!isTutorialRoute && matchId && (
-                <div className="absolute top-4 right-4 z-50 flex items-center gap-3">
-                    {/* Opponent Status */}
-                    <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2 shadow-lg">
-                        {matchStatus.opponentName ? (
-                            <>
-                                <span className={`w-2 h-2 rounded-full ${matchStatus.opponentConnected ? 'bg-green-400' : 'bg-red-500 animate-pulse'}`} />
-                                <span className={`text-sm ${matchStatus.opponentConnected ? 'text-white/90' : 'text-red-400 font-bold'}`}>
-                                    {matchStatus.opponentName}
-                                </span>
-                            </>
-                        ) : (
-                            <>
-                                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-                                <span className="text-white/60 text-sm">等待对手...</span>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Room ID */}
-                    <div className="bg-black/40 backdrop-blur-md px-3 py-2 rounded-full border border-white/10 shadow-lg hidden sm:block">
-                        <span className="text-white/40 text-xs">ID: </span>
-                        <span className="text-white/80 text-xs font-mono">{matchId.slice(0, 4)}</span>
-                    </div>
-
-                    {/* Destroy Room Button (Host Only) */}
-                    {matchStatus.isHost ? (
-                        <button
-                            onClick={handleDestroyRoom}
-                            disabled={isLeaving || !credentials}
-                            className="bg-red-500/20 backdrop-blur-md text-red-400 px-3 py-2 rounded-full text-xs font-bold border border-red-500/30 hover:bg-red-500/30 transition-all disabled:opacity-50 shadow-lg"
-                            title={!credentials ? '缺少凭证，无法销毁' : '销毁房间'}
-                        >
-                            销毁
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleLeaveRoom}
-                            disabled={isLeaving || !credentials}
-                            className="bg-white/10 backdrop-blur-md text-white/80 px-3 py-2 rounded-full text-xs font-bold border border-white/10 hover:bg-white/20 transition-all disabled:opacity-50 shadow-lg"
-                            title={!credentials ? '缺少凭证，无法离开' : '离开房间'}
-                        >
-                            离开
-                        </button>
-                    )}
-                </div>
-            )}
-
-            {autoExitMessage && !isTutorialRoute && (
-                <ConfirmModal
-                    open={!!autoExitMessage}
-                    title="自动退出提醒"
-                    description={autoExitMessage}
-                    confirmText="立即返回"
-                    showCancel={false}
-                    onConfirm={() => navigate('/')}
-                    onCancel={() => navigate('/')}
-                    tone="cool"
-                    panelClassName="bg-black/70 border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] font-sans"
-                    titleClassName="text-white/80 text-sm font-semibold tracking-wide"
-                    descriptionClassName="text-white/70 text-base"
-                    actionsClassName="justify-center"
-                    confirmClassName="px-4 py-2 text-xs font-bold uppercase tracking-wider bg-white/10 text-white/80 hover:bg-white/20 rounded-full"
-                />
-            )}
-
-            {/* Game Board - Full Screen */}
+            {/* 游戏棋盘 - 全屏 */}
             <div className="w-full h-full">
                 {isTutorialRoute ? (
-                    <TutorialClient />
+                    TutorialClient ? <TutorialClient /> : (
+                        <div className="w-full h-full flex items-center justify-center text-white/50">
+                            {t('matchRoom.noTutorial')}
+                        </div>
+                    )
                 ) : (
-                    <GameClient
-                        playerID={effectivePlayerID}
-                        matchID={matchId}
-                        credentials={credentials}
-                    />
+                    GameClient ? (
+                        <GameClient
+                            playerID={effectivePlayerID}
+                            matchID={matchId}
+                            credentials={credentials}
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-white/50">
+                            {t('matchRoom.noClient')}
+                        </div>
+                    )
                 )}
             </div>
 
-            <TutorialOverlay />
-
-            {pendingDestroy && (
-                <ConfirmModal
-                    open={pendingDestroy}
-                    title="销毁房间"
-                    description="确定要销毁房间吗？这将结束对局且无法恢复。"
-                    onConfirm={handleConfirmDestroy}
-                    onCancel={handleCancelDestroy}
-                    tone="cool"
-                />
-            )}
         </div>
     );
 };

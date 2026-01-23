@@ -1,4 +1,6 @@
 import nodemailer from 'nodemailer';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '../lib/i18n/types';
+import { tServer } from './i18n';
 
 /**
  * 邮件服务配置
@@ -41,12 +43,16 @@ export function generateCode(): string {
 /**
  * 发送验证码邮件
  */
-export async function sendVerificationEmail(email: string): Promise<{ success: boolean; message: string }> {
+export async function sendVerificationEmail(
+    email: string,
+    locale: SupportedLanguage = DEFAULT_LANGUAGE,
+): Promise<{ success: boolean; message: string }> {
     const smtpUser = process.env.SMTP_USER;
+    const t = (key: string, params?: Record<string, string | number>) => tServer(locale, key, params);
 
     if (!smtpUser || !process.env.SMTP_PASS) {
         console.error('SMTP 配置缺失，请设置环境变量');
-        return { success: false, message: '邮件服务未配置' };
+        return { success: false, message: t('email.error.missingConfig') };
     }
 
     const code = generateCode();
@@ -59,31 +65,31 @@ export async function sendVerificationEmail(email: string): Promise<{ success: b
 
     try {
         await transporter.sendMail({
-            from: `"桌游教学平台" <${smtpUser}>`,
+            from: `"${t('email.template.senderName')}" <${smtpUser}>`,
             to: email,
-            subject: '邮箱验证码 - 桌游教学平台',
+            subject: t('email.subject'),
             html: `
                 <div style="font-family: 'Georgia', serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #fcfbf9; border: 1px solid #e5e0d0;">
-                    <h2 style="color: #433422; margin-bottom: 24px; text-align: center;">邮箱验证</h2>
+                    <h2 style="color: #433422; margin-bottom: 24px; text-align: center;">${t('email.template.title')}</h2>
                     <p style="color: #8c7b64; font-size: 14px; line-height: 1.6;">
-                        您正在绑定邮箱到桌游教学平台账户。请使用以下验证码完成验证：
+                        ${t('email.template.intro')}
                     </p>
                     <div style="background: #f3f0e6; padding: 20px; text-align: center; margin: 24px 0; border: 1px solid #e5e0d0;">
                         <span style="font-size: 32px; font-weight: bold; color: #433422; letter-spacing: 8px;">${code}</span>
                     </div>
                     <p style="color: #8c7b64; font-size: 12px;">
-                        验证码有效期为 5 分钟。如果您没有请求此验证码，请忽略此邮件。
+                        ${t('email.template.note', { minutes: 5 })}
                     </p>
                     <hr style="border: none; border-top: 1px solid #e5e0d0; margin: 24px 0;" />
                     <p style="color: #c0a080; font-size: 10px; text-align: center;">
-                        桌游教学与联机平台
+                        ${t('email.template.footer')}
                     </p>
                 </div>
             `,
         });
 
         console.log(`验证码已发送至 ${email}: ${code}`);
-        return { success: true, message: '验证码已发送' };
+        return { success: true, message: t('email.success.sent') };
     } catch (error) {
         console.error('发送邮件失败 (网络原因):', error);
 
@@ -94,7 +100,7 @@ export async function sendVerificationEmail(email: string): Promise<{ success: b
         console.log(` 验证码: ${code}  <--- 请使用此验证码`);
         console.log('==================================================\n');
 
-        return { success: true, message: '开发模式：验证码已打印到服务器终端' };
+        return { success: true, message: t('email.info.devFallback') };
     }
 }
 

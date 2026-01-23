@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 // 响应式缩略图组件：自适应父容器大小
 export const NeonTicTacToeThumbnail = () => (
     <div className="w-full h-full bg-slate-900 relative overflow-hidden flex items-center justify-center">
@@ -12,42 +14,44 @@ export const NeonTicTacToeThumbnail = () => (
         {/* Game Elements - Scaled to fit container */}
         <div className="w-[80%] h-[80%] grid grid-cols-3 gap-1 opacity-90 transform rotate-6">
             <div className="border-r border-b border-cyan-500/50 flex items-center justify-center">
-                <span className="text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(0,243,255,0.8)] text-[1.5rem] leading-none">X</span>
+                <span className="text-cyan-400 font-bold text-[1.5rem] leading-none" style={{ textShadow: '0 0 5px rgba(0,243,255,0.8)' }}>X</span>
             </div>
             <div className="border-b border-cyan-500/50"></div>
             <div className="border-l border-b border-cyan-500/50 flex items-center justify-center">
-                <span className="text-fuchsia-500 font-bold drop-shadow-[0_0_5px_rgba(188,19,254,0.8)] text-[1.5rem] leading-none">O</span>
+                <span className="text-fuchsia-500 font-bold text-[1.5rem] leading-none" style={{ textShadow: '0 0 5px rgba(188,19,254,0.8)' }}>O</span>
             </div>
 
             <div className="border-r border-cyan-500/50"></div>
             <div className="flex items-center justify-center">
-                <span className="text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(0,243,255,0.8)] text-[1.5rem] leading-none">X</span>
+                <span className="text-cyan-400 font-bold text-[1.5rem] leading-none" style={{ textShadow: '0 0 5px rgba(0,243,255,0.8)' }}>X</span>
             </div>
             <div className="border-l border-cyan-500/50"></div>
 
             <div className="border-t border-r border-cyan-500/50"></div>
             <div className="border-t border-cyan-500/50 flex items-center justify-center">
-                <span className="text-fuchsia-500 font-bold drop-shadow-[0_0_5px_rgba(188,19,254,0.8)] text-[1.5rem] leading-none">O</span>
+                <span className="text-fuchsia-500 font-bold text-[1.5rem] leading-none" style={{ textShadow: '0 0 5px rgba(188,19,254,0.8)' }}>O</span>
             </div>
             <div className="border-t border-l border-cyan-500/50"></div>
         </div>
 
-        {/* Overlay Badge - Smaller */}
-        <div className="absolute top-1 right-1 bg-black/60 backdrop-blur border border-white/10 px-1 py-0.5 rounded text-[8px] font-mono text-cyan-300">
+        {/* Overlay Badge - Smaller, optimized (removed backdrop-blur) */}
+        <div className="absolute top-1 right-1 bg-black/80 border border-white/10 px-1 py-0.5 rounded text-[8px] font-mono text-cyan-300">
             PRO
         </div>
     </div>
 );
 
-export const GameThumbnail = ({ gameId }: { gameId: string }) => {
-    switch (gameId) {
-        case 'tictactoe':
-            return <NeonTicTacToeThumbnail />;
-        default:
-            return (
-                <div className="w-full h-full bg-[#fcfbf9] flex items-center justify-center text-[#433422] font-bold text-4xl">
-                    ?
-                </div>
-            );
-    }
+type DefaultGameThumbnailProps = {
+    titleKey: string;
+    icon?: string;
+};
+
+export const DefaultGameThumbnail = ({ titleKey, icon }: DefaultGameThumbnailProps) => {
+    const { t } = useTranslation('lobby');
+    return (
+        <div className="w-full h-full bg-[#fcfbf9] flex flex-col items-center justify-center text-[#433422] font-bold">
+            <div className="text-4xl leading-none">{icon ?? '🎲'}</div>
+            <div className="mt-1 text-[10px] tracking-widest text-[#8c7b64]">{t(titleKey, { defaultValue: titleKey })}</div>
+        </div>
+    );
 };

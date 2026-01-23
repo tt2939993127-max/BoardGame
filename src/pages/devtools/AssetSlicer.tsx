@@ -1,14 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-// Helper to merge classes
+// 辅助函数：合并类名
 function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
 }
 
-// Icons (SVGs)
+// 图标组件 (SVG)
 const UploadIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
 );
@@ -29,12 +30,24 @@ const ChevronLeftIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
 );
 
+const LockIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+);
+
+const UnlockIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
+);
+
 const ChevronRightIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
 );
 
 const GridIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+);
+
+const LightningIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
 );
 
 const SquareIcon = () => (
@@ -51,12 +64,17 @@ interface ExtractedAsset {
     id: string;
     dataUrl: string;
     timestamp: number;
-    // Metadata for sprite sheet regeneration
+    // 用于重建精灵图的元数据
     srcX: number;
     srcY: number;
     width: number;
     height: number;
     shape: 'circle' | 'square';
+}
+
+interface CropSize {
+    width: number;
+    height: number;
 }
 
 interface Transform {
@@ -69,7 +87,9 @@ export const AssetSlicer = () => {
     // 基础状态
     const [sourceImage, setSourceImage] = useState<string | null>(null);
     const [imageName, setImageName] = useState<string>('图片');
-    const [diameter, setDiameter] = useState<number>(64); // 默认尺寸改为 64x64，更适合图标
+    const [cropSize, setCropSize] = useState<CropSize>({ width: 64, height: 64 }); // 默认尺寸
+    const [isSizeLocked, setIsSizeLocked] = useState(false); // 默认不锁定
+    const [isQuickSlice, setIsQuickSlice] = useState(false); // 快裁模式
     const [shape, setShape] = useState<'circle' | 'square'>('square'); // 默认方形
     const [extractedAssets, setExtractedAssets] = useState<ExtractedAsset[]>([]);
 
@@ -83,8 +103,15 @@ export const AssetSlicer = () => {
     // 交互状态
     const [isPanning, setIsPanning] = useState(false);
     const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+    const [isDrawing, setIsDrawing] = useState(false);
     const [isHoveringImage, setIsHoveringImage] = useState(false);
     const [isAltPressed, setIsAltPressed] = useState(false);
+
+    // 动态锚点：支持从任意方向拖拽后，光标相对选区的位置
+    // { x: 0, y: 0 } = 鼠标在左上角 (默认)
+    // { x: 1, y: 1 } = 鼠标在右下角
+    const [anchorPoint, setAnchorPoint] = useState({ x: 0, y: 0 });
+    const mousePos = useRef({ x: 0, y: 0 }); // 记录鼠标位置用于非移动时的更新
 
     // 高级功能状态
 
@@ -93,6 +120,50 @@ export const AssetSlicer = () => {
     const imageRef = useRef<HTMLImageElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const cursorRef = useRef<HTMLDivElement>(null);
+
+    // 使用 Ref 确保事件处理中的状态实时性
+    const isDrawingRef = useRef(false);
+    const drawStartRef = useRef({ x: 0, y: 0 });
+
+    const dragAspectRatio = useRef<number>(1);
+
+    const getCursorCenter = (scale: number, size: CropSize, anchor = anchorPoint) => {
+        const currentWidth = size.width * scale;
+        const currentHeight = size.height * scale;
+
+        return {
+            x: mousePos.current.x + currentWidth * (0.5 - anchor.x),
+            y: mousePos.current.y + currentHeight * (0.5 - anchor.y)
+        };
+    };
+
+    const updateCursorStyle = () => {
+        if (!cursorRef.current || !sourceImage) return;
+
+        const transformScale = transform.scale;
+        const currentWidth = cropSize.width * transformScale;
+        const currentHeight = cropSize.height * transformScale;
+
+        cursorRef.current.style.width = `${currentWidth}px`;
+        cursorRef.current.style.height = `${currentHeight}px`;
+
+        // 根据锚点计算位置
+        // 如果 anchor.x = 0 (左), left = mouseX
+        // 如果 anchor.x = 1 (右), left = mouseX - width
+        const left = mousePos.current.x - (currentWidth * anchorPoint.x);
+        const top = mousePos.current.y - (currentHeight * anchorPoint.y);
+
+        cursorRef.current.style.left = `${left}px`;
+        cursorRef.current.style.top = `${top}px`;
+    };
+
+    // 当尺寸或视角变化时，更新光标
+    useEffect(() => {
+        if (!isDrawingRef.current) {
+            updateCursorStyle();
+        }
+    }, [cropSize, transform, anchorPoint, isDrawing]); // Added isDrawing to dependencies
 
     // 快捷键与粘贴支持
     useEffect(() => {
@@ -110,12 +181,12 @@ export const AssetSlicer = () => {
                 resetView();
             }
 
-            // 提取尺寸快捷键 (Photoshop 风格: [ 减小, ] 增大)
+            // 提取尺寸快捷键 (Photoshop 风格: [ 减小, ] 增大) - 统一缩放
             if (e.key === '[') {
-                updateDiameter(-4);
+                updateSize(-4);
             }
             if (e.key === ']') {
-                updateDiameter(4);
+                updateSize(4);
             }
 
 
@@ -149,40 +220,83 @@ export const AssetSlicer = () => {
             window.removeEventListener('keyup', handleKeyUp);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [diameter]); // 依赖 diameter 是因为 updateDiameter 闭包问题，虽然这里只用函数式更新
+    }, [cropSize]); // 依赖 cropSize
 
     // 图像缩放逻辑封装 (支持以特定点为中心缩放)
     const handleImageZoom = (deltaY: number, mouseX?: number, mouseY?: number) => {
-        setTransform(prev => {
-            // 使用指数缩放，并减小灵敏度以获得更平滑的体验
-            const zoomIntensity = 0.001;
-            const zoomFactor = Math.exp(-deltaY * zoomIntensity);
-            const newScale = Math.min(Math.max(0.01, prev.scale * zoomFactor), 50);
+        const zoomIntensity = 0.001;
+        const zoomFactor = Math.exp(-deltaY * zoomIntensity);
+        const currentCenter = getCursorCenter(transform.scale, cropSize, anchorPoint);
 
-            if (mouseX === undefined || mouseY === undefined || !containerRef.current) {
-                return { ...prev, scale: newScale };
+        if (!isDrawingRef.current) {
+            // 缩放时以裁剪框中心为锚点，保持视觉位置稳定
+            mousePos.current = currentCenter;
+            setAnchorPoint({ x: 0.5, y: 0.5 });
+        }
+
+        setTransform(prev => {
+            const newScale = Math.min(Math.max(0.01, prev.scale * zoomFactor), 50);
+            const scaleRatio = newScale / prev.scale;
+
+            if (!isDrawingRef.current) {
+                // 视觉恒定：介于“世界恒定”和“屏幕恒定”之间的折中缩放
+                const visualExponent = 0.5;
+                const sizeRatio = Math.pow(scaleRatio, visualExponent - 1);
+
+                setCropSize(prevSize => {
+                    const nextW = Math.max(1, Math.round(prevSize.width * sizeRatio));
+                    const nextH = Math.max(1, Math.round(prevSize.height * sizeRatio));
+
+                    if (shape === 'circle') {
+                        const s = Math.max(nextW, nextH);
+                        return { width: s, height: s };
+                    }
+
+                    return { width: nextW, height: nextH };
+                });
             }
 
-            const rect = containerRef.current.getBoundingClientRect();
-            const cx = mouseX - rect.left;
-            const cy = mouseY - rect.top;
+            // 如果没有提供鼠标位置（如快捷键缩放），则默认以容器中心为缩放中心
+            let cx: number;
+            let cy: number;
 
-            const scaleRatio = newScale / prev.scale;
-            const newX = cx - (cx - prev.x) * scaleRatio;
-            const newY = cy - (cy - prev.y) * scaleRatio;
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                if (isHoveringImage) {
+                    cx = currentCenter.x - rect.left;
+                    cy = currentCenter.y - rect.top;
+                } else if (mouseX !== undefined && mouseY !== undefined) {
+                    cx = mouseX - rect.left;
+                    cy = mouseY - rect.top;
+                } else {
+                    // 使用容器中心（视口中心）
+                    cx = rect.width / 2;
+                    cy = rect.height / 2;
+                }
 
-            return { x: newX, y: newY, scale: newScale };
+                const newX = cx - (cx - prev.x) * scaleRatio;
+                const newY = cy - (cy - prev.y) * scaleRatio;
+
+                return { x: newX, y: newY, scale: newScale };
+            }
+
+            return { ...prev, scale: newScale };
         });
     };
 
-    // 提取区域尺寸逻辑封装 (指数增长更丝滑)
-    const updateDiameter = (deltaY: number) => {
-        setDiameter(prev => {
+    // 提取区域尺寸逻辑封装 (指数增长更丝滑，保持宽高比)
+    const updateSize = (deltaY: number) => {
+        // 调整尺寸时，强制将锚点设为中心，解决“以右下角为原点”的问题
+        setAnchorPoint({ x: 0.5, y: 0.5 });
+
+        setCropSize(prev => {
             const zoomIntensity = 0.001;
             const step = Math.exp(-deltaY * zoomIntensity);
-            const next = prev * step;
-            // 限制一个合理的增长范围，避免单次滚轮变化过巨
-            return Math.max(1, Math.round(next));
+
+            const nextW = Math.max(1, Math.round(prev.width * step));
+            const nextH = Math.max(1, Math.round(prev.height * step));
+
+            return { width: nextW, height: nextH };
         });
     };
 
@@ -197,7 +311,7 @@ export const AssetSlicer = () => {
 
             // 如果按下了 Ctrl 或 Meta，则专门缩放提取区域
             if (e.ctrlKey || e.metaKey) {
-                updateDiameter(e.deltaY);
+                updateSize(e.deltaY);
             } else {
                 // 普通滚轮，缩放视角，以鼠标位置为中心
                 handleImageZoom(e.deltaY, e.clientX, e.clientY);
@@ -206,7 +320,7 @@ export const AssetSlicer = () => {
 
         container.addEventListener('wheel', handleNativeWheel, { passive: false });
         return () => container.removeEventListener('wheel', handleNativeWheel);
-    }, [sourceImage]); // 不再依赖 diameter，仅依赖图片状态
+    }, [sourceImage]);
 
     // 文件处理
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,7 +329,7 @@ export const AssetSlicer = () => {
     };
 
     const loadFile = (file: File) => {
-        // Revoke old URL to avoid memory leaks
+        // 释放旧的 URL 以避免内存泄漏
         if (sourceImage) URL.revokeObjectURL(sourceImage);
 
         const url = URL.createObjectURL(file);
@@ -223,7 +337,28 @@ export const AssetSlicer = () => {
         setImageName(file.name.replace(/\.[^/.]+$/, ""));
         setExtractedAssets([]);
         setTransform({ x: 0, y: 0, scale: 1 });
+        // 重置状态，默认使用中心锚点，符合用户“以中心缩放”的直觉
+        setAnchorPoint({ x: 0.5, y: 0.5 });
+        setCropSize({ width: 64, height: 64 });
+        isDrawingRef.current = false;
     };
+
+    // 全局事件监听：防止拖拽出区域后无法结束
+    useEffect(() => {
+        const handleGlobalEnd = () => {
+            if (isDrawingRef.current) {
+                isDrawingRef.current = false;
+                setIsDrawing(false);
+            }
+        };
+
+        window.addEventListener('mouseup', handleGlobalEnd);
+        // window.addEventListener('mouseleave', handleGlobalEnd); // MouseLeave window 也可以视为结束，视需求而定
+
+        return () => {
+            window.removeEventListener('mouseup', handleGlobalEnd);
+        };
+    }, []);
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
@@ -234,28 +369,16 @@ export const AssetSlicer = () => {
 
 
 
-    // 核心功能：提取切片
-    const handleExtract = (e: React.MouseEvent) => {
-        if (!imageRef.current || isPanning || isAltPressed) return;
-        if (Math.abs(panStart.x - e.clientX) > 5 || Math.abs(panStart.y - e.clientY) > 5) return;
-
+    // 核心功能：提取切片 (抽取通用逻辑)
+    const performExtraction = (imgCenterX: number, imgCenterY: number, width: number, height: number, customShape?: 'circle' | 'square') => {
+        if (!imageRef.current) return;
         const img = imageRef.current;
-        const rect = img.getBoundingClientRect();
+        const targetShape = customShape || shape;
 
-        const displayX = e.clientX - rect.left;
-        const displayY = e.clientY - rect.top;
-
-        const scaleFactor = img.naturalWidth / rect.width;
-
-        const centerX = displayX * scaleFactor;
-        const centerY = displayY * scaleFactor;
-
-        let targetX = centerX - (diameter / 2);
-        let targetY = centerY - (diameter / 2);
-        let targetW = diameter;
-        let targetH = diameter;
-
-
+        let targetX = imgCenterX - (width / 2);
+        let targetY = imgCenterY - (height / 2);
+        let targetW = width;
+        let targetH = height;
 
         // 生成预览图
         const canvas = document.createElement('canvas');
@@ -265,9 +388,10 @@ export const AssetSlicer = () => {
         if (!ctx) return;
 
         // 根据形状裁切
-        if (shape === 'circle') {
+        if (targetShape === 'circle') {
             ctx.beginPath();
-            ctx.arc(targetW / 2, targetH / 2, targetW / 2, 0, Math.PI * 2);
+            const r = Math.min(targetW, targetH) / 2;
+            ctx.arc(targetW / 2, targetH / 2, r, 0, Math.PI * 2);
             ctx.closePath();
             ctx.clip();
         }
@@ -282,9 +406,36 @@ export const AssetSlicer = () => {
             srcY: targetY,
             width: targetW,
             height: targetH,
-            shape,
+            shape: targetShape,
             timestamp: Date.now()
         }]);
+    };
+
+    const handleExtractClick = (e: React.MouseEvent) => {
+        if (!imageRef.current || isPanning || isAltPressed) return;
+
+        const img = imageRef.current;
+        const rect = img.getBoundingClientRect();
+
+        const displayX = e.clientX - rect.left;
+        const displayY = e.clientY - rect.top;
+        const scaleFactor = img.naturalWidth / rect.width;
+
+        // 由于光标位置受 anchorPoint 影响，点击时的坐标 (e.clientX) 是光标的定位点
+        // 定位点 = BoxLeft + (Width * AnchorX)
+        // 所以 BoxLeft = MouseX - (Width * AnchorX)
+
+        const sourceMouseX = displayX * scaleFactor;
+        const sourceMouseY = displayY * scaleFactor;
+
+        // 计算选区原本的 TopLeft (Source Coordinates)
+        const boxLeft = sourceMouseX - (cropSize.width * anchorPoint.x);
+        const boxTop = sourceMouseY - (cropSize.height * anchorPoint.y);
+
+        const centerX = boxLeft + (cropSize.width / 2);
+        const centerY = boxTop + (cropSize.height / 2);
+
+        performExtraction(centerX, centerY, cropSize.width, cropSize.height);
     };
 
     const downloadAsset = (asset: ExtractedAsset, index: number) => {
@@ -361,7 +512,7 @@ export const AssetSlicer = () => {
         triggerDownload(pngUrl, `${imageName}_spritesheet.png`);
     };
 
-    const cursorRef = useRef<HTMLDivElement>(null);
+
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (e.button === 1 || (e.button === 0 && isAltPressed)) {
@@ -370,33 +521,118 @@ export const AssetSlicer = () => {
             setPanStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
         } else if (e.button === 0) {
             setPanStart({ x: e.clientX, y: e.clientY });
+            // 如果是在图片上按下，且不带 Alt，则开始“滑选”
+            if (isHoveringImage && !isAltPressed) {
+                // 同步更新 Ref 和 State
+                isDrawingRef.current = true;
+                drawStartRef.current = { x: e.clientX, y: e.clientY };
+
+                setIsDrawing(true);
+
+                // 记录开始拖拽时的宽高比，用于锁定比例模式
+                if (isSizeLocked && cropSize.height > 0) {
+                    dragAspectRatio.current = cropSize.width / cropSize.height;
+                } else {
+                    dragAspectRatio.current = 1;
+                }
+            }
         }
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
-        // 性能优化：移除了实时自动贴边计算，只在点击时触发，避免“乱动”
-        if (cursorRef.current && sourceImage) {
-            const transformScale = transform.scale;
-            // 恢复为固定的光标大小，仅跟随直径
-            const currentWidth = diameter * transformScale;
-            const currentHeight = diameter * transformScale;
-
-            cursorRef.current.style.width = `${currentWidth}px`;
-            cursorRef.current.style.height = `${currentHeight}px`;
-            cursorRef.current.style.left = `${e.clientX}px`;
-            cursorRef.current.style.top = `${e.clientY}px`;
-        }
+        mousePos.current = { x: e.clientX, y: e.clientY };
 
         if (isPanning) {
             e.preventDefault();
             setTransform(prev => ({ ...prev, x: e.clientX - panStart.x, y: e.clientY - panStart.y }));
+            return;
+        }
+
+        if (isDrawingRef.current) {
+            const startX = drawStartRef.current.x;
+            const startY = drawStartRef.current.y;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+
+            let w = Math.abs(dx) / transform.scale;
+            let h = Math.abs(dy) / transform.scale;
+
+            if (shape === 'circle') {
+                const s = Math.max(w, h);
+                w = s;
+                h = s;
+            } else if (isSizeLocked) {
+                const ratio = dragAspectRatio.current;
+                if (w / ratio > h) {
+                    h = w / ratio;
+                } else {
+                    w = h * ratio;
+                }
+            }
+
+            setCropSize({ width: Math.round(w), height: Math.round(h) });
+
+            if (cursorRef.current) {
+                const screenW = w * transform.scale;
+                const screenH = h * transform.scale;
+                cursorRef.current.style.width = `${screenW}px`;
+                cursorRef.current.style.height = `${screenH}px`;
+                cursorRef.current.style.left = `${dx > 0 ? startX : startX - screenW}px`;
+                cursorRef.current.style.top = `${dy > 0 ? startY : startY - screenH}px`;
+            }
+        } else {
+            updateCursorStyle();
         }
     };
 
-    const handleMouseUp = () => { setIsPanning(false); };
+    const handleMouseUp = (e: React.MouseEvent) => {
+        if (isPanning) {
+            setIsPanning(false);
+            return;
+        }
+
+        if (isDrawingRef.current) {
+            const startX = drawStartRef.current.x;
+            const startY = drawStartRef.current.y;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            const dragDist = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+
+            // 阈值调大预防误触 (原 10 -> 30)
+            if (dragDist > 30) {
+                if (isQuickSlice && imageRef.current) {
+                    // 快裁模式：直接提取
+                    const img = imageRef.current;
+                    const rect = img.getBoundingClientRect();
+                    const screenCenterX = (e.clientX + startX) / 2;
+                    const screenCenterY = (e.clientY + startY) / 2;
+                    const displayX = screenCenterX - rect.left;
+                    const displayY = screenCenterY - rect.top;
+                    const scaleFactor = img.naturalWidth / rect.width;
+                    const imgCenterX = displayX * scaleFactor;
+                    const imgCenterY = displayY * scaleFactor;
+                    performExtraction(imgCenterX, imgCenterY, cropSize.width, cropSize.height);
+
+                    setAnchorPoint({ x: 0, y: 0 });
+                } else {
+                    // 非快裁模式：计算新的锚点，使选区视觉上保持在原位
+                    // dx > 0: 鼠标在右 -> Anchor X = 1
+                    setAnchorPoint({
+                        x: dx > 0 ? 1 : 0,
+                        y: dy > 0 ? 1 : 0
+                    });
+                }
+            } else {
+                handleExtractClick(e);
+            }
+
+            isDrawingRef.current = false;
+            setIsDrawing(false);
+        }
+    };
     const resetView = () => { setTransform({ x: 0, y: 0, scale: 1 }); };
 
-    const displayedCursorSize = diameter * transform.scale;
+
 
     return (
         <div
@@ -416,10 +652,15 @@ export const AssetSlicer = () => {
                 className="flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col z-20 shadow-2xl relative overflow-hidden"
             >
                 <div className="p-6 border-b border-gray-800 bg-gray-900/50 backdrop-blur shrink-0">
+                    <div className="flex items-center justify-between mb-1">
+                        <Link to="/" className="text-[10px] text-gray-500 hover:text-teal-400 font-bold flex items-center gap-1 transition-colors uppercase tracking-wider">
+                            ← 返回主页
+                        </Link>
+                    </div>
                     <h1 className="text-2xl font-black bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent truncate cursor-pointer" onClick={resetView}>
                         素材切片机
                     </h1>
-                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-widest font-bold">Circle & Square Extractor</p>
+                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-widest font-bold">Creative Workshop</p>
                 </div>
 
                 <div className="p-6 space-y-8 flex-1 overflow-y-auto custom-scrollbar min-w-[320px]">
@@ -441,37 +682,106 @@ export const AssetSlicer = () => {
                         <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
                             {/* 功能切换栏 */}
                             <div className="flex bg-gray-800 p-1 rounded-lg">
-                                <button onClick={() => setShape('square')} className={cn("flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-bold transition-all", shape === 'square' ? "bg-teal-500 text-white shadow-lg" : "text-gray-400 hover:text-white")}><SquareIcon /> 方形</button>
-                                <button onClick={() => setShape('circle')} className={cn("flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-bold transition-all", shape === 'circle' ? "bg-teal-500 text-white shadow-lg" : "text-gray-400 hover:text-white")}><CircleIcon /> 圆形</button>
+                                <button
+                                    onClick={() => setShape('square')}
+                                    className={cn("flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-bold transition-all", shape === 'square' ? "bg-teal-500 text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                                >
+                                    <SquareIcon /> 矩形
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShape('circle');
+                                        // 切换回圆形是强制正圆 (取最大边)
+                                        const s = Math.max(cropSize.width, cropSize.height);
+                                        setCropSize({ width: s, height: s });
+                                    }}
+                                    className={cn("flex-1 flex items-center justify-center gap-2 py-1.5 rounded-md text-xs font-bold transition-all", shape === 'circle' ? "bg-teal-500 text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                                >
+                                    <CircleIcon /> 圆形
+                                </button>
                             </div>
 
 
 
                             <div>
                                 <div className="flex justify-between items-end mb-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">裁切尺寸</label>
-                                    <div className="flex items-center gap-1 group/input">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">裁切尺寸 (宽 x 高)</label>
+                                </div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-gray-500 text-xs font-medium">裁剪尺寸</span>
+                                    <button
+                                        onClick={() => setIsQuickSlice(!isQuickSlice)}
+                                        className={cn(
+                                            "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all",
+                                            isQuickSlice
+                                                ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                                                : "bg-gray-800 border-gray-700 text-gray-500 hover:text-gray-400"
+                                        )}
+                                        title="快裁模式：松开鼠标立即裁剪"
+                                    >
+                                        <LightningIcon />
+                                        <span>快裁</span>
+                                    </button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {/* 宽度输入 */}
+                                    <div className="flex-1 bg-gray-800 rounded-lg flex items-center px-2 py-1.5 border border-transparent focus-within:border-teal-500/50 transition-colors">
+                                        <span className="text-[9px] text-gray-500 font-bold mr-1.5">W</span>
                                         <input
                                             type="number"
-                                            value={diameter}
-                                            onChange={(e) => setDiameter(Math.max(1, Number(e.target.value)))}
-                                            className="w-16 bg-transparent border-none text-right text-sm text-teal-400 font-mono font-bold p-0 focus:ring-0"
+                                            value={cropSize.width}
+                                            onChange={(e) => {
+                                                const val = Math.max(1, Number(e.target.value));
+                                                setCropSize(prev => {
+                                                    if (shape === 'circle') return { width: val, height: val };
+                                                    if (isSizeLocked) {
+                                                        const ratio = prev.width / prev.height;
+                                                        return { width: val, height: Math.max(1, Math.round(val / ratio)) };
+                                                    }
+                                                    return { ...prev, width: val };
+                                                });
+                                            }}
+                                            className="w-full bg-transparent border-none text-teal-400 font-mono font-bold p-0 focus:ring-0 text-sm"
                                         />
-                                        <span className="text-xs text-gray-500 font-mono">px</span>
+                                    </div>
+
+                                    {/* 锁定按钮 */}
+                                    <button
+                                        onClick={() => setIsSizeLocked(!isSizeLocked)}
+                                        className={cn(
+                                            "p-1.5 rounded-md transition-all active:scale-95",
+                                            isSizeLocked ? "bg-teal-500/10 text-teal-400" : "bg-gray-800 text-gray-500 hover:text-gray-300"
+                                        )}
+                                        title={isSizeLocked ? "解除锁定" : "锁定比例"}
+                                        disabled={shape === 'circle'}
+                                    >
+                                        {isSizeLocked ? <LockIcon /> : <UnlockIcon />}
+                                    </button>
+
+                                    {/* 高度输入 */}
+                                    <div className="flex-1 bg-gray-800 rounded-lg flex items-center px-2 py-1.5 border border-transparent focus-within:border-teal-500/50 transition-colors">
+                                        <span className="text-[9px] text-gray-500 font-bold mr-1.5">H</span>
+                                        <input
+                                            type="number"
+                                            value={cropSize.height}
+                                            onChange={(e) => {
+                                                const val = Math.max(1, Number(e.target.value));
+                                                setCropSize(prev => {
+                                                    if (shape === 'circle') return { width: val, height: val };
+                                                    if (isSizeLocked) {
+                                                        const ratio = prev.width / prev.height;
+                                                        return { width: Math.max(1, Math.round(val * ratio)), height: val };
+                                                    }
+                                                    return { ...prev, height: val };
+                                                });
+                                            }}
+                                            className="w-full bg-transparent border-none text-teal-400 font-mono font-bold p-0 focus:ring-0 text-sm"
+                                        />
                                     </div>
                                 </div>
-                                <input
-                                    type="range"
-                                    min="8"
-                                    max="2048"
-                                    step="1"
-                                    value={diameter > 2048 ? 2048 : diameter}
-                                    onChange={(e) => setDiameter(Number(e.target.value))}
-                                    className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-teal-500"
-                                />
                                 <div className="flex justify-between mt-2">
-                                    <button onClick={() => updateDiameter(-4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">缩减 [</button>
-                                    <button onClick={() => updateDiameter(4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">增大 ]</button>
+                                    <button onClick={() => updateSize(-4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">缩减 [</button>
+                                    <button onClick={() => updateSize(4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">增大 ]</button>
                                 </div>
                             </div>
 
@@ -535,19 +845,43 @@ export const AssetSlicer = () => {
                 ) : (
                     <div className="w-full h-full flex items-center justify-center pointer-events-none">
                         <div className="pointer-events-auto origin-center" style={{ transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})` }}>
-                            <img ref={imageRef} src={sourceImage} alt="Source" className={cn("max-w-none shadow-[0_0_100px_rgba(0,0,0,0.8)] ring-1 ring-gray-700/50 select-none", (isAltPressed || isPanning) ? "cursor-grab" : isHoveringImage ? "cursor-none" : "cursor-default")} onMouseEnter={() => setIsHoveringImage(true)} onMouseLeave={() => setIsHoveringImage(false)} onClick={handleExtract} draggable={false} />
+                            <img ref={imageRef} src={sourceImage} alt="Source" className={cn("max-w-none shadow-[0_0_100px_rgba(0,0,0,0.8)] ring-1 ring-gray-700/50 select-none", (isAltPressed || isPanning) ? "cursor-grab" : isHoveringImage ? "cursor-none" : "cursor-default")} onMouseEnter={() => setIsHoveringImage(true)} onMouseLeave={() => setIsHoveringImage(false)} draggable={false} />
                         </div>
                     </div>
                 )}
 
                 {sourceImage && isHoveringImage && !isAltPressed && !isPanning && (
-                    <div ref={cursorRef} className={cn("fixed pointer-events-none border-2 border-teal-400 shadow-[0_0_20px_rgba(45,212,191,0.6)] z-50 mix-blend-difference transition-[border-color,box-shadow] duration-150",
-                        shape === 'circle' ? 'rounded-full' : 'rounded-none'
-                    )}
-                        style={{ width: displayedCursorSize, height: displayedCursorSize, transform: 'translate(-50%, -50%)' }}>
-                        <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-teal-400 -translate-x-1/2 -translate-y-1/2" />
-                        <div className="absolute top-1/2 left-1/2 w-0.5 h-3 bg-teal-400 -translate-x-1/2 -translate-y-1/2" />
-                        <div className="absolute bottom-[-24px] left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-black/80 rounded text-[10px] font-mono font-bold text-gray-300 whitespace-nowrap">{diameter}x{diameter}</div>
+                    <div
+                        ref={cursorRef}
+                        className={cn(
+                            "fixed pointer-events-none border-2 border-teal-400 shadow-[0_0_20px_rgba(45,212,191,0.6)] z-50 mix-blend-difference transition-[border-color,box-shadow,width,height] duration-75",
+                            shape === 'circle' ? 'rounded-full' : 'rounded-none',
+                            isDrawing && "border-white border-dashed opacity-80"
+                        )}
+                        style={{
+                            // 样式完全由 handleMouseMove 和 useEffect 控制，避免 React 渲染冲突
+                            transform: 'none',
+                        }}
+                    >
+                        {/* 实时尺寸提示 */}
+                        <div className="absolute bottom-[-24px] left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-black/80 rounded text-[10px] font-mono font-bold text-gray-300 whitespace-nowrap">
+                            {cropSize.width}x{cropSize.height}
+                        </div>
+                        {isDrawing ? (
+                            <div className="absolute -top-6 left-0 flex items-center gap-1.5">
+                                <div className={cn("text-white px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-tighter", isQuickSlice ? "bg-amber-500" : "bg-teal-500")}>
+                                    {isQuickSlice ? "释放提取" : "释放锁定"}
+                                </div>
+                                <div className="text-[10px] text-white/50 font-mono">
+                                    {isQuickSlice ? "快裁模式" : "滑选模式"}
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-teal-400 -translate-x-1/2 -translate-y-1/2" />
+                                <div className="absolute top-1/2 left-1/2 w-0.5 h-3 bg-teal-400 -translate-x-1/2 -translate-y-1/2" />
+                            </>
+                        )}
                     </div>
                 )}
 

@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { CategoryPills, type Category } from '../components/layout/CategoryPills';
 import { GameDetailsModal } from '../components/lobby/GameDetailsModal';
 import { GameList } from '../components/lobby/GameList';
@@ -7,11 +8,16 @@ import { getGamesByCategory, getGameById } from '../config/games.config';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { EmailBindModal } from '../components/auth/EmailBindModal';
-import { lobbySocket, type LobbyMatch } from '../services/lobbySocket';
 import { useNavigate } from 'react-router-dom';
 import { clearMatchCredentials, leaveMatch } from '../hooks/useMatchStatus';
 import { ConfirmModal } from '../components/common/ConfirmModal';
+import { LanguageSwitcher } from '../components/common/LanguageSwitcher';
+import { useModalStack } from '../contexts/ModalStackContext';
 import clsx from 'clsx';
+import { LobbyClient } from 'boardgame.io/client';
+import { GAME_SERVER_URL } from '../config/server';
+
+const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
 export const Home = () => {
     const [activeCategory, setActiveCategory] = useState<Category>('All');
@@ -19,9 +25,10 @@ export const Home = () => {
     const [showUserMenu, setShowUserMenu] = useState(false);
     const navigate = useNavigate();
 
-    // Active Match State
-    const [activeMatch, setActiveMatch] = useState<LobbyMatch | null>(null);
-    const [myMatchRole, setMyMatchRole] = useState<{ playerID: string; credentials?: string } | null>(null);
+    // 活跃对局状态
+    const [activeMatch, setActiveMatch] = useState<{ matchID: string; gameName: string; players: Array<{ id: number; name?: string; isConnected?: boolean }> } | null>(null);
+    const [myMatchRole, setMyMatchRole] = useState<{ playerID: string; credentials?: string; gameName?: string } | null>(null);
+    const [localStorageTick, setLocalStorageTick] = useState(0);
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
@@ -29,19 +36,25 @@ export const Home = () => {
         isHost: boolean;
     } | null>(null);
 
-    // Auth Modal State
-    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-    const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-
-    // Email Bind Modal State
-    const [isEmailBindModalOpen, setIsEmailBindModalOpen] = useState(false);
-
     const { user, logout } = useAuth();
+    const { openModal, closeModal } = useModalStack();
+    const { t } = useTranslation(['lobby', 'auth']);
     const selectedGameId = searchParams.get('game');
     const selectedGame = useMemo(() => selectedGameId ? getGameById(selectedGameId) : null, [selectedGameId]);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory]);
+    const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
+
+    const confirmModalIdRef = useRef<string | null>(null);
+    const gameDetailsModalIdRef = useRef<string | null>(null);
+    const gameDetailsGameIdRef = useRef<string | null>(null);
+    const authModalIdRef = useRef<string | null>(null);
+    const emailBindModalIdRef = useRef<string | null>(null);
 
     const handleGameClick = (id: string) => {
+        if (id === 'assetslicer') {
+            navigate('/dev/slicer');
+            return;
+        }
         setSearchParams({ game: id });
     };
 
@@ -55,41 +68,147 @@ export const Home = () => {
     };
 
     const openAuth = (mode: 'login' | 'register') => {
-        setAuthMode(mode);
-        setIsAuthModalOpen(true);
+        if (authModalIdRef.current) {
+            closeModal(authModalIdRef.current);
+            authModalIdRef.current = null;
+        }
+        authModalIdRef.current = openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            lockScroll: true,
+            onClose: () => {
+                authModalIdRef.current = null;
+            },
+            render: ({ close, closeOnBackdrop }) => (
+                <AuthModal
+                    isOpen
+                    onClose={() => {
+                        close();
+                    }}
+                    initialMode={mode}
+                    closeOnBackdrop={closeOnBackdrop}
+                />
+            ),
+        });
     };
 
-    // Check for active matches
+    const openEmailBind = () => {
+        if (emailBindModalIdRef.current) {
+            closeModal(emailBindModalIdRef.current);
+            emailBindModalIdRef.current = null;
+        }
+        emailBindModalIdRef.current = openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            lockScroll: true,
+            onClose: () => {
+                emailBindModalIdRef.current = null;
+            },
+            render: ({ close, closeOnBackdrop }) => (
+                <EmailBindModal
+                    isOpen
+                    onClose={() => {
+                        close();
+                    }}
+                    closeOnBackdrop={closeOnBackdrop}
+                />
+            ),
+        });
+    };
+
+    // 检查是否有活跃对局（基于 localStorage，跨游戏）
     useEffect(() => {
-        const unsubscribe = lobbySocket.subscribe((matches) => {
-            // Priority 1: Check local credentials
-            const localMatch = matches.find(m =>
-                localStorage.getItem(`match_creds_${m.matchID}`)
-            );
+        const handleStorage = () => setLocalStorageTick(t => t + 1);
+        window.addEventListener('storage', handleStorage);
 
-            if (localMatch) {
-                setActiveMatch(localMatch);
-                const saved = localStorage.getItem(`match_creds_${localMatch.matchID}`);
-                if (saved) setMyMatchRole(JSON.parse(saved));
-                return;
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const findLocalMatch = () => {
+            for (let i = 0; i < localStorage.length; i += 1) {
+                const key = localStorage.key(i);
+                if (!key || !key.startsWith('match_creds_')) continue;
+                const raw = localStorage.getItem(key);
+                if (!raw) continue;
+                try {
+                    const parsed = JSON.parse(raw);
+                    const matchID = parsed.matchID || key.replace('match_creds_', '');
+                    if (!matchID) continue;
+                    const gameName = parsed.gameName || 'tictactoe';
+                    return {
+                        matchID,
+                        playerID: parsed.playerID as string,
+                        credentials: parsed.credentials as string | undefined,
+                        gameName: gameName as string,
+                    };
+                } catch {
+                    continue;
+                }
             }
+            return null;
+        };
 
+        const local = findLocalMatch();
+        if (!local) {
             setActiveMatch(null);
             setMyMatchRole(null);
+            return;
+        }
+
+        setMyMatchRole({
+            playerID: local.playerID,
+            credentials: local.credentials,
+            gameName: local.gameName,
         });
 
-        // Request initial state
-        lobbySocket.requestRefresh();
+        void lobbyClient.getMatch(local.gameName, local.matchID)
+            .then(match => {
+                if (cancelled) return;
+                setActiveMatch({
+                    matchID: local.matchID,
+                    gameName: local.gameName,
+                    players: match.players.map((p: any) => ({
+                        id: p.id,
+                        name: p.name,
+                        isConnected: p.isConnected,
+                    })),
+                });
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                const status = (err as { status?: number }).status;
+                const message = (err as { message?: string }).message ?? '';
+                if (status === 404 || message.includes('404')) {
+                    // 房间已不存在，清理本地凭证避免重复请求
+                    clearMatchCredentials(local.matchID);
+                    setActiveMatch(null);
+                    setMyMatchRole(null);
+                    setLocalStorageTick((t) => t + 1);
+                    return;
+                }
+                setActiveMatch({
+                    matchID: local.matchID,
+                    gameName: local.gameName,
+                    players: [],
+                });
+            });
 
-        return () => unsubscribe();
-    }, [user]);
+        return () => {
+            cancelled = true;
+        };
+    }, [localStorageTick, user]);
 
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;
 
-        // We assume it's TicTacToe for now
-        const gameId = 'tictactoe';
-        navigate(`/games/${gameId}/match/${activeMatch.matchID}?playerID=${myMatchRole.playerID}`);
+        // 优先使用 myMatchRole 中保存的 gameName，否则回退到 activeMatch 中的 gameName，最后默认 tictactoe
+        const gameId = myMatchRole.gameName || activeMatch.gameName || 'tictactoe';
+        navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${myMatchRole.playerID}`);
     };
 
     const handleDestroyOrLeave = async () => {
@@ -102,7 +221,7 @@ export const Home = () => {
             clearMatchCredentials(activeMatch.matchID);
             setActiveMatch(null);
             setMyMatchRole(null);
-            lobbySocket.requestRefresh();
+            setLocalStorageTick(t => t + 1);
             return;
         }
 
@@ -117,132 +236,193 @@ export const Home = () => {
 
     const handleConfirmAction = async () => {
         if (!pendingAction) return;
-        const success = await leaveMatch('TicTacToe', pendingAction.matchID, pendingAction.playerID, pendingAction.credentials);
+
+        let gameName = 'tictactoe';
+        // 尝试获取正确的 gameName
+        if (myMatchRole && myMatchRole.gameName) {
+            gameName = myMatchRole.gameName;
+        } else if (activeMatch && activeMatch.gameName) {
+            gameName = activeMatch.gameName;
+        }
+
+        const success = await leaveMatch(gameName, pendingAction.matchID, pendingAction.playerID, pendingAction.credentials);
         if (!success) {
-            clearMatchCredentials(pendingAction.matchID);
-            setPendingAction(null);
-            lobbySocket.requestRefresh();
+            // Keep state as-is so the user can retry or decide what to do next.
             return;
         }
+
+        // On success, the backend has released the slot; update local state to match.
+        clearMatchCredentials(pendingAction.matchID);
         setPendingAction(null);
-        lobbySocket.requestRefresh();
+        setLocalStorageTick(t => t + 1);
     };
 
     const handleCancelAction = () => {
         setPendingAction(null);
     };
 
+    useEffect(() => {
+        if (pendingAction && !confirmModalIdRef.current) {
+            confirmModalIdRef.current = openModal({
+                closeOnBackdrop: true,
+                closeOnEsc: true,
+                lockScroll: true,
+                onClose: () => {
+                    handleCancelAction();
+                    confirmModalIdRef.current = null;
+                },
+                render: ({ close, closeOnBackdrop }) => (
+                    <ConfirmModal
+                        open
+                        title={pendingAction.isHost ? t('lobby:confirm.destroy.title') : t('lobby:confirm.leave.title')}
+                        description={pendingAction.isHost ? t('lobby:confirm.destroy.description') : t('lobby:confirm.leave.description')}
+                        onConfirm={() => {
+                            handleConfirmAction();
+                        }}
+                        onCancel={() => {
+                            close();
+                        }}
+                        tone="warm"
+                        closeOnBackdrop={closeOnBackdrop}
+                    />
+                ),
+            });
+        }
+
+        if (!pendingAction && confirmModalIdRef.current) {
+            closeModal(confirmModalIdRef.current);
+            confirmModalIdRef.current = null;
+        }
+    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
+
+    useEffect(() => {
+        if (import.meta.env.DEV) {
+            console.info('[Home] modal sync', {
+                search: window.location.search,
+                selectedGameId,
+                selectedGame: selectedGame?.id,
+                currentModalId: gameDetailsModalIdRef.current,
+                currentGameId: gameDetailsGameIdRef.current,
+            });
+        }
+
+        if (selectedGame && (gameDetailsGameIdRef.current !== selectedGame.id)) {
+            if (gameDetailsModalIdRef.current) {
+                closeModal(gameDetailsModalIdRef.current);
+                gameDetailsModalIdRef.current = null;
+            }
+            gameDetailsGameIdRef.current = selectedGame.id;
+            gameDetailsModalIdRef.current = openModal({
+                closeOnBackdrop: true,
+                closeOnEsc: true,
+                lockScroll: true,
+                onClose: () => {
+                    gameDetailsModalIdRef.current = null;
+                    gameDetailsGameIdRef.current = null;
+                    handleCloseModal();
+                },
+                render: ({ close, closeOnBackdrop }) => (
+                    <GameDetailsModal
+                        isOpen
+                        onClose={() => {
+                            close();
+                        }}
+                        gameId={selectedGame.id}
+                        titleKey={selectedGame.titleKey}
+                        descriptionKey={selectedGame.descriptionKey}
+                        thumbnail={selectedGame.thumbnail}
+                        closeOnBackdrop={closeOnBackdrop}
+                    />
+                ),
+            });
+        }
+
+        if (!selectedGame && gameDetailsModalIdRef.current) {
+            closeModal(gameDetailsModalIdRef.current);
+            gameDetailsModalIdRef.current = null;
+            gameDetailsGameIdRef.current = null;
+        }
+    }, [closeModal, handleCloseModal, openModal, selectedGame, selectedGameId]);
+
     return (
-        <div className="min-h-screen bg-[#f3f0e6] text-[#433422] font-serif overflow-y-scroll">
+        <div className="min-h-screen bg-[#f3f0e6] text-[#433422] font-serif overflow-y-scroll flex flex-col items-center">
+            <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-4">
+                {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
+                <div className="md:absolute md:top-10 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-8 md:mb-0">
+                    {user ? (
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowUserMenu(!showUserMenu)}
+                                className="group hover:text-[#2c2216] text-[#433422] flex items-center gap-2 cursor-pointer transition-colors px-4 py-2 rounded hover:bg-[#e8e4db]"
+                            >
+                                <span className="font-bold text-sm tracking-tight">{user.username}</span>
+                            </button>
+                            {showUserMenu && (
+                                <div className="absolute top-[calc(100%+0.5rem)] right-0 bg-[#fefcf7] shadow-[0_8px_32px_rgba(67,52,34,0.12)] border border-[#d3ccba] rounded-sm py-2 px-2 z-50 min-w-[160px] animate-in fade-in slide-in-from-top-1">
+                                    <button
+                                        onClick={() => { setShowUserMenu(false); openEmailBind(); }}
+                                        className="relative w-full px-4 py-2 text-center cursor-pointer text-[#433422] font-bold text-xs hover:bg-[#f3f0e6] transition-colors"
+                                    >
+                                        <span className="relative z-10 flex items-center justify-center gap-2">
+                                            {user?.emailVerified ? t('auth:menu.emailBound') : t('auth:menu.bindEmail')}
+                                        </span>
+                                    </button>
+                                    <div className="h-px bg-[#e5e0d0] my-1 mx-2" />
+                                    <button
+                                        onClick={handleLogout}
+                                        className="relative w-full px-4 py-2 text-center cursor-pointer text-[#433422] font-bold text-xs hover:bg-[#f3f0e6] transition-colors"
+                                    >
+                                        <span className="relative z-10">{t('auth:menu.logout')}</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-6">
+                            <button onClick={() => openAuth('login')} className="hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider translate-y-[1px]">{t('auth:menu.login')}</button>
+                            <button onClick={() => openAuth('register')} className="hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider translate-y-[1px]">{t('auth:menu.register')}</button>
+                        </div>
+                    )}
+                    <LanguageSwitcher />
+                </div>
 
-            {/* Compact Header - Logo integrated into divider */}
-            <div className="pt-6 pb-3 flex justify-center">
+                {/* 居中大标题 - 使用 clamp 保证响应式大小 */}
                 <div className="flex flex-col items-center">
-                    <h1 className="text-3xl font-bold tracking-[0.2em] text-[#433422] mb-4">
-                        桌游教学与联机平台
+                    <h1 className="text-[clamp(1.75rem,5vw,2.5rem)] font-bold tracking-[0.15em] text-[#433422] mb-1.5 text-center leading-tight">
+                        {t('lobby:home.title')}
                     </h1>
-                    {/* Divider with embedded logo */}
-                    <div className="flex items-center gap-3">
-                        <div className="h-px w-16 bg-[#433422] opacity-20" />
-
-                        {/* Logo */}
-                        <img
-                            src="/logos/logo_1_grid.svg"
-                            alt="BoardGame Logo"
-                            className="w-6 h-6 opacity-60"
-                        />
-
-                        <div className="h-px w-16 bg-[#433422] opacity-20" />
+                    <div className="flex items-center gap-4">
+                        <div className="h-px w-[115px] md:w-44 bg-[#433422] opacity-25" />
+                        <img src="/logos/logo_1_grid.svg" alt="logo" className="w-5 md:w-6 opacity-60" />
+                        <div className="h-px w-[115px] md:w-44 bg-[#433422] opacity-25" />
                     </div>
                 </div>
-            </div>
+            </header>
 
-            {/* Auth Actions - with cursor pointer */}
-            <div className="absolute top-4 right-4 text-[10px] font-sans tracking-wide z-50 text-[#8c7b64]">
-                {user ? (
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowUserMenu(!showUserMenu)}
-                            className="hover:text-[#2c2216] text-[#433422] flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded hover:bg-[#e8e4db]"
-                        >
-                            <span className="font-bold text-sm">{user.username}</span>
-                        </button>
-                        {showUserMenu && (
-                            <div className="absolute top-[calc(100%+8px)] right-0 bg-[#fefcf7] shadow-[0_8px_24px_rgba(67,52,34,0.15)] border border-[#d3ccba] rounded-sm py-1.5 px-1.5 z-50 min-w-[100px] animate-in fade-in slide-in-from-top-1 duration-200">
-                                <div className="absolute -top-1.5 right-4 w-3 h-3 bg-[#fefcf7] border-l border-t border-[#d3ccba] rotate-45" />
-
-                                {/* Bind Email */}
-                                <button
-                                    onClick={() => { setShowUserMenu(false); setIsEmailBindModalOpen(true); }}
-                                    className="relative w-full px-4 py-2 text-center cursor-pointer text-[#433422] whitespace-nowrap font-serif font-bold text-xs tracking-wider transition-colors group"
-                                >
-                                    <span className="relative z-10 flex items-center justify-center gap-1">
-                                        {user?.emailVerified ? '✓' : '📧'}
-                                        {user?.emailVerified ? '已绑定邮箱' : '绑定邮箱'}
-                                    </span>
-                                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-[1.5px] bg-[#433422] transition-all duration-300 group-hover:w-[60%]" />
-                                </button>
-
-                                <div className="h-px bg-[#e5e0d0] my-1" />
-
-                                {/* Logout */}
-                                <button
-                                    onClick={handleLogout}
-                                    className="relative w-full px-4 py-2 text-center cursor-pointer text-[#433422] whitespace-nowrap font-serif font-bold text-xs tracking-wider transition-colors group"
-                                >
-                                    <span className="relative z-10">退出登录</span>
-                                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-[1.5px] bg-[#433422] transition-all duration-300 group-hover:w-[60%]" />
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="flex gap-4 items-center">
-                        <button
-                            onClick={() => openAuth('login')}
-                            className="relative hover:text-[#2c2216] cursor-pointer transition-colors font-bold text-xs tracking-wider group py-1"
-                        >
-                            <span className="relative z-10">登录</span>
-                            <span className="absolute bottom-0 left-0 w-0 h-[1.5px] bg-[#433422] transition-all duration-300 group-hover:w-full" />
-                        </button>
-                        <span className="opacity-30">|</span>
-                        <button
-                            onClick={() => openAuth('register')}
-                            className="relative hover:text-[#2c2216] cursor-pointer transition-colors font-bold text-xs tracking-wider group py-1"
-                        >
-                            <span className="relative z-10">注册</span>
-                            <span className="absolute bottom-0 left-0 w-0 h-[1.5px] bg-[#433422] transition-all duration-300 group-hover:w-full" />
-                        </button>
-                    </div>
-                )}
-            </div>
-
-            {/* Main Content */}
-            <main className="w-full flex flex-col items-center py-4">
-
-                {/* Category Filter */}
-                <div className="mb-8">
+            {/* 主内容区域 - 商业级容器限制 */}
+            <main className="w-full max-w-7xl flex flex-col items-center pt-0 px-6 md:px-8">
+                {/* 分类筛选 */}
+                <nav className="mb-6 w-full">
                     <CategoryPills activeCategory={activeCategory} onSelect={setActiveCategory} />
-                </div>
+                </nav>
 
-                {/* Game Grid */}
-                <div className="w-full flex justify-center px-4">
+                {/* 游戏列表 */}
+                <section className="w-full pb-20">
                     <GameList games={filteredGames} onGameClick={handleGameClick} />
-                </div>
-
+                </section>
             </main>
 
-            {/* Active Match Indicator */}
+            {/* 活跃对局指示器 */}
             {activeMatch && (
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
                     <div className="bg-[#433422] text-[#fcfbf9] px-6 py-3 rounded shadow-xl border border-[#5c4a35] flex items-center gap-4">
                         <div className="flex flex-col">
-                            <span className="text-[10px] text-[#c0a080] uppercase tracking-wider font-bold">当前进行中</span>
+                            <span className="text-[10px] text-[#c0a080] uppercase tracking-wider font-bold">{t('lobby:home.activeMatch.status')}</span>
                             <span className="text-sm font-bold">
-                                房间 #{activeMatch.matchID.slice(0, 4)}
+                                {t('lobby:home.activeMatch.room', { id: activeMatch.matchID.slice(0, 4) })}
                                 <span className="mx-2 opacity-50">|</span>
                                 <span className={activeMatch.players.some(p => p.name) ? 'opacity-100' : 'opacity-50 italic'}>
-                                    {activeMatch.players.filter(p => p.name).length} 人在席
+                                    {t('lobby:home.activeMatch.players', { count: activePlayerCount })}
                                 </span>
                             </span>
                         </div>
@@ -257,49 +437,19 @@ export const Home = () => {
                                             : "bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20"
                                     )}
                                 >
-                                    {myMatchRole.playerID === '0' ? '销毁' : '离开'}
+                                    {myMatchRole.playerID === '0' ? t('lobby:actions.destroy') : t('lobby:actions.leave')}
                                 </button>
                             )}
                             <button
                                 onClick={handleReconnect}
                                 className="bg-[#c0a080] hover:bg-[#a08060] text-white px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm border border-[#c0a080]"
                             >
-                                重连进入
+                                {t('lobby:actions.reconnectEnter')}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-
-            {pendingAction && (
-                <ConfirmModal
-                    open={!!pendingAction}
-                    title={pendingAction?.isHost ? '销毁房间' : '离开房间'}
-                    description={pendingAction?.isHost ? '确定要销毁房间吗？' : '确定要离开房间吗？'}
-                    onConfirm={handleConfirmAction}
-                    onCancel={handleCancelAction}
-                    tone="warm"
-                />
-            )}
-
-            {/* Modals */}
-            {selectedGame && (
-                <GameDetailsModal
-                    isOpen={!!selectedGameId}
-                    onClose={handleCloseModal}
-                    gameId={selectedGame.id}
-                    title={selectedGame.title}
-                />
-            )}
-            <AuthModal
-                isOpen={isAuthModalOpen}
-                onClose={() => setIsAuthModalOpen(false)}
-                initialMode={authMode}
-            />
-            <EmailBindModal
-                isOpen={isEmailBindModalOpen}
-                onClose={() => setIsEmailBindModalOpen(false)}
-            />
         </div>
     );
 };

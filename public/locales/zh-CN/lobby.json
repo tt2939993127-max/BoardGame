@@ -1,0 +1,134 @@
+{
+  "home": {
+    "title": "桌游教学与联机平台",
+    "logoAlt": "桌游平台 Logo",
+    "audio": {
+      "mute": "静音",
+      "unmute": "取消静音"
+    },
+    "activeMatch": {
+      "status": "当前进行中",
+      "room": "房间 #{{id}}",
+      "players": "{{count}} 人在席"
+    }
+  },
+  "confirm": {
+    "destroy": {
+      "title": "销毁房间",
+      "description": "确定要销毁房间吗？"
+    },
+    "leave": {
+      "title": "离开房间",
+      "description": "确定要离开房间吗？"
+    }
+  },
+  "actions": {
+    "destroy": "销毁",
+    "leave": "离开",
+    "reconnect": "重连",
+    "reconnectEnter": "重连进入",
+    "join": "加入",
+    "localPlay": "👥 本地同屏",
+    "tutorial": "🎓 教程模式",
+    "createRoom": "开设新局"
+  },
+  "button": {
+    "processing": "处理中..."
+  },
+  "activeMatch": {
+    "notice": "您当前正在进行一场对局",
+    "return": "返回当前对局 (#{{id}})"
+  },
+  "rooms": {
+    "empty": "暂无活跃房间",
+    "matchTitle": "对局 #{{id}}",
+    "mine": "我的",
+    "emptySlot": "空位",
+    "inAnotherMatch": "您当前已在另一场对局中",
+    "inProgress": "对局中",
+    "full": "已满"
+  },
+  "tabs": {
+    "lobby": "在线大厅",
+    "leaderboard": "排行榜"
+  },
+  "leaderboard": {
+    "loading": "加载中...",
+    "title": "胜场排行",
+    "empty": "暂无数据",
+    "record": "{{wins}} 胜 / {{matches}} 局"
+  },
+  "player": {
+    "guest": "游客{{id}}"
+  },
+  "gameDetails": {
+    "description": "经典策略游戏。连成3个符号即可获胜。"
+  },
+  "games": {
+    "tictactoe": {
+      "title": "井字棋",
+      "description": "经典的X和O游戏。挑战AI或与朋友对战。",
+      "players": "2人游戏"
+    },
+    "dicethrone": {
+      "title": "王权骰铸 (Dice Throne)",
+      "description": "快节奏的骰子对战游戏。率领传奇英雄进行1v1对决。",
+      "players": "2人游戏"
+    },
+    "assetslicer": {
+      "title": "素材切片机",
+      "description": "专为棋牌游戏设计的素材提取工具。支持圆形/方形裁切、批量导出精灵图。",
+      "players": "单人工具"
+    }
+  },
+  "matchRoom": {
+    "leaveFailed": "离开房间失败，请稍后重试。",
+    "destroy": {
+      "title": "销毁房间",
+      "description": "确定要销毁房间吗？这将结束对局且无法恢复。",
+      "missingCredentials": "无法销毁房间：缺少凭证，请刷新或重新进入对局。",
+      "notAllowed": "无法销毁房间：权限或凭证异常。"
+    },
+    "autoExit": {
+      "message": "房主已退出，房间已关闭，正在返回大厅…",
+      "title": "自动退出提醒",
+      "confirm": "立即返回"
+    },
+    "redirecting": "即将自动返回大厅...",
+    "returnHome": "立即返回首页",
+    "noTutorial": "暂无该游戏教程",
+    "noClient": "未找到游戏客户端",
+    "noGame": "未找到游戏"
+  },
+  "error": {
+    "createRoomFailed": "创建房间失败",
+    "roomFull": "房间已满",
+    "joinRoomFailed": "加入房间失败",
+    "actionFailed": "操作失败，请稍后重试。",
+    "serviceUnavailable": {
+      "title": "服务目前不可用",
+      "desc": "无法连接到后端服务。请检查网络或确认后端容器（MongoDB/Server）已启动。"
+    }
+  },
+  "socket": {
+    "invalidGameId": "非法 gameId，已忽略订阅: {{value}}",
+    "alreadyConnected": "已连接，跳过重复连接",
+    "connecting": "正在连接到大厅服务器...",
+    "connected": "✅ 连接成功",
+    "disconnected": "❌ 断开连接: {{reason}}",
+    "connectError": "连接错误: {{message}}",
+    "ignoreSnapshot": "忽略过期大厅快照: {{version}}",
+    "snapshotReceived": "收到大厅更新: {{count}} 个房间，版本 {{version}}",
+    "ignoreMatchCreated": "忽略过期房间创建事件: {{version}} {{matchId}}",
+    "matchCreated": "新房间创建: {{matchId}}，版本 {{version}}",
+    "ignoreMatchUpdated": "忽略过期房间更新事件: {{version}} {{matchId}}",
+    "matchUpdated": "房间更新: {{matchId}}，版本 {{version}}",
+    "ignoreMatchEnded": "忽略过期房间结束事件: {{version}} {{matchId}}",
+    "matchEnded": "房间结束: {{matchId}}，版本 {{version}}",
+    "heartbeatStale": "心跳检测到版本落后，刷新大厅: {{version}} 当前 {{current}}",
+    "heartbeatOk": "心跳正常，版本 {{version}}",
+    "subscriberError": "订阅者回调错误: {{message}}",
+    "subscribeMissingGameId": "subscribe 失败：缺少 gameId",
+    "noSubscribers": "无订阅者，取消大厅订阅"
+  }
+}

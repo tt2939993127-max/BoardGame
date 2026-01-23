@@ -8,7 +8,7 @@ const OUTPUT_FLAGS = new Set(['-o', '--output']);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DEFAULT_RULES_DIR = path.resolve(__dirname, '..', 'public', 'game-data', 'rules');
+const DEFAULT_RULES_DIR = path.resolve(__dirname, '..', 'public', 'assets', 'rules');
 
 const usage = `用法:
   node scripts/pdf_to_md.js <输入PDF> [-o <输出md>]
@@ -18,7 +18,7 @@ const usage = `用法:
   node scripts/pdf_to_md.js "d:/path/rules.pdf" -o "d:/path/rules.md"
 
 说明:
-  未指定输出时，默认输出到 public/game-data/rules/ 下，同名 .md。
+  未指定输出时，默认输出到 public/assets/rules/ 下，同名 .md。
 `;
 
 const args = process.argv.slice(2);

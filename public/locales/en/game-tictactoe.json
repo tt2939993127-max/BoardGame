@@ -1,0 +1,31 @@
+{
+  "title": {
+    "primary": "Tic",
+    "secondary": "Tac Toe"
+  },
+  "player": {
+    "self": "Me",
+    "guest": "Guest {{number}}"
+  },
+  "status": {
+    "win": "{{player}} wins!",
+    "draw": "Draw!",
+    "turnSuffix": "'s turn",
+    "thinking": "Thinking..."
+  },
+  "rematch": {
+    "missingInfo": "Cannot start a rematch: missing match info or credentials.",
+    "failed": "Rematch failed, please try again.",
+    "creating": "Creating...",
+    "playAgain": "Play again",
+    "backToLobby": "Back to lobby"
+  },
+  "tutorial": {
+    "steps": {
+      "intro": "Welcome to Tic-Tac-Toe! 👋 This classic strategy game challenges you to connect three marks in a row.",
+      "centerStrategy": "💡 Strategy tip: Take the center! Click the middle cell (X).",
+      "blockStrategy": "Watch the opponent's pattern. If they have two in a row, block it.",
+      "finish": "Good luck—go win the game! 🎉"
+    }
+  }
+}

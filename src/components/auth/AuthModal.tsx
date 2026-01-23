@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { ModalBase } from '../common/ModalBase';
 
@@ -7,9 +8,10 @@ interface AuthModalProps {
     isOpen: boolean;
     onClose: () => void;
     initialMode?: 'login' | 'register';
+    closeOnBackdrop?: boolean;
 }
 
-export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalProps) => {
+export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackdrop }: AuthModalProps) => {
     const [mode, setMode] = useState<'login' | 'register'>(initialMode);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -17,6 +19,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
+    const { t } = useTranslation('auth');
     const { login, register } = useAuth();
 
     useEffect(() => {
@@ -40,13 +43,13 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
                 onClose();
             } else {
                 if (password !== confirmPassword) {
-                    throw new Error('两次输入的密码不一致');
+                    throw new Error(t('error.passwordMismatch'));
                 }
                 await register(username, password);
                 onClose();
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : '操作失败');
+            setError(err instanceof Error ? err.message : t('error.operationFailed'));
         } finally {
             setIsLoading(false);
         }
@@ -61,6 +64,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
         <ModalBase
             open={isOpen}
             onClose={onClose}
+            closeOnBackdrop={closeOnBackdrop}
             overlayClassName="z-50 bg-[#433422]/20 transition-colors"
             containerClassName="z-50 p-4"
         >
@@ -73,7 +77,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
 
                 <div className="text-center mb-8">
                     <h2 className="text-2xl font-serif font-bold text-[#433422] tracking-wide mb-2">
-                        {mode === 'login' ? '欢迎回来' : '创建账户'}
+                        {t(mode === 'login' ? 'login.title' : 'register.title')}
                     </h2>
                     <div className="h-px w-12 bg-[#c0a080] mx-auto opacity-50" />
                 </div>
@@ -87,14 +91,14 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
                 <form onSubmit={handleSubmit} className="space-y-5 font-serif">
                     <div>
                         <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                            用户名
+                            {t('label.username')}
                         </label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-lg"
-                            placeholder="Username"
+                            placeholder={t('placeholder.username')}
                             required
                             autoFocus
                         />
@@ -102,7 +106,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
 
                     <div>
                         <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                            密码
+                            {t('label.password')}
                         </label>
                         <input
                             type="password"
@@ -121,7 +125,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
                             animate={{ opacity: 1, height: 'auto' }}
                         >
                             <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2 mt-4">
-                                确认密码
+                                {t('label.confirmPassword')}
                             </label>
                             <input
                                 type="password"
@@ -140,7 +144,9 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
                         disabled={isLoading}
                         className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-4 cursor-pointer"
                     >
-                        {isLoading ? '处理中...' : (mode === 'login' ? '登 录' : '注 册')}
+                        {isLoading
+                            ? t('button.processing')
+                            : t(mode === 'login' ? 'login.submit' : 'register.submit')}
                     </button>
                 </form>
 
@@ -150,9 +156,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }: AuthModalP
                         onClick={toggleMode}
                         className="text-sm text-[#8c7b64] hover:text-[#433422] underline decoration-1 underline-offset-4 transition-colors cursor-pointer font-serif italic"
                     >
-                        {mode === 'login'
-                            ? '创建新账户 ->'
-                            : '<- 返回登录'}
+                        {t(mode === 'login' ? 'login.toggle' : 'register.toggle')}
                     </button>
                 </div>
             </div>

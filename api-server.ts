@@ -5,7 +5,7 @@ import bodyParser from 'koa-bodyparser';
 import { connectDB } from './src/server/db';
 import { authRouter } from './src/server/auth';
 
-const API_PORT = 8001;
+const API_PORT = Number(process.env.API_SERVER_PORT) || 18001;
 
 async function startAPIServer() {
     // 连接数据库

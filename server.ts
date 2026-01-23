@@ -1,6 +1,10 @@
+import 'dotenv/config'; // 加载 .env
+import type { Game } from 'boardgame.io';
 import { Server as BoardgameServer, Origins } from 'boardgame.io/server';
-import { Server as IOServer } from 'socket.io';
-import { TicTacToe } from './src/games/default/game';
+import { Server as IOServer, Socket as IOSocket } from 'socket.io';
+import { connectDB } from './src/server/db';
+import { MatchRecord } from './src/server/models/MatchRecord';
+import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 
 // 大厅事件常量（与前端 lobbySocket.ts 保持一致）
 const LOBBY_EVENTS = {
@@ -10,72 +14,587 @@ const LOBBY_EVENTS = {
     MATCH_CREATED: 'lobby:matchCreated',
     MATCH_UPDATED: 'lobby:matchUpdated',
     MATCH_ENDED: 'lobby:matchEnded',
+    HEARTBEAT: 'lobby:heartbeat',
 } as const;
+
+const LOBBY_ROOM = 'lobby:subscribers';
+const LOBBY_HEARTBEAT_INTERVAL = 15000;
+
+// 权威清单驱动服务端注册与归档（仅 type=game 且 enabled=true）
+const MATCH_ID_FIELD = '__matchID';
+
+const ENABLED_GAME_ENTRIES = GAME_SERVER_MANIFEST.filter(
+    (entry) => entry.manifest.type === 'game' && entry.manifest.enabled
+);
+
+const SUPPORTED_GAMES = ENABLED_GAME_ENTRIES.map((entry) => entry.manifest.id);
+type SupportedGame = (typeof SUPPORTED_GAMES)[number];
+
+const normalizeGameName = (name?: string) => (name || '').toLowerCase();
+const isSupportedGame = (gameName: string): gameName is SupportedGame => {
+    return (SUPPORTED_GAMES as readonly string[]).includes(gameName);
+};
+
+let serverDb: any = null;
+
+const archiveMatchResult = async ({
+    matchID,
+    gameName,
+    ctx,
+}: {
+    matchID: string;
+    gameName: string;
+    ctx: { gameover?: { winner?: string | number } } | undefined;
+}) => {
+    if (!serverDb) {
+        console.warn(`[Archive] DB 未就绪，跳过归档: ${matchID}`);
+        return;
+    }
+    try {
+        const existing = await MatchRecord.findOne({ matchID });
+        if (existing) return;
+
+        const { metadata } = (await serverDb.fetch(matchID, { metadata: true })) || {};
+        const gameover = ctx?.gameover;
+        const winnerID = gameover?.winner !== undefined ? String(gameover.winner) : undefined;
+        const resultType = winnerID ? 'win' : 'draw';
+
+        const players = [] as Array<{ id: string; name: string; result: string }>;
+        if (metadata && metadata.players) {
+            for (const [pid, pdata] of Object.entries(metadata.players)) {
+                const name = (pdata as { name?: string })?.name || `Player ${pid}`;
+                players.push({
+                    id: pid,
+                    name,
+                    result: pid === winnerID ? 'win' : (resultType === 'draw' ? 'draw' : 'loss'),
+                });
+            }
+        }
+
+        await MatchRecord.create({
+            matchID,
+            gameName,
+            players,
+            winnerID,
+            createdAt: new Date(metadata?.createdAt || Date.now()),
+            endedAt: new Date(),
+        });
+        console.log(`[Archive] Archived match ${matchID}`);
+    } catch (err) {
+        console.error('[Archive] Error:', err);
+    }
+};
+
+const attachMatchIdToState = async (matchID: string) => {
+    if (!serverDb) return;
+    try {
+        const { state } = (await serverDb.fetch(matchID, { state: true })) || {};
+        if (!state || !state.G) return;
+        const current = state.G as Record<string, unknown>;
+        if (current[MATCH_ID_FIELD] === matchID) return;
+        const nextState = {
+            ...state,
+            G: {
+                ...current,
+                [MATCH_ID_FIELD]: matchID,
+            },
+        };
+        await serverDb.setState(matchID, nextState);
+    } catch (error) {
+        console.error(`[Archive] 注入 matchID 失败: ${matchID}`, error);
+    }
+};
+
+const withArchiveOnEnd = (game: Game, gameName: string): Game => {
+    const originalOnEnd = game.onEnd;
+    return {
+        ...game,
+        onEnd: (context) => {
+            const result = originalOnEnd ? originalOnEnd(context) : undefined;
+            const resolvedG = (result ?? context.G) as Record<string, unknown>;
+            const matchID = (resolvedG?.[MATCH_ID_FIELD] ?? (context.G as Record<string, unknown>)?.[MATCH_ID_FIELD]) as
+                | string
+                | undefined;
+            if (!matchID) {
+                console.warn(`[Archive] 未找到 matchID，跳过归档: ${gameName}`);
+                return result ?? context.G;
+            }
+            void archiveMatchResult({ matchID, gameName, ctx: context.ctx });
+            return result ?? context.G;
+        },
+    };
+};
+
+const buildServerGames = (): Game[] => {
+    const games: Game[] = [];
+    const manifestGameIds = new Set<string>();
+
+    for (const entry of ENABLED_GAME_ENTRIES) {
+        const { manifest, game } = entry;
+        if (manifestGameIds.has(manifest.id)) {
+            throw new Error(`[GameManifest] 游戏 ID 重复: ${manifest.id}`);
+        }
+        manifestGameIds.add(manifest.id);
+        games.push(withArchiveOnEnd(game, manifest.id));
+    }
+
+    return games;
+};
+
+const SERVER_GAMES = buildServerGames();
+
+const RAW_WEB_ORIGINS = (process.env.WEB_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+const SERVER_ORIGINS = RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : [Origins.LOCALHOST];
+
+const DEV_LOBBY_CORS_ORIGINS = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+];
+
+const LOBBY_CORS_ORIGINS = RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_LOBBY_CORS_ORIGINS;
 
 // 创建 boardgame.io 服务器
 const server = BoardgameServer({
-    games: [TicTacToe],
-    origins: [Origins.LOCALHOST],
+    games: SERVER_GAMES,
+    origins: SERVER_ORIGINS,
 });
 
 // 获取底层的 Koa 应用和数据库
 const { app, db } = server;
+serverDb = db;
+const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
 
-// 存储订阅大厅的 socket 连接
-const lobbySubscribers = new Set<string>();
+// HTTP CORS：允许前端（Vite）跨端口访问本服务的 REST 接口（例如 /games/:game/leaderboard）。
+app.use(async (ctx, next) => {
+    const requestOrigin = ctx.get('origin');
+    const allowedOrigins = new Set(LOBBY_CORS_ORIGINS);
+
+    if (requestOrigin && allowedOrigins.has(requestOrigin)) {
+        ctx.set('Access-Control-Allow-Origin', requestOrigin);
+        ctx.set('Vary', 'Origin');
+        ctx.set('Access-Control-Allow-Credentials', 'true');
+    }
+
+    ctx.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    ctx.set(
+        'Access-Control-Allow-Headers',
+        ctx.get('access-control-request-headers') || 'Content-Type, Authorization'
+    );
+
+    if (ctx.method === 'OPTIONS') {
+        ctx.status = 204;
+        return;
+    }
+
+    await next();
+});
+
+// 临时排查日志：捕获 /games/* 500 与异常栈，定位创建房间失败原因（定位完成后移除）
+app.use(async (ctx, next) => {
+    try {
+        await next();
+    } catch (error) {
+        console.error('[服务器异常]', {
+            method: ctx.method,
+            path: ctx.path,
+            query: ctx.query,
+            error,
+        });
+        throw error;
+    }
+
+    if (ctx.status >= 500 && ctx.path.startsWith('/games/')) {
+        console.error('[HTTP 500]', {
+            method: ctx.method,
+            path: ctx.path,
+            status: ctx.status,
+            body: ctx.body,
+        });
+    }
+});
+
+// 存储订阅大厅的 socket 连接（按 game 维度分组）
+const lobbySubscribersByGame = new Map<SupportedGame, Set<string>>();
 let lobbyIO: IOServer | null = null;
 
 // 房间信息类型（发送给前端的格式）
 interface LobbyMatch {
     matchID: string;
     gameName: string;
-    players: Array<{ id: number; name?: string }>;
+    players: Array<{ id: number; name?: string; isConnected?: boolean }>;
     createdAt?: number;
     updatedAt?: number;
 }
 
-// 获取当前所有房间列表的辅助函数
-const fetchAllMatches = async (): Promise<LobbyMatch[]> => {
+const lobbyCacheByGame = new Map<SupportedGame, Map<string, LobbyMatch>>();
+const lobbyCacheReadyByGame = new Map<SupportedGame, boolean>();
+const lobbySnapshotTimerByGame = new Map<SupportedGame, ReturnType<typeof setTimeout> | null>();
+let lobbyHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+const lobbyVersionByGame = new Map<SupportedGame, number>();
+const matchGameIndex = new Map<string, SupportedGame>();
+
+type PlayerMetadata = { name?: string; isConnected?: boolean };
+
+interface LobbySnapshotPayload {
+    version: number;
+    matches: LobbyMatch[];
+}
+
+interface LobbyMatchPayload {
+    version: number;
+    match: LobbyMatch;
+}
+
+interface LobbyMatchEndedPayload {
+    version: number;
+    matchID: string;
+}
+
+interface LobbyHeartbeatPayload {
+    version: number;
+    timestamp: number;
+}
+
+const bumpLobbyVersion = (gameName: SupportedGame): number => {
+    const current = lobbyVersionByGame.get(gameName) ?? 0;
+    const next = current + 1;
+    lobbyVersionByGame.set(gameName, next);
+    return next;
+};
+
+const buildLobbyMatch = (
+    matchID: string,
+    metadata: { gameName?: string; players?: Record<string, PlayerMetadata>; createdAt?: number; updatedAt?: number }
+): LobbyMatch => {
+    const playersObj = metadata.players || {};
+    const playersArray = Object.entries(playersObj).map(([id, data]) => ({
+        id: Number(id),
+        name: data?.name,
+        isConnected: data?.isConnected,
+    }));
+
+    return {
+        matchID,
+        gameName: metadata.gameName || 'tictactoe',
+        players: playersArray,
+        createdAt: metadata.createdAt,
+        updatedAt: metadata.updatedAt,
+    };
+};
+
+const fetchLobbyMatch = async (matchID: string): Promise<LobbyMatch | null> => {
     try {
-        // boardgame.io 的 db 对象提供了 listMatches 方法
-        const matchIDs = await db.listMatches({ gameName: 'TicTacToe' });
+        const match = await db.fetch(matchID, { metadata: true });
+        if (!match || !match.metadata) return null;
+        return buildLobbyMatch(matchID, match.metadata);
+    } catch (error) {
+        console.error(`[LobbyIO] 获取房间 ${matchID} 失败:`, error);
+        return null;
+    }
+};
+
+// 获取指定游戏的房间列表
+const fetchMatchesByGame = async (gameName: SupportedGame): Promise<LobbyMatch[]> => {
+    try {
         const results: LobbyMatch[] = [];
 
+        const matchIDs = await db.listMatches({ gameName });
         for (const matchID of matchIDs) {
             const match = await db.fetch(matchID, { metadata: true });
             if (!match || !match.metadata) continue;
-
-            // 将 players 对象转换为数组格式
-            const playersObj = match.metadata.players || {};
-            const playersArray = Object.entries(playersObj).map(([id, data]) => ({
-                id: parseInt(id, 10),
-                name: (data as { name?: string })?.name,
-            }));
-
-            results.push({
-                matchID,
-                gameName: match.metadata.gameName || 'TicTacToe',
-                players: playersArray,
-                createdAt: match.metadata.createdAt,
-                updatedAt: match.metadata.updatedAt,
-            });
+            results.push(buildLobbyMatch(matchID, match.metadata));
         }
-
         return results;
     } catch (error) {
-        console.error('[LobbyIO] 获取房间列表失败:', error);
+        console.error(`[LobbyIO] 获取房间列表失败(${gameName}):`, error);
         return [];
     }
 };
 
-// 广播房间列表更新给所有订阅者
-const broadcastLobbyUpdate = async () => {
-    if (!lobbyIO || lobbySubscribers.size === 0) return;
+const getLobbyRoomName = (gameName: SupportedGame) => `${LOBBY_ROOM}:${gameName}`;
 
-    const matches = await fetchAllMatches();
-    lobbyIO.emit(LOBBY_EVENTS.LOBBY_UPDATE, matches);
-    console.log(`[LobbyIO] 广播房间更新: ${matches.length} 个房间 -> ${lobbySubscribers.size} 个订阅者`);
+const ensureGameState = (gameName: SupportedGame) => {
+    if (!lobbySubscribersByGame.has(gameName)) lobbySubscribersByGame.set(gameName, new Set());
+    if (!lobbyCacheByGame.has(gameName)) lobbyCacheByGame.set(gameName, new Map());
+    if (!lobbyCacheReadyByGame.has(gameName)) lobbyCacheReadyByGame.set(gameName, false);
+    if (!lobbySnapshotTimerByGame.has(gameName)) lobbySnapshotTimerByGame.set(gameName, null);
+    if (!lobbyVersionByGame.has(gameName)) lobbyVersionByGame.set(gameName, 0);
 };
+
+SUPPORTED_GAMES.forEach(gameName => ensureGameState(gameName));
+
+const syncLobbyCache = async (gameName: SupportedGame): Promise<LobbyMatch[]> => {
+    ensureGameState(gameName);
+    const matches = await fetchMatchesByGame(gameName);
+    const cache = lobbyCacheByGame.get(gameName)!;
+    cache.clear();
+    matches.forEach(match => {
+        cache.set(match.matchID, match);
+        matchGameIndex.set(match.matchID, gameName);
+    });
+    lobbyCacheReadyByGame.set(gameName, true);
+    return matches;
+};
+
+const markLobbyCacheDirty = (gameName: SupportedGame) => {
+    ensureGameState(gameName);
+    lobbyCacheReadyByGame.set(gameName, false);
+};
+
+const getLobbySnapshot = async (gameName: SupportedGame): Promise<LobbyMatch[]> => {
+    ensureGameState(gameName);
+    const ready = lobbyCacheReadyByGame.get(gameName);
+    if (ready) {
+        return Array.from(lobbyCacheByGame.get(gameName)!.values());
+    }
+    return syncLobbyCache(gameName);
+};
+
+const sendLobbySnapshot = async (socket: IOSocket, gameName: SupportedGame) => {
+    ensureGameState(gameName);
+    const wasReady = lobbyCacheReadyByGame.get(gameName) ?? false;
+    const matches = await getLobbySnapshot(gameName);
+    const version = wasReady ? (lobbyVersionByGame.get(gameName) ?? 0) : bumpLobbyVersion(gameName);
+    const payload: LobbySnapshotPayload = { version, matches };
+    socket.emit(LOBBY_EVENTS.LOBBY_UPDATE, payload);
+};
+
+const emitToLobby = (gameName: SupportedGame, event: string, payload: unknown) => {
+    ensureGameState(gameName);
+    const subscribers = lobbySubscribersByGame.get(gameName)!;
+    if (!lobbyIO || subscribers.size === 0) return;
+    lobbyIO.to(getLobbyRoomName(gameName)).emit(event, payload);
+};
+
+const emitMatchCreated = (gameName: SupportedGame, match: LobbyMatch) => {
+    ensureGameState(gameName);
+    lobbyCacheByGame.get(gameName)!.set(match.matchID, match);
+    matchGameIndex.set(match.matchID, gameName);
+    const payload: LobbyMatchPayload = { version: bumpLobbyVersion(gameName), match };
+    emitToLobby(gameName, LOBBY_EVENTS.MATCH_CREATED, payload);
+};
+
+const emitMatchUpdated = (gameName: SupportedGame, match: LobbyMatch) => {
+    ensureGameState(gameName);
+    lobbyCacheByGame.get(gameName)!.set(match.matchID, match);
+    matchGameIndex.set(match.matchID, gameName);
+    const payload: LobbyMatchPayload = { version: bumpLobbyVersion(gameName), match };
+    emitToLobby(gameName, LOBBY_EVENTS.MATCH_UPDATED, payload);
+};
+
+const emitMatchEnded = (gameName: SupportedGame, matchID: string) => {
+    ensureGameState(gameName);
+    lobbyCacheByGame.get(gameName)!.delete(matchID);
+    matchGameIndex.delete(matchID);
+    const payload: LobbyMatchEndedPayload = { version: bumpLobbyVersion(gameName), matchID };
+    emitToLobby(gameName, LOBBY_EVENTS.MATCH_ENDED, payload);
+};
+
+const emitLobbyHeartbeat = () => {
+    if (!lobbyIO) return;
+
+    for (const gameName of SUPPORTED_GAMES) {
+        ensureGameState(gameName);
+        const subscribers = lobbySubscribersByGame.get(gameName)!;
+        if (subscribers.size === 0) continue;
+        const payload: LobbyHeartbeatPayload = {
+            version: lobbyVersionByGame.get(gameName) ?? 0,
+            timestamp: Date.now(),
+        };
+        lobbyIO.to(getLobbyRoomName(gameName)).emit(LOBBY_EVENTS.HEARTBEAT, payload);
+    }
+};
+
+const startLobbyHeartbeat = () => {
+    if (lobbyHeartbeatTimer) return;
+    lobbyHeartbeatTimer = setInterval(emitLobbyHeartbeat, LOBBY_HEARTBEAT_INTERVAL);
+};
+
+const broadcastLobbySnapshot = async (gameName: SupportedGame, reason: string) => {
+    ensureGameState(gameName);
+    const subscribers = lobbySubscribersByGame.get(gameName)!;
+    if (!lobbyIO || subscribers.size === 0) return;
+    const matches = await syncLobbyCache(gameName);
+    const payload: LobbySnapshotPayload = { version: bumpLobbyVersion(gameName), matches };
+    lobbyIO.to(getLobbyRoomName(gameName)).emit(LOBBY_EVENTS.LOBBY_UPDATE, payload);
+};
+
+const scheduleLobbySnapshot = (gameName: SupportedGame, reason: string) => {
+    ensureGameState(gameName);
+    const subscribers = lobbySubscribersByGame.get(gameName)!;
+    if (!lobbyIO || subscribers.size === 0) return;
+
+    const existingTimer = lobbySnapshotTimerByGame.get(gameName);
+    if (existingTimer) return;
+
+    const timer = setTimeout(() => {
+        lobbySnapshotTimerByGame.set(gameName, null);
+        void broadcastLobbySnapshot(gameName, reason);
+    }, 200);
+    lobbySnapshotTimerByGame.set(gameName, timer);
+};
+
+const resolveGameFromUrl = (raw?: string): SupportedGame | null => {
+    const normalized = normalizeGameName(raw);
+    if (!normalized) return null;
+    if (!isSupportedGame(normalized)) return null;
+    return normalized;
+};
+
+const resolveGameFromMatch = (match: LobbyMatch | null): SupportedGame | null => {
+    const normalized = normalizeGameName(match?.gameName);
+    if (!normalized) return null;
+    if (!isSupportedGame(normalized)) return null;
+    return normalized;
+};
+
+const handleMatchCreated = async (matchID?: string, gameNameFromUrl?: string) => {
+    if (matchID) {
+        void attachMatchIdToState(matchID);
+    }
+    const gameFromUrl = resolveGameFromUrl(gameNameFromUrl);
+    if (gameFromUrl && lobbySubscribersByGame.get(gameFromUrl)?.size === 0) {
+        markLobbyCacheDirty(gameFromUrl);
+        return;
+    }
+    if (!matchID) {
+        if (gameFromUrl) scheduleLobbySnapshot(gameFromUrl, 'create: 无 matchID');
+        return;
+    }
+
+    const match = await fetchLobbyMatch(matchID);
+    const game = gameFromUrl || resolveGameFromMatch(match);
+    if (!game) return;
+    if ((lobbySubscribersByGame.get(game)?.size ?? 0) === 0) {
+        markLobbyCacheDirty(game);
+        return;
+    }
+
+    if (match) {
+        emitMatchCreated(game, match);
+        return;
+    }
+
+    scheduleLobbySnapshot(game, `create: 获取房间失败 ${matchID}`);
+};
+
+const handleMatchJoined = async (matchID?: string, gameNameFromUrl?: string) => {
+    const gameFromUrl = resolveGameFromUrl(gameNameFromUrl);
+    if (gameFromUrl && lobbySubscribersByGame.get(gameFromUrl)?.size === 0) {
+        markLobbyCacheDirty(gameFromUrl);
+        return;
+    }
+    if (!matchID) {
+        if (gameFromUrl) scheduleLobbySnapshot(gameFromUrl, 'join: 无 matchID');
+        return;
+    }
+
+    const match = await fetchLobbyMatch(matchID);
+    const game = gameFromUrl || resolveGameFromMatch(match);
+    if (!game) return;
+    if ((lobbySubscribersByGame.get(game)?.size ?? 0) === 0) {
+        markLobbyCacheDirty(game);
+        return;
+    }
+
+    if (!match) {
+        scheduleLobbySnapshot(game, `join: 获取房间失败 ${matchID}`);
+        return;
+    }
+
+    const cache = lobbyCacheByGame.get(game)!;
+    if (cache.has(matchID)) {
+        emitMatchUpdated(game, match);
+    } else {
+        emitMatchCreated(game, match);
+    }
+};
+
+const handleMatchLeft = async (matchID?: string, gameNameFromUrl?: string) => {
+    const gameFromUrl = resolveGameFromUrl(gameNameFromUrl);
+    if (gameFromUrl && lobbySubscribersByGame.get(gameFromUrl)?.size === 0) {
+        markLobbyCacheDirty(gameFromUrl);
+        return;
+    }
+    if (!matchID) {
+        if (gameFromUrl) scheduleLobbySnapshot(gameFromUrl, 'leave: 无 matchID');
+        return;
+    }
+
+    const match = await fetchLobbyMatch(matchID);
+    const indexed = matchGameIndex.get(matchID) ?? null;
+    const game = gameFromUrl || indexed || resolveGameFromMatch(match);
+    if (!game) return;
+    if ((lobbySubscribersByGame.get(game)?.size ?? 0) === 0) {
+        markLobbyCacheDirty(game);
+        return;
+    }
+
+    if (match) {
+        emitMatchUpdated(game, match);
+        return;
+    }
+
+    emitMatchEnded(game, matchID);
+};
+
+// Leaderboard API
+app.use(async (ctx, next) => {
+    if (ctx.method === 'GET' && ctx.path.match(/^\/games\/[^/]+\/leaderboard$/)) {
+        const gameNameMatch = ctx.path.match(/^\/games\/([^/]+)\/leaderboard$/);
+        const gameName = gameNameMatch ? gameNameMatch[1] : null;
+
+        if (!gameName) {
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid game name' };
+            return;
+        }
+
+        try {
+            // Aggregate wins
+            const records = await MatchRecord.find({ gameName });
+
+            // Simple leaderboard: Count wins per player
+            const stats: Record<string, { name: string, wins: number, matches: number }> = {};
+
+            records.forEach(record => {
+                if (record.winnerID) {
+                    const winner = record.players.find(p => p.id === record.winnerID);
+                    if (winner) {
+                        if (!stats[winner.id]) stats[winner.id] = { name: winner.name, wins: 0, matches: 0 };
+                        stats[winner.id].wins++;
+                    }
+                }
+
+                record.players.forEach(p => {
+                    if (!stats[p.id]) stats[p.id] = { name: p.name, wins: 0, matches: 0 };
+                    stats[p.id].matches++;
+                    // Update name if more recent? Keep simple for now.
+                    if (p.name && !stats[p.id].name) stats[p.id].name = p.name;
+                });
+            });
+
+            // Convert to array and sort
+            const leaderboard = Object.values(stats)
+                .sort((a, b) => b.wins - a.wins)
+                .slice(0, 50); // Top 50
+
+            ctx.body = { leaderboard };
+        } catch (err) {
+            console.error('Leaderboard error:', err);
+            ctx.status = 500;
+            ctx.body = { error: 'Internal Server Error' };
+        }
+        return;
+    }
+    await next();
+});
 
 // 添加中间件拦截 Lobby API 调用来触发广播
 app.use(async (ctx, next) => {
@@ -89,56 +608,51 @@ app.use(async (ctx, next) => {
         // 创建房间: POST /games/:name/create
         if (url.match(/^\/games\/[^/]+\/create$/)) {
             console.log('[LobbyIO] 检测到房间创建');
-            setTimeout(broadcastLobbyUpdate, 100); // 短暂延迟确保数据已写入
+            const responseBody = ctx.body as { matchID?: string } | undefined;
+            const matchID = responseBody?.matchID;
+            const gameName = url.match(/^\/games\/([^/]+)\/create$/)?.[1];
+            setTimeout(() => {
+                void handleMatchCreated(matchID, gameName);
+            }, 100); // 短暂延迟确保数据已写入
         }
         // 加入房间: POST /games/:name/:matchID/join
         else if (url.match(/^\/games\/[^/]+\/[^/]+\/join$/)) {
             console.log('[LobbyIO] 检测到玩家加入');
-            setTimeout(broadcastLobbyUpdate, 100);
+            const matchIDMatch = url.match(/^\/games\/([^/]+)\/([^/]+)\/join$/);
+            const gameName = matchIDMatch ? matchIDMatch[1] : undefined;
+            const matchID = matchIDMatch ? matchIDMatch[2] : undefined;
+            setTimeout(() => {
+                void handleMatchJoined(matchID, gameName);
+            }, 100);
         }
         // 离开房间: POST /games/:name/:matchID/leave
         else if (url.match(/^\/games\/[^/]+\/[^/]+\/leave$/)) {
             console.log('[LobbyIO] 检测到玩家离开');
-
-            // 提取 matchID
-            const matchIDMatch = url.match(/^\/games\/[^/]+\/([^/]+)\/leave$/);
-            const matchID = matchIDMatch ? matchIDMatch[1] : null;
-
-            // 延迟检查房间是否仍然存在
-            setTimeout(async () => {
-                if (matchID) {
-                    try {
-                        const match = await db.fetch(matchID, { metadata: true });
-
-                        // 如果房间已不存在，广播 MATCH_ENDED 事件
-                        if (!match) {
-                            console.log(`[LobbyIO] 房间 ${matchID} 已被删除，广播 MATCH_ENDED`);
-                            if (lobbyIO) {
-                                lobbyIO.emit(LOBBY_EVENTS.MATCH_ENDED, matchID);
-                            }
-                        }
-                    } catch (error) {
-                        console.error('[LobbyIO] 检查房间状态失败:', error);
-                    }
-                }
-
-                // 无论如何都广播更新
-                await broadcastLobbyUpdate();
+            const matchIDMatch = url.match(/^\/games\/([^/]+)\/([^/]+)\/leave$/);
+            const gameName = matchIDMatch ? matchIDMatch[1] : undefined;
+            const matchID = matchIDMatch ? matchIDMatch[2] : undefined;
+            setTimeout(() => {
+                void handleMatchLeft(matchID, gameName);
             }, 100);
         }
     }
 });
 
-// 启动服务器
-server.run(8000).then((runningServers) => {
-    console.log('🎮 游戏服务器运行在 http://localhost:8000');
 
-    // 使用 appServer 创建独立的大厅 Socket.IO 服务器
-    // 使用不同的路径避免与 boardgame.io 的 socket 冲突
+// 启动服务器
+server.run(GAME_SERVER_PORT).then(async (runningServers) => {
+    // Connect to DB
+    await connectDB();
+
+    console.log(`🎮 游戏服务器运行在 http://localhost:${GAME_SERVER_PORT}`);
+
+    // 注意：boardgame.io 在 /default 路径下运行自己的 socket.io
+    // 我们在这里创建一个独立的大厅 Socket.IO 服务器，挂载在同一个 HTTP 服务器上
+    // 使用不同的路径 /lobby-socket 以避免与 boardgame.io 的默认 socket 冲突
     lobbyIO = new IOServer(runningServers.appServer, {
         path: '/lobby-socket',
         cors: {
-            origin: ['http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'],
+            origin: LOBBY_CORS_ORIGINS,
             methods: ['GET', 'POST'],
             credentials: true,
         },
@@ -148,25 +662,50 @@ server.run(8000).then((runningServers) => {
     lobbyIO.on('connection', (socket) => {
         console.log(`[LobbyIO] 新连接: ${socket.id}`);
 
-        // 订阅大厅更新
-        socket.on(LOBBY_EVENTS.SUBSCRIBE_LOBBY, async () => {
-            lobbySubscribers.add(socket.id);
-            console.log(`[LobbyIO] ${socket.id} 订阅大厅 (当前 ${lobbySubscribers.size} 个订阅者)`);
+        // 订阅大厅更新请求
+        socket.on(LOBBY_EVENTS.SUBSCRIBE_LOBBY, async (payload?: { gameId?: string }) => {
+            const requestedGame = normalizeGameName(payload?.gameId);
+            if (!requestedGame || !isSupportedGame(requestedGame)) {
+                console.warn(`[LobbyIO] ${socket.id} 订阅大厅失败：非法 gameId`, payload?.gameId);
+                return;
+            }
 
-            // 立即发送当前房间列表
-            const matches = await fetchAllMatches();
-            socket.emit(LOBBY_EVENTS.LOBBY_UPDATE, matches);
+            const prevGame = socket.data.lobbyGameId as SupportedGame | undefined;
+            if (prevGame && prevGame !== requestedGame) {
+                lobbySubscribersByGame.get(prevGame)?.delete(socket.id);
+                socket.leave(getLobbyRoomName(prevGame));
+            }
+
+            socket.data.lobbyGameId = requestedGame;
+            ensureGameState(requestedGame);
+            lobbySubscribersByGame.get(requestedGame)!.add(socket.id);
+            socket.join(getLobbyRoomName(requestedGame));
+            console.log(`[LobbyIO] ${socket.id} 订阅大厅(${requestedGame}) (当前 ${lobbySubscribersByGame.get(requestedGame)!.size} 个订阅者)`);
+
+            // 立即发送当前房间列表（仅当前游戏）
+            await sendLobbySnapshot(socket, requestedGame);
+            startLobbyHeartbeat();
         });
 
-        // 取消订阅
+        // 取消订阅请求
         socket.on(LOBBY_EVENTS.UNSUBSCRIBE_LOBBY, () => {
-            lobbySubscribers.delete(socket.id);
+            const gameName = socket.data.lobbyGameId as SupportedGame | undefined;
+            if (gameName) {
+                lobbySubscribersByGame.get(gameName)?.delete(socket.id);
+                socket.leave(getLobbyRoomName(gameName));
+            }
+            socket.data.lobbyGameId = undefined;
             console.log(`[LobbyIO] ${socket.id} 取消订阅`);
         });
 
-        // 断开连接时清理
+        // 断开连接时的清理逻辑
         socket.on('disconnect', () => {
-            lobbySubscribers.delete(socket.id);
+            const gameName = socket.data.lobbyGameId as SupportedGame | undefined;
+            if (gameName) {
+                lobbySubscribersByGame.get(gameName)?.delete(socket.id);
+                socket.leave(getLobbyRoomName(gameName));
+            }
+            socket.data.lobbyGameId = undefined;
             console.log(`[LobbyIO] ${socket.id} 断开连接`);
         });
     });

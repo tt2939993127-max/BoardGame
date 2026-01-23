@@ -1,0 +1,45 @@
+{
+  "auth": {
+    "error": {
+      "missingCredentials": "用户名和密码不能为空",
+      "usernameLength": "用户名长度应在 3-20 个字符之间",
+      "passwordLength": "密码长度至少为 4 个字符",
+      "usernameTaken": "用户名已被占用",
+      "serverError": "服务器错误，请稍后重试",
+      "invalidCredentials": "用户名或密码错误",
+      "missingToken": "未提供认证令牌",
+      "userNotFound": "用户不存在",
+      "invalidToken": "无效的认证令牌",
+      "loginRequired": "请先登录",
+      "missingEmail": "请输入邮箱地址",
+      "invalidEmail": "请输入有效的邮箱地址",
+      "emailAlreadyBound": "该邮箱已被其他账户绑定",
+      "missingEmailCode": "请输入邮箱和验证码",
+      "invalidEmailCode": "验证码错误或已过期"
+    },
+    "success": {
+      "register": "注册成功",
+      "login": "登录成功",
+      "emailBound": "邮箱绑定成功"
+    }
+  },
+  "email": {
+    "error": {
+      "missingConfig": "邮件服务未配置"
+    },
+    "subject": "邮箱验证码 - 桌游教学平台",
+    "template": {
+      "senderName": "桌游教学平台",
+      "title": "邮箱验证",
+      "intro": "您正在绑定邮箱到桌游教学平台账户。请使用以下验证码完成验证：",
+      "note": "验证码有效期为 {{minutes}} 分钟。如果您没有请求此验证码，请忽略此邮件。",
+      "footer": "桌游教学与联机平台"
+    },
+    "success": {
+      "sent": "验证码已发送"
+    },
+    "info": {
+      "devFallback": "开发模式：验证码已打印到服务器终端"
+    }
+  }
+}

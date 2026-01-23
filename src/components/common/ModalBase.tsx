@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 interface ModalBaseProps {
     open: boolean;
     onClose?: () => void;
+    closeOnBackdrop?: boolean;
     overlayClassName?: string;
     containerClassName?: string;
     children: ReactNode;
@@ -13,6 +14,7 @@ interface ModalBaseProps {
 export const ModalBase = ({
     open,
     onClose,
+    closeOnBackdrop = true,
     overlayClassName,
     containerClassName,
     children,
@@ -25,7 +27,7 @@ export const ModalBase = ({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={onClose}
+                        onClick={closeOnBackdrop ? onClose : undefined}
                         className={clsx('fixed inset-0 backdrop-blur-sm', overlayClassName)}
                     />
                     <motion.div

@@ -1,20 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
-// --- Types ---
+// --- 类型定义 ---
 export interface TutorialStep {
     id: string;
     content: string;
-    // Target element to highlight (via data-tutorial-id or id)
+    // 要高亮的目标元素（通过 data-tutorial-id 或 id 指定）
     highlightTarget?: string;
     position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
 
-    // If true, the "Next" button is hidden, and we wait for external trigger (e.g. a move)
+    // 如果为 true，则隐藏“下一步”按钮，等待外部触发（例如：玩家执行了一次移动）
     requireAction?: boolean;
 
-    // AI opponent's automatic move (cell index). When set, AI will execute this move after a delay.
+    // AI 对手的自动行动（格子索引）。设置后，AI 将在延迟后自动执行此操作。
     aiMove?: number;
 
-    // Whether to show a dark overlay mask for this step (default: false/transparent)
+    // 是否为此步骤显示黑色遮罩背景（默认：false/透明）
     showMask?: boolean;
 }
 
@@ -27,14 +27,15 @@ interface TutorialContextType {
     isActive: boolean;
     currentStepIndex: number;
     currentStep: TutorialStep | null;
+    isLastStep: boolean;
     startTutorial: (manifest?: TutorialManifest) => void;
     nextStep: () => void;
     closeTutorial: () => void;
-    // Callback to execute game move (provided by Board component)
+    // 执行游戏移动的回调函数（由 Board 组件提供）
     registerMoveCallback: (callback: (cellId: number) => void) => void;
 }
 
-// --- Context ---
+// --- 上下文 (Context) ---
 const TutorialContext = createContext<TutorialContextType | undefined>(undefined);
 
 export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -49,14 +50,14 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
 
-    // --- Default TicTacToe Manifest (Quick Fix) ---
-    // In a real app, we'd fetch this based on gameId, but for now we hardcode it here
-    // or import it. Let's define a simple default so the button works.
+    // --- 默认井字棋配置（临时方案） ---
+    // 在正式应用中，我们会根据 gameId 动态获取，但目前我们先硬编码或直接导入。
+    // 这里定义一个简单的默认值以确保按钮可用。
     const DEFAULT_MANIFEST: TutorialManifest = {
         id: 'tictactoe-basics',
         steps: [
-            { id: 'welcome', content: 'Welcome to Tic-Tac-Toe! The goal is to get 3 in a row.', position: 'center' },
-            { id: 'grid', content: 'This is the game grid. Click any empty cell to place your mark (X).', highlightTarget: 'board-grid', position: 'top', requireAction: false },
+            { id: 'welcome', content: 'default.welcome', position: 'center' },
+            { id: 'grid', content: 'default.grid', highlightTarget: 'board-grid', position: 'top', requireAction: false },
             // More steps would go here
         ]
     };
@@ -82,11 +83,11 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (currentStepIndex < manifest.steps.length - 1) {
             setCurrentStepIndex(prev => prev + 1);
         } else {
-            closeTutorial(); // Finish
+            closeTutorial(); // 完成教学
         }
     }, [manifest, currentStepIndex, closeTutorial]);
 
-    // Execute AI move when entering a step with aiMove
+    // 当进入带有 aiMove 的步骤时，执行 AI 行动
     useEffect(() => {
         if (!isActive || !manifest) return;
 
@@ -119,6 +120,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         isActive,
         currentStepIndex,
         currentStep: manifest ? manifest.steps[currentStepIndex] : null,
+        isLastStep: Boolean(manifest && currentStepIndex >= manifest.steps.length - 1),
         startTutorial,
         nextStep,
         closeTutorial,

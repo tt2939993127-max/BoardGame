@@ -18,12 +18,22 @@ export interface SoundDefinition {
     sprite?: SoundSprite;
 }
 
-// 游戏音效配置
+// BGM 定义
+export interface BgmDefinition {
+    key: string;
+    name: string;
+    src: string | string[];
+    volume?: number;
+}
+
+// 游戏音频配置
 export interface GameAudioConfig {
     // 资源路径前缀
     basePath?: string;
     // 音效定义
-    sounds: Record<SoundKey, SoundDefinition>;
+    sounds?: Record<SoundKey, SoundDefinition>;
+    // BGM 定义列表
+    bgm?: BgmDefinition[];
     // Move 名称映射到音效
     moves?: Record<string, SoundKey>;
     // 状态触发器
@@ -36,6 +46,9 @@ export interface GameAudioConfig {
 // 音频上下文状态
 export interface AudioState {
     muted: boolean;
-    volume: number;
+    masterVolume: number;
+    sfxVolume: number;
+    bgmVolume: number;
+    currentBgm: string | null;
     initialized: boolean;
 }

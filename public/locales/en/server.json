@@ -1,0 +1,45 @@
+{
+  "auth": {
+    "error": {
+      "missingCredentials": "Username and password are required",
+      "usernameLength": "Username length must be between 3 and 20 characters",
+      "passwordLength": "Password must be at least 4 characters",
+      "usernameTaken": "Username is already taken",
+      "serverError": "Server error, please try again later",
+      "invalidCredentials": "Invalid username or password",
+      "missingToken": "Missing authentication token",
+      "userNotFound": "User not found",
+      "invalidToken": "Invalid authentication token",
+      "loginRequired": "Please log in first",
+      "missingEmail": "Please enter an email address",
+      "invalidEmail": "Please enter a valid email address",
+      "emailAlreadyBound": "This email is already bound to another account",
+      "missingEmailCode": "Please enter email and verification code",
+      "invalidEmailCode": "Invalid or expired verification code"
+    },
+    "success": {
+      "register": "Registration successful",
+      "login": "Login successful",
+      "emailBound": "Email bound successfully"
+    }
+  },
+  "email": {
+    "error": {
+      "missingConfig": "Email service is not configured"
+    },
+    "subject": "Email Verification Code - Board Game Platform",
+    "template": {
+      "senderName": "Board Game Platform",
+      "title": "Email Verification",
+      "intro": "You are binding this email to your Board Game Platform account. Use the code below to verify:",
+      "note": "The code is valid for {{minutes}} minutes. If you didn't request it, please ignore this email.",
+      "footer": "Board Game Learning & Play"
+    },
+    "success": {
+      "sent": "Verification code sent"
+    },
+    "info": {
+      "devFallback": "Dev mode: verification code printed to server console"
+    }
+  }
+}

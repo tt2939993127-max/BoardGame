@@ -1,0 +1,101 @@
+{
+  "controls": {
+    "undo": {
+      "waiting": "等待批准中...",
+      "cancel": "取消",
+      "opponentRequest": "对手请求撤销",
+      "approve": "接受",
+      "reject": "拒绝",
+      "request": "撤销操作"
+    }
+  },
+  "hud": {
+    "mode": {
+      "local": "本地同屏",
+      "tutorial": "教学模式",
+      "online": "联机房间"
+    },
+    "copyRoomId": "复制房间 ID",
+    "roomId": "ID: {{id}}",
+    "status": {
+      "self": "本人",
+      "connected": "已连接",
+      "waiting": "等待中...",
+      "opponent": "对手",
+      "offline": "离线",
+      "searching": "搜索中",
+      "localTitle": "同屏对战",
+      "localDescription": "在本机轮流操作或同屏竞技。",
+      "tutorialTitle": "学习模式",
+      "tutorialDescription": "按照指示学习游戏规则。"
+    },
+    "actions": {
+      "destroy": "结束游戏并销毁房间",
+      "leaveKeep": "离开房间 (保持开启)",
+      "backToLobby": "返回大厅"
+    },
+    "toggle": {
+      "collapse": "收起菜单",
+      "expand": "展开菜单 - 可拖拽位置"
+    }
+  },
+  "audio": {
+    "bgmVolume": "音乐音量",
+    "sfxVolume": "音效音量",
+    "nowPlaying": "正在播放",
+    "nonePlaying": "未在播放",
+    "unmute": "取消静音",
+    "mute": "静音",
+    "switchTrack": "切换曲目",
+    "tracks": {
+      "main_theme": "经典对弈",
+      "chill_piano": "轻柔钢琴"
+    }
+  },
+  "debug": {
+    "toggleTitle": "开发调试",
+    "panelTitle": "🛠️ 调试控制台",
+    "viewLabel": "视角:",
+    "spectator": "旁观",
+    "tabs": {
+      "actions": "🎮 指令",
+      "state": "📊 数据",
+      "controls": "⚙️ 系统"
+    },
+    "sections": {
+      "moves": "指令",
+      "events": "事件"
+    },
+    "actions": {
+      "execute": "执行",
+      "empty": "暂无可用动作"
+    },
+    "placeholders": {
+      "moveArgs": "参数 (JSON/String)..."
+    },
+    "events": {
+      "endTurn": "🛑 结束回合",
+      "endPhase": "⏭️ 结束阶段"
+    },
+    "state": {
+      "phase": "阶段",
+      "turn": "回合",
+      "activePlayer": "当前玩家",
+      "gameState": "游戏状态 (G)"
+    },
+    "testMode": {
+      "title": "🧪 测试模式",
+      "description": "执行行动后自动切换玩家视角",
+      "enabled": "✅ 已开启 - 行动后自动切换视角",
+      "disabled": "⏸️ 已关闭 - 需手动切换视角"
+    },
+    "reset": {
+      "button": "🔄 重置游戏 (Reset)",
+      "hintTitle": "💡 提示",
+      "hintDescription": "重置操作将清除本地缓存并刷新页面。"
+    },
+    "tools": {
+      "gameSpecific": "游戏专用工具"
+    }
+  }
+}

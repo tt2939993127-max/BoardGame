@@ -1,0 +1,29 @@
+{
+  "imageW": 3726,
+  "imageH": 4096,
+  "rows": 4,
+  "cols": 10,
+  "deckX": 28,
+  "deckY": 29,
+  "deckW": 3677,
+  "deckH": 2279,
+  "rowStarts": [29, 614, 1182, 1773],
+  "rowHeights": [543, 546, 546, 535],
+  "colStarts": [28, 406, 777, 1152, 1522, 1892, 2269, 2642, 3011, 3381],
+  "colWidths": [329, 335, 333, 321, 323, 330, 338, 333, 321, 324],
+  "scan": {
+    "threshold": 35,
+    "alphaThreshold": 0,
+    "rowRatio": 0.2,
+    "colRatio": 0.2,
+    "rowMinCount": null,
+    "colMinCount": null,
+    "rowGap": 6,
+    "colGap": 6,
+    "scanXStart": 0,
+    "scanXEnd": null,
+    "scanYStart": 0,
+    "scanYEnd": null,
+    "step": 1
+  }
+}

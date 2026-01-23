@@ -1,0 +1,101 @@
+{
+  "controls": {
+    "undo": {
+      "waiting": "Waiting for approval...",
+      "cancel": "Cancel",
+      "opponentRequest": "Opponent requested undo",
+      "approve": "Approve",
+      "reject": "Reject",
+      "request": "Request Undo"
+    }
+  },
+  "hud": {
+    "mode": {
+      "local": "Local",
+      "tutorial": "Tutorial",
+      "online": "Online Room"
+    },
+    "copyRoomId": "Copy Room ID",
+    "roomId": "ID: {{id}}",
+    "status": {
+      "self": "You",
+      "connected": "Connected",
+      "waiting": "Waiting...",
+      "opponent": "Opponent",
+      "offline": "Offline",
+      "searching": "Searching",
+      "localTitle": "Local Match",
+      "localDescription": "Take turns on this device.",
+      "tutorialTitle": "Tutorial Mode",
+      "tutorialDescription": "Follow the guidance to learn the rules."
+    },
+    "actions": {
+      "destroy": "End game and destroy room",
+      "leaveKeep": "Leave room (keep open)",
+      "backToLobby": "Back to Lobby"
+    },
+    "toggle": {
+      "collapse": "Collapse menu",
+      "expand": "Expand menu - draggable"
+    }
+  },
+  "audio": {
+    "bgmVolume": "Music Volume",
+    "sfxVolume": "SFX Volume",
+    "nowPlaying": "Now Playing",
+    "nonePlaying": "Not Playing",
+    "unmute": "Unmute",
+    "mute": "Mute",
+    "switchTrack": "Switch Track",
+    "tracks": {
+      "main_theme": "Classic Duel",
+      "chill_piano": "Chill Piano"
+    }
+  },
+  "debug": {
+    "toggleTitle": "Dev Debug",
+    "panelTitle": "🛠️ Debug Console",
+    "viewLabel": "View:",
+    "spectator": "Spectator",
+    "tabs": {
+      "actions": "🎮 Actions",
+      "state": "📊 State",
+      "controls": "⚙️ System"
+    },
+    "sections": {
+      "moves": "Moves",
+      "events": "Events"
+    },
+    "actions": {
+      "execute": "Run",
+      "empty": "No actions available"
+    },
+    "placeholders": {
+      "moveArgs": "Args (JSON/String)..."
+    },
+    "events": {
+      "endTurn": "🛑 End Turn",
+      "endPhase": "⏭️ End Phase"
+    },
+    "state": {
+      "phase": "Phase",
+      "turn": "Turn",
+      "activePlayer": "Active Player",
+      "gameState": "Game State (G)"
+    },
+    "testMode": {
+      "title": "🧪 Test Mode",
+      "description": "Auto-switch perspective after actions",
+      "enabled": "✅ Enabled - auto switch perspective",
+      "disabled": "⏸️ Disabled - manual switch"
+    },
+    "reset": {
+      "button": "🔄 Reset Game (Reset)",
+      "hintTitle": "💡 Tip",
+      "hintDescription": "Reset clears local cache and reloads the page."
+    },
+    "tools": {
+      "gameSpecific": "Game Specific Tools"
+    }
+  }
+}

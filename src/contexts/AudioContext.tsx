@@ -1,29 +1,52 @@
-/**
- * 音频上下文 - 提供全局音频状态和控制
- */
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { AudioManager } from '../lib/audio/AudioManager';
+import type { BgmDefinition } from '../lib/audio/types';
 
 interface AudioContextValue {
     muted: boolean;
-    volume: number;
+    masterVolume: number;
+    sfxVolume: number;
+    bgmVolume: number;
+    currentBgm: string | null;
+    playlist: BgmDefinition[];
     toggleMute: () => void;
-    setVolume: (volume: number) => void;
+    setMasterVolume: (volume: number) => void;
+    setSfxVolume: (volume: number) => void;
+    setBgmVolume: (volume: number) => void;
     play: (key: string, spriteKey?: string) => void;
+    playBgm: (key: string) => void;
+    stopBgm: () => void;
+    setPlaylist: (list: BgmDefinition[]) => void;
 }
 
 const AudioContext = createContext<AudioContextValue | null>(null);
 
 export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [muted, setMuted] = useState(false);
-    const [volume, setVolumeState] = useState(1.0);
+    const [masterVolume, setMasterVolumeState] = useState(1.0);
+    const [sfxVolume, setSfxVolumeState] = useState(1.0);
+    const [bgmVolume, setBgmVolumeState] = useState(0.6);
+    const [currentBgm, setCurrentBgmState] = useState<string | null>(null);
+    const [playlist, setPlaylist] = useState<BgmDefinition[]>([]);
 
     // 初始化音频管理器
     useEffect(() => {
         AudioManager.initialize();
         setMuted(AudioManager.muted);
-        setVolumeState(AudioManager.volume);
+        setMasterVolumeState(AudioManager.masterVolume);
+        setSfxVolumeState(AudioManager.sfxVolume);
+        setBgmVolumeState(AudioManager.bgmVolume);
     }, []);
+
+    // 监听 BGM 状态更新
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (AudioManager.currentBgm !== currentBgm) {
+                setCurrentBgmState(AudioManager.currentBgm);
+            }
+        }, 500);
+        return () => clearInterval(interval);
+    }, [currentBgm]);
 
     const toggleMute = useCallback(() => {
         const newMuted = !muted;
@@ -31,17 +54,52 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setMuted(newMuted);
     }, [muted]);
 
-    const setVolume = useCallback((vol: number) => {
-        AudioManager.setVolume(vol);
-        setVolumeState(vol);
+    const setMasterVolume = useCallback((vol: number) => {
+        AudioManager.setMasterVolume(vol);
+        setMasterVolumeState(vol);
+    }, []);
+
+    const setSfxVolume = useCallback((vol: number) => {
+        AudioManager.setSfxVolume(vol);
+        setSfxVolumeState(vol);
+    }, []);
+
+    const setBgmVolume = useCallback((vol: number) => {
+        AudioManager.setBgmVolume(vol);
+        setBgmVolumeState(vol);
     }, []);
 
     const play = useCallback((key: string, spriteKey?: string) => {
         AudioManager.play(key, spriteKey);
     }, []);
 
+    const playBgm = useCallback((key: string) => {
+        AudioManager.playBgm(key);
+        setCurrentBgmState(key);
+    }, []);
+
+    const stopBgm = useCallback(() => {
+        AudioManager.stopBgm();
+        setCurrentBgmState(null);
+    }, []);
+
     return (
-        <AudioContext.Provider value={{ muted, volume, toggleMute, setVolume, play }}>
+        <AudioContext.Provider value={{
+            muted,
+            masterVolume,
+            sfxVolume,
+            bgmVolume,
+            currentBgm,
+            playlist,
+            toggleMute,
+            setMasterVolume,
+            setSfxVolume,
+            setBgmVolume,
+            play,
+            playBgm,
+            stopBgm,
+            setPlaylist
+        }}>
             {children}
         </AudioContext.Provider>
     );

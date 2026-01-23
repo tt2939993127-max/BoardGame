@@ -11,7 +11,14 @@ export async function connectDB(): Promise<void> {
         await mongoose.connect(MONGO_URI);
         console.log('✅ MongoDB 连接成功');
     } catch (error) {
+        // Print an actionable message. This failure is a common dev setup issue.
         console.error('❌ MongoDB 连接失败:', error);
+        console.error(
+            `[MongoDB] 请确认 MongoDB 已启动且可访问。` +
+            `\n- 当前 MONGO_URI: ${MONGO_URI}` +
+            `\n- Docker: docker-compose up -d mongodb` +
+            `\n- 或本机启动 MongoDB 并监听 27017`
+        );
         process.exit(1);
     }
 }

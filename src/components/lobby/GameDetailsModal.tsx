@@ -1,5 +1,6 @@
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { LobbyClient } from 'boardgame.io/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,11 +8,13 @@ import { lobbySocket, type LobbyMatch } from '../../services/lobbySocket';
 import { leaveMatch } from '../../hooks/useMatchStatus';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { ModalBase } from '../common/ModalBase';
-import { GameThumbnail } from './thumbnails';
+import { useModalStack } from '../../contexts/ModalStackContext';
+import { useToast } from '../../contexts/ToastContext';
+import { GAME_SERVER_URL } from '../../config/server';
 
-// Server URL
-const SERVER_URL = 'http://localhost:8000';
-const lobbyClient = new LobbyClient({ server: SERVER_URL });
+const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
+
+const normalizeGameName = (name?: string) => (name || '').toLowerCase();
 
 interface RoomPlayer {
     id: number;
@@ -21,23 +24,33 @@ interface RoomPlayer {
 interface Room {
     matchID: string;
     players: RoomPlayer[];
+    gameName?: string;
 }
 
 interface GameDetailsModalProps {
     isOpen: boolean;
     onClose: () => void;
     gameId: string;
-    title: string;
+    titleKey: string;
+    descriptionKey: string;
+    thumbnail: ReactNode;
+    closeOnBackdrop?: boolean;
 }
 
-export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetailsModalProps) => {
+export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop }: GameDetailsModalProps) => {
     const navigate = useNavigate();
     const modalRef = useRef<HTMLDivElement>(null);
     const { user } = useAuth();
+    const { t } = useTranslation('lobby');
+    const { openModal, closeModal, closeAll } = useModalStack();
+    const toast = useToast();
+    const confirmModalIdRef = useRef<string | null>(null);
+    const normalizedGameId = normalizeGameName(gameId);
 
-    // Real room state
+    // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [localStorageTick, setLocalStorageTick] = useState(0);
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         myPlayerID: string;
@@ -45,38 +58,88 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetails
         isHost: boolean;
     } | null>(null);
 
+    // 排行榜状态
+    const [activeTab, setActiveTab] = useState<'lobby' | 'leaderboard'>('lobby');
+    const [leaderboardData, setLeaderboardData] = useState<{
+        leaderboard: { name: string; wins: number; matches: number }[];
+    } | null>(null);
+
+    useEffect(() => {
+        if (isOpen && activeTab === 'leaderboard') {
+            fetch(`${GAME_SERVER_URL}/games/${normalizedGameId}/leaderboard`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && !data.error) {
+                        setLeaderboardData(data);
+                    }
+                })
+                .catch(err => console.error('Failed to fetch leaderboard:', err));
+        }
+    }, [isOpen, activeTab, normalizedGameId]);
+
     // 使用 WebSocket 订阅房间列表更新（替代轮询）
     useEffect(() => {
         if (isOpen) {
-            // 订阅大厅更新
-            const unsubscribe = lobbySocket.subscribe((matches: LobbyMatch[]) => {
+            const handleStorage = () => setLocalStorageTick(t => t + 1);
+            window.addEventListener('storage', handleStorage);
+
+            // 订阅大厅更新（仅当前游戏）
+            const unsubscribeMatches = lobbySocket.subscribe(normalizedGameId, (matches: LobbyMatch[]) => {
                 // 转换为 Room 格式
                 const roomList: Room[] = matches.map(m => ({
                     matchID: m.matchID,
                     players: m.players,
+                    gameName: m.gameName,
                 }));
                 setRooms(roomList);
             });
 
+            // 订阅连接状态
+            const unsubscribeStatus = lobbySocket.subscribeStatus((status) => {
+                if (status.lastError) {
+                    // Surface backend connection issues to the user.
+                    toast.error(
+                        { kind: 'i18n', key: 'error.serviceUnavailable.desc', ns: 'lobby' },
+                        { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
+                        { dedupeKey: 'lobbySocket.connectError' }
+                    );
+                }
+            });
+
             // 请求初始数据
-            lobbySocket.requestRefresh();
+            lobbySocket.requestRefresh(normalizedGameId);
 
             return () => {
-                unsubscribe();
+                window.removeEventListener('storage', handleStorage);
+                unsubscribeMatches();
+                unsubscribeStatus();
             };
         }
-    }, [isOpen]);
+    }, [isOpen, normalizedGameId]);
 
-    // Detect user's current active room (where we have local credentials)
+    // 检测用户当前活跃的房间（本地存有凭证的任意房间，可能跨游戏）
     const myActiveRoomMatchID = useMemo(() => {
-        return rooms.find(r =>
-            localStorage.getItem(`match_creds_${r.matchID}`)
-        )?.matchID || null;
-    }, [rooms]);
+        for (let i = 0; i < localStorage.length; i += 1) {
+            const key = localStorage.key(i);
+            if (!key || !key.startsWith('match_creds_')) continue;
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+            try {
+                const parsed = JSON.parse(raw);
+                return parsed.matchID || key.replace('match_creds_', '') || null;
+            } catch {
+                continue;
+            }
+        }
+        return null;
+    }, [localStorageTick, rooms]);
+
+    const buildGuestName = () => t('player.guest', { id: Math.floor(Math.random() * 9000) + 1000 });
 
 
     const handleTutorial = () => {
-        navigate(`/games/${gameId}/tutorial`);
+        closeAll({ skipOnClose: true });
+        navigate(`/play/${gameId}/tutorial`);
     };
 
     const handleCreateRoom = async () => {
@@ -85,71 +148,73 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetails
         try {
             const numPlayers = 2;
             // 获取用户名或生成游客名
-            const playerName = user?.username || `游客${Math.floor(Math.random() * 9000) + 1000}`;
+            const playerName = user?.username || buildGuestName();
 
-            const { matchID } = await lobbyClient.createMatch('TicTacToe', { numPlayers });
+            // 使用传入的 gameId
+            const { matchID } = await lobbyClient.createMatch(gameId, { numPlayers });
 
-            // Join as player 0
-            const { playerCredentials } = await lobbyClient.joinMatch('TicTacToe', matchID, {
+            // 加入为 0 号玩家
+            const { playerCredentials } = await lobbyClient.joinMatch(gameId, matchID, {
                 playerID: '0',
                 playerName,
             });
 
-            // Save credentials for the MatchRoom to pick up (simplest way without complex context for now)
+            // 保存凭据，以便 MatchRoom 获取
             localStorage.setItem(`match_creds_${matchID}`, JSON.stringify({
                 playerID: '0',
                 credentials: playerCredentials,
-                matchID
+                matchID,
+                gameName: gameId // 保存游戏名称
             }));
 
-            navigate(`/games/${gameId}/match/${matchID}?playerID=0`);
+            setLocalStorageTick(t => t + 1);
+
+            closeAll({ skipOnClose: true });
+            navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
         } catch (error) {
             console.error('Failed to create match:', error);
-            alert('创建房间失败');
+            toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleJoinRoom = async (matchID: string) => {
-
-
-        // Check available slot
-        const match = rooms.find(r => r.matchID === matchID);
-        if (!match) return;
-
-        const player0 = match.players[0];
-        const player1 = match.players[1];
-
+    const handleJoinRoom = async (matchID: string, overrideGameName?: string) => {
         // 检查是否有已保存的凭证（重连场景）
         const savedCreds = localStorage.getItem(`match_creds_${matchID}`);
         if (savedCreds) {
             const data = JSON.parse(savedCreds);
-            // 检查我们的位置是否仍然是我们的（名字匹配，或者是我们保存的游客身份）
-            // 简单处理：只要有凭证且位置没变，就允许重连。
-            // 实际上 boardgame.io 会校验 credentials，所以这里只要 ID 对应即可尝试
-            const mySlot = match.players[parseInt(data.playerID)];
-            if (mySlot) {
-                // 直接重连，无需重新加入
-                navigate(`/games/${gameId}/match/${matchID}?playerID=${data.playerID}`);
-                return;
-            }
+            const storedGameName = data.gameName;
+            const roomGameName = normalizeGameName(overrideGameName || storedGameName) || normalizedGameId || 'tictactoe';
+
+            // 直接重连：让 server/client 侧用 credentials 校验
+            closeAll({ skipOnClose: true });
+            navigate(`/play/${roomGameName}/match/${matchID}?playerID=${data.playerID}`);
+            return;
         }
+
+        // 新加入逻辑需要从当前大厅列表拿到玩家占位信息
+        const match = rooms.find(r => r.matchID === matchID);
+        if (!match) return;
+
+        const roomGameName = normalizeGameName(overrideGameName || match.gameName) || normalizedGameId || 'tictactoe';
+        const player0 = match.players[0];
+        const player1 = match.players[1];
 
         // 新加入逻辑：找一个空位
         let targetPlayerID = '';
         if (!player0.name) targetPlayerID = '0';
         else if (!player1.name) targetPlayerID = '1';
         else {
-            alert('房间已满');
+            toast.warning({ kind: 'i18n', key: 'error.roomFull', ns: 'lobby' });
             return;
         }
 
         try {
             // 获取用户名或生成游客名
-            const playerName = user?.username || `游客${Math.floor(Math.random() * 9000) + 1000}`;
+            const playerName = user?.username || buildGuestName();
 
-            const { playerCredentials } = await lobbyClient.joinMatch('TicTacToe', matchID, {
+            const { playerCredentials } = await lobbyClient.joinMatch(roomGameName, matchID, {
                 playerID: targetPlayerID,
                 playerName,
             });
@@ -157,13 +222,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetails
             localStorage.setItem(`match_creds_${matchID}`, JSON.stringify({
                 playerID: targetPlayerID,
                 credentials: playerCredentials,
-                matchID
+                matchID,
+                gameName: roomGameName
             }));
 
-            navigate(`/games/${gameId}/match/${matchID}?playerID=${targetPlayerID}`);
+            setLocalStorageTick(t => t + 1);
+
+            closeAll({ skipOnClose: true });
+            navigate(`/play/${roomGameName}/match/${matchID}?playerID=${targetPlayerID}`);
         } catch (error) {
             console.error('Join failed:', error);
-            alert('加入房间失败');
+            toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
         }
     };
 
@@ -181,14 +250,28 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetails
         if (!pendingAction) return;
         const { matchID, myPlayerID, myCredentials, isHost } = pendingAction;
         console.log('[LobbyModal] 确认执行', { matchID, myPlayerID, isHost });
-        const success = await leaveMatch('TicTacToe', matchID, myPlayerID, myCredentials);
+
+        // 尝试从本地存储或房间列表获取 gameName
+        const saved = localStorage.getItem(`match_creds_${matchID}`);
+        let gameName = gameId; // 默认使用当前模态框的 gameId
+        if (saved) {
+            const data = JSON.parse(saved);
+            if (data.gameName) gameName = data.gameName;
+        } else {
+            // 如果本地没有，尝试从 rooms 列表找
+            const room = rooms.find(r => r.matchID === matchID);
+            if (room?.gameName) gameName = room.gameName;
+        }
+
+        const success = await leaveMatch(gameName, matchID, myPlayerID, myCredentials);
         console.log('[LobbyModal] 执行完成', { success });
         if (!success) {
-            alert('操作失败，请稍后重试。');
+            toast.error({ kind: 'i18n', key: 'error.actionFailed', ns: 'lobby' });
             return;
         }
         setPendingAction(null);
-        lobbySocket.requestRefresh();
+        setLocalStorageTick(t => t + 1);
+        lobbySocket.requestRefresh(normalizedGameId);
     };
 
     const handleCancelAction = () => {
@@ -198,8 +281,51 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetails
         setPendingAction(null);
     };
 
-    // Pre-process rooms with credentials metadata
-    const roomItems = useMemo(() => {
+    useEffect(() => {
+        if (pendingAction && !confirmModalIdRef.current) {
+            confirmModalIdRef.current = openModal({
+                closeOnBackdrop: true,
+                closeOnEsc: true,
+                lockScroll: true,
+                onClose: () => {
+                    handleCancelAction();
+                    confirmModalIdRef.current = null;
+                },
+                render: ({ close, closeOnBackdrop: stackCloseOnBackdrop }) => (
+                    <ConfirmModal
+                        open
+                        title={pendingAction.isHost ? t('confirm.destroy.title') : t('confirm.leave.title')}
+                        description={pendingAction.isHost ? t('confirm.destroy.description') : t('confirm.leave.description')}
+                        onConfirm={() => {
+                            handleConfirmAction();
+                        }}
+                        onCancel={() => {
+                            close();
+                        }}
+                        tone="cool"
+                        closeOnBackdrop={stackCloseOnBackdrop}
+                    />
+                ),
+            });
+        }
+
+        if (!pendingAction && confirmModalIdRef.current) {
+            closeModal(confirmModalIdRef.current);
+            confirmModalIdRef.current = null;
+        }
+    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
+
+    useEffect(() => {
+        return () => {
+            if (confirmModalIdRef.current) {
+                closeModal(confirmModalIdRef.current);
+                confirmModalIdRef.current = null;
+            }
+        };
+    }, [closeModal]);
+
+    // 预处理带有凭据元数据的房间列表（全量）
+    const allRoomItems = useMemo(() => {
         return rooms.map(room => {
             const p0 = room.players[0]?.name;
             const p1 = room.players[1]?.name;
@@ -233,60 +359,131 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetails
                 canReconnect,
                 myPlayerID,
                 myCredentials,
-                isHost
+                isHost,
+                gameKey: normalizeGameName(room.gameName)
             };
         });
     }, [rooms, user]);
+
+    const roomItems = useMemo(() => {
+        return allRoomItems.filter(room => room.gameKey === normalizedGameId);
+    }, [allRoomItems, normalizedGameId]);
+
+    const activeMatch = useMemo(() => {
+        for (let i = 0; i < localStorage.length; i += 1) {
+            const key = localStorage.key(i);
+            if (!key || !key.startsWith('match_creds_')) continue;
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+
+            try {
+                const parsed = JSON.parse(raw);
+                const matchID = parsed.matchID || key.replace('match_creds_', '');
+                if (!matchID) continue;
+
+                const listMatch = rooms.find(r => r.matchID === matchID);
+                const gameName = normalizeGameName(parsed.gameName || listMatch?.gameName) || normalizedGameId || 'tictactoe';
+                const myPlayerID = parsed.playerID as string | undefined;
+                const myCredentials = parsed.credentials as string | undefined;
+
+                return {
+                    matchID,
+                    gameName,
+                    canReconnect: !!myCredentials,
+                    myPlayerID: myPlayerID ?? null,
+                    myCredentials: myCredentials ?? null,
+                    isHost: myPlayerID === '0',
+                };
+            } catch {
+                continue;
+            }
+        }
+        return null;
+    }, [localStorageTick, normalizedGameId, rooms]);
 
     return (
         <>
             <ModalBase
                 open={isOpen}
                 onClose={onClose}
+                closeOnBackdrop={closeOnBackdrop}
                 overlayClassName="z-40 bg-slate-900/40"
                 containerClassName="z-50 p-4"
             >
                 <div
                     ref={modalRef}
-                    className="bg-[#fcfbf9] pointer-events-auto w-full max-w-2xl h-[450px] rounded-sm shadow-[0_10px_40px_rgba(67,52,34,0.15)] flex flex-col md:flex-row border border-[#e5e0d0] relative overflow-hidden"
+                    className="
+                        bg-[#fcfbf9] pointer-events-auto 
+                        w-full max-w-2xl 
+                        min-h-[450px] max-h-[90vh] md:h-[450px]
+                        rounded-sm shadow-[0_10px_40px_rgba(67,52,34,0.15)] 
+                        flex flex-col md:flex-row 
+                        border border-[#e5e0d0] relative 
+                        overflow-y-auto md:overflow-hidden custom-scrollbar
+                    "
                 >
-                    {/* Decorative Corners */}
+                    {/* 装饰性边角 */}
                     <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-[#c0a080]" />
                     <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-[#c0a080]" />
                     <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-[#c0a080]" />
                     <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-[#c0a080]" />
 
-                    {/* Left Panel - Game Info */}
+                    {/* 左侧面板 - 游戏信息 */}
                     <div className="w-full md:w-2/5 bg-[#f3f0e6]/50 border-r border-[#e5e0d0] p-8 flex flex-col items-center text-center font-serif">
                         <div className="w-20 h-20 bg-[#fcfbf9] border border-[#e5e0d0] rounded-[4px] shadow-sm flex items-center justify-center text-4xl text-[#433422] font-bold mb-6 overflow-hidden">
-                            <GameThumbnail gameId={gameId} />
+                            {thumbnail}
                         </div>
-                        <h2 className="text-xl font-bold text-[#433422] mb-2 tracking-wide">{title}</h2>
+                        <h2 className="text-xl font-bold text-[#433422] mb-2 tracking-wide">{t(titleKey, { defaultValue: titleKey })}</h2>
                         <div className="h-px w-12 bg-[#c0a080] opacity-30 mb-4" />
                         <p className="text-xs text-[#8c7b64] mb-8 leading-relaxed italic">
-                            经典策略游戏。连成3个符号即可获胜。
+                            {t(descriptionKey, { defaultValue: descriptionKey })}
                         </p>
 
                         <div className="mt-auto w-full">
                             <button
-                                onClick={() => navigate(`/games/${gameId}/local`)}
+                                onClick={() => {
+                                    closeAll({ skipOnClose: true });
+                                    navigate(`/play/${gameId}/local`);
+                                }}
                                 className="w-full py-2 px-4 bg-[#fcfbf9] border border-[#e5e0d0] text-[#433422] font-bold rounded-[4px] hover:bg-[#efede6] transition-all flex items-center justify-center gap-2 cursor-pointer text-xs mb-2"
                             >
-                                👥 本地同屏
+                                {t('actions.localPlay')}
                             </button>
                             <button
                                 onClick={handleTutorial}
                                 className="w-full py-2 px-4 bg-[#fcfbf9] border border-[#e5e0d0] text-[#433422] font-bold rounded-[4px] hover:bg-[#efede6] transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
                             >
-                                🎓 教程模式
+                                {t('actions.tutorial')}
                             </button>
                         </div>
                     </div>
 
-                    {/* Right Panel - Lobby */}
+                    {/* 右侧面板 - 大厅/排行 */}
                     <div className="flex-1 p-8 flex flex-col bg-[#fcfbf9] font-serif">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-lg font-bold text-[#433422] tracking-wider uppercase">在线大厅</h3>
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => setActiveTab('lobby')}
+                                    className={clsx(
+                                        "text-lg font-bold tracking-wider uppercase transition-colors relative",
+                                        activeTab === 'lobby' ? "text-[#433422]" : "text-[#8c7b64] hover:text-[#433422]"
+                                    )}
+                                >
+                                    {t('tabs.lobby')}
+                                    {activeTab === 'lobby' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#433422]" />}
+                                </button>
+                                <div className="w-px bg-[#e5e0d0] h-6" />
+                                <button
+                                    onClick={() => setActiveTab('leaderboard')}
+                                    className={clsx(
+                                        "text-lg font-bold tracking-wider uppercase transition-colors relative",
+                                        activeTab === 'leaderboard' ? "text-[#433422]" : "text-[#8c7b64] hover:text-[#433422]"
+                                    )}
+                                >
+                                    {t('tabs.leaderboard')}
+                                    {activeTab === 'leaderboard' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#433422]" />}
+                                </button>
+                            </div>
                             <button onClick={onClose} className="p-1 hover:bg-[#efede6] rounded-full text-[#8c7b64] hover:text-[#433422] transition-colors cursor-pointer">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -294,126 +491,180 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, title }: GameDetails
                             </button>
                         </div>
 
-                        {/* Create Action */}
-                        <div className="mb-6">
-                            {(() => {
-                                // Check if user is already in a match (by credentials or username)
-                                const activeMatch = roomItems.find(room => room.isMyRoom);
-
-                                if (activeMatch) {
-                                    return (
-                                        <div className="w-full py-3 px-4 bg-[#f8f4e8] border border-[#c0a080] rounded-[4px] flex flex-col items-center gap-2">
-                                            <span className="text-xs text-[#8c7b64] font-bold uppercase tracking-wider">
-                                                您当前正在进行一场对局
-                                            </span>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleJoinRoom(activeMatch.matchID)}
-                                                    className="px-4 py-1.5 bg-[#c0a080] text-white text-xs font-bold rounded hover:bg-[#a08060] transition-colors cursor-pointer uppercase tracking-wider"
-                                                >
-                                                    返回当前对局 (#{activeMatch.matchID.slice(0, 4)})
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                }
-
-                                return (
-                                    <button
-                                        onClick={handleCreateRoom}
-                                        disabled={isLoading}
-                                        className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
-                                    >
-                                        {isLoading ? '处理中...' : '开设新局'}
-                                    </button>
-                                );
-                            })()}
-                        </div>
-
-                        {/* Room List */}
-                        <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                            {roomItems.length === 0 ? (
-                                <div className="text-center text-[#8c7b64] py-10 italic text-sm border border-dashed border-[#e5e0d0] rounded-[4px]">
-                                    暂无活跃房间
-                                </div>
-                            ) : (
-                                roomItems.map((room) => (
-                                    <div
-                                        key={room.matchID}
-                                        className={clsx(
-                                            "flex items-center justify-between p-3 rounded-[4px] border transition-colors",
-                                            room.isMyRoom
-                                                ? "border-[#c0a080] bg-[#f8f4e8]"
-                                                : "border-[#e5e0d0] bg-[#fcfbf9] hover:bg-[#f3f0e6]/30"
-                                        )}
-                                    >
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-bold text-[#433422] text-sm">
-                                                    对局 #{room.matchID.slice(0, 4)}
-                                                </span>
-                                                {room.isMyRoom && (
-                                                    <span className="text-[8px] bg-[#c0a080] text-white px-1.5 py-0.5 rounded uppercase font-bold">
-                                                        我的
+                        {activeTab === 'lobby' ? (
+                            <>
+                                {/* 创建操作 */}
+                                <div className="mb-6">
+                                    {(() => {
+                                        // 检查用户是否已在对局中
+                                        if (activeMatch) {
+                                            return (
+                                                <div className="w-full py-3 px-4 bg-[#f8f4e8] border border-[#c0a080] rounded-[4px] flex flex-col items-center gap-2">
+                                                    <span className="text-xs text-[#8c7b64] font-bold uppercase tracking-wider">
+                                                        {t('activeMatch.notice')}
                                                     </span>
-                                                )}
-                                            </div>
-                                            <div className="text-[10px] text-[#8c7b64] mt-0.5">
-                                                {room.p0 || '空位'} vs {room.p1 || '空位'}
-                                            </div>
-                                        </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => handleJoinRoom(activeMatch.matchID, activeMatch.gameName)}
+                                                            className="px-4 py-1.5 bg-[#c0a080] text-white text-xs font-bold rounded hover:bg-[#a08060] transition-colors cursor-pointer uppercase tracking-wider"
+                                                        >
+                                                            {t('activeMatch.return', { id: activeMatch.matchID.slice(0, 4) })}
+                                                        </button>
+                                                        {activeMatch.canReconnect && activeMatch.myPlayerID && activeMatch.myCredentials && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleAction(activeMatch.matchID, activeMatch.myPlayerID!, activeMatch.myCredentials!, activeMatch.isHost);
+                                                                }}
+                                                                className={clsx(
+                                                                    "px-3 py-1.5 rounded-[4px] text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider border",
+                                                                    activeMatch.isHost
+                                                                        ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                                                                        : "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100"
+                                                                )}
+                                                            >
+                                                                {activeMatch.isHost ? t('actions.destroy') : t('actions.leave')}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
 
-                                        <div className="flex gap-2">
-                                            {room.canReconnect && room.myPlayerID && room.myCredentials && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleAction(room.matchID, room.myPlayerID!, room.myCredentials!, room.isHost);
-                                                    }}
-                                                    className={clsx(
-                                                        "px-3 py-1.5 rounded-[4px] text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider border",
-                                                        room.isHost
-                                                            ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
-                                                            : "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100"
-                                                    )}
-                                                >
-                                                    {room.isHost ? '销毁' : '离开'}
-                                                </button>
-                                            )}
-
+                                        return (
                                             <button
-                                                onClick={() => handleJoinRoom(room.matchID)}
-                                                disabled={(room.isFull && !room.canReconnect) || (!!myActiveRoomMatchID && !room.canReconnect)}
-                                                className={clsx(
-                                                    "px-3 py-1.5 rounded-[4px] text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider",
-                                                    room.canReconnect
-                                                        ? "bg-[#c0a080] text-white hover:bg-[#a08060]"
-                                                        : (room.isFull || (!!myActiveRoomMatchID && !room.canReconnect))
-                                                            ? "bg-[#e5e0d0] text-[#8c7b64] cursor-not-allowed"
-                                                            : "bg-[#433422] text-[#fcfbf9] hover:bg-[#2b2114]"
-                                                )}
-                                                title={myActiveRoomMatchID && !room.canReconnect ? "您当前已在另一场对局中" : undefined}
+                                                onClick={handleCreateRoom}
+                                                disabled={isLoading}
+                                                className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
                                             >
-                                                {room.canReconnect ? '重连' : (myActiveRoomMatchID && !room.canReconnect) ? '对局中' : room.isFull ? '已满' : '加入'}
+                                                {isLoading ? t('button.processing') : t('actions.createRoom')}
                                             </button>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* 房间列表 */}
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                    {roomItems.length === 0 ? (
+                                        <div className="text-center text-[#8c7b64] py-10 italic text-sm border border-dashed border-[#e5e0d0] rounded-[4px]">
+                                            {t('rooms.empty')}
                                         </div>
+                                    ) : (
+                                        roomItems.map((room) => (
+                                            <div
+                                                key={room.matchID}
+                                                className={clsx(
+                                                    "flex items-center justify-between p-3 rounded-[4px] border transition-colors",
+                                                    room.isMyRoom
+                                                        ? "border-[#c0a080] bg-[#f8f4e8]"
+                                                        : "border-[#e5e0d0] bg-[#fcfbf9] hover:bg-[#f3f0e6]/30"
+                                                )}
+                                            >
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-[#433422] text-sm">
+                                                            {t('rooms.matchTitle', { id: room.matchID.slice(0, 4) })}
+                                                        </span>
+                                                        {room.isMyRoom && (
+                                                            <span className="text-[8px] bg-[#c0a080] text-white px-1.5 py-0.5 rounded uppercase font-bold">
+                                                                {t('rooms.mine')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[10px] text-[#8c7b64] mt-0.5">
+                                                        {room.p0 || t('rooms.emptySlot')} vs {room.p1 || t('rooms.emptySlot')}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-2">
+                                                    {room.canReconnect && room.myPlayerID && room.myCredentials && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleAction(room.matchID, room.myPlayerID!, room.myCredentials!, room.isHost);
+                                                            }}
+                                                            className={clsx(
+                                                                "px-3 py-1.5 rounded-[4px] text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider border",
+                                                                room.isHost
+                                                                    ? "bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
+                                                                    : "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100"
+                                                            )}
+                                                        >
+                                                            {room.isHost ? t('actions.destroy') : t('actions.leave')}
+                                                        </button>
+                                                    )}
+
+                                                    <button
+                                                        onClick={() => handleJoinRoom(room.matchID)}
+                                                        disabled={(room.isFull && !room.canReconnect) || (!!myActiveRoomMatchID && !room.canReconnect)}
+                                                        className={clsx(
+                                                            "px-3 py-1.5 rounded-[4px] text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider",
+                                                            room.canReconnect
+                                                                ? "bg-[#c0a080] text-white hover:bg-[#a08060]"
+                                                                : (room.isFull || (!!myActiveRoomMatchID && !room.canReconnect))
+                                                                    ? "bg-[#e5e0d0] text-[#8c7b64] cursor-not-allowed"
+                                                                    : "bg-[#433422] text-[#fcfbf9] hover:bg-[#2b2114]"
+                                                        )}
+                                                        title={myActiveRoomMatchID && !room.canReconnect ? t('rooms.inAnotherMatch') : undefined}
+                                                    >
+                                                        {room.canReconnect
+                                                            ? t('actions.reconnect')
+                                                            : (myActiveRoomMatchID && !room.canReconnect)
+                                                                ? t('rooms.inProgress')
+                                                                : room.isFull
+                                                                    ? t('rooms.full')
+                                                                    : t('actions.join')}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                                {!leaderboardData ? (
+                                    <div className="flex items-center justify-center h-40">
+                                        <p className="text-[#8c7b64] italic">{t('leaderboard.loading')}</p>
                                     </div>
-                                ))
-                            )}
-                        </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {/* 胜场排行 */}
+                                        <section>
+                                            <h4 className="text-xs font-bold text-[#8c7b64] uppercase tracking-widest mb-3">{t('leaderboard.title')}</h4>
+                                            {leaderboardData.leaderboard.length === 0 ? (
+                                                <p className="text-sm text-[#433422]/60 italic">{t('leaderboard.empty')}</p>
+                                            ) : (
+                                                <div className="space-y-1">
+                                                    {leaderboardData.leaderboard.map((player, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center py-2 border-b border-[#e5e0d0]/50 text-sm">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className={clsx(
+                                                                    "w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold",
+                                                                    idx === 0 ? "bg-yellow-400 text-yellow-900" :
+                                                                        idx === 1 ? "bg-gray-300 text-gray-800" :
+                                                                            idx === 2 ? "bg-orange-300 text-orange-900" :
+                                                                                "bg-[#f3f0e6] text-[#8c7b64]"
+                                                                )}>
+                                                                    {idx + 1}
+                                                                </span>
+                                                                <span className="font-bold text-[#433422]">{player.name}</span>
+                                                            </div>
+                                                            <span className="text-[#8c7b64] text-xs font-mono">
+                                                                {t('leaderboard.record', { wins: player.wins, matches: player.matches })}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </section>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </ModalBase>
-            {pendingAction && (
-                <ConfirmModal
-                    open={!!pendingAction}
-                    title={pendingAction.isHost ? '销毁房间' : '离开房间'}
-                    description={pendingAction.isHost ? '确定要销毁房间吗？' : '确定要离开房间吗？'}
-                    onConfirm={handleConfirmAction}
-                    onCancel={handleCancelAction}
-                    tone="cool"
-                />
-            )}
         </>
     );
 };

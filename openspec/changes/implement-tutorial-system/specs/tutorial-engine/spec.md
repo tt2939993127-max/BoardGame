@@ -1,5 +1,3 @@
-# Tutorial Engine Specs
-
 ## ADDED Requirements
 
 ### Requirement: 教程状态管理
@@ -36,4 +34,3 @@
 - When 步骤激活
 - Then 遮罩层在 `cell-4` 的位置挖洞或显示高亮边框
 - And 提示框 (Tooltip) 自动定位到高亮元素附近
-

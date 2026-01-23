@@ -6,25 +6,16 @@ import { useEffect, useRef } from 'react';
 import { AudioManager } from './AudioManager';
 import { playSynthSound, getSynthSoundKeys } from './SynthAudio';
 import type { GameAudioConfig, SoundKey } from './types';
+import { useAudio } from '../../contexts/AudioContext';
 
 interface UseGameAudioOptions<G> {
     config: GameAudioConfig;
     G: G;
     ctx: { gameover?: unknown; currentPlayer?: string; turn?: number };
-    playerID: string | null;
 }
 
 // 追踪哪些音效加载失败，需要使用合成音
 const failedSounds = new Set<string>();
-
-/**
- * 初始化游戏音效
- * @param config 游戏音频配置
- */
-export function initGameAudio(config: GameAudioConfig): void {
-    AudioManager.initialize();
-    AudioManager.registerAll(config.sounds, config.basePath || '');
-}
 
 /**
  * 播放指定音效（自动回退到合成音）
@@ -57,19 +48,32 @@ export function useGameAudio<G extends { cells?: unknown[] }>({
     config,
     G,
     ctx,
-    playerID,
 }: UseGameAudioOptions<G>): void {
     const prevGRef = useRef<G | null>(null);
     const prevCtxRef = useRef<typeof ctx | null>(null);
     const initializedRef = useRef(false);
+    const { setPlaylist, playBgm, stopBgm } = useAudio();
 
     // 初始化音效
     useEffect(() => {
         if (!initializedRef.current) {
-            initGameAudio(config);
+            AudioManager.initialize();
+            AudioManager.registerAll(config, config.basePath || '');
+
+            // 更新上下文状态
+            if (config.bgm && config.bgm.length > 0) {
+                setPlaylist(config.bgm);
+                // 默认播放第一个 BGM
+                playBgm(config.bgm[0].key);
+            } else {
+                // 如果没有 BGM 配置，确保停止当前播放并清空歌单
+                setPlaylist([]);
+                stopBgm();
+            }
+
             initializedRef.current = true;
         }
-    }, [config]);
+    }, [config, setPlaylist, playBgm]);
 
     // 监听 cells 变化 (落子音效)
     useEffect(() => {
@@ -96,6 +100,13 @@ export function useGameAudio<G extends { cells?: unknown[] }>({
         prevGRef.current = G;
     }, [G]);
 
+    // 组件卸载时停止 BGM
+    useEffect(() => {
+        return () => {
+            AudioManager.stopBgm();
+        };
+    }, []);
+
     // 监听游戏结束
     useEffect(() => {
         if (!prevCtxRef.current) {
@@ -114,5 +125,5 @@ export function useGameAudio<G extends { cells?: unknown[] }>({
         }
 
         prevCtxRef.current = ctx;
-    }, [ctx, playerID]);
+    }, [ctx]);
 }

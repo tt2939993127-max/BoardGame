@@ -1,0 +1,11 @@
+{
+  "overlay": {
+    "finish": "Finish and return",
+    "next": "Next",
+    "clickToContinue": "Click the highlighted area to continue"
+  },
+  "default": {
+    "welcome": "Welcome to Tic-Tac-Toe! The goal is to align three marks.",
+    "grid": "This is the board. Click any empty cell to place your mark (X)."
+  }
+}

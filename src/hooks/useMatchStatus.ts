@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LobbyClient } from 'boardgame.io/client';
+import { GAME_SERVER_URL } from '../config/server';
 
-const SERVER_URL = 'http://localhost:8000';
-const lobbyClient = new LobbyClient({ server: SERVER_URL });
+const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
 export interface PlayerStatus {
     id: number;
@@ -30,7 +30,7 @@ export interface MatchStatus {
  * 房间状态 Hook
  * 用于实时获取房间信息和对手状态
  */
-export function useMatchStatus(matchID: string | undefined, myPlayerID: string | null): MatchStatus {
+export function useMatchStatus(gameName: string | undefined, matchID: string | undefined, myPlayerID: string | null): MatchStatus {
     const [players, setPlayers] = useState<PlayerStatus[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -40,7 +40,8 @@ export function useMatchStatus(matchID: string | undefined, myPlayerID: string |
         if (!matchID) return;
 
         try {
-            const match = await lobbyClient.getMatch('TicTacToe', matchID);
+            const effectiveGameName = gameName || 'tictactoe';
+            const match = await lobbyClient.getMatch(effectiveGameName, matchID);
             setPlayers(match.players.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -53,7 +54,7 @@ export function useMatchStatus(matchID: string | undefined, myPlayerID: string |
         } finally {
             setIsLoading(false);
         }
-    }, [matchID]);
+    }, [gameName, matchID]);
 
     // 定期轮询房间状态
     useEffect(() => {
@@ -123,10 +124,21 @@ export async function rejoinMatch(
         });
 
         // 保存新凭证
-        localStorage.setItem(`match_creds_${matchID}`, JSON.stringify({
+        const storageKey = `match_creds_${matchID}`;
+        let existing: any = null;
+        try {
+            const raw = localStorage.getItem(storageKey);
+            if (raw) existing = JSON.parse(raw);
+        } catch {
+            existing = null;
+        }
+
+        localStorage.setItem(storageKey, JSON.stringify({
+            ...(existing && typeof existing === 'object' ? existing : {}),
             playerID,
             credentials: playerCredentials,
             matchID,
+            gameName,
         }));
 
         return { success: true, credentials: playerCredentials };

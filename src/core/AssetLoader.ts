@@ -1,0 +1,294 @@
+/**
+ * 游戏资源加载器
+ * 
+ * 提供统一的资源路径解析、预加载和缓存管理。
+ * 所有游戏资源路径相对于 /assets/ 目录。
+ */
+
+import type { GameAssets, SpriteAtlasDefinition } from './types';
+
+// ============================================================================
+// 资源路径常量
+// ============================================================================
+
+const ASSETS_BASE_PATH = '/assets';
+const COMPRESSED_SUBDIR = 'compressed';
+const LOCALIZED_ASSETS_SUBDIR = 'i18n';
+
+// ============================================================================
+// 资源注册表
+// ============================================================================
+
+const gameAssetsRegistry = new Map<string, GameAssets>();
+const preloadedImages = new Map<string, HTMLImageElement>();
+const preloadedAudio = new Map<string, HTMLAudioElement>();
+
+// ============================================================================
+// 公共 API
+// ============================================================================
+
+/**
+ * 注册游戏资源清单
+ * 应在游戏模块初始化时调用
+ */
+export function registerGameAssets(gameId: string, assets: GameAssets): void {
+    gameAssetsRegistry.set(gameId, assets);
+}
+
+/**
+ * 获取图片路径
+ * 自动处理压缩格式优先级：.avif > .webp > 原始格式
+ * 
+ * @param gameId 游戏 ID
+ * @param key 资源键名
+ * @param preferCompressed 是否优先使用压缩格式（默认 true）
+ */
+export function getImagePath(
+    gameId: string,
+    key: string,
+    preferCompressed = true
+): string {
+    const assets = gameAssetsRegistry.get(gameId);
+    if (!assets?.images?.[key]) {
+        console.warn(`[AssetLoader] 未找到图片资源: ${gameId}/${key}`);
+        return '';
+    }
+
+    const relativePath = assets.images[key];
+    
+    if (preferCompressed) {
+        const basePath = relativePath.replace(/\.[^.]+$/, '');
+        const dir = basePath.substring(0, basePath.lastIndexOf('/'));
+        const filename = basePath.substring(basePath.lastIndexOf('/') + 1);
+        return `${ASSETS_BASE_PATH}/${dir}/${COMPRESSED_SUBDIR}/${filename}.avif`;
+    }
+
+    return `${ASSETS_BASE_PATH}/${relativePath}`;
+}
+
+/**
+ * 获取音频路径
+ * 自动使用压缩格式 .ogg
+ */
+export function getAudioPath(gameId: string, key: string): string {
+    const assets = gameAssetsRegistry.get(gameId);
+    if (!assets?.audio?.[key]) {
+        console.warn(`[AssetLoader] 未找到音频资源: ${gameId}/${key}`);
+        return '';
+    }
+
+    return `${ASSETS_BASE_PATH}/${assets.audio[key]}`;
+}
+
+/**
+ * 获取精灵图集定义
+ */
+export function getSpriteAtlas(
+    gameId: string,
+    atlasId: string
+): SpriteAtlasDefinition | undefined {
+    const assets = gameAssetsRegistry.get(gameId);
+    return assets?.sprites?.find(s => s.id === atlasId);
+}
+
+/**
+ * 预加载游戏资源
+ * 返回 Promise，所有资源加载完成后 resolve
+ */
+export async function preloadGameAssets(gameId: string): Promise<void> {
+    const assets = gameAssetsRegistry.get(gameId);
+    if (!assets) {
+        console.warn(`[AssetLoader] 游戏 ${gameId} 未注册资源清单`);
+        return;
+    }
+
+    const promises: Promise<void>[] = [];
+
+    if (assets.images) {
+        for (const [key] of Object.entries(assets.images)) {
+            const path = getImagePath(gameId, key);
+            if (path && !preloadedImages.has(path)) {
+                promises.push(preloadImage(path));
+            }
+        }
+    }
+
+    if (assets.audio) {
+        for (const [key] of Object.entries(assets.audio)) {
+            const path = getAudioPath(gameId, key);
+            if (path && !preloadedAudio.has(path)) {
+                promises.push(preloadAudioFile(path));
+            }
+        }
+    }
+
+    if (assets.sprites) {
+        for (const atlas of assets.sprites) {
+            const path = `${ASSETS_BASE_PATH}/${atlas.imagePath}`;
+            if (!preloadedImages.has(path)) {
+                promises.push(preloadImage(path));
+            }
+        }
+    }
+
+    await Promise.all(promises);
+    console.log(`[AssetLoader] 游戏 ${gameId} 资源预加载完成`);
+}
+
+/**
+ * 清除游戏资源缓存
+ */
+export function clearGameAssetsCache(gameId: string): void {
+    const assets = gameAssetsRegistry.get(gameId);
+    if (!assets) return;
+
+    if (assets.images) {
+        for (const [key] of Object.entries(assets.images)) {
+            const path = getImagePath(gameId, key);
+            preloadedImages.delete(path);
+        }
+    }
+
+    if (assets.audio) {
+        for (const [key] of Object.entries(assets.audio)) {
+            const path = getAudioPath(gameId, key);
+            preloadedAudio.delete(path);
+        }
+    }
+}
+
+// ============================================================================
+// 内部辅助函数
+// ============================================================================
+
+async function preloadImage(src: string): Promise<void> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            preloadedImages.set(src, img);
+            resolve();
+        };
+        img.onerror = () => {
+            console.warn(`[AssetLoader] 图片加载失败: ${src}`);
+            resolve(); // 不阻塞其他资源加载
+        };
+        img.src = src;
+    });
+}
+
+async function preloadAudioFile(src: string): Promise<void> {
+    return new Promise((resolve) => {
+        const audio = new Audio();
+        audio.oncanplaythrough = () => {
+            preloadedAudio.set(src, audio);
+            resolve();
+        };
+        audio.onerror = () => {
+            console.warn(`[AssetLoader] 音频加载失败: ${src}`);
+            resolve();
+        };
+        audio.src = src;
+    });
+}
+
+// ============================================================================
+// 便捷工具函数（统一资源路径 API）
+// ============================================================================
+
+/** 判断是否为穿透源（data/blob/http） */
+const isPassthroughSource = (src: string) => (
+    src.startsWith('data:')
+    || src.startsWith('blob:')
+    || src.startsWith('http://')
+    || src.startsWith('https://')
+);
+
+/** 移除扩展名 */
+const stripExtension = (src: string) => {
+    if (isPassthroughSource(src)) return src;
+    return src.replace(/\.(avif|webp|png|jpe?g)$/i, '');
+};
+
+/**
+ * 规范化资源路径，统一添加 /assets/ 前缀
+ * 支持相对路径转换
+ */
+export function assetsPath(path: string): string {
+    if (isPassthroughSource(path)) return path;
+    if (path.startsWith('/assets/')) return path;
+    const trimmed = path.startsWith('/') ? path.slice(1) : path;
+    return `${ASSETS_BASE_PATH}/${trimmed}`;
+}
+
+/**
+ * 获取优化图片 URL（avif/webp）
+ * 用于 <picture> 或 <img> srcset
+ */
+export type ImageUrlSet = { avif: string; webp: string };
+export type LocalizedImageUrls = { primary: ImageUrlSet; fallback: ImageUrlSet };
+
+export function getOptimizedImageUrls(src: string): ImageUrlSet {
+    const normalized = assetsPath(src);
+    if (isPassthroughSource(normalized)) {
+        return { avif: normalized, webp: normalized };
+    }
+    const base = stripExtension(normalized);
+    return {
+        avif: `${base}.avif`,
+        webp: `${base}.webp`,
+    };
+}
+
+/**
+ * 构建语言化资源路径（A 方案：本地语言目录）
+ * 目录结构：/assets/i18n/<lang>/<relativePath>
+ */
+export function getLocalizedAssetPath(path: string, locale?: string): string {
+    if (!locale || isPassthroughSource(path)) return assetsPath(path);
+    const normalized = assetsPath(path);
+    const relative = normalized.replace(/^\/assets\//, '');
+    return assetsPath(`${LOCALIZED_ASSETS_SUBDIR}/${locale}/${relative}`);
+}
+
+/**
+ * 获取语言化图片 URL（包含回退）
+ */
+export function getLocalizedImageUrls(src: string, locale?: string): LocalizedImageUrls {
+    const fallback = getOptimizedImageUrls(src);
+    if (!locale || isPassthroughSource(src)) {
+        return { primary: fallback, fallback };
+    }
+    const localizedPath = getLocalizedAssetPath(src, locale);
+    return {
+        primary: getOptimizedImageUrls(localizedPath),
+        fallback,
+    };
+}
+
+/**
+ * 构建语言化图片集（用于 CSS background-image）
+ * 返回支持 image-set 的 CSS 值，并包含回退层
+ */
+export function buildLocalizedImageSet(src: string, locale?: string): string {
+    const { primary, fallback } = getLocalizedImageUrls(src, locale);
+    const primarySet = `image-set(url("${primary.avif}") type("image/avif"), url("${primary.webp}") type("image/webp"))`;
+    const fallbackSet = `image-set(url("${fallback.avif}") type("image/avif"), url("${fallback.webp}") type("image/webp"))`;
+    return `${primarySet}, ${fallbackSet}`;
+}
+
+/**
+ * 构建优化图片集（用于 CSS background-image）
+ * 返回支持 image-set 的 CSS 值
+ */
+export function buildOptimizedImageSet(src: string): string {
+    const { avif, webp } = getOptimizedImageUrls(src);
+    return `image-set(url("${avif}") type("image/avif"), url("${webp}") type("image/webp"))`;
+}
+
+/**
+ * 获取直接路径（不经过注册表）
+ * 用于简单场景，直接拼接 /assets/ 前缀
+ */
+export function getDirectAssetPath(relativePath: string): string {
+    return assetsPath(relativePath);
+}

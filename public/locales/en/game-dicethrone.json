@@ -1,0 +1,276 @@
+{
+  "phase": {
+    "title": "Turn Order",
+    "setup": {
+      "label": "Setup"
+    },
+    "upkeep": {
+      "label": "1. Upkeep Phase",
+      "desc": ["Resolve applicable status effects"]
+    },
+    "income": {
+      "label": "2. Income Phase",
+      "desc": ["Gain 1 CP", "Draw 1 card"]
+    },
+    "main1": {
+      "label": "3. Main Phase (1)",
+      "desc": ["Play ability upgrade cards", "Play main phase action cards", "Sell cards (1 CP each)"]
+    },
+    "offensiveRoll": {
+      "label": "4. Offensive Roll Phase",
+      "desc": ["Roll up to 3 times to activate an ability"]
+    },
+    "defensiveRoll": {
+      "label": "5. Defensive Roll Phase",
+      "desc": ["Your opponent rolls once to defend"]
+    },
+    "main2": {
+      "label": "6. Main Phase (2)",
+      "desc": ["Same as Main Phase (1)"]
+    },
+    "discard": {
+      "label": "7. Discard Phase",
+      "desc": ["Sell cards above 6 in hand"]
+    }
+  },
+  "statusEffects": {
+    "evasive": {
+      "name": "Evasive",
+      "description": [
+        "When taking damage, you may spend 1 Evasive and roll 1 die",
+        "On 1-2, damage becomes 0 (other effects still apply)",
+        "You may spend multiple Evasive to retry in the same attack"
+      ]
+    },
+    "taiji": {
+      "name": "Taiji",
+      "description": [
+        "At any time, spend 1 Taiji to reduce incoming damage by 1",
+        "Before attacking, spend 1 Taiji to increase damage by 1",
+        "Taiji gained this turn cannot be used to boost damage this turn"
+      ]
+    },
+    "stun": {
+      "name": "Stun",
+      "description": [
+        "Before the Offensive Roll Phase, you may spend 2 CP to remove this token",
+        "If not removed, you must skip the phase and remove this token"
+      ]
+    },
+    "purify": {
+      "name": "Purify",
+      "description": ["At any time, spend 1 Purify to remove 1 negative status token"]
+    },
+    "chi": {
+      "name": "Chi",
+      "description": ["Inner energy gathered, used to enhance abilities"]
+    }
+  },
+  "hud": {
+    "health": "Health",
+    "energy": "Energy",
+    "deck": "Deck",
+    "discardPile": "Discard Pile",
+    "viewingOpponent": "Observing Opponent",
+    "opponent": "Opponent",
+    "healthLabel": "Health: {{value}}",
+    "energyLabel": "Energy: {{value}}"
+  },
+  "hero": {
+    "monk": "Monk"
+  },
+  "imageAlt": {
+    "deck": "Deck",
+    "discard": "Discard Pile",
+    "background": "Background",
+    "playerBoard": "Player Board",
+    "tipBoard": "Tip Board",
+    "magnifiedView": "Magnified View"
+  },
+  "dice": {
+    "waitingOpponent": "Opponent is thinking...",
+    "locked": "Locked",
+    "rolling": "Rolling...",
+    "roll": "Roll ({{current}}/{{total}})",
+    "confirm": "Confirm Dice",
+    "confirmed": "Confirmed"
+  },
+  "error": {
+    "confirmRoll": "Please confirm the roll result first",
+    "confirmDefenseRoll": "Please confirm the defense roll first"
+  },
+  "actions": {
+    "resolveAttack": "Resolve Attack",
+    "endDefense": "End Defense",
+    "nextPhase": "Next Phase",
+    "closePreview": "Close Preview ✕"
+  },
+  "layout": {
+    "exitEdit": "🧱 Exit Layout Edit",
+    "enterEdit": "📐 Enter Layout Edit (Drag/Resize)"
+  },
+  "status": {
+    "loadingGameState": "Loading game state... (Player {{playerId}})"
+  },
+  "confirmSkip": {
+    "title": "End offensive roll?",
+    "description": "You haven't selected any ability to activate. End this phase anyway?",
+    "cancel": "Cancel (Select Ability)",
+    "confirm": "End Phase"
+  },
+  "abilitySlots": {
+    "fist": "Fist Technique",
+    "chi": "Zen Forget",
+    "sky": "Harmony",
+    "lotus": "Lotus Palm",
+    "combo": "Taiji Combo",
+    "lightning": "Thunder Strike",
+    "calm": "Calm Water",
+    "meditate": "Meditation"
+  },
+  "abilities": {
+    "fist-technique": {
+      "name": "Fist Technique",
+      "description": "Basic fist attack; damage scales with number of fist faces"
+    },
+    "fist-technique-3": {
+      "effects": {
+        "damage4": "Deal 4 damage"
+      }
+    },
+    "fist-technique-4": {
+      "effects": {
+        "damage6": "Deal 6 damage"
+      }
+    },
+    "fist-technique-5": {
+      "effects": {
+        "damage8": "Deal 8 damage"
+      }
+    },
+    "zen-forget": {
+      "name": "Zen Forget",
+      "description": "A transcendent state, gain many Taiji tokens",
+      "effects": {
+        "gainTaiji5": "Gain 5 Taiji tokens",
+        "gainChoice": "Gain Evasive or Purify (your choice)"
+      }
+    },
+    "harmony": {
+      "name": "Harmony",
+      "description": "In harmony with heaven and earth, balanced offense and defense",
+      "effects": {
+        "damage5": "Deal 5 damage",
+        "gainTaiji2": "Then gain 2 Taiji tokens"
+      }
+    },
+    "lotus-palm": {
+      "name": "Lotus Palm",
+      "description": "Lotus blooms, Taiji perfected",
+      "effects": {
+        "damage5": "Deal 5 damage",
+        "taijiCapMax": "Taiji stack limit +1 and immediately gain the maximum Taiji tokens",
+        "unblockable": "You may spend 2 Taiji tokens to make this attack undefendable"
+      }
+    },
+    "taiji-combo": {
+      "name": "Taiji Combo",
+      "description": "Flowing palm strikes with extra effects based on dice faces",
+      "effects": {
+        "damage6": "Deal 6 damage",
+        "inflictStun": "Inflict 1 Stun token",
+        "bonusFist": "If this roll contains Fist: +2 damage",
+        "bonusPalm": "If this roll contains Palm: +3 damage",
+        "gainTaiji2": "If this roll contains Taiji: gain 2 Taiji tokens",
+        "gainChoice": "If this roll contains Lotus: gain Evasive or Purify (your choice)"
+      }
+    },
+    "thunder-strike": {
+      "name": "Thunder Strike",
+      "description": "Strike with thunderous force",
+      "effects": {
+        "roll3Damage": "Roll 3 dice; deal damage equal to their total (avg ~10)",
+        "rerollOne": "Spend 2 Taiji tokens to reroll one die"
+      }
+    },
+    "calm-water": {
+      "name": "Calm Water",
+      "description": "A serene mind, balanced offense and defense",
+      "effects": {
+        "damage7": "Deal 7 damage",
+        "gainTaiji2": "Then gain 2 Taiji tokens",
+        "gainEvasive": "Gain 1 Evasive token"
+      }
+    },
+    "meditation": {
+      "name": "Meditation",
+      "description": "A meditative stance while defending",
+      "effects": {
+        "taijiByResult": "Gain Taiji tokens equal to Taiji faces rolled",
+        "damageByFist": "Deal damage equal to Fist faces rolled"
+      }
+    }
+  },
+  "cards": {
+    "card-upgrade-fist-2": {
+      "name": "Fist Technique Upgrade II",
+      "description": "Upgrade Fist Technique to level II"
+    },
+    "card-upgrade-fist-3": {
+      "name": "Fist Technique Upgrade III",
+      "description": "Upgrade Fist Technique to level III (pay only the difference if already level II)"
+    },
+    "card-upgrade-harmony-2": {
+      "name": "Harmony Upgrade II",
+      "description": "Upgrade Harmony to level II"
+    },
+    "card-upgrade-lotus-2": {
+      "name": "Lotus Palm Upgrade II",
+      "description": "Upgrade Lotus Palm to level II"
+    },
+    "card-chi-burst": {
+      "name": "Chi Burst",
+      "description": "Modify any 1 die result by +1 or -1"
+    },
+    "card-reroll": {
+      "name": "Reroll",
+      "description": "Reroll any number of dice (does not count as a roll)"
+    },
+    "card-focus": {
+      "name": "Focus",
+      "description": "Set any 1 die to any face"
+    },
+    "card-inner-peace": {
+      "name": "Inner Peace",
+      "description": "Gain 1 Taiji token"
+    },
+    "card-swift-strike": {
+      "name": "Swift Strike",
+      "description": "This attack deals +2 damage"
+    },
+    "card-dodge": {
+      "name": "Dodge",
+      "description": "Gain 1 Evasive token"
+    },
+    "card-counterattack": {
+      "name": "Counterattack",
+      "description": "When attacked, deal 2 damage to the attacker"
+    },
+    "card-purify": {
+      "name": "Purify",
+      "description": "Remove 1 negative status from yourself"
+    },
+    "card-iron-will": {
+      "name": "Iron Will",
+      "description": "Halve incoming damage this turn (round down)"
+    },
+    "card-meditation": {
+      "name": "Meditation",
+      "description": "Discard 1 card to gain 2 Taiji tokens"
+    },
+    "card-chi-shield": {
+      "name": "Chi Shield",
+      "description": "Spend 2 Taiji tokens to reduce damage by 4 this attack"
+    }
+  }
+}

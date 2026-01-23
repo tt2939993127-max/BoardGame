@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { AUTH_API_URL } from '../config/server';
+import i18n from '../lib/i18n';
 
 interface User {
     id: string;
@@ -20,8 +22,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEFAULT_AUTH_API_PATH = '/auth';
-const API_URL = (import.meta.env.VITE_AUTH_API_URL || DEFAULT_AUTH_API_PATH).replace(/\/$/, '');
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -41,9 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const login = async (username: string, password: string) => {
-        const response = await fetch(`${API_URL}/login`, {
+        const response = await fetch(`${AUTH_API_URL}/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
             body: JSON.stringify({ username, password }),
         });
 
@@ -61,9 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const register = async (username: string, password: string) => {
-        const response = await fetch(`${API_URL}/register`, {
+        const response = await fetch(`${AUTH_API_URL}/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
             body: JSON.stringify({ username, password }),
         });
 
@@ -90,10 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sendEmailCode = async (email: string) => {
         if (!token) throw new Error('请先登录');
 
-        const response = await fetch(`${API_URL}/send-email-code`, {
+        const response = await fetch(`${AUTH_API_URL}/send-email-code`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept-Language': i18n.language,
                 'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({ email }),
@@ -108,10 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const verifyEmail = async (email: string, code: string) => {
         if (!token) throw new Error('请先登录');
 
-        const response = await fetch(`${API_URL}/verify-email`, {
+        const response = await fetch(`${AUTH_API_URL}/verify-email`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept-Language': i18n.language,
                 'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({ email, code }),

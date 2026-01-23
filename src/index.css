@@ -22,6 +22,10 @@
         font-family: var(--font-serif);
         margin: 0;
     }
+
+    button:not(:disabled) {
+        cursor: pointer;
+    }
 }
 
 /* Scrollbars - Classic style */
@@ -33,4 +37,14 @@
 ::-webkit-scrollbar-thumb {
     background: #8c7b64;
     border-radius: 2px;
+}
+
+@layer utilities {
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+    .no-scrollbar {
+        -ms-overflow-style: none; /* IE and Edge */
+        scrollbar-width: none; /* Firefox */
+    }
 }

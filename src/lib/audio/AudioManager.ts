@@ -3,13 +3,48 @@
  * 提供全局音效播放、静音、音量控制
  */
 import { Howl, Howler } from 'howler';
-import type { SoundDefinition, SoundKey } from './types';
+import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from './types';
+import { assetsPath } from '../../core/AssetLoader';
+
+const isPassthroughSource = (src: string) => (
+    src.startsWith('data:')
+    || src.startsWith('blob:')
+    || src.startsWith('http://')
+    || src.startsWith('https://')
+);
+
+const ensureTrailingSlash = (value: string) => (value.endsWith('/') ? value : `${value}/`);
+
+const normalizeBasePath = (basePath: string) => {
+    if (!basePath) return '';
+    if (isPassthroughSource(basePath)) {
+        return ensureTrailingSlash(basePath);
+    }
+    return ensureTrailingSlash(assetsPath(basePath));
+};
+
+const buildAudioSrc = (basePath: string, src: string) => {
+    if (isPassthroughSource(src)) {
+        return src;
+    }
+    if (!basePath) {
+        return assetsPath(src);
+    }
+    const trimmed = src.startsWith('/') ? src.slice(1) : src;
+    return `${basePath}${trimmed}`;
+};
 
 class AudioManagerClass {
     private sounds: Map<SoundKey, Howl> = new Map();
+    private bgms: Map<string, Howl> = new Map();
     private failedKeys: Set<SoundKey> = new Set();
+
     private _muted: boolean = false;
-    private _volume: number = 1.0;
+    private _masterVolume: number = 1.0;
+    private _sfxVolume: number = 1.0;
+    private _bgmVolume: number = 0.6;
+
+    private _currentBgm: string | null = null;
     private _initialized: boolean = false;
 
     /**
@@ -19,14 +54,23 @@ class AudioManagerClass {
         if (this._initialized) return;
         // 尝试恢复用户设置
         const savedMuted = localStorage.getItem('audio_muted');
-        const savedVolume = localStorage.getItem('audio_volume');
+        const savedMasterVolume = localStorage.getItem('audio_master_volume');
+        const savedSfxVolume = localStorage.getItem('audio_sfx_volume');
+        const savedBgmVolume = localStorage.getItem('audio_bgm_volume');
+
         if (savedMuted !== null) {
             this._muted = savedMuted === 'true';
             Howler.mute(this._muted);
         }
-        if (savedVolume !== null) {
-            this._volume = parseFloat(savedVolume);
-            Howler.volume(this._volume);
+        if (savedMasterVolume !== null) {
+            this._masterVolume = parseFloat(savedMasterVolume);
+            Howler.volume(this._masterVolume);
+        }
+        if (savedSfxVolume !== null) {
+            this._sfxVolume = parseFloat(savedSfxVolume);
+        }
+        if (savedBgmVolume !== null) {
+            this._bgmVolume = parseFloat(savedBgmVolume);
         }
         this._initialized = true;
     }
@@ -36,24 +80,18 @@ class AudioManagerClass {
      */
     register(key: SoundKey, definition: SoundDefinition): void {
         if (this.sounds.has(key)) {
-            console.warn(`[AudioManager] 音效 "${key}" 已存在，将被覆盖`);
             this.sounds.get(key)?.unload();
         }
-        // 重置错误状态
         this.failedKeys.delete(key);
 
         const howl = new Howl({
             src: Array.isArray(definition.src) ? definition.src : [definition.src],
-            volume: definition.volume ?? 1.0,
+            volume: (definition.volume ?? 1.0) * this._sfxVolume,
             loop: definition.loop ?? false,
             sprite: definition.sprite,
             preload: true,
             onloaderror: (_id, error) => {
                 console.error(`[AudioManager] 加载音效 "${key}" 失败:`, error);
-                this.failedKeys.add(key);
-            },
-            onplayerror: (_id, error) => {
-                console.warn(`[AudioManager] 播放音效 "${key}" 失败:`, error);
                 this.failedKeys.add(key);
             }
         });
@@ -61,14 +99,43 @@ class AudioManagerClass {
     }
 
     /**
-     * 批量注册音效
+     * 批量注册音频
      */
-    registerAll(sounds: Record<SoundKey, SoundDefinition>, basePath: string = ''): void {
-        for (const [key, def] of Object.entries(sounds)) {
-            const src = Array.isArray(def.src)
-                ? def.src.map(s => basePath + s)
-                : basePath + def.src;
-            this.register(key, { ...def, src });
+    registerAll(config: GameAudioConfig, basePath: string = ''): void {
+        const normalizedBasePath = normalizeBasePath(basePath);
+
+        // 注册音效
+        if (config.sounds) {
+            for (const [key, def] of Object.entries(config.sounds)) {
+                const soundDef = def as SoundDefinition;
+                const src = Array.isArray(soundDef.src)
+                    ? soundDef.src.map(s => buildAudioSrc(normalizedBasePath, s))
+                    : buildAudioSrc(normalizedBasePath, soundDef.src);
+                this.register(key, { ...soundDef, src });
+            }
+        }
+
+        // 注册 BGM
+        if (config.bgm) {
+            for (const def of config.bgm) {
+                const bgmDef = def as BgmDefinition;
+                const src = Array.isArray(bgmDef.src)
+                    ? bgmDef.src.map(s => buildAudioSrc(normalizedBasePath, s))
+                    : buildAudioSrc(normalizedBasePath, bgmDef.src);
+
+                if (this.bgms.has(bgmDef.key)) {
+                    this.bgms.get(bgmDef.key)?.unload();
+                }
+
+                const howl = new Howl({
+                    src: Array.isArray(src) ? src : [src],
+                    volume: (bgmDef.volume ?? 1.0) * this._bgmVolume,
+                    loop: true,
+                    html5: true, // BGM 通常比较大，使用 HTML5 Audio 以节省内存并支持流式播放
+                    preload: false // BGM 按需加载
+                });
+                this.bgms.set(bgmDef.key, howl);
+            }
         }
     }
 
@@ -76,79 +143,105 @@ class AudioManagerClass {
      * 播放音效
      */
     play(key: SoundKey, spriteKey?: string): number | null {
-        // 如果已知加载失败，返回 null 以便触发回退
-        if (this.failedKeys.has(key)) {
-            return null;
-        }
-
+        if (this.failedKeys.has(key)) return null;
         const howl = this.sounds.get(key);
-        if (!howl) {
-            console.warn(`[AudioManager] 音效 "${key}" 未注册`);
-            return null;
-        }
-
-        // 尝试播放
-        const id = howl.play(spriteKey);
-        return id;
+        if (!howl) return null;
+        return howl.play(spriteKey);
     }
 
     /**
-     * 停止音效
+     * 播放 BGM
      */
-    stop(key: SoundKey): void {
-        const howl = this.sounds.get(key);
+    playBgm(key: string): void {
+        if (this._currentBgm === key) return;
+
+        // 停止当前 BGM
+        if (this._currentBgm) {
+            this.bgms.get(this._currentBgm)?.fade(this._bgmVolume, 0, 1000);
+            const prevBgm = this._currentBgm;
+            setTimeout(() => {
+                this.bgms.get(prevBgm)?.stop();
+            }, 1000);
+        }
+
+        const howl = this.bgms.get(key);
         if (howl) {
-            howl.stop();
+            howl.volume(0);
+            howl.play();
+            howl.fade(0, this._bgmVolume, 1000);
+            this._currentBgm = key;
+        } else {
+            console.warn(`[AudioManager] BGM "${key}" 未注册`);
         }
     }
 
     /**
-     * 停止所有音效
+     * 停止 BGM
      */
-    stopAll(): void {
-        Howler.stop();
+    stopBgm(): void {
+        if (this._currentBgm) {
+            this.bgms.get(this._currentBgm)?.stop();
+            this._currentBgm = null;
+        }
     }
 
     /**
-     * 设置静音
+     * 设置主音量
      */
+    setMasterVolume(volume: number): void {
+        this._masterVolume = Math.max(0, Math.min(1, volume));
+        Howler.volume(this._masterVolume);
+        localStorage.setItem('audio_master_volume', String(this._masterVolume));
+    }
+
+    /**
+     * 设置音效音量
+     */
+    setSfxVolume(volume: number): void {
+        this._sfxVolume = Math.max(0, Math.min(1, volume));
+        for (const howl of this.sounds.values()) {
+            howl.volume(this._sfxVolume);
+        }
+        localStorage.setItem('audio_sfx_volume', String(this._sfxVolume));
+    }
+
+    /**
+     * 设置 BGM 音量
+     */
+    setBgmVolume(volume: number): void {
+        this._bgmVolume = Math.max(0, Math.min(1, volume));
+        if (this._currentBgm) {
+            this.bgms.get(this._currentBgm)?.volume(this._bgmVolume);
+        }
+        localStorage.setItem('audio_bgm_volume', String(this._bgmVolume));
+    }
+
+    /**
+     * 获取状态
+     */
+    get muted(): boolean { return this._muted; }
+    get masterVolume(): number { return this._masterVolume; }
+    get sfxVolume(): number { return this._sfxVolume; }
+    get bgmVolume(): number { return this._bgmVolume; }
+    get currentBgm(): string | null { return this._currentBgm; }
+
     setMuted(muted: boolean): void {
         this._muted = muted;
         Howler.mute(muted);
         localStorage.setItem('audio_muted', String(muted));
     }
 
-    /**
-     * 获取静音状态
-     */
-    get muted(): boolean {
-        return this._muted;
+    stopAll(): void {
+        Howler.stop();
+        this._currentBgm = null;
     }
 
-    /**
-     * 设置音量 (0.0 - 1.0)
-     */
-    setVolume(volume: number): void {
-        this._volume = Math.max(0, Math.min(1, volume));
-        Howler.volume(this._volume);
-        localStorage.setItem('audio_volume', String(this._volume));
-    }
-
-    /**
-     * 获取当前音量
-     */
-    get volume(): number {
-        return this._volume;
-    }
-
-    /**
-     * 卸载所有音效
-     */
     unloadAll(): void {
-        for (const howl of this.sounds.values()) {
-            howl.unload();
-        }
+        for (const howl of this.sounds.values()) howl.unload();
+        for (const howl of this.bgms.values()) howl.unload();
         this.sounds.clear();
+        this.bgms.clear();
+        this._currentBgm = null;
     }
 }
 

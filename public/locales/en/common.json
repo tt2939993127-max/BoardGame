@@ -1,0 +1,21 @@
+{
+  "button": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "category": {
+    "all": "All Games",
+    "strategy": "Strategy",
+    "casual": "Casual",
+    "party": "Party",
+    "abstract": "Abstract",
+    "tools": "Tools"
+  },
+  "language": {
+    "zhCN": "Chinese",
+    "en": "English"
+  },
+  "toast": {
+    "close": "Close"
+  }
+}

@@ -12,7 +12,7 @@ const DebugContext = createContext<DebugContextType | undefined>(undefined);
 
 export const DebugProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [playerID, setPlayerID] = useState<string | null>(() => {
-        // Persist debug player selection
+        // 持久化调试玩家选择
         return localStorage.getItem('debug_playerID') || '0';
     });
 

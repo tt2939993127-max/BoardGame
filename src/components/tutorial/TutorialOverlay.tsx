@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTutorial } from '../../contexts/TutorialContext';
 
 export const TutorialOverlay: React.FC = () => {
-    const { isActive, currentStep, nextStep } = useTutorial();
+    const { isActive, currentStep, nextStep, isLastStep } = useTutorial();
+    const { t } = useTranslation('tutorial');
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
 
 
 
-    // Update highlight position
+    // 更新高亮位置
     useEffect(() => {
         if (!isActive || !currentStep) return;
 
@@ -37,16 +39,16 @@ export const TutorialOverlay: React.FC = () => {
         };
     }, [isActive, currentStep]);
 
-    // State for tooltip position and arrow class
+    // 提示框位置和箭头样式的状态
     const [tooltipStyles, setTooltipStyles] = useState<{
         style: React.CSSProperties,
         arrowClass: string
     }>({ style: {}, arrowClass: '' });
 
-    // Calculate layout based on targetRect
+    // 根据目标矩形计算布局
     useEffect(() => {
         if (!targetRect) {
-            // Default: Bottom Center
+            // 默认：底部居中
             setTooltipStyles({
                 style: {
                     position: 'fixed',
@@ -60,11 +62,11 @@ export const TutorialOverlay: React.FC = () => {
             return;
         }
 
-        const padding = 12; // Gap between target and tooltip
-        const tooltipWidth = 280; // Estimated width
-        const tooltipHeight = 160; // Estimated height
+        const padding = 12; // 目标与提示框间距
+        const tooltipWidth = 280; // 估计宽度
+        const tooltipHeight = 160; // 估计高度
 
-        // Priority logic: Right -> Left -> Bottom -> Top
+        // 优先级逻辑：右 -> 左 -> 下 -> 上
         const spaceRight = window.innerWidth - targetRect.right;
         const spaceLeft = targetRect.left;
         const spaceBottom = window.innerHeight - targetRect.bottom;
@@ -81,7 +83,7 @@ export const TutorialOverlay: React.FC = () => {
             pos = 'top';
         }
 
-        // Calculate specific coordinates
+        // 计算具体坐标
         const styles: React.CSSProperties = {
             position: 'absolute',
             zIndex: 100,
@@ -92,26 +94,26 @@ export const TutorialOverlay: React.FC = () => {
             case 'right':
                 styles.left = targetRect.right + padding;
                 styles.top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 3);
-                arrow = '-left-[6px] top-[40px] border-b border-l'; // Left-pointing on right side
+                arrow = '-left-[6px] top-[40px] border-b border-l'; // 左箭头指向右侧
                 break;
             case 'left':
                 styles.left = targetRect.left - tooltipWidth - padding;
                 styles.top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 3);
-                arrow = '-right-[6px] top-[40px] border-t border-r'; // Right-pointing on left side
+                arrow = '-right-[6px] top-[40px] border-t border-r'; // 右箭头指向左侧
                 break;
             case 'bottom':
                 styles.top = targetRect.bottom + padding;
                 styles.left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
-                arrow = '-top-[6px] left-1/2 -translate-x-1/2 border-t border-l'; // Up-pointing on bottom side
+                arrow = '-top-[6px] left-1/2 -translate-x-1/2 border-t border-l'; // 上箭头指向下侧
                 break;
             case 'top':
                 styles.top = targetRect.top - tooltipHeight - padding;
                 styles.left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
-                arrow = '-bottom-[6px] left-1/2 -translate-x-1/2 border-b border-r'; // Down-pointing on top side
+                arrow = '-bottom-[6px] left-1/2 -translate-x-1/2 border-b border-r'; // 下箭头指向上侧
                 break;
         }
 
-        // Add common base classes for the rotated square arrow
+        // 为旋转的方形箭头添加通用基础类
         const arrowBase = "bg-white w-4 h-4 absolute rotate-45 border-gray-100 z-0";
         setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
 
@@ -119,15 +121,15 @@ export const TutorialOverlay: React.FC = () => {
 
     if (!isActive || !currentStep) return null;
 
-    // Don't show overlay during AI's turn - let the AI move happen silently
+    // 在 AI 回合期间不显示遮罩层 - 让 AI 静默移动
     if (currentStep.aiMove !== undefined) return null;
 
 
 
-    // SVG Path for the mask with a hole
+    // SVG 路径用于带孔洞的遮罩
     let maskPath = `M0 0 h${window.innerWidth} v${window.innerHeight} h-${window.innerWidth} z`;
     if (targetRect) {
-        // Anti-clockwise rect for the hole to create cutout (fill-rule: evenodd)
+        // 逆时针矩形用于创建挖空效果 (fill-rule: evenodd)
         const { left, top, right, bottom } = targetRect;
         const p = 8;
         maskPath += ` M${left - p} ${top - p} v${(bottom - top) + p * 2} h${(right - left) + p * 2} v-${(bottom - top) + p * 2} z`;
@@ -137,19 +139,19 @@ export const TutorialOverlay: React.FC = () => {
 
     return (
         <div className="fixed inset-0 z-[9999] pointer-events-none">
-            {/* Mask Layer - Only block clicks when showMask is true */}
+            {/* 遮罩层 - 仅在 showMask 为 true 时阻止点击 */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300">
                 <path
                     d={maskPath}
                     fill={`rgba(0, 0, 0, ${maskOpacity})`}
-                    // When mask is transparent, allow all clicks through
-                    // When mask is visible, still need to allow clicks on the "hole" area
+                    // 当遮罩透明时，允许所有点击穿透
+                    // 当遮罩可见时，仍需要允许在“孔洞”区域点击
                     style={{ pointerEvents: currentStep.showMask ? 'auto' : 'none' }}
                     fillRule="evenodd"
                 />
             </svg>
 
-            {/* Target Highlight Ring (Apple-style blue glow) - Always visible when target exists */}
+            {/* 目标高亮环（Apple 风格蓝色光晕）- 目标存在时始终可见 */}
             {targetRect && (
                 <div
                     className="absolute pointer-events-none transition-all duration-300"
@@ -164,36 +166,36 @@ export const TutorialOverlay: React.FC = () => {
                 />
             )}
 
-            {/* Tooltip Popover */}
+            {/* 提示框弹窗 */}
             <div
                 className="pointer-events-auto transition-all duration-300 ease-out flex flex-col items-center absolute"
                 style={tooltipStyles.style}
             >
-                {/* CSS Triangle Arrow */}
+                {/* CSS 三角箭头 */}
                 <div className={`absolute w-0 h-0 border-solid ${tooltipStyles.arrowClass}`} />
 
-                {/* Content Card */}
+                {/* 内容卡片 */}
                 <div className="bg-[#fcfbf9] rounded-sm shadow-[0_8px_30px_rgba(67,52,34,0.12)] p-5 border border-[#e5e0d0] max-w-sm w-72 animate-in fade-in zoom-in-95 duration-200 relative font-serif">
-                    {/* Decorative Corner (Top Right) */}
+                    {/* 装饰性边角（右上）*/}
                     <div className="absolute top-1.5 right-1.5 w-2 h-2 border-t border-r border-[#c0a080] opacity-40" />
 
                     <div className="text-[#433422] font-bold text-lg mb-4 leading-relaxed text-left">
-                        {currentStep.content}
+                        {t(currentStep.content, { defaultValue: currentStep.content })}
                     </div>
 
                     {!currentStep.requireAction && (
                         <button
                             onClick={nextStep}
-                            className="w-full py-2 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest transition-all cursor-pointer"
+                            className="w-full py-2 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center text-center relative z-10 pointer-events-auto"
                         >
-                            下一步
+                            {isLastStep ? t('overlay.finish') : t('overlay.next')}
                         </button>
                     )}
 
                     {currentStep.requireAction && (
                         <div className="flex items-center gap-2 text-sm font-bold text-[#8c7b64] bg-[#f3f0e6]/50 p-2 border border-[#e5e0d0]/50 justify-center italic">
                             <span className="animate-pulse w-2 h-2 rounded-full bg-[#c0a080]"></span>
-                            请点击高亮区域继续
+                            {t('overlay.clickToContinue')}
                         </div>
                     )}
                 </div>

@@ -1,0 +1,37 @@
+{
+  "imageW": 1024,
+  "imageH": 1024,
+  "rows": 3,
+  "cols": 3,
+  "deckX": 0,
+  "deckY": 0,
+  "deckW": 1024,
+  "deckH": 1024,
+  "rowStarts": [
+    0
+  ],
+  "rowHeights": [
+    1024
+  ],
+  "colStarts": [
+    0
+  ],
+  "colWidths": [
+    1024
+  ],
+  "scan": {
+    "threshold": 35,
+    "alphaThreshold": 0,
+    "rowRatio": 0.2,
+    "colRatio": 0.2,
+    "rowMinCount": null,
+    "colMinCount": null,
+    "rowGap": 6,
+    "colGap": 6,
+    "scanXStart": 0,
+    "scanXEnd": null,
+    "scanYStart": 0,
+    "scanYEnd": null,
+    "step": 1
+  }
+}
