@@ -49,6 +49,24 @@
 - **WHEN** 用户点击某骰子
 - **THEN** 触发 `onItemClick(itemId)` 回调
 
+### Requirement: 特写骨架
+系统 SHALL 提供 `SpotlightSkeleton` 组件，用于中心展示重要内容（骰子结果、卡牌打出、技能激活等），支持自动/手动关闭和动画序列。
+
+#### Scenario: 骰子结果特写（自动关闭）
+- **GIVEN** 玩家投掷额外骰子
+- **WHEN** 使用 `SpotlightSkeleton` 并设置 `autoCloseDelay=3000`
+- **THEN** 骰子结果在屏幕中央展示，3 秒后自动淡出并调用 `onClose`
+
+#### Scenario: 卡牌特写（手动关闭）
+- **GIVEN** 敌方打出技能卡
+- **WHEN** 使用 `SpotlightSkeleton` 不设置 `autoCloseDelay`，设置 `closeOnBackdrop=true`
+- **THEN** 卡牌在屏幕中央展示，点击背景或关闭按钮后调用 `onClose`
+
+#### Scenario: 动画序列
+- **GIVEN** 特写内容需要入场/出场动画
+- **WHEN** 设置 `enterAnimation` 和 `exitAnimation`
+- **THEN** 内容按配置播放入场动画，关闭时播放出场动画
+
 ### Requirement: 底层 Hook 契约
 系统 SHALL 提供 `useHandArea`/`useResourceTray` 等底层 Hook，供完全自定义 UI 时使用。
 

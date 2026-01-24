@@ -213,6 +213,7 @@ function handlePromptResponse<TCore>(
             playerId,
             optionId: payload.optionId,
             value: selectedOption.value,
+            sourceId: current.sourceId,
         },
         timestamp: Date.now(),
     };

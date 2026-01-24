@@ -1,9 +1,10 @@
 import React from 'react';
 import type { RefObject } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, animate, motion, motionValue, type MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { AbilityCard, TurnPhase } from '../types';
 import { buildLocalizedImageSet } from '../../../core';
+import { ENGINE_NOTIFICATION_EVENT, type EngineNotificationDetail } from '../../../engine/notifications';
 import { ASSETS } from './assets';
 import type { CardAtlasConfig } from './cardAtlas';
 import { getCardAtlasStyle } from './cardAtlas';
@@ -21,6 +22,7 @@ export const HandArea = ({
     onSellCard,
     onError,
     canInteract = true,
+    canPlayCards = true,
     drawDeckRef,
     discardPileRef,
     undoCardId,
@@ -37,6 +39,7 @@ export const HandArea = ({
     onSellCard?: (cardId: string) => void;
     onError?: (message: string) => void;
     canInteract?: boolean;
+    canPlayCards?: boolean;
     drawDeckRef?: RefObject<HTMLDivElement | null>;
     discardPileRef?: RefObject<HTMLDivElement | null>;
     undoCardId?: string;
@@ -48,13 +51,39 @@ export const HandArea = ({
     const [draggingCardId, setDraggingCardId] = React.useState<string | null>(null);
     const dragOffsetRef = React.useRef({ x: 0, y: 0 });
     const dragReleaseTimerRef = React.useRef<number | null>(null);
+    const draggingCardRef = React.useRef<AbilityCard | null>(null);
+    const dragEndHandledRef = React.useRef(false);
     const [showSellHint, setShowSellHint] = React.useState(false);
     const [returningCardMap, setReturningCardMap] = React.useState<
         Record<string, { version: number; offset: { x: number; y: number }; originalIndex: number }>
     >({});
+    const [returningVersionMap, setReturningVersionMap] = React.useState<Record<string, number>>({});
+    const pendingPlayRef = React.useRef<{
+        cardId: string;
+        offset: { x: number; y: number };
+        originalIndex: number;
+    } | null>(null);
+    const pendingPlayTimeoutRef = React.useRef<number | null>(null);
+    const handRef = React.useRef(hand);
     const cardBackImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARD_BG, locale), [locale]);
     const cardFrontImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARDS_ATLAS, locale), [locale]);
     const handAreaRef = React.useRef<HTMLDivElement>(null);
+    const dragValueMapRef = React.useRef(new Map<string, { x: MotionValue<number>; y: MotionValue<number> }>());
+
+    const getDragValues = React.useCallback((cardId: string) => {
+        const existing = dragValueMapRef.current.get(cardId);
+        if (existing) return existing;
+        const next = { x: motionValue(0), y: motionValue(0) };
+        dragValueMapRef.current.set(cardId, next);
+        return next;
+    }, []);
+
+    const resetDragValues = React.useCallback((cardId: string, source: 'drag' | 'window') => {
+        const values = dragValueMapRef.current.get(cardId);
+        if (!values) return;
+        animate(values.x, 0, { duration: 0.25, ease: 'easeOut' });
+        animate(values.y, 0, { duration: 0.25, ease: 'easeOut' });
+    }, []);
 
     const getDeckOffset = React.useCallback(() => {
         if (!drawDeckRef?.current || !handAreaRef.current) {
@@ -99,6 +128,7 @@ export const HandArea = ({
     const DEAL_INTERVAL = 300;
     const FLIP_INTERVAL = 250;
     const RETURN_RESET_DELAY = 320;
+    const PENDING_PLAY_TIMEOUT = 2000;
 
     const totalCards = hand.length;
     const centerIndex = (totalCards - 1) / 2;
@@ -109,6 +139,75 @@ export const HandArea = ({
         dealTimersRef.current = [];
         flipTimersRef.current = [];
     }, []);
+
+    const clearPendingPlay = React.useCallback(() => {
+        pendingPlayRef.current = null;
+        if (pendingPlayTimeoutRef.current) {
+            window.clearTimeout(pendingPlayTimeoutRef.current);
+            pendingPlayTimeoutRef.current = null;
+        }
+    }, []);
+
+    const triggerReturn = React.useCallback((cardId: string, offset: { x: number; y: number }, originalIndex: number) => {
+        setReturningCardMap(prev => {
+            const prevEntry = prev[cardId];
+            const nextVersion = (prevEntry?.version ?? 0) + 1;
+            setReturningVersionMap(prevVersions => ({
+                ...prevVersions,
+                [cardId]: nextVersion,
+            }));
+            return {
+                ...prev,
+                [cardId]: {
+                    version: nextVersion,
+                    offset,
+                    originalIndex,
+                },
+            };
+        });
+        window.setTimeout(() => {
+            setReturningCardMap(prev => {
+                if (!prev[cardId]) return prev;
+                const next = { ...prev };
+                delete next[cardId];
+                return next;
+            });
+        }, RETURN_RESET_DELAY);
+    }, [RETURN_RESET_DELAY]);
+
+    React.useEffect(() => {
+        handRef.current = hand;
+        if (pendingPlayRef.current && !hand.some(card => card.id === pendingPlayRef.current?.cardId)) {
+            clearPendingPlay();
+        }
+    }, [clearPendingPlay, hand]);
+
+    React.useEffect(() => {
+        const currentIds = new Set(hand.map(card => card.id));
+        dragValueMapRef.current.forEach((_value, cardId) => {
+            if (!currentIds.has(cardId)) {
+                dragValueMapRef.current.delete(cardId);
+            }
+        });
+    }, [hand]);
+
+    React.useEffect(() => {
+        const handler = (event: Event) => {
+            const pending = pendingPlayRef.current;
+            if (!pending) return;
+            const detail = (event as CustomEvent<EngineNotificationDetail>).detail;
+            if (!detail) return;
+            if (!handRef.current.some(card => card.id === pending.cardId)) {
+                clearPendingPlay();
+                return;
+            }
+            triggerReturn(pending.cardId, pending.offset, pending.originalIndex);
+            clearPendingPlay();
+        };
+
+        window.addEventListener(ENGINE_NOTIFICATION_EVENT, handler as EventListener);
+        return () => window.removeEventListener(ENGINE_NOTIFICATION_EVENT, handler as EventListener);
+    }, [clearPendingPlay, triggerReturn]);
 
     React.useEffect(() => {
         const currentIds = hand.map(c => c.id);
@@ -193,17 +292,14 @@ export const HandArea = ({
     }, [hand, clearAnimationTimers, undoCardId]);
 
     const canPlayCard = (card: AbilityCard): { allowed: boolean; reason?: string } => {
-        if (!currentPhase) return { allowed: false, reason: t('error.notYourTurn') };
+        if (!currentPhase || !canPlayCards) return { allowed: false, reason: t('error.notYourTurn') };
 
         if (card.cpCost > 0 && playerCp < card.cpCost) {
             return { allowed: false, reason: t('error.notEnoughCp', { required: card.cpCost, current: playerCp }) };
         }
 
         if (card.type === 'upgrade') {
-            if (currentPhase === 'main1' || currentPhase === 'main2') {
-                return { allowed: true };
-            }
-            return { allowed: false, reason: t('error.wrongPhaseForUpgrade') };
+            return { allowed: false, reason: t('error.cannotPlayCard') };
         }
         if (card.timing === 'main') {
             if (currentPhase === 'main1' || currentPhase === 'main2') {
@@ -238,60 +334,71 @@ export const HandArea = ({
                cardCenterY <= discardRect.bottom + padding;
     }, [discardPileRef, draggingCardId]);
 
-    const handleDragEnd = (card: AbilityCard) => {
+    const handleDragEnd = React.useCallback((card: AbilityCard, source: 'drag' | 'window' = 'drag') => {
         if (!canInteract) return;
+        if (dragEndHandledRef.current && source === 'drag') return;
+        dragEndHandledRef.current = true;
         const { x, y } = dragOffsetRef.current;
         const overDiscard = isOverDiscardPile();
         const currentIndex = hand.findIndex(c => c.id === card.id);
+        const offset = { x, y };
 
         let actionTaken = false;
         if (y < DRAG_PLAY_THRESHOLD) {
             const playCheck = canPlayCard(card);
             if (playCheck.allowed) {
-                onPlayCard?.(card.id);
-                actionTaken = true;
+                if (onPlayCard) {
+                    pendingPlayRef.current = { cardId: card.id, offset, originalIndex: currentIndex };
+                    if (pendingPlayTimeoutRef.current) {
+                        window.clearTimeout(pendingPlayTimeoutRef.current);
+                    }
+                    pendingPlayTimeoutRef.current = window.setTimeout(() => {
+                        clearPendingPlay();
+                    }, PENDING_PLAY_TIMEOUT);
+                    onPlayCard(card.id);
+                    actionTaken = true;
+                } else if (onError) {
+                    onError(t('error.cannotPlayCard'));
+                }
             } else if (playCheck.reason && onError) {
                 onError(playCheck.reason);
             }
         } else if (overDiscard && (currentPhase === 'main1' || currentPhase === 'main2')) {
-            onSellCard?.(card.id);
-            actionTaken = true;
+            if (!canPlayCards && onError) {
+                onError(t('error.notYourTurn'));
+            } else if (onSellCard) {
+                onSellCard(card.id);
+                actionTaken = true;
+            }
         }
 
-        if (dragReleaseTimerRef.current) {
-            window.clearTimeout(dragReleaseTimerRef.current);
-        }
         if (!actionTaken) {
-            setReturningCardMap(prev => {
-                const prevEntry = prev[card.id];
-                const nextVersion = (prevEntry?.version ?? 0) + 1;
-                return {
-                    ...prev,
-                    [card.id]: {
-                        version: nextVersion,
-                        offset: { x, y },
-                        originalIndex: currentIndex,
-                    },
-                };
-            });
-            window.setTimeout(() => {
-                setReturningCardMap(prev => {
-                    if (!prev[card.id]) return prev;
-                    const next = { ...prev };
-                    delete next[card.id];
-                    return next;
-                });
-            }, RETURN_RESET_DELAY);
-            setDraggingCardId(null);
-        } else {
-            setDraggingCardId(null);
+            triggerReturn(card.id, offset, currentIndex);
         }
+        resetDragValues(card.id, source);
+        setDraggingCardId(null);
+        draggingCardRef.current = null;
         dragOffsetRef.current = { x: 0, y: 0 };
         onPlayHintChange?.(false);
         setShowSellHint(false);
         onSellHintChange?.(false);
         onSellButtonChange?.(false);
-    };
+    }, [
+        canInteract,
+        canPlayCards,
+        currentPhase,
+        hand,
+        isOverDiscardPile,
+        onError,
+        onPlayCard,
+        onPlayHintChange,
+        onSellCard,
+        onSellButtonChange,
+        onSellHintChange,
+        resetDragValues,
+        t,
+        triggerReturn,
+    ]);
 
     const handleDrag = (_cardId: string, info: { offset: { x: number; y: number } }) => {
         dragOffsetRef.current = info.offset;
@@ -302,6 +409,27 @@ export const HandArea = ({
             onSellHintChange?.(nextSellHint);
         }
     };
+
+    React.useEffect(() => {
+        const handlePointerEnd = (event: PointerEvent) => {
+            if (!draggingCardRef.current || dragEndHandledRef.current) return;
+            handleDragEnd(draggingCardRef.current, 'window');
+        };
+
+        const handleWindowBlur = () => {
+            if (!draggingCardRef.current || dragEndHandledRef.current) return;
+            handleDragEnd(draggingCardRef.current, 'window');
+        };
+
+        window.addEventListener('pointerup', handlePointerEnd);
+        window.addEventListener('pointercancel', handlePointerEnd);
+        window.addEventListener('blur', handleWindowBlur);
+        return () => {
+            window.removeEventListener('pointerup', handlePointerEnd);
+            window.removeEventListener('pointercancel', handlePointerEnd);
+            window.removeEventListener('blur', handleWindowBlur);
+        };
+    }, [handleDragEnd]);
 
     return (
         <div ref={handAreaRef} className="absolute bottom-0 left-0 right-0 z-[100] flex justify-center items-end pb-0 h-[22vw] pointer-events-none">
@@ -322,27 +450,29 @@ export const HandArea = ({
                         const returningEntry = returningCardMap[card.id];
                         const zIndex = isDragging ? 500 : 100 + i;
                         const isReturning = !!returningEntry;
+                        const returnVersion = returningVersionMap[card.id] ?? 0;
                         const canDrag = canInteract && isFlipped && !isReturning;
+                        const dragValues = getDragValues(card.id);
 
                         return (
                             <motion.div
-                                key={card.id}
+                                key={`${card.id}-${returnVersion}`}
                                 data-card-id={card.id}
                                 drag={canDrag}
-                                dragSnapToOrigin
                                 dragElastic={0.1}
                                 dragMomentum={false}
                                 onDragStart={() => {
                                     if (!canDrag) return;
-                                    if (dragReleaseTimerRef.current) {
-                                        window.clearTimeout(dragReleaseTimerRef.current);
-                                    }
+                                    dragEndHandledRef.current = false;
+                                    draggingCardRef.current = card;
+                                    dragValues.x.set(0);
+                                    dragValues.y.set(0);
                                     setDraggingCardId(card.id);
                                     onSellButtonChange?.(true);
                                     onPlayHintChange?.(true);
                                 }}
-                                onDrag={(_, info) => canDrag && handleDrag(card.id, info)}
-                                onDragEnd={() => canDrag && handleDragEnd(card)}
+                            onDrag={(_, info) => canDrag && handleDrag(card.id, info)}
+                            onDragEnd={() => canDrag && handleDragEnd(card, 'drag')}
                                 className={`
                                     absolute bottom-0 w-[12vw] aspect-[0.61] rounded-[0.8vw]
                                     cursor-grab active:cursor-grabbing pointer-events-auto origin-bottom-center bg-transparent overflow-visible
@@ -350,6 +480,8 @@ export const HandArea = ({
                                 style={{
                                     bottom: '-2vw',
                                     left: `calc(50% + ${offset * 7}vw - 6vw)`,
+                                    x: dragValues.x,
+                                    y: dragValues.y,
                                     zIndex,
                                 }}
                             >
@@ -402,6 +534,7 @@ export const HandArea = ({
                                         <motion.div
                                             className={`relative w-full h-full rounded-[0.8vw] shadow-2xl ${isDragging ? 'ring-4 ring-amber-400 shadow-amber-500/50' : ''}`}
                                             style={{ transformStyle: 'preserve-3d' }}
+                                            initial={{ rotateY: isFlipped ? 0 : 180 }}
                                             animate={{ rotateY: isFlipped ? 0 : 180 }}
                                             transition={{ duration: 0.6 }}
                                         >

@@ -140,6 +140,7 @@ export function handlePromptResolved(
         playerId: string;
         optionId: string;
         value: { statusId: string; value: number };
+        sourceId?: string;
     };
     
     return {
@@ -148,6 +149,7 @@ export function handlePromptResolved(
             playerId: payload.playerId,
             statusId: payload.value.statusId,
             value: payload.value.value,
+            sourceAbilityId: payload.sourceId,
         },
         sourceCommandType: 'RESOLVE_CHOICE',
         timestamp: Date.now(),

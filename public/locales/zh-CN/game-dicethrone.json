@@ -99,6 +99,15 @@
       "lotus": "莲花"
     }
   },
+  "bonusDie": {
+    "title": "额外投掷",
+    "effect": {
+      "fist": "拳: 伤害 +2",
+      "palm": "掌: 伤害 +3",
+      "taiji": "太极: 获得 2 个太极标记",
+      "lotus": "莲花: 选择获得闪避或净化"
+    }
+  },
   "error": {
     "confirmRoll": "请先确认投掷结果",
     "confirmDefenseRoll": "请先确认防御投掷结果",

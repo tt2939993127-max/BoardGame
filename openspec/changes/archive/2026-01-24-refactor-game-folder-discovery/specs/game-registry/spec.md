@@ -27,10 +27,3 @@
 #### Scenario: 新增游戏目录
 - **WHEN** 新增游戏目录并补齐约定文件
 - **THEN** 运行生成脚本后自动出现在大厅与服务端注册列表
-
-### Requirement: i18n 源文件自动生成
-系统 SHALL 将 `src/games/<gameId>/i18n.json` 生成至 `public/locales/<lang>/game-<gameId>.json`。
-
-#### Scenario: 生成游戏翻译文件
-- **WHEN** 执行生成脚本
-- **THEN** 输出对应语言文件供 i18n 运行时加载

@@ -28,6 +28,7 @@ import { HandArea } from './ui/HandArea';
 import { getCardAtlasStyle, loadCardAtlasConfig, type CardAtlasConfig } from './ui/cardAtlas';
 import { ConfirmSkipModal } from './ui/ConfirmSkipModal';
 import { ChoiceModal } from './ui/ChoiceModal';
+import { BonusDieOverlay } from './ui/BonusDieOverlay';
 import { OpponentHeader } from './ui/OpponentHeader';
 import { LeftSidebar } from './ui/LeftSidebar';
 import { CenterBoard } from './ui/CenterBoard';
@@ -35,6 +36,7 @@ import { RightSidebar } from './ui/RightSidebar';
 import { MagnifyOverlay } from '../../components/common/overlays/MagnifyOverlay';
 import { EndgameOverlay } from '../../components/game/EndgameOverlay';
 import { useRematch } from '../../contexts/RematchContext';
+import { useGameMode } from '../../contexts/GameModeContext';
 import { useCurrentChoice, useDiceThroneState } from './hooks/useDiceThroneState';
 import { PROMPT_COMMANDS } from '../../engine/systems/PromptSystem';
 
@@ -60,18 +62,32 @@ const requireMove = <T extends (...args: unknown[]) => void>(value: unknown, nam
     return value as T;
 };
 
-const resolveMoves = (raw: Record<string, unknown>): DiceThroneMoveMap => ({
-    advancePhase: requireMove(raw.advancePhase ?? raw.ADVANCE_PHASE, 'advancePhase'),
-    rollDice: requireMove(raw.rollDice ?? raw.ROLL_DICE, 'rollDice'),
-    rollBonusDie: requireMove(raw.rollBonusDie ?? raw.ROLL_BONUS_DIE, 'rollBonusDie'),
-    toggleDieLock: requireMove(raw.toggleDieLock ?? raw.TOGGLE_DIE_LOCK, 'toggleDieLock'),
-    confirmRoll: requireMove(raw.confirmRoll ?? raw.CONFIRM_ROLL, 'confirmRoll'),
-    selectAbility: requireMove(raw.selectAbility ?? raw.SELECT_ABILITY, 'selectAbility'),
-    playCard: requireMove(raw.playCard ?? raw.PLAY_CARD, 'playCard'),
-    sellCard: requireMove(raw.sellCard ?? raw.SELL_CARD, 'sellCard'),
-    undoSellCard: (raw.undoSellCard ?? raw.UNDO_SELL_CARD) as (() => void) | undefined,
-    resolveChoice: requireMove(raw.resolveChoice ?? raw.RESOLVE_CHOICE, 'resolveChoice'),
-});
+const resolveMoves = (raw: Record<string, unknown>): DiceThroneMoveMap => {
+    // 统一把 payload 包装成领域命令结构，避免 die_not_found 等校验失败
+    const advancePhase = requireMove(raw.advancePhase ?? raw.ADVANCE_PHASE, 'advancePhase');
+    const rollDice = requireMove(raw.rollDice ?? raw.ROLL_DICE, 'rollDice');
+    const rollBonusDie = requireMove(raw.rollBonusDie ?? raw.ROLL_BONUS_DIE, 'rollBonusDie');
+    const toggleDieLock = requireMove(raw.toggleDieLock ?? raw.TOGGLE_DIE_LOCK, 'toggleDieLock');
+    const confirmRoll = requireMove(raw.confirmRoll ?? raw.CONFIRM_ROLL, 'confirmRoll');
+    const selectAbility = requireMove(raw.selectAbility ?? raw.SELECT_ABILITY, 'selectAbility');
+    const playCard = requireMove(raw.playCard ?? raw.PLAY_CARD, 'playCard');
+    const sellCard = requireMove(raw.sellCard ?? raw.SELL_CARD, 'sellCard');
+    const undoSellCardRaw = (raw.undoSellCard ?? raw.UNDO_SELL_CARD) as ((payload?: unknown) => void) | undefined;
+    const resolveChoice = requireMove(raw.resolveChoice ?? raw.RESOLVE_CHOICE, 'resolveChoice');
+
+    return {
+        advancePhase: () => advancePhase({}),
+        rollDice: () => rollDice({}),
+        rollBonusDie: () => rollBonusDie({}),
+        toggleDieLock: (id) => toggleDieLock({ dieId: id }),
+        confirmRoll: () => confirmRoll({}),
+        selectAbility: (abilityId) => selectAbility({ abilityId }),
+        playCard: (cardId) => playCard({ cardId }),
+        sellCard: (cardId) => sellCard({ cardId }),
+        undoSellCard: undoSellCardRaw ? () => undoSellCardRaw({}) : undefined,
+        resolveChoice: (statusId) => resolveChoice({ statusId }),
+    };
+};
 
 // --- Main Layout ---
 export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, moves, playerID, reset, matchData, isMultiplayer }) => {
@@ -82,6 +98,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const { t, i18n } = useTranslation('game-dicethrone');
     const toast = useToast();
     const locale = i18n.resolvedLanguage ?? i18n.language;
+    const gameMode = useGameMode();
+    const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
 
     // 重赛系统（多人模式使用 socket）
     const { state: rematchState, vote: handleRematchVote, registerReset } = useRematch();
@@ -111,6 +129,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const [isRolling, setIsRolling] = React.useState(false);
     const [cardAtlas, setCardAtlas] = React.useState<CardAtlasConfig | null>(null);
     const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusIconAtlasConfig | null>(null);
+    // 额外骰子投掷展示状态
+    const [bonusDieValue, setBonusDieValue] = React.useState<number | undefined>(undefined);
+    const [showBonusDie, setShowBonusDie] = React.useState(false);
+    const prevBonusDieTimestampRef = React.useRef<number | undefined>(undefined);
     const manualViewModeRef = React.useRef<'self' | 'opponent'>('self');
     const autoObserveRef = React.useRef(false);
 
@@ -142,29 +164,25 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const viewPid = isSelfView ? rootPid : otherPid;
     const viewPlayer = (isSelfView ? player : opponent) || player;
     const rollerId = currentPhase === 'defensiveRoll' ? G.pendingAttack?.defenderId : G.activePlayerId;
-    const shouldAutoObserve = currentPhase === 'defensiveRoll' && rootPid !== rollerId;
-    const isViewRolling = viewPid === rollerId;
+    const shouldAutoObserve = !isLocalMatch && currentPhase === 'defensiveRoll' && rootPid !== rollerId;
     const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
+    const isViewRolling = isLocalMatch ? isRollPhase : viewPid === rollerId;
     const rollConfirmed = G.rollConfirmed;
     const availableAbilityIds = isViewRolling ? G.availableAbilityIds : [];
     const selectedAbilityId = currentPhase === 'defensiveRoll'
         ? (isViewRolling ? G.pendingAttack?.defenseAbilityId : undefined)
         : (isViewRolling ? G.pendingAttack?.sourceAbilityId : undefined);
-    const isLocalMatch = playerID === undefined || playerID === null;
     const canOperateView = isLocalMatch || isSelfView;
     const hasRolled = G.rollCount > 0;
     const canHighlightAbility = canOperateView && isViewRolling && isRollPhase && hasRolled;
     const canSelectAbility = canOperateView && isViewRolling && isRollPhase
         && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed);
-    const bonusRollInfo = G.pendingAttack?.sourceAbilityId === 'taiji-combo' ? G.pendingAttack.extraRoll : undefined;
-    const showBonusRollPanel = currentPhase === 'offensiveRoll' && !!bonusRollInfo;
-    const canRollBonusDie = showBonusRollPanel && !bonusRollInfo?.resolved && canOperateView && isViewRolling;
-    const requiresBonusRoll = currentPhase === 'offensiveRoll' && bonusRollInfo && !bonusRollInfo.resolved;
+    // 额外骰子现在在 resolveAttack 中自动投掷，不再需要手动按钮
     const canAdvancePhase = isActivePlayer && (
         currentPhase !== 'offensiveRoll' && currentPhase !== 'defensiveRoll' ? true : G.rollConfirmed
-    ) && !requiresBonusRoll;
+    );
     const canResolveChoice = Boolean(choice.hasChoice && (isLocalMatch || choice.playerId === rootPid));
-    const canInteractDice = canOperateView && isViewRolling;
+    const canInteractDice = isLocalMatch ? isRollPhase : (canOperateView && isViewRolling);
     const showHand = isLocalMatch || isSelfView;
     const handOwner = (isSelfView ? player : opponent) || player;
     const showAdvancePhaseButton = isLocalMatch || isSelfView;
@@ -223,6 +241,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     }, []);
 
     React.useEffect(() => {
+        if (isLocalMatch) {
+            autoObserveRef.current = false;
+            return;
+        }
         if (shouldAutoObserve) {
             if (!autoObserveRef.current) {
                 manualViewModeRef.current = viewMode;
@@ -236,7 +258,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             }
         }
         autoObserveRef.current = shouldAutoObserve;
-    }, [shouldAutoObserve, viewMode]);
+    }, [isLocalMatch, shouldAutoObserve, viewMode]);
 
     const handleAdvancePhase = () => {
         if (!canAdvancePhase) {
@@ -270,6 +292,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     }, []);
 
     React.useEffect(() => {
+        if (isLocalMatch) return;
         if (currentPhase === 'defensiveRoll') {
             if (rollerId && rollerId === rootPid) {
                 setViewMode('self');
@@ -279,7 +302,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             return;
         }
         if (currentPhase === 'offensiveRoll' && isActivePlayer) setViewMode('self');
-    }, [currentPhase, isActivePlayer, rollerId, rootPid]);
+    }, [currentPhase, isActivePlayer, isLocalMatch, rollerId, rootPid]);
 
     React.useEffect(() => {
         const sourceAbilityId = G.activatingAbilityId ?? G.pendingAttack?.sourceAbilityId;
@@ -289,6 +312,23 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         const timer = setTimeout(() => setActivatingAbilityId(undefined), 800);
         return () => clearTimeout(timer);
     }, [G.activatingAbilityId, G.pendingAttack?.sourceAbilityId, triggerAbilityGlow]);
+
+    // 监听额外骰子投掷（使用独立的 lastBonusDieRoll 状态）
+    React.useEffect(() => {
+        const bonusDie = G.lastBonusDieRoll;
+        const prevTimestamp = prevBonusDieTimestampRef.current;
+        
+        // 检测新的额外投掷结果（通过 timestamp 判断是否是新的）
+        if (bonusDie && bonusDie.timestamp !== prevTimestamp) {
+            setBonusDieValue(bonusDie.value);
+            setShowBonusDie(true);
+            prevBonusDieTimestampRef.current = bonusDie.timestamp;
+        }
+    }, [G.lastBonusDieRoll]);
+
+    const handleBonusDieClose = React.useCallback(() => {
+        setShowBonusDie(false);
+    }, []);
 
     React.useEffect(() => {
         if (!opponent) return;
@@ -370,9 +410,19 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             <GameDebugPanel G={G} ctx={ctx} moves={moves} playerID={playerID}>
                 <button
                     onClick={() => setIsLayoutEditing(!isLayoutEditing)}
-                    className={`w-full py-2 rounded font-bold text-xs border transition-all ${isLayoutEditing ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
+                    className={`w-full py-2 rounded font-bold text-xs border transition-[background-color] duration-200 ${isLayoutEditing ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
                 >
                     {isLayoutEditing ? t('layout.exitEdit') : t('layout.enterEdit')}
+                </button>
+                <button
+                    onClick={() => {
+                        const testValue = Math.floor(Math.random() * 6) + 1;
+                        setBonusDieValue(testValue);
+                        setShowBonusDie(true);
+                    }}
+                    className="w-full py-2 rounded font-bold text-xs border transition-[background-color] duration-200 bg-purple-700 border-purple-500 text-white hover:bg-purple-600"
+                >
+                    🎲 测试额外骰子特写
                 </button>
             </GameDebugPanel>
 
@@ -393,6 +443,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     isOpponentShaking={isOpponentShaking}
                     shouldAutoObserve={shouldAutoObserve}
                     onToggleView={() => {
+                        if (isLocalMatch) return;
                         setViewMode(prev => {
                             const next = prev === 'self' ? 'opponent' : 'self';
                             manualViewModeRef.current = next;
@@ -429,6 +480,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     canSelectAbility={canSelectAbility}
                     canHighlightAbility={canHighlightAbility}
                     onSelectAbility={(abilityId) => engineMoves.selectAbility(abilityId)}
+                    onHighlightedAbilityClick={() => {
+                        if (currentPhase === 'offensiveRoll' && !G.rollConfirmed) {
+                            toast.warning(t('error.confirmRoll'));
+                        }
+                    }}
                     selectedAbilityId={selectedAbilityId}
                     activatingAbilityId={activatingAbilityId}
                     locale={locale}
@@ -453,13 +509,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     onConfirm={() => {
                         if (!canInteractDice) return;
                         engineMoves.confirmRoll();
-                    }}
-                    showBonusRollPanel={showBonusRollPanel}
-                    bonusRollInfo={bonusRollInfo}
-                    canRollBonusDie={canRollBonusDie}
-                    onRollBonus={() => {
-                        if (!canRollBonusDie) return;
-                        engineMoves.rollBonusDie();
                     }}
                     showAdvancePhaseButton={showAdvancePhaseButton}
                     advanceLabel={advanceLabel}
@@ -492,6 +541,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         onSellCard={(cardId) => engineMoves.sellCard(cardId)}
                         onError={(msg) => toast.warning(msg)}
                         canInteract={canOperateView}
+                        canPlayCards={canOperateView && isActivePlayer}
                         drawDeckRef={drawDeckRef}
                         discardPileRef={discardPileRef}
                         undoCardId={lastUndoCardId}
@@ -556,6 +606,14 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                 }}
                 locale={locale}
                 statusIconAtlas={statusIconAtlas}
+            />
+
+            {/* 额外骰子投掷展示 */}
+            <BonusDieOverlay
+                value={bonusDieValue}
+                isVisible={showBonusDie}
+                onClose={handleBonusDieClose}
+                locale={locale}
             />
 
             {/* 统一结束页面遮罩 */}

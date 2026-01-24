@@ -70,7 +70,20 @@ export const MONK_ABILITIES: AbilityDef[] = [
         trigger: { type: 'diceSet', faces: { taiji: 3 } },
         effects: [
             grantStatus('taiji', 5, abilityEffectText('zen-forget', 'gainTaiji5')),
-            { description: abilityEffectText('zen-forget', 'gainChoice') },
+            // 选择效果：获得闪避或净化
+            {
+                description: abilityEffectText('zen-forget', 'gainChoice'),
+                action: {
+                    type: 'choice',
+                    target: 'self',
+                    choiceTitleKey: 'choices.evasiveOrPurify',
+                    choiceOptions: [
+                        { statusId: 'evasive', value: 1 },
+                        { statusId: 'purify', value: 1 },
+                    ],
+                },
+                timing: 'preDefense',
+            },
         ],
     },
     {
@@ -113,12 +126,33 @@ export const MONK_ABILITIES: AbilityDef[] = [
         description: abilityText('taiji-combo', 'description'),
         trigger: { type: 'diceSet', faces: { fist: 3, palm: 1 } },
         effects: [
+            // 投掷骰子效果：先投掷，根据结果累加 bonusDamage
+            {
+                description: abilityEffectText('taiji-combo', 'rollDie'),
+                action: {
+                    type: 'rollDie',
+                    target: 'self',
+                    diceCount: 1,
+                    conditionalEffects: [
+                        { face: 'fist', bonusDamage: 2 },
+                        { face: 'palm', bonusDamage: 3 },
+                        { face: 'taiji', grantStatus: { statusId: 'taiji', value: 2 } },
+                        {
+                            face: 'lotus',
+                            triggerChoice: {
+                                titleKey: 'choices.evasiveOrPurify',
+                                options: [
+                                    { statusId: 'evasive', value: 1 },
+                                    { statusId: 'purify', value: 1 },
+                                ],
+                            },
+                        },
+                    ],
+                },
+                timing: 'withDamage',
+            },
+            // 基础伤害 6 + rollDie 累加的 bonusDamage
             damage(6, abilityEffectText('taiji-combo', 'damage6')),
-            inflictStatus('stun', 1, abilityEffectText('taiji-combo', 'inflictStun')),
-            { description: abilityEffectText('taiji-combo', 'bonusFist') },
-            { description: abilityEffectText('taiji-combo', 'bonusPalm') },
-            { description: abilityEffectText('taiji-combo', 'gainTaiji2') },
-            { description: abilityEffectText('taiji-combo', 'gainChoice') },
         ],
     },
     {
@@ -159,8 +193,8 @@ export const MONK_ABILITIES: AbilityDef[] = [
         description: abilityText('meditation', 'description'),
         trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 4 },
         effects: [
-            { description: abilityEffectText('meditation', 'taijiByResult'), action: { type: 'custom', target: 'self', customActionId: 'meditation-taiji' } },
-            { description: abilityEffectText('meditation', 'damageByFist'), action: { type: 'custom', target: 'opponent', customActionId: 'meditation-damage' } },
+            { description: abilityEffectText('meditation', 'taijiByResult'), action: { type: 'custom', target: 'self', customActionId: 'meditation-taiji' }, timing: 'withDamage' },
+            { description: abilityEffectText('meditation', 'damageByFist'), action: { type: 'custom', target: 'opponent', customActionId: 'meditation-damage' }, timing: 'withDamage' },
         ],
     },
 ];

@@ -195,14 +195,17 @@ export function executePipeline<
     }
 
     // 2. Core.validate
-    const validation: ValidationResult = domain.validate(currentState.core, command);
-    if (!validation.valid) {
-        return {
-            success: false,
-            state: currentState,
-            events: allEvents,
-            error: validation.error ?? 'Invalid command',
-        };
+    // 本地同屏可跳过领域校验（由适配层标记 command.skipValidation）
+    if (!command.skipValidation) {
+        const validation: ValidationResult = domain.validate(currentState.core, command);
+        if (!validation.valid) {
+            return {
+                success: false,
+                state: currentState,
+                events: allEvents,
+                error: validation.error ?? 'Invalid command',
+            };
+        }
     }
 
     // 3. Core.execute -> 产生 Events

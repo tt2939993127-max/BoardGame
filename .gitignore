@@ -54,4 +54,9 @@ nul
 # 浏览器测试录制（可选，根据需要调整）
 .agent/recordings/
 
+# public 下的大文件资源（只提交压缩/处理后的版本）
+public/**/*.png
+public/**/*.jpg
+public/**/*.wav
+
 BordGameAsset

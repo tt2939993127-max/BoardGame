@@ -46,11 +46,12 @@ const Dice3D = ({
             style={{ width: size, height: size }}
         >
             <div
-                className={`relative w-full h-full transform-style-3d transition-transform duration-[1000ms] ease-out ${isRolling ? 'animate-tumble' : ''}`}
+                className={`relative w-full h-full transform-style-3d ${isRolling ? 'animate-tumble' : ''}`}
                 style={{
                     transform: isRolling
                         ? `rotateX(${720 + index * 90}deg) rotateY(${720 + index * 90}deg)`
-                        : getFinalTransform(value)
+                        : getFinalTransform(value),
+                    transition: isRolling ? 'none' : 'transform 1000ms ease-out'
                 }}
             >
                 {faces.map((face) => {
@@ -181,7 +182,7 @@ export const DiceActions = ({
                 onClick={handleRollClick}
                 disabled={!canInteract || rollConfirmed || (rollCount >= rollLimit)}
                 className={`
-                    w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-all active:scale-95
+                    w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-[transform,filter] duration-200 active:scale-95
                     ${isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit
                         ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:brightness-110 shadow-amber-900/50'
                         : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}
@@ -193,7 +194,7 @@ export const DiceActions = ({
                 onClick={onConfirm}
                 disabled={rollConfirmed || rollCount === 0 || !canInteract}
                 className={`
-                    w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-all active:scale-95
+                    w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-[transform,background-color,opacity] duration-200 active:scale-95
                     ${rollConfirmed
                         ? 'bg-emerald-700 text-emerald-100 border border-emerald-500/60'
                         : (canInteract ? 'bg-slate-800 text-slate-300 hover:bg-emerald-700/80 border border-slate-600' : 'bg-slate-900 text-slate-600 border border-slate-800')}

@@ -38,7 +38,7 @@ export type EffectType =
  * 效果行为定义（可程序化执行）
  */
 export interface EffectAction {
-    type: 'damage' | 'heal' | 'modifyStat' | 'grantStatus' | 'removeStatus' | 'custom';
+    type: 'damage' | 'heal' | 'modifyStat' | 'grantStatus' | 'removeStatus' | 'choice' | 'rollDie' | 'custom';
     /** 目标：self/opponent/all */
     target: 'self' | 'opponent' | 'all';
     /** 数值（伤害/治疗量/修改值） */
@@ -47,6 +47,32 @@ export interface EffectAction {
     statusId?: string;
     /** 自定义行为 ID（需要游戏实现对应处理器） */
     customActionId?: string;
+    
+    // ============ choice 类型参数 ============
+    /** 选择项列表（用于 choice 类型） */
+    choiceOptions?: Array<{ statusId: string; value: number }>;
+    /** 选择弹窗标题 key（用于 choice 类型） */
+    choiceTitleKey?: string;
+    
+    // ============ rollDie 类型参数 ============
+    /** 投掷骰子数量（用于 rollDie 类型） */
+    diceCount?: number;
+    /** 根据骰面的条件效果（用于 rollDie 类型） */
+    conditionalEffects?: RollDieConditionalEffect[];
+}
+
+/**
+ * 投掷骰子的条件效果
+ */
+export interface RollDieConditionalEffect {
+    /** 触发条件：骰面类型 */
+    face: string;
+    /** 增加伤害（加到当前攻击） */
+    bonusDamage?: number;
+    /** 获得状态 */
+    grantStatus?: { statusId: string; value: number };
+    /** 触发选择 */
+    triggerChoice?: { options: Array<{ statusId: string; value: number }>; titleKey: string };
 }
 
 /**

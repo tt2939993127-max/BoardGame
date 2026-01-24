@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Client } from 'boardgame.io/react';
 import { GAME_IMPLEMENTATIONS } from '../games/registry';
+import { GameModeProvider } from '../contexts/GameModeContext';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - Boardgame.io 类型有时不匹配
 import { getGameById } from '../config/games.config';
@@ -68,11 +69,13 @@ export const LocalMatchRoom = () => {
 
             {/* 游戏棋盘 - 全屏 */}
             <div className="w-full h-full">
-                {LocalClient ? <LocalClient playerID={null} /> : (
-                    <div className="w-full h-full flex items-center justify-center text-white/50">
-                        {t('matchRoom.noClient')}
-                    </div>
-                )}
+                <GameModeProvider mode="local">
+                    {LocalClient ? <LocalClient playerID={null} /> : (
+                        <div className="w-full h-full flex items-center justify-center text-white/50">
+                            {t('matchRoom.noClient')}
+                        </div>
+                    )}
+                </GameModeProvider>
             </div>
         </div>
     );

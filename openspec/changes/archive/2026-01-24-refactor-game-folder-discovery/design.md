@@ -11,15 +11,17 @@ src/games/<gameId>/
   game.ts            # type=game 必须
   Board.tsx          # type=game 必须
   tutorial.ts        # 可选
-  i18n.json          # 可选（多语言）
   thumbnail.tsx      # 可选（覆盖默认缩略图）
 ```
 
 ## 发现与生成流程
 1. 脚本扫描 `src/games` 子目录，读取 `manifest.ts` 并解析 `id/type/enabled`。
 2. 对 `type=game`：若存在 `game.ts`/`Board.tsx` 则生成客户端/服务端入口。
-3. 对 `i18n.json`：生成 `public/locales/<lang>/game-<gameId>.json`，保持运行时加载逻辑不变。
-4. 缩略图：若存在 `thumbnail.tsx` 则使用；否则使用默认缩略图组件（基于 `manifest.icon/title`）。
+3. 缩略图：若存在 `thumbnail.tsx` 则使用；否则使用默认缩略图组件（基于 `manifest.icon/title`）。
+
+## i18n
+- 游戏翻译文件直接维护在 `public/locales/<lang>/game-<gameId>.json`，运行时按 namespace 加载。
+- 不从 `src/games/**` 扫描/生成翻译文件（避免“源文件分散在两处”）。
 
 ## 缩略图覆盖策略
 - 默认：`DefaultGameThumbnail({ title, icon })`。
@@ -27,5 +29,5 @@ src/games/<gameId>/
 
 ## 风险与缓解
 - **缺失文件**：脚本在生成时校验并抛错，阻止启动。
-- **i18n 维护**：保持 JSON 格式，便于非开发编辑。
+- **i18n 维护**：翻译文件直接维护于 `public/locales`（JSON 格式），便于非开发编辑。
 - **工具类**：统一为一级目录，避免多级目录破坏约定。

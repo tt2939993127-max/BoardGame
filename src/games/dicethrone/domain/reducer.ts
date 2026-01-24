@@ -8,6 +8,7 @@ import type {
     DiceThroneEvent,
 } from './types';
 import { CP_MAX, INITIAL_HEALTH } from './types';
+import { getAvailableAbilityIds } from './rules';
 
 // ============================================================================
 // 辅助函数
@@ -37,7 +38,7 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
     event
 ) => {
     const newState = cloneState(state);
-    const { results } = event.payload;
+    const { results, rollerId } = event.payload;
     
     let resultIndex = 0;
     newState.dice.slice(0, newState.rollDiceCount).forEach(die => {
@@ -49,6 +50,7 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
     
     newState.rollCount++;
     newState.rollConfirmed = false;
+    newState.availableAbilityIds = getAvailableAbilityIds(newState, rollerId);
     
     return newState;
 };
@@ -85,21 +87,17 @@ const handleBonusDieRolled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS
     const newState = cloneState(state);
     const { value, face, playerId } = event.payload;
     
-    if (newState.pendingAttack && newState.pendingAttack.sourceAbilityId === 'taiji-combo') {
+    // 设置独立的 lastBonusDieRoll 状态（用于 UI 展示）
+    newState.lastBonusDieRoll = { value, face, playerId, timestamp: event.timestamp };
+    
+    // 记录额外投掷结果（用于 pendingAttack 追踪）
+    if (newState.pendingAttack) {
         newState.pendingAttack.extraRoll = { value, resolved: true };
-        
-        if (face === 'fist') {
-            newState.pendingAttack.bonusDamage = (newState.pendingAttack.bonusDamage ?? 0) + 2;
-        } else if (face === 'palm') {
-            newState.pendingAttack.bonusDamage = (newState.pendingAttack.bonusDamage ?? 0) + 3;
-        } else if (face === 'taiji') {
-            const player = newState.players[playerId];
-            if (player) {
-                player.statusEffects.taiji = Math.min((player.statusEffects.taiji || 0) + 2, 5);
-            }
-        }
-        // lotus 触发选择，由 ChoiceRequestedEvent 处理
     }
+    
+    // 注意：骰面效果（bonusDamage、grantStatus、triggerChoice）
+    // 统一由效果系统通过 resolveConditionalEffect 处理
+    // 不在此处重复处理，避免状态重复增加
     
     return newState;
 };
@@ -167,6 +165,9 @@ const handlePhaseChanged: EventHandler<Extract<DiceThroneEvent, { type: 'PHASE_C
         newState.rollConfirmed = false;
         newState.availableAbilityIds = [];
         resetDice(newState);
+        if (newState.pendingAttack) {
+            newState.availableAbilityIds = getAvailableAbilityIds(newState, newState.pendingAttack.defenderId);
+        }
     }
     
     return newState;
@@ -232,11 +233,16 @@ const handleHealApplied: EventHandler<Extract<DiceThroneEvent, { type: 'HEAL_APP
     event
 ) => {
     const newState = cloneState(state);
-    const { targetId, amount } = event.payload;
+    const { targetId, amount, sourceAbilityId } = event.payload;
     
     const target = newState.players[targetId];
     if (target) {
         target.health = Math.min(INITIAL_HEALTH, target.health + amount);
+    }
+
+    if (sourceAbilityId) {
+        newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
+        newState.lastEffectSourceByPlayerId[targetId] = sourceAbilityId;
     }
     
     return newState;
@@ -250,11 +256,16 @@ const handleStatusApplied: EventHandler<Extract<DiceThroneEvent, { type: 'STATUS
     event
 ) => {
     const newState = cloneState(state);
-    const { targetId, statusId, newTotal } = event.payload;
+    const { targetId, statusId, newTotal, sourceAbilityId } = event.payload;
     
     const target = newState.players[targetId];
     if (target) {
         target.statusEffects[statusId] = newTotal;
+    }
+
+    if (sourceAbilityId) {
+        newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
+        newState.lastEffectSourceByPlayerId[targetId] = sourceAbilityId;
     }
     
     return newState;
@@ -478,7 +489,7 @@ const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type: 'ATTA
         defenderId,
         isDefendable,
         sourceAbilityId,
-        extraRoll: sourceAbilityId === 'taiji-combo' ? { resolved: false } : undefined,
+        // 额外骰子现在在 resolveAttack 中自动投掷，不再需要设置 extraRoll
     };
     
     return newState;
@@ -524,7 +535,7 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
     event
 ) => {
     const newState = cloneState(state);
-    const { playerId, statusId, value } = event.payload;
+    const { playerId, statusId, value, sourceAbilityId } = event.payload;
     
     const player = newState.players[playerId];
     if (player) {
@@ -532,6 +543,11 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
         const maxStacks = def?.stackLimit || 99;
         const currentStacks = player.statusEffects[statusId] || 0;
         player.statusEffects[statusId] = Math.min(currentStacks + value, maxStacks);
+    }
+
+    if (sourceAbilityId) {
+        newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
+        newState.lastEffectSourceByPlayerId[playerId] = sourceAbilityId;
     }
     
     return newState;

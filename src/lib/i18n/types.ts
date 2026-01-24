@@ -4,7 +4,7 @@ export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
 
 export const DEFAULT_LANGUAGE: SupportedLanguage = 'zh-CN';
 
-export { I18N_NAMESPACES } from './namespaces.generated';
+export { I18N_NAMESPACES } from './namespaces';
 
 export type I18nNamespace = typeof I18N_NAMESPACES[number];
 

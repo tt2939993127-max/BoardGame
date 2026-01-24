@@ -46,7 +46,7 @@ export const OpponentHeader = ({
                         if (shouldAutoObserve) return;
                         onToggleView();
                     }}
-                    className={`group bg-slate-900/80 backdrop-blur-md border border-slate-700 px-[0.75vw] py-[0.3vw] rounded-[0.8vw] shadow-2xl flex items-center gap-[0.8vw] cursor-pointer hover:bg-slate-800 transition-all ${viewMode === 'opponent' ? 'border-amber-500/50 bg-slate-800' : ''} ${isOpponentShaking ? 'border-red-500' : ''}`}
+                    className={`group bg-slate-900/80 backdrop-blur-md border border-slate-700 px-[0.75vw] py-[0.3vw] rounded-[0.8vw] shadow-2xl flex items-center gap-[0.8vw] cursor-pointer hover:bg-slate-800 transition-[background-color] duration-200 ${viewMode === 'opponent' ? 'border-amber-500/50 bg-slate-800' : ''} ${isOpponentShaking ? 'border-red-500' : ''}`}
                 >
                     <div className="w-[2.6vw] h-[3.4vw] rounded-[0.3vw] border border-slate-600 overflow-hidden relative bg-slate-800">
                         <div className="w-full h-full" style={getPortraitStyle(opponent.characterId, locale)} />

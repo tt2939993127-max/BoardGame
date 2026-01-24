@@ -3,6 +3,7 @@
  */
 
 import type { DomainCore, GameOverResult, PlayerId } from '../../../engine/types';
+import { abilityManager } from '../../../systems/AbilitySystem';
 import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, Die } from './types';
 import { INITIAL_HEALTH, INITIAL_CP } from './types';
 import { validateCommand } from './commands';
@@ -12,6 +13,9 @@ import { playerView } from './view';
 import { MONK_ABILITIES } from '../monk/abilities';
 import { MONK_STATUS_EFFECTS } from '../monk/statusEffects';
 import { getMonkStartingDeck } from '../monk/cards';
+
+// 初始化技能定义，供条件系统与高亮判定使用
+abilityManager.registerAbilities(MONK_ABILITIES);
 
 // ============================================================================
 // 领域内核定义

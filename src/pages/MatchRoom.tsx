@@ -14,6 +14,7 @@ import { useToast } from '../contexts/ToastContext';
 import { SocketIO } from 'boardgame.io/multiplayer';
 import { GAME_SERVER_URL } from '../config/server';
 import { GameHUD } from '../components/game/GameHUD';
+import { GameModeProvider } from '../contexts/GameModeContext';
 
 
 export const MatchRoom = () => {
@@ -436,24 +437,28 @@ export const MatchRoom = () => {
             {/* 游戏棋盘 - 全屏 */}
             <div className="w-full h-full">
                 {isTutorialRoute ? (
-                    TutorialClient ? <TutorialClient playerID={null} /> : (
-                        <div className="w-full h-full flex items-center justify-center text-white/50">
-                            {t('matchRoom.noTutorial')}
-                        </div>
-                    )
+                    <GameModeProvider mode="tutorial">
+                        {TutorialClient ? <TutorialClient playerID={null} /> : (
+                            <div className="w-full h-full flex items-center justify-center text-white/50">
+                                {t('matchRoom.noTutorial')}
+                            </div>
+                        )}
+                    </GameModeProvider>
                 ) : (
                     GameClient ? (
-                        <RematchProvider
-                            matchId={matchId}
-                            playerId={effectivePlayerID}
-                            isMultiplayer={true}
-                        >
-                            <GameClient
-                                playerID={effectivePlayerID}
-                                matchID={matchId}
-                                credentials={credentials}
-                            />
-                        </RematchProvider>
+                        <GameModeProvider mode="online">
+                            <RematchProvider
+                                matchId={matchId}
+                                playerId={effectivePlayerID}
+                                isMultiplayer={true}
+                            >
+                                <GameClient
+                                    playerID={effectivePlayerID}
+                                    matchID={matchId}
+                                    credentials={credentials}
+                                />
+                            </RematchProvider>
+                        </GameModeProvider>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-white/50">
                             {t('matchRoom.noClient')}

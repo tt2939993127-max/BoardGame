@@ -60,11 +60,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ### 1. 沟通与开发原则
 - **中文优先（强制）**：所有交互、UI 文本、代码注释、设计文档必须使用中文。
 - **破坏性变更/激进重构**：默认采取破坏性改动并拒绝向后兼容，主动清理过时代码、接口与文档。交付必须完整具体，禁止占位或 `NotImplemented`。
-- **方案先行**：编码前必须完成 **Sequential-Thinking** 分析。在开始直接改动代码前，必须先进行方案分析并获得（或自我确认）清晰的路径。
-- **（仅在当前是antigravity并且你是gemini模型时，不是的话就不管这条）需求确认先行**：在进行任何代码修改前，必须先与用户确认需求。严禁在未确认需求的情况下擅自进行非必要的重构或样式调整。
+- **方案与需求对齐（推荐）**：编码前先给出推荐方案与理由，必要时补充需确认的需求点；在未明确需求时，避免进行非必要的重构或样式调整。
 - **样式开发约束（核心规定）**：**当任务目标为优化样式/视觉效果时，严禁修改任何业务逻辑代码**（如状态判定、Button 的 disabled 条件、Phase 转换逻辑等）。如需修改逻辑，必须单独申请。
 - **关键逻辑注释（强制）**：涉及全局状态/架构入口/默认行为（例如 Modal 栈、路由守卫、全局事件）必须写清晰中文注释；提交前自检是否遗漏，避免再次发生。
-- **日志不需要开关，调试完后将（强制）**
+- **日志不需要开关，调试完后将移除（强制）**
 
 ### 1.1 证据链与排查规范（修bug时强制）
 - **事实/未知/假设**：提出任何方案/排查/评审结论前，必须列出：
@@ -73,6 +72,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - **假设（含验证方法）**：必须标注“假设：”，并给出可执行的验证步骤。
 
 - **修 Bug 证据优先**：证据不足时不得直接改代码“试试”，只能给出最小验证步骤或临时日志方案。
+- **首次修复未解决且未定位原因**：必须强制添加临时日志/统计获取证据，且标注采集点与清理计划。
 - **禁止用“强制/绕过”掩盖问题**：不得通过放开安全限制/扩大白名单/关闭校验/无限重试等方式掩盖根因；必须先定位原因并给出验证步骤。确需临时绕过时，必须明确标注为临时方案并给出回滚/清理计划。
 - **连续两次未解决**：必须切换为“假设列表 → 验证方法 → 多方案对比”的排查模式。
 - **临时日志规则**：允许在添加临时日志/统计用于排障；不得引入额外 debug 开关（如 localStorage flag）来控制日志；问题解决后必须清理。
@@ -91,25 +91,36 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## ⚠️ 重要教训 (Golden Rules)
 
-### Bug 教训文档（强制）
-- **修 bug 前必读**：
-  - 前端 bug：必须先检查 `docs/bugs/frontend.md`（目录 + 相关条目）
-  - 后端 bug：必须先检查 `docs/bugs/backend.md`（目录 + 相关条目）
-- **修复后总结规则（仅对修复次数 > 2 的 bug）**：当同一个 bug 需要多次往返才修好（修复尝试次数大于1次），在“确认修复成功”后必须把根因与防复发措施沉淀到对应文档：
-  - 前端：追加到 `docs/bugs/frontend.md`
-  - 后端：追加到 `docs/bugs/backend.md`
-  - 条目格式遵循文档内模板，确保包含：现象、根因、证据链、回归测试清单、防复发措施。
-  - 条目模板以 `docs/bugs/*.md` 中的「条目格式」为准，保持简洁精要。
-  - 高频可复发的具体教训优先沉淀到 bug 文档，避免长期占用上下文。
-
 ### React Hooks 规则（强制）
 > **禁止在条件语句或 return 之后调用 Hooks**。永远将 Hooks 置于组件顶部。
+
+### CSS 布局与父容器约束（强制）
+> **`overflow` 属性会被父级容器覆盖，导致子组件布局失效**。
+- 修改布局前必须使用 `grep_search` 检查所有父容器的 `overflow`、`height` 等属性。
+
+### 遮罩/层级排查规则（强制）
+> **先用 `elementsFromPoint` 证明“谁在最上层”，再改层级**；Portal 外层容器必须显式 `z-index`，否则会被页面正 `z-index` 覆盖。
+
+### 联机测试与网络
+- **WebSocket**：`vite.config.ts` 中 `hmr` 严禁设置自定义端口。
+- **HMR 错误**：出现 "Upgrade Required" 时，移除 `hmr: { port: ... }` 配置。
+- **端口占用**：使用 `taskkill /F /IM node.exe` 清理占用。
+
+### 高频交互规范
+- **Ref 优先**：`MouseMove` 等高频回调优先用 `useRef` 避开 `useState` 异步延迟导致的跳动。
+- **直操 DOM**：实时 UI 更新建议直接修改 `DOM.style` 绕过 React 渲染链以优化性能。
+- **状态卫生**：在 `window` 监听 `mouseup` 防止状态卡死；重置业务时同步清空相关 Ref。
+- **锚点算法**：建立 `anchorPoint` 逻辑处理坐标缩放与定位补偿，确保交互一致性。
+- **拖拽回弹规范（DiceThrone）**：手牌拖拽回弹必须统一由外层 `motionValue` 控制；当 `onDragEnd` 丢失时由 `window` 兜底结束，并用 `animate(x/y → 0)` 手动回弹。禁止混用 `dragSnapToOrigin` 与手动回弹，避免二次写入导致回弹后跳位。
 
 ### 动画/动效规范
 - **动画库已接入**：项目使用 **framer-motion**（`motion` / `AnimatePresence`）。
 - **通用动效组件**：`src/components/common/animations/` 下已有 `FlyingEffect`、`ShakeContainer`、`PulseGlow` 与 `variants`。
 - **优先复用原则**：新增动画优先复用/扩展上述组件或 framer-motion 变体，避免重复造轮子或引入平行动画库。
-- **性能友好**：动效优先使用 `transform` / `opacity`，避免动画 `filter/backdrop-filter`、`box-shadow/text-shadow`、`color/border-color` 等高重绘属性。
+- **性能友好（强制）**：
+  - **禁止 `transition-all` / `transition-colors`**：会导致 `border-color` 等不可合成属性触发主线程渲染。改用具体属性：`transition-[background-color]`、`transition-[opacity,transform]`。
+  - **优先合成属性**：`transform`、`opacity`、`filter`；**谨慎使用**：`background-color`、`box-shadow`、`border-*`。
+  - **transition 与 @keyframes 互斥**：同一元素禁止同时使用，应通过 `style.transition` 动态切换。
 - **毛玻璃策略**：`backdrop-filter` 尽量保持静态；需要动效时只动遮罩层 `opacity`，避免在动画过程中改变 blur 半径。
 - **通用动效 hooks**：延迟渲染/延迟 blur 优先复用 `useDeferredRender` / `useDelayedBackdropBlur`，避免各处重复实现。
 - **颜色/阴影替代**：若需高亮变化，优先采用“叠层 + opacity”而非直接动画颜色/阴影。
@@ -120,7 +131,6 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **DiceThrone 国际化说明**：`docs/dicethrone-i18n.md`（新增/修改文案、卡牌、状态效果或图片本地化时必须先读）
 - **部署说明**：`docs/deploy.md`（本地/线上部署、端口与服务编排调整时必须先读）
 - **测试模式说明**：`docs/test-mode.md`（需要测试入口、调试面板或测试流程时必须先读）
-- **调试运行手册**：`docs/debugging/runbook.md`（线上/本地排障、错误定位、日志规范相关时必须先读）
 - **前端框架封装**：`docs/framework/frontend.md`（涉及前端架构/封装约定时必须先读）
 - **后端框架封装**：`docs/framework/backend.md`（涉及后端架构/封装约定时必须先读）
 
@@ -128,6 +138,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **系统注册**：新系统必须在 `src/engine/systems/` 实现，并在 `src/engine/systems/index.ts` 导出；如需默认启用，必须加入 `createDefaultSystems()`。
 - **状态结构**：系统新增状态必须写入 `SystemState` 并由系统 `setup()` 初始化；禁止把系统状态塞进 `core`。
 - **命令可枚举**：凡是系统命令（如 `UNDO_COMMANDS`），**必须加入每个游戏的 `commandTypes`**，否则 `moves` 不会注入。
+- **Move payload 必须包装**：UI 调用 move 时必须传 payload 对象，结构与 domain types 保持一致（如 `toggleDieLock({ dieId })`），禁止传裸值。
 - **常量使用**：UI 触发系统命令必须使用 `UNDO_COMMANDS.*` 等常量，禁止硬编码字符串。
 - **重置清理**：需要 `reset()` 的系统必须保证状态在重开后回到初始值。
 
@@ -139,6 +150,18 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - 客户端：`src/services/matchSocket.ts` 服务 + `src/contexts/RematchContext.tsx` 上下文
   - UI：`RematchActions` 组件通过 `useRematch()` hook 获取状态和投票回调
 - **为什么不用 move**：boardgame.io 在 `endIf` 返回 gameover 后会禁止所有 move，但我们需要保留 gameover 以支持对局回放/战绩记录。
+
+### 本地 / 联机 / 教学 模式差异（强制）
+- **模式来源**：统一使用 `GameModeProvider` 注入 `mode`，并写入 `window.__BG_GAME_MODE__`，供引擎层读取。
+- **本地模式（local）**：
+  - **不做领域校验**：适配层在本地模式强制 `skipValidation=true`，避免 `player_mismatch` 等权限限制。
+  - **视角单一**：本地同屏不切视角，UI 不以“当前玩家/防御方”限制交互。
+  - **入口**：`/play/:gameId/local`，由 `LocalMatchRoom` 负责渲染。
+- **联机模式（online）**：
+  - **严格校验**：按玩家身份进行领域校验，所有权限由 `domain.validate` 控制。
+  - **视角区分**：UI 允许/需要根据玩家视角与阶段进行交互限制。
+- **教学模式（tutorial）**：
+  - 走 `MatchRoom` 的 `GameModeProvider`，具体权限策略按需求明确，默认与联机一致。
 
 ### i18n 配置方法（强制）
 - **通用 vs 游戏**：通用组件文案放 `public/locales/{lang}/common.json`；单游戏文案放 `public/locales/{lang}/game-<id>.json`。
@@ -206,6 +229,22 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ## 📂 项目目录结构
 
 ```
+/ (repo root)
+├── api-server.ts          # 认证服务入口（Koa）
+├── server.ts              # 游戏服务入口（Boardgame.io）
+├── src/                   # 前端与共享模块
+├── public/                # 静态资源（图片/字体/本地化）
+├── scripts/               # 资源处理/自动化脚本
+├── test/                  # 测试与一次性验证脚本
+├── docs/                  # 研发文档
+├── openspec/              # 变更规范与提案
+├── docker/                # 容器化与部署
+├── design/                # 设计稿/参考资料
+├── evidence/              # 证据归档
+└── screenshots/           # 项目截图
+```
+
+```
 src/
 ├── engine/                  # 引擎层（Domain Core + Systems + Adapter）
 │   ├── types.ts             # 引擎核心类型（MatchState/Command/Event）
@@ -231,12 +270,35 @@ src/
 │       ├── types.ts
 │       ├── game.ts
 │       └── Board.tsx
-├── components/              # 通用 UI 组件（大厅、通宵、各类弹窗）
+├── components/              # 通用 UI 组件
+│   ├── auth/                # 登录/注册相关
+│   ├── common/              # 通用组件与基础样式
+│   ├── game/                # 游戏内 HUD/面板/卡牌等
+│   ├── layout/              # 页面布局壳
+│   ├── lobby/               # 大厅 UI
+│   ├── system/              # 系统级 UI（弹窗/提示）
+│   └── tutorial/            # 教学引导 UI
+├── hooks/                   # 通用 Hooks
+│   ├── match/               # 对局相关
+│   ├── routing/             # 路由/导航
+│   └── ui/                  # UI 交互与动效
 ├── contexts/                # 全局状态管理 (Toast/Modal/Audio/Auth/Tutorial/Debug)
-├── lib/                     # 底层服务库（AudioManager/i18n/LobbySocket）
-├── pages/                   # 页面入口 (Lobby/MatchRoom/Profile)
-└── config/                  # 后端配置、游戏规则常量
+├── lib/                     # 底层服务库
+│   ├── audio/               # 音频管理
+│   └── i18n/                # 国际化
+├── services/                # 实时通信与服务封装
+├── pages/                   # 页面入口
+│   ├── Home.tsx             # 首页/大厅入口
+│   ├── MatchRoom.tsx        # 在线对局
+│   ├── LocalMatchRoom.tsx   # 本地对局
+│   └── devtools/            # 调试页面
+├── server/                  # 服务端共享模块（Koa/Mongo/邮件）
+│   └── models/              # 数据模型
+├── assets/                  # 源码内静态资源（少量）
+└── config/                  # 前端配置与游戏规则常量
 ```
+
+> 单元测试建议：优先放在 `src/**/__tests__/` 或同级 `*.test.ts(x)`，若为端到端/集成测试，可统一放 `test/` 下并按模块分目录。
 
 ### 关键文件速查
 

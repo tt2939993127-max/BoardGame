@@ -11,6 +11,7 @@
 - [ ] 实现 `PlayerPanelSkeleton` - 玩家面板骨架
 - [ ] 实现 `HandAreaSkeleton` - 手牌区骨架（含拖拽/发牌动画逻辑）
 - [ ] 实现 `ResourceTraySkeleton` - 资源托盘骨架
+- [ ] 实现 `SpotlightSkeleton` - 特写骨架（骰子结果/卡牌打出/技能激活等中心展示）
 - [ ] 创建 `src/components/game/framework/index.ts` - 统一导出
 
 ## Phase 3: 实现底层 Hooks
@@ -26,6 +27,9 @@
 - [ ] 重构 HandArea 基于骨架组件
 - [ ] 重构 DiceTray 基于骨架组件
 - [ ] 重构 AbilityOverlays（技能槽位）
+- [ ] 重构 ChoiceModal 复用 ConfirmModal/ModalBase
+- [ ] 重构 ConfirmSkipModal 复用 ConfirmModal
+- [ ] 重构 BonusDieOverlay 基于 SpotlightSkeleton
 - [ ] Board.tsx 精简至 <500 行
 
 ## Phase 5: 验证与文档

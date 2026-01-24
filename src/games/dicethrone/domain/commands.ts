@@ -51,6 +51,22 @@ const validateRollDice = (
     
     const rollerId = getRollerId(state);
     if (!isMoveAllowed(playerId, rollerId)) {
+        // 临时日志：排查防御投掷 player_mismatch
+        console.warn('[DiceThrone][validateRollDice] player_mismatch', {
+            playerId,
+            rollerId,
+            turnPhase: state.turnPhase,
+            activePlayerId: state.activePlayerId,
+            rollCount: state.rollCount,
+            rollLimit: state.rollLimit,
+            pendingAttack: state.pendingAttack
+                ? {
+                    attackerId: state.pendingAttack.attackerId,
+                    defenderId: state.pendingAttack.defenderId,
+                    sourceAbilityId: state.pendingAttack.sourceAbilityId,
+                }
+                : null,
+        });
         return fail('player_mismatch');
     }
     
@@ -63,29 +79,15 @@ const validateRollDice = (
 
 /**
  * 验证额外骰子命令
+ * @deprecated 额外骰子现在在 resolveAttack 中自动投掷
  */
 const validateRollBonusDie = (
-    state: DiceThroneCore,
+    _state: DiceThroneCore,
     _cmd: RollBonusDieCommand,
-    playerId: PlayerId
+    _playerId: PlayerId
 ): ValidationResult => {
-    if (state.turnPhase !== 'offensiveRoll') {
-        return fail('invalid_phase');
-    }
-    
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    if (!state.pendingAttack || state.pendingAttack.sourceAbilityId !== 'taiji-combo') {
-        return fail('no_pending_taiji_combo');
-    }
-    
-    if (state.pendingAttack.extraRoll?.resolved) {
-        return fail('already_resolved');
-    }
-    
-    return ok();
+    // 已废弃：额外骰子现在在 resolveAttack 中自动投掷
+    return fail('deprecated_command');
 };
 
 /**

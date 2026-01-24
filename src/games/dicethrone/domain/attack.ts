@@ -3,34 +3,16 @@
  * 仅生成事件，不直接修改状态
  */
 
+import type { RandomFn } from '../../../engine/types';
 import type {
     DiceThroneCore,
     DiceThroneEvent,
     AttackResolvedEvent,
-    ChoiceRequestedEvent,
     AttackPreDefenseResolvedEvent,
 } from './types';
 import { getAbilityEffects, resolveEffectsToEvents, type EffectContext } from './effects';
 
 const now = () => Date.now();
-
-const createChoiceEvent = (
-    playerId: string,
-    sourceAbilityId: string
-): ChoiceRequestedEvent => ({
-    type: 'CHOICE_REQUESTED',
-    payload: {
-        playerId,
-        sourceAbilityId,
-        titleKey: 'choices.evasiveOrPurify',
-        options: [
-            { statusId: 'evasive', value: 1 },
-            { statusId: 'purify', value: 1 },
-        ],
-    },
-    sourceCommandType: 'ABILITY_EFFECT',
-    timestamp: now(),
-});
 
 const createPreDefenseResolvedEvent = (
     attackerId: string,
@@ -66,11 +48,8 @@ export const resolveOffensivePreDefenseEffects = (state: DiceThroneCore): DiceTh
     };
 
     const events: DiceThroneEvent[] = [];
+    // preDefense 效果现在统一通过效果系统处理（包括 choice 效果）
     events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx));
-
-    if (sourceAbilityId === 'zen-forget') {
-        events.push(createChoiceEvent(attackerId, sourceAbilityId));
-    }
 
     events.push(createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId));
     return events;
@@ -78,6 +57,7 @@ export const resolveOffensivePreDefenseEffects = (state: DiceThroneCore): DiceTh
 
 export const resolveAttack = (
     state: DiceThroneCore,
+    random: RandomFn,
     options?: { includePreDefense?: boolean }
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
@@ -97,16 +77,17 @@ export const resolveAttack = (
 
     if (defenseAbilityId) {
         const defenseEffects = getAbilityEffects(defenseAbilityId);
+        // 防御技能的上下文：防御者是 "attacker"，原攻击者是 "defender"
         const defenseCtx: EffectContext = {
-            attackerId: defenderId,
-            defenderId: attackerId,
+            attackerId: defenderId,  // 防御者（使用防御技能的人）
+            defenderId: attackerId,  // 原攻击者（被防御技能影响的人）
             sourceAbilityId: defenseAbilityId,
             state,
             damageDealt: 0,
         };
 
-        events.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx));
-        events.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx));
+        events.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
+        events.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
     }
 
     let totalDamage = 0;
@@ -120,11 +101,13 @@ export const resolveAttack = (
             damageDealt: 0,
         };
 
+        // withDamage 时机的效果（包括 rollDie 和 damage）统一通过效果系统处理
         events.push(...resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
             bonusDamage,
             bonusDamageOnce: true,
+            random,
         }));
-        events.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx));
+        events.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
         totalDamage = attackCtx.damageDealt;
     }
 

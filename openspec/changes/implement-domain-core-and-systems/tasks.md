@@ -85,9 +85,7 @@
 - [x] Reducer 处理 `DAMAGE_DEALT` / `HEAL_APPLIED` / `STATUS_APPLIED` 等事件
 
 ### 3.4 game.ts 适配
-- [x] 使用 `createGameAdapter` 创建 `game-v2.ts`
-- [x] 旧版 `game.ts` 备份为 `game.legacy.ts`
-- [x] 导出新版 `DiceThroneGameV2` 供切换使用
+- [x] 使用 `createGameAdapter` 转正 `game.ts`
 - [x] 注册 commandTypes 以支持可枚举 moves
 
 ### 3.5 UI 适配（Board.tsx 重构）

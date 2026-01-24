@@ -3,10 +3,12 @@
  * 将 AbilityEffect 转换为 DiceThroneEvent（事件驱动）
  */
 
-import type { PlayerId } from '../../../engine/types';
-import type { EffectAction } from '../../../systems/StatusEffectSystem';
+import type { PlayerId, RandomFn } from '../../../engine/types';
+import type { EffectAction, RollDieConditionalEffect } from '../../../systems/StatusEffectSystem';
 import type { AbilityEffect, EffectTiming, EffectResolutionContext } from '../../../systems/AbilitySystem';
 import { abilityManager } from '../../../systems/AbilitySystem';
+import { getActiveDice, getFaceCounts, getDieFace } from './rules';
+import { MONK_ABILITIES } from '../monk/abilities';
 import type {
     DiceThroneCore,
     DiceThroneEvent,
@@ -14,6 +16,8 @@ import type {
     HealAppliedEvent,
     StatusAppliedEvent,
     StatusRemovedEvent,
+    ChoiceRequestedEvent,
+    BonusDieRolledEvent,
 } from './types';
 
 // ============================================================================
@@ -26,6 +30,8 @@ export interface EffectContext {
     sourceAbilityId: string;
     state: DiceThroneCore;
     damageDealt: number;
+    /** 额外伤害累加器（用于 rollDie 的 bonusDamage 累加） */
+    accumulatedBonusDamage?: number;
 }
 
 // ============================================================================
@@ -38,7 +44,8 @@ export interface EffectContext {
 function resolveEffectAction(
     action: EffectAction,
     ctx: EffectContext,
-    bonusDamage?: number
+    bonusDamage?: number,
+    random?: RandomFn
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const timestamp = Date.now();
@@ -73,6 +80,7 @@ function resolveEffectAction(
                 payload: {
                     targetId,
                     amount: action.value ?? 0,
+                    sourceAbilityId,
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
@@ -97,6 +105,7 @@ function resolveEffectAction(
                     statusId: action.statusId,
                     stacks: stacksToAdd,
                     newTotal,
+                    sourceAbilityId,
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
@@ -121,13 +130,164 @@ function resolveEffectAction(
             break;
         }
 
+        case 'choice': {
+            // 选择效果：生成 CHOICE_REQUESTED 事件
+            if (!action.choiceOptions || action.choiceOptions.length === 0) break;
+            const choiceEvent: ChoiceRequestedEvent = {
+                type: 'CHOICE_REQUESTED',
+                payload: {
+                    playerId: targetId,
+                    sourceAbilityId,
+                    titleKey: action.choiceTitleKey || 'choices.default',
+                    options: action.choiceOptions,
+                },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            };
+            events.push(choiceEvent);
+            break;
+        }
+
+        case 'rollDie': {
+            // 投掷骰子效果：投掷并根据结果触发条件效果
+            if (!random || !action.conditionalEffects) break;
+            const diceCount = action.diceCount ?? 1;
+            
+            for (let i = 0; i < diceCount; i++) {
+                const value = random.d(6);
+                const face = getDieFace(value);
+                
+                // 生成 BONUS_DIE_ROLLED 事件
+                const bonusDieEvent: BonusDieRolledEvent = {
+                    type: 'BONUS_DIE_ROLLED',
+                    payload: { value, face, playerId: targetId },
+                    sourceCommandType: 'ABILITY_EFFECT',
+                    timestamp,
+                };
+                events.push(bonusDieEvent);
+                
+                // 查找匹配的条件效果
+                const matchedEffect = action.conditionalEffects.find(e => e.face === face);
+                if (matchedEffect) {
+                    events.push(...resolveConditionalEffect(matchedEffect, ctx, targetId, sourceAbilityId, timestamp));
+                }
+            }
+            break;
+        }
+
         case 'custom': {
-            // 自定义动作需要单独处理，这里生成通用事件
-            // TODO: 根据 actionId 生成特定事件
+            const actionId = action.customActionId;
+            if (!actionId) break;
+
+            if (actionId === 'meditation-taiji') {
+                const faceCounts = getFaceCounts(getActiveDice(state));
+                const stacksToAdd = faceCounts.taiji;
+                const target = state.players[targetId];
+                const currentStacks = target?.statusEffects.taiji ?? 0;
+                const def = state.statusDefinitions.find(e => e.id === 'taiji');
+                const maxStacks = def?.stackLimit || 99;
+                const newTotal = Math.min(currentStacks + stacksToAdd, maxStacks);
+                const event: StatusAppliedEvent = {
+                    type: 'STATUS_APPLIED',
+                    payload: {
+                        targetId,
+                        statusId: 'taiji',
+                        stacks: stacksToAdd,
+                        newTotal,
+                        sourceAbilityId,
+                    },
+                    sourceCommandType: 'ABILITY_EFFECT',
+                    timestamp,
+                };
+                events.push(event);
+                break;
+            }
+
+            if (actionId === 'meditation-damage') {
+                const faceCounts = getFaceCounts(getActiveDice(state));
+                const amount = faceCounts.fist;
+                const target = state.players[targetId];
+                const actualDamage = target ? Math.min(amount, target.health) : 0;
+                const event: DamageDealtEvent = {
+                    type: 'DAMAGE_DEALT',
+                    payload: {
+                        targetId,
+                        amount,
+                        actualDamage,
+                        sourceAbilityId,
+                    },
+                    sourceCommandType: 'ABILITY_EFFECT',
+                    timestamp,
+                };
+                events.push(event);
+                ctx.damageDealt += actualDamage;
+                break;
+            }
             break;
         }
     }
 
+    return events;
+}
+
+/**
+ * 处理 rollDie 的条件效果
+ */
+function resolveConditionalEffect(
+    effect: RollDieConditionalEffect,
+    ctx: EffectContext,
+    targetId: PlayerId,
+    sourceAbilityId: string,
+    timestamp: number
+): DiceThroneEvent[] {
+    const events: DiceThroneEvent[] = [];
+    const { state } = ctx;
+    
+    // 处理 bonusDamage
+    if (effect.bonusDamage) {
+        ctx.accumulatedBonusDamage = (ctx.accumulatedBonusDamage ?? 0) + effect.bonusDamage;
+    }
+    
+    // 处理 grantStatus
+    if (effect.grantStatus) {
+        const { statusId, value } = effect.grantStatus;
+        const target = state.players[targetId];
+        const currentStacks = target?.statusEffects[statusId] ?? 0;
+        const def = state.statusDefinitions.find(e => e.id === statusId);
+        const maxStacks = def?.stackLimit || 99;
+        const newTotal = Math.min(currentStacks + value, maxStacks);
+        
+        const event: StatusAppliedEvent = {
+            type: 'STATUS_APPLIED',
+            payload: {
+                targetId,
+                statusId,
+                stacks: value,
+                newTotal,
+                sourceAbilityId,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        };
+        events.push(event);
+    }
+    
+    // 处理 triggerChoice
+    if (effect.triggerChoice) {
+        const choiceEvent: ChoiceRequestedEvent = {
+            type: 'CHOICE_REQUESTED',
+            payload: {
+                playerId: targetId,
+                sourceAbilityId,
+                titleKey: effect.triggerChoice.titleKey,
+                options: effect.triggerChoice.options,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        };
+        events.push(choiceEvent);
+    }
+    
     return events;
 }
 
@@ -138,7 +298,7 @@ export function resolveEffectsToEvents(
     effects: AbilityEffect[],
     timing: EffectTiming,
     ctx: EffectContext,
-    config?: { bonusDamage?: number; bonusDamageOnce?: boolean }
+    config?: { bonusDamage?: number; bonusDamageOnce?: boolean; random?: RandomFn }
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     let bonusApplied = false;
@@ -159,13 +319,23 @@ export function resolveEffectsToEvents(
         if (!effect.action) continue;
         if (!abilityManager.checkEffectCondition(effect, resolutionCtx)) continue;
 
-        const bonus = config && !bonusApplied ? config.bonusDamage : undefined;
-        const effectEvents = resolveEffectAction(effect.action, ctx, bonus);
+        // 计算额外伤害：包括配置的 bonusDamage + rollDie 累加的 accumulatedBonusDamage
+        let totalBonus = 0;
+        if (config && !bonusApplied && config.bonusDamage) {
+            totalBonus += config.bonusDamage;
+        }
+        if (ctx.accumulatedBonusDamage) {
+            totalBonus += ctx.accumulatedBonusDamage;
+        }
+        
+        const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random);
         events.push(...effectEvents);
 
         // 如果产生伤害且只允许一次加成
         if (effectEvents.some(e => e.type === 'DAMAGE_DEALT') && config?.bonusDamageOnce) {
             bonusApplied = true;
+            // 伤害已应用，清空累加的额外伤害
+            ctx.accumulatedBonusDamage = 0;
         }
 
         // 更新 resolutionCtx.damageDealt 用于后续条件检查
@@ -179,14 +349,23 @@ export function resolveEffectsToEvents(
  * 获取技能的所有效果
  */
 export function getAbilityEffects(abilityId: string): AbilityEffect[] {
+    // 先尝试直接查找（基础技能 ID）
     const def = abilityManager.getDefinition(abilityId);
-    if (!def) return [];
-
-    // 检查是否是变体 ID
-    if (def.variants) {
-        const variant = def.variants.find(v => v.id === abilityId);
-        if (variant?.effects) return variant.effects;
+    if (def) {
+        if (def.variants) {
+            const variant = def.variants.find(v => v.id === abilityId);
+            if (variant?.effects) return variant.effects;
+        }
+        return def.effects ?? [];
     }
 
-    return def.effects ?? [];
+    // 如果找不到，可能是变体 ID，遍历所有技能查找
+    for (const ability of MONK_ABILITIES) {
+        if (ability.variants) {
+            const variant = ability.variants.find(v => v.id === abilityId);
+            if (variant?.effects) return variant.effects;
+        }
+    }
+
+    return [];
 }

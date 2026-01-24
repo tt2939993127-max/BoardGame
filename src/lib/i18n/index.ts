@@ -4,10 +4,6 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 import { DEFAULT_LANGUAGE, I18N_NAMESPACES, SUPPORTED_LANGUAGES } from './types';
 
-const CORE_I18N_NAMESPACES = I18N_NAMESPACES.filter(
-    (namespace: string) => !namespace.startsWith('game-'),
-);
-
 export const i18nInitPromise = i18n
     .use(Backend)
     .use(LanguageDetector)
@@ -16,7 +12,7 @@ export const i18nInitPromise = i18n
         fallbackLng: DEFAULT_LANGUAGE,
         supportedLngs: [...SUPPORTED_LANGUAGES],
         defaultNS: 'common',
-        ns: [...CORE_I18N_NAMESPACES],
+        ns: [...I18N_NAMESPACES],
         interpolation: {
             escapeValue: false,
         },

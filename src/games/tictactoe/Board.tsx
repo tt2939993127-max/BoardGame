@@ -9,6 +9,7 @@ import { EndgameOverlay } from '../../components/game/EndgameOverlay';
 import { useDebug } from '../../contexts/DebugContext';
 import { useTutorial } from '../../contexts/TutorialContext';
 import { useRematch } from '../../contexts/RematchContext';
+import { useGameMode } from '../../contexts/GameModeContext';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { TIC_TAC_TOE_AUDIO_CONFIG } from './audio.config';
 
@@ -96,13 +97,15 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
     const isWinner = isGameOver?.winner !== undefined;
     const coreCurrentPlayer = G.core.currentPlayer;
     const currentPlayer = coreCurrentPlayer ?? ctx.currentPlayer;
-    const isSpectator = playerID === null || playerID === undefined;
+    const gameMode = useGameMode();
+    const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
+    const isSpectator = isLocalMatch || playerID === null || playerID === undefined;
     const isPlayerTurn = isSpectator || currentPlayer === playerID;
     const { t } = useTranslation('game-tictactoe');
 
     // 本地同屏(hotseat)模式：开始一局时清空本机累计，避免上一轮对战/联机残留造成“离谱分数”。
     // 注意：多人联机的“再来一局”可能是新 match；我们只在本地同屏下清理。
-    const isHotseatLocal = !isMultiplayer && (playerID === null || playerID === undefined);
+    const isHotseatLocal = isLocalMatch;
     const didClearOnStartRef = useRef(false);
 
     const [scoreboard, setScoreboard] = useState<LocalScoreboard>(() => {
@@ -292,7 +295,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
                             const isWinningCell = winningLine?.includes(id);
                             const isOccupied = cell !== null;
                             const isTutorialTarget = isActive && currentStep?.highlightTarget === `cell-${id}`;
-                            const isClickable = !isOccupied && !isGameOver && (playerID === null || currentPlayer === playerID) && (!isActive || (currentStep?.requireAction && (!currentStep.highlightTarget || currentStep.highlightTarget === `cell-${id}`)));
+                            const isClickable = !isOccupied && !isGameOver && isPlayerTurn && (!isActive || (currentStep?.requireAction && (!currentStep.highlightTarget || currentStep.highlightTarget === `cell-${id}`)));
 
                             // 根据棋子颜色设置胜利发光效果
                             const winningGlow = cell === '0'

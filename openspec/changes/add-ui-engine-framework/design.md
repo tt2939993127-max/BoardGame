@@ -135,6 +135,35 @@ export interface ResourceTraySkeletonProps<TItem = unknown> extends ResourceTray
   className?: string;
   layout?: 'row' | 'column' | 'grid';
 }
+
+/**
+ * 特写骨架 Props
+ * 用于中心展示重要内容（骰子结果、卡牌打出、技能激活等）
+ */
+export interface SpotlightSkeletonProps {
+  /** 是否显示 */
+  isVisible: boolean;
+  /** 关闭回调 */
+  onClose: () => void;
+  /** 自动关闭延迟 (ms)，不传则手动关闭 */
+  autoCloseDelay?: number;
+  /** 标题 */
+  title?: React.ReactNode;
+  /** 描述/效果文字 */
+  description?: React.ReactNode;
+  /** 特写内容 */
+  children: React.ReactNode;
+  /** 入场动画配置 */
+  enterAnimation?: AnimationConfig;
+  /** 出场动画配置 */
+  exitAnimation?: AnimationConfig;
+  /** 背景遮罩样式 */
+  backdropClassName?: string;
+  /** 容器样式 */
+  containerClassName?: string;
+  /** 点击背景关闭 */
+  closeOnBackdrop?: boolean;
+}
 ```
 
 ### 3. Hook 契约
@@ -191,6 +220,7 @@ src/
 │           ├── PlayerPanelSkeleton.tsx
 │           ├── HandAreaSkeleton.tsx
 │           ├── ResourceTraySkeleton.tsx
+│           ├── SpotlightSkeleton.tsx   # 特写骨架
 │           └── index.ts
 └── games/
     └── dicethrone/
@@ -216,6 +246,7 @@ src/
 2. `PlayerPanelSkeleton` - 资源/状态显示逻辑
 3. `HandAreaSkeleton` - 拖拽/发牌动画逻辑
 4. `ResourceTraySkeleton` - 点击/选择逻辑
+5. `SpotlightSkeleton` - 中心特写展示（自动/手动关闭、动画序列）
 
 ### Phase 3: 重构 DiceThrone
 1. 基于骨架组件实现皮肤层
@@ -248,7 +279,36 @@ src/
 - 避免 CSS 覆盖冲突
 - 保持骨架层纯粹
 
-## Open Questions
-1. 是否需要提供默认主题（可选使用）？
-2. 动画参数是否需要标准化（duration/easing）？
-3. 是否需要支持 SSR？
+## Design Decisions (Continued)
+
+### D4: 复用已有 Modal 系统
+**选择**：DiceThrone 的 ChoiceModal/ConfirmSkipModal 应基于 `ConfirmModal` 或 `ModalBase` 重构
+**理由**：
+- 已有成熟的 `src/components/common/overlays/ModalBase.tsx`
+- 已有 `ConfirmModal.tsx` 支持主题定制
+- 避免重复实现动画/backdrop 逻辑
+
+### D5: 默认主题
+**决定**：暂不提供默认主题
+**理由**：
+- 桌游美术风格差异大
+- 强制使用默认主题会增加覆盖成本
+- 通过文档示例指导即可
+
+### D6: 动画参数
+**决定**：提供可选的标准化动画配置
+**方案**：
+```typescript
+export interface AnimationConfig {
+  duration?: number;  // 默认 300ms
+  easing?: string;    // 默认 'ease-out'
+}
+```
+骨架组件接受 `animationConfig` 可选参数，不传则使用默认值。
+
+### D7: SSR 支持
+**决定**：暂不支持
+**理由**：
+- 当前项目为纯 SPA
+- 游戏 Board 依赖浏览器 API（拖拽/动画）
+- 未来如需支持可渐进改造

@@ -14,6 +14,7 @@ export const CenterBoard = ({
     canSelectAbility,
     canHighlightAbility,
     onSelectAbility,
+    onHighlightedAbilityClick,
     selectedAbilityId,
     activatingAbilityId,
     locale,
@@ -28,6 +29,7 @@ export const CenterBoard = ({
     canSelectAbility: boolean;
     canHighlightAbility: boolean;
     onSelectAbility: (abilityId: string) => void;
+    onHighlightedAbilityClick?: () => void;
     selectedAbilityId?: string;
     activatingAbilityId?: string;
     locale?: string;
@@ -39,7 +41,7 @@ export const CenterBoard = ({
         <div className="absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto">
             <div className="relative flex items-center justify-center gap-[0.5vw]">
                 <div
-                    className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-all duration-300 rounded-[0.8vw] overflow-hidden ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
+                    className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
                 >
                     <OptimizedImage
                         src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD, locale)}
@@ -53,13 +55,14 @@ export const CenterBoard = ({
                         canSelect={canSelectAbility}
                         canHighlight={canHighlightAbility}
                         onSelectAbility={onSelectAbility}
+                        onHighlightedAbilityClick={onHighlightedAbilityClick}
                         selectedAbilityId={selectedAbilityId}
                         activatingAbilityId={activatingAbilityId}
                         locale={locale}
                     />
                     <button
                         onClick={(e) => { e.stopPropagation(); onMagnifyImage(ASSETS.PLAYER_BOARD); }}
-                        className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-xl border border-white/20 z-20"
+                        className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20 z-20"
                     >
                         <svg className="w-[1.2vw] h-[1.2vw] fill-current" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -69,9 +72,9 @@ export const CenterBoard = ({
                 <div className="flex items-center relative h-[35vw]">
                     <button
                         onClick={onToggleTip}
-                        className={`absolute top-[55%] -translate-y-1/2 z-50 p-[0.5vw] bg-black/30 hover:bg-black/60 text-white/50 hover:text-white rounded-full transition-all duration-500 border border-white/10 ${isTipOpen ? 'right-[0.8vw]' : 'left-[0.1vw]'}`}
+                        className={`absolute top-[55%] -translate-y-1/2 z-50 p-[0.5vw] bg-black/30 hover:bg-black/60 text-white/50 hover:text-white rounded-full transition-[background-color,color] duration-500 border border-white/10 ${isTipOpen ? 'right-[0.8vw]' : 'left-[0.1vw]'}`}
                     >{isTipOpen ? '‹' : '›'}</button>
-                    <div className={`relative h-full transition-all duration-500 overflow-hidden rounded-[0.8vw] ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}>
+                    <div className={`relative h-full transition-[width,opacity,transform] duration-500 overflow-hidden rounded-[0.8vw] ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}>
                         <div className="relative h-full w-auto aspect-[1311/2048] group">
                             <OptimizedImage
                                 src={getLocalizedAssetPath(ASSETS.TIP_BOARD, locale)}
@@ -81,7 +84,7 @@ export const CenterBoard = ({
                             />
                             <button
                                 onClick={(e) => { e.stopPropagation(); onMagnifyImage(ASSETS.TIP_BOARD); }}
-                                className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-xl border border-white/20 z-20"
+                                className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20 z-20"
                             >
                                 <svg className="w-[1.2vw] h-[1.2vw] fill-current" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />

@@ -85,9 +85,15 @@ export function createGameAdapter<
                 || playerID === undefined
                 || String(playerID) === String(ctx.currentPlayer);
             const isClient = typeof window !== 'undefined';
+            const shouldAvoidCtxPlayer = isClient && (playerID === null || playerID === undefined) && !coreCurrentPlayer;
+            const globalMode = isClient
+                ? (window as Window & { __BG_GAME_MODE__?: string }).__BG_GAME_MODE__
+                : undefined;
+            const isLocalMode = globalMode === 'local';
+            const shouldSkipValidation = playerID === null || playerID === undefined || isLocalMode;
             const resolvedPlayerId = (!isSystemCommand && isClient && coreCurrentPlayer && isAssumedPlayer)
                 ? coreCurrentPlayer
-                : (playerID ?? coreCurrentPlayer ?? ctx.currentPlayer);
+                : (shouldAvoidCtxPlayer ? playerID : (playerID ?? coreCurrentPlayer ?? ctx.currentPlayer));
             const normalizedPlayerId = resolvedPlayerId !== null && resolvedPlayerId !== undefined
                 ? String(resolvedPlayerId)
                 : '';
@@ -98,6 +104,7 @@ export function createGameAdapter<
                 playerId: normalizedPlayerId,
                 payload,
                 timestamp: Date.now(),
+                skipValidation: shouldSkipValidation,
             };
 
             if (isUndoCommand) {

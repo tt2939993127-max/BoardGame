@@ -24,6 +24,8 @@ export interface Command<TType extends string = string, TPayload = unknown> {
     playerId: PlayerId;
     payload: TPayload;
     timestamp?: number;
+    /** 本地同屏可跳过领域校验（由适配层注入） */
+    skipValidation?: boolean;
 }
 
 /**

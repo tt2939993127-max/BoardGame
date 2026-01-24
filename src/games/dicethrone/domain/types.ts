@@ -92,6 +92,8 @@ export interface DiceThroneCore {
     activatingAbilityId?: string;
     lastEffectSourceByPlayerId?: Record<PlayerId, string | undefined>;
     lastSoldCardId?: string;
+    /** 最后一次额外骰子投掷结果（用于 UI 展示） */
+    lastBonusDieRoll?: { value: number; face: DieFace; playerId: PlayerId; timestamp: number };
 }
 
 // ============================================================================
@@ -272,6 +274,7 @@ export interface HealAppliedEvent extends GameEvent<'HEAL_APPLIED'> {
     payload: {
         targetId: PlayerId;
         amount: number;
+        sourceAbilityId?: string;
     };
 }
 
@@ -282,6 +285,7 @@ export interface StatusAppliedEvent extends GameEvent<'STATUS_APPLIED'> {
         statusId: string;
         stacks: number;
         newTotal: number;
+        sourceAbilityId?: string;
     };
 }
 
@@ -409,6 +413,7 @@ export interface ChoiceResolvedEvent extends GameEvent<'CHOICE_RESOLVED'> {
         playerId: PlayerId;
         statusId: string;
         value: number;
+        sourceAbilityId?: string;
     };
 }
 

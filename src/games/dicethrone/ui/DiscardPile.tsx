@@ -35,7 +35,7 @@ export const DiscardPile = React.forwardRef<HTMLDivElement, {
     return (
         <div
             ref={ref}
-            className={`relative group perspective-500 w-full aspect-[0.7] rounded-[0.5vw] border-[0.2vw] border-dashed flex items-center justify-center overflow-hidden shadow-lg transition-all duration-200 ${
+            className={`relative group perspective-500 w-full aspect-[0.7] rounded-[0.5vw] border-[0.2vw] border-dashed flex items-center justify-center overflow-hidden shadow-lg transition-[transform,background-color,box-shadow] duration-200 ${
                 isHighlighted ? 'border-amber-400 bg-amber-500/20 scale-105 shadow-amber-500/30' :
                 canUndo ? 'border-amber-500 cursor-pointer hover:scale-[1.03] bg-slate-900/50' :
                 topCard ? 'border-slate-600 cursor-pointer hover:scale-[1.03] bg-slate-900/50' :
@@ -56,7 +56,7 @@ export const DiscardPile = React.forwardRef<HTMLDivElement, {
             )}
             {topCard && (
                 <button
-                    className="absolute top-[0.3vw] right-[0.3vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-xl border border-white/20 z-20"
+                    className="absolute top-[0.3vw] right-[0.3vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20 z-20"
                     onClick={(e) => {
                         e.stopPropagation();
                         if (topCard && onInspect) onInspect(topCard);

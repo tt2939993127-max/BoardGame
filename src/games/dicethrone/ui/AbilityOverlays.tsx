@@ -40,6 +40,7 @@ export const AbilityOverlays = ({
     canSelect,
     canHighlight,
     onSelectAbility,
+    onHighlightedAbilityClick,
     selectedAbilityId,
     activatingAbilityId,
     locale,
@@ -49,6 +50,7 @@ export const AbilityOverlays = ({
     canSelect: boolean;
     canHighlight: boolean;
     onSelectAbility: (abilityId: string) => void;
+    onHighlightedAbilityClick?: () => void;
     selectedAbilityId?: string;
     activatingAbilityId?: string;
     locale?: string;
@@ -130,7 +132,13 @@ export const AbilityOverlays = ({
                             ${isActivating ? 'animate-ability-activate z-50' : ''}
                         `}
                         style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
-                        onClick={() => canClick && isResolved && onSelectAbility(isResolved)}
+                        onClick={() => {
+                            if (canClick && isResolved) {
+                                onSelectAbility(isResolved);
+                            } else if (!isEditing && shouldHighlight && !canSelect && onHighlightedAbilityClick) {
+                                onHighlightedAbilityClick();
+                            }
+                        }}
                     >
                         {!isUltimate && (
                             <div

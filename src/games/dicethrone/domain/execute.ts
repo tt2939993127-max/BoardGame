@@ -111,35 +111,8 @@ export function execute(
         }
 
         case 'ROLL_BONUS_DIE': {
-            const value = random.d(6);
-            const face = getDieFace(value);
-            
-            const event: BonusDieRolledEvent = {
-                type: 'BONUS_DIE_ROLLED',
-                payload: { value, face, playerId: state.activePlayerId },
-                sourceCommandType: command.type,
-                timestamp,
-            };
-            events.push(event);
-            
-            // lotus 面触发选择
-            if (face === 'lotus' && state.pendingAttack?.sourceAbilityId) {
-                const choiceEvent: ChoiceRequestedEvent = {
-                    type: 'CHOICE_REQUESTED',
-                    payload: {
-                        playerId: state.activePlayerId,
-                        sourceAbilityId: state.pendingAttack.sourceAbilityId,
-                        titleKey: 'choices.evasiveOrPurify',
-                        options: [
-                            { statusId: 'evasive', value: 1 },
-                            { statusId: 'purify', value: 1 },
-                        ],
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                };
-                events.push(choiceEvent);
-            }
+            // 已废弃：额外骰子现在在 resolveAttack 中自动投掷
+            console.warn('[DiceThrone] ROLL_BONUS_DIE is deprecated - bonus dice are now rolled automatically during attack resolution');
             break;
         }
 
@@ -388,7 +361,14 @@ export function execute(
                         return events;
                     }
 
-                    events.push(...resolveAttack(stateAfterPreDefense, { includePreDefense: false }));
+                    const attackEvents = resolveAttack(stateAfterPreDefense, random, { includePreDefense: false });
+                    events.push(...attackEvents);
+
+                    // 如果攻击效果触发了选择，需要等待用户选择后再继续
+                    const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
+                    if (hasAttackChoice) {
+                        return events;
+                    }
 
                     const phaseEvent: PhaseChangedEvent = {
                         type: 'PHASE_CHANGED',
@@ -419,7 +399,14 @@ export function execute(
             }
 
             if (state.turnPhase === 'defensiveRoll' && state.pendingAttack) {
-                events.push(...resolveAttack(state));
+                const attackEvents = resolveAttack(state, random);
+                events.push(...attackEvents);
+
+                // 如果攻击效果触发了选择，需要等待用户选择后再继续
+                const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
+                if (hasAttackChoice) {
+                    return events;
+                }
             }
 
             const nextPhase = getNextPhase(state);

@@ -59,7 +59,7 @@ export const PhaseIndicator = ({ currentPhase }: { currentPhase: TurnPhase }) =>
                     >
                         <div
                             className={`
-                                relative z-10 px-[0.8vw] py-[0.4vw] text-[0.8vw] font-bold rounded-r-[0.5vw] transition-all duration-300 border-l-[0.3vw] truncate cursor-help
+                                relative z-10 px-[0.8vw] py-[0.4vw] text-[0.8vw] font-bold rounded-r-[0.5vw] transition-[transform,background-color,color,box-shadow] duration-300 border-l-[0.3vw] truncate cursor-help
                                 ${isActive
                                     ? 'bg-amber-600 text-white border-amber-300 translate-x-[0.5vw] shadow-[0_0_1vw_rgba(245,158,11,0.5)]'
                                     : 'bg-black/40 text-slate-500 border-slate-700 hover:bg-slate-800 hover:text-slate-300'}

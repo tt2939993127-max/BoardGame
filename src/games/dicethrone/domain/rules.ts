@@ -91,15 +91,6 @@ export const canAdvancePhase = (state: DiceThroneCore): boolean => {
     // 有待处理选择时不可推进
     // 注意：pendingChoice 已迁移到 sys.prompt，这里只检查领域层约束
     
-    // 太极连击额外骰子未结算时不可推进
-    if (
-        state.turnPhase === 'offensiveRoll' &&
-        state.pendingAttack?.extraRoll &&
-        !state.pendingAttack.extraRoll.resolved
-    ) {
-        return false;
-    }
-    
     // 弃牌阶段手牌超限时不可推进
     if (state.turnPhase === 'discard') {
         const player = state.players[state.activePlayerId];

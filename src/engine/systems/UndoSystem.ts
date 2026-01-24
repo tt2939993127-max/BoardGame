@@ -97,8 +97,18 @@ function saveSnapshot<TCore>(
 ): MatchState<TCore> {
     const snapshots = [...state.sys.undo.snapshots];
     
-    // 保存当前状态的深拷贝
-    snapshots.push(JSON.parse(JSON.stringify(state)));
+    // 保存当前状态的深拷贝（排除已有快照，避免嵌套导致指数级膨胀）
+    const stateToSave = {
+        ...state,
+        sys: {
+            ...state.sys,
+            undo: {
+                ...state.sys.undo,
+                snapshots: [], // 快照中不保存快照历史
+            },
+        },
+    };
+    snapshots.push(JSON.parse(JSON.stringify(stateToSave)));
     
     // 限制快照数量
     while (snapshots.length > maxSnapshots) {

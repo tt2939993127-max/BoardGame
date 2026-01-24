@@ -40,7 +40,7 @@ export const ChoiceModal = ({
                                 key={option.id}
                                 onClick={() => onResolve(option.id)}
                                 disabled={!canResolve}
-                                className={`flex-1 py-[0.8vw] rounded-[0.8vw] font-bold text-[0.85vw] shadow-lg transition-all border ${canResolve ? 'bg-slate-800 hover:bg-amber-600 text-white border-amber-500/40' : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
+                                className={`flex-1 py-[0.8vw] rounded-[0.8vw] font-bold text-[0.85vw] shadow-lg transition-[background-color] duration-200 border ${canResolve ? 'bg-slate-800 hover:bg-amber-600 text-white border-amber-500/40' : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
                             >
                                 <div className="flex items-center justify-center gap-[0.5vw]">
                                     <span className="w-[2vw] h-[2vw] rounded-full overflow-hidden border border-white/30">

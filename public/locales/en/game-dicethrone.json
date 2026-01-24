@@ -103,6 +103,15 @@
       "lotus": "Lotus"
     }
   },
+  "bonusDie": {
+    "title": "Bonus Roll",
+    "effect": {
+      "fist": "Fist: +2 Damage",
+      "palm": "Palm: +3 Damage",
+      "taiji": "Taiji: Gain 2 Taiji Tokens",
+      "lotus": "Lotus: Choose Evasive or Purify"
+    }
+  },
   "error": {
     "confirmRoll": "Please confirm the roll result first",
     "confirmDefenseRoll": "Please confirm the defense roll first",
@@ -132,6 +141,10 @@
     "description": "You haven't selected any ability to activate. End this phase anyway?",
     "cancel": "Cancel (Select Ability)",
     "confirm": "End Phase"
+  },
+  "choices": {
+    "title": "Ability Resolution Choice",
+    "evasiveOrPurify": "Choose a status effect to gain"
   },
   "abilitySlots": {
     "fist": "Fist Technique",
