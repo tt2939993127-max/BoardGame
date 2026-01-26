@@ -143,6 +143,7 @@ export const SYSTEM_IDS = {
     PROMPT: 'prompt',
     LOG: 'log',
     REMATCH: 'rematch',
+    RESPONSE_WINDOW: 'responseWindow',
 } as const;
 
 export type SystemId = (typeof SYSTEM_IDS)[keyof typeof SYSTEM_IDS];

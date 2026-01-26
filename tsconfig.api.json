@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "types": ["node"]
+  },
+  "include": [
+    "apps/api/src/**/*",
+    "apps/api/test/**/*",
+    "src/server/**/*",
+    "src/lib/**/*",
+    "public/locales/**/*"
+  ]
+}

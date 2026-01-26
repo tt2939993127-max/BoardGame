@@ -26,9 +26,9 @@
 
 - **Affected specs**: 新增 `backend-platform`，其他能力为新建
 - **Affected code**:
-  - `api-server.ts` / `src/server/auth.ts` → 迁移到 NestJS 模块
+  - `apps/api/src/modules/auth` → NestJS Auth 模块承接原认证能力
   - `src/components/game/GameHUD.tsx` → 保留局内信息入口，并提供"好友与聊天"入口
-  - `src/server/models/User.ts` → 新增 friends、lastOnline 字段
+  - `apps/api/src/modules/auth/schemas/user.schema.ts` → 扩展 friends、lastOnline 字段
   - `src/services/lobbySocket.ts` → 保持大厅广播逻辑
   - `src/contexts/AuthContext.tsx` → 继续复用 `/auth` 接口
 - **New files**:

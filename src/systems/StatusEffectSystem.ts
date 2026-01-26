@@ -38,7 +38,7 @@ export type EffectType =
  * 效果行为定义（可程序化执行）
  */
 export interface EffectAction {
-    type: 'damage' | 'heal' | 'modifyStat' | 'grantStatus' | 'removeStatus' | 'choice' | 'rollDie' | 'custom';
+    type: 'damage' | 'heal' | 'modifyStat' | 'grantStatus' | 'removeStatus' | 'choice' | 'rollDie' | 'custom' | 'drawCard' | 'replaceAbility';
     /** 目标：self/opponent/all */
     target: 'self' | 'opponent' | 'all';
     /** 数值（伤害/治疗量/修改值） */
@@ -59,6 +59,18 @@ export interface EffectAction {
     diceCount?: number;
     /** 根据骰面的条件效果（用于 rollDie 类型） */
     conditionalEffects?: RollDieConditionalEffect[];
+    
+    // ============ drawCard 类型参数 ============
+    /** 抽牌数量（用于 drawCard 类型） */
+    drawCount?: number;
+    
+    // ============ replaceAbility 类型参数 ============
+    /** 被替换的技能 ID（用于 replaceAbility 类型） */
+    targetAbilityId?: string;
+    /** 新技能定义（用于 replaceAbility 类型），需要在游戏层定义具体类型 */
+    newAbilityDef?: unknown;
+    /** 新技能等级（用于 replaceAbility 类型，升级卡用于标注升级到 II/III 等） */
+    newAbilityLevel?: number;
 }
 
 /**

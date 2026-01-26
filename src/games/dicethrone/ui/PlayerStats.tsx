@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import type { HeroState } from '../types';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
+import { RESOURCE_IDS } from '../domain/resources';
 import {
     PlayerPanelSkeleton,
     createResourceBarRender,
@@ -19,19 +20,21 @@ export const PlayerStats = ({
     const { t } = useTranslation('game-dicethrone');
 
     // 构建 PlayerPanelData
+    const health = player.resources[RESOURCE_IDS.HP] ?? 0;
+    const cp = player.resources[RESOURCE_IDS.CP] ?? 0;
     const panelData: PlayerPanelData = useMemo(() => ({
         playerId: player.id ?? '0',
         resources: {
-            health: player.health,
-            cp: player.cp,
+            health,
+            cp,
         },
-    }), [player.id, player.health, player.cp]);
+    }), [player.id, health, cp]);
 
-    // 使用预设创建资源条渲染函数（带 i18n 标签）
+    // 使用预设创建资源条渲染函数
     const renderResource = useMemo(() => createResourceBarRender({
         resources: {
             health: { max: 50, gradient: 'from-red-900 to-red-600', labelColor: 'text-red-200/80', label: t('hud.health') },
-            cp: { max: 6, gradient: 'from-amber-800 to-amber-500', labelColor: 'text-amber-200/80', label: t('hud.energy') },
+            cp: { max: 15, gradient: 'from-amber-800 to-amber-500', labelColor: 'text-amber-200/80', label: 'CP' },
         },
     }), [t]);
 

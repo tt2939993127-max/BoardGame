@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { clearMatchCredentials, destroyMatch, leaveMatch } from '../hooks/match/useMatchStatus';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { LanguageSwitcher } from '../components/common/i18n/LanguageSwitcher';
+import { UserMenu } from '../components/social/UserMenu';
 import { useModalStack } from '../contexts/ModalStackContext';
 import { useUrlModal } from '../hooks/routing/useUrlModal';
 import clsx from 'clsx';
@@ -23,7 +24,6 @@ const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 export const Home = () => {
     const [activeCategory, setActiveCategory] = useState<Category>('All');
     const [, setSearchParams] = useSearchParams();
-    const [showUserMenu, setShowUserMenu] = useState(false);
     const navigate = useNavigate();
 
     // 活跃对局状态
@@ -79,7 +79,6 @@ export const Home = () => {
 
     const handleLogout = () => {
         logout();
-        setShowUserMenu(false);
     };
 
     const openAuth = (mode: 'login' | 'register') => {
@@ -321,36 +320,7 @@ export const Home = () => {
                 {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
                 <div className="md:absolute md:top-10 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-8 md:mb-0">
                     {user ? (
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowUserMenu(!showUserMenu)}
-                                className="group relative hover:text-[#2c2216] text-[#433422] flex items-center gap-2 cursor-pointer transition-colors px-2 py-1"
-                            >
-                                <span className="font-bold text-sm tracking-tight">{user.username}</span>
-                                <span className="underline-center" />
-                            </button>
-                            {showUserMenu && (
-                                <div className="absolute top-[calc(100%+0.5rem)] right-0 bg-[#fefcf7] shadow-[0_8px_32px_rgba(67,52,34,0.12)] border border-[#d3ccba] rounded-sm py-2 px-2 z-50 min-w-[160px] animate-in fade-in slide-in-from-top-1">
-                                    <button
-                                        onClick={() => { setShowUserMenu(false); openEmailBind(); }}
-                                        className="group relative w-full px-4 py-3 text-center cursor-pointer text-[#433422] font-bold text-xs transition-colors"
-                                    >
-                                        <span className="relative z-10 flex items-center justify-center gap-2">
-                                            {user?.emailVerified ? t('auth:menu.emailBound') : t('auth:menu.bindEmail')}
-                                        </span>
-                                        <span className="absolute bottom-2 left-1/2 w-0 h-[1.5px] bg-[#433422]/20 transition-all duration-300 group-hover:w-1/2 group-hover:left-1/4" />
-                                    </button>
-                                    <div className="h-px bg-[#e5e0d0] my-1 mx-4 opacity-50" />
-                                    <button
-                                        onClick={handleLogout}
-                                        className="group relative w-full px-4 py-3 text-center cursor-pointer text-[#8c7b64] hover:text-[#433422] font-bold text-xs transition-colors"
-                                    >
-                                        <span className="relative z-10">{t('auth:menu.logout')}</span>
-                                        <span className="absolute bottom-2 left-1/2 w-0 h-[1.5px] bg-[#433422]/20 transition-all duration-300 group-hover:w-1/2 group-hover:left-1/4" />
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                        <UserMenu onLogout={handleLogout} onBindEmail={openEmailBind} />
                     ) : (
                         <div className="flex items-center gap-6">
                             <button onClick={() => openAuth('login')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">

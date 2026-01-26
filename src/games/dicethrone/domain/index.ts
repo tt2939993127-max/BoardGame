@@ -3,23 +3,24 @@
  */
 
 import type { DomainCore, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
-import { abilityManager } from '../../../systems/AbilitySystem';
 import { diceSystem } from '../../../systems/DiceSystem';
 import { resourceSystem } from '../../../systems/ResourceSystem';
 import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, Die, DieFace } from './types';
-import { INITIAL_HEALTH, INITIAL_CP } from './types';
+import { RESOURCE_IDS } from './resources';
 import { validateCommand } from './commands';
 import { execute } from './execute';
 import { reduce } from './reducer';
 import { playerView } from './view';
+import { registerDiceThroneConditions } from '../conditions';
 import { MONK_ABILITIES } from '../monk/abilities';
 import { MONK_STATUS_EFFECTS } from '../monk/statusEffects';
 import { getMonkStartingDeck } from '../monk/cards';
 import { monkDiceDefinition } from '../monk/diceConfig';
 import { monkResourceDefinitions } from '../monk/resourceConfig';
 
-// 初始化技能定义，供条件系统与高亮判定使用
-abilityManager.registerAbilities(MONK_ABILITIES);
+
+// 注册 DiceThrone 游戏特定条件（骰子组合、顺子等）
+registerDiceThroneConditions();
 
 // 注册 Monk 骰子定义
 diceSystem.registerDefinition(monkDiceDefinition);
@@ -39,13 +40,15 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
 
         for (const pid of playerIds) {
             const deck = getMonkStartingDeck(random);
-            const startingHand = deck.splice(0, 3);
+            const startingHand = deck.splice(0, 4);
+
+            // 创建初始资源池
+            const resources = resourceSystem.createPool([RESOURCE_IDS.CP, RESOURCE_IDS.HP]);
 
             players[pid] = {
                 id: `player-${pid}`,
                 characterId: 'monk',
-                health: INITIAL_HEALTH,
-                cp: INITIAL_CP,
+                resources,
                 hand: startingHand,
                 deck,
                 discard: [],
@@ -67,6 +70,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
                     'calm-water': 1,
                     'meditation': 1,
                 },
+                upgradeCardByAbilityId: {},
             };
         }
 
@@ -103,7 +107,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
 
     isGameOver: (state: DiceThroneCore): GameOverResult | undefined => {
         const playerIds = Object.keys(state.players);
-        const defeated = playerIds.filter(id => state.players[id]?.health <= 0);
+        const defeated = playerIds.filter(id => (state.players[id]?.resources[RESOURCE_IDS.HP] ?? 0) <= 0);
         
         if (defeated.length === 0) return undefined;
         

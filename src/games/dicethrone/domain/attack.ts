@@ -10,7 +10,8 @@ import type {
     AttackResolvedEvent,
     AttackPreDefenseResolvedEvent,
 } from './types';
-import { getAbilityEffects, resolveEffectsToEvents, type EffectContext } from './effects';
+import { resolveEffectsToEvents, type EffectContext } from './effects';
+import { getPlayerAbilityEffects } from './abilityLookup';
 
 const now = () => Date.now();
 
@@ -38,7 +39,7 @@ export const resolveOffensivePreDefenseEffects = (state: DiceThroneCore): DiceTh
         return [createPreDefenseResolvedEvent(attackerId, defenderId)];
     }
 
-    const effects = getAbilityEffects(sourceAbilityId);
+    const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
     const ctx: EffectContext = {
         attackerId,
         defenderId,
@@ -76,7 +77,7 @@ export const resolveAttack = (
     const bonusDamage = pending.bonusDamage ?? 0;
 
     if (defenseAbilityId) {
-        const defenseEffects = getAbilityEffects(defenseAbilityId);
+        const defenseEffects = getPlayerAbilityEffects(state, defenderId, defenseAbilityId);
         // 防御技能的上下文：防御者是 "attacker"，原攻击者是 "defender"
         const defenseCtx: EffectContext = {
             attackerId: defenderId,  // 防御者（使用防御技能的人）
@@ -92,7 +93,7 @@ export const resolveAttack = (
 
     let totalDamage = 0;
     if (sourceAbilityId) {
-        const effects = getAbilityEffects(sourceAbilityId);
+        const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
         const attackCtx: EffectContext = {
             attackerId,
             defenderId,

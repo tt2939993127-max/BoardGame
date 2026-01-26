@@ -20,11 +20,11 @@ import type {
     SellUndoneEvent,
     CardReorderedEvent,
     CardPlayedEvent,
-    AbilityUpgradedEvent,
     CpChangedEvent,
     PhaseChangedEvent,
     TurnChangedEvent,
     ChoiceRequestedEvent,
+    ResponseWindowOpenedEvent,
 } from './types';
 import {
     getAvailableAbilityIds,
@@ -32,12 +32,16 @@ import {
     getDieFace,
     getNextPlayerId,
     getNextPhase,
+    getUpgradeTargetAbilityId,
+    hasRespondableContent,
 } from './rules';
-import { MONK_ABILITIES } from '../monk/abilities';
+import { findPlayerAbility } from './abilityLookup';
 import { resolveAttack, resolveOffensivePreDefenseEffects } from './attack';
 import { reduce } from './reducer';
 import { resourceSystem } from '../../../systems/ResourceSystem';
-import { RESOURCE_IDS } from '../monk/resourceConfig';
+import { RESOURCE_IDS } from './resources';
+import { resolveEffectsToEvents, type EffectContext } from './effects';
+import { buildDrawEvents } from './deckEvents';
 
 // ============================================================================
 // 辅助函数
@@ -46,21 +50,20 @@ import { RESOURCE_IDS } from '../monk/resourceConfig';
 const now = () => Date.now();
 
 /**
- * 检查技能是否有伤害效果
+ * 判断该进攻技能是否可被防御（是否进入防御投掷阶段）
  */
-const abilityHasDamage = (abilityId: string): boolean => {
-    for (const ability of MONK_ABILITIES) {
-        if (ability.variants) {
-            const variant = ability.variants.find(v => v.id === abilityId);
-            if (variant?.effects) {
-                return variant.effects.some(e => e.action?.type === 'damage' && (e.action.value ?? 0) > 0);
-            }
-        }
-        if (ability.id === abilityId && ability.effects) {
-            return ability.effects.some(e => e.action?.type === 'damage' && (e.action.value ?? 0) > 0);
-        }
-    }
-    return false;
+const isDefendableAttack = (state: DiceThroneCore, attackerId: string, abilityId: string): boolean => {
+    const match = findPlayerAbility(state, attackerId, abilityId);
+    if (!match) return true;
+
+    const effects = match.variant?.effects ?? match.ability.effects ?? [];
+    const hasDamage = effects.some(e => e.action?.type === 'damage' && (e.action.value ?? 0) > 0);
+    if (!hasDamage) return false;
+
+    // 不可防御标签：跳过防御阶段
+    if (match.ability.tags?.includes('unblockable')) return false;
+
+    return true;
 };
 
 const applyEvents = (state: DiceThroneCore, events: DiceThroneEvent[]): DiceThroneCore => {
@@ -182,7 +185,7 @@ export function execute(
             } else {
                 // 进攻技能选择 -> 发起攻击
                 const defenderId = getNextPlayerId(state);
-                const isDefendable = abilityHasDamage(abilityId);
+                const isDefendable = isDefendableAttack(state, state.activePlayerId, abilityId);
                 
                 const event: AttackInitiatedEvent = {
                     type: 'ATTACK_INITIATED',
@@ -201,17 +204,9 @@ export function execute(
         }
 
         case 'DRAW_CARD': {
-            const player = state.players[state.activePlayerId];
-            if (player && player.deck.length > 0) {
-                const cardId = player.deck[0].id;
-                const event: CardDrawnEvent = {
-                    type: 'CARD_DRAWN',
-                    payload: { playerId: state.activePlayerId, cardId },
-                    sourceCommandType: command.type,
-                    timestamp,
-                };
-                events.push(event);
-            }
+            events.push(
+                ...buildDrawEvents(state, state.activePlayerId, 1, random, command.type, timestamp)
+            );
             break;
         }
 
@@ -227,10 +222,11 @@ export function execute(
         }
 
         case 'SELL_CARD': {
+            const actingPlayerId = (command.playerId || state.activePlayerId);
             const event: CardSoldEvent = {
                 type: 'CARD_SOLD',
                 payload: { 
-                    playerId: state.activePlayerId, 
+                    playerId: actingPlayerId, 
                     cardId: command.payload.cardId,
                     cpGained: 1,
                 },
@@ -243,9 +239,10 @@ export function execute(
 
         case 'UNDO_SELL_CARD': {
             if (state.lastSoldCardId) {
+                const actingPlayerId = (command.playerId || state.activePlayerId);
                 const event: SellUndoneEvent = {
                     type: 'SELL_UNDONE',
-                    payload: { playerId: state.activePlayerId, cardId: state.lastSoldCardId },
+                    payload: { playerId: actingPlayerId, cardId: state.lastSoldCardId },
                     sourceCommandType: command.type,
                     timestamp,
                 };
@@ -266,22 +263,84 @@ export function execute(
         }
 
         case 'PLAY_CARD': {
-            const player = state.players[state.activePlayerId];
+            const actingPlayerId = (command.playerId || state.activePlayerId);
+            const player = state.players[actingPlayerId];
             const card = player?.hand.find(c => c.id === command.payload.cardId);
-            if (card) {
-                const event: CardPlayedEvent = {
-                    type: 'CARD_PLAYED',
+            if (!card || !player) break;
+            
+            // 升级卡：自动提取目标技能并执行升级逻辑
+            if (card.type === 'upgrade') {
+                const targetAbilityId = getUpgradeTargetAbilityId(card);
+                if (!targetAbilityId || !card.effects || card.effects.length === 0) {
+                    console.warn(`[DiceThrone] 升级卡 ${card.id} 缺少 targetAbilityId 或 effects`);
+                    break;
+                }
+                
+                // 计算实际 CP 消耗
+                const currentLevel = player.abilityLevels[targetAbilityId] ?? 1;
+                const previousUpgradeCost = player.upgradeCardByAbilityId[targetAbilityId]?.cpCost;
+                let actualCost = card.cpCost;
+                if (previousUpgradeCost !== undefined && currentLevel > 1) {
+                    actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
+                }
+                
+                // CP 变化事件
+                const cpResult = resourceSystem.modify(
+                    player.resources,
+                    RESOURCE_IDS.CP,
+                    -actualCost
+                );
+                const cpEvent: CpChangedEvent = {
+                    type: 'CP_CHANGED',
                     payload: { 
-                        playerId: state.activePlayerId, 
-                        cardId: card.id,
-                        cpCost: card.cpCost,
+                        playerId: actingPlayerId, 
+                        delta: cpResult.actualDelta,
+                        newValue: cpResult.newValue,
                     },
                     sourceCommandType: command.type,
                     timestamp,
                 };
-                events.push(event);
+                events.push(cpEvent);
                 
-                // TODO: 卡牌效果事件
+                // 执行升级卡效果（replaceAbility）
+                const opponentId = Object.keys(state.players).find(id => id !== actingPlayerId) || actingPlayerId;
+                const effectCtx: EffectContext = {
+                    attackerId: actingPlayerId,
+                    defenderId: opponentId,
+                    sourceAbilityId: card.id,
+                    state,
+                    damageDealt: 0,
+                };
+                const effectEvents = resolveEffectsToEvents(card.effects, 'immediate', effectCtx, { random });
+                events.push(...effectEvents);
+                break;
+            }
+            
+            // 普通卡牌
+            const event: CardPlayedEvent = {
+                type: 'CARD_PLAYED',
+                payload: { 
+                    playerId: actingPlayerId, 
+                    cardId: card.id,
+                    cpCost: card.cpCost,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(event);
+            
+            // 通过效果系统执行卡牌效果（数据驱动）
+            if (card.effects && card.effects.length > 0) {
+                const opponentId = Object.keys(state.players).find(id => id !== actingPlayerId) || actingPlayerId;
+                const effectCtx: EffectContext = {
+                    attackerId: actingPlayerId,
+                    defenderId: opponentId,
+                    sourceAbilityId: card.id,
+                    state,
+                    damageDealt: 0,
+                };
+                const effectEvents = resolveEffectsToEvents(card.effects, 'immediate', effectCtx, { random });
+                events.push(...effectEvents);
             }
             break;
         }
@@ -291,14 +350,15 @@ export function execute(
             const card = player?.hand.find(c => c.id === command.payload.cardId);
             if (card && player) {
                 const currentLevel = player.abilityLevels[command.payload.targetAbilityId] ?? 1;
+                const previousUpgradeCost = player.upgradeCardByAbilityId[command.payload.targetAbilityId]?.cpCost;
                 let actualCost = card.cpCost;
-                if (currentLevel === 2 && card.cpCost > 3) {
-                    actualCost = card.cpCost - 3;
+                if (previousUpgradeCost !== undefined && currentLevel > 1) {
+                    actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
                 }
                 
                 // CP 变化事件（使用 ResourceSystem 保证边界）
                 const cpResult = resourceSystem.modify(
-                    { [RESOURCE_IDS.CP]: player.cp },
+                    player.resources,
                     RESOURCE_IDS.CP,
                     -actualCost
                 );
@@ -314,19 +374,22 @@ export function execute(
                 };
                 events.push(cpEvent);
                 
-                // 技能升级事件
-                const upgradeEvent: AbilityUpgradedEvent = {
-                    type: 'ABILITY_UPGRADED',
-                    payload: { 
-                        playerId: state.activePlayerId,
-                        abilityId: command.payload.targetAbilityId,
-                        newLevel: currentLevel + 1,
-                        cardId: card.id,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
+                // 通过效果系统执行升级卡效果（包含 replaceAbility）
+                if (!card.effects || card.effects.length === 0) {
+                    console.warn(`[DiceThrone] 升级卡 ${card.id} 缺少 effects 定义，无法执行升级`);
+                    break;
+                }
+
+                const opponentId = Object.keys(state.players).find(id => id !== state.activePlayerId) || state.activePlayerId;
+                const effectCtx: EffectContext = {
+                    attackerId: state.activePlayerId,
+                    defenderId: opponentId,
+                    sourceAbilityId: card.id,
+                    state,
+                    damageDealt: 0,
                 };
-                events.push(upgradeEvent);
+                const effectEvents = resolveEffectsToEvents(card.effects, 'immediate', effectCtx, { random });
+                events.push(...effectEvents);
             }
             break;
         }
@@ -334,6 +397,11 @@ export function execute(
         case 'RESOLVE_CHOICE': {
             // 由 PromptSystem 处理，这里只生成领域事件
             // 实际的 prompt 清理在系统层
+            break;
+        }
+
+        case 'RESPONSE_PASS': {
+            // 由 ResponseWindowSystem 处理，领域层不生成事件
             break;
         }
 
@@ -405,6 +473,26 @@ export function execute(
             }
 
             if (state.turnPhase === 'defensiveRoll' && state.pendingAttack) {
+                // 在攻击结算前检测是否需要打开响应窗口
+                // 让进攻方可以打出响应卡（instant/roll）或使用消耗性状态
+                const attackerId = state.pendingAttack.attackerId;
+                if (hasRespondableContent(state, attackerId, 'preResolve')) {
+                    const windowId = `preResolve-${state.pendingAttack.sourceAbilityId}-${timestamp}`;
+                    const responseWindowEvent: ResponseWindowOpenedEvent = {
+                        type: 'RESPONSE_WINDOW_OPENED',
+                        payload: {
+                            windowId,
+                            responderId: attackerId,
+                            windowType: 'preResolve',
+                            sourceAbilityId: state.pendingAttack.sourceAbilityId,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    };
+                    events.push(responseWindowEvent);
+                    return events;
+                }
+
                 const attackEvents = resolveAttack(state, random);
                 events.push(...attackEvents);
 
@@ -436,7 +524,7 @@ export function execute(
                 if (player) {
                     // CP +1（使用 ResourceSystem 处理上限）
                     const cpResult = resourceSystem.modify(
-                        { [RESOURCE_IDS.CP]: player.cp },
+                        player.resources,
                         RESOURCE_IDS.CP,
                         1
                     );
@@ -452,16 +540,10 @@ export function execute(
                     };
                     events.push(cpEvent);
                     
-                    // 抽牌
-                    if (player.deck.length > 0) {
-                        const drawEvent: CardDrawnEvent = {
-                            type: 'CARD_DRAWN',
-                            payload: { playerId: state.activePlayerId, cardId: player.deck[0].id },
-                            sourceCommandType: command.type,
-                            timestamp,
-                        };
-                        events.push(drawEvent);
-                    }
+                    // 抽牌（牌库为空则洗弃牌堆）
+                    events.push(
+                        ...buildDrawEvents(state, state.activePlayerId, 1, random, command.type, timestamp)
+                    );
                 }
             }
             

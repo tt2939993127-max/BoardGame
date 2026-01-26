@@ -1,0 +1,71 @@
+{
+  "manifestVersion": 1,
+  "scope": "official",
+  "id": "common",
+  "basePrefix": "official/common/",
+  "files": {
+    "audio/back": {
+      "variants": {
+        "wav": {
+          "sha256": "31fd5441b0fd0f057e3fcd5205a9d8bdbfad63f93d40feb685a7df9c88f5ef9e",
+          "bytes": 192340,
+          "mime": "audio/wav"
+        }
+      }
+    },
+    "audio/click": {
+      "variants": {
+        "wav": {
+          "sha256": "975f61a306fb55cfca15885a3efae57d9daa0c3fae50a6ce2955db99b804fb25",
+          "bytes": 188592,
+          "mime": "audio/wav"
+        }
+      }
+    },
+    "audio/compressed/back": {
+      "variants": {
+        "ogg": {
+          "sha256": "c92069460e5e3fb7c0d5372f5c7b38dc9bac6990b29d2029924ec0663de2d8a6",
+          "bytes": 3453,
+          "mime": "audio/ogg"
+        }
+      }
+    },
+    "audio/compressed/click": {
+      "variants": {
+        "ogg": {
+          "sha256": "eea13b91876e79231b6044d85ce0b42df97424866f83295b1d75e0bbf5588d19",
+          "bytes": 3175,
+          "mime": "audio/ogg"
+        }
+      }
+    },
+    "audio/compressed/hover": {
+      "variants": {
+        "ogg": {
+          "sha256": "dd736993486627c3b54af3bff35b833e2b7589723a71d02a20744cb86b2ef61c",
+          "bytes": 5352,
+          "mime": "audio/ogg"
+        }
+      }
+    },
+    "audio/hover": {
+      "variants": {
+        "wav": {
+          "sha256": "64f7745e4e361cf5d2a48613e1df7d69a8cec6fa70b51fc794ba2633b8c436a1",
+          "bytes": 206326,
+          "mime": "audio/wav"
+        }
+      }
+    },
+    "images/noise": {
+      "variants": {
+        "svg": {
+          "sha256": "7d0dea4ddde014af07b969db29d1a9b3c2ea7d898b16fb8536b8f8d1f86b6973",
+          "bytes": 277,
+          "mime": "image/svg+xml"
+        }
+      }
+    }
+  }
+}

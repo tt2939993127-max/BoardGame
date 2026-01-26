@@ -5,6 +5,8 @@
 
 import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../systems/AbilitySystem';
 
+// 游戏特定条件注册已移至 ../conditions.ts，由 domain/index.ts 统一调用
+
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
 const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
 

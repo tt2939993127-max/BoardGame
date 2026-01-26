@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from 'react';
-import type { PlayerId, MatchState, PromptState } from '../../../engine/types';
+import type { PlayerId, MatchState, PromptState, ResponseWindowState } from '../../../engine/types';
 import type { HeroState, Die, TurnPhase, PendingAttack } from '../types';
 import type { DiceThroneCore } from '../domain';
 
@@ -45,6 +45,9 @@ export interface DiceThroneStateAccess {
     
     // 选择/提示
     prompt: PromptState['current'] | undefined;
+    
+    // 响应窗口
+    responseWindow: ResponseWindowState['current'] | undefined;
     
     // 撤销
     lastSoldCardId?: string;
@@ -86,6 +89,8 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
             lastEffectSourceByPlayerId: core.lastEffectSourceByPlayerId,
             
             prompt: sys.prompt.current,
+            
+            responseWindow: sys.responseWindow?.current,
             
             lastSoldCardId: core.lastSoldCardId,
             

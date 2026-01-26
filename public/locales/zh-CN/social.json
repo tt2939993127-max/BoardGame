@@ -1,0 +1,48 @@
+{
+    "tabs": {
+        "friends": "好友",
+        "chats": "聊天",
+        "requests": "请求",
+        "add": "添加"
+    },
+    "friends": {
+        "empty": "暂无好友"
+    },
+    "chats": {
+        "empty": "暂无最近会话"
+    },
+    "requests": {
+        "empty": "暂无待处理请求"
+    },
+    "status": {
+        "online": "在线",
+        "offline": "离线",
+        "sent": "已发送请求",
+        "incoming": "请求好友中",
+        "friend": "好友"
+    },
+    "search": {
+        "placeholder": "搜索用户名..."
+    },
+    "actions": {
+        "addFriend": "添加好友",
+        "invite": "邀请游戏"
+    },
+    "chat": {
+        "placeholder": "输入消息...",
+        "gameInvite": "发送了游戏邀请",
+        "userNotFound": "未找到用户或会话"
+    },
+    "modal": {
+        "title": "社交",
+        "selectFriend": "选择好友开始聊天"
+    },
+    "menu": {
+        "friendsAndChat": "好友与聊天",
+        "matchHistory": "对局记录"
+    },
+    "matchHistory": {
+        "title": "对局记录",
+        "empty": "暂无对局记录"
+    }
+}

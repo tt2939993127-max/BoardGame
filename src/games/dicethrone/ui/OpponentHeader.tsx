@@ -1,6 +1,7 @@
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HeroState } from '../types';
+import { RESOURCE_IDS } from '../domain/resources';
 import { ShakeContainer } from '../../../components/common/animations/ShakeContainer';
 import { StatusEffectsContainer, type StatusIconAtlasConfig } from './statusEffects';
 import { getPortraitStyle } from './assets';
@@ -75,11 +76,11 @@ export const OpponentHeader = ({
                         <div className="flex gap-[0.8vw] mt-[0.1vw]">
                             <div ref={opponentHpRef} className="flex items-center gap-[0.3vw]">
                                 <div className="w-[0.6vw] h-[0.6vw] bg-red-500 rounded-full shadow-red-500/50"></div>
-                                <span className="text-red-400 font-bold text-[0.8vw]">{t('hud.healthLabel', { value: opponent.health })}</span>
+                                <span className="text-red-400 font-bold text-[0.8vw]">{t('hud.healthLabel', { value: opponent.resources[RESOURCE_IDS.HP] ?? 0 })}</span>
                             </div>
                             <div className="flex items-center gap-[0.3vw]">
                                 <div className="w-[0.7vw] h-[0.7vw] bg-amber-500 rounded-full shadow-amber-500/50"></div>
-                                <span className="text-amber-400 font-bold text-[0.8vw]">{t('hud.energyLabel', { value: opponent.cp })}</span>
+                                <span className="text-amber-400 font-bold text-[0.8vw]">{t('hud.energyLabel', { value: opponent.resources[RESOURCE_IDS.CP] ?? 0 })}</span>
                             </div>
                         </div>
                     </div>

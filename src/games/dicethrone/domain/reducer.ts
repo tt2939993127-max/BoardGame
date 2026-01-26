@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { getAvailableAbilityIds, getDieFace } from './rules';
 import { resourceSystem } from '../../../systems/ResourceSystem';
-import { RESOURCE_IDS } from '../monk/resourceConfig';
+import { RESOURCE_IDS } from './resources';
 
 // ============================================================================
 // 辅助函数
@@ -225,9 +225,8 @@ const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'DAMAGE_D
     const target = newState.players[targetId];
     if (target) {
         // 使用 ResourceSystem 计算生命值变更
-        const hpPool = { [RESOURCE_IDS.HP]: target.health };
-        const result = resourceSystem.modify(hpPool, RESOURCE_IDS.HP, -actualDamage);
-        target.health = result.newValue;
+        const result = resourceSystem.modify(target.resources, RESOURCE_IDS.HP, -actualDamage);
+        target.resources = result.pool;
     }
     
     if (sourceAbilityId) {
@@ -251,9 +250,8 @@ const handleHealApplied: EventHandler<Extract<DiceThroneEvent, { type: 'HEAL_APP
     const target = newState.players[targetId];
     if (target) {
         // 使用 ResourceSystem 计算治疗（会自动限制在最大生命值）
-        const hpPool = { [RESOURCE_IDS.HP]: target.health };
-        const result = resourceSystem.modify(hpPool, RESOURCE_IDS.HP, amount);
-        target.health = result.newValue;
+        const result = resourceSystem.modify(target.resources, RESOURCE_IDS.HP, amount);
+        target.resources = result.pool;
     }
 
     if (sourceAbilityId) {
@@ -366,9 +364,8 @@ const handleCardSold: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_SOLD' 
             const [card] = player.hand.splice(cardIndex, 1);
             player.discard.push(card);
             // 使用 ResourceSystem 计算 CP 增加（自动限制上限）
-            const cpPool = { [RESOURCE_IDS.CP]: player.cp };
-            const result = resourceSystem.modify(cpPool, RESOURCE_IDS.CP, cpGained);
-            player.cp = result.newValue;
+            const result = resourceSystem.modify(player.resources, RESOURCE_IDS.CP, cpGained);
+            player.resources = result.pool;
         }
     }
     
@@ -394,9 +391,8 @@ const handleSellUndone: EventHandler<Extract<DiceThroneEvent, { type: 'SELL_UNDO
             const [card] = player.discard.splice(cardIndex, 1);
             player.hand.push(card);
             // 使用 ResourceSystem 计算 CP 减少（自动限制下限）
-            const cpPool = { [RESOURCE_IDS.CP]: player.cp };
-            const result = resourceSystem.modify(cpPool, RESOURCE_IDS.CP, -1);
-            player.cp = result.newValue;
+            const result = resourceSystem.modify(player.resources, RESOURCE_IDS.CP, -1);
+            player.resources = result.pool;
         }
     }
     
@@ -422,8 +418,7 @@ const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_PLAY
             const [card] = player.hand.splice(cardIndex, 1);
             player.discard.push(card);
             // 使用 ResourceSystem 支付 CP
-            const cpPool = { [RESOURCE_IDS.CP]: player.cp };
-            player.cp = resourceSystem.pay(cpPool, { [RESOURCE_IDS.CP]: cpCost })[RESOURCE_IDS.CP];
+            player.resources = resourceSystem.pay(player.resources, { [RESOURCE_IDS.CP]: cpCost });
         }
     }
     
@@ -433,30 +428,6 @@ const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_PLAY
     return newState;
 };
 
-/**
- * 处理技能升级事件
- */
-const handleAbilityUpgraded: EventHandler<Extract<DiceThroneEvent, { type: 'ABILITY_UPGRADED' }>> = (
-    state,
-    event
-) => {
-    const newState = cloneState(state);
-    const { playerId, abilityId, newLevel, cardId } = event.payload;
-    
-    const player = newState.players[playerId];
-    if (player) {
-        player.abilityLevels[abilityId] = newLevel;
-        
-        // 移除卡牌
-        const cardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (cardIndex !== -1) {
-            const [card] = player.hand.splice(cardIndex, 1);
-            player.discard.push(card);
-        }
-    }
-    
-    return newState;
-};
 
 /**
  * 处理 CP 变化事件
@@ -471,9 +442,8 @@ const handleCpChanged: EventHandler<Extract<DiceThroneEvent, { type: 'CP_CHANGED
     const player = newState.players[playerId];
     if (player) {
         // 使用 ResourceSystem 设置 CP（确保边界限制）
-        const cpPool = { [RESOURCE_IDS.CP]: player.cp };
-        const result = resourceSystem.setValue(cpPool, RESOURCE_IDS.CP, newValue);
-        player.cp = result.newValue;
+        const result = resourceSystem.setValue(player.resources, RESOURCE_IDS.CP, newValue);
+        player.resources = result.pool;
     }
     
     return newState;
@@ -498,6 +468,32 @@ const handleCardReordered: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_R
         }
     }
     
+    return newState;
+};
+
+/**
+ * 处理牌库洗牌事件（弃牌堆洗回牌库）
+ */
+const handleDeckShuffled: EventHandler<Extract<DiceThroneEvent, { type: 'DECK_SHUFFLED' }>> = (
+    state,
+    event
+) => {
+    const newState = cloneState(state);
+    const { playerId, deckCardIds } = event.payload;
+
+    const player = newState.players[playerId];
+    if (!player) return newState;
+
+    const idSet = new Set(deckCardIds);
+    const discardMap = new Map(player.discard.map(card => [card.id, card] as const));
+
+    player.deck = deckCardIds
+        .map((id) => discardMap.get(id))
+        .filter((card): card is NonNullable<typeof card> => Boolean(card));
+
+    // 将已洗入牌库的卡从弃牌堆移除
+    player.discard = player.discard.filter(card => !idSet.has(card.id));
+
     return newState;
 };
 
@@ -597,6 +593,72 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
     return newState;
 };
 
+/**
+ * 处理响应窗口打开事件
+ * 注意：实际状态由 ResponseWindowSystem 管理在 sys.responseWindow 中
+ */
+const handleResponseWindowOpened: EventHandler<Extract<DiceThroneEvent, { type: 'RESPONSE_WINDOW_OPENED' }>> = (
+    state,
+    _event
+) => {
+    // 不修改核心状态，响应窗口由系统层管理
+    return state;
+};
+
+/**
+ * 处理响应窗口关闭事件
+ * 注意：实际状态由 ResponseWindowSystem 管理在 sys.responseWindow 中
+ */
+const handleResponseWindowClosed: EventHandler<Extract<DiceThroneEvent, { type: 'RESPONSE_WINDOW_CLOSED' }>> = (
+    state,
+    _event
+) => {
+    // 不修改核心状态，响应窗口由系统层管理
+    return state;
+};
+
+/**
+ * 处理技能替换事件（升级卡使用）
+ * - 更新技能定义（保持原技能 ID）
+ * - 更新技能等级（abilityLevels）
+ * - 将升级卡从手牌移入弃牌堆（升级卡不走 CARD_PLAYED 事件）
+ */
+const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABILITY_REPLACED' }>> = (
+    state,
+    event
+) => {
+    const newState = cloneState(state);
+    const { playerId, oldAbilityId, newAbilityDef, cardId, newLevel } = event.payload;
+    
+    const player = newState.players[playerId];
+    if (player) {
+        // 1) 替换技能定义
+        const abilityIndex = player.abilities.findIndex(a => a.id === oldAbilityId);
+        if (abilityIndex !== -1) {
+            player.abilities[abilityIndex] = {
+                ...newAbilityDef,
+                id: oldAbilityId,
+            };
+        }
+
+        // 2) 更新技能等级
+        player.abilityLevels[oldAbilityId] = newLevel;
+
+        // 3) 移除升级卡
+        const upgradeCardIndex = player.hand.findIndex(c => c.id === cardId);
+        if (upgradeCardIndex !== -1) {
+            const [card] = player.hand.splice(upgradeCardIndex, 1);
+            player.discard.push(card);
+            player.upgradeCardByAbilityId[oldAbilityId] = { cardId: card.id, cpCost: card.cpCost };
+        }
+    }
+
+    // 升级后清除撤回状态
+    newState.lastSoldCardId = undefined;
+
+    return newState;
+};
+
 // ============================================================================
 // 主 Reducer
 // ============================================================================
@@ -639,12 +701,12 @@ export const reduce = (
             return handleSellUndone(state, event);
         case 'CARD_PLAYED':
             return handleCardPlayed(state, event);
-        case 'ABILITY_UPGRADED':
-            return handleAbilityUpgraded(state, event);
         case 'CP_CHANGED':
             return handleCpChanged(state, event);
         case 'CARD_REORDERED':
             return handleCardReordered(state, event);
+        case 'DECK_SHUFFLED':
+            return handleDeckShuffled(state, event);
         case 'ATTACK_INITIATED':
             return handleAttackInitiated(state, event);
         case 'ATTACK_PRE_DEFENSE_RESOLVED':
@@ -657,6 +719,12 @@ export const reduce = (
             return handleChoiceResolved(state, event);
         case 'TURN_CHANGED':
             return handleTurnChanged(state, event);
+        case 'ABILITY_REPLACED':
+            return handleAbilityReplaced(state, event);
+        case 'RESPONSE_WINDOW_OPENED':
+            return handleResponseWindowOpened(state, event);
+        case 'RESPONSE_WINDOW_CLOSED':
+            return handleResponseWindowClosed(state, event);
         default: {
             const _exhaustive: never = event;
             console.warn(`Unknown event type: ${(_exhaustive as DiceThroneEvent).type}`);

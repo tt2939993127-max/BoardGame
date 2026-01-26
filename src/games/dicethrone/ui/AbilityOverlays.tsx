@@ -2,6 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildLocalizedImageSet } from '../../../core';
 import { ASSETS } from './assets';
+import type { CardAtlasConfig } from './cardAtlas';
+import { getCardAtlasStyle } from './cardAtlas';
 
 const INITIAL_SLOTS = [
     { id: 'fist', index: 0, x: 0.1, y: 1.5, w: 20.8, h: 38.5 },
@@ -34,6 +36,30 @@ export const getAbilitySlotId = (abilityId: string) => {
     return null;
 };
 
+// 技能槽到基础技能 ID 的映射（用于获取等级）
+const SLOT_TO_ABILITY_ID: Record<string, string> = {
+    fist: 'fist-technique',
+    chi: 'zen-forget',
+    sky: 'harmony',
+    lotus: 'lotus-palm',
+    combo: 'taiji-combo',
+    lightning: 'thunder-strike',
+    calm: 'calm-water',
+    meditate: 'meditation',
+};
+
+// 升级卡图片映射: (abilityId, level) -> 卡牌 atlasIndex
+const UPGRADE_CARD_ATLAS_INDEX: Record<string, Record<number, number>> = {
+    'fist-technique': { 2: 13, 3: 14 },      // card-thrust-punch-2, card-thrust-punch-3
+    'meditation': { 2: 7, 3: 5 },            // card-meditation-2, card-meditation-3
+    'calm-water': { 2: 8 },                   // card-zen-fist-2
+    'thunder-strike': { 2: 9 },               // card-storm-assault-2
+    'taiji-combo': { 2: 10 },                 // card-combo-punch-2
+    'lotus-palm': { 2: 11 },                  // card-lotus-bloom-2
+    'harmony': { 2: 12 },                     // card-mahayana-2
+    'zen-forget': { 2: 15 },                  // card-contemplation-2
+};
+
 export const AbilityOverlays = ({
     isEditing,
     availableAbilityIds,
@@ -43,6 +69,8 @@ export const AbilityOverlays = ({
     onHighlightedAbilityClick,
     selectedAbilityId,
     activatingAbilityId,
+    abilityLevels,
+    cardAtlas,
     locale,
 }: {
     isEditing: boolean;
@@ -53,6 +81,8 @@ export const AbilityOverlays = ({
     onHighlightedAbilityClick?: () => void;
     selectedAbilityId?: string;
     activatingAbilityId?: string;
+    abilityLevels?: Record<string, number>;
+    cardAtlas?: CardAtlasConfig;
     locale?: string;
 }) => {
     const { t } = useTranslation('game-dicethrone');
@@ -108,6 +138,9 @@ export const AbilityOverlays = ({
                 const bgX = col * 50;
                 const bgY = row * 50;
                 const isResolved = resolveAbilityId(slot.id);
+                const baseAbilityId = SLOT_TO_ABILITY_ID[slot.id];
+                const level = baseAbilityId ? (abilityLevels?.[baseAbilityId] ?? 1) : 1;
+                const upgradeAtlasIndex = baseAbilityId ? UPGRADE_CARD_ATLAS_INDEX[baseAbilityId]?.[level] : undefined;
                 const mapping = ABILITY_SLOT_MAP[slot.id];
                 const slotLabel = mapping ? t(mapping.labelKey) : slot.id;
                 const isAbilitySelected = !isEditing && selectedAbilityId === isResolved;
@@ -115,9 +148,7 @@ export const AbilityOverlays = ({
                 const canClick = !isEditing && canSelect && isAvailable;
                 const isActivating = !isEditing && activatingAbilityId === isResolved;
                 const shouldHighlight = !isEditing && canHighlight && isAvailable;
-                const shouldDim = !isEditing && canHighlight && !isAvailable;
                 const isUltimate = slot.id === 'ultimate';
-
                 return (
                     <div
                         key={slot.id}
@@ -128,7 +159,6 @@ export const AbilityOverlays = ({
                             ${isEditing ? 'pointer-events-auto cursor-move border border-amber-500/30' : 'pointer-events-auto cursor-pointer group'}
                             ${isEditing && editingId === slot.id ? 'border-2 border-green-500 z-50 bg-green-500/10' : ''}
                             ${canClick ? 'hover:scale-[1.02] hover:z-30' : ''}
-                            ${shouldDim ? 'opacity-35 grayscale' : ''}
                             ${isActivating ? 'animate-ability-activate z-50' : ''}
                         `}
                         style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
@@ -141,15 +171,33 @@ export const AbilityOverlays = ({
                         }}
                     >
                         {!isUltimate && (
-                            <div
-                                className="w-full h-full rounded-lg pointer-events-none"
-                                style={{
-                                    backgroundImage: buildLocalizedImageSet(ASSETS.ABILITY_CARDS_BASE, locale),
-                                    backgroundSize: '300% 300%',
-                                    backgroundPosition: `${bgX}% ${bgY}%`,
-                                    opacity: isEditing ? 0.7 : 1
-                                }}
-                            />
+                            <>
+                                {/* 基础技能槽图片 */}
+                                <div
+                                    className="w-full h-full rounded-lg pointer-events-none"
+                                    style={{
+                                        backgroundImage: buildLocalizedImageSet(ASSETS.ABILITY_CARDS_BASE, locale),
+                                        backgroundSize: '300% 300%',
+                                        backgroundPosition: `${bgX}% ${bgY}%`,
+                                        opacity: isEditing ? 0.7 : 1
+                                    }}
+                                />
+                                {/* 升级卡叠加层（保持卡牌原始比例，居中覆盖） */}
+                                {upgradeAtlasIndex !== undefined && cardAtlas && (
+                                    <div
+                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                    >
+                                        <div
+                                            className="h-full rounded-lg"
+                                            style={{
+                                                aspectRatio: `${cardAtlas.colWidths[upgradeAtlasIndex % cardAtlas.cols] ?? 330} / ${cardAtlas.rowHeights[Math.floor(upgradeAtlasIndex / cardAtlas.cols)] ?? 540}`,
+                                                backgroundImage: buildLocalizedImageSet(ASSETS.CARDS_ATLAS, locale),
+                                                ...getCardAtlasStyle(upgradeAtlasIndex, cardAtlas),
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                            </>
                         )}
                         {shouldHighlight && (
                             <div className="absolute inset-0 rounded-lg border-[2px] border-amber-400/80 shadow-[0_0_24px_rgba(251,191,36,0.65)] pointer-events-none z-10" />

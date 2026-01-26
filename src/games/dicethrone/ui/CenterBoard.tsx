@@ -3,6 +3,7 @@ import { OptimizedImage } from '../../../components/common/media/OptimizedImage'
 import { getLocalizedAssetPath } from '../../../core';
 import { AbilityOverlays } from './AbilityOverlays';
 import { ASSETS } from './assets';
+import type { CardAtlasConfig } from './cardAtlas';
 
 export const CenterBoard = ({
     coreAreaHighlighted,
@@ -17,6 +18,8 @@ export const CenterBoard = ({
     onHighlightedAbilityClick,
     selectedAbilityId,
     activatingAbilityId,
+    abilityLevels,
+    cardAtlas,
     locale,
     onMagnifyImage,
 }: {
@@ -32,6 +35,8 @@ export const CenterBoard = ({
     onHighlightedAbilityClick?: () => void;
     selectedAbilityId?: string;
     activatingAbilityId?: string;
+    abilityLevels?: Record<string, number>;
+    cardAtlas?: CardAtlasConfig;
     locale?: string;
     onMagnifyImage: (image: string) => void;
 }) => {
@@ -58,6 +63,8 @@ export const CenterBoard = ({
                         onHighlightedAbilityClick={onHighlightedAbilityClick}
                         selectedAbilityId={selectedAbilityId}
                         activatingAbilityId={activatingAbilityId}
+                        abilityLevels={abilityLevels}
+                        cardAtlas={cardAtlas}
                         locale={locale}
                     />
                     <button

@@ -20,7 +20,48 @@
     "success": {
       "register": "Registration successful",
       "login": "Login successful",
-      "emailBound": "Email bound successfully"
+      "emailBound": "Email bound successfully",
+      "logout": "Logged out successfully"
+    }
+  },
+  "friend": {
+    "error": {
+      "missingQuery": "Please enter a search keyword",
+      "missingTargetUser": "Please select a user to add",
+      "cannotAddSelf": "You cannot add yourself",
+      "userNotFound": "User not found",
+      "alreadyFriends": "You are already friends",
+      "requestExists": "Friend request already sent",
+      "incomingRequest": "This user has already sent you a request",
+      "requestNotFound": "Friend request not found",
+      "friendNotFound": "Friend relation not found"
+    },
+    "success": {
+      "requestSent": "Friend request sent",
+      "requestAccepted": "Friend request accepted",
+      "requestRejected": "Friend request rejected",
+      "friendDeleted": "Friend deleted"
+    }
+  },
+  "message": {
+    "error": {
+      "userNotFound": "User not found",
+      "notFriend": "You can only message friends",
+      "invalidTarget": "Invalid message target"
+    },
+    "success": {
+      "sent": "Message sent",
+      "read": "Marked as read"
+    }
+  },
+  "invite": {
+    "error": {
+      "userNotFound": "User not found",
+      "notFriend": "You can only invite friends",
+      "invalidTarget": "Invalid invite target"
+    },
+    "success": {
+      "sent": "Invite sent"
     }
   },
   "email": {

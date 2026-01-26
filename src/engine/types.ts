@@ -123,6 +123,28 @@ export interface RematchState {
 }
 
 /**
+ * 响应窗口类型
+ */
+export type ResponseWindowType = 'preResolve' | 'thenBreakpoint';
+
+/**
+ * 响应窗口状态
+ */
+export interface ResponseWindowState {
+    /** 当前响应窗口 */
+    current?: {
+        /** 窗口唯一 ID */
+        id: string;
+        /** 可响应的玩家 ID */
+        responderId: PlayerId;
+        /** 窗口类型 */
+        windowType: ResponseWindowType;
+        /** 来源技能 ID（可选） */
+        sourceAbilityId?: string;
+    };
+}
+
+/**
  * 系统状态（G.sys）
  */
 export interface SystemState {
@@ -138,6 +160,8 @@ export interface SystemState {
     log: LogState;
     /** 重赛系统状态 */
     rematch: RematchState;
+    /** 响应窗口状态 */
+    responseWindow: ResponseWindowState;
     /** 当前回合数 */
     turnNumber: number;
     /** 当前阶段 */

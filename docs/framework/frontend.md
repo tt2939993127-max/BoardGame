@@ -35,7 +35,7 @@ src/
   - `assetsPath` / `getOptimizedImageUrls` / `buildOptimizedImageSet`
   - 资源注册表 API（可选）：`registerGameAssets` / `preloadGameAssets`
 - **撤销系统**：`src/engine/systems/UndoSystem.ts`（通过 `createDefaultSystems` 启用）
-- **通用游戏系统**：`src/systems/StatusEffectSystem.ts`、`AbilitySystem.ts`
+- **通用游戏系统**：`src/systems/StatusEffectSystem.ts`、`AbilitySystem/`（模块化，含条件注册表）
 - **动画组件库**：`src/components/common/animations/`
   - `FlyingEffect` / `ShakeContainer` / `PulseGlow` / `variants`
 - **国际化**：`src/lib/i18n/`
@@ -60,6 +60,8 @@ src/
 - `src/services/lobbySocket.ts`：大厅订阅
 
 ## 5. 何时扩展“框架”层
+
+> 解耦要求：框架不再默认注册任何游戏特定条件（如骰子组合/顺子/阶段）。这些条件需在游戏层通过 `conditionRegistry.register()` 显式注册，以避免耦合。
 
 - **跨游戏复用** → 放 `core/` 或 `systems/`
 - **仅游戏内使用** → 放 `games/<gameId>/`

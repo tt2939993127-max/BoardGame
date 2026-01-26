@@ -83,6 +83,11 @@
     "tipBoard": "提示板",
     "magnifiedView": "放大预览"
   },
+  "response": {
+    "waitingOpponent": "等待对手响应...",
+    "yourTurn": "可以响应",
+    "pass": "跳过"
+  },
   "dice": {
     "waitingOpponent": "对方正在思考中...",
     "locked": "已锁定",
@@ -112,11 +117,26 @@
     "confirmRoll": "请先确认投掷结果",
     "confirmDefenseRoll": "请先确认防御投掷结果",
     "notYourTurn": "不是你的回合",
-    "notEnoughCp": "CP不足（需要{{required}}，当前{{current}}）",
+    "notEnoughCp": "CP不足",
     "wrongPhaseForUpgrade": "只能在主要阶段升级卡牌",
     "wrongPhaseForMain": "只能在主要阶段使用此卡",
     "wrongPhaseForRoll": "只能在投掷阶段使用此卡",
-    "cannotPlayCard": "无法打出此卡"
+    "upgradeCardCannotPlay": "升级卡需要拖到技能槽上使用",
+    "upgradeCardSkipLevel": "升级卡不能跳级使用",
+    "upgradeCardMaxLevel": "该技能已达最高等级",
+    "upgradeCardTargetMismatch": "升级卡与目标技能不匹配",
+    "unknownCardTiming": "该卡牌无法在当前时机使用",
+    "cannotPlayCard": "无法打出此卡",
+    "player_mismatch": "不是你的回合",
+    "player_not_found": "找不到玩家",
+    "card_not_in_hand": "卡牌不在手牌中",
+    "invalid_phase": "当前阶段无法执行此操作",
+    "roll_limit_reached": "已达到投掷次数上限",
+    "roll_already_confirmed": "已确认投掷结果",
+    "no_roll_yet": "请先投掷骰子",
+    "ability_not_available": "该技能当前不可用",
+    "die_not_found": "找不到骰子",
+    "cannot_advance_phase": "无法推进阶段"
   },
   "actions": {
     "resolveAttack": "结算攻击",
@@ -124,6 +144,11 @@
     "nextPhase": "下一阶段",
     "closePreview": "关闭预览 ✕",
     "undoSell": "撤回售出"
+  },
+  "discard": {
+    "mustDiscard": "手牌超限",
+    "selectToDiscard": "请选择 {{count}} 张卡牌弃置",
+    "tapToDiscard": "点击卡牌弃置"
   },
   "layout": {
     "exitEdit": "🧱 退出布局编辑",
@@ -236,65 +261,137 @@
     }
   },
   "cards": {
-    "card-upgrade-fist-2": {
-      "name": "拳术升级 II",
-      "description": "将拳术升级到 II 级"
-    },
-    "card-upgrade-fist-3": {
-      "name": "拳术升级 III",
-      "description": "将拳术升级到 III 级（若已有 II 级仅支付差价）"
-    },
-    "card-upgrade-harmony-2": {
-      "name": "天人合一升级 II",
-      "description": "将天人合一升级到 II 级"
-    },
-    "card-upgrade-lotus-2": {
-      "name": "莲花掌升级 II",
-      "description": "将莲花掌升级到 II 级"
-    },
-    "card-chi-burst": {
-      "name": "真气爆发",
-      "description": "修改任意1颗骰子的结果 +1 或 -1"
-    },
-    "card-reroll": {
-      "name": "重掷",
-      "description": "重掷任意数量的骰子（不计入掷骰次数）"
-    },
-    "card-focus": {
-      "name": "专注",
-      "description": "将任意1颗骰子设置为任意结果"
+    "card-enlightenment": {
+      "name": "顿悟！",
+      "description": "投掷1骰：如果投出莲花，获得2气、闪避和净化；否则抽取1张牌。"
     },
     "card-inner-peace": {
-      "name": "内心平静",
-      "description": "获得1个太极标记"
+      "name": "静心！",
+      "description": "获得2气。"
     },
-    "card-swift-strike": {
-      "name": "迅捷打击",
-      "description": "本次攻击伤害+2"
+    "card-deep-thought": {
+      "name": "沉思！",
+      "description": "获得5气。"
     },
-    "card-dodge": {
-      "name": "闪避",
-      "description": "获得1个闪避标记"
+    "card-buddha-light": {
+      "name": "佛光普照！",
+      "description": "获得1气、闪避和净化；对1名对手施加倒地。"
     },
-    "card-counterattack": {
-      "name": "反击",
-      "description": "受到攻击时，对攻击者造成2点伤害"
+    "card-palm-strike": {
+      "name": "掌击！",
+      "description": "对1名对手施加倒地。"
     },
-    "card-purify": {
-      "name": "净化",
-      "description": "移除自己身上1个负面效果"
+    "card-meditation-upgrade-3": {
+      "name": "清修 III",
+      "description": "防御投掷5骰。获得1×气数值的气，造成1×拳伤害。如果投出2个太极，获得闪避 -或- 净化。"
     },
-    "card-iron-will": {
-      "name": "钢铁意志",
-      "description": "将即将受到的伤害减半（向下取整）"
+    "card-play-six": {
+      "name": "玩得六啊！",
+      "description": "将你1颗骰子的数值改至6。"
     },
-    "card-meditation": {
-      "name": "冥想",
-      "description": "弃掉1张手牌，获得2个太极标记"
+    "card-meditation-upgrade-2": {
+      "name": "清修 II",
+      "description": "防御投掷5骰。获得1×气数值的气，造成1×拳伤害。"
     },
-    "card-chi-shield": {
-      "name": "气护体",
-      "description": "花费2个太极标记，本次伤害减少4点"
+    "card-zen-fist-2": {
+      "name": "止禅拳法 II",
+      "description": "大顺子触发：造成7伤害，然后获得闪避和3气，施加倒地。武僧之路（拳掌太极莲花触发）：获得2闪避，造成3不可防御伤害。"
+    },
+    "card-storm-assault-2": {
+      "name": "风暴突袭 II",
+      "description": "投掷3骰，造成等同于投掷结果总和的伤害。你可以花费1个气以重掷以上三颗中的任何一颗骰子。如果投掷结果大于等于12，则施加倒地。"
+    },
+    "card-combo-punch-2": {
+      "name": "连段冲拳 II",
+      "description": "造成5伤害并投掷2骰。增加2×拳伤害，增加3×掌伤害。获得2×太极的气。每投出1个莲花，获得闪避 -或- 净化。"
+    },
+    "card-lotus-bloom-2": {
+      "name": "花开贝佛 II",
+      "description": "4莲花触发：造成6不可防御伤害，然后气的堆叠上限提升1，并获得6气。莲花之道（3莲花触发）：造成2不可防御伤害，然后获得闪避和2气。"
+    },
+    "card-mahayana-2": {
+      "name": "大乘拳法 II",
+      "description": "小顺子触发：造成6伤害，然后获得3气。"
+    },
+    "card-thrust-punch-2": {
+      "name": "冲拳 II",
+      "description": "拳拳造成7伤害 / 拳拳掌造成8伤害 / 拳拳掌掌造成9伤害。"
+    },
+    "card-thrust-punch-3": {
+      "name": "冲拳 III",
+      "description": "拳拳造成7伤害 / 拳拳掌造成8伤害 / 拳拳掌掌造成9伤害。如果投出4个相同数字，施加倒地。"
+    },
+    "card-contemplation-2": {
+      "name": "冥想 II",
+      "description": "3太极触发：获得6气，获得闪避和净化。禅武归一（拳掌太极触发）：造成6伤害，然后获得2气。"
+    },
+    "card-just-this": {
+      "name": "就这？",
+      "description": "1名玩家可以在其防御投掷阶段，对至多5颗骰子进行1次额外的投掷尝试。"
+    },
+    "card-give-hand": {
+      "name": "抬一手！",
+      "description": "选择对手的1颗骰子，强制他重掷该骰子。"
+    },
+    "card-i-can-again": {
+      "name": "我又行了！",
+      "description": "1名玩家可以在其进攻投掷阶段，对至多5颗骰子进行1次额外的投掷尝试。"
+    },
+    "card-me-too": {
+      "name": "俺也一样！",
+      "description": "将你1颗骰子的数值变为和你另一颗骰子的数值一样（同一阶段使用且目的相同）。"
+    },
+    "card-surprise": {
+      "name": "惊不惊喜？！",
+      "description": "改变任意1颗骰子的数值。"
+    },
+    "card-worthy-of-me": {
+      "name": "不愧是我！",
+      "description": "你或1名队友可以重掷至多2颗骰子（可以是同一颗骰子重掷2次或两颗骰子各重掷1次）。"
+    },
+    "card-unexpected": {
+      "name": "意不意外？！",
+      "description": "改变任意2颗骰子的数值。"
+    },
+    "card-next-time": {
+      "name": "下次一定！",
+      "description": "一名玩家防止6点即将受到的伤害。"
+    },
+    "card-boss-generous": {
+      "name": "老板大气！",
+      "description": "获得2气。"
+    },
+    "card-flick": {
+      "name": "弹一手！",
+      "description": "增加或减少任意1颗骰子的数值1点（数值1无法再减少，数值6无法再增加）。"
+    },
+    "card-bye-bye": {
+      "name": "拜拜了您内！",
+      "description": "从1名玩家身上移除1个状态效果。"
+    },
+    "card-double": {
+      "name": "加倍！",
+      "description": "抽取2张牌。"
+    },
+    "card-super-double": {
+      "name": "超级加倍！",
+      "description": "抽取3张牌。"
+    },
+    "card-get-away": {
+      "name": "起开！",
+      "description": "从1名玩家身上移除1个状态效果。"
+    },
+    "card-one-throw-fortune": {
+      "name": "一掷千金！",
+      "description": "投掷1骰：获得½数值的气（向上取整）。"
+    },
+    "card-what-status": {
+      "name": "状什么态？",
+      "description": "移除1名玩家的所有状态效果。"
+    },
+    "card-transfer-status": {
+      "name": "乾坤大挪移！",
+      "description": "将1名玩家身上的1个状态效果转移至另1名玩家。"
     },
     "actions": {
       "play": "打出",

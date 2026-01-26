@@ -25,5 +25,9 @@
     "waitingForOpponent": "Waiting for opponent...",
     "restarting": "Both confirmed, restarting...",
     "backToLobby": "Back to Lobby"
-  }
+  },
+  "accept": "Accept",
+  "reject": "Reject",
+  "back": "Back",
+  "loading": "Loading"
 }

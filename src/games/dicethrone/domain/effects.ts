@@ -8,7 +8,7 @@ import type { EffectAction, RollDieConditionalEffect } from '../../../systems/St
 import type { AbilityEffect, EffectTiming, EffectResolutionContext } from '../../../systems/AbilitySystem';
 import { abilityManager } from '../../../systems/AbilitySystem';
 import { getActiveDice, getFaceCounts, getDieFace } from './rules';
-import { MONK_ABILITIES } from '../monk/abilities';
+import { RESOURCE_IDS } from './resources';
 import type {
     DiceThroneCore,
     DiceThroneEvent,
@@ -18,7 +18,10 @@ import type {
     StatusRemovedEvent,
     ChoiceRequestedEvent,
     BonusDieRolledEvent,
+    AbilityReplacedEvent,
 } from './types';
+import { buildDrawEvents } from './deckEvents';
+import type { AbilityDef } from '../../../systems/AbilitySystem';
 
 // ============================================================================
 // 效果上下文
@@ -56,7 +59,8 @@ function resolveEffectAction(
         case 'damage': {
             const totalValue = (action.value ?? 0) + (bonusDamage ?? 0);
             const target = state.players[targetId];
-            const actualDamage = target ? Math.min(totalValue, target.health) : 0;
+            const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+            const actualDamage = target ? Math.min(totalValue, targetHp) : 0;
             
             const event: DamageDealtEvent = {
                 type: 'DAMAGE_DEALT',
@@ -207,7 +211,8 @@ function resolveEffectAction(
                 const faceCounts = getFaceCounts(getActiveDice(state));
                 const amount = faceCounts.fist;
                 const target = state.players[targetId];
-                const actualDamage = target ? Math.min(amount, target.health) : 0;
+                const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+                const actualDamage = target ? Math.min(amount, targetHp) : 0;
                 const event: DamageDealtEvent = {
                     type: 'DAMAGE_DEALT',
                     payload: {
@@ -223,6 +228,39 @@ function resolveEffectAction(
                 ctx.damageDealt += actualDamage;
                 break;
             }
+            break;
+        }
+
+        case 'drawCard': {
+            // 抽牌效果（牌库为空则洗弃牌堆）
+            if (!random) break;
+            const count = action.drawCount ?? 1;
+            events.push(...buildDrawEvents(state, targetId, count, random, 'ABILITY_EFFECT', timestamp));
+            break;
+        }
+
+        case 'replaceAbility': {
+            // 替换技能效果（升级卡使用）
+            const { targetAbilityId, newAbilityDef, newAbilityLevel } = action;
+            if (!targetAbilityId || !newAbilityDef) break;
+
+            const currentLevel = state.players[targetId]?.abilityLevels?.[targetAbilityId] ?? 1;
+            let resolvedLevel = newAbilityLevel ?? Math.min(3, currentLevel + 1);
+            resolvedLevel = Math.max(1, Math.min(3, Math.floor(resolvedLevel)));
+
+            const replaceEvent: AbilityReplacedEvent = {
+                type: 'ABILITY_REPLACED',
+                payload: {
+                    playerId: targetId,
+                    oldAbilityId: targetAbilityId,
+                    newAbilityDef: newAbilityDef as AbilityDef,
+                    cardId: sourceAbilityId,
+                    newLevel: resolvedLevel,
+                },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            };
+            events.push(replaceEvent);
             break;
         }
     }
@@ -343,29 +381,4 @@ export function resolveEffectsToEvents(
     }
 
     return events;
-}
-
-/**
- * 获取技能的所有效果
- */
-export function getAbilityEffects(abilityId: string): AbilityEffect[] {
-    // 先尝试直接查找（基础技能 ID）
-    const def = abilityManager.getDefinition(abilityId);
-    if (def) {
-        if (def.variants) {
-            const variant = def.variants.find(v => v.id === abilityId);
-            if (variant?.effects) return variant.effects;
-        }
-        return def.effects ?? [];
-    }
-
-    // 如果找不到，可能是变体 ID，遍历所有技能查找
-    for (const ability of MONK_ABILITIES) {
-        if (ability.variants) {
-            const variant = ability.variants.find(v => v.id === abilityId);
-            if (variant?.effects) return variant.effects;
-        }
-    }
-
-    return [];
 }

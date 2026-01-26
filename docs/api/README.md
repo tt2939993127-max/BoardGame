@@ -30,7 +30,7 @@ Authorization: Bearer <token>
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | page | number | 1 | 页码（从 1 开始） |
-| limit | number | 20 | 每页数量（最大 100） |
+| limit | number | 50 | 每页数量（最大 100） |
 
 ### 分页响应格式
 ```typescript
@@ -72,4 +72,20 @@ interface ErrorResponse {
 | `/lobby-socket` | 大厅广播（房间列表更新） |
 | `/social-socket` | 社交消息推送（好友状态、消息通知） |
 
-详见各模块文档中的事件说明。
+### Social Socket 认证
+连接时在握手信息中携带 JWT：
+```
+Authorization: Bearer <token>
+```
+或在 socket.io 的 `auth.token` 字段中传入。
+
+### Social Socket 事件
+客户端 → 服务端：
+- `social:heartbeat` 心跳续期在线状态
+
+服务端 → 客户端：
+- `social:friendOnline` 好友上线 `{ userId }`
+- `social:friendOffline` 好友离线 `{ userId }`
+- `social:friendRequest` 新好友请求 `{ id, fromUser }`
+- `social:newMessage` 新消息 `{ id, fromUser, content, type, inviteData, createdAt }`
+- `social:gameInvite` 游戏邀请 `{ id, fromUser, content, type, inviteData, createdAt }`

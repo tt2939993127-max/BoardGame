@@ -1,9 +1,8 @@
 /**
  * 井字棋流程测试
- * 
- * 运行方式: npx tsx src/games/tictactoe/__tests__/flow.test.ts
  */
 
+import { describe, it, expect } from 'vitest';
 import { TicTacToeDomain } from '../domain';
 import type { TicTacToeCore } from '../domain/types';
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
@@ -152,9 +151,12 @@ const runner = new GameTestRunner({
     playerIds: ['0', '1'],
     assertFn: assertTicTacToe,
     visualizeFn: (state) => printBoard(state.cells),
+    silent: true,
 });
 
-console.log('\n🎮 井字棋流程测试');
-console.log('使用 Domain Core 直接运行，无需 UI 和 boardgame.io\n');
-
-runner.runAll(testCases);
+describe('井字棋流程测试', () => {
+    it.each(testCases)('$name', (testCase) => {
+        const result = runner.run(testCase);
+        expect(result.assertionErrors).toEqual([]);
+    });
+});

@@ -20,7 +20,48 @@
     "success": {
       "register": "注册成功",
       "login": "登录成功",
-      "emailBound": "邮箱绑定成功"
+      "emailBound": "邮箱绑定成功",
+      "logout": "退出登录成功"
+    }
+  },
+  "friend": {
+    "error": {
+      "missingQuery": "请输入搜索关键词",
+      "missingTargetUser": "请选择要添加的用户",
+      "cannotAddSelf": "不能添加自己为好友",
+      "userNotFound": "用户不存在",
+      "alreadyFriends": "你们已经是好友",
+      "requestExists": "好友请求已发送",
+      "incomingRequest": "对方已向你发送请求",
+      "requestNotFound": "好友请求不存在",
+      "friendNotFound": "好友关系不存在"
+    },
+    "success": {
+      "requestSent": "好友请求已发送",
+      "requestAccepted": "已接受好友请求",
+      "requestRejected": "已拒绝好友请求",
+      "friendDeleted": "好友已删除"
+    }
+  },
+  "message": {
+    "error": {
+      "userNotFound": "用户不存在",
+      "notFriend": "只能向好友发送消息",
+      "invalidTarget": "无效的消息对象"
+    },
+    "success": {
+      "sent": "消息已发送",
+      "read": "已标记为已读"
+    }
+  },
+  "invite": {
+    "error": {
+      "userNotFound": "用户不存在",
+      "notFriend": "只能邀请好友",
+      "invalidTarget": "无效的邀请对象"
+    },
+    "success": {
+      "sent": "邀请已发送"
     }
   },
   "email": {

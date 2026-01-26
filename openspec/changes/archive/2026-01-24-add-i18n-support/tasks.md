@@ -44,7 +44,7 @@
 - [x] 7.4 迁移 `src/games/default/Board.tsx`
 
 ## 8. 后端消息国际化（可选）
-- [x] 8.1 迁移 `src/server/auth.ts` 错误消息
+- [x] 8.1 迁移认证模块错误消息
 - [x] 8.2 迁移 `src/server/email.ts` 邮件模板
 - [x] 8.3 迁移 `src/services/lobbySocket.ts` 提示消息
 

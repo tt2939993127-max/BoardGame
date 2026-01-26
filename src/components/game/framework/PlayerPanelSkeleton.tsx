@@ -62,7 +62,7 @@ export const PlayerPanelSkeleton = memo(function PlayerPanelSkeleton({
 
             {/* 资源区域 */}
             {resourceEntries.length > 0 && renderResource && (
-                <div data-section="resources" role="list" aria-label="Resources">
+                <div data-section="resources" className="flex flex-col gap-[0.5vw]" role="list" aria-label="Resources">
                     {resourceEntries.map(([key, value]) => (
                         <div key={key} role="listitem" data-resource={key}>
                             {renderResource(key, value)}

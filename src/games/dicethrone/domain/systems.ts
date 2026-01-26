@@ -3,7 +3,7 @@
  * 处理领域事件到系统状态的映射
  */
 
-import type { GameEvent, PromptOption } from '../../../engine/types';
+import type { GameEvent, PromptOption, RandomFn } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { PROMPT_EVENTS, queuePrompt, createPrompt } from '../../../engine/systems/PromptSystem';
 import type {
@@ -30,7 +30,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
         name: 'DiceThrone 事件处理',
         priority: 50, // 在 PromptSystem 之后执行
 
-        afterEvents: ({ state, events }): HookResult<DiceThroneCore> | void => {
+        afterEvents: ({ state, events, random }): HookResult<DiceThroneCore> | void => {
             let newState = state;
             const nextEvents: GameEvent[] = [];
 
@@ -63,7 +63,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 const resolvedEvent = handlePromptResolved(event);
                 if (resolvedEvent) {
                     nextEvents.push(resolvedEvent);
-                    const followupEvents = buildChoiceFollowupEvents(state.core, resolvedEvent);
+                    const followupEvents = buildChoiceFollowupEvents(state.core, resolvedEvent, random);
                     if (followupEvents.length > 0) {
                         nextEvents.push(...followupEvents);
                     }
@@ -84,7 +84,8 @@ const now = () => Date.now();
 
 function buildChoiceFollowupEvents(
     core: DiceThroneCore,
-    resolvedEvent: ChoiceResolvedEvent
+    resolvedEvent: ChoiceResolvedEvent,
+    random: RandomFn
 ): DiceThroneEvent[] {
     if (core.turnPhase !== 'offensiveRoll') return [];
     if (!core.pendingAttack?.preDefenseResolved) return [];
@@ -108,7 +109,7 @@ function buildChoiceFollowupEvents(
     }
 
     const coreAfterChoice = reduce(core, resolvedEvent);
-    const attackEvents = resolveAttack(coreAfterChoice, { includePreDefense: false });
+    const attackEvents = resolveAttack(coreAfterChoice, random, { includePreDefense: false });
     followups.push(...attackEvents);
 
     const phaseEvent: PhaseChangedEvent = {

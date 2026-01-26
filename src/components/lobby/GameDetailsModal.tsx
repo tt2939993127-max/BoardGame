@@ -11,6 +11,7 @@ import { ModalBase } from '../common/overlays/ModalBase';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
+import { getGameById } from '../../config/games.config';
 
 const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
@@ -48,6 +49,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const toast = useToast();
     const confirmModalIdRef = useRef<string | null>(null);
     const normalizedGameId = normalizeGameName(gameId);
+    const gameManifest = getGameById(gameId);
+    const allowLocalMode = gameManifest?.allowLocalMode !== false;
 
     // 房间列表状态
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -508,13 +511,15 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         </p>
 
                         <div className="mt-auto w-full">
-                            <button
-                                type="button"
-                                onClick={handleLocalPlay}
-                                className="w-full py-2 px-4 bg-[#fcfbf9] border border-[#e5e0d0] text-[#433422] font-bold rounded-[4px] hover:bg-[#efede6] transition-all flex items-center justify-center gap-2 cursor-pointer text-xs mb-2"
-                            >
-                                {t('actions.localPlay')}
-                            </button>
+                            {allowLocalMode && (
+                                <button
+                                    type="button"
+                                    onClick={handleLocalPlay}
+                                    className="w-full py-2 px-4 bg-[#fcfbf9] border border-[#e5e0d0] text-[#433422] font-bold rounded-[4px] hover:bg-[#efede6] transition-all flex items-center justify-center gap-2 cursor-pointer text-xs mb-2"
+                                >
+                                    {t('actions.localPlay')}
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={handleTutorial}

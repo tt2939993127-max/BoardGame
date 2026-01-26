@@ -6,7 +6,7 @@
 
 ### 现有基础设施
 
-- **认证服务**: Koa + JWT（计划迁移至 NestJS），端口 18001
+- **认证服务**: NestJS + JWT，端口 18001
 - **游戏服务**: Boardgame.io，端口 18000
 - **WebSocket**: Socket.io 已用于大厅实时更新 (`lobbySocket.ts`)
 - **悬浮球**: `GameHUD.tsx` 已实现可拖拽悬浮球 UI
@@ -37,10 +37,10 @@
 
 ### 1. 后端平台迁移（NestJS）
 
-**决策**: 将现有 Koa API 服务迁移到 NestJS，社交系统基于 NestJS 构建
+**决策**: API 服务迁移到 NestJS，社交系统基于 NestJS 构建
 
 **范围**:
-- `api-server.ts`/`src/server/auth.ts` 迁移为 NestJS Auth 模块
+- NestJS Auth 模块承接原认证能力
 - 保持 `/auth` 路由与响应结构兼容现有前端
 - Boardgame.io 游戏服务保持独立运行
 

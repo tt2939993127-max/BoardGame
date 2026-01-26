@@ -12,6 +12,8 @@ export {
     getSpriteAtlas,
     preloadGameAssets,
     clearGameAssetsCache,
+    setAssetsBaseUrl,
+    getAssetsBaseUrl,
     // 便捷工具 API
     assetsPath,
     getOptimizedImageUrls,

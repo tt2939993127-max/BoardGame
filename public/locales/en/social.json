@@ -1,0 +1,48 @@
+{
+    "tabs": {
+        "friends": "Friends",
+        "chats": "Chats",
+        "requests": "Requests",
+        "add": "Add Friend"
+    },
+    "friends": {
+        "empty": "No friends yet."
+    },
+    "chats": {
+        "empty": "No recent conversations."
+    },
+    "requests": {
+        "empty": "No pending requests."
+    },
+    "status": {
+        "online": "Online",
+        "offline": "Offline",
+        "sent": "Request Sent",
+        "incoming": "Incoming Request",
+        "friend": "Friend"
+    },
+    "search": {
+        "placeholder": "Search username..."
+    },
+    "actions": {
+        "addFriend": "Add Friend",
+        "invite": "Invite to Game"
+    },
+    "chat": {
+        "placeholder": "Type a message...",
+        "gameInvite": "sent a game invitation",
+        "userNotFound": "User or conversation not found."
+    },
+    "modal": {
+        "title": "Social",
+        "selectFriend": "Select a friend to start chatting"
+    },
+    "menu": {
+        "friendsAndChat": "Friends & Chat",
+        "matchHistory": "Match History"
+    },
+    "matchHistory": {
+        "title": "Match History",
+        "empty": "No match history found."
+    }
+}

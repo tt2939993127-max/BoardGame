@@ -11,4 +11,8 @@ export interface GameManifestEntry {
     category: GameCategory;
     playersKey: string;
     icon: string;
+    /** 是否允许本地同屏模式，默认 true */
+    allowLocalMode?: boolean;
+}
+    allowLocalMode?: boolean;
 }

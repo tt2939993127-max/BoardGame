@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import type { Context } from 'koa';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, type SupportedLanguage } from '../lib/i18n/types';
 
@@ -10,16 +9,8 @@ type MessageParams = Record<string, string | number>;
 
 const localeCache = new Map<SupportedLanguage, LocaleTable>();
 
-// Avoid relying on process.cwd() because it can vary by deploy/runtime.
-// Default to the repository's public/locales directory relative to this file.
-const DEFAULT_LOCALES_DIR = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    '..',
-    'public',
-    'locales'
-);
+// 默认从仓库根目录定位 public/locales，生产环境可通过 LOCALES_DIR 覆盖
+const DEFAULT_LOCALES_DIR = path.resolve(process.cwd(), 'public', 'locales');
 
 const LOCALES_DIR = process.env.LOCALES_DIR || DEFAULT_LOCALES_DIR;
 

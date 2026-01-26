@@ -7,6 +7,8 @@ interface User {
     username: string;
     email?: string;
     emailVerified?: boolean;
+    lastOnline?: string;
+    avatar?: string;
 }
 
 interface AuthContextType {
@@ -81,6 +83,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const logout = () => {
+        if (token) {
+            fetch(`${AUTH_API_URL}/logout`, {
+                method: 'POST',
+                headers: {
+                    'Accept-Language': i18n.language,
+                    'Authorization': `Bearer ${token}`,
+                },
+            }).catch(() => {
+                // 忽略失败，继续本地退出
+            });
+        }
+
         setToken(null);
         setUser(null);
         localStorage.removeItem('auth_token');

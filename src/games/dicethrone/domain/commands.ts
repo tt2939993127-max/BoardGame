@@ -21,13 +21,15 @@ import type {
     PlayUpgradeCardCommand,
     ResolveChoiceCommand,
     AdvancePhaseCommand,
+    ResponsePassCommand,
 } from './types';
 import {
     getRollerId,
     isMoveAllowed,
     canAdvancePhase,
     canPlayCard,
-    canPlayUpgradeCard,
+    checkPlayCard,
+    checkPlayUpgradeCard,
 } from './rules';
 
 // ============================================================================
@@ -197,7 +199,12 @@ const validateDrawCard = (
     }
     
     const player = state.players[state.activePlayerId];
-    if (!player || player.deck.length === 0) {
+    if (!player) {
+        return fail('player_not_found');
+    }
+
+    // 允许牌库为空但弃牌堆不为空：会在 execute 层触发洗牌事件
+    if (player.deck.length === 0 && player.discard.length === 0) {
         return fail('deck_empty');
     }
     
@@ -237,8 +244,12 @@ const validateSellCard = (
     cmd: SellCardCommand,
     playerId: PlayerId
 ): ValidationResult => {
+    // 售卖仅限当前回合玩家，且仅在主要阶段与弃牌阶段
     if (!isMoveAllowed(playerId, state.activePlayerId)) {
         return fail('player_mismatch');
+    }
+    if (state.turnPhase !== 'main1' && state.turnPhase !== 'main2' && state.turnPhase !== 'discard') {
+        return fail('invalid_phase');
     }
     
     const player = state.players[state.activePlayerId];
@@ -262,8 +273,12 @@ const validateUndoSellCard = (
     _cmd: UndoSellCardCommand,
     playerId: PlayerId
 ): ValidationResult => {
+    // 撤回售卖仅限当前回合玩家，且仅在主要阶段与弃牌阶段
     if (!isMoveAllowed(playerId, state.activePlayerId)) {
         return fail('player_mismatch');
+    }
+    if (state.turnPhase !== 'main1' && state.turnPhase !== 'main2' && state.turnPhase !== 'discard') {
+        return fail('invalid_phase');
     }
     
     if (!state.lastSoldCardId) {
@@ -316,11 +331,9 @@ const validatePlayCard = (
     cmd: PlayCardCommand,
     playerId: PlayerId
 ): ValidationResult => {
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    const player = state.players[state.activePlayerId];
+    const actingPlayerId = playerId;
+
+    const player = state.players[actingPlayerId];
     if (!player) {
         return fail('player_not_found');
     }
@@ -329,9 +342,16 @@ const validatePlayCard = (
     if (!card) {
         return fail('card_not_in_hand');
     }
-    
-    if (!canPlayCard(state, playerId, card)) {
-        return fail('cannot_play_card');
+
+    // 主要阶段牌：仅允许当前回合玩家
+    if (card.timing === 'main' && !isMoveAllowed(playerId, state.activePlayerId)) {
+        return fail('player_mismatch');
+    }
+
+    // 使用 checkPlayCard 获取详细原因（阶段/CP 校验等）
+    const checkResult = checkPlayCard(state, actingPlayerId, card);
+    if (!checkResult.ok) {
+        return fail(checkResult.reason);
     }
     
     return ok();
@@ -359,8 +379,10 @@ const validatePlayUpgradeCard = (
         return fail('card_not_in_hand');
     }
     
-    if (!canPlayUpgradeCard(state, playerId, card, cmd.payload.targetAbilityId)) {
-        return fail('cannot_play_upgrade');
+    // 使用 checkPlayUpgradeCard 获取详细原因
+    const checkResult = checkPlayUpgradeCard(state, playerId, card, cmd.payload.targetAbilityId);
+    if (!checkResult.ok) {
+        return fail(checkResult.reason);
     }
     
     return ok();
@@ -395,6 +417,19 @@ const validateAdvancePhase = (
         return fail('cannot_advance_phase');
     }
     
+    return ok();
+};
+
+/**
+ * 验证跳过响应窗口命令
+ * 注意：实际验证由 ResponseWindowSystem 在 beforeCommand hook 中处理
+ */
+const validateResponsePass = (
+    _state: DiceThroneCore,
+    _cmd: ResponsePassCommand,
+    _playerId: PlayerId
+): ValidationResult => {
+    // 实际验证由系统层处理
     return ok();
 };
 
@@ -443,6 +478,8 @@ export const validateCommand = (
             return validateResolveChoice(state, command, playerId);
         case 'ADVANCE_PHASE':
             return validateAdvancePhase(state, command, playerId);
+        case 'RESPONSE_PASS':
+            return validateResponsePass(state, command, playerId);
         default: {
             const _exhaustive: never = command;
             return fail(`unknown_command: ${(_exhaustive as DiceThroneCommand).type}`);

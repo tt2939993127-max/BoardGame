@@ -61,7 +61,18 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **中文优先（强制）**：所有交互、UI 文本、代码注释、设计文档必须使用中文。
 - **破坏性变更/激进重构**：默认采取破坏性改动并拒绝向后兼容，主动清理过时代码、接口与文档。交付必须完整具体，禁止占位或 `NotImplemented`。
 - **方案与需求对齐（推荐）**：编码前先给出推荐方案与理由，必要时补充需确认的需求点；在未明确需求时，避免进行非必要的重构或样式调整。
+- **多方案必须标注最佳方案（强制）**：当给出多个方案时，必须明确写出"最佳方案"，并说明理由。**最佳方案的评判标准优先级（从高到低）**：
+  1. **架构正确性**：用正确的模型解决问题，而非用 hack/补丁掩盖不合适的模型。
+  2. **可维护性**：代码意图清晰、状态流可追踪、未来扩展无须重写。
+  3. **一致性**：与项目现有模式、约定保持一致。
+  4. **风险/成本**：改动范围、回归影响、实现复杂度。
+  - **禁止以"改动最小"作为最佳方案的首要理由**；如果改动小但架构不正确，必须选择架构正确的方案并说明为什么不能用补丁。
+- **未讨论方案先自检（强制）**：当准备直接给出并执行某个修改方案、且该方案未经过讨论/确认时，必须先自检：是否为最佳方案、是否合理、是否符合现有架构与设计模式原则；若存在不确定点，先提出并等待确认。
+- **重构清理遗留代码（强制）**：重构应尽可能删除/迁移不再使用的代码与资源；若确实无法清理，必须明确告知哪些遗留被保留、原因、以及后续清理计划/风险。
 - **样式开发约束（核心规定）**：**当任务目标为优化样式/视觉效果时，严禁修改任何业务逻辑代码**（如状态判定、Button 的 disabled 条件、Phase 转换逻辑等）。如需修改逻辑，必须单独申请。
+- **目录/游戏边界严格区分（强制）**：本仓库为综合性游戏项目，存在同名/近似命名文件夹；修改/引用前必须以完整路径与所属 gameId（如 `src/games/dicethrone/...`）核对，禁止把不同游戏/模块的目录当成同一个。
+- **改游戏前先读规则文档（强制）**：对指定游戏进行任何修改前，必须先检查该游戏对应脚本目录 `rule/` 文件夹下的规则文档（例如 `src/games/<gameId>/rule/`），确认约束与注意事项后再动手。
+- **Git 禁止使用 restore（强制）**：禁止使用 `git restore`（含 `--staged`）；如需丢弃/回退变更，必须先说明原因并采用可审计的替代方式。
 - **关键逻辑注释（强制）**：涉及全局状态/架构入口/默认行为（例如 Modal 栈、路由守卫、全局事件）必须写清晰中文注释；提交前自检是否遗漏，避免再次发生。
 - **日志不需要开关，调试完后将移除（强制）**
 
@@ -98,7 +109,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 > **`overflow` 属性会被父级容器覆盖，导致子组件布局失效**。
 - 修改布局前必须使用 `grep_search` 检查所有父容器的 `overflow`、`height` 等属性。
 
-### 遮罩/层级排查规则（强制）
+### 遗罩/层级排查规则
 > **先用 `elementsFromPoint` 证明“谁在最上层”，再改层级**；Portal 外层容器必须显式 `z-index`，否则会被页面正 `z-index` 覆盖。
 
 ### 联机测试与网络
@@ -111,7 +122,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **直操 DOM**：实时 UI 更新建议直接修改 `DOM.style` 绕过 React 渲染链以优化性能。
 - **状态卫生**：在 `window` 监听 `mouseup` 防止状态卡死；重置业务时同步清空相关 Ref。
 - **锚点算法**：建立 `anchorPoint` 逻辑处理坐标缩放与定位补偿，确保交互一致性。
-- **拖拽回弹规范（DiceThrone）**：手牌拖拽回弹必须统一由外层 `motionValue` 控制；当 `onDragEnd` 丢失时由 `window` 兜底结束，并用 `animate(x/y → 0)` 手动回弹。禁止混用 `dragSnapToOrigin` 与手动回弹，避免二次写入导致回弹后跳位。
+- **拖拽回弹规范（DiceThrone）**：手牌拖拽回弹必须统一由外层 `motionValue` 控制；当 `onDragEnd` 丢失时由 `window` 兗底结束，并用 `animate(x/y → 0)` 手动回弹。禁止混用 `dragSnapToOrigin` 与手动回弹，避免二次写入导致回弹后跳位。
+- **Hover 事件驱动原则**：禁止用 `whileHover` 处理"元素会移动到鼠标下"的场景（如卡牌回弹），否则会导致假 hover。应用 `onHoverStart/onHoverEnd` + 显式状态驱动，确保只有"鼠标进入元素"而非"元素移到鼠标下"才触发 hover。
 
 ### 动画/动效规范
 - **动画库已接入**：项目使用 **framer-motion**（`motion` / `AnimatePresence`）。
@@ -131,17 +143,26 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **DiceThrone 国际化说明**：`docs/dicethrone-i18n.md`（新增/修改文案、卡牌、状态效果或图片本地化时必须先读）
 - **部署说明**：`docs/deploy.md`（本地/线上部署、端口与服务编排调整时必须先读）
 - **测试模式说明**：`docs/test-mode.md`（需要测试入口、调试面板或测试流程时必须先读）
+- **自动化测试**：`docs/automated-testing.md`（编写游戏测试用例、API 测试、E2E 测试时必须先读）
 - **前端框架封装**：`docs/framework/frontend.md`（涉及前端架构/封装约定时必须先读）
 - **后端框架封装**：`docs/framework/backend.md`（涉及后端架构/封装约定时必须先读）
 
 ### 新引擎系统注意事项（强制）
-- **新机制先检查引擎**：实现新游戏机制（如骰子、卡牌、资源）前，必须先检查 `src/systems/` 是否已有对应系统；若无，必须先在引擎层抽象通用类型和接口，再在游戏层实现。原因：UGC 游戏需要复用这些能力。
+- **数据驱动优先（强制）**：规则/配置/清单优先做成可枚举的数据（如 manifest、常量表、定义对象），由引擎/系统解析执行；避免在组件或 move 内写大量分支硬编码，确保可扩展、可复用、可验证。
+- **新机制先检查引擎**：实现新游戏机制（如骰子、卡牌、资源）前，必须先检查 `src/systems/` 是否已有对应系统；若无，必须先在引擎层抽象通用类型和接口，再在游戏层实现。原因：UGC 游戏需要复用这些能力。充分考虑未来可能性而不是只看当下。
 - **引擎层系统清单**：
   - `DiceSystem` - 骰子定义/创建/掷骰/统计/触发条件
   - `CardSystem` - 卡牌定义/牌组/手牌区/抽牌/弃牌/洗牌
   - `ResourceSystem` - 资源定义/增减/边界/消耗检查
-  - `AbilitySystem` - 技能定义/触发条件/效果
+  - `AbilitySystem` - 技能定义/触发条件/效果（含可扩展条件注册表）
   - `StatusEffectSystem` - 状态效果/堆叠/持续时间
+
+### 框架解耦要求
+> **目标**：`src/systems/` 和 `src/engine/` 与具体游戏完全解耦，支持 UGC 复用。
+
+- **禁止**：框架层 import 游戏层模块；框架默认注册/启用游戏特定功能；用 `@deprecated` 标记保留耦合代码。
+- **正确做法**：框架提供通用接口与注册表，游戏层显式注册扩展（如 `conditionRegistry.register('diceSet', ...)`）。
+- **发现耦合时**：立即报告并将游戏特定代码迁移到 `games/<gameId>/`，不得以“后续处理”搪塞。
 - **系统注册**：新系统必须在 `src/engine/systems/` 实现，并在 `src/engine/systems/index.ts` 导出；如需默认启用，必须加入 `createDefaultSystems()`。
 - **状态结构**：系统新增状态必须写入 `SystemState` 并由系统 `setup()` 初始化；禁止把系统状态塞进 `core`。
 - **命令可枚举**：凡是系统命令（如 `UNDO_COMMANDS`），**必须加入每个游戏的 `commandTypes`**，否则 `moves` 不会注入。
@@ -218,10 +239,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   2. **用户决策**：展示生成的图片，让用户选择偏好的风格。
   3. **规范落地**：基于选定风格定义颜色变量与组件样式。
 
-### 2. 验证测试 (除非指明否则不强制执行)
+### 2. 验证测试 (除非存在browser_subagent工具否则不强制执行)
 - **一键流程（无需查代码）**：
   1. **确认服务就绪**：前端/游戏服务已启动并可访问。
-  2. **直接访问目标路由**：用 `browser_subagent` 打开当前任务要求的页面（默认首页或需求明确的路由）。
+  2. **直接访问目标路由**：用 `` 打开当前任务要求的页面（默认首页或需求明确的路由）。
   3. **自动化测试**：用同屏模式完成关键流程录制与验证。
   4. **手动验证**：通过 Debug Panel 切换 Player ID（0/1/Spectator）走通核心回合。
   5. **控制台审计**：确保无 React Runtime 错误或 Hooks 顺序警告。
@@ -237,7 +258,6 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ```
 / (repo root)
-├── api-server.ts          # 认证服务入口（Koa）
 ├── server.ts              # 游戏服务入口（Boardgame.io）
 ├── src/                   # 前端与共享模块
 ├── public/                # 静态资源（图片/字体/本地化）
@@ -386,7 +406,7 @@ src/
 ---
 
 ## 🎨 UI/UX 规范 (General Paradigm)
-
+  
 ### 1. 核心审美准则 (Visual Excellence)
 - **深度感 (Depth)**：禁止平铺色块。通过渐变、毛玻璃 (Backdrop Blur)、软阴影 (Soft Shadow) 构建视觉层级。
 - **动效反馈 (Motion)**：所有状态变更（Hover, Active, Transition）必须由物理动效支撑，优先复用项目动效库。

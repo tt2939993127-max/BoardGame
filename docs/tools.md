@@ -6,6 +6,8 @@
 
 - **图片压缩**：`npm run compress:images --clear`（入口 `scripts/compress_images.js`）
 - **音频压缩**：`npm run compress:audio --clear`（入口 `scripts/compress_audio.js`，依赖 `FFMPEG_PATH`）
+- **资源清单生成**：`npm run assets:manifest`（入口 `scripts/generate_asset_manifests.js`）
+- **资源清单校验**：`npm run assets:validate`（入口 `scripts/generate_asset_manifests.js --validate`）
 - **PDF 转 Markdown**：`npm run pdf:md -- <pdf路径> [-o <md路径>]`（入口 `scripts/pdf_to_md.js`）
 - **资源提取**：`node scripts/extract_assets.js`（需先在脚本内配置本地路径常量）
 - **模拟房主流程**：`npx tsx scripts/simulate-host.ts`（用于快速验证创建/加入/离开流程）
@@ -15,6 +17,7 @@
 
 - **图片/音频压缩产物**：各资源目录下的 `compressed/`
 - **规则 Markdown**：默认输出到 `public/assets/rules/`
+- **官方资源清单**：`public/assets/<gameId>/assets-manifest.json`（包含 common 等公共目录）
 
 ## 关键参数
 

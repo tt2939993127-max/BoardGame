@@ -2,7 +2,7 @@
  * 游戏资源加载器
  * 
  * 提供统一的资源路径解析、预加载和缓存管理。
- * 所有游戏资源路径相对于 /assets/ 目录。
+ * 所有游戏资源路径相对于资源基址（默认 /assets/）。
  */
 
 import type { GameAssets, SpriteAtlasDefinition } from './types';
@@ -11,9 +11,36 @@ import type { GameAssets, SpriteAtlasDefinition } from './types';
 // 资源路径常量
 // ============================================================================
 
-const ASSETS_BASE_PATH = '/assets';
+const DEFAULT_ASSETS_BASE_URL = '/assets';
 const COMPRESSED_SUBDIR = 'compressed';
 const LOCALIZED_ASSETS_SUBDIR = 'i18n';
+
+const normalizeAssetsBaseUrl = (value?: string) => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed.replace(/\/+$/, '');
+    }
+    if (trimmed.startsWith('/')) {
+        return trimmed.replace(/\/+$/, '');
+    }
+    return `/${trimmed.replace(/\/+$/, '')}`;
+};
+
+/**
+ * 资源基址（默认 /assets）。
+ * 允许通过 setAssetsBaseUrl 进行覆盖，用于独立资源域名场景。
+ */
+let assetsBaseUrl = normalizeAssetsBaseUrl(import.meta.env?.VITE_ASSETS_BASE_URL) ?? DEFAULT_ASSETS_BASE_URL;
+
+export function setAssetsBaseUrl(value?: string): void {
+    assetsBaseUrl = normalizeAssetsBaseUrl(value) ?? DEFAULT_ASSETS_BASE_URL;
+}
+
+export function getAssetsBaseUrl(): string {
+    return assetsBaseUrl;
+}
 
 // ============================================================================
 // 资源注册表
@@ -60,10 +87,10 @@ export function getImagePath(
         const basePath = relativePath.replace(/\.[^.]+$/, '');
         const dir = basePath.substring(0, basePath.lastIndexOf('/'));
         const filename = basePath.substring(basePath.lastIndexOf('/') + 1);
-        return `${ASSETS_BASE_PATH}/${dir}/${COMPRESSED_SUBDIR}/${filename}.avif`;
+        return assetsPath(`${dir}/${COMPRESSED_SUBDIR}/${filename}.avif`);
     }
 
-    return `${ASSETS_BASE_PATH}/${relativePath}`;
+    return assetsPath(relativePath);
 }
 
 /**
@@ -77,7 +104,7 @@ export function getAudioPath(gameId: string, key: string): string {
         return '';
     }
 
-    return `${ASSETS_BASE_PATH}/${assets.audio[key]}`;
+    return assetsPath(assets.audio[key]);
 }
 
 /**
@@ -124,7 +151,7 @@ export async function preloadGameAssets(gameId: string): Promise<void> {
 
     if (assets.sprites) {
         for (const atlas of assets.sprites) {
-            const path = `${ASSETS_BASE_PATH}/${atlas.imagePath}`;
+            const path = assetsPath(atlas.imagePath);
             if (!preloadedImages.has(path)) {
                 promises.push(preloadImage(path));
             }
@@ -195,12 +222,13 @@ async function preloadAudioFile(src: string): Promise<void> {
 // 便捷工具函数（统一资源路径 API）
 // ============================================================================
 
-/** 判断是否为穿透源（data/blob/http） */
+/** 判断是否为穿透源（data/blob/http），独立资源域名不算穿透 */
+const isHttpUrl = (src: string) => src.startsWith('http://') || src.startsWith('https://');
+const isInternalAssetsUrl = (src: string) => isHttpUrl(assetsBaseUrl) && src.startsWith(assetsBaseUrl);
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
     || src.startsWith('blob:')
-    || src.startsWith('http://')
-    || src.startsWith('https://')
+    || (isHttpUrl(src) && !isInternalAssetsUrl(src))
 );
 
 /** 移除扩展名 */
@@ -209,15 +237,28 @@ const stripExtension = (src: string) => {
     return src.replace(/\.(avif|webp|png|jpe?g)$/i, '');
 };
 
+const stripAssetsBasePrefix = (normalized: string) => {
+    if (normalized === assetsBaseUrl) return '';
+    if (normalized.startsWith(`${assetsBaseUrl}/`)) {
+        return normalized.slice(assetsBaseUrl.length + 1);
+    }
+    if (normalized.startsWith('/assets/')) {
+        return normalized.slice('/assets/'.length);
+    }
+    return normalized.replace(/^\/+/, '');
+};
+
 /**
- * 规范化资源路径，统一添加 /assets/ 前缀
+ * 规范化资源路径，统一添加资源基址（默认 /assets）
  * 支持相对路径转换
  */
 export function assetsPath(path: string): string {
     if (isPassthroughSource(path)) return path;
+    if (!path) return assetsBaseUrl;
+    if (path === assetsBaseUrl || path.startsWith(`${assetsBaseUrl}/`)) return path;
     if (path.startsWith('/assets/')) return path;
     const trimmed = path.startsWith('/') ? path.slice(1) : path;
-    return `${ASSETS_BASE_PATH}/${trimmed}`;
+    return `${assetsBaseUrl}/${trimmed}`;
 }
 
 /**
@@ -246,7 +287,7 @@ export function getOptimizedImageUrls(src: string): ImageUrlSet {
 export function getLocalizedAssetPath(path: string, locale?: string): string {
     if (!locale || isPassthroughSource(path)) return assetsPath(path);
     const normalized = assetsPath(path);
-    const relative = normalized.replace(/^\/assets\//, '');
+    const relative = stripAssetsBasePrefix(normalized);
     return assetsPath(`${LOCALIZED_ASSETS_SUBDIR}/${locale}/${relative}`);
 }
 

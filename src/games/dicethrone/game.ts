@@ -35,6 +35,8 @@ const COMMAND_TYPES = [
     // 选择与阶段
     'RESOLVE_CHOICE',
     'ADVANCE_PHASE',
+    // 响应窗口
+    'RESPONSE_PASS',
     // 撤销系统命令
     UNDO_COMMANDS.REQUEST_UNDO,
     UNDO_COMMANDS.APPROVE_UNDO,

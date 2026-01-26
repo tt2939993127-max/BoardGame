@@ -3,4 +3,4 @@
  */
 
 export * from './StatusEffectSystem';
-export * from './AbilitySystem';
+export * from './AbilitySystem/index';

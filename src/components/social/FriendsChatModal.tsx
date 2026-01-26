@@ -1,0 +1,99 @@
+import { useState } from 'react';
+import { FriendList } from './FriendList';
+import { ChatWindow } from './ChatWindow';
+import { X, ChevronLeft } from 'lucide-react';
+import { motion } from 'framer-motion';
+import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
+
+interface FriendsChatModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    inviteData?: {
+        matchId: string;
+        gameName: string;
+    };
+}
+
+export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatModalProps) => {
+    const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
+    const { t } = useTranslation(['social']);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={onClose}
+                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+
+            {/* Modal Content */}
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="relative bg-[#fcfbf9] w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-[#e5e0d0]"
+            >
+                {/* Close Button */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 z-20 p-2 rounded-full bg-[#fcfbf9]/80 hover:bg-[#e5e0d0] transition-colors"
+                >
+                    <X size={20} className="text-[#433422]" />
+                </button>
+
+                {/* Left Pane: Friend List */}
+                <div className={clsx(
+                    "w-full md:w-80 h-full border-r border-[#e5e0d0] flex flex-col transition-all duration-300 absolute md:relative z-10 bg-[#fcfbf9]",
+                    selectedFriendId ? "-translate-x-full md:translate-x-0" : "translate-x-0"
+                )}>
+                    <div className="p-4 border-b border-[#e5e0d0] bg-[#f3f0e6]">
+                        <h2 className="font-bold text-lg text-[#433422]">{t('social:modal.title')}</h2>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <FriendList
+                            onSelectFriend={(id) => setSelectedFriendId(id)}
+                            activeFriendId={selectedFriendId || undefined}
+                        />
+                    </div>
+                </div>
+
+                {/* Right Pane: Chat Window */}
+                <div className={clsx(
+                    "flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-[#fcfbf9]",
+                    selectedFriendId ? "translate-x-0" : "translate-x-full md:translate-x-0"
+                )}>
+                    {selectedFriendId ? (
+                        <>
+                            {/* Mobile Back Button */}
+                            <div className="md:hidden h-14 border-b border-[#e5e0d0] flex items-center px-2 bg-[#f3f0e6]">
+                                <button
+                                    onClick={() => setSelectedFriendId(null)}
+                                    className="p-2 hover:bg-[#e5e0d0] rounded-full"
+                                >
+                                    <ChevronLeft size={20} className="text-[#433422]" />
+                                </button>
+                                <span className="font-bold text-[#433422] ml-2">{t('common:back')}</span>
+                            </div>
+                            <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
+                        </>
+                    ) : (
+                        <div className="hidden md:flex flex-col items-center justify-center h-full text-[#8c7b64] opacity-50 space-y-4">
+                            <div className="w-32 h-32 rounded-full bg-[#e5e0d0] flex items-center justify-center">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                                </svg>
+                            </div>
+                            <p>{t('social:modal.selectFriend')}</p>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
+        </div>
+    );
+};

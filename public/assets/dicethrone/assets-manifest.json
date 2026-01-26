@@ -1,0 +1,371 @@
+{
+  "manifestVersion": 1,
+  "scope": "official",
+  "id": "dicethrone",
+  "basePrefix": "official/dicethrone/",
+  "files": {
+    "images/Common/background": {
+      "variants": {
+        "jpg": {
+          "sha256": "985774683fba508e6092afa59e74cbaf39556e153cd99df7e41a570287e3bf7e",
+          "bytes": 207649,
+          "mime": "image/jpeg"
+        }
+      }
+    },
+    "images/Common/card-background": {
+      "variants": {
+        "jpg": {
+          "sha256": "790b7a92c8d38e75964ffe47e06bf7373bde0e07a4cadf39ce1343a13fb07f09",
+          "bytes": 180597,
+          "mime": "image/jpeg"
+        }
+      }
+    },
+    "images/Common/character-portraits": {
+      "variants": {
+        "jpg": {
+          "sha256": "f472e4b082cf299ddb4399ce08937bd061ca643fa25a4e73a8ca4080c7144912",
+          "bytes": 10378152,
+          "mime": "image/jpeg"
+        }
+      }
+    },
+    "images/Common/compressed/background": {
+      "variants": {
+        "avif": {
+          "sha256": "2e029c979b8d7121cda6a62bef22ca6c6247894ab693be68154cc2ed94720d7b",
+          "bytes": 43197,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "0aa554c2ea095db6762b954f0e98f020a74d87e460705511877af2594f3baef7",
+          "bytes": 98502,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/Common/compressed/card-background": {
+      "variants": {
+        "avif": {
+          "sha256": "2563e821008fa658c80481145ca28c79e3fd539856aba68b58c108b36bd1372e",
+          "bytes": 10685,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "d048889c409b984858de44dc0c1b866ca776f7a9b93ed9562e70345d9f575688",
+          "bytes": 21170,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/Common/compressed/character-portraits": {
+      "variants": {
+        "avif": {
+          "sha256": "2ef23c2d8628efa3b2e84fad34103e4360531b1017ed4f54a84f7d802a90dce7",
+          "bytes": 86490,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "329ed4504c3bf59d31dce7b93be7af951f9277c89aa9931103a0d459bcd325ed",
+          "bytes": 165570,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/dice-sprite": {
+      "variants": {
+        "avif": {
+          "sha256": "c79dc960d1e1b0363d6214e839a869b975ed3396715ef23972a6e9db348d2683",
+          "bytes": 10924,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "617e1c0a94224abd0c980e84e1f6f3432d689b1bf9f8f9cbc6f02d0c989efbf8",
+          "bytes": 19554,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/dice-sprite copy": {
+      "variants": {
+        "avif": {
+          "sha256": "744672419c29e2b262e6ae43a4d7a12643687443ef815f5e37c29f017f228e81",
+          "bytes": 5023,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "be0ab8eeef75b5addc1268065eeb98dc0a59b8501070e1e8f5ff5f7f00316e5d",
+          "bytes": 9500,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/effect-icons": {
+      "variants": {
+        "avif": {
+          "sha256": "85f1c8392625b94d070869e438642ce30454338cc348c869a86e7f5679e59b96",
+          "bytes": 40541,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "f75625c46f8fdaeba6534db7c0cd499c1285ed3307e8107c8e2b9d8224216146",
+          "bytes": 69790,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/monk-ability-cards": {
+      "variants": {
+        "avif": {
+          "sha256": "dbab8bf144adf580ddc54b09cc54e7af1a9031b45a5a135c416837723dd7aa4f",
+          "bytes": 190501,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "51374975a8ebf5e7734144c6359c22ea8aa942259af73e1cda13a78205a817cb",
+          "bytes": 340144,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/monk-ability-cards.atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "010be06bfb7678d7e9b0de74694bff031223f0c86c7cb4e4eb9016aa5e79fb06",
+          "bytes": 664,
+          "mime": "application/json"
+        }
+      }
+    },
+    "images/monk/compressed/monk-base-ability-cards": {
+      "variants": {
+        "avif": {
+          "sha256": "63779365353a9d1bf1b092c205c6ecf06e41737425a7e6ebf31b0f16a3b28305",
+          "bytes": 126042,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "8f0c8d49fd6b189331e37fb4b7eed6a6302c602d4f2eb30ec903a9c84c0ce804",
+          "bytes": 409018,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/monk-player-board": {
+      "variants": {
+        "avif": {
+          "sha256": "27951bce5270c961dfe4ae8a8a9d9bfc0d82254cac896d2f979cbb5a834b2648",
+          "bytes": 225536,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "f25a2ac98467af7e92fa083397d05bc12596ac4810785507858307571ece3ab3",
+          "bytes": 750176,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/monk-tip-board": {
+      "variants": {
+        "avif": {
+          "sha256": "9a30f5f9ee1fc5b867b0cec9b0eeea7ce392606f4b7a5c91f215f9d8ca364ec6",
+          "bytes": 168996,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "78d1e6e12a607b50638a74d27586dcab689fd9c91ef98f1f926d53eacc0e89bf",
+          "bytes": 348536,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/compressed/status-icons-atlas": {
+      "variants": {
+        "avif": {
+          "sha256": "e0a91a1d71d7c85d36f82413aff69389cea09932aae26365663468b043c04bad",
+          "bytes": 17003,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "00be51f8f3571eedd4a7cad6fbbc38d54157b7d6ad3c4a1d03a3dcf926897096",
+          "bytes": 32642,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/dice-sprite": {
+      "variants": {
+        "png": {
+          "sha256": "89f5f9eb8001eae5a11ee9cd6d786cf745af46ea11fbb5c64c3186fa5f101af8",
+          "bytes": 60903,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/dice-sprite copy": {
+      "variants": {
+        "png": {
+          "sha256": "03d43d9e72b47df0fb90c834c57bd9a737ce8b3b71e0bee50fd03fa9e7dabfe6",
+          "bytes": 176360,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/dice-sprite.atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "d509d447a44d7545b2bd5f283d12e81bf6463f3137a78037bfe0fa7225d83f67",
+          "bytes": 570,
+          "mime": "application/json"
+        }
+      }
+    },
+    "images/monk/monk-ability-cards": {
+      "variants": {
+        "png": {
+          "sha256": "fdd6500d0339ded2283db4e233a2663ba752f4aa44640e9bc9080962d9d48f4c",
+          "bytes": 18035396,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/monk-base-ability-cards": {
+      "variants": {
+        "png": {
+          "sha256": "feacb9dfd43cc5eb9cdecf02ed0a4f2c746a41a0f698ca166150b2aa06e33000",
+          "bytes": 14493295,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/monk-player-board": {
+      "variants": {
+        "png": {
+          "sha256": "a75486708fa2e77eb386f690ad2ea38d3448abeb6fafe3a411a22cc6d2c40d4f",
+          "bytes": 21417104,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/monk-tip-board": {
+      "variants": {
+        "png": {
+          "sha256": "26a4f31af99b4318ec6a2937c84fe2a84c56719e4910c2aa6a5dfd240558f987",
+          "bytes": 20840062,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/status-icons-atlas": {
+      "variants": {
+        "png": {
+          "sha256": "26814bbc2e275d3503eaa1f6f9cedd003e43a9992ad399758801503ec8362736",
+          "bytes": 235663,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "d2cbd24524ddca7becefaa1f989710752858c5a28097b01be2eceef31fd4b36e",
+          "bytes": 640,
+          "mime": "application/json"
+        }
+      }
+    },
+    "images/monk/status-icons/compressed/dodge": {
+      "variants": {
+        "avif": {
+          "sha256": "5139452861784dd1371500860c703459c89b4fbe6649100a4976c6aa4c8e541c",
+          "bytes": 16679,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "59e96f64b27108cff4586579ffde75a754ec760b273957d855018f4750b6c71e",
+          "bytes": 4342,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/status-icons/compressed/knockdown": {
+      "variants": {
+        "avif": {
+          "sha256": "a2b1ec00e9f688b7b30718ce99c9dadb743df37a0e32709b0aacca1d41886e08",
+          "bytes": 18318,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "fa9c638717eec2fc6d9f958f2c1b772094185454d459da7cca1bb40e303d2afa",
+          "bytes": 6036,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/status-icons/compressed/purify": {
+      "variants": {
+        "avif": {
+          "sha256": "2198789721a34ebe83b16302add55885bd130c75c2f8bda6d420eeef6a05aa8f",
+          "bytes": 6874,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "0636038c62fd8e7661db94f19d70d14d42497f39a1c9423a4d0fd912e16a9566",
+          "bytes": 10368,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/status-icons/compressed/tai-chi": {
+      "variants": {
+        "avif": {
+          "sha256": "54fb588b39324b18b64dfab48685d8535706d8722c8b68fb5fb10405e08366f7",
+          "bytes": 9490,
+          "mime": "image/avif"
+        },
+        "webp": {
+          "sha256": "c7b62a02049c9ac965c3486b7958b05436ff665d64158390c2c8f409552687cb",
+          "bytes": 11854,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/monk/status-icons/dodge": {
+      "variants": {
+        "png": {
+          "sha256": "285608464ece041370db017501dfc4e8026168a63ac362cefa62411bff99f94a",
+          "bytes": 28457,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/status-icons/knockdown": {
+      "variants": {
+        "png": {
+          "sha256": "b7cdd992482642906fc26925d81b9370d2fbb735bc785780b8aeb6fb7d1f599e",
+          "bytes": 32840,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/status-icons/purify": {
+      "variants": {
+        "png": {
+          "sha256": "6d29aa0028f7203c378dda9849d3a00d357eb6a872626512d155e8d5efef79b8",
+          "bytes": 92107,
+          "mime": "image/png"
+        }
+      }
+    },
+    "images/monk/status-icons/tai-chi": {
+      "variants": {
+        "png": {
+          "sha256": "c4c4de66f36396efa1b469322fb975368d0009dd87c0c0ba0e4e01bc5e267e59",
+          "bytes": 103690,
+          "mime": "image/png"
+        }
+      }
+    }
+  }
+}

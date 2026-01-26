@@ -1,10 +1,12 @@
+import { I18N_NAMESPACES } from './namespaces';
+
 export const SUPPORTED_LANGUAGES = ['zh-CN', 'en'] as const;
 
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
 
 export const DEFAULT_LANGUAGE: SupportedLanguage = 'zh-CN';
 
-export { I18N_NAMESPACES } from './namespaces';
+export { I18N_NAMESPACES };
 
 export type I18nNamespace = typeof I18N_NAMESPACES[number];
 

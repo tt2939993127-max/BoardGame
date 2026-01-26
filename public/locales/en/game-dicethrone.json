@@ -87,6 +87,11 @@
     "tipBoard": "Tip Board",
     "magnifiedView": "Magnified View"
   },
+  "response": {
+    "waitingOpponent": "Waiting for opponent to respond...",
+    "yourTurn": "You may respond",
+    "pass": "Pass"
+  },
   "dice": {
     "waitingOpponent": "Opponent is thinking...",
     "locked": "Locked",
@@ -116,11 +121,26 @@
     "confirmRoll": "Please confirm the roll result first",
     "confirmDefenseRoll": "Please confirm the defense roll first",
     "notYourTurn": "Not your turn",
-    "notEnoughCp": "Not enough CP (need {{required}}, have {{current}})",
+    "notEnoughCp": "Not enough CP",
     "wrongPhaseForUpgrade": "Can only upgrade cards in main phase",
     "wrongPhaseForMain": "Can only use this card in main phase",
     "wrongPhaseForRoll": "Can only use this card in roll phase",
-    "cannotPlayCard": "Cannot play this card"
+    "upgradeCardCannotPlay": "Upgrade cards must be dragged to an ability slot",
+    "upgradeCardSkipLevel": "Cannot skip ability levels with upgrade cards",
+    "upgradeCardMaxLevel": "This ability is already at max level",
+    "upgradeCardTargetMismatch": "Upgrade card does not match target ability",
+    "unknownCardTiming": "This card cannot be used at current timing",
+    "cannotPlayCard": "Cannot play this card",
+    "player_mismatch": "Not your turn",
+    "player_not_found": "Player not found",
+    "card_not_in_hand": "Card is not in hand",
+    "invalid_phase": "Cannot perform this action in current phase",
+    "roll_limit_reached": "Roll limit reached",
+    "roll_already_confirmed": "Roll already confirmed",
+    "no_roll_yet": "Please roll the dice first",
+    "ability_not_available": "This ability is not available",
+    "die_not_found": "Die not found",
+    "cannot_advance_phase": "Cannot advance phase"
   },
   "actions": {
     "resolveAttack": "Resolve Attack",
@@ -128,6 +148,11 @@
     "nextPhase": "Next Phase",
     "closePreview": "Close Preview ✕",
     "undoSell": "Undo Sell"
+  },
+  "discard": {
+    "mustDiscard": "Hand Limit Exceeded",
+    "selectToDiscard": "Select {{count}} card(s) to discard",
+    "tapToDiscard": "Tap card to discard"
   },
   "layout": {
     "exitEdit": "🧱 Exit Layout Edit",

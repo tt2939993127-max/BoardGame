@@ -1,17 +1,16 @@
 /**
- * DiceThrone Monk 资源定义
+ * DiceThrone Monk 资源配置
+ * 
+ * Monk 角色特定的资源配置（如 max 值）。
+ * 通用 RESOURCE_IDS 从 domain/resources.ts 导入。
  */
 
 import type { ResourceDefinition } from '../../../systems/ResourceSystem/types';
 import { INITIAL_HEALTH, INITIAL_CP, CP_MAX } from '../domain/types';
+import { RESOURCE_IDS } from '../domain/resources';
 
-/**
- * 资源 ID 常量
- */
-export const RESOURCE_IDS = {
-    CP: 'cp',
-    HP: 'hp',
-} as const;
+// 重新导出以保持向后兼容
+export { RESOURCE_IDS } from '../domain/resources';
 
 /**
  * CP（战斗点数）定义

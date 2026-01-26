@@ -195,15 +195,28 @@ export function executePipeline<
     }
 
     // 2. Core.validate
-    // 本地同屏可跳过领域校验（由适配层标记 command.skipValidation）
-    if (!command.skipValidation) {
+    // 本地同屏：跳过权限校验，但保留规则校验（避免非法动作直通）
+    if (command.skipValidation) {
+        const validation: ValidationResult = domain.validate(currentState.core, command);
+        if (!validation.valid) {
+            // 本地同屏允许越权操作，但不允许违反规则
+            if (validation.error !== 'player_mismatch') {
+                return {
+                    success: false,
+                    state: currentState,
+                    events: allEvents,
+                    error: validation.error,
+                };
+            }
+        }
+    } else {
         const validation: ValidationResult = domain.validate(currentState.core, command);
         if (!validation.valid) {
             return {
                 success: false,
                 state: currentState,
                 events: allEvents,
-                error: validation.error ?? 'Invalid command',
+                error: validation.error,
             };
         }
     }

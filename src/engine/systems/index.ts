@@ -10,12 +10,14 @@ export { createUndoSystem, UNDO_COMMANDS } from './UndoSystem';
 export { createPromptSystem, createPrompt, queuePrompt, resolvePrompt, PROMPT_COMMANDS, PROMPT_EVENTS } from './PromptSystem';
 export { createLogSystem, getCommands, getEvents, getEventsByType, getRecentLogs } from './LogSystem';
 export { createRematchSystem, resetRematchState, getPlayerVote, isRematchReady, getVotedPlayers, REMATCH_COMMANDS } from './RematchSystem';
+export { createResponseWindowSystem, createResponseWindow, openResponseWindow, closeResponseWindow, hasActiveResponseWindow, getResponseWindowResponderId, RESPONSE_WINDOW_COMMANDS, RESPONSE_WINDOW_EVENTS } from './ResponseWindowSystem';
 
 // 默认系统集合
 import { createUndoSystem } from './UndoSystem';
 import { createPromptSystem } from './PromptSystem';
 import { createLogSystem } from './LogSystem';
 import { createRematchSystem } from './RematchSystem';
+import { createResponseWindowSystem } from './ResponseWindowSystem';
 import type { EngineSystem } from './types';
 
 /**
@@ -27,5 +29,6 @@ export function createDefaultSystems<TCore>(): EngineSystem<TCore>[] {
         createUndoSystem(),
         createPromptSystem(),
         createRematchSystem(),
+        createResponseWindowSystem(),
     ];
 }

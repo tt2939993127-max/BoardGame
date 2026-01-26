@@ -11,6 +11,7 @@ import {
     ChevronRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useModalStack } from '../../contexts/ModalStackContext';
 
 import { AudioControlSection } from './AudioControlSection';
 
@@ -19,6 +20,7 @@ interface GameHUDProps {
 
     // Online specific props
     matchId?: string;
+    gameId?: string;
     isHost?: boolean;
     credentials?: string;
 
@@ -36,6 +38,7 @@ interface GameHUDProps {
 export const GameHUD = ({
     mode,
     matchId,
+    gameId,
     isHost,
     credentials,
     opponentName,
@@ -45,6 +48,7 @@ export const GameHUD = ({
     isLoading = false
 }: GameHUDProps) => {
     const navigate = useNavigate();
+    const { openModal } = useModalStack();
     const { t } = useTranslation('game');
     const [expanded, setExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -102,7 +106,7 @@ export const GameHUD = ({
                 localStorage.setItem('game_hud_position', JSON.stringify(newPos));
             }}
             animate={position}
-            className="fixed bottom-8 right-8 z-[10000] flex flex-col items-end gap-2 font-sans"
+            className="fixed bottom-24 right-6 z-[10000] flex flex-col items-end gap-2 font-sans"
         >
             <AnimatePresence>
                 {expanded && (
@@ -182,6 +186,8 @@ export const GameHUD = ({
                                 </div>
                             )}
                         </div>
+
+
 
                         {/* Audio Section */}
                         <AudioControlSection />

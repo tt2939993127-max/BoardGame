@@ -424,6 +424,7 @@ export const MatchRoom = () => {
             <GameHUD
                 mode={isTutorialRoute ? 'tutorial' : 'online'}
                 matchId={matchId}
+                gameId={gameId}
                 isHost={matchStatus.isHost}
                 credentials={credentials}
                 myPlayerId={effectivePlayerID}

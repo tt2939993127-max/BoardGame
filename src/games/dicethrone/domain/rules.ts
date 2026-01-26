@@ -13,6 +13,7 @@ import type {
     AbilityCard,
 } from './types';
 import { HAND_LIMIT, PHASE_ORDER } from './types';
+import { RESOURCE_IDS } from './resources';
 
 // ============================================================================
 // 骰子规则
@@ -161,59 +162,231 @@ export const getAvailableAbilityIds = (
         currentPhase: state.turnPhase,
         diceValues,
         faceCounts,
-        resources: { cp: player.cp },
+        resources: { cp: player.resources[RESOURCE_IDS.CP] ?? 0 },
         statusEffects: player.statusEffects,
     };
 
-    const abilityIds = player.abilities.map(a => a.id);
-    
     // 根据阶段过滤技能类型
     const expectedType = state.turnPhase === 'defensiveRoll'
         ? 'defensive'
         : state.turnPhase === 'offensiveRoll'
             ? 'offensive'
             : undefined;
-            
-    const filteredAbilityIds = expectedType
-        ? abilityIds.filter(id => abilityManager.getDefinition(id)?.type === expectedType)
-        : abilityIds;
-    
-    return abilityManager.getAvailableAbilities(filteredAbilityIds, context);
+
+    // 注意：必须基于玩家当前 abilities（升级卡会替换此处定义）进行判定
+    const available: string[] = [];
+
+    for (const def of player.abilities) {
+        if (expectedType && def.type !== expectedType) continue;
+
+        if (def.variants?.length) {
+            for (const variant of def.variants) {
+                if (abilityManager.checkTrigger(variant.trigger, context)) {
+                    available.push(variant.id);
+                }
+            }
+            continue;
+        }
+
+        if (def.trigger && abilityManager.checkTrigger(def.trigger, context)) {
+            available.push(def.id);
+        }
+    }
+
+    return available;
 };
 
 // ============================================================================
 // 卡牌规则
 // ============================================================================
 
+/** 卡牌打出检查结果 */
+export type CardPlayCheckResult = 
+    | { ok: true }
+    | { ok: false; reason: CardPlayFailReason };
+
+/** 卡牌打出失败原因（用于国际化 key，必须与 i18n 保持一致） */
+export type CardPlayFailReason =
+    | 'playerNotFound'
+    | 'upgradeCardCannotPlay'      // 升级卡缺少目标技能
+    | 'upgradeCardSkipLevel'       // 升级卡不能跳级（如 1→3）
+    | 'upgradeCardMaxLevel'        // 技能已达到最高级
+    | 'wrongPhaseForUpgrade'       // 升级卡只能在主要阶段
+    | 'wrongPhaseForMain'          // 主要阶段卡只能在主要阶段
+    | 'wrongPhaseForRoll'          // 投掷阶段卡只能在投掷阶段
+    | 'notEnoughCp'                // CP 不足
+    | 'unknownCardTiming';         // 未知卡牌时机
+
 /**
- * 检查是否可以打出卡牌
+ * 从升级卡效果中提取目标技能 ID
+ */
+export const getUpgradeTargetAbilityId = (card: AbilityCard): string | null => {
+    if (card.type !== 'upgrade' || !card.effects) return null;
+    const replaceAction = card.effects.find(e => e.action?.type === 'replaceAbility')?.action;
+    if (replaceAction?.type === 'replaceAbility' && replaceAction.targetAbilityId) {
+        return replaceAction.targetAbilityId;
+    }
+    return null;
+};
+
+/**
+ * 检查是否可以打出卡牌（返回详细原因）
+ */
+export const checkPlayCard = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    card: AbilityCard
+): CardPlayCheckResult => {
+    const player = state.players[playerId];
+    if (!player) return { ok: false, reason: 'playerNotFound' };
+    
+    const phase = state.turnPhase;
+    const playerCp = player.resources[RESOURCE_IDS.CP] ?? 0;
+    
+    // 升级卡：自动提取目标技能并验证
+    if (card.type === 'upgrade') {
+        if (phase !== 'main1' && phase !== 'main2') {
+            return { ok: false, reason: 'wrongPhaseForUpgrade' };
+        }
+        
+        const targetAbilityId = getUpgradeTargetAbilityId(card);
+        if (!targetAbilityId) {
+            return { ok: false, reason: 'upgradeCardCannotPlay' };
+        }
+        
+        // 检查技能等级（必须逐级升级）
+        const currentLevel = player.abilityLevels[targetAbilityId] ?? 1;
+        const replaceAction = card.effects?.find(e => e.action?.type === 'replaceAbility')?.action;
+        const desiredLevel = (replaceAction?.type === 'replaceAbility' ? replaceAction.newAbilityLevel : undefined) ?? (currentLevel + 1);
+        if (currentLevel >= 3) {
+            return { ok: false, reason: 'upgradeCardMaxLevel' };
+        }
+        if (desiredLevel !== currentLevel + 1) {
+            return { ok: false, reason: 'upgradeCardSkipLevel' };
+        }
+        
+        // 计算实际 CP 消耗
+        const previousUpgradeCost = player.upgradeCardByAbilityId[targetAbilityId]?.cpCost;
+        let actualCost = card.cpCost;
+        if (previousUpgradeCost !== undefined && currentLevel > 1) {
+            actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
+        }
+        
+        if (actualCost > 0 && playerCp < actualCost) {
+            return { ok: false, reason: 'notEnoughCp' };
+        }
+        
+        return { ok: true };
+    }
+    
+    // 检查阶段
+    if (card.timing === 'main') {
+        if (phase !== 'main1' && phase !== 'main2') {
+            return { ok: false, reason: 'wrongPhaseForMain' };
+        }
+    } else if (card.timing === 'roll') {
+        if (phase !== 'offensiveRoll' && phase !== 'defensiveRoll') {
+            return { ok: false, reason: 'wrongPhaseForRoll' };
+        }
+    } else if (card.timing !== 'instant') {
+        return { ok: false, reason: 'unknownCardTiming' };
+    }
+    
+    // 检查 CP
+    if (card.cpCost > 0 && playerCp < card.cpCost) {
+        return { ok: false, reason: 'notEnoughCp' };
+    }
+    
+    return { ok: true };
+};
+
+/**
+ * 检查是否可以打出卡牌（简化版，返回 boolean）
+ * @deprecated 使用 checkPlayCard 获取详细原因
  */
 export const canPlayCard = (
     state: DiceThroneCore,
     playerId: PlayerId,
     card: AbilityCard
 ): boolean => {
+    return checkPlayCard(state, playerId, card).ok;
+};
+
+/** 升级卡打出失败原因 */
+export type UpgradeCardPlayFailReason =
+    | 'playerNotFound'
+    | 'notUpgradeCard'
+    | 'wrongPhaseForUpgrade'
+    | 'upgradeCardCannotPlay'     // 升级卡缺少 replaceAbility 效果
+    | 'upgradeCardTargetMismatch' // 目标技能不匹配
+    | 'upgradeCardMaxLevel'
+    | 'upgradeCardSkipLevel'
+    | 'notEnoughCp';
+
+/** 升级卡打出检查结果 */
+export type UpgradeCardPlayCheckResult =
+    | { ok: true }
+    | { ok: false; reason: UpgradeCardPlayFailReason };
+
+/**
+ * 检查是否可以打出升级卡（返回详细原因）
+ */
+export const checkPlayUpgradeCard = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    card: AbilityCard,
+    targetAbilityId: string
+): UpgradeCardPlayCheckResult => {
     const player = state.players[playerId];
-    if (!player) return false;
+    if (!player) return { ok: false, reason: 'playerNotFound' };
     
-    // 升级卡走单独流程
-    if (card.type === 'upgrade') return false;
+    // 必须是升级卡
+    if (card.type !== 'upgrade') return { ok: false, reason: 'notUpgradeCard' };
     
-    // 检查 CP
-    if (player.cp < card.cpCost) return false;
+    // 仅 Main Phase 可用
+    if (state.turnPhase !== 'main1' && state.turnPhase !== 'main2') {
+        return { ok: false, reason: 'wrongPhaseForUpgrade' };
+    }
+
+    // 升级卡必须带 replaceAbility 效果
+    const replaceAction = card.effects?.find(e => e.action?.type === 'replaceAbility')?.action;
+    if (!replaceAction || replaceAction.type !== 'replaceAbility') {
+        return { ok: false, reason: 'upgradeCardCannotPlay' };
+    }
     
-    // 检查时机
-    const phase = state.turnPhase;
-    const validTiming =
-        (card.timing === 'main' && (phase === 'main1' || phase === 'main2')) ||
-        (card.timing === 'roll' && (phase === 'offensiveRoll' || phase === 'defensiveRoll')) ||
-        card.timing === 'instant';
+    // 目标技能必须与拖拽目标一致
+    if (!replaceAction.targetAbilityId || replaceAction.targetAbilityId !== targetAbilityId) {
+        return { ok: false, reason: 'upgradeCardTargetMismatch' };
+    }
+
+    // 检查技能等级（必须逐级升级，不允许跳级）
+    const currentLevel = player.abilityLevels[targetAbilityId] ?? 1;
+    const desiredLevel = replaceAction.newAbilityLevel ?? Math.min(3, currentLevel + 1);
+    if (currentLevel >= 3) {
+        return { ok: false, reason: 'upgradeCardMaxLevel' };
+    }
+    if (desiredLevel !== currentLevel + 1) {
+        return { ok: false, reason: 'upgradeCardSkipLevel' };
+    }
+
+    // 计算实际 CP 消耗
+    const previousUpgradeCost = player.upgradeCardByAbilityId[targetAbilityId]?.cpCost;
+    let actualCost = card.cpCost;
+    if (previousUpgradeCost !== undefined && currentLevel > 1) {
+        actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
+    }
     
-    return validTiming;
+    const playerCp = player.resources[RESOURCE_IDS.CP] ?? 0;
+    if (actualCost > 0 && playerCp < actualCost) {
+        return { ok: false, reason: 'notEnoughCp' };
+    }
+    
+    return { ok: true };
 };
 
 /**
- * 检查是否可以打出升级卡
+ * 检查是否可以打出升级卡（简化版，返回 boolean）
+ * @deprecated 使用 checkPlayUpgradeCard 获取详细原因
  */
 export const canPlayUpgradeCard = (
     state: DiceThroneCore,
@@ -221,26 +394,7 @@ export const canPlayUpgradeCard = (
     card: AbilityCard,
     targetAbilityId: string
 ): boolean => {
-    const player = state.players[playerId];
-    if (!player) return false;
-    
-    // 仅 Main Phase 可用
-    if (state.turnPhase !== 'main1' && state.turnPhase !== 'main2') return false;
-    
-    // 必须是升级卡
-    if (card.type !== 'upgrade') return false;
-    
-    // 检查技能等级
-    const currentLevel = player.abilityLevels[targetAbilityId] ?? 1;
-    if (currentLevel >= 3) return false;
-    
-    // 计算实际 CP 消耗
-    let actualCost = card.cpCost;
-    if (currentLevel === 2 && card.cpCost > 3) {
-        actualCost = card.cpCost - 3;
-    }
-    
-    return player.cp >= actualCost;
+    return checkPlayUpgradeCard(state, playerId, card, targetAbilityId).ok;
 };
 
 /**
@@ -262,6 +416,60 @@ export const canUndoSell = (
     playerId: PlayerId
 ): boolean => {
     return playerId === state.activePlayerId && !!state.lastSoldCardId;
+};
+
+// ============================================================================
+// 响应窗口检测
+// ============================================================================
+
+/**
+ * 检测玩家是否有可响应的内容（卡牌或消耗性状态效果）
+ * 用于决定是否打开响应窗口
+ * 
+ * @param state 游戏状态
+ * @param playerId 要检测的玩家 ID
+ * @param windowType 窗口类型（preResolve = 攻击结算前）
+ */
+export const hasRespondableContent = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    windowType: 'preResolve' | 'thenBreakpoint'
+): boolean => {
+    const player = state.players[playerId];
+    if (!player) return false;
+
+    const phase = state.turnPhase;
+    const playerCp = player.resources[RESOURCE_IDS.CP] ?? 0;
+
+    // 检查手牌中是否有可响应的卡牌
+    for (const card of player.hand) {
+        // 跳过升级卡
+        if (card.type === 'upgrade') continue;
+        
+        // 检查 CP 是否足够
+        if (card.cpCost > playerCp) continue;
+
+        // instant 卡牌可以在任何时候打出
+        if (card.timing === 'instant') {
+            return true;
+        }
+
+        // roll 卡牌可以在掷骰阶段打出
+        if (card.timing === 'roll' && (phase === 'offensiveRoll' || phase === 'defensiveRoll')) {
+            return true;
+        }
+    }
+
+    // 检查是否有可消耗的状态效果（timing=manual）
+    for (const statusDef of state.statusDefinitions) {
+        if (statusDef.timing !== 'manual') continue;
+        const stacks = player.statusEffects[statusDef.id] ?? 0;
+        if (stacks > 0) {
+            return true;
+        }
+    }
+
+    return false;
 };
 
 // ============================================================================

@@ -19,7 +19,7 @@
 ## 运行方式（同域，无跨域）
 
 - **开发**：运行 `npm run dev`，访问 `http://localhost:5173`
-- **Docker 一键部署**：运行 `docker compose up --build`，访问 `http://localhost:18080`
+- **Docker 一键部署**：运行 `docker compose up --build`，访问 `http://localhost:18080`（Web + API 单体，game-server 独立）
 
 ## 游戏与工具
 

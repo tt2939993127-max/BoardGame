@@ -5,7 +5,8 @@
 
 import type { Command, GameEvent, PlayerId } from '../../../engine/types';
 import type { StatusEffectDef } from '../../../systems/StatusEffectSystem';
-import type { AbilityDef } from '../../../systems/AbilitySystem';
+import type { AbilityDef, AbilityEffect } from '../../../systems/AbilitySystem';
+import type { ResourcePool } from '../../../systems/ResourceSystem/types';
 
 // ============================================================================
 // 基础类型（从 types.ts 迁移）
@@ -49,6 +50,8 @@ export interface AbilityCard {
     timing: 'main' | 'roll' | 'instant';
     description: string;
     atlasIndex?: number;
+    /** 卡牌效果列表（行动卡的即时效果，或升级卡的 replaceAbility 效果） */
+    effects?: AbilityEffect[];
 }
 
 export interface PendingAttack {
@@ -70,14 +73,16 @@ export interface PendingAttack {
 export interface HeroState {
     id: string;
     characterId: 'monk';
-    health: number;
-    cp: number;
+    /** 资源池（hp, cp 等） */
+    resources: ResourcePool;
     hand: AbilityCard[];
     deck: AbilityCard[];
     discard: AbilityCard[];
     statusEffects: Record<string, number>;
     abilities: AbilityDef[];
     abilityLevels: Record<string, number>;
+    /** 已覆盖在技能上的升级卡信息（用于 II->III 差价计算 / 未来 UI 展示） */
+    upgradeCardByAbilityId: Record<string, { cardId: string; cpCost: number }>;
 }
 
 // ============================================================================
@@ -199,6 +204,11 @@ export interface AdvancePhaseCommand extends Command<'ADVANCE_PHASE'> {
     payload: Record<string, never>;
 }
 
+/** 跳过响应窗口命令 */
+export interface ResponsePassCommand extends Command<'RESPONSE_PASS'> {
+    payload: Record<string, never>;
+}
+
 /** 所有 DiceThrone 命令 */
 export type DiceThroneCommand =
     | RollDiceCommand
@@ -214,7 +224,8 @@ export type DiceThroneCommand =
     | PlayCardCommand
     | PlayUpgradeCardCommand
     | ResolveChoiceCommand
-    | AdvancePhaseCommand;
+    | AdvancePhaseCommand
+    | ResponsePassCommand;
 
 // ============================================================================
 // 事件定义
@@ -352,13 +363,18 @@ export interface CardPlayedEvent extends GameEvent<'CARD_PLAYED'> {
     };
 }
 
-/** 技能升级事件 */
-export interface AbilityUpgradedEvent extends GameEvent<'ABILITY_UPGRADED'> {
+/** 技能替换事件（升级卡使用） */
+export interface AbilityReplacedEvent extends GameEvent<'ABILITY_REPLACED'> {
     payload: {
         playerId: PlayerId;
-        abilityId: string;
-        newLevel: number;
+        /** 被替换的技能 ID（原技能 ID，不变） */
+        oldAbilityId: string;
+        /** 新技能定义（会在 reducer 中强制保持 oldAbilityId） */
+        newAbilityDef: AbilityDef;
+        /** 触发升级的卡牌 ID（用于从手牌移除） */
         cardId: string;
+        /** 升级后的等级（用于 abilityLevels 追踪） */
+        newLevel: number;
     };
 }
 
@@ -376,6 +392,15 @@ export interface CardReorderedEvent extends GameEvent<'CARD_REORDERED'> {
     payload: {
         playerId: PlayerId;
         cardId: string;
+    };
+}
+
+/** 牌库洗牌事件（从弃牌堆洗回牌库时触发） */
+export interface DeckShuffledEvent extends GameEvent<'DECK_SHUFFLED'> {
+    payload: {
+        playerId: PlayerId;
+        /** 洗牌后的牌库顺序（从顶到底） */
+        deckCardIds: string[];
     };
 }
 
@@ -438,6 +463,24 @@ export interface TurnChangedEvent extends GameEvent<'TURN_CHANGED'> {
     };
 }
 
+/** 响应窗口打开事件 */
+export interface ResponseWindowOpenedEvent extends GameEvent<'RESPONSE_WINDOW_OPENED'> {
+    payload: {
+        windowId: string;
+        responderId: PlayerId;
+        windowType: 'preResolve' | 'thenBreakpoint';
+        sourceAbilityId?: string;
+    };
+}
+
+/** 响应窗口关闭事件 */
+export interface ResponseWindowClosedEvent extends GameEvent<'RESPONSE_WINDOW_CLOSED'> {
+    payload: {
+        windowId: string;
+        passed: boolean;
+    };
+}
+
 /** 所有 DiceThrone 事件 */
 export type DiceThroneEvent =
     | DiceRolledEvent
@@ -455,22 +498,25 @@ export type DiceThroneEvent =
     | CardSoldEvent
     | SellUndoneEvent
     | CardPlayedEvent
-    | AbilityUpgradedEvent
     | CpChangedEvent
     | CardReorderedEvent
+    | DeckShuffledEvent
     | AttackInitiatedEvent
     | AttackPreDefenseResolvedEvent
     | AttackResolvedEvent
     | ChoiceRequestedEvent
     | ChoiceResolvedEvent
-    | TurnChangedEvent;
+    | TurnChangedEvent
+    | AbilityReplacedEvent
+    | ResponseWindowOpenedEvent
+    | ResponseWindowClosedEvent;
 
 // ============================================================================
 // 常量
 // ============================================================================
 
 export const INITIAL_HEALTH = 50;
-export const INITIAL_CP = 10; // TODO: 测试完成后改回0
+export const INITIAL_CP = 2; // 规则：起始 CP 为 2（1v1）
 export const CP_MAX = 15;
 export const HAND_LIMIT = 6;
 

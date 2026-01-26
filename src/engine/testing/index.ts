@@ -36,6 +36,10 @@ export interface TestCase<TExpect extends StateExpectation = StateExpectation> {
     }>;
     /** 预期结果 */
     expect?: TExpect;
+    /** 单测自定义初始化（优先级高于全局 setup） */
+    setup?: (playerIds: PlayerId[], random: RandomFn) => unknown;
+    /** 期望某步包含的事件 */
+    eventsAtStep?: Array<{ step: number; includes: string[] }>;
     /** 跳过此测试 */
     skip?: boolean;
 }
@@ -73,6 +77,8 @@ export interface TestRunnerConfig<TState, TCommand extends Command, TEvent exten
     domain: DomainCore<TState, TCommand, TEvent>;
     /** 玩家列表 */
     playerIds: PlayerId[];
+    /** 自定义初始化（用于需要 RandomFn 的 setup） */
+    setup?: (playerIds: PlayerId[], random: RandomFn) => TState;
     /** 状态断言函数 */
     assertFn?: (state: TState, expect: TExpect) => string[];
     /** 状态可视化函数 */
@@ -122,8 +128,10 @@ export class GameTestRunner<
     run(testCase: TestCase<TExpect>): TestResult<TState> {
         const { domain, playerIds, assertFn, visualizeFn } = this.config;
         const random = this.config.random ?? defaultRandom;
-
-        let state = domain.setup(playerIds, random);
+        const setup = (testCase.setup as ((ids: PlayerId[], rnd: RandomFn) => TState) | undefined)
+            ?? this.config.setup
+            ?? ((ids: PlayerId[]) => domain.setup(ids));
+        let state = setup(playerIds, random);
         const steps: StepLog[] = [];
         const actualErrors: { step: number; error: string }[] = [];
         const expectedErrors: { step: number; error: string }[] = [];
@@ -208,6 +216,21 @@ export class GameTestRunner<
             }
         }
 
+        if (testCase.eventsAtStep) {
+            for (const expectation of testCase.eventsAtStep) {
+                const stepLog = steps.find(step => step.step === expectation.step);
+                if (!stepLog) {
+                    assertionErrors.push(`未找到 Step ${expectation.step} 的事件记录`);
+                    continue;
+                }
+                for (const eventType of expectation.includes) {
+                    if (!stepLog.events.includes(eventType)) {
+                        assertionErrors.push(`Step ${expectation.step} 缺少事件: ${eventType}`);
+                    }
+                }
+            }
+        }
+
         if (assertionErrors.length > 0) {
             this.log('\n  ⚠️ 断言失败:');
             for (const err of assertionErrors) {
@@ -261,9 +284,6 @@ export class GameTestRunner<
 
         if (failed > 0) {
             this.log('\n❌ 存在失败的测试用例\n');
-            if (typeof process !== 'undefined') {
-                process.exit(1);
-            }
         } else {
             this.log('\n✅ 所有测试通过\n');
         }

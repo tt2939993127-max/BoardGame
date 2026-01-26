@@ -1,0 +1,62 @@
+{
+  "manifestVersion": 1,
+  "scope": "official",
+  "id": "tictactoe",
+  "basePrefix": "official/tictactoe/",
+  "files": {
+    "audio/compressed/draw_line": {
+      "variants": {
+        "ogg": {
+          "sha256": "f2ed6b5403f897fff450de5f372e5c10f90c2fabfc9fd8543fdfd62269842263",
+          "bytes": 10063,
+          "mime": "audio/ogg"
+        }
+      }
+    },
+    "audio/compressed/move": {
+      "variants": {
+        "ogg": {
+          "sha256": "ae5df82b3355b82564f40cb79060cfc3eb12a8722b4bbd4c29f65f19265289fc",
+          "bytes": 4184,
+          "mime": "audio/ogg"
+        }
+      }
+    },
+    "audio/compressed/win": {
+      "variants": {
+        "ogg": {
+          "sha256": "1cc9d70ee088f078d1933735cf71de7d715f14d51b4269c62c165edcf59e184a",
+          "bytes": 53349,
+          "mime": "audio/ogg"
+        }
+      }
+    },
+    "audio/draw_line": {
+      "variants": {
+        "wav": {
+          "sha256": "3c83d5f8ca563954aae5e61c5e508297d5e33356d29ad99e248ef63861b0acef",
+          "bytes": 244360,
+          "mime": "audio/wav"
+        }
+      }
+    },
+    "audio/move": {
+      "variants": {
+        "wav": {
+          "sha256": "37b1b60df2930604d47a00d957393c5960f0af6d1470ea98d9a6a475e47157d3",
+          "bytes": 201722,
+          "mime": "audio/wav"
+        }
+      }
+    },
+    "audio/win": {
+      "variants": {
+        "wav": {
+          "sha256": "73702a6d0cef7c329168601e647f039fc66b85c3fcc50ac31396cdefdc11b9f5",
+          "bytes": 972662,
+          "mime": "audio/wav"
+        }
+      }
+    }
+  }
+}
