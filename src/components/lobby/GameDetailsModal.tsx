@@ -12,6 +12,7 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
+import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 
 const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
@@ -26,6 +27,7 @@ interface Room {
     matchID: string;
     players: RoomPlayer[];
     gameName?: string;
+    roomName?: string;
 }
 
 interface GameDetailsModalProps {
@@ -69,6 +71,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         leaderboard: { name: string; wins: number; matches: number }[];
     } | null>(null);
 
+    // 创建房间弹窗状态
+    const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
             fetch(`${GAME_SERVER_URL}/games/${normalizedGameId}/leaderboard`)
@@ -101,6 +106,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     matchID: m.matchID,
                     players: m.players,
                     gameName: m.gameName,
+                    roomName: m.roomName,
                 }));
                 setRooms(roomList);
             });
@@ -156,6 +162,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     };
 
     const getGuestName = () => t('player.guest', { id: getGuestId() });
+    const getOwnerKey = () => (user?.id ? `user:${user.id}` : `guest:${getGuestId()}`);
+    const getOwnerType = () => (user?.id ? 'user' : 'guest');
 
 
     const handleTutorial = () => {
@@ -168,16 +176,29 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         navigate(`/play/${gameId}/local`);
     };
 
-    const handleCreateRoom = async () => {
+    // 打开创建房间弹窗
+    const handleOpenCreateRoom = () => {
+        setShowCreateRoomModal(true);
+    };
 
+    // 实际创建房间逻辑
+    const handleCreateRoom = async (config: RoomConfig) => {
         setIsLoading(true);
         try {
-            const numPlayers = 2;
+            const { numPlayers, roomName, ttlSeconds } = config;
             // 获取用户名或生成游客名
             const playerName = user?.username || getGuestName();
+            const ownerKey = getOwnerKey();
+            const ownerType = getOwnerType();
 
-            // 使用传入的 gameId
-            const { matchID } = await lobbyClient.createMatch(gameId, { numPlayers });
+            // 使用传入的 gameId，通过 setupData 传递房间名
+            const setupData = {
+                ...(roomName ? { roomName } : {}),
+                ttlSeconds,
+                ownerKey,
+                ownerType,
+            };
+            const { matchID } = await lobbyClient.createMatch(gameId, { numPlayers, setupData });
 
             // 加入为 0 号玩家
             const { playerCredentials } = await lobbyClient.joinMatch(gameId, matchID, {
@@ -195,11 +216,18 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             }));
 
             setLocalStorageTick(t => t + 1);
+            setShowCreateRoomModal(false);
 
             onNavigate?.();
             navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
         } catch (error) {
             console.error('Failed to create match:', error);
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('ACTIVE_MATCH_EXISTS')) {
+                toast.warning({ kind: 'i18n', key: 'error.activeMatchExists', ns: 'lobby' });
+                lobbySocket.requestRefresh(normalizedGameId);
+                return;
+            }
             toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
         } finally {
             setIsLoading(false);
@@ -486,7 +514,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     className="
                         bg-[#fcfbf9] pointer-events-auto 
                         w-full max-w-2xl 
-                        h-auto max-h-[85vh]
+                        h-[27.5rem] max-h-[85vh]
                         rounded-sm shadow-[0_10px_40px_rgba(67,52,34,0.15)] 
                         flex flex-col md:flex-row 
                         border border-[#e5e0d0] relative 
@@ -605,7 +633,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
                                         return (
                                             <button
-                                                onClick={handleCreateRoom}
+                                                onClick={handleOpenCreateRoom}
                                                 disabled={isLoading}
                                                 className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
                                             >
@@ -635,7 +663,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold text-[#433422] text-sm">
-                                                            {t('rooms.matchTitle', { id: room.matchID.slice(0, 4) })}
+                                                            {room.roomName || t('rooms.matchTitle', { id: room.matchID.slice(0, 4) })}
                                                         </span>
                                                         {room.isMyRoom && (
                                                             <span className="text-[8px] bg-[#c0a080] text-white px-1.5 py-0.5 rounded uppercase font-bold">
@@ -663,6 +691,25 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                                             )}
                                                         >
                                                             {room.isHost ? t('actions.destroy') : t('actions.leave')}
+                                                        </button>
+                                                    )}
+
+                                                    {/* 满员房间：显示观战按钮（眼睛图标） */}
+                                                    {room.isFull && !room.canReconnect && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onNavigate?.();
+                                                                navigate(`/play/${normalizedGameId}/match/${room.matchID}?spectate=1`);
+                                                            }}
+                                                            className="p-1.5 rounded-[4px] text-[#8c7b64] hover:text-[#433422] hover:bg-[#f3f0e6] transition-all cursor-pointer border border-[#e5e0d0]"
+                                                            title={t('actions.spectate')}
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                            </svg>
                                                         </button>
                                                     )}
 
@@ -737,6 +784,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     </div>
                 </div>
             </ModalBase>
+
+            {/* 创建房间配置弹窗 */}
+            {gameManifest && (
+                <CreateRoomModal
+                    isOpen={showCreateRoomModal}
+                    onClose={() => setShowCreateRoomModal(false)}
+                    onConfirm={handleCreateRoom}
+                    gameManifest={gameManifest}
+                    isLoading={isLoading}
+                />
+            )}
         </>
     );
 };

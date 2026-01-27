@@ -1,0 +1,91 @@
+import React, { createContext, useContext, ReactNode } from 'react';
+import type { MatchState } from '../engine/types';
+
+interface UndoContextValue {
+    G: MatchState<unknown>;
+    ctx: any;
+    moves: any;
+    playerID: string | null;
+    isGameOver: boolean;
+    isLocalMode?: boolean; // 是否本地同屏模式
+}
+
+const UndoContext = createContext<UndoContextValue | null>(null);
+
+interface UndoProviderProps {
+    children: ReactNode;
+    value: UndoContextValue;
+}
+
+/**
+ * UndoProvider - 在游戏 Board 组件中提供撤回状态
+ * 
+ * 使用示例：
+ * ```tsx
+ * <UndoProvider value={{ G, ctx, moves, playerID, isGameOver }}>
+ *     {游戏界面}
+ * </UndoProvider>
+ * ```
+ */
+export const UndoProvider: React.FC<UndoProviderProps> = ({ children, value }) => {
+    return <UndoContext.Provider value={value}>{children}</UndoContext.Provider>;
+};
+
+/**
+ * useUndo - 在任何组件中获取撤回状态
+ * 
+ * @returns 撤回状态对象，如果不在游戏中返回 null
+ */
+export const useUndo = (): UndoContextValue | null => {
+    return useContext(UndoContext);
+};
+
+/**
+ * useUndoStatus - 获取撤回状态和红点标记
+ * 
+ * @returns 撤回状态类型和是否需要红点提醒
+ */
+export const useUndoStatus = (): {
+    status: 'canRequest' | 'canReview' | 'isRequester' | null;
+    hasNotification: boolean;
+} => {
+    const undoState = useUndo();
+    
+    if (!undoState || undoState.isGameOver || !undoState.playerID) {
+        return { status: null, hasNotification: false };
+    }
+
+    const { G, ctx, playerID, isLocalMode } = undoState;
+    const history = G.sys?.undo?.snapshots || [];
+    const request = G.sys?.undo?.pendingRequest;
+    
+    const coreCurrentPlayer = (G.core as { currentPlayer?: string | number } | undefined)?.currentPlayer;
+    const currentPlayer = coreCurrentPlayer ?? ctx.currentPlayer;
+    const normalizedCurrentPlayer = currentPlayer !== null && currentPlayer !== undefined
+        ? String(currentPlayer)
+        : null;
+    const isCurrentPlayer = normalizedCurrentPlayer !== null && playerID === normalizedCurrentPlayer;
+    
+    let status: 'canRequest' | 'canReview' | 'isRequester' | null = null;
+    let hasNotification = false;
+    
+    if (request?.requesterId === playerID) {
+        // 我是申请者，等待批准
+        status = 'isRequester';
+        hasNotification = false; // 等待中不显示红点
+    } else if (request && request.requesterId !== playerID && isCurrentPlayer) {
+        // 对方请求撤回，需要我审批
+        status = 'canReview';
+        hasNotification = true; // 显示红点提醒
+    } else if (history.length > 0 && !request) {
+        // 可以发起撤回请求
+        // 本地模式：任何时候都可以撤回（不需要握手）
+        // 在线模式：只有非当前玩家才能请求撤回上一步
+        if (isLocalMode || !isCurrentPlayer) {
+            status = 'canRequest';
+            hasNotification = false; // 可以申请不显示红点
+        }
+    }
+    
+    return { status, hasNotification };
+};

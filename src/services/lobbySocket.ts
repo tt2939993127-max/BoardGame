@@ -48,6 +48,7 @@ export interface LobbyMatch {
     }>;
     createdAt?: number;
     updatedAt?: number;
+    roomName?: string;
 }
 
 interface LobbySnapshotPayload {

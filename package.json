@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "predev": "node scripts/clean_ports.js && node scripts/generate_game_manifests.js",
-    "dev": "concurrently \"npm:dev:frontend\" \"npm:dev:api\" \"npm:dev:game\"",
+    "dev": "concurrently \"npm:dev:game\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
     "dev:frontend": "vite",
+    "dev:frontend:wait": "node scripts/wait_for_ports.js 18000 18001 && vite",
     "dev:api": "tsx --tsconfig apps/api/tsconfig.json apps/api/src/main.ts",
     "dev:game": "vite-node server.ts",
     "prebuild": "node scripts/generate_game_manifests.js",
@@ -14,6 +15,7 @@
     "lint": "eslint .",
     "clean:ports": "node scripts/clean_ports.js",
     "generate:manifests": "node scripts/generate_game_manifests.js",
+    "generate:locales": "node scripts/generate-card-locales.cjs",
     "assets:manifest": "node scripts/generate_asset_manifests.js",
     "assets:validate": "node scripts/generate_asset_manifests.js --validate",
     "preview": "vite preview",

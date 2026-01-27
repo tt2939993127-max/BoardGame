@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { EmailBindModal } from '../components/auth/EmailBindModal';
 import { useNavigate } from 'react-router-dom';
-import { clearMatchCredentials, destroyMatch, leaveMatch } from '../hooks/match/useMatchStatus';
+import { clearMatchCredentials, exitMatch } from '../hooks/match/useMatchStatus';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { LanguageSwitcher } from '../components/common/i18n/LanguageSwitcher';
 import { UserMenu } from '../components/social/UserMenu';
@@ -262,9 +262,13 @@ export const Home = () => {
             gameName = activeMatch.gameName;
         }
 
-        const success = pendingAction.isHost
-            ? await destroyMatch(gameName, pendingAction.matchID, pendingAction.playerID, pendingAction.credentials)
-            : await leaveMatch(gameName, pendingAction.matchID, pendingAction.playerID, pendingAction.credentials);
+        const success = await exitMatch(
+            gameName,
+            pendingAction.matchID,
+            pendingAction.playerID,
+            pendingAction.credentials,
+            pendingAction.isHost
+        );
         if (!success) {
             // Keep state as-is so the user can retry or decide what to do next.
             return;

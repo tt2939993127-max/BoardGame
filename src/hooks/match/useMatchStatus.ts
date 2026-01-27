@@ -57,14 +57,13 @@ export async function destroyMatch(
 
         if (!response.ok) {
             if (response.status === 404) {
-                console.warn('[destroyMatch] 404 Not Found，清理本地凭证', {
+                console.warn('[destroyMatch] 404 Not Found，销毁失败', {
                     url,
                     normalizedGameName,
                     matchID,
                     playerID,
                 });
-                clearMatchCredentials(matchID);
-                return true;
+                return false;
             }
 
             const message = await response.text().catch(() => '');
@@ -121,8 +120,12 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
                 isConnected: p.isConnected,
             })));
             setError(null);
-        } catch (err) {
+        } catch (err: any) {
             console.error('获取房间状态失败:', err);
+            // 404 说明房间已不存在，清理本地凭据
+            if (err?.message?.includes('404') || err?.message?.includes('not found')) {
+                clearMatchCredentials(matchID);
+            }
             setError(prev => prev ?? '房间不存在或已被删除');
         } finally {
             setIsLoading(false);
@@ -185,10 +188,31 @@ export async function leaveMatch(
         // 清理本地凭证
         clearMatchCredentials(matchID);
         return true;
-    } catch (err) {
+    } catch (err: any) {
         console.error('离开房间失败:', err);
+        // 404 说明房间已不存在，视为成功并清理凭据
+        if (err?.message?.includes('404') || err?.message?.includes('not found')) {
+            clearMatchCredentials(matchID);
+            return true;
+        }
         return false;
     }
+}
+
+/**
+ * 离开/销毁房间（统一入口）
+ */
+export async function exitMatch(
+    gameName: string,
+    matchID: string,
+    playerID: string,
+    credentials: string,
+    isHost?: boolean
+): Promise<boolean> {
+    if (isHost) {
+        return destroyMatch(gameName, matchID, playerID, credentials);
+    }
+    return leaveMatch(gameName, matchID, playerID, credentials);
 }
 
 /**
