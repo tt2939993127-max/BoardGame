@@ -782,7 +782,7 @@ export const MONK_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: '改变任意1颗骰子的数值',
-                action: { type: 'custom', target: 'any', customActionId: 'modify-die-any-1' },
+                action: { type: 'custom', target: 'select', customActionId: 'modify-die-any-1' },
                 timing: 'immediate',
             },
         ],
@@ -808,7 +808,7 @@ export const MONK_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: '重掷至多2颗骰子',
-                action: { type: 'custom', target: 'self', customActionId: 'reroll-die-2' },
+                action: { type: 'custom', target: 'select', customActionId: 'reroll-die-2' },
                 timing: 'immediate',
             },
         ],
@@ -833,7 +833,7 @@ export const MONK_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: '改变任意2颗骰子的数值',
-                action: { type: 'custom', target: 'any', customActionId: 'modify-die-any-2' },
+                action: { type: 'custom', target: 'select', customActionId: 'modify-die-any-2' },
                 timing: 'immediate',
             },
         ],
@@ -896,7 +896,7 @@ export const MONK_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: '增/减1颗骰子数值1点',
-                action: { type: 'custom', target: 'any', customActionId: 'modify-die-adjust-1' },
+                action: { type: 'custom', target: 'select', customActionId: 'modify-die-adjust-1' },
                 timing: 'immediate',
             },
         ],
@@ -1061,7 +1061,7 @@ export const getMonkStartingDeck = (random: RandomFn): AbilityCard[] => {
 export const getCardAtlasPosition = (atlasIndex: number): { x: number; y: number; width: number; height: number } => {
     const CARD_WIDTH = 328;
     const CARD_HEIGHT = 529;
-    const CARDS_PER_ROW = 5; // 假设每行5张
+    const CARDS_PER_ROW = 10; // 对应图集中的列数
 
     const col = atlasIndex % CARDS_PER_ROW;
     const row = Math.floor(atlasIndex / CARDS_PER_ROW);

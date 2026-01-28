@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { redisStore } from 'cache-manager-redis-store';
 import { AuthModule } from './modules/auth/auth.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { FriendModule } from './modules/friend/friend.module';
 import { HealthModule } from './modules/health/health.module';
 import { InviteModule } from './modules/invite/invite.module';
@@ -38,6 +39,7 @@ import { ReviewModule } from './modules/review/review.module';
             },
         }),
         AuthModule,
+        AdminModule,
         FriendModule,
         MessageModule,
         InviteModule,

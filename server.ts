@@ -319,7 +319,6 @@ app.use(async (ctx, next) => {
 
     await next();
 });
-
 // 预处理 /leave：只释放座位，不删除房间（避免 boardgame.io 在无人时 wipe）
 // 注意：必须插入到 middleware 队列最前面，以拦截 boardgame.io 的默认路由
 const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => {

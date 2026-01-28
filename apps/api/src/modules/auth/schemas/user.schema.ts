@@ -47,6 +47,22 @@ export class User {
     @Prop({ type: String, default: null, trim: true })
     avatar?: string | null;
 
+    @Prop({
+        type: String,
+        enum: ['user', 'admin'],
+        default: 'user',
+    })
+    role!: 'user' | 'admin';
+
+    @Prop({ type: Boolean, default: false })
+    banned!: boolean;
+
+    @Prop({ type: Date, default: null })
+    bannedAt?: Date | null;
+
+    @Prop({ type: String, default: null, trim: true })
+    bannedReason?: string | null;
+
     createdAt!: Date;
     updatedAt!: Date;
 }

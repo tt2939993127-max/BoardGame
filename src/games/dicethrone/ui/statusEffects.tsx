@@ -398,7 +398,7 @@ export const SelectableStatusBadge = ({
     const sizeClass = size === 'small' ? 'w-[2vw] h-[2vw] text-[0.8vw]' : 'w-[2.5vw] h-[2.5vw] text-[1vw]';
     const stackSizeClass = size === 'small' ? 'text-[0.5vw] min-w-[0.8vw] h-[0.8vw]' : 'text-[0.6vw] min-w-[1vw] h-[1vw]';
 
-    const clickable = Boolean(onSelect && isHighlighted);
+    const clickable = Boolean(onSelect);
 
     return (
         <div

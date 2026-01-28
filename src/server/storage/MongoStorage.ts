@@ -108,17 +108,28 @@ export class MongoStorage implements StorageAPI.Async {
         const setupData = { ...setupDataFromMetadata, ...setupDataFromState };
         const ttlSeconds = setupData.ttlSeconds ?? 0;
         const ownerKey = setupData.ownerKey;
+        const isGuestOwner = setupData.ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false);
 
-        // 强制保持单房间：创建新房间时清理同 ownerKey 的旧房间
+        // 全局单房间限制：同一 ownerKey 只能有一个占用房间（gameover 仍视为占用）
         if (ownerKey) {
-            const existingMatches = await Match.find({
-                'metadata.setupData.ownerKey': ownerKey,
-            }).select('matchID').lean();
+            if (isGuestOwner) {
+                const existingMatches = await Match.find({
+                    'metadata.setupData.ownerKey': ownerKey,
+                }).select('matchID').lean();
 
-            if (existingMatches.length > 0) {
-                const matchIds = existingMatches.map(doc => doc.matchID);
-                await Match.deleteMany({ matchID: { $in: matchIds } });
-                console.log(`[MongoStorage] 清理同 ownerKey 旧房间 ownerKey=${ownerKey} count=${matchIds.length}`);
+                if (existingMatches.length > 0) {
+                    const matchIds = existingMatches.map(doc => doc.matchID);
+                    await Match.deleteMany({ matchID: { $in: matchIds } });
+                    console.log(`[MongoStorage] 游客覆盖房间 ownerKey=${ownerKey} count=${matchIds.length}`);
+                }
+            } else {
+                const existing = await Match.findOne({
+                    'metadata.setupData.ownerKey': ownerKey,
+                }).select('matchID gameName').sort({ updatedAt: -1 }).lean();
+
+                if (existing) {
+                    throw new Error(`[Lobby] ACTIVE_MATCH_EXISTS:${existing.gameName}:${existing.matchID}`);
+                }
             }
         }
         
@@ -141,8 +152,8 @@ export class MongoStorage implements StorageAPI.Async {
     async setState(matchID: string, state: State, deltalog?: LogEntry[]): Promise<void> {
         const Match = getMatchModel();
         
-        // 存储时剔除 undo 快照和过多日志，避免超过 MongoDB 16MB 限制
-        // 撤销快照只在内存中保留，不需要持久化
+        // 存储时裁剪 undo 快照和过多日志，避免超过 MongoDB 16MB 限制
+        // 撤销快照仅保留最近 1 条，用于在线撤回
         const stateToSave = this.sanitizeStateForStorage(state);
         
         // 简单超限告警（保留最少监控）
@@ -186,12 +197,14 @@ export class MongoStorage implements StorageAPI.Async {
         }
         
 
-        // 剔除 undo 快照（不持久化，在内存中管理即可）
+        // 裁剪 undo 快照（只保留最近 1 条）
         const sanitizedSys = { ...sys };
         if (sanitizedSys.undo && typeof sanitizedSys.undo === 'object') {
+            const undo = sanitizedSys.undo as { snapshots?: unknown[] } & Record<string, unknown>;
+            const snapshots = Array.isArray(undo.snapshots) ? undo.snapshots.slice(-1) : [];
             sanitizedSys.undo = {
-                ...(sanitizedSys.undo as Record<string, unknown>),
-                snapshots: [], // 清空快照
+                ...undo,
+                snapshots,
             };
         }
 

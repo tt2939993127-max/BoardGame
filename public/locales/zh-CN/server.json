@@ -76,6 +76,18 @@
       "deleted": "评论已删除"
     }
   },
+  "admin": {
+    "error": {
+      "userNotFound": "用户不存在",
+      "matchNotFound": "对局不存在",
+      "missingBanReason": "请输入封禁原因",
+      "cannotBanAdmin": "不能封禁管理员账号"
+    },
+    "success": {
+      "userBanned": "用户已封禁",
+      "userUnbanned": "用户已解封"
+    }
+  },
   "email": {
     "error": {
       "missingConfig": "邮件服务未配置"

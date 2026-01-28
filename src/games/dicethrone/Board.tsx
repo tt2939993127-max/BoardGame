@@ -390,6 +390,39 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const handleSelectStatus = interactionHandlers.selectStatus;
     const handleSelectPlayer = interactionHandlers.selectPlayer;
 
+    const statusInteraction = React.useMemo(() => {
+        if (!pendingInteraction || !isStatusInteraction) return pendingInteraction;
+
+        const selected = (() => {
+            if (pendingInteraction.type === 'selectPlayer') {
+                return localInteraction.selectedPlayer
+                    ? [localInteraction.selectedPlayer]
+                    : (pendingInteraction.selected ?? []);
+            }
+            if (pendingInteraction.type === 'selectTargetStatus' && pendingInteraction.transferConfig?.statusId) {
+                return localInteraction.selectedPlayer
+                    ? [localInteraction.selectedPlayer]
+                    : (pendingInteraction.selected ?? []);
+            }
+            if (pendingInteraction.type === 'selectStatus' || pendingInteraction.type === 'selectTargetStatus') {
+                return localInteraction.selectedStatus
+                    ? [localInteraction.selectedStatus.statusId]
+                    : (pendingInteraction.selected ?? []);
+            }
+            return pendingInteraction.selected ?? [];
+        })();
+
+        return {
+            ...pendingInteraction,
+            selected,
+        };
+    }, [
+        pendingInteraction,
+        isStatusInteraction,
+        localInteraction.selectedPlayer,
+        localInteraction.selectedStatus,
+    ]);
+
     const handleStatusInteractionConfirm = () => {
         if (!pendingInteraction) return;
 
@@ -613,6 +646,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         drawDeckRef={drawDeckRef}
                         onPurifyClick={() => openModal('purify')}
                         canUsePurify={canUsePurify}
+                        tokenDefinitions={G.tokenDefinitions}
                         onStunClick={() => openModal('removeStun')}
                         canRemoveStun={canRemoveStun}
                     />
@@ -783,7 +817,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
                     // 交互覆盖层
                     isStatusInteraction={!!isStatusInteraction}
-                    pendingInteraction={pendingInteraction}
+                    pendingInteraction={statusInteraction}
                     players={G.players}
                     currentPlayerId={rootPid}
                     onSelectStatus={handleSelectStatus}

@@ -224,14 +224,14 @@ export const HandArea = ({
         if (pending && !hand.some(card => card.id === pending.cardId)) {
             // 卡牌成功使用（从手牌移除），触发飞出动画
             const { card, offset, originalIndex } = pending;
-            
+
             // 判断目标位置：升级卡飞向技能槽，普通卡飞向弃牌堆
             if (card.type === 'upgrade') {
                 // 从卡牌效果中提取目标技能 ID
                 const replaceAction = card.effects?.find(e => e.action?.type === 'replaceAbility')?.action;
                 const targetAbilityId = replaceAction?.type === 'replaceAbility' ? replaceAction.targetAbilityId : undefined;
                 const slotId = targetAbilityId ? getAbilitySlotId(targetAbilityId) : null;
-                
+
                 if (slotId) {
                     setFlyingOutCard({
                         card,
@@ -278,7 +278,7 @@ export const HandArea = ({
             if (!pending) return;
             const detail = (event as CustomEvent<EngineNotificationDetail>).detail;
             if (!detail?.error) return;
-            
+
             // 卡牌仍在手牌中则触发回弹动画
             if (!handRef.current.some(card => card.id === pending.cardId)) {
                 clearPendingPlay();
@@ -384,9 +384,9 @@ export const HandArea = ({
         const cardCenterY = cardRect.top + cardRect.height / 2;
         const padding = 20;
         return cardCenterX >= discardRect.left - padding &&
-               cardCenterX <= discardRect.right + padding &&
-               cardCenterY >= discardRect.top - padding &&
-               cardCenterY <= discardRect.bottom + padding;
+            cardCenterX <= discardRect.right + padding &&
+            cardCenterY >= discardRect.top - padding &&
+            cardCenterY <= discardRect.bottom + padding;
     }, [discardPileRef, draggingCardId]);
 
     const handleDragEnd = React.useCallback((card: AbilityCard, source: 'drag' | 'window' = 'drag') => {
@@ -509,8 +509,8 @@ export const HandArea = ({
                         const isHovered = hoveredCardId === card.id && (canDrag || canClickDiscard) && !isDragging && !isReturning && !isDealing;
                         const dragValues = getDragValues(card.id);
 
-                                        return (
-                                            <motion.div
+                        return (
+                            <motion.div
                                 key={`${card.id}-${returnVersion}`}
                                 data-card-id={card.id}
                                 drag={canDrag}
@@ -526,22 +526,22 @@ export const HandArea = ({
                                     onSellButtonChange?.(true);
                                     onPlayHintChange?.(true);
                                 }}
-                            onDrag={(_, info) => canDrag && handleDrag(card.id, info)}
-                            onDragEnd={() => canDrag && handleDragEnd(card, 'drag')}
-                            onClick={() => {
-                                // 弃牌模式下点击卡牌直接弃置
-                                if (canClickDiscard && onDiscardCard) {
-                                    onDiscardCard(card.id);
-                                }
-                            }}
-                            onHoverStart={() => {
-                                if ((canDrag || canClickDiscard) && !isDragging && !isReturning) {
-                                    setHoveredCardId(card.id);
-                                }
-                            }}
-                            onHoverEnd={() => {
-                                setHoveredCardId(prev => prev === card.id ? null : prev);
-                            }}
+                                onDrag={(_, info) => canDrag && handleDrag(card.id, info)}
+                                onDragEnd={() => canDrag && handleDragEnd(card, 'drag')}
+                                onClick={() => {
+                                    // 弃牌模式下点击卡牌直接弃置
+                                    if (canClickDiscard && onDiscardCard) {
+                                        onDiscardCard(card.id);
+                                    }
+                                }}
+                                onHoverStart={() => {
+                                    if ((canDrag || canClickDiscard) && !isDragging && !isReturning) {
+                                        setHoveredCardId(card.id);
+                                    }
+                                }}
+                                onHoverEnd={() => {
+                                    setHoveredCardId(prev => prev === card.id ? null : prev);
+                                }}
                                 className={`
                                     absolute bottom-0 w-[12vw] aspect-[0.61] rounded-[0.8vw]
                                     ${canClickDiscard ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
@@ -635,25 +635,25 @@ export const HandArea = ({
                         );
                     })}
                 </AnimatePresence>
-                
+
                 {/* 飞出动画卡牌（成功使用后飞向目标） */}
                 <AnimatePresence>
-                    {flyingOutCard && (() => {
+                    {flyingOutCard && atlas && (() => {
                         const { card, startOffset, startIndex, targetType, targetSlotId } = flyingOutCard;
                         const spriteIndex = (card.atlasIndex ?? 0) % (atlas.cols * atlas.rows);
                         const atlasStyle = getCardAtlasStyle(spriteIndex, atlas);
                         const flyingCenterIndex = (hand.length) / 2; // 使用移除后的手牌数量计算
                         const startIndexOffset = startIndex - flyingCenterIndex;
                         const startYOffset = Math.abs(startIndexOffset) * 0.8;
-                        
+
                         // 计算目标位置
                         const targetPos = targetType === 'abilitySlot' && targetSlotId
                             ? getAbilitySlotOffset(targetSlotId)
                             : getDiscardPileOffset();
-                        
+
                         // 目标缩放比例：升级卡缩小到技能槽大小，普通卡缩小到弃牌堆大小
                         const targetScale = targetType === 'abilitySlot' ? 0.4 : 0.5;
-                        
+
                         return (
                             <motion.div
                                 key={`flying-${card.id}`}

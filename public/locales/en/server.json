@@ -76,6 +76,18 @@
       "deleted": "Review deleted"
     }
   },
+  "admin": {
+    "error": {
+      "userNotFound": "User not found",
+      "matchNotFound": "Match not found",
+      "missingBanReason": "Please provide a ban reason",
+      "cannotBanAdmin": "Cannot ban admin account"
+    },
+    "success": {
+      "userBanned": "User banned",
+      "userUnbanned": "User unbanned"
+    }
+  },
   "email": {
     "error": {
       "missingConfig": "Email service is not configured"

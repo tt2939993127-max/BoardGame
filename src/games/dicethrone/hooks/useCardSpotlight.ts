@@ -9,6 +9,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlayerId } from '../../../engine/types';
 import type { DieFace } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
+import { MONK_CARDS } from '../monk/cards';
 
 /**
  * 卡牌特写配置
@@ -151,19 +152,42 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             return;
         }
 
-        // 只展示其他玩家打出的卡牌
-        if (card.playerId !== currentPlayerId) {
-            const newItem: CardSpotlightItem = {
-                id: `${card.cardId}-${card.timestamp}`,
-                timestamp: card.timestamp,
-                atlasIndex: card.atlasIndex ?? 0,
-                playerId: card.playerId,
-                playerName: opponentName,
-            };
-            setCardSpotlightQueue(prev => [...prev, newItem]);
-        }
-
         prevLastPlayedCardTimestampRef.current = card.timestamp;
+
+        // 归一化 ID 比较
+        const cardPlayerId = String(card.playerId);
+        const selfPlayerId = String(currentPlayerId);
+
+        console.log('[useCardSpotlight] New card detected:', {
+            cardId: card.cardId,
+            timestamp: card.timestamp,
+            cardPlayerId,
+            selfPlayerId,
+            shouldShow: cardPlayerId !== selfPlayerId && selfPlayerId !== ''
+        });
+
+        // DEBUG: 暂时允许显示自己的卡牌特写（方便调试）
+        // 归一化后 ID 相同说明是自己打出的卡
+        // if (cardPlayerId === selfPlayerId) return;
+
+        // 尝试从定义中查找正确的 atlasIndex，作为数据损坏的修复
+        const cardDef = MONK_CARDS.find(c => c.id === card.cardId);
+        const resolvedAtlasIndex = cardDef?.atlasIndex ?? card.atlasIndex ?? 0;
+
+        console.log('[useCardSpotlight] Atlas Lookup:', {
+            cardId: card.cardId,
+            originalAtlasIndex: card.atlasIndex,
+            resolvedAtlasIndex
+        });
+
+        const newItem: CardSpotlightItem = {
+            id: `${card.cardId}-${card.timestamp}`,
+            timestamp: card.timestamp,
+            atlasIndex: resolvedAtlasIndex,
+            playerId: card.playerId,
+            playerName: opponentName, // 注意：如果是自己，这里的名字可能不对，但 UI 暂未显示名字
+        };
+        setCardSpotlightQueue((prev) => [...prev, newItem]);
     }, [lastPlayedCard, currentPlayerId, opponentName]);
 
     /**
