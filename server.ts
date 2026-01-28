@@ -3,10 +3,12 @@ import type { Game } from 'boardgame.io';
 import { Server as BoardgameServer, Origins } from 'boardgame.io/server';
 import { Server as IOServer, Socket as IOSocket } from 'socket.io';
 import bodyParser from 'koa-bodyparser';
+import type { StorageAPI } from 'boardgame.io/dist/types/src/server/db';
 import { connectDB } from './src/server/db';
 import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';
+import { createClaimSeatHandler } from './src/server/claimSeat';
 
 // 大厅事件常量（与前端 lobbySocket.ts 保持一致）
 const LOBBY_EVENTS = {
@@ -57,6 +59,8 @@ const normalizeGameName = (name?: string) => (name || '').toLowerCase();
 const isSupportedGame = (gameName: string): gameName is SupportedGame => {
     return (SUPPORTED_GAMES as readonly string[]).includes(gameName);
 };
+
+const JWT_SECRET = process.env.JWT_SECRET || 'boardgame-secret-key-change-in-production';
 
 let serverDb: any = null;
 
@@ -210,7 +214,7 @@ const server = BoardgameServer({
     games: SERVER_GAMES,
     origins: SERVER_ORIGINS,
     // 启用持久化时使用 MongoDB 存储
-    ...(USE_PERSISTENT_STORAGE ? { db: mongoStorage } : {}),
+    ...(USE_PERSISTENT_STORAGE ? { db: mongoStorage as unknown as StorageAPI.Async } : {}),
 });
 
 // 获取底层的 Koa 应用和数据库
@@ -242,7 +246,8 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
             if (!metadata) {
                 ctx.throw(404, 'Match ' + matchID + ' not found');
             }
-            if (!metadata.players[playerID as string]) {
+            const players = metadata.players as Record<string, { name?: string; credentials?: string }>;
+            if (!players[playerID as string]) {
                 ctx.throw(404, 'Player ' + playerID + ' not found');
             }
 
@@ -255,10 +260,20 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
                 ctx.throw(403, 'Invalid credentials ' + credentials);
             }
 
-            // 只清除该玩家的占位，不删除房间
-            delete metadata.players[playerID as string].name;
-            delete metadata.players[playerID as string].credentials;
-            await db.setMetadata(matchID, metadata);
+            // 清除该玩家的占位
+            delete players[playerID as string].name;
+            delete players[playerID as string].credentials;
+
+            // 检查是否还有玩家占座（有 name 就算占座，不看 isConnected）
+            const hasPlayers = Object.values(players).some((p: any) => p.name);
+            if (hasPlayers) {
+                // 还有人，只更新 metadata
+                await db.setMetadata(matchID, metadata);
+            } else {
+                // 没人了，删除整个房间
+                await db.wipe(matchID);
+                console.log(`[Leave] 房间 ${matchID} 已无人占座，已删除`);
+            }
 
             ctx.body = {};
             return;
@@ -310,6 +325,19 @@ app.use(async (ctx, next) => {
 // 因此在该路由内按需解析 body。
 app.use(async (ctx, next) => {
     if (ctx.method === 'POST') {
+        const claimMatch = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/claim-seat$/);
+        if (claimMatch) {
+            const matchID = claimMatch[2];
+            const parse = bodyParser();
+            await (parse as any)(ctx, async () => undefined);
+            const handler = createClaimSeatHandler({
+                db,
+                auth: app.context.auth,
+                jwtSecret: JWT_SECRET,
+            });
+            await handler(ctx, matchID);
+            return;
+        }
         const match = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/destroy$/);
         if (match) {
             const gameNameFromUrl = match[1];

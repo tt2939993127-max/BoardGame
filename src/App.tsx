@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DebugProvider } from './contexts/DebugContext';
+
+const queryClient = new QueryClient();
 import { TutorialProvider } from './contexts/TutorialContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { SocialProvider } from './contexts/SocialContext';
@@ -20,34 +23,36 @@ const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
 
 const App = () => {
   return (
-    <ToastProvider>
-      <ModalStackProvider>
-        <AuthProvider>
-          <SocialProvider>
-            <AudioProvider>
-              <DebugProvider>
-                <TutorialProvider>
-                  <BrowserRouter>
-                    <Routes>
-                      <Route path="/" element={<Home />} />
-                      <Route path="/play/:gameId/match/:matchId" element={<MatchRoom />} />
-                      <Route path="/play/:gameId/local" element={<LocalMatchRoom />} />
-                      <Route path="/dev/slicer" element={<React.Suspense fallback={<div>Loading...</div>}><DevToolsSlicer /></React.Suspense>} />
-                      {/* 教程路由回退（如需要），或映射到对局路由 */}
-                      <Route path="/play/:gameId/tutorial" element={<MatchRoom />} />
-                    </Routes>
-                    <GlobalHUD />
-                    <ModalStackRoot />
-                    <ToastViewport />
-                    <EngineNotificationListener />
-                  </BrowserRouter>
-                </TutorialProvider>
-              </DebugProvider>
-            </AudioProvider>
-          </SocialProvider>
-        </AuthProvider>
-      </ModalStackProvider>
-    </ToastProvider>
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+        <ModalStackProvider>
+          <AuthProvider>
+            <SocialProvider>
+              <AudioProvider>
+                <DebugProvider>
+                  <TutorialProvider>
+                    <BrowserRouter>
+                      <Routes>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/play/:gameId/match/:matchId" element={<MatchRoom />} />
+                        <Route path="/play/:gameId/local" element={<LocalMatchRoom />} />
+                        <Route path="/dev/slicer" element={<React.Suspense fallback={<div>Loading...</div>}><DevToolsSlicer /></React.Suspense>} />
+                        {/* 教程路由回退（如需要），或映射到对局路由 */}
+                        <Route path="/play/:gameId/tutorial" element={<MatchRoom />} />
+                      </Routes>
+                      <GlobalHUD />
+                      <ModalStackRoot />
+                      <ToastViewport />
+                      <EngineNotificationListener />
+                    </BrowserRouter>
+                  </TutorialProvider>
+                </DebugProvider>
+              </AudioProvider>
+            </SocialProvider>
+          </AuthProvider>
+        </ModalStackProvider>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 };
 

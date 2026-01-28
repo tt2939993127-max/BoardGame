@@ -213,7 +213,7 @@ const handleAbilityActivated: EventHandler<Extract<DiceThroneEvent, { type: 'ABI
     event
 ) => {
     const newState = cloneState(state);
-    const { abilityId, playerId, isDefense } = event.payload;
+    const { abilityId, isDefense } = event.payload;
     
     newState.activatingAbilityId = abilityId;
 
@@ -221,21 +221,6 @@ const handleAbilityActivated: EventHandler<Extract<DiceThroneEvent, { type: 'ABI
         newState.pendingAttack.defenseAbilityId = abilityId;
     }
 
-    // 记录最后一次激活的技能（用于特写展示）
-    const player = newState.players[playerId];
-    if (player) {
-        // 查找技能的基础 ID（去掉 -2 / -2-3 等后缀）
-        const baseAbilityId = abilityId.replace(/(-\d+)+$/, '');
-        const level = player.abilityLevels[baseAbilityId] ?? 1;
-        
-        newState.lastActivatedAbility = {
-            abilityId,
-            playerId,
-            level,
-            timestamp: event.timestamp,
-            isDefense,
-        };
-    }
     
     return newState;
 };

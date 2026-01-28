@@ -1,0 +1,27 @@
+{
+    "stats": {
+        "positive": "{{rate}}% Positive",
+        "fewReviews": "Few Reviews",
+        "count": "({{count}} reviews)"
+    },
+    "form": {
+        "placeholder": "Write something...",
+        "submit": "Post Review",
+        "update": "Update Review",
+        "delete": "Delete",
+        "loginToReview": "Login to review",
+        "positive": "Recommend",
+        "negative": "Not Recommend"
+    },
+    "list": {
+        "empty": "No reviews yet",
+        "loadMore": "Load More"
+    },
+    "section": {
+        "title": "Game Reviews"
+    },
+    "errors": {
+        "contentLenght": "Review content cannot exceed 500 characters",
+        "required": "Please select positive or negative"
+    }
+}

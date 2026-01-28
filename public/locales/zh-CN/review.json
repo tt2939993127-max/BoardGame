@@ -1,0 +1,27 @@
+{
+    "stats": {
+        "positive": "{{rate}}% 好评",
+        "fewReviews": "评价较少",
+        "count": "({{count}} 条评价)"
+    },
+    "form": {
+        "placeholder": "写点什么...",
+        "submit": "发布评论",
+        "update": "更新评论",
+        "delete": "删除",
+        "loginToReview": "登录后参与评价",
+        "positive": "推荐",
+        "negative": "不推荐"
+    },
+    "list": {
+        "empty": "暂无评论",
+        "loadMore": "加载更多"
+    },
+    "section": {
+        "title": "游戏评价"
+    },
+    "errors": {
+        "contentLenght": "评论内容不能超过 500 字",
+        "required": "请选择好评或差评"
+    }
+}

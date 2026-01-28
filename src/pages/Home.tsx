@@ -18,6 +18,7 @@ import { useUrlModal } from '../hooks/routing/useUrlModal';
 import clsx from 'clsx';
 import { LobbyClient } from 'boardgame.io/client';
 import { GAME_SERVER_URL } from '../config/server';
+import { GameReviewSection } from '../components/review/GameReviewSection';
 
 const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
@@ -402,6 +403,9 @@ export const Home = () => {
                 <section className="w-full pb-20">
                     <GameList games={filteredGames} onGameClick={handleGameClick} />
                 </section>
+
+                {/* 游戏评价 */}
+                <GameReviewSection />
             </main>
 
             {/* 活跃对局指示器 */}
