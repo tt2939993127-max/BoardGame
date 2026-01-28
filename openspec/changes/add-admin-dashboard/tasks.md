@@ -3,28 +3,28 @@
 > **前置依赖**：本任务必须在 `add-social-hub` 完成后实施（NestJS 已迁移、Redis 已接入）
 
 ## 1. 数据模型扩展（NestJS Mongoose Schema）
-- [ ] 1.1 User Schema 新增 `role` 字段（默认值 `user`，枚举 `user` | `admin`）
-- [ ] 1.2 User Schema 新增 `banned`、`bannedAt`、`bannedReason` 字段
-- [ ] 1.3 更新 User DTO 和 TypeScript 类型定义
+- [x] 1.1 User Schema 新增 `role` 字段（默认值 `user`，枚举 `user` | `admin`）
+- [x] 1.2 User Schema 新增 `banned`、`bannedAt`、`bannedReason` 字段
+- [x] 1.3 更新 User DTO 和 TypeScript 类型定义
 
 ## 2. NestJS Admin 模块
-- [ ] 2.1 创建 `apps/api/src/modules/admin/admin.module.ts`
-- [ ] 2.2 创建 `AdminController`（路由前缀 `/admin`）
-- [ ] 2.3 创建 `AdminService`（业务逻辑）
-- [ ] 2.4 创建 `AdminGuard`（复用 `@Roles('admin')` 装饰器）
-- [ ] 2.5 创建 DTO：`QueryUsersDto`、`BanUserDto`、`QueryMatchesDto`
-- [ ] 2.6 在 `AppModule` 注册 Admin 模块
+- [x] 2.1 创建 `apps/api/src/modules/admin/admin.module.ts`
+- [x] 2.2 创建 `AdminController`（路由前缀 `/admin`）
+- [x] 2.3 创建 `AdminService`（业务逻辑）
+- [x] 2.4 创建 `AdminGuard`（复用 `@Roles('admin')` 装饰器）
+- [x] 2.5 创建 DTO：`QueryUsersDto`、`BanUserDto`、`QueryMatchesDto`
+- [x] 2.6 在 `AppModule` 注册 Admin 模块
 
 ## 3. 后端 API 实现
-- [ ] 3.1 GET /admin/stats（统计数据，Redis 缓存 5 分钟）
-- [ ] 3.2 GET /admin/users（用户列表，分页 + 搜索）
-- [ ] 3.3 GET /admin/users/:id（用户详情 + 对局历史）
-- [ ] 3.4 POST /admin/users/:id/ban（封禁用户）
-- [ ] 3.5 POST /admin/users/:id/unban（解封用户）
-- [ ] 3.6 GET /admin/matches（对局列表，分页 + 游戏/时间筛选）
-- [ ] 3.7 GET /admin/matches/:id（对局详情）
-- [ ] 3.8 编写 Admin 模块测试用例（Jest + Supertest）
-- [ ] 3.9 编写接口文档 `docs/api/admin.md`（已完成）
+- [x] 3.1 GET /admin/stats（统计数据，Redis 缓存 5 分钟）
+- [x] 3.2 GET /admin/users（用户列表，分页 + 搜索）
+- [x] 3.3 GET /admin/users/:id（用户详情 + 对局历史）
+- [x] 3.4 POST /admin/users/:id/ban（封禁用户）
+- [x] 3.5 POST /admin/users/:id/unban（解封用户）
+- [x] 3.6 GET /admin/matches（对局列表，分页 + 游戏/时间筛选）
+- [x] 3.7 GET /admin/matches/:id（对局详情）
+- [x] 3.8 编写 Admin 模块测试用例（Jest + Supertest）
+- [x] 3.9 编写接口文档 `docs/api/admin.md`（已完成）
 
 ## 4. 前端页面
 - [ ] 4.1 创建 `AdminLayout` 组件（侧边栏 + 内容区）

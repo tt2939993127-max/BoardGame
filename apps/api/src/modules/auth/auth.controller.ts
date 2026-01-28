@@ -38,7 +38,12 @@ export class AuthController {
 
         return res.status(201).json({
             message: t('auth.success.register'),
-            user: { id: user._id.toString(), username: user.username },
+            user: {
+                id: user._id.toString(),
+                username: user.username,
+                role: user.role,
+                banned: user.banned,
+            },
             token,
         });
     }
@@ -61,7 +66,12 @@ export class AuthController {
 
         return res.json({
             message: t('auth.success.login'),
-            user: { id: user._id.toString(), username: user.username },
+            user: {
+                id: user._id.toString(),
+                username: user.username,
+                role: user.role,
+                banned: user.banned,
+            },
             token,
         });
     }
@@ -87,6 +97,10 @@ export class AuthController {
                 emailVerified: user.emailVerified,
                 lastOnline: user.lastOnline ?? null,
                 avatar: user.avatar ?? null,
+                role: user.role,
+                banned: user.banned,
+                bannedAt: user.bannedAt ?? null,
+                bannedReason: user.bannedReason ?? null,
                 createdAt: user.createdAt,
             },
         });
@@ -169,6 +183,8 @@ export class AuthController {
                 username: user.username,
                 email: user.email,
                 emailVerified: user.emailVerified,
+                role: user.role,
+                banned: user.banned,
             },
         });
     }
@@ -197,6 +213,8 @@ export class AuthController {
                 id: user._id.toString(),
                 username: user.username,
                 avatar: user.avatar,
+                role: user.role,
+                banned: user.banned,
             },
         });
     }
