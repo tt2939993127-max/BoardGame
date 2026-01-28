@@ -5,7 +5,10 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { LobbyClient } from 'boardgame.io/client';
 import { matchSocket, type RematchVoteState } from '../services/matchSocket';
+import { GAME_SERVER_URL } from '../config/server';
+import { persistMatchCredentials, readStoredMatchCredentials } from '../hooks/match/useMatchStatus';
 
 interface RematchContextValue {
     /** 重赛投票状态 */
@@ -39,6 +42,21 @@ export function RematchProvider({
     const [state, setState] = useState<RematchVoteState>({ votes: {}, ready: false, revision: 0 });
     const [isConnected, setIsConnected] = useState(false);
     const resetCallbackRef = useRef<(() => void) | null>(null);
+    const hasRematchStartedRef = useRef(false);
+    const lobbyClientRef = useRef(new LobbyClient({ server: GAME_SERVER_URL }));
+    const resetTimeoutRef = useRef<number | null>(null);
+
+    const matchInfoRef = useRef<{ matchId?: string; playerId?: string }>({ matchId, playerId });
+    useEffect(() => {
+        matchInfoRef.current = { matchId, playerId };
+    }, [matchId, playerId]);
+
+    const clearResetTimeout = useCallback(() => {
+        if (resetTimeoutRef.current !== null) {
+            window.clearTimeout(resetTimeoutRef.current);
+            resetTimeoutRef.current = null;
+        }
+    }, []);
 
     // 注册 reset 回调
     const registerReset = useCallback((callback: () => void) => {
@@ -61,15 +79,70 @@ export function RematchProvider({
         });
 
         // 订阅重置触发
-        const unsubReset = matchSocket.subscribeReset(() => {
+        const unsubReset = matchSocket.subscribeReset(async () => {
+            if (hasRematchStartedRef.current) return;
+            hasRematchStartedRef.current = true;
+            clearResetTimeout();
+
+            const currentMatchId = matchInfoRef.current.matchId;
+            const currentPlayerId = matchInfoRef.current.playerId;
+            const stored = currentMatchId ? readStoredMatchCredentials(currentMatchId) : null;
+            const rawGameName = stored?.gameName;
+            const gameName = rawGameName ? rawGameName.toLowerCase() : '';
+            const credentials = stored?.credentials;
+            const playerName = stored?.playerName;
+
+            if (currentMatchId && currentPlayerId && gameName && credentials) {
+                if (currentPlayerId === '0') {
+                    try {
+                        const { nextMatchID } = await lobbyClientRef.current.playAgain(gameName, currentMatchId, {
+                            playerID: currentPlayerId,
+                            credentials,
+                        });
+                        const { playerCredentials: nextCredentials } = await lobbyClientRef.current.joinMatch(gameName, nextMatchID, {
+                            playerID: currentPlayerId,
+                            playerName: playerName || `Player ${currentPlayerId}`,
+                        });
+                        persistMatchCredentials(nextMatchID, {
+                            playerID: currentPlayerId,
+                            credentials: nextCredentials,
+                            matchID: nextMatchID,
+                            gameName,
+                            playerName,
+                        });
+                        matchSocket.broadcastNewRoom(`/play/${gameName}/match/${nextMatchID}`);
+                        window.location.href = `/play/${gameName}/match/${nextMatchID}?playerID=${currentPlayerId}`;
+                        return;
+                    } catch (error) {
+                        console.error('[RematchContext] playAgain 失败，回退为本地 reset', error);
+                    }
+                } else {
+                    resetTimeoutRef.current = window.setTimeout(() => {
+                        console.warn('[RematchContext] 等待新房间超时，回退为本地 reset');
+                        if (resetCallbackRef.current) {
+                            resetCallbackRef.current();
+                        }
+                        hasRematchStartedRef.current = false;
+                    }, 8000);
+                    return;
+                }
+            }
+
             if (resetCallbackRef.current) {
                 resetCallbackRef.current();
             }
+            hasRematchStartedRef.current = false;
         });
 
         // 订阅新房间通知（调试用）
         const unsubNewRoom = matchSocket.subscribeNewRoom((url) => {
             console.log('[RematchContext] 收到新房间通知，跳转到:', url);
+            clearResetTimeout();
+            const currentPlayerId = matchInfoRef.current.playerId;
+            if (currentPlayerId === '0') {
+                window.location.href = `${url}?playerID=0`;
+                return;
+            }
             // 跳转到新房间（作为玩家 1 加入）
             window.location.href = `${url}?join=true`;
         });
@@ -79,6 +152,8 @@ export function RematchProvider({
             unsubReset();
             unsubNewRoom();
             matchSocket.leaveMatch();
+            hasRematchStartedRef.current = false;
+            clearResetTimeout();
         };
     }, [isMultiplayer, matchId, playerId]);
 

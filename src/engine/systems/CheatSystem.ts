@@ -21,6 +21,8 @@ export const CHEAT_COMMANDS = {
     SET_PHASE: 'SYS_CHEAT_SET_PHASE',
     /** 抽取指定卡牌 */
     DRAW_SPECIFIC_CARD: 'SYS_CHEAT_DRAW_SPECIFIC_CARD',
+    /** 根据图集索引发牌 */
+    DEAL_CARD_BY_ATLAS_INDEX: 'SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX',
     /** 根据索引发牌（从牌库指定位置发牌到手牌） */
     DEAL_CARD_BY_INDEX: 'SYS_CHEAT_DEAL_CARD_BY_INDEX',
     /** 设置骰子面 */
@@ -71,6 +73,12 @@ export interface DealCardByIndexPayload {
     deckIndex: number;
 }
 
+export interface DealCardByAtlasIndexPayload {
+    playerId: PlayerId;
+    /** 图集索引 */
+    atlasIndex: number;
+}
+
 // ============================================================================
 // 通用资源修改器接口
 // ============================================================================
@@ -88,6 +96,8 @@ export interface CheatResourceModifier<TCore> {
     setToken?: (core: TCore, playerId: PlayerId, tokenId: string, amount: number) => TCore;
     /** 根据索引发牌（可选） */
     dealCardByIndex?: (core: TCore, playerId: PlayerId, deckIndex: number) => TCore;
+    /** 根据图集索引发牌（可选） */
+    dealCardByAtlasIndex?: (core: TCore, playerId: PlayerId, atlasIndex: number) => TCore;
 }
 
 // ============================================================================
@@ -182,7 +192,7 @@ export function createCheatSystem<TCore>(
                     state: { ...state, core: newCore },
                 };
             }
-            
+
             // 处理根据索引发牌命令
             if (command.type === CHEAT_COMMANDS.DEAL_CARD_BY_INDEX && modifier.dealCardByIndex) {
                 const payload = command.payload as DealCardByIndexPayload;
@@ -196,7 +206,21 @@ export function createCheatSystem<TCore>(
                     state: { ...state, core: newCore },
                 };
             }
-            
+
+            // 处理根据图集索引发牌命令
+            if (command.type === CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX && modifier.dealCardByAtlasIndex) {
+                const payload = command.payload as DealCardByAtlasIndexPayload;
+                const newCore = modifier.dealCardByAtlasIndex(
+                    state.core,
+                    payload.playerId,
+                    payload.atlasIndex
+                );
+                return {
+                    halt: true,
+                    state: { ...state, core: newCore },
+                };
+            }
+
             // 处理直接设置状态命令
             if (command.type === CHEAT_COMMANDS.SET_STATE) {
                 const payload = command.payload as SetStatePayload<TCore>;

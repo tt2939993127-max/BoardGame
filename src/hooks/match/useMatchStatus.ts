@@ -156,6 +156,11 @@ const parseStoredCredentials = (raw: string | null): StoredMatchCredentials | nu
     }
 };
 
+export function readStoredMatchCredentials(matchID: string): StoredMatchCredentials | null {
+    if (!matchID) return null;
+    return parseStoredCredentials(localStorage.getItem(`${MATCH_CREDENTIALS_PREFIX}${matchID}`));
+}
+
 export function listStoredMatchCredentials(): StoredMatchCredentials[] {
     const results: StoredMatchCredentials[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {

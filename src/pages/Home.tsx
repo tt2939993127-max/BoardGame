@@ -404,9 +404,9 @@ export const Home = () => {
 
     return (
         <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center">
-            <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-4">
+            <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-1">
                 {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
-                <div className="md:absolute md:top-10 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-8 md:mb-0">
+                <div className="md:absolute md:top-8 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-4 md:mb-0">
                     {user ? (
                         <UserMenu onLogout={handleLogout} onBindEmail={openEmailBind} />
                     ) : (
@@ -425,19 +425,24 @@ export const Home = () => {
                     <LanguageSwitcher />
                 </div>
 
-                {/* 居中大标题 - 使用 clamp 保证响应式大小 */}
-                <div className="flex flex-col items-center">
-                    <h1 className="text-[clamp(1.75rem,5vw,2.5rem)] font-bold tracking-[0.15em] text-parchment-base-text mb-1.5 text-center leading-tight">
-                        {t('lobby:home.title')}
-                    </h1>
-                    <p className="text-xs md:text-sm text-parchment-light-text tracking-widest text-center font-bold mb-4 uppercase">
+                {/* 居中大标题 - 极简布局，Logo作为标题点缀 */}
+                <div className="flex flex-col items-center justify-center mb-4">
+                    {/* 标题行：Logo + H1 */}
+                    <div className="flex items-center justify-center gap-3 md:gap-4 mb-2">
+                        <img
+                            src="/logos/logo_1_grid.svg"
+                            alt="logo"
+                            className="w-8 md:w-10 opacity-90"
+                        />
+                        <h1 className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold tracking-[0.1em] text-parchment-base-text leading-none pt-1">
+                            {t('lobby:home.title')}
+                        </h1>
+                    </div>
+
+                    {/* 副标题 */}
+                    <p className="text-[10px] md:text-sm text-parchment-light-text tracking-[0.2em] font-bold uppercase opacity-80">
                         {t('lobby:home.subtitle')}
                     </p>
-                    <div className="flex items-center gap-4">
-                        <div className="h-px w-[115px] md:w-44 bg-parchment-base-text opacity-25" />
-                        <img src="/logos/logo_1_grid.svg" alt="logo" className="w-5 md:w-6 opacity-60" />
-                        <div className="h-px w-[115px] md:w-44 bg-parchment-base-text opacity-25" />
-                    </div>
                 </div>
             </header>
 

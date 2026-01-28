@@ -225,6 +225,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         lastBonusDieRoll: G.lastBonusDieRoll,
         currentPlayerId: rootPid,
         opponentName,
+        isSpectator,
     });
 
 

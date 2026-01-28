@@ -48,7 +48,11 @@ export const LeftSidebar = ({
                  * selfBuffRef is used as the end position for buff/status flying effects.
                  * Use a small offset above the HP container so the effect doesn't land too low.
                  */}
-                <div className="w-full px-[1.2vw] flex flex-col-reverse gap-[0.3vw]" ref={selfBuffRef}>
+                <div
+                    className="w-full px-[1.2vw] flex flex-col-reverse gap-[0.3vw]"
+                    ref={selfBuffRef}
+                    data-tutorial-id="status-tokens"
+                >
                     <TokensContainer
                         tokens={viewPlayer.tokens ?? {}}
                         maxPerRow={5}
@@ -83,8 +87,12 @@ export const LeftSidebar = ({
                         clickableEffects={canRemoveStun ? ['stun'] : []}
                     />
                 </div>
-                <div className="w-full px-[1vw]"><PlayerStats player={viewPlayer} hpRef={selfHpRef} /></div>
-                <div className="w-full px-[1vw] pt-[0.5vw]"><DrawDeck ref={drawDeckRef} count={viewPlayer.deck.length} locale={locale} /></div>
+                <div className="w-full px-[1vw]" data-tutorial-id="player-stats">
+                    <PlayerStats player={viewPlayer} hpRef={selfHpRef} />
+                </div>
+                <div className="w-full px-[1vw] pt-[0.5vw]" data-tutorial-id="draw-deck">
+                    <DrawDeck ref={drawDeckRef} count={viewPlayer.deck.length} locale={locale} />
+                </div>
             </div>
         </div>
     );

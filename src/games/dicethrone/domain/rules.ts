@@ -640,7 +640,7 @@ export const isCardPlayableInResponseWindow = (
             //   1. 只有具有骰子相关效果的 instant/roll 卡才能使用
             //   2. 卡牌必须能作用于对手骰子：
             //      - target='opponent' 的卡（强制修改对手骰子）
-            //      - target='any' 的卡（可选择任意玩家的骰子）
+            //      - target='any'/'select' 的卡（可选择任意玩家的骰子）
             //      - target='self' 的卡不允许，因为此时场上是对手的骰子，没有合法目标
             //   3. 玩家必须是对手（非 rollerId）
             if (card.timing !== 'instant' && card.timing !== 'roll') {
@@ -675,14 +675,9 @@ export const isCardPlayableInResponseWindow = (
             
         case 'afterCardPlayed':
             // 卡牌打出后的响应窗口
-            // 目的：允许对手响应刚打出的卡牌效果
-            // 限制：只有 instant 卡可以响应（快速反应）
-            // 注意：响应窗口中打出的卡牌不会再触发新的响应窗口（避免无限嵌套）
-            // TODO: 考虑限制为只有骰子/对手目标效果的 instant 卡才能响应
-            if (card.timing !== 'instant') {
-                return false;
-            }
-            break;
+            // 目的：允许对手响应刚打出的卡牌效果（预留）
+            // 当前未定义“效果覆盖”判定规则，避免误放响应，暂时禁止此窗口出牌
+            return false;
             
         case 'thenBreakpoint':
             // "然后" 断点响应窗口
@@ -729,7 +724,7 @@ const hasAnyDiceEffect = (card: AbilityCard): boolean => {
  * 用于 afterRollConfirmed 响应窗口中检查卡牌是否可用：
  * - 'self' 的卡牌：只有骰子主人（rollerId）能用
  * - 'opponent' 的卡牌：只有对手能用
- * - 'any' 的卡牌：可以选择任意玩家的骰子
+ * - 'any'/'select' 的卡牌：可以选择任意玩家的骰子
  */
 const getDiceEffectTarget = (card: AbilityCard): 'self' | 'opponent' | 'any' | 'unknown' => {
     if (!card.effects || card.effects.length === 0) return 'unknown';
@@ -745,7 +740,7 @@ const getDiceEffectTarget = (card: AbilityCard): 'self' | 'opponent' | 'any' | '
                 // 返回效果目标
                 if (action.target === 'self') return 'self';
                 if (action.target === 'opponent') return 'opponent';
-                if (action.target === 'any') return 'any';
+                if (action.target === 'select') return 'any';
             }
         }
     }

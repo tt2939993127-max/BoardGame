@@ -9,7 +9,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlayerId } from '../../../engine/types';
 import type { DieFace } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
-import { MONK_CARDS } from '../monk/cards';
 
 /**
  * 卡牌特写配置
@@ -28,6 +27,8 @@ export interface CardSpotlightConfig {
         value: number;
         face?: DieFace;
         playerId: PlayerId;
+        /** 效果目标玩家（若与 playerId 不同，则双方都显示特写） */
+        targetPlayerId?: PlayerId;
         /** 效果描述 key */
         effectKey?: string;
         /** 效果描述参数 */
@@ -37,7 +38,16 @@ export interface CardSpotlightConfig {
     currentPlayerId: PlayerId;
     /** 对手名称 */
     opponentName: string;
+    /** 是否为观战模式（观战显示全部特写） */
+    isSpectator?: boolean;
 }
+
+const normalizePlayerId = (value: PlayerId | string | number | null | undefined): string => {
+    if (value === null || value === undefined) return '';
+    const raw = String(value);
+    const match = raw.match(/(\d+)$/);
+    return match ? match[1] : raw;
+};
 
 /**
  * 卡牌特写状态
@@ -63,7 +73,13 @@ export interface CardSpotlightState {
  * 管理卡牌和额外骰子特写队列
  */
 export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightState {
-    const { lastPlayedCard, lastBonusDieRoll, currentPlayerId, opponentName } = config;
+    const {
+        lastPlayedCard,
+        lastBonusDieRoll,
+        currentPlayerId,
+        opponentName,
+        isSpectator = false,
+    } = config;
 
     // 卡牌特写队列
     const [cardSpotlightQueue, setCardSpotlightQueue] = useState<CardSpotlightItem[]>([]);
@@ -98,13 +114,23 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
 
         prevBonusDieTimestampRef.current = bonusDie.timestamp;
 
+        const selfPlayerId = normalizePlayerId(currentPlayerId);
+        const bonusPlayerId = normalizePlayerId(bonusDie.playerId);
+        const bonusTargetId = normalizePlayerId(bonusDie.targetPlayerId ?? bonusDie.playerId);
+        const shouldShowBonusDie = isSpectator || selfPlayerId === bonusPlayerId || selfPlayerId === bonusTargetId;
+
+        if (!shouldShowBonusDie) {
+            setShowBonusDie(false);
+            return;
+        }
+
         // 尝试绑定到卡牌队列（卡左骰右）
         const cardQueue = cardSpotlightQueueRef.current;
         const thresholdMs = 1500;
         const cardCandidate = [...cardQueue]
             .reverse()
             .find((item) =>
-                item.playerId === bonusDie.playerId &&
+                normalizePlayerId(item.playerId) === bonusPlayerId &&
                 Math.abs(item.timestamp - bonusDie.timestamp) <= thresholdMs
             );
 
@@ -139,7 +165,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         setBonusDieEffectKey(bonusDie.effectKey);
         setBonusDieEffectParams(bonusDie.effectParams);
         setShowBonusDie(true);
-    }, [lastBonusDieRoll]);
+    }, [lastBonusDieRoll, currentPlayerId, isSpectator]);
 
     /**
      * 监听其他玩家打出卡牌
@@ -155,30 +181,12 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         prevLastPlayedCardTimestampRef.current = card.timestamp;
 
         // 归一化 ID 比较
-        const cardPlayerId = String(card.playerId);
-        const selfPlayerId = String(currentPlayerId);
+        const cardPlayerId = normalizePlayerId(card.playerId);
+        const selfPlayerId = normalizePlayerId(currentPlayerId);
 
-        console.log('[useCardSpotlight] New card detected:', {
-            cardId: card.cardId,
-            timestamp: card.timestamp,
-            cardPlayerId,
-            selfPlayerId,
-            shouldShow: cardPlayerId !== selfPlayerId && selfPlayerId !== ''
-        });
+        if (!isSpectator && cardPlayerId === selfPlayerId) return;
 
-        // DEBUG: 暂时允许显示自己的卡牌特写（方便调试）
-        // 归一化后 ID 相同说明是自己打出的卡
-        // if (cardPlayerId === selfPlayerId) return;
-
-        // 尝试从定义中查找正确的 atlasIndex，作为数据损坏的修复
-        const cardDef = MONK_CARDS.find(c => c.id === card.cardId);
-        const resolvedAtlasIndex = cardDef?.atlasIndex ?? card.atlasIndex ?? 0;
-
-        console.log('[useCardSpotlight] Atlas Lookup:', {
-            cardId: card.cardId,
-            originalAtlasIndex: card.atlasIndex,
-            resolvedAtlasIndex
-        });
+        const resolvedAtlasIndex = card.atlasIndex ?? 0;
 
         const newItem: CardSpotlightItem = {
             id: `${card.cardId}-${card.timestamp}`,
@@ -188,7 +196,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             playerName: opponentName, // 注意：如果是自己，这里的名字可能不对，但 UI 暂未显示名字
         };
         setCardSpotlightQueue((prev) => [...prev, newItem]);
-    }, [lastPlayedCard, currentPlayerId, opponentName]);
+    }, [lastPlayedCard, currentPlayerId, opponentName, isSpectator]);
 
     /**
      * 关闭卡牌特写

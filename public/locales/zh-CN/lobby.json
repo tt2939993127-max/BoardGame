@@ -13,6 +13,11 @@
       "players": "{{count}} 人在席"
     }
   },
+  "password": {
+    "modalTitle": "私密房间",
+    "modalDesc": "该房间需要密码才能进入。",
+    "placeholder": "请输入密码..."
+  },
   "confirm": {
     "destroy": {
       "title": "销毁房间",
@@ -125,6 +130,9 @@
     "roomName": "房间名称",
     "roomNamePlaceholder": "输入房间名称（可选）",
     "roomNameHint": "留空则自动生成",
+    "password": "房间密码",
+    "passwordPlaceholder": "输入密码（可选，留空则公开）",
+    "passwordHint": "私密房间专用",
     "playerCount": "游戏人数",
     "playerCountUnit": "{{count}}人",
     "retention": "房间保存",

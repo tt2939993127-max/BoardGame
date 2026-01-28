@@ -12,6 +12,7 @@ import { getDieFace, getTokenStackLimit } from './rules';
 import { resourceSystem } from '../../../systems/ResourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
+import { MONK_CARDS } from '../monk/cards';
 
 // ============================================================================
 // Choice Effect 处理器注册表
@@ -521,10 +522,14 @@ const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_PLAY
 
             // 直接设置 lastPlayedCard（立即触发特写）
             // 如果后续有 INTERACTION_REQUESTED 事件，会在那里清除并暂存
+            const resolvedAtlasIndex = MONK_CARDS.find(cardDef => cardDef.id === cardId)?.atlasIndex
+                ?? card.atlasIndex
+                ?? 0;
+
             newState.lastPlayedCard = {
                 cardId,
                 playerId,
-                atlasIndex: card.atlasIndex ?? 0,
+                atlasIndex: resolvedAtlasIndex,
                 timestamp: event.timestamp,
             };
         }
@@ -986,10 +991,13 @@ const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABIL
             player.upgradeCardByAbilityId[oldAbilityId] = { cardId: card.id, cpCost: card.cpCost };
 
             // 触发特写系统
+            const resolvedAtlasIndex = MONK_CARDS.find(cardDef => cardDef.id === card.id)?.atlasIndex
+                ?? card.atlasIndex
+                ?? 0;
             newState.lastPlayedCard = {
                 cardId: card.id,
                 playerId,
-                atlasIndex: card.atlasIndex ?? 0,
+                atlasIndex: resolvedAtlasIndex,
                 timestamp: event.timestamp,
             };
         }

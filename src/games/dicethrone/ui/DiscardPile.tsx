@@ -50,6 +50,7 @@ export const DiscardPile = React.forwardRef<HTMLDivElement, {
                 topCard ? 'border-slate-600 cursor-pointer hover:scale-[1.03] bg-slate-900/50' :
                 'border-slate-600 cursor-default opacity-70 bg-slate-900/50'
             }`}
+            data-tutorial-id="discard-pile"
             onClick={handleClick}
         >
             {!topCard && <div className="text-[0.8vw] font-bold uppercase tracking-widest text-slate-600">{t('hud.discardPile')}</div>}

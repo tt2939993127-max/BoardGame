@@ -13,6 +13,11 @@
       "players": "{{count}} seated"
     }
   },
+  "password": {
+    "modalTitle": "Private Room",
+    "modalDesc": "This room requires a password.",
+    "placeholder": "Enter password..."
+  },
   "confirm": {
     "destroy": {
       "title": "Destroy Room",
@@ -125,6 +130,9 @@
     "roomName": "Room Name",
     "roomNamePlaceholder": "Enter room name (optional)",
     "roomNameHint": "Leave blank for auto-generated name",
+    "password": "Room Password",
+    "passwordPlaceholder": "Enter password (optional)",
+    "passwordHint": "For private rooms",
     "playerCount": "Players",
     "playerCountUnit": "{{count}} players",
     "retention": "Room Retention",

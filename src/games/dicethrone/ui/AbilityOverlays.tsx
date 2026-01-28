@@ -160,7 +160,11 @@ export const AbilityOverlays = ({
     }, [isEditing]);
 
     return (
-        <div ref={containerRef} className="absolute inset-0 z-20 pointer-events-none">
+        <div
+            ref={containerRef}
+            className="absolute inset-0 z-20 pointer-events-none"
+            data-tutorial-id="ability-slots"
+        >
             {slots.map((slot) => {
                 const col = slot.index % 3;
                 const row = Math.floor(slot.index / 3);

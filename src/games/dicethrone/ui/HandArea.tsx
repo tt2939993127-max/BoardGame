@@ -483,7 +483,11 @@ export const HandArea = ({
     }, [handleDragEnd]);
 
     return (
-        <div ref={handAreaRef} className="absolute bottom-0 left-0 right-0 z-[100] flex justify-center items-end pb-0 h-[22vw] pointer-events-none">
+        <div
+            ref={handAreaRef}
+            className="absolute bottom-0 left-0 right-0 z-[100] flex justify-center items-end pb-0 h-[22vw] pointer-events-none"
+            data-tutorial-id="hand-area"
+        >
             <div className="relative w-[95vw] h-full flex justify-center items-end">
                 <AnimatePresence>
                     {hand.map((card, i) => {

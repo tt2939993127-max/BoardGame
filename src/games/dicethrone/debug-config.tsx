@@ -42,12 +42,12 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
     // 应用骰子值
     const handleApplyDice = () => {
         if (!moves.SYS_CHEAT_SET_DICE) return;
-        
+
         const values = diceValues.map((v) => {
             const num = parseInt(v, 10);
             return isNaN(num) ? 1 : Math.max(1, Math.min(6, num));
         });
-        
+
         moves.SYS_CHEAT_SET_DICE({ diceValues: values });
     };
 
@@ -220,10 +220,10 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
             )}
 
             {/* 发牌作弊 */}
-            {moves.SYS_CHEAT_DEAL_CARD_BY_INDEX && (
+            {moves.SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX && (
                 <div className="bg-green-50 p-3 rounded-lg border border-green-200">
                     <h4 className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-3">
-                        发牌调试
+                        发牌调试 (图集索引)
                     </h4>
                     <div className="space-y-2">
                         <div className="flex gap-2">
@@ -238,32 +238,36 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                             <input
                                 type="number"
                                 min="0"
-                                max={G?.core?.players?.[dealPlayer]?.deck?.length - 1 ?? 0}
+                                max={32}
                                 value={deckIndex}
                                 onChange={(e) => setDeckIndex(e.target.value)}
                                 className="flex-1 px-2 py-1.5 text-xs border border-green-300 rounded bg-white text-center"
-                                placeholder="牌库索引"
+                                placeholder="图集索引"
                             />
                         </div>
                         <div className="text-[9px] text-green-600 mb-1">
                             牌库剩余: {G?.core?.players?.[dealPlayer]?.deck?.length ?? 0} 张
-                            {G?.core?.players?.[dealPlayer]?.deck?.[Number(deckIndex)]?.id && (
-                                <span className="ml-1">| 当前: {G.core.players[dealPlayer].deck[Number(deckIndex)].id}</span>
-                            )}
+                            {(() => {
+                                const targetAtlasIndex = Number(deckIndex);
+                                const cardInDeck = G?.core?.players?.[dealPlayer]?.deck?.find((c: any) => c.atlasIndex === targetAtlasIndex);
+                                return cardInDeck ? (
+                                    <span className="ml-1">| 牌库中存在: {cardInDeck.id}</span>
+                                ) : (
+                                    <span className="ml-1 text-red-400">| 牌库中不存在该索引</span>
+                                );
+                            })()}
                         </div>
                         <button
                             onClick={() => {
-                                const index = Number(deckIndex);
-                                if (index >= 0 && index < (G?.core?.players?.[dealPlayer]?.deck?.length ?? 0)) {
-                                    moves.SYS_CHEAT_DEAL_CARD_BY_INDEX({
-                                        playerId: dealPlayer,
-                                        deckIndex: index,
-                                    });
-                                }
+                                const atlasIdx = Number(deckIndex);
+                                moves.SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX({
+                                    playerId: dealPlayer,
+                                    atlasIndex: atlasIdx,
+                                });
                             }}
                             className="w-full px-3 py-1.5 bg-green-500 text-white rounded text-xs font-bold hover:bg-green-600"
                         >
-                            🎴 发指定牌
+                            🎴 发指定牌 (Atlas)
                         </button>
                     </div>
                 </div>

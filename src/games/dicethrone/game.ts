@@ -84,11 +84,34 @@ const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
     dealCardByIndex: (core, playerId, deckIndex) => {
         const player = core.players[playerId];
         if (!player || deckIndex < 0 || deckIndex >= player.deck.length) return core;
-        
+
         // 从牌库指定位置取出卡牌
         const newDeck = [...player.deck];
         const [card] = newDeck.splice(deckIndex, 1);
-        
+
+        return {
+            ...core,
+            players: {
+                ...core.players,
+                [playerId]: {
+                    ...player,
+                    deck: newDeck,
+                    hand: [...player.hand, card],
+                },
+            },
+        };
+    },
+    dealCardByAtlasIndex: (core, playerId, atlasIndex) => {
+        const player = core.players[playerId];
+        if (!player) return core;
+
+        // 在牌库中查找具有指定 atlasIndex 的卡牌
+        const deckIndex = player.deck.findIndex(card => card.atlasIndex === atlasIndex);
+        if (deckIndex === -1) return core;
+
+        const newDeck = [...player.deck];
+        const [card] = newDeck.splice(deckIndex, 1);
+
         return {
             ...core,
             players: {
@@ -233,11 +256,11 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
     onAutoContinueCheck: ({ state, events }): { autoContinue: boolean; playerId: string } | void => {
         const core = state.core;
-        
+
         // 检查是否有 TOKEN_RESPONSE_CLOSED 或 CHOICE_RESOLVED 事件
         const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
         const hasChoiceResolved = events.some(e => e.type === 'CHOICE_RESOLVED');
-        
+
         // 如果有这些事件，且没有其他阻塞条件，则自动继续
         if (hasTokenResponseClosed || hasChoiceResolved) {
             // 检查是否有阻塞条件
@@ -245,7 +268,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             const hasActiveResponseWindow = state.sys.responseWindow?.current !== undefined;
             const hasPendingInteraction = core.pendingInteraction !== undefined;
             const hasPendingDamage = core.pendingDamage !== undefined;
-            
+
             // 只有在没有其他阻塞条件时才自动继续
             if (!hasActivePrompt && !hasActiveResponseWindow && !hasPendingInteraction && !hasPendingDamage) {
                 return {
@@ -254,7 +277,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 };
             }
         }
-        
+
         return undefined;
     },
 
@@ -395,6 +418,7 @@ const COMMAND_TYPES = [
     CHEAT_COMMANDS.SET_DICE,
     CHEAT_COMMANDS.SET_TOKEN,
     CHEAT_COMMANDS.DEAL_CARD_BY_INDEX,
+    CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX,
     CHEAT_COMMANDS.SET_STATE,
 ];
 

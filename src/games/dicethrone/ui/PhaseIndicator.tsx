@@ -22,7 +22,10 @@ export const PhaseIndicator = ({ currentPhase }: { currentPhase: TurnPhase }) =>
     const [hoveredPhaseId, setHoveredPhaseId] = React.useState<string | null>(null);
 
     return (
-        <div className="flex flex-col gap-[0.4vw] pointer-events-auto opacity-100 w-full z-[80]">
+        <div
+            className="flex flex-col gap-[0.4vw] pointer-events-auto opacity-100 w-full z-[80]"
+            data-tutorial-id="phase-indicator"
+        >
             <h3 className="text-[1.0vw] font-black text-slate-300/80 mb-[0.4vw] ml-[0.3vw] tracking-[0.2em] uppercase truncate drop-shadow-md">
                 {t('phase.title')}
             </h3>

@@ -47,6 +47,7 @@ export const CenterBoard = ({
             <div className="relative flex items-center justify-center gap-[0.5vw]">
                 <div
                     className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
+                    data-tutorial-id="player-board"
                 >
                     <OptimizedImage
                         src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD, locale)}

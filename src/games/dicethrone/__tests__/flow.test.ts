@@ -13,6 +13,7 @@ import { MONK_CARDS } from '../monk/cards';
 import type { AbilityCard } from '../types';
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
+import type { EngineSystem } from '../../../engine/systems/types';
 import { createInitialSystemState } from '../../../engine/pipeline';
 
 // ============================================================================
@@ -45,7 +46,8 @@ const createQueuedRandom = (values: number[]): RandomFn => {
 const getCardById = (cardId: string): AbilityCard => {
     const card = MONK_CARDS.find(c => c.id === cardId);
     if (!card) throw new Error(`找不到卡牌: ${cardId}`);
-    return card;
+    // 深拷贝，避免测试中修改手牌污染静态配置
+    return JSON.parse(JSON.stringify(card)) as AbilityCard;
 };
 
 const createSetupWithHand = (
@@ -64,7 +66,7 @@ const createSetupWithHand = (
             }
         }
         options.mutate?.(core);
-        const sys = createInitialSystemState(playerIds, diceThroneSystemsForTest, undefined);
+        const sys = createInitialSystemState(playerIds, testSystems, undefined);
         return { sys, core };
     };
 };
@@ -148,6 +150,11 @@ interface DiceThroneExpectation extends StateExpectation {
     activePlayerId?: PlayerId;
     turnNumber?: number;
     diceValues?: number[];
+    lastPlayedCard?: {
+        cardId?: string;
+        playerId?: PlayerId;
+        atlasIndex?: number;
+    } | null;
     players?: Record<PlayerId, PlayerExpectation>;
     pendingInteraction?: {
         type?: CardInteractionType;
@@ -287,6 +294,28 @@ function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpectation):
         });
     }
 
+    if (expect.lastPlayedCard === null) {
+        if (state.lastPlayedCard) {
+            errors.push('预期 lastPlayedCard 为空，但实际存在');
+        }
+    } else if (expect.lastPlayedCard) {
+        const actual = state.lastPlayedCard;
+        if (!actual) {
+            errors.push('预期 lastPlayedCard 存在，但实际为空');
+        } else {
+            const expected = expect.lastPlayedCard;
+            if (expected.cardId !== undefined && actual.cardId !== expected.cardId) {
+                errors.push(`lastPlayedCard cardId 不匹配: 预期 ${expected.cardId}, 实际 ${actual.cardId}`);
+            }
+            if (expected.playerId !== undefined && actual.playerId !== expected.playerId) {
+                errors.push(`lastPlayedCard playerId 不匹配: 预期 ${expected.playerId}, 实际 ${actual.playerId}`);
+            }
+            if (expected.atlasIndex !== undefined && actual.atlasIndex !== expected.atlasIndex) {
+                errors.push(`lastPlayedCard atlasIndex 不匹配: 预期 ${expected.atlasIndex}, 实际 ${actual.atlasIndex}`);
+            }
+        }
+    }
+
     if (expect.pendingInteraction === null) {
         if (state.pendingInteraction) {
             errors.push('预期 pendingInteraction 为空，但实际存在');
@@ -363,6 +392,10 @@ function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpectation):
     return errors;
 }
 
+const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThroneExpectation): string[] => {
+    return assertDiceThrone(state.core, expect);
+};
+
 // ============================================================================
 // 测试用例（参照规则并对照实现）
 // ============================================================================
@@ -424,7 +457,7 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
                 selected: [],
                 dieModifyConfig: { mode: 'any' },
             };
-            const sys = createInitialSystemState(playerIds, diceThroneSystemsForTest, undefined);
+            const sys = createInitialSystemState(playerIds, testSystems, undefined);
             return { sys, core };
         },
         commands: [
@@ -576,12 +609,14 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
 // 运行测试
 // ============================================================================
 
+const testSystems = diceThroneSystemsForTest as unknown as EngineSystem<DiceThroneCore>[];
+
 const createRunner = (random: RandomFn, silent = true) => new GameTestRunner({
     domain: DiceThroneDomain,
-    systems: diceThroneSystemsForTest,
+    systems: testSystems,
     playerIds: ['0', '1'],
     random,
-    assertFn: (state, expect: DiceThroneExpectation) => assertDiceThrone(state.core, expect),
+    assertFn: assertState,
     silent,
 });
 
@@ -664,6 +699,28 @@ describe('王权骰铸流程测试', () => {
             expect(result.finalState.sys.responseWindow?.current).toBeUndefined();
         });
 
+        it('响应窗口：掌击后对手仅持有弹一手时不应打开 afterCardPlayed', () => {
+            const runner = createRunner(fixedRandom);
+            const result = runner.run({
+                name: 'afterCardPlayed 不打开 - dice instant only',
+                setup: createSetupWithHand(['card-palm-strike'], {
+                    cp: 10,
+                    mutate: (core) => {
+                        core.players['1'].hand = [getCardById('card-flick')];
+                        core.players['1'].resources.cp = 10;
+                        core.players['0'].deck = [];
+                        core.players['1'].deck = [];
+                    },
+                }),
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
+                    cmd('PLAY_CARD', '0', { cardId: 'card-palm-strike' }),
+                ],
+            });
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.sys.responseWindow?.current).toBeUndefined();
+        });
+
         it('击倒：可花费 2CP 主动移除', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
@@ -730,6 +787,53 @@ describe('王权骰铸流程测试', () => {
                     turnPhase: 'main2',
                     players: {
                         '0': { cp: 2, statusEffects: { stun: 0 } },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('净化：移除击倒并消耗净化', () => {
+            const runner = createRunner(fixedRandom);
+            const result = runner.run({
+                name: '净化移除击倒',
+                setup: createSetupWithHand([], {
+                    mutate: (core) => {
+                        core.players['0'].statusEffects.stun = 1;
+                        core.players['0'].tokens.purify = 1;
+                    },
+                }),
+                commands: [
+                    cmd('USE_PURIFY', '0', { statusId: 'stun' }),
+                ],
+                expect: {
+                    turnPhase: 'upkeep',
+                    players: {
+                        '0': { tokens: { purify: 0 }, statusEffects: { stun: 0 } },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('净化：无负面状态不可使用 - no_status', () => {
+            const runner = createRunner(fixedRandom);
+            const result = runner.run({
+                name: '净化无负面状态 - no_status',
+                setup: createSetupWithHand([], {
+                    mutate: (core) => {
+                        core.players['0'].statusEffects.stun = 0;
+                        core.players['0'].tokens.purify = 1;
+                    },
+                }),
+                commands: [
+                    cmd('USE_PURIFY', '0', { statusId: 'stun' }),
+                ],
+                expect: {
+                    errorAtStep: { step: 1, error: 'no_status' },
+                    turnPhase: 'upkeep',
+                    players: {
+                        '0': { tokens: { purify: 1 }, statusEffects: { stun: 0 } },
                     },
                 },
             });
@@ -882,11 +986,11 @@ describe('王权骰铸流程测试', () => {
             
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
-                systems: diceThroneSystemsForTest,
+                systems: testSystems,
                 playerIds: ['0', '1'],
                 random,
                 setup: createNoResponseSetup(),
-                assertFn: (state, expect: DiceThroneExpectation) => assertDiceThrone(state.core, expect),
+                assertFn: assertState,
                 silent: true,
             });
             const result = runner.run({
@@ -920,11 +1024,11 @@ describe('王权骰铸流程测试', () => {
             
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
-                systems: diceThroneSystemsForTest,
+                systems: testSystems,
                 playerIds: ['0', '1'],
                 random,
                 setup: createNoResponseSetup(),
-                assertFn: (state, expect: DiceThroneExpectation) => assertDiceThrone(state.core, expect),
+                assertFn: assertState,
                 silent: true,
             });
             const result = runner.run({
@@ -958,11 +1062,11 @@ describe('王权骰铸流程测试', () => {
             // 使用无响应卡牌的 setup
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
-                systems: diceThroneSystemsForTest,
+                systems: testSystems,
                 playerIds: ['0', '1'],
                 random,
                 setup: createNoResponseSetup(),
-                assertFn: (state, expect: DiceThroneExpectation) => assertDiceThrone(state.core, expect),
+                assertFn: assertState,
                 silent: true,
             });
             
@@ -995,6 +1099,34 @@ describe('王权骰铸流程测试', () => {
     });
 
     describe('卡牌效果', () => {
+        it('打出升级卡时应使用静态表 atlasIndex（忽略手牌污染）', () => {
+            const runner = createRunner(fixedRandom);
+            const result = runner.run({
+                name: 'lastPlayedCard atlasIndex 取静态表（升级卡）',
+                setup: createSetupWithHand(['card-meditation-2'], {
+                    cp: 2,
+                    mutate: (core) => {
+                        const card = core.players['0']?.hand[0];
+                        if (card) {
+                            card.atlasIndex = 25; // 注入错误索引
+                        }
+                    },
+                }),
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
+                ],
+                expect: {
+                    lastPlayedCard: {
+                        cardId: 'card-meditation-2',
+                        playerId: '0',
+                        atlasIndex: 6,
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
         it('打出内心平静获得2太极', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
@@ -1190,11 +1322,11 @@ describe('王权骰铸流程测试', () => {
             
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
-                systems: diceThroneSystemsForTest,
+                systems: testSystems,
                 playerIds: ['0', '1'],
                 random,
                 setup: createNoResponseSetup(),
-                assertFn: (state, expect: DiceThroneExpectation) => assertDiceThrone(state.core, expect),
+                assertFn: assertState,
                 silent: true,
             });
             const result = runner.run({
@@ -1242,11 +1374,11 @@ describe('王权骰铸流程测试', () => {
             
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
-                systems: diceThroneSystemsForTest,
+                systems: testSystems,
                 playerIds: ['0', '1'],
                 random,
                 setup: createNoResponseSetup(),
-                assertFn: (state, expect: DiceThroneExpectation) => assertDiceThrone(state.core, expect),
+                assertFn: assertState,
                 silent: true,
             });
             const result = runner.run({
@@ -1315,11 +1447,11 @@ describe('王权骰铸流程测试', () => {
             // 使用 createNoResponseSetup() 避免手牌中有响应卡牌
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
-                systems: diceThroneSystemsForTest,
+                systems: testSystems,
                 playerIds: ['0', '1'],
                 random: createQueuedRandom([1, 1, 1, 1, 1, 1, 1, 1, 1]),
                 setup: createNoResponseSetup(),
-                assertFn: (state, expect: DiceThroneExpectation) => assertDiceThrone(state.core, expect),
+                assertFn: assertState,
                 silent: true,
             });
             const result = runner.run({
@@ -1814,7 +1946,7 @@ describe('王权骰铸流程测试', () => {
                             },
                             effects: [{
                                 description: '改变任意1颗骰子的数值',
-                                action: { type: 'custom', target: 'any', customActionId: 'modify-die-any-1' },
+                                action: { type: 'custom', target: 'select', customActionId: 'modify-die-any-1' },
                                 timing: 'immediate',
                             }],
                         }];
