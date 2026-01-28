@@ -52,40 +52,39 @@ const writeLocalScoreboard = (next: LocalScoreboard) => {
     }
 };
 
-const iconPopStyle: React.CSSProperties = { transformOrigin: 'center', transformBox: 'fill-box' };
 
-// SVG 图标组件 - X (霓虹风格)
+
+// SVG 图标组件 - X (Premium Neon)
 const IconX = ({ className }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" className={className} style={{ overflow: 'visible' }}>
         <path
-            d="M5.5 5.5L18.5 18.5M18.5 5.5L5.5 18.5"
+            d="M6 6L18 18M18 6L6 18"
             stroke="currentColor"
-            strokeWidth="4.5"
+            strokeWidth="3.5"
             strokeLinecap="round"
-            className="animate-[icon-pop_0.2s_ease-out]"
-            style={iconPopStyle}
+            className="animate-[icon-pop_0.25s_ease-out]"
         />
         <style>{`
             @keyframes icon-pop {
-                from { transform: scale(0.6); opacity: 0; }
+                from { transform: scale(0.5); opacity: 0; }
                 to { transform: scale(1); opacity: 1; }
             }
         `}</style>
     </svg>
 );
 
+// SVG 图标组件 - O (Premium Neon)
 const IconO = ({ className }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" className={className} style={{ overflow: 'visible' }}>
         <circle
-            cx="12" cy="12" r="8"
+            cx="12" cy="12" r="7"
             stroke="currentColor"
-            strokeWidth="4.5"
-            className="animate-[icon-pop_0.24s_ease-out]"
-            style={iconPopStyle}
+            strokeWidth="3.5"
+            className="animate-[icon-pop_0.3s_ease-out]"
         />
         <style>{`
             @keyframes icon-pop {
-                from { transform: scale(0.6); opacity: 0; }
+                from { transform: scale(0.5); opacity: 0; }
                 to { transform: scale(1); opacity: 1; }
             }
         `}</style>
@@ -263,157 +262,144 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
 
     return (
         <UndoProvider value={{ G, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
-            <div className="flex flex-col items-center h-[100dvh] w-full font-sans bg-[#050510] bg-[radial-gradient(ellipse_at_center,_#1a1d2d_0%,_#050510_100%)] overflow-hidden relative pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-                {/* 噪点纹理背景 */}
-            <div className="absolute inset-0 opacity-[0.05] pointer-events-none"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}
-            ></div>
+            <div className="flex flex-col items-center h-[100dvh] w-full font-sans bg-black overflow-hidden relative pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] select-none">
 
-            {/* 页眉 - 居中标题 */}
-            <div className="w-full max-w-3xl flex-none flex flex-col items-center mt-4 mb-4 relative z-10">
-                <h1 className="text-4xl md:text-6xl font-black text-white tracking-widest uppercase italic transform -skew-x-6 select-none leading-none">
-                    <span className="text-neon-blue drop-shadow-[0_0_15px_rgba(0,243,255,0.8)]">{t('title.primary')}</span>
-                    <span className="text-neon-pink drop-shadow-[0_0_15px_rgba(188,19,254,0.8)]">{t('title.secondary')}</span>
-                </h1>
-            </div>
+                {/* 顶部标题 - 霞红青色交错的现代风格 */}
+                <div className="flex-none flex flex-col items-center mt-8 mb-4 z-10">
+                    <h1 className="text-4xl md:text-6xl font-black italic tracking-tight flex items-center gap-1">
+                        <span className="text-neon-blue drop-shadow-[0_0_15px_rgba(0,243,255,0.7)]">TIC</span>
+                        <span className="text-neon-pink drop-shadow-[0_0_15px_rgba(188,19,254,0.7)]">TAC TOE</span>
+                    </h1>
+                </div>
 
-            {/* 棋盘区域 - 自适应剩余空间 */}
-            <div className="flex-1 w-full flex items-center justify-center min-h-0 px-4 py-2 relative pointer-events-none">
-                <div className={`relative aspect-square h-full max-h-full max-w-full mx-auto pointer-events-auto transition-all duration-500 ${isActive ? 'z-auto' : 'drop-shadow-[0_0_15px_rgba(0,243,255,0.3)]'}`}>
-                    {/* 网格背景线 - 稳定的绝对定位实现 */}
-                    <div className="absolute inset-0 pointer-events-none">
-                        {/* 垂直线 */}
-                        <div className="absolute top-0 bottom-0 left-1/3 w-[2px] -translate-x-1/2 bg-neon-blue shadow-[0_0_12px_#00f3ff,0_0_24px_rgba(0,243,255,0.4)]" />
-                        <div className="absolute top-0 bottom-0 left-2/3 w-[2px] -translate-x-1/2 bg-neon-blue shadow-[0_0_12px_#00f3ff,0_0_24px_rgba(0,243,255,0.4)]" />
+                {/* 棋盘主区域 - 增加圆角外框模拟图片中的底座感 */}
+                <div className="flex-1 w-full flex items-center justify-center p-6 min-h-0 relative z-0">
+                    <div className="relative aspect-square h-full max-h-[80vw] md:max-h-[60vh] max-w-full p-4 border border-white/10 rounded-[2rem] bg-gradient-to-br from-white/5 to-transparent backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
 
-                        {/* 水平线 */}
-                        <div className="absolute left-0 right-0 top-1/3 h-[2px] -translate-y-1/2 bg-neon-blue shadow-[0_0_12px_#00f3ff,0_0_243px_rgba(0,243,255,0.4)]" />
-                        <div className="absolute left-0 right-0 top-2/3 h-[2px] -translate-y-1/2 bg-neon-blue shadow-[0_0_12px_#00f3ff,0_0_243px_rgba(0,243,255,0.4)]" />
+                        {/* 核心网格线：立体霓虹灯管效果 - 对应图片：左上红，右下蓝 */}
+                        <div className="absolute inset-6 pointer-events-none z-10">
+                            {/* 垂直线 */}
+                            {/* 左竖线 - 粉色 (Pink/Magenta) */}
+                            <div className="absolute top-2 bottom-2 left-1/3 w-2 -translate-x-1/2 bg-neon-pink rounded-full shadow-[0_0_15px_rgba(188,19,254,0.8),inset_0_0_4px_rgba(255,255,255,0.4)]" />
+                            {/* 右竖线 - 青色 (Blue/Cyan) */}
+                            <div className="absolute top-2 bottom-2 left-2/3 w-2 -translate-x-1/2 bg-neon-blue rounded-full shadow-[0_0_15px_rgba(0,243,255,0.8),inset_0_0_4px_rgba(255,255,255,0.4)]" />
+
+                            {/* 水平线 */}
+                            {/* 上横线 - 粉色 (Pink/Magenta) */}
+                            <div className="absolute left-2 right-2 top-1/3 h-2 -translate-y-1/2 bg-neon-pink rounded-full shadow-[0_0_15px_rgba(188,19,254,0.8),inset_0_0_4px_rgba(255,255,255,0.4)]" />
+                            {/* 下横线 - 青色 (Blue/Cyan) */}
+                            <div className="absolute left-2 right-2 top-2/3 h-2 -translate-y-1/2 bg-neon-blue rounded-full shadow-[0_0_15px_rgba(0,243,255,0.8),inset_0_0_4px_rgba(255,255,255,0.4)]" />
+                        </div>
+
+                        {/* 棋子层 - 提升 z-index 确保可点击，并使用 inset-0 配合父级的 p-4 */}
+                        <div className="grid grid-cols-3 grid-rows-3 h-full w-full absolute inset-0 p-4 z-20">
+                            {G.core.cells.map((cell: string | null, id: number) => {
+                                const isWinningCell = winningLine?.includes(id);
+                                const isOccupied = cell !== null;
+                                const isTutorialTarget = isActive && currentStep?.highlightTarget === `cell-${id}`;
+                                const isClickable = !isOccupied && !isGameOver && isPlayerTurn && (!isActive || (currentStep?.requireAction && (!currentStep.highlightTarget || currentStep.highlightTarget === `cell-${id}`)));
+
+                                // 动态光晕颜色 (匹配图片：X为粉，O为青)
+                                const glowColor = cell === '0' ? 'rgba(188,19,254,' : 'rgba(0,243,255,';
+                                const dynamicGlow = isWinningCell
+                                    ? `drop-shadow-[0_0_20px_${glowColor}1)] drop-shadow-[0_0_40px_${glowColor}0.8)]`
+                                    : `drop-shadow-[0_0_10px_${glowColor}0.6)]`;
+
+                                return (
+                                    <div
+                                        key={id}
+                                        data-tutorial-id={`cell-${id}`}
+                                        onClick={() => onClick(id)}
+                                        className={`
+                                            flex items-center justify-center relative
+                                            ${isClickable ? 'cursor-pointer hover:bg-white/5 transition-colors duration-200' : ''}
+                                            ${isTutorialTarget ? 'z-[10000] ring-2 ring-white' : ''}
+                                        `}
+                                    >
+                                        <div className={`
+                                            w-3/5 h-3/5 flex items-center justify-center 
+                                            transition-all duration-300 ease-out
+                                            ${isOccupied ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}
+                                            ${isWinningCell ? 'scale-110 brightness-150' : ''}
+                                            ${cell === '0' ? 'text-neon-pink' : 'text-neon-blue'}
+                                            ${isOccupied ? dynamicGlow : ''}
+                                        `}>
+                                            {cell === '0' && <IconX className="w-full h-full" />}
+                                            {cell === '1' && <IconO className="w-full h-full" />}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
+                </div>
 
-                    <div className="grid grid-cols-3 grid-rows-3 h-full w-full" data-tutorial-id="board-grid">
-                        {G.core.cells.map((cell: string | null, id: number) => {
-                            const isWinningCell = winningLine?.includes(id);
-                            const isOccupied = cell !== null;
-                            const isTutorialTarget = isActive && currentStep?.highlightTarget === `cell-${id}`;
-                            const isClickable = !isOccupied && !isGameOver && isPlayerTurn && (!isActive || (currentStep?.requireAction && (!currentStep.highlightTarget || currentStep.highlightTarget === `cell-${id}`)));
+                {/* 底部 HUD 仪表盘 */}
+                <div className="flex-none w-full max-w-2xl px-8 pb-12 z-10">
+                    <div className="relative flex justify-between items-end">
 
-                            // 根据棋子颜色设置胜利发光效果
-                            const winningGlow = cell === '0'
-                                ? 'filter [--tw-drop-shadow:drop-shadow(0_0_15px_rgba(0,243,255,1))_drop-shadow(0_0_40px_rgba(0,243,255,0.8))]'
-                                : 'filter [--tw-drop-shadow:drop-shadow(0_0_15px_rgba(188,19,254,1))_drop-shadow(0_0_40px_rgba(188,19,254,0.8))]';
+                        {/* 左侧玩家 P0 (X - Pink) */}
+                        <div className={`flex flex-col items-center gap-2 transition-opacity duration-300 ${String(currentPlayer) === '0' || isGameOver ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className="text-neon-pink font-bold tracking-widest text-xs md:text-sm uppercase mb-1">
+                                {getPlayerName('0')}
+                            </div>
+                            <IconX className="w-8 h-8 md:w-10 md:h-10 text-neon-pink drop-shadow-[0_0_10px_rgba(188,19,254,0.6)]" />
+                            <div className="text-3xl md:text-4xl font-black text-neon-pink mt-2 leading-none">
+                                {scoreboard.xWins}
+                            </div>
+                        </div>
 
-                            const pieceGlow = cell === '0'
-                                ? 'filter [--tw-drop-shadow:drop-shadow(0_0_12px_rgba(0,243,255,0.8))_drop-shadow(0_0_25px_rgba(0,243,255,0.3))]'
-                                : 'filter [--tw-drop-shadow:drop-shadow(0_0_12px_rgba(188,19,254,0.8))_drop-shadow(0_0_25px_rgba(188,19,254,0.3))]';
-
-                            return (
-                                <div
-                                    key={id}
-                                    data-tutorial-id={`cell-${id}`}
-                                    onClick={() => onClick(id)}
-                                    className={`
-                                        flex items-center justify-center relative
-                                        ${isClickable ? 'cursor-pointer' : ''}
-                                        ${isTutorialTarget ? 'z-[10000]' : 'z-auto'}
-                                    `}
-                                >
-                                    <div className={`
-                                        w-[65%] h-[65%] transition-transform transition-opacity duration-300 flex items-center justify-center
-                                        ${isOccupied ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}
-                                        ${isOccupied ? pieceGlow : ''}
-                                        ${isWinningCell ? `scale-110 ${winningGlow} brightness-125 animate-pulse` : ''}
-                                        ${cell === '0' ? 'text-neon-blue' : 'text-neon-pink'}
-                                    `}>
-                                        {cell === '0' && <IconX className="w-full h-full" />}
-                                        {cell === '1' && <IconO className="w-full h-full" />}
+                        {/* 中间状态栏 */}
+                        <div className="flex-1 flex flex-col items-center justify-end pb-2">
+                            {isGameOver ? (
+                                <div className="text-xl md:text-2xl font-black italic text-white tracking-widest animate-pulse whitespace-nowrap drop-shadow-lg">
+                                    {isWinner ?
+                                        (String(ctx.gameover.winner) === '0' ? <span className="text-neon-pink">{getPlayerName('0')} WINS</span> : <span className="text-neon-blue">{getPlayerName('1')} WINS</span>)
+                                        : "DRAW GAME"
+                                    }
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center">
+                                    <div className="flex items-baseline gap-2 mb-2">
+                                        <span className={`text-2xl md:text-3xl font-black italic tracking-wider ${String(currentPlayer) === '0' ? 'text-neon-pink drop-shadow-[0_0_15px_rgba(188,19,254,0.6)]' : 'text-neon-blue drop-shadow-[0_0_15px_rgba(0,243,255,0.6)]'}`}>
+                                            {getPlayerName(currentPlayer)}
+                                        </span>
+                                        <span className="text-sm md:text-base font-bold text-white/80 italic">'S TURN</span>
+                                    </div>
+                                    <div className="h-1 w-24 bg-gray-800 rounded-full overflow-hidden">
+                                        <div className={`h-full w-full rounded-full animate-[loading_1.5s_ease-in-out_infinite] ${String(currentPlayer) === '0' ? 'bg-neon-pink' : 'bg-neon-blue'}`} />
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
-            {/* 底部区域 - 分数与状态 */}
-            <div className="flex-none w-full max-w-2xl px-6 z-10 relative pb-2">
-                <div className="flex justify-between items-center w-full text-center text-white/80 relative">
-                    {/* 左侧玩家 (P0) */}
-                    <div className="flex flex-col items-center gap-2 transition-all duration-300">
-                        <div className="flex flex-row items-center gap-2">
-                            <span className={`text-[10px] md:text-xs font-bold tracking-[0.2em] text-neon-blue uppercase truncate flex-1 min-w-0 transition-opacity duration-300 ${String(currentPlayer) === '0' ? 'opacity-100' : 'opacity-40'}`}>
-                                {getPlayerName('0')}
-                            </span>
-                            {String(playerID) === '0' && (
-                                <span className="px-1.5 py-0.5 rounded-full bg-neon-blue text-black text-[9px] font-bold shadow-[0_0_10px_rgba(0,243,255,0.8)]">
-                                    {t('player.self')}
-                                </span>
                             )}
                         </div>
-                        <div className={`w-8 h-8 md:w-10 md:h-10 text-neon-blue transition-opacity duration-300 ${String(currentPlayer) === '0' ? 'opacity-100' : 'opacity-40'}`}>
-                            <IconX />
-                        </div>
-                        <span className="text-2xl md:text-3xl font-black font-mono">{scoreboard.xWins}</span>
-                    </div>
 
-                    {/* 状态文本 - 绝对居中 */}
-                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center">
-                        {isGameOver ? (
-                            <span className="text-xl md:text-2xl font-black tracking-widest text-white animate-pulse whitespace-nowrap">
-                                {isWinner ? t('status.win', { player: getPlayerName(ctx.gameover.winner) }) : t('status.draw')}
-                            </span>
-                        ) : (
-                            <div className="flex flex-col items-center gap-0.5">
-                                <div className="flex items-center gap-2 uppercase tracking-[0.2em] font-black text-white italic text-base md:text-lg whitespace-nowrap">
-                                    <span className={String(currentPlayer) === '0' ? "text-neon-blue" : "text-neon-pink"}>
-                                        {getPlayerName(currentPlayer)}
-                                    </span>
-                                    <span>{t('status.turnSuffix')}</span>
-                                </div>
-                                <div className="h-[10px]">
-                                    <span
-                                        className={`text-[9px] text-white/40 tracking-[0.5em] whitespace-nowrap transition-opacity ${String(currentPlayer) !== String(playerID) ? 'opacity-100 animate-pulse' : 'opacity-0'}`}
-                                    >
-                                        {t('status.thinking')}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 右侧玩家 (P1) */}
-                    <div className="flex flex-col items-center gap-2 transition-all duration-300">
-                        <div className="flex flex-row items-center gap-2">
-                            <span className={`text-[10px] md:text-xs font-bold tracking-[0.2em] text-neon-pink uppercase truncate flex-1 min-w-0 transition-opacity duration-300 ${String(currentPlayer) === '1' ? 'opacity-100' : 'opacity-40'}`}>
+                        {/* 右侧玩家 P1 (O - Blue) */}
+                        <div className={`flex flex-col items-center gap-2 transition-opacity duration-300 ${String(currentPlayer) === '1' || isGameOver ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className="text-neon-blue font-bold tracking-widest text-xs md:text-sm uppercase mb-1">
                                 {getPlayerName('1')}
-                            </span>
-                            {String(playerID) === '1' && (
-                                <span className="px-1.5 py-0.5 rounded-full bg-neon-pink text-black text-[9px] font-bold shadow-[0_0_10px_rgba(188,19,254,0.8)]">
-                                    {t('player.self')}
-                                </span>
-                            )}
+                            </div>
+                            <IconO className="w-8 h-8 md:w-10 md:h-10 text-neon-blue drop-shadow-[0_0_10px_rgba(0,243,255,0.6)]" />
+                            <div className="text-3xl md:text-4xl font-black text-neon-blue mt-2 leading-none">
+                                {scoreboard.oWins}
+                            </div>
                         </div>
-                        <div className={`w-8 h-8 md:w-10 md:h-10 text-neon-pink transition-opacity duration-300 ${String(currentPlayer) === '1' ? 'opacity-100' : 'opacity-40'}`}>
-                            <IconO />
-                        </div>
-                        <span className="text-2xl md:text-3xl font-black font-mono">{scoreboard.oWins}</span>
+
                     </div>
                 </div>
-            </div>
 
                 {/* 统一结束页面遮罩 */}
-            <EndgameOverlay
-                isGameOver={!!isGameOver}
-                result={isGameOver}
-                playerID={playerID}
-                reset={isSpectator ? undefined : reset}
-                isMultiplayer={isSpectator ? false : isMultiplayer}
-                totalPlayers={matchData?.length}
-                rematchState={rematchState}
-                onVote={isSpectator ? undefined : handleRematchVote}
-            />
+                <EndgameOverlay
+                    isGameOver={!!isGameOver}
+                    result={isGameOver}
+                    playerID={playerID}
+                    reset={isSpectator ? undefined : reset}
+                    isMultiplayer={isSpectator ? false : isMultiplayer}
+                    totalPlayers={matchData?.length}
+                    rematchState={rematchState}
+                    onVote={isSpectator ? undefined : handleRematchVote}
+                />
                 {!isSpectator && (
-                    <div className="fixed bottom-0 right-0 p-2 z-50">
+                    <div className="fixed bottom-0 right-0 p-2 z-50 opacity-0 hover:opacity-100 transition-opacity">
                         <GameDebugPanel G={G} ctx={ctx} moves={moves} events={events} playerID={playerID} autoSwitch={!isMultiplayer} />
                     </div>
                 )}

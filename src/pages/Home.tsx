@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { EmailBindModal } from '../components/auth/EmailBindModal';
 import { useNavigate } from 'react-router-dom';
-import { clearMatchCredentials, exitMatch, getOwnerActiveMatch, clearOwnerActiveMatch, rejoinMatch, getLatestStoredMatchCredentials, pruneStoredMatchCredentials } from '../hooks/match/useMatchStatus';
+import { claimSeat, clearMatchCredentials, exitMatch, getOwnerActiveMatch, clearOwnerActiveMatch, rejoinMatch, getLatestStoredMatchCredentials, pruneStoredMatchCredentials } from '../hooks/match/useMatchStatus';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { LanguageSwitcher } from '../components/common/i18n/LanguageSwitcher';
 import { UserMenu } from '../components/social/UserMenu';
@@ -18,7 +18,6 @@ import { useUrlModal } from '../hooks/routing/useUrlModal';
 import clsx from 'clsx';
 import { LobbyClient } from 'boardgame.io/client';
 import { GAME_SERVER_URL } from '../config/server';
-import { GameReviewSection } from '../components/review/GameReviewSection';
 
 const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
@@ -38,7 +37,7 @@ export const Home = () => {
         isHost: boolean;
     } | null>(null);
 
-    const { user, logout } = useAuth();
+    const { user, token, logout } = useAuth();
     const { openModal, closeModal } = useModalStack();
     const { t } = useTranslation(['lobby', 'auth']);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory]);
@@ -242,15 +241,45 @@ export const Home = () => {
         // 优先使用 myMatchRole 中保存的 gameName，否则回退到 activeMatch 中的 gameName，最后默认 tictactoe
         const gameId = myMatchRole.gameName || activeMatch.gameName || 'tictactoe';
 
+        console.log(
+            `[Home] action=reconnect matchID=${activeMatch.matchID} playerID=${myMatchRole.playerID} hasCred=${!!myMatchRole.credentials} gameName=${gameId} userId=${user?.id ?? ''}`
+        );
+
         // 有凭证：直接进入
         if (myMatchRole.credentials) {
             navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${myMatchRole.playerID}`);
             return;
         }
 
-        // 无凭证：尝试重新加入空位
+        // 无凭证：登录用户优先 claim-seat 回归
         void (async () => {
             try {
+                if (user?.id && token) {
+                    console.log(
+                        `[Home] action=claim-seat-start matchID=${activeMatch.matchID} playerID=${myMatchRole.playerID || '0'} userId=${user.id} gameName=${gameId}`
+                    );
+                    const { success, credentials } = await claimSeat(
+                        gameId,
+                        activeMatch.matchID,
+                        myMatchRole.playerID || '0',
+                        token,
+                        user.username
+                    );
+                    if (success) {
+                        console.log(
+                            `[Home] action=claim-seat-success matchID=${activeMatch.matchID} playerID=${myMatchRole.playerID || '0'} userId=${user.id}`
+                        );
+                        setMyMatchRole((prev) => (prev ? { ...prev, credentials } : prev));
+                        setLocalStorageTick((t) => t + 1);
+                        navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${myMatchRole.playerID}`);
+                        return;
+                    }
+                    console.warn(
+                        `[Home] action=claim-seat-failed matchID=${activeMatch.matchID} playerID=${myMatchRole.playerID || '0'} userId=${user.id}`
+                    );
+                }
+
+                // 无凭证：尝试重新加入空位
                 const matchInfo = await lobbyClient.getMatch(gameId, activeMatch.matchID);
                 const player0 = matchInfo.players.find(p => p.id === 0);
                 const player1 = matchInfo.players.find(p => p.id === 1);
@@ -357,7 +386,7 @@ export const Home = () => {
     }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
 
     return (
-        <div className="min-h-screen bg-[#f3f0e6] text-[#433422] font-serif overflow-y-scroll flex flex-col items-center">
+        <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center">
             <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-4">
                 {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
                 <div className="md:absolute md:top-10 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-8 md:mb-0">
@@ -369,7 +398,7 @@ export const Home = () => {
                                 {t('auth:menu.login')}
                                 <span className="underline-center" />
                             </button>
-                            <div className="w-[1px] h-3 bg-[#c0a080] opacity-30" />
+                            <div className="w-[1px] h-3 bg-parchment-light-text/30" />
                             <button onClick={() => openAuth('register')} className="group relative hover:text-[#2c2216] cursor-pointer font-bold text-sm tracking-wider py-1">
                                 {t('auth:menu.register')}
                                 <span className="underline-center" />
@@ -381,13 +410,13 @@ export const Home = () => {
 
                 {/* 居中大标题 - 使用 clamp 保证响应式大小 */}
                 <div className="flex flex-col items-center">
-                    <h1 className="text-[clamp(1.75rem,5vw,2.5rem)] font-bold tracking-[0.15em] text-[#433422] mb-1.5 text-center leading-tight">
+                    <h1 className="text-[clamp(1.75rem,5vw,2.5rem)] font-bold tracking-[0.15em] text-parchment-base-text mb-1.5 text-center leading-tight">
                         {t('lobby:home.title')}
                     </h1>
                     <div className="flex items-center gap-4">
-                        <div className="h-px w-[115px] md:w-44 bg-[#433422] opacity-25" />
+                        <div className="h-px w-[115px] md:w-44 bg-parchment-base-text opacity-25" />
                         <img src="/logos/logo_1_grid.svg" alt="logo" className="w-5 md:w-6 opacity-60" />
-                        <div className="h-px w-[115px] md:w-44 bg-[#433422] opacity-25" />
+                        <div className="h-px w-[115px] md:w-44 bg-parchment-base-text opacity-25" />
                     </div>
                 </div>
             </header>
@@ -403,17 +432,14 @@ export const Home = () => {
                 <section className="w-full pb-20">
                     <GameList games={filteredGames} onGameClick={handleGameClick} />
                 </section>
-
-                {/* 游戏评价 */}
-                <GameReviewSection />
             </main>
 
             {/* 活跃对局指示器 */}
             {activeMatch && (
                 <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300">
-                    <div className="bg-[#433422] text-[#fcfbf9] px-6 py-3 rounded shadow-xl border border-[#5c4a35] flex items-center gap-4">
+                    <div className="bg-parchment-base-text text-parchment-card-bg px-6 py-3 rounded shadow-xl border border-parchment-brown flex items-center gap-4">
                         <div className="flex flex-col">
-                            <span className="text-[10px] text-[#c0a080] uppercase tracking-wider font-bold">{t('lobby:home.activeMatch.status')}</span>
+                            <span className="text-[10px] text-parchment-light-text uppercase tracking-wider font-bold">{t('lobby:home.activeMatch.status')}</span>
                             <span className="text-sm font-bold">
                                 {t('lobby:home.activeMatch.room', { id: activeMatch.matchID.slice(0, 4) })}
                                 <span className="mx-2 opacity-50">|</span>
@@ -438,7 +464,7 @@ export const Home = () => {
                             )}
                             <button
                                 onClick={handleReconnect}
-                                className="bg-[#c0a080] hover:bg-[#a08060] text-white px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm border border-[#c0a080]"
+                                className="bg-parchment-light-text hover:bg-[#a08060] text-white px-6 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm border border-parchment-light-text"
                             >
                                 {t('lobby:actions.reconnectEnter')}
                             </button>

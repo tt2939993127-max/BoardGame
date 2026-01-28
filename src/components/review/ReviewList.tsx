@@ -22,17 +22,19 @@ export const ReviewList = ({
 }: ReviewListProps) => {
     const { t } = useTranslation(['review']);
 
-    if (loading && reviews.length === 0) {
+    const reviewItems = reviews || [];
+
+    if (loading && reviewItems.length === 0) {
         return (
             <div className="flex justify-center py-12">
-                <Loader2 className="animate-spin text-[#433422]/50" size={24} />
+                <Loader2 className="animate-spin text-parchment-light-text/50" size={24} />
             </div>
         );
     }
 
-    if (!loading && reviews.length === 0) {
+    if (!loading && reviewItems.length === 0) {
         return (
-            <div className="text-center py-12 text-[#433422]/40 italic font-serif">
+            <div className="text-center py-12 text-parchment-light-text italic font-serif opacity-60">
                 {t('list.empty')}
             </div>
         );
@@ -41,11 +43,11 @@ export const ReviewList = ({
     return (
         <div className="flex flex-col gap-4 w-full">
             <div className="flex flex-col gap-4">
-                {reviews.map((review) => (
+                {reviewItems.map((review, index) => (
                     <ReviewItem
-                        key={review.user._id + review.gameId} // Assuming one review per user per game, but careful with keys.
+                        key={review._id || `${review.gameId}-${index}`}
                         review={review}
-                        isMine={currentUserId === review.user._id}
+                        isMine={!!(currentUserId && review.user?._id === currentUserId)}
                         onDelete={() => onDeleteReview(review.gameId)}
                     />
                 ))}
@@ -56,7 +58,7 @@ export const ReviewList = ({
                     <button
                         onClick={onLoadMore}
                         disabled={loading}
-                        className="px-6 py-2 bg-[#433422]/5 hover:bg-[#433422]/10 text-[#433422] text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="px-6 py-2 bg-parchment-base-text/5 hover:bg-parchment-base-text/10 text-parchment-base-text text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         {loading && <Loader2 className="animate-spin" size={14} />}
                         {t('list.loadMore')}

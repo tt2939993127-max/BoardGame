@@ -11,7 +11,6 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useDeferredRender } from '../../hooks/ui/useDeferredRender';
-import { useDelayedBackdropBlur } from '../../hooks/ui/useDelayedBackdropBlur';
 import { useMatchRoomExit } from '../../contexts/MatchRoomExitContext';
 import { RematchActions, type RematchActionsProps } from './RematchActions';
 
@@ -27,7 +26,7 @@ export interface ContentSlotProps {
     playerID?: string | null;
 }
 
-export interface ActionsSlotProps extends Omit<RematchActionsProps, 'className'> {}
+export interface ActionsSlotProps extends Omit<RematchActionsProps, 'className'> { }
 
 export interface EndgameOverlayProps {
     /** 游戏是否结束 */
@@ -100,7 +99,7 @@ function DefaultContent({ result, playerID }: ContentSlotProps): React.ReactElem
                 initial={{ scale: 0.5, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-                className={`text-4xl md:text-5xl font-black tracking-wider uppercase ${colorClass} drop-shadow-lg`}
+                className={`text-4xl md:text-5xl font-black tracking-wider uppercase ${colorClass} drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)]`}
             >
                 {title}
             </motion.h2>
@@ -109,7 +108,7 @@ function DefaultContent({ result, playerID }: ContentSlotProps): React.ReactElem
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.4 }}
-                    className="text-white/70 text-lg mt-2"
+                    className="text-white text-lg mt-2 font-bold drop-shadow-lg"
                 >
                     {subtitle}
                 </motion.p>
@@ -136,7 +135,7 @@ export function EndgameOverlay({
     const [shouldShow, setShouldShow] = useState(false);
     const [frozenResult, setFrozenResult] = useState<GameOverResult | undefined>(undefined);
     const contentReady = useDeferredRender(shouldShow);
-    const blurEnabled = useDelayedBackdropBlur(shouldShow, OVERLAY_FADE_MS);
+    // 移除未使用的 blurEnabled，遮罩效果已移除
     const prevGameOverRef = useRef(false);
     const matchRoomExit = useMatchRoomExit();
 
@@ -181,23 +180,17 @@ export function EndgameOverlay({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: OVERLAY_FADE_MS / 1000 }}
-                    className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-auto"
+                    className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none"
                 >
-                    {/* 背景遮罩 */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className={`absolute inset-0 bg-black/70 ${blurEnabled ? 'backdrop-blur-sm' : ''}`}
-                    />
+                    {/* 彻底移除背景遮罩 */}
 
-                    {/* 内容容器 */}
+                    {/* 内容容器 - 仅作为布局容器，无背景 */}
                     <motion.div
-                        initial={{ scale: 0.9, y: 20 }}
-                        animate={{ scale: 1, y: 0 }}
-                        exit={{ scale: 0.9, y: 20 }}
+                        initial={{ scale: 0.9, y: 20, opacity: 0 }}
+                        animate={{ scale: 1, y: 0, opacity: 1 }}
+                        exit={{ scale: 0.9, y: 20, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-                        className="relative z-10 flex flex-col items-center p-8 max-w-md w-full mx-4"
+                        className="relative z-10 flex flex-col items-center w-full max-w-md mx-4 pointer-events-auto"
                     >
                         {/* 内容区域（可自定义） */}
                         {contentReady && (renderContent

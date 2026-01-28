@@ -3,7 +3,6 @@ import type { Game } from 'boardgame.io';
 import { Server as BoardgameServer, Origins } from 'boardgame.io/server';
 import { Server as IOServer, Socket as IOSocket } from 'socket.io';
 import bodyParser from 'koa-bodyparser';
-import type { StorageAPI } from 'boardgame.io/dist/types/src/server/db';
 import { connectDB } from './src/server/db';
 import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
@@ -214,12 +213,26 @@ const server = BoardgameServer({
     games: SERVER_GAMES,
     origins: SERVER_ORIGINS,
     // 启用持久化时使用 MongoDB 存储
-    ...(USE_PERSISTENT_STORAGE ? { db: mongoStorage as unknown as StorageAPI.Async } : {}),
+    ...(USE_PERSISTENT_STORAGE ? { db: mongoStorage as any } : {}),
 });
 
 // 获取底层的 Koa 应用和数据库
 const { app, db } = server;
 serverDb = db;
+
+const claimSeatHandler = createClaimSeatHandler({
+    db: {
+        fetch: async (matchID, opts) => {
+            const result = (db as any).fetch(matchID, opts as any);
+            return await Promise.resolve(result);
+        },
+        setMetadata: async (matchID, metadata) => {
+            await Promise.resolve((db as any).setMetadata(matchID, metadata));
+        },
+    },
+    auth: app.context.auth,
+    jwtSecret: JWT_SECRET,
+});
 
 // 预处理 /leave：只释放座位，不删除房间（避免 boardgame.io 在无人时 wipe）
 // 注意：必须插入到 middleware 队列最前面，以拦截 boardgame.io 的默认路由
@@ -296,11 +309,13 @@ const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
 // boardgame.io 会自行解析 /games/* 的 body；全局启用会导致 request stream 被重复读取，触发 "stream is not readable"。
 
 // HTTP CORS：允许前端（Vite）跨端口访问本服务的 REST 接口（例如 /games/:game/leaderboard）。
-app.use(async (ctx, next) => {
+// 注意：该中间件必须在最前执行，避免 boardgame.io 内部路由直接返回导致浏览器拿不到 CORS 头。
+const corsMiddleware = async (ctx: any, next: () => Promise<void>) => {
     const requestOrigin = ctx.get('origin');
     const allowedOrigins = new Set(LOBBY_CORS_ORIGINS);
+    const isDevOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/i.test(requestOrigin);
 
-    if (requestOrigin && allowedOrigins.has(requestOrigin)) {
+    if (requestOrigin && (allowedOrigins.has(requestOrigin) || isDevOrigin)) {
         ctx.set('Access-Control-Allow-Origin', requestOrigin);
         ctx.set('Vary', 'Origin');
         ctx.set('Access-Control-Allow-Credentials', 'true');
@@ -318,7 +333,8 @@ app.use(async (ctx, next) => {
     }
 
     await next();
-});
+};
+(app as any).middleware?.unshift(corsMiddleware);
 
 // 强制销毁房间（仅房主可用）
 // 注意：不要启用全局 bodyParser，否则会和 boardgame.io 自己的 body 解析冲突（create/join/leave 会 500）。
@@ -330,12 +346,7 @@ app.use(async (ctx, next) => {
             const matchID = claimMatch[2];
             const parse = bodyParser();
             await (parse as any)(ctx, async () => undefined);
-            const handler = createClaimSeatHandler({
-                db,
-                auth: app.context.auth,
-                jwtSecret: JWT_SECRET,
-            });
-            await handler(ctx, matchID);
+            await claimSeatHandler(ctx as any, matchID);
             return;
         }
         const match = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/destroy$/);
@@ -363,7 +374,8 @@ app.use(async (ctx, next) => {
                 ctx.throw(404, 'Match ' + matchID + ' not found');
             }
             // 经过上面的必填校验，这里 playerID 一定存在。
-            if (!metadata.players[playerID as string]) {
+            const players = metadata.players as Record<string, { name?: string; credentials?: string }>;
+            if (!players[playerID as string]) {
                 ctx.throw(404, 'Player ' + playerID + ' not found');
             }
 

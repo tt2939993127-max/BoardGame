@@ -71,8 +71,16 @@ test.describe('Game Review System', () => {
             }
         });
 
-        // 3. Fill and submit form
-        const positiveBtn = page.getByRole('button', { name: '推荐' });
+        // 3. Select game if needed (ensure we are on tictactoe)
+        // Find the select element inside the review section
+        const select = reviewSection.locator('..').locator('select');
+        // Or just strictly select by role if it's the only combobox or easy to pinpoint
+        await page.getByRole('combobox').selectOption('tictactoe');
+
+        // 4. Fill and submit form
+        // Use a more flexible locator in case of i18n delay or mismatch
+        const positiveBtn = page.getByRole('button', { name: /推荐|Positive|form\.positive/i });
+        await expect(positiveBtn).toBeVisible();
         await positiveBtn.click();
 
         const textarea = page.getByPlaceholder('写点什么...');

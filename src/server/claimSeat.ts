@@ -1,4 +1,3 @@
-import type { Context } from 'koa';
 import jwt from 'jsonwebtoken';
 
 export type GameJwtPayload = {
@@ -11,8 +10,15 @@ type ClaimSeatDb = {
     setMetadata: (matchID: string, metadata: any) => Promise<void>;
 };
 
+type ClaimSeatContext = {
+    get: (name: string) => string;
+    throw: (status: number, message: string) => void;
+    request: { body?: { playerID?: string | number } };
+    body?: unknown;
+};
+
 type ClaimSeatAuth = {
-    generateCredentials: (ctx: Context) => Promise<string> | string;
+    generateCredentials: (ctx: ClaimSeatContext) => Promise<string> | string;
 };
 
 const parseBearerToken = (value?: string): string | null => {
@@ -40,20 +46,25 @@ export const createClaimSeatHandler = ({
     auth: ClaimSeatAuth;
     jwtSecret: string;
 }) => {
-    return async (ctx: Context, matchID: string): Promise<void> => {
-        const rawToken = parseBearerToken(ctx.get('authorization'));
+    return async (ctx: ClaimSeatContext, matchID: string): Promise<void> => {
+        const origin = ctx.get('origin');
+        const authHeader = ctx.get('authorization');
+        const rawToken = parseBearerToken(authHeader);
         if (!rawToken) {
+            console.warn(`[claim-seat] rejected reason=missing_auth matchID=${matchID} origin=${origin || ''}`);
             ctx.throw(401, 'Authorization is required');
             return;
         }
         const payload = verifyGameToken(rawToken, jwtSecret);
         if (!payload?.userId) {
+            console.warn(`[claim-seat] rejected reason=invalid_token matchID=${matchID} origin=${origin || ''} hasAuth=${!!authHeader}`);
             ctx.throw(401, 'Invalid token');
             return;
         }
 
-        const body = (ctx.request as { body?: { playerID?: string | number } }).body;
+        const body = ctx.request.body;
         const resolvedPlayerID = String(body?.playerID ?? '0');
+        console.log(`[claim-seat] start matchID=${matchID} playerID=${resolvedPlayerID} userId=${payload.userId} origin=${origin || ''}`);
 
         const { metadata, state } = await db.fetch(matchID, { metadata: true, state: true });
         if (!metadata) {
@@ -66,6 +77,9 @@ export const createClaimSeatHandler = ({
         const ownerKey = setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey;
         const expectedOwnerKey = `user:${payload.userId}`;
         if (!ownerKey || ownerKey !== expectedOwnerKey) {
+            console.warn(
+                `[claim-seat] rejected reason=owner_mismatch matchID=${matchID} ownerKey=${ownerKey || ''} expected=${expectedOwnerKey}`
+            );
             ctx.throw(403, 'Not match owner');
             return;
         }
@@ -73,6 +87,7 @@ export const createClaimSeatHandler = ({
         const players = metadata.players as Record<string, { name?: string; credentials?: string }> | undefined;
         const player = players?.[resolvedPlayerID];
         if (!player) {
+            console.warn(`[claim-seat] rejected reason=player_not_found matchID=${matchID} playerID=${resolvedPlayerID}`);
             ctx.throw(404, 'Player ' + resolvedPlayerID + ' not found');
             return;
         }
@@ -84,6 +99,7 @@ export const createClaimSeatHandler = ({
         }
 
         await db.setMetadata(matchID, metadata);
+        console.log(`[claim-seat] success matchID=${matchID} playerID=${resolvedPlayerID} userId=${payload.userId}`);
         ctx.body = { playerID: resolvedPlayerID, playerCredentials };
     };
 };

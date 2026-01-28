@@ -24,25 +24,21 @@ export const ReviewItem = ({ review, isMine, onDelete }: ReviewItemProps) => {
     };
 
     return (
-        <div className="bg-[#fcfbf9] border border-[#d3ccba]/50 rounded p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+        <div className="bg-parchment-card-bg border border-parchment-card-border/20 rounded-sm p-3 flex flex-col gap-2 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                    {/* Avatar */}
-                    <div className="w-9 h-9 rounded-full bg-[#f3f0e6] flex items-center justify-center overflow-hidden border border-[#d3ccba]">
-                        {review.user.avatar ? (
+                <div className="flex items-center gap-2.5">
+                    {/* Avatar - Only show if image exists */}
+                    {review.user?.avatar && (
+                        <div className="w-8 h-8 rounded-full bg-parchment-base-bg flex items-center justify-center overflow-hidden border border-parchment-card-border/30 shrink-0">
                             <img src={review.user.avatar} alt={review.user.username} className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-sm font-bold text-[#433422]/50">
-                                {review.user.username.slice(0, 2).toUpperCase()}
-                            </span>
-                        )}
-                    </div>
+                        </div>
+                    )}
 
                     <div className="flex flex-col">
-                        <span className="font-bold text-[#433422] text-sm leading-tight">
-                            {review.user.username}
+                        <span className="font-bold text-parchment-base-text text-sm leading-tight">
+                            {review.user?.username || t('common.unknownUser', '未知用户')}
                         </span>
-                        <span className="text-[10px] text-[#433422]/50 uppercase tracking-wide">
+                        <span className="text-[10px] text-parchment-base-text/40 uppercase tracking-wide">
                             {formatDate(review.createdAt)}
                         </span>
                     </div>
@@ -51,10 +47,10 @@ export const ReviewItem = ({ review, isMine, onDelete }: ReviewItemProps) => {
                 {isMine && onDelete && (
                     <button
                         onClick={onDelete}
-                        className="p-1.5 text-[#433422]/40 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                        className="p-1 text-parchment-base-text/30 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                         title={t('form.delete')}
                     >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                     </button>
                 )}
             </div>
@@ -68,7 +64,7 @@ export const ReviewItem = ({ review, isMine, onDelete }: ReviewItemProps) => {
                     )}
                 </div>
                 {review.content && (
-                    <div className="text-sm text-[#433422]/90 leading-relaxed break-words whitespace-pre-wrap font-serif">
+                    <div className="text-sm text-parchment-base-text selection:bg-parchment-brown/20 leading-relaxed break-words whitespace-pre-wrap font-serif">
                         {review.content}
                     </div>
                 )}

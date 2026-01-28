@@ -71,7 +71,6 @@ export function createGameAdapter<
 >(config: AdapterConfig<TCore, TCommand, TEvent>): Game<MatchState<TCore>> {
     const { domain, systems, systemsConfig, commandTypes } = config;
     const undoCommandTypes = new Set<string>(Object.values(UNDO_COMMANDS));
-    const systemCommandTypes = new Set<string>(ALL_SYSTEM_COMMANDS);
 
     // 自动合并系统命令到 commandTypes（游戏无需手动添加）
     const mergedCommandTypes = commandTypes?.length
@@ -83,7 +82,6 @@ export function createGameAdapter<
         let warnedSpectator = false;
         return ({ G, ctx, random, playerID }, payload: unknown) => {
             const coreCurrentPlayer = (G as { core?: { currentPlayer?: string } }).core?.currentPlayer;
-            const isSystemCommand = systemCommandTypes.has(commandType);
             const isClient = typeof window !== 'undefined';
 
             const globalMode = isClient
@@ -113,10 +111,10 @@ export function createGameAdapter<
             const shouldSkipValidation = isLocalLikeMode;
 
             // Resolve acting playerId.
-            // - local/tutorial: allow hotseat-style fallback.
+            // - local/tutorial: hotseat 模式下由当前回合玩家行动（忽略 boardgame.io 的 playerID，避免永远是 P0）。
             // - online: require explicit playerID.
             const resolvedPlayerId = isLocalLikeMode
-                ? (playerID ?? coreCurrentPlayer ?? ctx.currentPlayer)
+                ? (coreCurrentPlayer ?? ctx.currentPlayer)
                 : playerID;
 
             const normalizedPlayerId = resolvedPlayerId !== null && resolvedPlayerId !== undefined
@@ -225,7 +223,7 @@ export function createGameAdapter<
         name: domain.gameId,
 
         setup: ({ ctx, random }): MatchState<TCore> => {
-            const playerIds = ctx.playOrder as PlayerId[];
+            const playerIds = (ctx.playOrder as Array<string | number>).map((id) => String(id)) as PlayerId[];
             
             // 封装 boardgame.io 的 random 为引擎层 RandomFn
             const randomFn: RandomFn = {

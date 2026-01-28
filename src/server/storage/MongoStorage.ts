@@ -5,8 +5,14 @@
  */
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { State, Server, LogEntry } from 'boardgame.io';
-import type { StorageAPI } from 'boardgame.io/dist/types/src/server/db';
+import type { State, Server, LogEntry, StorageAPI } from 'boardgame.io';
+
+const STORAGE_TYPE = {
+    SYNC: 0,
+    ASYNC: 1,
+} as const;
+
+type StorageTypeValue = (typeof STORAGE_TYPE)[keyof typeof STORAGE_TYPE];
 
 // 房间文档接口
 interface IMatchDocument extends Document {
@@ -32,7 +38,7 @@ const MatchSchema = new Schema<IMatchDocument>(
         state: { type: Schema.Types.Mixed, default: null },
         initialState: { type: Schema.Types.Mixed, default: null },
         metadata: { type: Schema.Types.Mixed, default: null },
-        log: { type: [Schema.Types.Mixed], default: [] },
+        log: { type: [Schema.Types.Mixed], default: [] } as any,
         ttlSeconds: { type: Number, default: 0 },
         expiresAt: { type: Date, default: null, index: { expires: 0 } }, // TTL 索引
     },
@@ -70,8 +76,8 @@ const calculateExpiresAt = (ttlSeconds: number): Date | null => {
 export class MongoStorage implements StorageAPI.Async {
     private connected = false;
 
-    type(): 'ASYNC' {
-        return 'ASYNC';
+    type(): StorageTypeValue {
+        return STORAGE_TYPE.ASYNC;
     }
 
     async connect(): Promise<void> {
@@ -103,18 +109,20 @@ export class MongoStorage implements StorageAPI.Async {
         const setupData = { ...setupDataFromMetadata, ...setupDataFromState };
         const ttlSeconds = setupData.ttlSeconds ?? 0;
         const ownerKey = setupData.ownerKey;
+        const isGuestOwner = setupData.ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false);
 
-        // 全局单房间限制：同一 ownerKey 只能有一个未结束的房间
+        // 全局单房间限制：同一 ownerKey 只能有一个占用房间（gameover 仍视为占用）
         if (ownerKey) {
             const existing = await Match.findOne({
                 'metadata.setupData.ownerKey': ownerKey,
-                $or: [
-                    { 'metadata.gameover': null },
-                    { 'metadata.gameover': { $exists: false } },
-                ],
             }).select('matchID gameName');
             if (existing) {
-                throw new Error(`[Lobby] ACTIVE_MATCH_EXISTS:${existing.gameName}:${existing.matchID}`);
+                if (isGuestOwner) {
+                    await Match.deleteOne({ matchID: existing.matchID });
+                    console.log(`[MongoStorage] 游客覆盖房间 ownerKey=${ownerKey} oldMatchID=${existing.matchID}`);
+                } else {
+                    throw new Error(`[Lobby] ACTIVE_MATCH_EXISTS:${existing.gameName}:${existing.matchID}`);
+                }
             }
         }
         

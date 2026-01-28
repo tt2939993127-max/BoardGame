@@ -45,7 +45,7 @@ export const LocalMatchRoom = () => {
             <GameHUD mode="local" />
             <div className="w-full h-full">
                 <GameModeProvider mode="local">
-                    {LocalClient ? <LocalClient playerID={null} /> : (
+                    {LocalClient ? <LocalClient /> : (
                         <div className="w-full h-full flex items-center justify-center text-white/50">
                             {t('matchRoom.noClient')}
                         </div>

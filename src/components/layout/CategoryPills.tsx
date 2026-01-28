@@ -32,24 +32,21 @@ export const CategoryPills = ({ activeCategory, onSelect }: CategoryPillsProps) 
                             key={category}
                             onClick={() => onSelect(category)}
                             className={`
-                                group relative text-sm tracking-wide transition-colors duration-300 cursor-pointer whitespace-nowrap py-1
-                                ${isActive ? 'text-[#433422] font-bold' : 'text-[#8c7b64] hover:text-[#433422]'}
+                                group relative text-sm tracking-wide transition-colors duration-300 cursor-pointer whitespace-nowrap px-4 py-1.5 rounded-full
+                                ${isActive ? 'text-parchment-base-text font-bold' : 'text-parchment-light-text hover:text-parchment-base-text'}
                             `}
                         >
-                            <span className="relative z-10 px-1">
+                            <span className="relative z-10">
                                 {t(categoryLabelKeys[category])}
                             </span>
 
-                            {/* Active Underline - Sliding implementation */}
-                            {isActive ? (
+                            {/* Active Pill Background */}
+                            {isActive && (
                                 <motion.div
                                     layoutId="activeCategory"
-                                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#433422] z-0"
+                                    className="absolute inset-0 bg-parchment-brown/10 rounded-full z-0"
                                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                                 />
-                            ) : (
-                                /* Hover Underline - Expanding from center */
-                                <span className="underline-center h-[1px] opacity-40" />
                             )}
                         </button>
                     );
