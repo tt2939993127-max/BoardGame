@@ -15,24 +15,31 @@ interface BonusDieOverlayProps {
     value: number | undefined;
     /** 骰面符号 */
     face?: DieFace;
+    /** 效果描述 key */
+    effectKey?: string;
+    /** 效果描述参数 */
+    effectParams?: Record<string, string | number>;
     /** 是否显示 */
     isVisible: boolean;
     /** 关闭回调 */
     onClose: () => void;
     /** 语言 */
     locale?: string;
-    /** 自动关闭延迟（毫秒），默认 1000 */
+    /** 自动关闭延迟（毫秒），默认 2500 */
     autoCloseDelay?: number;
 }
 
 export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     value,
     face,
+    effectKey,
+    effectParams,
     isVisible,
     onClose,
     locale,
-    autoCloseDelay = 1000,
+    autoCloseDelay = 2500,
 }) => {
+
     if (!isVisible || value === undefined) return null;
 
     return (
@@ -43,9 +50,17 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             autoCloseDelay={autoCloseDelay}
             zIndex={9999}
         >
-            <BonusDieSpotlightContent value={value} face={face} locale={locale} size="8vw" />
+            <BonusDieSpotlightContent
+                value={value}
+                face={face}
+                effectKey={effectKey}
+                effectParams={effectParams}
+                locale={locale}
+                size="8vw"
+            />
         </SpotlightContainer>
     );
 };
+
 
 export default BonusDieOverlay;

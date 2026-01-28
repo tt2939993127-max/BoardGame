@@ -268,8 +268,8 @@ export const MatchRoom = () => {
 
     useEffect(() => {
         if (!isTutorialRoute) return;
-        // 只有当前未激活时才启动，避免重复渲染导致的循环/重置
-        if (!isActive) {
+        // 只有首次进入且当前未激活时才启动，避免结束后被再次拉起导致提示闪现
+        if (!isActive && !tutorialStartedRef.current) {
             const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
             if (impl?.tutorial) {
                 startTutorial(impl.tutorial);
@@ -307,6 +307,7 @@ export const MatchRoom = () => {
                 closeOnBackdrop: false,
                 closeOnEsc: true,
                 lockScroll: true,
+                allowPointerThrough: true,
                 onClose: () => {
                     tutorialModalIdRef.current = null;
                     closeTutorial();
@@ -606,7 +607,7 @@ export const MatchRoom = () => {
                             >
                                 <GameClient
                                     key={`${matchId}-${isSpectatorRoute ? 'spectate' : (effectivePlayerID ?? 'player')}`}
-                                    playerID={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
+                                    playerID={isSpectatorRoute ? undefined : (effectivePlayerID ?? undefined)}
                                     matchID={matchId}
                                     credentials={credentials}
                                 />

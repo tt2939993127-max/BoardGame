@@ -85,7 +85,7 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
 ) => {
     const newState = cloneState(state);
     const { results } = event.payload;
-    
+
     let resultIndex = 0;
     newState.dice.slice(0, newState.rollDiceCount).forEach(die => {
         if (!die.isKept && resultIndex < results.length) {
@@ -98,7 +98,7 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
             resultIndex++;
         }
     });
-    
+
     newState.rollCount++;
     newState.rollConfirmed = false;
 
@@ -136,7 +136,7 @@ const handleBonusDieRolled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS
 ) => {
     const newState = cloneState(state);
     const { value, face, playerId, targetPlayerId, effectKey, effectParams } = event.payload;
-    
+
     // 设置独立的 lastBonusDieRoll 状态（用于 UI 展示）
     newState.lastBonusDieRoll = {
         value,
@@ -147,16 +147,16 @@ const handleBonusDieRolled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS
         effectKey,
         effectParams,
     };
-    
+
     // 记录额外投掷结果（用于 pendingAttack 追踪）
     if (newState.pendingAttack) {
         newState.pendingAttack.extraRoll = { value, resolved: true };
     }
-    
+
     // 注意：骰面效果（bonusDamage、grantStatus、triggerChoice）
     // 统一由效果系统通过 resolveConditionalEffect 处理
     // 不在此处重复处理，避免状态重复增加
-    
+
     return newState;
 };
 
@@ -169,12 +169,12 @@ const handleDieLockToggled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_L
 ) => {
     const newState = cloneState(state);
     const { dieId, isKept } = event.payload;
-    
+
     const die = newState.dice.find(d => d.id === dieId);
     if (die) {
         die.isKept = isKept;
     }
-    
+
     return newState;
 };
 
@@ -214,14 +214,14 @@ const handleAbilityActivated: EventHandler<Extract<DiceThroneEvent, { type: 'ABI
 ) => {
     const newState = cloneState(state);
     const { abilityId, isDefense } = event.payload;
-    
+
     newState.activatingAbilityId = abilityId;
 
     if (isDefense && newState.pendingAttack) {
         newState.pendingAttack.defenseAbilityId = abilityId;
     }
 
-    
+
     return newState;
 };
 
@@ -235,34 +235,34 @@ const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'DAMAGE_D
 ) => {
     const newState = cloneState(state);
     const { targetId, actualDamage, sourceAbilityId } = event.payload;
-    
+
     const target = newState.players[targetId];
     if (target) {
         let remainingDamage = actualDamage;
-        
+
         // 消耗护盾抵消伤害
         if (target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
             // 按添加顺序消耗护盾
             const shield = target.damageShields[0];
             const preventedAmount = Math.min(shield.value, remainingDamage);
             remainingDamage -= preventedAmount;
-            
+
             // 清空所有护盾（下次受伤后清空的设计）
             target.damageShields = [];
         }
-        
+
         // 剩余伤害扣血
         if (remainingDamage > 0) {
             const result = resourceSystem.modify(target.resources, RESOURCE_IDS.HP, -remainingDamage);
             target.resources = result.pool;
         }
     }
-    
+
     if (sourceAbilityId) {
         newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
         newState.lastEffectSourceByPlayerId[targetId] = sourceAbilityId;
     }
-    
+
     return newState;
 };
 
@@ -275,7 +275,7 @@ const handleHealApplied: EventHandler<Extract<DiceThroneEvent, { type: 'HEAL_APP
 ) => {
     const newState = cloneState(state);
     const { targetId, amount, sourceAbilityId } = event.payload;
-    
+
     const target = newState.players[targetId];
     if (target) {
         // 使用 ResourceSystem 计算治疗（会自动限制在最大生命值）
@@ -287,7 +287,7 @@ const handleHealApplied: EventHandler<Extract<DiceThroneEvent, { type: 'HEAL_APP
         newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
         newState.lastEffectSourceByPlayerId[targetId] = sourceAbilityId;
     }
-    
+
     return newState;
 };
 
@@ -300,7 +300,7 @@ const handleStatusApplied: EventHandler<Extract<DiceThroneEvent, { type: 'STATUS
 ) => {
     const newState = cloneState(state);
     const { targetId, statusId, newTotal, sourceAbilityId } = event.payload;
-    
+
     const target = newState.players[targetId];
     if (target) {
         target.statusEffects[statusId] = newTotal;
@@ -310,7 +310,7 @@ const handleStatusApplied: EventHandler<Extract<DiceThroneEvent, { type: 'STATUS
         newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
         newState.lastEffectSourceByPlayerId[targetId] = sourceAbilityId;
     }
-    
+
     return newState;
 };
 
@@ -323,12 +323,12 @@ const handleStatusRemoved: EventHandler<Extract<DiceThroneEvent, { type: 'STATUS
 ) => {
     const newState = cloneState(state);
     const { targetId, statusId, stacks } = event.payload;
-    
+
     const target = newState.players[targetId];
     if (target) {
         target.statusEffects[statusId] = Math.max(0, (target.statusEffects[statusId] || 0) - stacks);
     }
-    
+
     return newState;
 };
 
@@ -341,7 +341,7 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
 ) => {
     const newState = cloneState(state);
     const { targetId, tokenId, newTotal, sourceAbilityId } = event.payload;
-    
+
     const target = newState.players[targetId];
     if (target) {
         target.tokens[tokenId] = newTotal;
@@ -351,7 +351,7 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
         newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
         newState.lastEffectSourceByPlayerId[targetId] = sourceAbilityId;
     }
-    
+
     return newState;
 };
 
@@ -364,12 +364,12 @@ const handleTokenConsumed: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_
 ) => {
     const newState = cloneState(state);
     const { playerId, tokenId, newTotal } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         player.tokens[tokenId] = newTotal;
     }
-    
+
     return newState;
 };
 
@@ -405,7 +405,7 @@ const handleCardDrawn: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_DRAWN
 ) => {
     const newState = cloneState(state);
     const { playerId, cardId } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         const cardIndex = player.deck.findIndex(c => c.id === cardId);
@@ -414,7 +414,7 @@ const handleCardDrawn: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_DRAWN
             player.hand.push(card);
         }
     }
-    
+
     return newState;
 };
 
@@ -427,7 +427,7 @@ const handleCardDiscarded: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_D
 ) => {
     const newState = cloneState(state);
     const { playerId, cardId } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
@@ -436,7 +436,7 @@ const handleCardDiscarded: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_D
             player.discard.push(card);
         }
     }
-    
+
     return newState;
 };
 
@@ -449,7 +449,7 @@ const handleCardSold: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_SOLD' 
 ) => {
     const newState = cloneState(state);
     const { playerId, cardId, cpGained } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
@@ -461,9 +461,9 @@ const handleCardSold: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_SOLD' 
             player.resources = result.pool;
         }
     }
-    
+
     newState.lastSoldCardId = cardId;
-    
+
     return newState;
 };
 
@@ -476,7 +476,7 @@ const handleSellUndone: EventHandler<Extract<DiceThroneEvent, { type: 'SELL_UNDO
 ) => {
     const newState = cloneState(state);
     const { playerId, cardId } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         const cardIndex = player.discard.findIndex(c => c.id === cardId);
@@ -488,9 +488,9 @@ const handleSellUndone: EventHandler<Extract<DiceThroneEvent, { type: 'SELL_UNDO
             player.resources = result.pool;
         }
     }
-    
+
     newState.lastSoldCardId = undefined;
-    
+
     return newState;
 };
 
@@ -503,13 +503,13 @@ const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_PLAY
 ) => {
     const newState = cloneState(state);
     const { playerId, cardId, cpCost } = event.payload;
-    
+
     // 如果有上一张卡的待展示特写，先触发它（处理无交互也无响应窗口的卡牌）
     if (newState.pendingCardSpotlight) {
         newState.lastPlayedCard = newState.pendingCardSpotlight;
         // 注意：不清除，留给后续逻辑覆盖
     }
-    
+
     const player = newState.players[playerId];
     if (player) {
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
@@ -518,7 +518,7 @@ const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_PLAY
             player.discard.push(card);
             // 使用 ResourceSystem 支付 CP
             player.resources = resourceSystem.pay(player.resources, { [RESOURCE_IDS.CP]: cpCost });
-            
+
             // 直接设置 lastPlayedCard（立即触发特写）
             // 如果后续有 INTERACTION_REQUESTED 事件，会在那里清除并暂存
             newState.lastPlayedCard = {
@@ -529,10 +529,10 @@ const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_PLAY
             };
         }
     }
-    
+
     // 打出卡牌后清除撤回状态
     newState.lastSoldCardId = undefined;
-    
+
     return newState;
 };
 
@@ -546,14 +546,14 @@ const handleCpChanged: EventHandler<Extract<DiceThroneEvent, { type: 'CP_CHANGED
 ) => {
     const newState = cloneState(state);
     const { playerId, newValue } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         // 使用 ResourceSystem 设置 CP（确保边界限制）
         const result = resourceSystem.setValue(player.resources, RESOURCE_IDS.CP, newValue);
         player.resources = result.pool;
     }
-    
+
     return newState;
 };
 
@@ -566,7 +566,7 @@ const handleCardReordered: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_R
 ) => {
     const newState = cloneState(state);
     const { playerId, cardId } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         const cardIndex = player.hand.findIndex(c => c.id === cardId);
@@ -575,7 +575,7 @@ const handleCardReordered: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_R
             player.hand.push(card);
         }
     }
-    
+
     return newState;
 };
 
@@ -614,7 +614,7 @@ const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type: 'ATTA
 ) => {
     const newState = cloneState(state);
     const { attackerId, defenderId, sourceAbilityId, isDefendable, isUltimate } = event.payload;
-    
+
     newState.pendingAttack = {
         attackerId,
         defenderId,
@@ -623,7 +623,7 @@ const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type: 'ATTA
         isUltimate,
         // 额外骰子现在在 resolveAttack 中自动投掷，不再需要设置 extraRoll
     };
-    
+
     return newState;
 };
 
@@ -636,13 +636,13 @@ const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type: 'ATTAC
 ) => {
     const newState = cloneState(state);
     const { sourceAbilityId, defenseAbilityId } = event.payload;
-    
+
     // 记录激活的技能ID
     newState.activatingAbilityId = sourceAbilityId || defenseAbilityId;
-    
+
     // 清除待处理攻击
     newState.pendingAttack = null;
-    
+
     return newState;
 };
 
@@ -668,7 +668,7 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
 ) => {
     const newState = cloneState(state);
     const { playerId, statusId, tokenId, value, customId, sourceAbilityId } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         if (tokenId) {
@@ -701,7 +701,7 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
         newState.lastEffectSourceByPlayerId = newState.lastEffectSourceByPlayerId || {};
         newState.lastEffectSourceByPlayerId[playerId] = sourceAbilityId;
     }
-    
+
     return newState;
 };
 
@@ -714,11 +714,11 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
 ) => {
     const newState = cloneState(state);
     const { nextPlayerId, turnNumber } = event.payload;
-    
+
     newState.activePlayerId = nextPlayerId;
     newState.turnNumber = turnNumber;
     newState.turnPhase = 'upkeep';
-    
+
     return newState;
 };
 
@@ -756,7 +756,7 @@ const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { type: '
 ) => {
     const newState = cloneState(state);
     const { targetId, value, sourceId } = event.payload;
-    
+
     const target = newState.players[targetId];
     if (target) {
         // 初始化 damageShields 数组（兼容旧状态）
@@ -766,7 +766,7 @@ const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { type: '
         // 添加新护盾
         target.damageShields.push({ value, sourceId });
     }
-    
+
     return newState;
 };
 
@@ -796,7 +796,7 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
 ) => {
     const newState = cloneState(state);
     const { dieId, newValue, playerId } = event.payload;
-    
+
     const die = newState.dice.find(d => d.id === dieId);
     if (die) {
         die.value = newValue;
@@ -804,18 +804,18 @@ const handleDieModified: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_MODI
         die.symbol = face;
         die.symbols = [face];
     }
-    
+
     // 检查是否是自己修改自己的骰子
     // rollerId 是当前骰子的所有者
     const rollerId = newState.turnPhase === 'defensiveRoll' && newState.pendingAttack
         ? newState.pendingAttack.defenderId
         : newState.activePlayerId;
-    
+
     if (playerId === rollerId && newState.rollConfirmed) {
         // 自己改自己的骰子，需要重新确认骰面，让对手有响应机会
         newState.rollConfirmed = false;
     }
-    
+
     return newState;
 };
 
@@ -832,7 +832,7 @@ const handleDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_RERO
 ) => {
     const newState = cloneState(state);
     const { dieId, newValue, playerId } = event.payload;
-    
+
     const die = newState.dice.find(d => d.id === dieId);
     if (die) {
         die.value = newValue;
@@ -840,17 +840,17 @@ const handleDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'DIE_RERO
         die.symbol = face;
         die.symbols = [face];
     }
-    
+
     // 检查是否是自己重掷自己的骰子
     const rollerId = newState.turnPhase === 'defensiveRoll' && newState.pendingAttack
         ? newState.pendingAttack.defenderId
         : newState.activePlayerId;
-    
+
     if (playerId === rollerId && newState.rollConfirmed) {
         // 自己重掷自己的骰子，需要重新确认骰面
         newState.rollConfirmed = false;
     }
-    
+
     return newState;
 };
 
@@ -863,9 +863,9 @@ const handleRollLimitChanged: EventHandler<Extract<DiceThroneEvent, { type: 'ROL
 ) => {
     const newState = cloneState(state);
     const { newLimit } = event.payload;
-    
+
     newState.rollLimit = newLimit;
-    
+
     return newState;
 };
 
@@ -879,13 +879,13 @@ const handleInteractionRequested: EventHandler<Extract<DiceThroneEvent, { type: 
     const newState = cloneState(state);
     const interaction = event.payload.interaction;
     newState.pendingInteraction = interaction;
-    
+
     // 如果交互来自卡牌，将 lastPlayedCard 移到 pendingCardSpotlight（暂停特写，等待交互完成）
     if (interaction.sourceCardId && newState.lastPlayedCard?.cardId === interaction.sourceCardId) {
         newState.pendingCardSpotlight = newState.lastPlayedCard;
         newState.lastPlayedCard = undefined;
     }
-    
+
     return newState;
 };
 
@@ -898,13 +898,13 @@ const handleInteractionCompleted: EventHandler<Extract<DiceThroneEvent, { type: 
 ) => {
     const newState = cloneState(state);
     newState.pendingInteraction = undefined;
-    
+
     // 如果有待展示的卡牌特写，现在触发（交互已完成，卡牌确认生效）
     if (newState.pendingCardSpotlight) {
         newState.lastPlayedCard = newState.pendingCardSpotlight;
         newState.pendingCardSpotlight = undefined;
     }
-    
+
     return newState;
 };
 
@@ -921,13 +921,13 @@ const handleInteractionCancelled: EventHandler<Extract<DiceThroneEvent, { type: 
 ) => {
     const newState = cloneState(state);
     const { sourceCardId, cpCost, playerId } = event.payload;
-    
+
     // 清除交互状态
     newState.pendingInteraction = undefined;
-    
+
     // 清除待展示的卡牌特写（卡牌被取消，不应显示特写）
     newState.pendingCardSpotlight = undefined;
-    
+
     const player = newState.players[playerId];
     if (player && sourceCardId) {
         // 从弃牌堆找到卡牌并还回手牌
@@ -936,14 +936,14 @@ const handleInteractionCancelled: EventHandler<Extract<DiceThroneEvent, { type: 
             const [card] = player.discard.splice(cardIndex, 1);
             player.hand.push(card);
         }
-        
+
         // 返还 CP
         if (cpCost > 0) {
             const currentCp = player.resources[RESOURCE_IDS.CP] ?? 0;
             player.resources[RESOURCE_IDS.CP] = currentCp + cpCost;
         }
     }
-    
+
     return newState;
 };
 
@@ -959,7 +959,7 @@ const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABIL
 ) => {
     const newState = cloneState(state);
     const { playerId, oldAbilityId, newAbilityDef, cardId, newLevel } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         // 1) 替换技能定义
@@ -984,6 +984,14 @@ const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABIL
                 player.upgradeCardByAbilityId = {};
             }
             player.upgradeCardByAbilityId[oldAbilityId] = { cardId: card.id, cpCost: card.cpCost };
+
+            // 触发特写系统
+            newState.lastPlayedCard = {
+                cardId: card.id,
+                playerId,
+                atlasIndex: card.atlasIndex ?? 0,
+                timestamp: event.timestamp,
+            };
         }
     }
 
@@ -991,6 +999,7 @@ const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABIL
     newState.lastSoldCardId = undefined;
 
     return newState;
+
 };
 
 // ============================================================================
@@ -1018,14 +1027,14 @@ const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_USED
 ) => {
     const newState = cloneState(state);
     const { playerId, tokenId, amount, effectType, damageModifier, evasionRoll } = event.payload;
-    
+
     const player = newState.players[playerId];
     if (player) {
         // 消耗 Token
         const currentAmount = player.tokens[tokenId] ?? 0;
         player.tokens[tokenId] = Math.max(0, currentAmount - amount);
     }
-    
+
     // 更新 pendingDamage
     if (newState.pendingDamage) {
         if (effectType === 'damageBoost' && damageModifier) {
@@ -1059,7 +1068,7 @@ const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_USED
             }
         }
     }
-    
+
     return newState;
 };
 
@@ -1195,7 +1204,7 @@ export const reduce = (
                 const newState = cloneState(state);
                 newState.turnPhase = phaseEvent.payload.to as TurnPhase;
                 newState.activePlayerId = phaseEvent.payload.activePlayerId;
-                
+
                 // 进入掆骰阶段时重置骰子状态
                 if (phaseEvent.payload.to === 'offensiveRoll') {
                     newState.rollCount = 0;
@@ -1211,10 +1220,10 @@ export const reduce = (
                     newState.rollConfirmed = false;
                     resetDice(newState);
                 }
-                
+
                 return newState;
             }
-            
+
             // 其他未知事件类型（包括系统层事件）直接返回原状态
             // 注意：这里不使用 exhaustive check，因为系统层事件不在 DiceThroneEvent 类型中
             console.debug(`[Reducer] Ignoring event type: ${(event as { type: string }).type}`);

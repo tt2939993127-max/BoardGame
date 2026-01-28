@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { GAME_SERVER_URL } from '../config/server';
 import { matchSocket } from '../services/matchSocket';
 import { persistMatchCredentials } from '../hooks/match/useMatchStatus';
+import { getOrCreateGuestId, getGuestName as resolveGuestName } from '../hooks/match/ownerIdentity';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface DebugPanelProps {
@@ -29,22 +30,14 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
     const [searchParams] = useSearchParams();
     const currentPlayerID = searchParams.get('playerID');
     const gameMode = useGameMode();
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const [isOpen, setIsOpen] = React.useState(false);
     const [activeTab, setActiveTab] = React.useState<'state' | 'actions' | 'controls'>('controls');
     const [isCreatingRoom, setIsCreatingRoom] = React.useState(false);
     const { setPlayerID } = useDebug();
 
-    const getGuestId = () => {
-        const key = 'guest_id';
-        const stored = localStorage.getItem(key);
-        if (stored) return stored;
-        const id = String(Math.floor(Math.random() * 9000) + 1000);
-        localStorage.setItem(key, id);
-        return id;
-    };
-
-    const getGuestName = () => t('player.guest', { id: getGuestId(), ns: 'lobby' });
+    const getGuestId = () => getOrCreateGuestId();
+    const getGuestName = () => resolveGuestName(t, getGuestId());
 
     // 动作参数的状态
     const [moveArgs, setMoveArgs] = useState<Record<string, string>>({});
@@ -350,9 +343,14 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                             setIsCreatingRoom(true);
                                             try {
                                                 const playerName = user?.username || getGuestName();
+                                                const guestId = user?.id ? undefined : getGuestId();
                                                 
                                                 // 1. 创建新房间
-                                                const { matchID: newMatchID } = await lobbyClient.createMatch(gameId, { numPlayers: 2 });
+                                                const { matchID: newMatchID } = await lobbyClient.createMatch(
+                                                    gameId,
+                                                    { numPlayers: 2, setupData: guestId ? { guestId } : undefined },
+                                                    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+                                                );
                                                 const { playerCredentials: newCredentials } = await lobbyClient.joinMatch(gameId, newMatchID, {
                                                     playerID: '0',
                                                     playerName,

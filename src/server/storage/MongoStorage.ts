@@ -5,8 +5,15 @@
  */
 
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import type { State, Server, LogEntry } from 'boardgame.io';
-import type { StorageAPI } from 'boardgame.io/dist/types/src/server/db';
+import type { State, Server, LogEntry, StorageAPI } from 'boardgame.io';
+import { hasOccupiedPlayers } from '../matchOccupancy';
+
+const STORAGE_TYPE = {
+    SYNC: 0,
+    ASYNC: 1,
+} as const;
+
+type StorageTypeValue = (typeof STORAGE_TYPE)[keyof typeof STORAGE_TYPE];
 
 // 房间文档接口
 interface IMatchDocument extends Document {
@@ -32,9 +39,9 @@ const MatchSchema = new Schema<IMatchDocument>(
         state: { type: Schema.Types.Mixed, default: null },
         initialState: { type: Schema.Types.Mixed, default: null },
         metadata: { type: Schema.Types.Mixed, default: null },
-        log: { type: [Schema.Types.Mixed], default: [] },
+        log: { type: [Schema.Types.Mixed], default: [] } as any,
         ttlSeconds: { type: Number, default: 0 },
-        expiresAt: { type: Date, default: null, index: { expires: 0 } }, // TTL 索引
+        expiresAt: { type: Date, default: null }, // TTL 索引
     },
     {
         timestamps: true,
@@ -68,17 +75,15 @@ const calculateExpiresAt = (ttlSeconds: number): Date | null => {
  * MongoDB 存储实现
  */
 export class MongoStorage implements StorageAPI.Async {
-    private connected = false;
 
-    type(): 'ASYNC' {
-        return 'ASYNC';
+    type(): StorageTypeValue {
+        return STORAGE_TYPE.ASYNC;
     }
 
     async connect(): Promise<void> {
         // mongoose 连接由 connectDB() 统一管理
         // 这里只确保模型已初始化
         getMatchModel();
-        this.connected = true;
         console.log('[MongoStorage] 已连接');
     }
 
@@ -104,17 +109,16 @@ export class MongoStorage implements StorageAPI.Async {
         const ttlSeconds = setupData.ttlSeconds ?? 0;
         const ownerKey = setupData.ownerKey;
 
-        // 全局单房间限制：同一 ownerKey 只能有一个未结束的房间
+        // 强制保持单房间：创建新房间时清理同 ownerKey 的旧房间
         if (ownerKey) {
-            const existing = await Match.findOne({
+            const existingMatches = await Match.find({
                 'metadata.setupData.ownerKey': ownerKey,
-                $or: [
-                    { 'metadata.gameover': null },
-                    { 'metadata.gameover': { $exists: false } },
-                ],
-            }).select('matchID gameName');
-            if (existing) {
-                throw new Error(`[Lobby] ACTIVE_MATCH_EXISTS:${existing.gameName}:${existing.matchID}`);
+            }).select('matchID').lean();
+
+            if (existingMatches.length > 0) {
+                const matchIds = existingMatches.map(doc => doc.matchID);
+                await Match.deleteMany({ matchID: { $in: matchIds } });
+                console.log(`[MongoStorage] 清理同 ownerKey 旧房间 ownerKey=${ownerKey} count=${matchIds.length}`);
             }
         }
         
@@ -195,7 +199,6 @@ export class MongoStorage implements StorageAPI.Async {
         if (sanitizedSys.log && typeof sanitizedSys.log === 'object') {
             const log = sanitizedSys.log as { entries?: unknown[]; maxEntries?: number };
             if (Array.isArray(log.entries)) {
-                const originalCount = log.entries.length;
                 // 只保留最近 10 条日志
                 const recentEntries = log.entries.slice(-10);
                 // 清理每个日志条目中的大型对象
@@ -218,8 +221,6 @@ export class MongoStorage implements StorageAPI.Async {
         // 清理 boardgame.io 的 plugins 字段（这是状态膨胀的主要来源）
         if (sanitizedState.plugins && typeof sanitizedState.plugins === 'object') {
             const plugins = sanitizedState.plugins as Record<string, unknown>;
-            const pluginsBefore = JSON.stringify(plugins).length;
-            
             // 遍历所有插件并清理
             for (const pluginName of Object.keys(plugins)) {
                 const plugin = plugins[pluginName] as Record<string, unknown> | undefined;
@@ -429,6 +430,110 @@ export class MongoStorage implements StorageAPI.Async {
         if (toDelete.length > 0) {
             await Match.deleteMany({ matchID: { $in: toDelete } });
             console.log(`[MongoStorage] 清理损坏房间: ${toDelete.length} 个`);
+        }
+
+        return toDelete.length;
+    }
+
+    /**
+     * 清理临时房间（ttlSeconds=0 且无在线玩家）
+     * 主要用于服务重启时回收“未保存”房间
+     */
+    async cleanupEphemeralMatches(): Promise<number> {
+        const Match = getMatchModel();
+
+        const ephemeralMatches = await Match.find({ ttlSeconds: 0 }).lean();
+        const toDelete: string[] = [];
+
+        for (const doc of ephemeralMatches) {
+            const metadata = doc.metadata as Server.MatchData | null;
+            const players = metadata?.players as Record<string, { isConnected?: boolean }> | undefined;
+            const hasConnectedPlayer = players
+                ? Object.values(players).some(player => Boolean(player?.isConnected))
+                : false;
+
+            if (!hasConnectedPlayer) {
+                toDelete.push(doc.matchID);
+                console.log(`[Cleanup] 删除临时房间 matchID=${doc.matchID} reason=ephemeral_no_connection`);
+            }
+        }
+
+        if (toDelete.length > 0) {
+            await Match.deleteMany({ matchID: { $in: toDelete } });
+            console.log(`[MongoStorage] 清理临时房间: ${toDelete.length} 个`);
+        }
+
+        return toDelete.length;
+    }
+
+    /**
+     * 清理同 ownerKey 的重复房间，仅保留最近更新的一条
+     */
+    async cleanupDuplicateOwnerMatches(): Promise<number> {
+        const Match = getMatchModel();
+        const docs = await Match.find({
+            'metadata.setupData.ownerKey': { $exists: true, $ne: null },
+        }).select('matchID updatedAt metadata.setupData.ownerKey').lean();
+
+        const grouped = new Map<string, Array<{ matchID: string; updatedAt?: Date }>>();
+        for (const doc of docs) {
+            const ownerKey = (doc as { metadata?: { setupData?: { ownerKey?: string } } }).metadata?.setupData?.ownerKey;
+            if (!ownerKey) continue;
+            const list = grouped.get(ownerKey) ?? [];
+            list.push({ matchID: doc.matchID, updatedAt: doc.updatedAt ?? undefined });
+            grouped.set(ownerKey, list);
+        }
+
+        const toDelete: string[] = [];
+        for (const [ownerKey, matches] of grouped.entries()) {
+            if (matches.length <= 1) continue;
+            matches.sort((a, b) => (b.updatedAt?.getTime() ?? 0) - (a.updatedAt?.getTime() ?? 0));
+            const stale = matches.slice(1);
+            for (const match of stale) {
+                toDelete.push(match.matchID);
+                console.log(`[Cleanup] 删除重复房间 ownerKey=${ownerKey} matchID=${match.matchID}`);
+            }
+        }
+
+        if (toDelete.length > 0) {
+            await Match.deleteMany({ matchID: { $in: toDelete } });
+            console.log(`[MongoStorage] 清理重复 ownerKey 房间: ${toDelete.length} 个`);
+        }
+
+        return toDelete.length;
+    }
+
+    /**
+     * 清理历史遗留房间（缺失 ownerKey 或 guest:unknown）且无人占座
+     * 用于修复旧逻辑遗留的无法覆盖房间
+     */
+    async cleanupLegacyMatches(hoursOld: number = 24): Promise<number> {
+        const Match = getMatchModel();
+        const cutoffTime = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
+
+        const legacyMatches = await Match.find({
+            updatedAt: { $lt: cutoffTime },
+            $or: [
+                { 'metadata.setupData.ownerKey': { $exists: false } },
+                { 'metadata.setupData.ownerKey': null },
+                { 'metadata.setupData.ownerKey': 'guest:unknown' },
+                { 'metadata.setupData.ownerKey': 'guest:invalid' },
+            ],
+        }).lean();
+
+        const toDelete: string[] = [];
+        for (const doc of legacyMatches) {
+            const metadata = doc.metadata as Server.MatchData | null;
+            const players = metadata?.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean }> | undefined;
+            if (!hasOccupiedPlayers(players)) {
+                toDelete.push(doc.matchID);
+                console.log(`[Cleanup] 删除遗留房间 matchID=${doc.matchID} reason=legacy_owner`);
+            }
+        }
+
+        if (toDelete.length > 0) {
+            await Match.deleteMany({ matchID: { $in: toDelete } });
+            console.log(`[MongoStorage] 清理遗留房间: ${toDelete.length} 个`);
         }
 
         return toDelete.length;

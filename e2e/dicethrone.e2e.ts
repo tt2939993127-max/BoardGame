@@ -189,4 +189,77 @@ test.describe('DiceThrone E2E', () => {
         await hostContext.close();
         await guestContext.close();
     });
+
+    test('Local skip token response shows Next Phase button', async ({ page }) => {
+        await setEnglishLocale(page);
+        await page.goto('/play/dicethrone/local');
+        await expect(page.getByAltText('Player Board')).toBeVisible();
+
+        await expect(page.getByText(/Main Phase \(1\)/)).toBeVisible({ timeout: 10000 });
+        await page.getByRole('button', { name: 'Next Phase' }).click();
+        await expect(page.getByRole('button', { name: 'Resolve Attack' })).toBeVisible({ timeout: 10000 });
+
+        const rollButton = page.getByRole('button', { name: /^Roll/ });
+        const confirmButton = page.getByRole('button', { name: 'Confirm Dice' });
+        const highlightedSlots = page
+            .locator('[data-ability-slot]')
+            .filter({ has: page.locator('div.animate-pulse[class*="border-"]') });
+
+        let abilitySelected = false;
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+            await expect(rollButton).toBeEnabled({ timeout: 5000 });
+            await rollButton.click();
+            await page.waitForTimeout(1000);
+
+            if (await highlightedSlots.count()) {
+                await confirmButton.click();
+                await page.waitForTimeout(500);
+                await highlightedSlots.first().click();
+                abilitySelected = true;
+                break;
+            }
+        }
+
+        if (!abilitySelected) {
+            throw new Error('No offensive ability available after 10 roll attempts.');
+        }
+
+        await page.getByRole('button', { name: 'Resolve Attack' }).click();
+        await expect(page.getByRole('button', { name: 'End Defense' })).toBeVisible({ timeout: 10000 });
+
+        await page.locator('button[title="Dev Debug"]').click();
+        await page.getByRole('button', { name: '📊 State' }).click();
+
+        const rawStateText = await page.locator('pre').filter({ hasText: '"core"' }).first().textContent();
+        const stateText = rawStateText?.trim();
+        if (!stateText) {
+            throw new Error('Failed to read debug game state.');
+        }
+
+        const state = JSON.parse(stateText) as { core?: Record<string, unknown> };
+        const core = (state.core ?? state) as Record<string, unknown>;
+        const pendingDamage = {
+            id: `e2e-damage-${Date.now()}`,
+            sourcePlayerId: '0',
+            targetPlayerId: '1',
+            originalDamage: 2,
+            currentDamage: 2,
+            responseType: 'beforeDamageDealt',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+
+        await page.getByRole('button', { name: '📝 赋值' }).click();
+        await page.getByPlaceholder('粘贴游戏状态 JSON...').fill(JSON.stringify({
+            ...core,
+            pendingDamage,
+        }));
+        await page.getByRole('button', { name: '✓ 应用状态' }).click();
+
+        const skipButton = page.getByRole('button', { name: 'Skip' });
+        await expect(skipButton).toBeVisible({ timeout: 5000 });
+        await skipButton.click();
+
+        await expect(page.getByRole('button', { name: 'Next Phase' })).toBeVisible({ timeout: 10000 });
+    });
 });

@@ -12,6 +12,8 @@ export interface ModalEntry {
     closeOnBackdrop?: boolean;
     lockScroll?: boolean;
     zIndex?: number;
+    /** 允许指针事件穿透到背景（用于教程等不应拦截交互的弹层） */
+    allowPointerThrough?: boolean;
     // 由栈触发的关闭回调（例如 ESC/编程关闭）
     onClose?: () => void;
 }

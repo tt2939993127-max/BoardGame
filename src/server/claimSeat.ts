@@ -1,4 +1,3 @@
-import type { Context } from 'koa';
 import jwt from 'jsonwebtoken';
 
 export type GameJwtPayload = {
@@ -11,8 +10,15 @@ type ClaimSeatDb = {
     setMetadata: (matchID: string, metadata: any) => Promise<void>;
 };
 
+type ClaimSeatContext = {
+    get: (name: string) => string;
+    throw: (status: number, message: string) => void;
+    request: { body?: { playerID?: string | number; guestId?: string; playerName?: string } };
+    body?: unknown;
+};
+
 type ClaimSeatAuth = {
-    generateCredentials: (ctx: Context) => Promise<string> | string;
+    generateCredentials: (ctx: ClaimSeatContext) => Promise<string> | string;
 };
 
 const parseBearerToken = (value?: string): string | null => {
@@ -40,20 +46,38 @@ export const createClaimSeatHandler = ({
     auth: ClaimSeatAuth;
     jwtSecret: string;
 }) => {
-    return async (ctx: Context, matchID: string): Promise<void> => {
-        const rawToken = parseBearerToken(ctx.get('authorization'));
-        if (!rawToken) {
-            ctx.throw(401, 'Authorization is required');
-            return;
-        }
-        const payload = verifyGameToken(rawToken, jwtSecret);
-        if (!payload?.userId) {
-            ctx.throw(401, 'Invalid token');
-            return;
+    return async (ctx: ClaimSeatContext, matchID: string): Promise<void> => {
+        const origin = ctx.get('origin');
+        const authHeader = ctx.get('authorization');
+        const rawToken = parseBearerToken(authHeader);
+        const body = ctx.request.body;
+        const resolvedPlayerID = String(body?.playerID ?? '0');
+        const requestedName = typeof body?.playerName === 'string' ? body.playerName.trim() : '';
+
+        let expectedOwnerKey: string | null = null;
+        let payload: GameJwtPayload | null = null;
+        let actorLabel = '';
+        if (rawToken) {
+            payload = verifyGameToken(rawToken, jwtSecret);
+            if (!payload?.userId) {
+                console.warn(`[claim-seat] rejected reason=invalid_token matchID=${matchID} origin=${origin || ''} hasAuth=${!!authHeader}`);
+                ctx.throw(401, 'Invalid token');
+                return;
+            }
+            expectedOwnerKey = `user:${payload.userId}`;
+            actorLabel = expectedOwnerKey;
+        } else {
+            const guestId = typeof body?.guestId === 'string' ? body.guestId.trim() : '';
+            if (!guestId) {
+                console.warn(`[claim-seat] rejected reason=missing_guest matchID=${matchID} origin=${origin || ''}`);
+                ctx.throw(401, 'Guest id is required');
+                return;
+            }
+            expectedOwnerKey = `guest:${guestId}`;
+            actorLabel = expectedOwnerKey;
         }
 
-        const body = (ctx.request as { body?: { playerID?: string | number } }).body;
-        const resolvedPlayerID = String(body?.playerID ?? '0');
+        console.log(`[claim-seat] start matchID=${matchID} playerID=${resolvedPlayerID} actor=${actorLabel} origin=${origin || ''}`);
 
         const { metadata, state } = await db.fetch(matchID, { metadata: true, state: true });
         if (!metadata) {
@@ -64,8 +88,10 @@ export const createClaimSeatHandler = ({
         const setupDataFromMeta = (metadata.setupData as { ownerKey?: string } | undefined) || undefined;
         const setupDataFromState = (state?.G?.__setupData as { ownerKey?: string } | undefined) || undefined;
         const ownerKey = setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey;
-        const expectedOwnerKey = `user:${payload.userId}`;
         if (!ownerKey || ownerKey !== expectedOwnerKey) {
+            console.warn(
+                `[claim-seat] rejected reason=owner_mismatch matchID=${matchID} ownerKey=${ownerKey || ''} expected=${expectedOwnerKey}`
+            );
             ctx.throw(403, 'Not match owner');
             return;
         }
@@ -73,17 +99,22 @@ export const createClaimSeatHandler = ({
         const players = metadata.players as Record<string, { name?: string; credentials?: string }> | undefined;
         const player = players?.[resolvedPlayerID];
         if (!player) {
+            console.warn(`[claim-seat] rejected reason=player_not_found matchID=${matchID} playerID=${resolvedPlayerID}`);
             ctx.throw(404, 'Player ' + resolvedPlayerID + ' not found');
             return;
         }
 
         const playerCredentials = await auth.generateCredentials(ctx);
         player.credentials = playerCredentials;
-        if (!player.name && payload.username) {
-            player.name = payload.username;
+        if (!player.name) {
+            const resolvedName = payload?.username || requestedName;
+            if (resolvedName) {
+                player.name = resolvedName;
+            }
         }
 
         await db.setMetadata(matchID, metadata);
+        console.log(`[claim-seat] success matchID=${matchID} playerID=${resolvedPlayerID} actor=${actorLabel}`);
         ctx.body = { playerID: resolvedPlayerID, playerCredentials };
     };
 };

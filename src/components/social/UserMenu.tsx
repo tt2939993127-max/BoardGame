@@ -81,11 +81,11 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                 {user.avatar ? (
                     <img
                         src={user.avatar}
-                        className="w-8 h-8 rounded-full object-cover border border-[#d3ccba] shadow-sm group-hover:border-[#8c7b64] transition-colors"
+                        className="w-8 h-8 rounded-full object-cover border border-parchment-card-border shadow-sm group-hover:border-parchment-light-text transition-colors"
                         alt={user.username}
                     />
                 ) : (
-                    <div className="relative group-hover:text-[#2c2216] text-[#433422]">
+                    <div className="relative group-hover:text-parchment-brown text-parchment-base-text">
                         <span className="font-bold text-sm tracking-tight">{user.username}</span>
                         <span className="underline-center" />
                     </div>
@@ -93,22 +93,22 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
             </button>
 
             {isOpen && (
-                <div className="absolute top-[calc(100%+0.5rem)] right-0 bg-[#fefcf7] shadow-[0_8px_32px_rgba(67,52,34,0.12)] border border-[#d3ccba] rounded-sm py-2 px-2 z-50 min-w-[200px] animate-in fade-in slide-in-from-top-1 flex flex-col gap-1">
+                <div className="absolute top-[calc(100%+0.5rem)] right-0 bg-parchment-card-bg shadow-parchment-card-hover border border-parchment-card-border rounded-sm py-2 px-2 z-50 min-w-[200px] animate-in fade-in slide-in-from-top-1 flex flex-col gap-1">
                     {/* Match History */}
                     <button
                         onClick={handleOpenHistory}
-                        className="w-full px-4 py-2.5 text-left cursor-pointer text-[#433422] font-bold text-xs hover:bg-[#f3f0e6] rounded flex items-center gap-3 transition-colors"
+                        className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
                     >
                         <History size={16} />
                         {t('social:menu.matchHistory')}
                     </button>
 
-                    <div className="h-px bg-[#e5e0d0] my-1 mx-2 opacity-50" />
+                    <div className="h-px bg-parchment-card-border/30 my-1 mx-2 opacity-50" />
 
                     {/* Set Avatar */}
                     <button
                         onClick={handleSetAvatar}
-                        className="w-full px-4 py-2.5 text-left cursor-pointer text-[#433422] font-bold text-xs hover:bg-[#f3f0e6] rounded flex items-center gap-3 transition-colors"
+                        className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
                     >
                         <Image size={16} />
                         {t('auth:menu.setAvatar') || 'Set Avatar'}
@@ -117,7 +117,7 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                     {/* Bind Email */}
                     <button
                         onClick={() => { setIsOpen(false); onBindEmail(); }}
-                        className="w-full px-4 py-2.5 text-left cursor-pointer text-[#433422] font-bold text-xs hover:bg-[#f3f0e6] rounded flex items-center gap-3 transition-colors"
+                        className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
                     >
                         <Mail size={16} />
                         {user.emailVerified ? t('auth:menu.emailBound') : t('auth:menu.bindEmail')}
@@ -126,7 +126,7 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                     {/* Logout */}
                     <button
                         onClick={() => { setIsOpen(false); onLogout(); }}
-                        className="w-full px-4 py-2.5 text-left cursor-pointer text-[#8c7b64] hover:text-red-500 font-bold text-xs hover:bg-[#f3f0e6] rounded flex items-center gap-3 transition-colors"
+                        className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-light-text hover:text-red-500 font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
                     >
                         <LogOut size={16} />
                         {t('auth:menu.logout')}

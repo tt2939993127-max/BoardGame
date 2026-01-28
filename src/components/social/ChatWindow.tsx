@@ -130,18 +130,18 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
     const isOnline = friend?.online || conversation?.online || false;
 
     return (
-        <div className="flex flex-col h-full bg-[#fcfbf9]">
+        <div className="flex flex-col h-full bg-parchment-card-bg">
             {/* Header */}
-            <div className="h-14 border-b border-[#e5e0d0] flex items-center px-4 bg-[#f3f0e6] shadow-sm z-10">
+            <div className="h-14 border-b border-parchment-card-border/30 flex items-center px-4 bg-parchment-base-bg shadow-sm z-10">
                 <div className="relative">
-                    <div className="w-9 h-9 rounded-full bg-[#d3ccba] flex items-center justify-center text-[#fcfbf9] font-bold">
+                    <div className="w-9 h-9 rounded-full bg-parchment-card-border flex items-center justify-center text-parchment-card-bg font-bold">
                         {username[0].toUpperCase()}
                     </div>
-                    {isOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#f3f0e6]" />}
+                    {isOnline && <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-parchment-base-bg" />}
                 </div>
                 <div className="ml-3 flex-1">
-                    <div className="font-bold text-[#433422] text-sm">{username}</div>
-                    <div className="text-[10px] text-[#8c7b64]">
+                    <div className="font-bold text-parchment-base-text text-sm">{username}</div>
+                    <div className="text-[10px] text-parchment-light-text">
                         {isOnline ? t('social:status.online') : t('social:status.offline')}
                     </div>
                 </div>
@@ -150,15 +150,12 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
                         onClick={async () => {
                             try {
                                 const content = JSON.stringify({ matchId: inviteData.matchId, gameName: inviteData.gameName });
-                                // Add a friendly text or just send payload? 
-                                // Schema usually expects `content` to be the text displayed or the payload.
-                                // If type is 'invite', frontend renders special UI, so content can be payload.
                                 await sendMessage(targetUserId, content, 'invite');
                             } catch (e) {
                                 console.error("Failed to invite", e);
                             }
                         }}
-                        className="p-2 bg-[#433422] text-[#fcfbf9] rounded-full hover:bg-[#2c2216] transition-colors"
+                        className="p-2 bg-parchment-base-text text-parchment-card-bg rounded-full hover:bg-parchment-brown transition-colors"
                         title={t('social:actions.invite')}
                     >
                         <Gamepad2 size={16} />
@@ -168,7 +165,7 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar" ref={scrollRef}>
-                {loading && <div className="text-center text-xs text-[#8c7b64]">{t('common:loading')}...</div>}
+                {loading && <div className="text-center text-xs text-parchment-light-text">{t('common:loading')}...</div>}
                 {messages.map((msg, index) => {
                     const isMe = msg.from !== targetUserId;
                     const showTime = index === 0 || (new Date(msg.createdAt).getTime() - new Date(messages[index - 1].createdAt).getTime() > 5 * 60 * 1000);
@@ -176,12 +173,12 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
                     return (
                         <div key={msg.id} className="flex flex-col">
                             {showTime && (
-                                <div className="text-center text-[10px] text-[#8c7b64]/60 mb-2 mt-2">
+                                <div className="text-center text-[10px] text-parchment-light-text/60 mb-2 mt-2">
                                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                             )}
                             <div className={clsx("max-w-[80%] rounded-lg p-3 text-sm shadow-sm",
-                                isMe ? "self-end bg-[#433422] text-[#fcfbf9] rounded-br-none" : "self-start bg-white border border-[#e5e0d0] text-[#433422] rounded-bl-none"
+                                isMe ? "self-end bg-parchment-base-text text-parchment-card-bg rounded-br-none" : "self-start bg-white border border-parchment-card-border/30 text-parchment-base-text rounded-bl-none"
                             )}>
                                 {msg.type === 'invite' ? (
                                     <div className="flex items-center gap-2">
@@ -199,19 +196,19 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
             </div>
 
             {/* Input */}
-            <div className="p-3 bg-white border-t border-[#e5e0d0]">
+            <div className="p-3 bg-white border-t border-parchment-card-border/30">
                 <form onSubmit={handleSend} className="relative flex items-center gap-2">
                     <input
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={t('social:chat.placeholder')}
-                        className="flex-1 bg-[#f3f0e6] border border-[#d3ccba] rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-[#433422] transition-colors"
+                        className="flex-1 bg-parchment-base-bg border border-parchment-card-border/40 rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-parchment-base-text transition-colors"
                     />
                     <button
                         type="submit"
                         disabled={!inputValue.trim()}
-                        className="absolute right-2 p-1.5 bg-[#433422] text-[#fcfbf9] rounded-full hover:bg-[#2c2216] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="absolute right-2 p-1.5 bg-parchment-base-text text-parchment-card-bg rounded-full hover:bg-parchment-brown disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         <Send size={14} />
                     </button>

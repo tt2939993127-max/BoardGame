@@ -1,6 +1,6 @@
 import React from 'react';
 import type { BoardProps } from 'boardgame.io/react';
-import type { AbilityCard } from './types';
+
 import { HAND_LIMIT, type TokenResponsePhase } from './domain/types';
 import type { MatchState } from '../../engine/types';
 import { RESOURCE_IDS } from './domain/resources';
@@ -42,6 +42,7 @@ import { useAnimationEffects } from './hooks/useAnimationEffects';
 import { useDiceInteractionConfig } from './hooks/useDiceInteractionConfig';
 import { useCardSpotlight } from './hooks/useCardSpotlight';
 import { useUIState } from './hooks/useUIState';
+import { computeViewModeState } from './ui/viewMode';
 
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = BoardProps<DiceThroneMatchState>;
@@ -141,12 +142,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const choice = useCurrentChoice(access);
     const gameMode = useGameMode();
     const isSpectator = !!gameMode?.isSpectator;
-    
+
     // 使用引擎层 useSpectatorMoves Hook 自动拦截观察者操作（消除88行重复代码）
     const engineMoves = useSpectatorMoves(
         resolveMoves(moves as Record<string, unknown>),
         isSpectator,
-        playerID,
+        playerID || undefined,
         { logPrefix: 'Spectate[DiceThrone]' }
     ) as DiceThroneMoveMap;
     const { t, i18n } = useTranslation('game-dicethrone');
@@ -173,29 +174,25 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
     // 从 access.turnPhase 读取阶段（单一权威：来自 sys.phase）
     const currentPhase = access.turnPhase;
-    
+
     // 使用 useUIState Hook 整合20+个分散的UI状态
     const {
         magnify,
         isMagnifyOpen,
         setMagnifiedImage,
-        setMagnifiedCard,
         setMagnifiedCards,
         closeMagnify,
         modals,
         openModal,
         closeModal,
         viewMode: manualViewMode,
-        setViewMode: setManualViewMode,
+        setViewMode,
         toggleViewMode,
         isLayoutEditing,
-        setIsLayoutEditing,
         toggleLayoutEditing,
         isTipOpen,
-        setIsTipOpen,
         toggleTip,
         headerError,
-        setHeaderError,
         showHeaderError,
         isRolling,
         setIsRolling,
@@ -212,11 +209,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         lastUndoCardId,
         setLastUndoCardId,
     } = useUIState();
-    
+
     // Atlas 配置（保持独立，用于资源加载）
     const [cardAtlas, setCardAtlas] = React.useState<CardAtlasConfig | null>(null);
     const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusIconAtlasConfig | null>(null);
-    
+
     // 使用 useCardSpotlight Hook 管理卡牌和额外骰子特写
     const {
         cardSpotlightQueue,
@@ -229,7 +226,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         currentPlayerId: rootPid,
         opponentName,
     });
-    
+
 
     // 使用动画库 Hooks
     const { effects: flyingEffects, pushEffect: pushFlyingEffect, removeEffect: handleEffectComplete } = useFlyingEffects();
@@ -248,7 +245,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     // 使用 useInteractionState Hook 管理交互状态
     const pendingInteraction = G.pendingInteraction;
     const { localState: localInteraction, handlers: interactionHandlers } = useInteractionState(pendingInteraction);
-    
+
     // 追踪取消交互时返回的卡牌ID
     const prevInteractionRef = React.useRef<typeof pendingInteraction>(undefined);
     React.useEffect(() => {
@@ -266,10 +263,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const isTokenResponder = pendingDamage && (pendingDamage.responderId === rootPid);
 
     const isActivePlayer = G.activePlayerId === rootPid;
-    const rollerId = currentPhase === 'defensiveRoll' ? G.pendingAttack?.defenderId : G.activePlayerId;
-    const shouldAutoObserve = currentPhase === 'defensiveRoll' && rootPid !== rollerId;
-    const viewMode = shouldAutoObserve ? 'opponent' : manualViewMode;
-    const isSelfView = viewMode === 'self';
+    const { rollerId, shouldAutoObserve, viewMode, isSelfView } = computeViewModeState({
+        currentPhase,
+        pendingAttack: G.pendingAttack,
+        activePlayerId: G.activePlayerId,
+        rootPlayerId: rootPid,
+        manualViewMode,
+    });
     const viewPid = isSelfView ? rootPid : otherPid;
     const viewPlayer = (isSelfView ? player : opponent) || player;
     const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
@@ -282,17 +282,18 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         : (isViewRolling ? G.pendingAttack?.sourceAbilityId : undefined);
     const canOperateView = isSelfView && !isSpectator;
     const hasRolled = G.rollCount > 0;
-    
+
     // 焦点玩家判断（统一的操作权判断）
     const isFocusPlayer = !isSpectator && access.focusPlayerId === rootPid;
-    
+    const hasPendingInteraction = Boolean(pendingInteraction);
+
     // 防御阶段进入时就应高亮可用的防御技能，不需要等投骰
     const canHighlightAbility = canOperateView && isViewRolling && isRollPhase
         && (currentPhase === 'defensiveRoll' || hasRolled);
     const canSelectAbility = canOperateView && isViewRolling && isRollPhase
         && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed);
     // 阶段推进权限：由焦点玩家控制，防御阶段需要验证 rollConfirmed
-    const canAdvancePhase = isFocusPlayer && (currentPhase === 'defensiveRoll' ? rollConfirmed : true);
+    const canAdvancePhase = isFocusPlayer && !hasPendingInteraction && (currentPhase === 'defensiveRoll' ? rollConfirmed : true);
     const canResolveChoice = Boolean(choice.hasChoice && choice.playerId === rootPid);
     const canInteractDice = canOperateView && isViewRolling;
     // 响应窗口状态
@@ -301,7 +302,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     // 当前响应者 ID（从队列中获取）
     const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
     const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
-    
+
     // 检测当前响应者是否离线，如果离线则自动跳过
     const isResponderOffline = React.useMemo(() => {
         if (!isResponseWindowOpen || !currentResponderId) return false;
@@ -310,7 +311,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         // 如果找不到或者 isConnected 为 false，认为离线
         return responderData ? responderData.isConnected === false : false;
     }, [isResponseWindowOpen, currentResponderId, matchData]);
-    
+
     // 当检测到当前响应者离线时，自动代替他跳过响应
     // 注：只有当自己是活跃玩家时才执行（避免双方都发送 pass）
     React.useEffect(() => {
@@ -323,7 +324,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             return () => clearTimeout(timer);
         }
     }, [isResponderOffline, isActivePlayer, currentResponderId, rootPid, engineMoves]);
-    
+
     // 自己的手牌永远显示
     const handOwner = player;
     const showAdvancePhaseButton = isSelfView && !isSpectator;
@@ -506,12 +507,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             // 防御掷骰时如果自己是掷骰者，强制切回自己视角
             // 若不是掷骰者，交给 shouldAutoObserve 临时切换，不改变手动视角
             if (rollerId && rollerId === rootPid) {
-                setManualViewMode('self');
+                setViewMode('self');
             }
             return;
         }
-        if (currentPhase === 'offensiveRoll' && isActivePlayer) setManualViewMode('self');
-    }, [currentPhase, isActivePlayer, rollerId, rootPid]);
+        if (currentPhase === 'offensiveRoll' && isActivePlayer) setViewMode('self');
+    }, [currentPhase, isActivePlayer, rollerId, rootPid, setViewMode]);
 
     React.useEffect(() => {
         const sourceAbilityId = G.activatingAbilityId ?? G.pendingAttack?.sourceAbilityId;
@@ -552,264 +553,263 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
     return (
         <UndoProvider value={{ G: rawG, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
-        <div className="relative w-full h-dvh bg-black overflow-hidden font-sans select-none text-slate-200">
-            {!isSpectator && (
-                <GameDebugPanel G={rawG} ctx={ctx} moves={moves} playerID={playerID}>
-                    {/* DiceThrone 专属作弊工具 */}
-                    <DiceThroneDebugConfig G={rawG} ctx={ctx} moves={moves} />
-                    
-                    {/* 测试工具 */}
-                    <div className="pt-4 border-t border-gray-200 mt-4 space-y-3">
-                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">测试工具</h4>
-                        <button
-                            onClick={toggleLayoutEditing}
-                            className={`w-full py-2 rounded font-bold text-xs border transition-[background-color] duration-200 ${isLayoutEditing ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-                        >
-                            {isLayoutEditing ? t('layout.exitEdit') : t('layout.enterEdit')}
-                        </button>
-                    </div>
-                </GameDebugPanel>
-            )}
+            <div className="relative w-full h-dvh bg-black overflow-hidden font-sans select-none text-slate-200">
+                {!isSpectator && (
+                    <GameDebugPanel G={rawG} ctx={ctx} moves={moves} playerID={playerID}>
+                        {/* DiceThrone 专属作弊工具 */}
+                        <DiceThroneDebugConfig G={rawG} ctx={ctx} moves={moves} />
 
-            <div className="absolute inset-0 z-0">
-                <div className="absolute inset-0 bg-black/40 z-10 pointer-events-none" />
-                <OptimizedImage
-                    src={getLocalizedAssetPath('dicethrone/images/Common/compressed/background', locale)}
-                    fallbackSrc="dicethrone/images/Common/compressed/background"
-                    className="w-full h-full object-cover"
-                    alt={t('imageAlt.background')}
-                />
-            </div>
+                        {/* 测试工具 */}
+                        <div className="pt-4 border-t border-gray-200 mt-4 space-y-3">
+                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">测试工具</h4>
+                            <button
+                                onClick={toggleLayoutEditing}
+                                className={`w-full py-2 rounded font-bold text-xs border transition-[background-color] duration-200 ${isLayoutEditing ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
+                            >
+                                {isLayoutEditing ? t('layout.exitEdit') : t('layout.enterEdit')}
+                            </button>
+                        </div>
+                    </GameDebugPanel>
+                )}
 
-            {opponent && (
-                <OpponentHeader
-                    opponent={opponent}
-                    opponentName={opponentName}
-                    viewMode={viewMode}
-                    isOpponentShaking={isOpponentShaking}
-                    shouldAutoObserve={shouldAutoObserve}
-                    onToggleView={() => {
-                        setManualViewMode(prev => prev === 'self' ? 'opponent' : 'self');
+                <div className="absolute inset-0 z-0">
+                    <div className="absolute inset-0 bg-black/40 z-10 pointer-events-none" />
+                    <OptimizedImage
+                        src={getLocalizedAssetPath('dicethrone/images/Common/compressed/background', locale)}
+                        fallbackSrc="dicethrone/images/Common/compressed/background"
+                        className="w-full h-full object-cover"
+                        alt={t('imageAlt.background')}
+                    />
+                </div>
+
+                {opponent && (
+                    <OpponentHeader
+                        opponent={opponent}
+                        opponentName={opponentName}
+                        viewMode={viewMode}
+                        isOpponentShaking={isOpponentShaking}
+                        shouldAutoObserve={shouldAutoObserve}
+                        onToggleView={() => {
+                            toggleViewMode();
+                        }}
+                        headerError={headerError}
+                        opponentBuffRef={opponentBuffRef}
+                        opponentHpRef={opponentHpRef}
+                        statusIconAtlas={statusIconAtlas}
+                        locale={locale}
+                        containerRef={opponentHeaderRef}
+                    />
+                )}
+
+                <FlyingEffectsLayer effects={flyingEffects} onEffectComplete={handleEffectComplete} />
+                <div className="absolute inset-x-0 top-[2vw] bottom-0 z-10 pointer-events-none">
+                    <LeftSidebar
+                        currentPhase={currentPhase}
+                        viewPlayer={player} // Always show own stats
+                        locale={locale}
+                        statusIconAtlas={statusIconAtlas}
+                        selfBuffRef={selfBuffRef}
+                        selfHpRef={selfHpRef}
+                        drawDeckRef={drawDeckRef}
+                        onPurifyClick={() => openModal('purify')}
+                        canUsePurify={canUsePurify}
+                        onStunClick={() => openModal('removeStun')}
+                        canRemoveStun={canRemoveStun}
+                    />
+
+                    <CenterBoard
+                        coreAreaHighlighted={coreAreaHighlighted}
+                        isTipOpen={isTipOpen}
+                        onToggleTip={toggleTip}
+                        isLayoutEditing={isLayoutEditing}
+                        isSelfView={isSelfView}
+                        availableAbilityIds={availableAbilityIds}
+                        canSelectAbility={canSelectAbility}
+                        canHighlightAbility={canHighlightAbility}
+                        onSelectAbility={(abilityId) => engineMoves.selectAbility(abilityId)}
+                        onHighlightedAbilityClick={() => {
+                            if (currentPhase === 'offensiveRoll' && !G.rollConfirmed) {
+                                toast.warning(t('error.confirmRoll'));
+                            }
+                        }}
+                        selectedAbilityId={selectedAbilityId}
+                        activatingAbilityId={activatingAbilityId}
+                        abilityLevels={viewPlayer.abilityLevels}
+                        cardAtlas={cardAtlas ?? undefined}
+                        locale={locale}
+                        onMagnifyImage={(image) => setMagnifiedImage(image)}
+                    />
+
+                    <RightSidebar
+                        dice={G.dice}
+                        rollCount={G.rollCount}
+                        rollLimit={G.rollLimit}
+                        rollConfirmed={rollConfirmed}
+                        currentPhase={currentPhase}
+                        canInteractDice={canInteractDice}
+                        isRolling={isRolling}
+                        setIsRolling={(rolling: boolean) => setIsRolling(rolling)}
+                        rerollingDiceIds={rerollingDiceIds}
+                        locale={locale}
+                        onToggleLock={(id) => engineMoves.toggleDieLock(id)}
+                        onRoll={() => {
+                            if (!canInteractDice) return;
+                            engineMoves.rollDice();
+                        }}
+                        onConfirm={() => {
+                            if (!canInteractDice) return;
+                            engineMoves.confirmRoll();
+                        }}
+                        showAdvancePhaseButton={showAdvancePhaseButton}
+                        advanceLabel={advanceLabel}
+                        isAdvanceButtonEnabled={canAdvancePhase}
+                        onAdvance={handleAdvancePhase}
+                        discardPileRef={discardPileRef}
+                        discardCards={viewPlayer.discard}
+                        cardAtlas={cardAtlas ?? undefined}
+                        onInspectRecentCards={cardAtlas ? (cards) => setMagnifiedCards(cards) : undefined}
+                        canUndoDiscard={canOperateView && !!G.lastSoldCardId && (currentPhase === 'main1' || currentPhase === 'main2' || currentPhase === 'discard')}
+                        onUndoDiscard={() => {
+                            setLastUndoCardId(G.lastSoldCardId);
+                            engineMoves.undoSellCard?.();
+                        }}
+                        discardHighlighted={discardHighlighted}
+                        sellButtonVisible={sellButtonVisible}
+                        diceInteractionConfig={diceInteractionConfig}
+                    />
+                </div>
+
+                {cardAtlas && (() => {
+                    const mustDiscardCount = Math.max(0, handOwner.hand.length - HAND_LIMIT);
+                    const isDiscardMode = currentPhase === 'discard' && mustDiscardCount > 0 && canOperateView;
+                    return (
+                        <>
+                            <div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-none bg-gradient-to-t from-black/90 via-black/40 to-transparent h-[15vw]" />
+                            {/* 游戏提示统一组件 */}
+                            <GameHints
+                                isDiscardMode={isDiscardMode}
+                                mustDiscardCount={mustDiscardCount}
+                                isDiceInteraction={!!isDiceInteraction}
+                                isInteractionOwner={isInteractionOwner}
+                                pendingInteraction={pendingInteraction}
+                                isWaitingOpponent={isWaitingOpponent}
+                                opponentName={opponentName}
+                                isResponder={isResponder}
+                                thinkingOffsetClass={thinkingOffsetClass}
+                                onResponsePass={() => engineMoves.responsePass()}
+                                currentPhase={currentPhase}
+                            />
+                            <HandArea
+                                hand={handOwner.hand}
+                                locale={locale}
+                                atlas={cardAtlas}
+                                currentPhase={currentPhase}
+                                playerCp={handOwner.resources[RESOURCE_IDS.CP] ?? 0}
+                                onPlayCard={(cardId) => engineMoves.playCard(cardId)}
+                                onSellCard={(cardId) => engineMoves.sellCard(cardId)}
+                                onError={(msg) => toast.warning(msg)}
+                                canInteract={isResponder || isSelfView}
+                                canPlayCards={isActivePlayer || isResponder}
+                                drawDeckRef={drawDeckRef}
+                                discardPileRef={discardPileRef}
+                                undoCardId={lastUndoCardId}
+                                onSellHintChange={setDiscardHighlighted}
+                                onPlayHintChange={setCoreAreaHighlighted}
+                                onSellButtonChange={setSellButtonVisible}
+                                isDiscardMode={isDiscardMode}
+                                onDiscardCard={(cardId) => engineMoves.sellCard(cardId)}
+                            />
+                        </>
+                    );
+                })()}
+
+                <BoardOverlays
+                    // 放大预览
+                    isMagnifyOpen={isMagnifyOpen}
+                    magnifiedImage={magnify.image}
+                    magnifiedCard={magnify.card}
+                    magnifiedCards={magnify.cards}
+                    onCloseMagnify={closeMagnify}
+
+                    // 弹窗状态
+                    isConfirmingSkip={modals.confirmSkip}
+                    onConfirmSkip={() => {
+                        closeModal('confirmSkip');
+                        engineMoves.advancePhase();
                     }}
-                    headerError={headerError}
-                    opponentBuffRef={opponentBuffRef}
-                    opponentHpRef={opponentHpRef}
-                    statusIconAtlas={statusIconAtlas}
-                    locale={locale}
-                    containerRef={opponentHeaderRef}
-                />
-            )}
+                    onCancelSkip={() => closeModal('confirmSkip')}
 
-            <FlyingEffectsLayer effects={flyingEffects} onEffectComplete={handleEffectComplete} />
-            <div className="absolute inset-x-0 top-[2vw] bottom-0 z-10 pointer-events-none">
-                <LeftSidebar
-                    currentPhase={currentPhase}
-                    viewPlayer={viewPlayer}
-                    locale={locale}
-                    statusIconAtlas={statusIconAtlas}
-                    selfBuffRef={selfBuffRef}
-                    selfHpRef={selfHpRef}
-                    drawDeckRef={drawDeckRef}
-                    onPurifyClick={() => openModal('purify')}
-                    canUsePurify={canUsePurify}
-                    onStunClick={() => openModal('removeStun')}
-                    canRemoveStun={canRemoveStun}
-                />
+                    isPurifyModalOpen={modals.purify}
+                    onConfirmPurify={(statusId) => {
+                        engineMoves.usePurify(statusId);
+                        closeModal('purify');
+                    }}
+                    onCancelPurify={() => closeModal('purify')}
 
-                <CenterBoard
-                    coreAreaHighlighted={coreAreaHighlighted}
-                    isTipOpen={isTipOpen}
-                    onToggleTip={toggleTip}
-                    isLayoutEditing={isLayoutEditing}
-                    isSelfView={isSelfView}
-                    availableAbilityIds={availableAbilityIds}
-                    canSelectAbility={canSelectAbility}
-                    canHighlightAbility={canHighlightAbility}
-                    onSelectAbility={(abilityId) => engineMoves.selectAbility(abilityId)}
-                    onHighlightedAbilityClick={() => {
-                        if (currentPhase === 'offensiveRoll' && !G.rollConfirmed) {
-                            toast.warning(t('error.confirmRoll'));
+                    isConfirmRemoveStunOpen={modals.removeStun}
+                    onConfirmRemoveStun={() => {
+                        closeModal('removeStun');
+                        engineMoves.payToRemoveStun();
+                    }}
+                    onCancelRemoveStun={() => closeModal('removeStun')}
+
+                    // 选择弹窗
+                    choice={choice}
+                    canResolveChoice={canResolveChoice}
+                    onResolveChoice={(optionId) => {
+                        const promptMove = (moves as Record<string, unknown>)[PROMPT_COMMANDS.RESPOND];
+                        if (typeof promptMove === 'function') {
+                            (promptMove as (payload: { optionId: string }) => void)({ optionId });
                         }
                     }}
-                    selectedAbilityId={selectedAbilityId}
-                    activatingAbilityId={activatingAbilityId}
-                    abilityLevels={viewPlayer.abilityLevels}
-                    cardAtlas={cardAtlas ?? undefined}
-                    locale={locale}
-                    onMagnifyImage={(image) => setMagnifiedImage(image)}
-                />
 
-                <RightSidebar
-                    dice={G.dice}
-                    rollCount={G.rollCount}
-                    rollLimit={G.rollLimit}
-                    rollConfirmed={rollConfirmed}
-                    currentPhase={currentPhase}
-                    canInteractDice={canInteractDice}
-                    isRolling={isRolling}
-                    setIsRolling={setIsRolling}
-                    rerollingDiceIds={rerollingDiceIds}
-                    locale={locale}
-                    onToggleLock={(id) => engineMoves.toggleDieLock(id)}
-                    onRoll={() => {
-                        if (!canInteractDice) return;
-                        engineMoves.rollDice();
-                    }}
-                    onConfirm={() => {
-                        if (!canInteractDice) return;
-                        engineMoves.confirmRoll();
-                    }}
-                    showAdvancePhaseButton={showAdvancePhaseButton}
-                    advanceLabel={advanceLabel}
-                    isAdvanceButtonEnabled={canAdvancePhase}
-                    onAdvance={handleAdvancePhase}
-                    discardPileRef={discardPileRef}
-                    discardCards={viewPlayer.discard}
+                    // 卡牌特写
+                    cardSpotlightQueue={cardSpotlightQueue}
+                    onCardSpotlightClose={handleCardSpotlightClose}
+                    opponentHeaderRef={opponentHeaderRef}
+
+                    // 额外骰子
+                    bonusDie={bonusDie}
+                    onBonusDieClose={handleBonusDieClose}
+
+
+                    // Token 响应
+                    pendingDamage={pendingDamage}
+                    tokenResponsePhase={tokenResponsePhase}
+                    isTokenResponder={!!isTokenResponder}
+                    tokenDefinitions={G.tokenDefinitions}
+                    onUseToken={(tokenId, amount) => engineMoves.useToken(tokenId, amount)}
+                    onSkipTokenResponse={() => engineMoves.skipTokenResponse()}
+
+                    // 交互覆盖层
+                    isStatusInteraction={!!isStatusInteraction}
+                    pendingInteraction={pendingInteraction}
+                    players={G.players}
+                    currentPlayerId={rootPid}
+                    onSelectStatus={handleSelectStatus}
+                    onSelectPlayer={handleSelectPlayer}
+                    onConfirmStatusInteraction={handleStatusInteractionConfirm}
+                    onCancelInteraction={handleCancelInteraction}
+
+                    // 净化相关
+                    viewPlayer={viewPlayer || player}
+                    purifiableStatusIds={purifiableStatusIds}
+
+                    // 游戏结束
+                    isGameOver={!!isGameOver}
+                    gameoverResult={isGameOver}
+                    playerID={playerID || undefined}
+                    reset={reset}
+                    rematchState={rematchState}
+                    onRematchVote={handleRematchVote}
+
+                    // 其他
                     cardAtlas={cardAtlas ?? undefined}
-                    onInspectRecentCards={cardAtlas ? (cards) => setMagnifiedCards(cards) : undefined}
-                    canUndoDiscard={canOperateView && !!G.lastSoldCardId && (currentPhase === 'main1' || currentPhase === 'main2' || currentPhase === 'discard')}
-                    onUndoDiscard={() => {
-                        setLastUndoCardId(G.lastSoldCardId);
-                        engineMoves.undoSellCard?.();
-                    }}
-                    discardHighlighted={discardHighlighted}
-                    sellButtonVisible={sellButtonVisible}
-                    diceInteractionConfig={diceInteractionConfig}
+                    statusIconAtlas={statusIconAtlas}
+                    locale={locale}
+                    moves={moves as Record<string, unknown>}
                 />
             </div>
-
-            {cardAtlas && (() => {
-                const mustDiscardCount = Math.max(0, handOwner.hand.length - HAND_LIMIT);
-                const isDiscardMode = currentPhase === 'discard' && mustDiscardCount > 0 && canOperateView;
-                return (
-                    <>
-                        <div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-none bg-gradient-to-t from-black/90 via-black/40 to-transparent h-[15vw]" />
-                        {/* 游戏提示统一组件 */}
-                        <GameHints
-                            isDiscardMode={isDiscardMode}
-                            mustDiscardCount={mustDiscardCount}
-                            isDiceInteraction={!!isDiceInteraction}
-                            isInteractionOwner={isInteractionOwner}
-                            pendingInteraction={pendingInteraction}
-                            isWaitingOpponent={isWaitingOpponent}
-                            opponentName={opponentName}
-                            isResponder={isResponder}
-                            thinkingOffsetClass={thinkingOffsetClass}
-                            onResponsePass={() => engineMoves.responsePass()}
-                            currentPhase={currentPhase}
-                        />
-                        <HandArea
-                            hand={handOwner.hand}
-                            locale={locale}
-                            atlas={cardAtlas}
-                            currentPhase={currentPhase}
-                            playerCp={handOwner.resources[RESOURCE_IDS.CP] ?? 0}
-                            onPlayCard={(cardId) => engineMoves.playCard(cardId)}
-                            onSellCard={(cardId) => engineMoves.sellCard(cardId)}
-                            onError={(msg) => toast.warning(msg)}
-                            canInteract={isResponder || isSelfView}
-                            canPlayCards={isActivePlayer || isResponder}
-                            drawDeckRef={drawDeckRef}
-                            discardPileRef={discardPileRef}
-                            undoCardId={lastUndoCardId}
-                            onSellHintChange={setDiscardHighlighted}
-                            onPlayHintChange={setCoreAreaHighlighted}
-                            onSellButtonChange={setSellButtonVisible}
-                            isDiscardMode={isDiscardMode}
-                            onDiscardCard={(cardId) => engineMoves.sellCard(cardId)}
-                        />
-                    </>
-                );
-            })()}
-
-            <BoardOverlays
-                // 放大预览
-                isMagnifyOpen={isMagnifyOpen}
-                magnifiedImage={magnify.image}
-                magnifiedCard={magnify.card}
-                magnifiedCards={magnify.cards}
-                onCloseMagnify={closeMagnify}
-                
-                // 弹窗状态
-                isConfirmingSkip={modals.confirmSkip}
-                onConfirmSkip={() => {
-                    closeModal('confirmSkip');
-                    engineMoves.advancePhase();
-                }}
-                onCancelSkip={() => closeModal('confirmSkip')}
-                
-                isPurifyModalOpen={modals.purify}
-                onConfirmPurify={(statusId) => {
-                    engineMoves.usePurify(statusId);
-                    closeModal('purify');
-                }}
-                onCancelPurify={() => closeModal('purify')}
-                
-                isConfirmRemoveStunOpen={modals.removeStun}
-                onConfirmRemoveStun={() => {
-                    closeModal('removeStun');
-                    engineMoves.payToRemoveStun();
-                }}
-                onCancelRemoveStun={() => closeModal('removeStun')}
-                
-                // 选择弹窗
-                choice={choice}
-                canResolveChoice={canResolveChoice}
-                onResolveChoice={(optionId) => {
-                    const promptMove = (moves as Record<string, unknown>)[PROMPT_COMMANDS.RESPOND];
-                    if (typeof promptMove === 'function') {
-                        (promptMove as (payload: { optionId: string }) => void)({ optionId });
-                    }
-                }}
-                
-                // 卡牌特写
-                cardSpotlightQueue={cardSpotlightQueue}
-                onCardSpotlightClose={handleCardSpotlightClose}
-                opponentHeaderRef={opponentHeaderRef}
-                
-                // 额外骰子
-                bonusDieValue={bonusDie.value}
-                bonusDieFace={bonusDie.face}
-                showBonusDie={bonusDie.show}
-                onBonusDieClose={handleBonusDieClose}
-                
-                // Token 响应
-                pendingDamage={pendingDamage}
-                tokenResponsePhase={tokenResponsePhase}
-                isTokenResponder={!!isTokenResponder}
-                tokenDefinitions={G.tokenDefinitions}
-                onUseToken={(tokenId, amount) => engineMoves.useToken(tokenId, amount)}
-                onSkipTokenResponse={() => engineMoves.skipTokenResponse()}
-                
-                // 交互覆盖层
-                isStatusInteraction={isStatusInteraction}
-                pendingInteraction={pendingInteraction}
-                players={G.players}
-                currentPlayerId={rootPid}
-                onSelectStatus={handleSelectStatus}
-                onSelectPlayer={handleSelectPlayer}
-                onConfirmStatusInteraction={handleStatusInteractionConfirm}
-                onCancelInteraction={handleCancelInteraction}
-                
-                // 净化相关
-                viewPlayer={viewPlayer}
-                purifiableStatusIds={purifiableStatusIds}
-                
-                // 游戏结束
-                isGameOver={!!isGameOver}
-                gameoverResult={isGameOver}
-                playerID={playerID}
-                reset={reset}
-                rematchState={rematchState}
-                onRematchVote={handleRematchVote}
-                
-                // 其他
-                cardAtlas={cardAtlas ?? undefined}
-                statusIconAtlas={statusIconAtlas}
-                locale={locale}
-                moves={moves as Record<string, unknown>}
-            />
-        </div>
         </UndoProvider>
     );
 };

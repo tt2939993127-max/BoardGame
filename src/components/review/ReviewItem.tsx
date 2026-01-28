@@ -24,51 +24,47 @@ export const ReviewItem = ({ review, isMine, onDelete }: ReviewItemProps) => {
     };
 
     return (
-        <div className="bg-[#fcfbf9] border border-[#d3ccba]/50 rounded p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                    {/* Avatar */}
-                    <div className="w-9 h-9 rounded-full bg-[#f3f0e6] flex items-center justify-center overflow-hidden border border-[#d3ccba]">
-                        {review.user.avatar ? (
+        <div className="bg-parchment-card-bg border border-parchment-card-border/15 rounded p-2.5 flex flex-col gap-1.5 shadow-sm hover:shadow-md transition-shadow">
+            {/* Header: User Avatar (optional) + Name | Date + Actions */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    {review.user?.avatar && (
+                        <div className="w-6 h-6 rounded-full bg-parchment-base-bg overflow-hidden border border-parchment-card-border/20 shrink-0">
                             <img src={review.user.avatar} alt={review.user.username} className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-sm font-bold text-[#433422]/50">
-                                {review.user.username.slice(0, 2).toUpperCase()}
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="flex flex-col">
-                        <span className="font-bold text-[#433422] text-sm leading-tight">
-                            {review.user.username}
-                        </span>
-                        <span className="text-[10px] text-[#433422]/50 uppercase tracking-wide">
-                            {formatDate(review.createdAt)}
-                        </span>
-                    </div>
+                        </div>
+                    )}
+                    <span className="font-bold text-parchment-base-text text-xs tracking-tight">
+                        {review.user?.username || t('common.unknownUser', '未知用户')}
+                    </span>
                 </div>
 
-                {isMine && onDelete && (
-                    <button
-                        onClick={onDelete}
-                        className="p-1.5 text-[#433422]/40 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                        title={t('form.delete')}
-                    >
-                        <Trash2 size={14} />
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-parchment-light-text/50 uppercase tracking-tighter tabular-nums">
+                        {formatDate(review.createdAt)}
+                    </span>
+                    {isMine && onDelete && (
+                        <button
+                            onClick={onDelete}
+                            className="p-1 text-parchment-light-text/30 hover:text-red-500/70 transition-colors"
+                            title={t('form.delete')}
+                        >
+                            <Trash2 size={12} />
+                        </button>
+                    )}
+                </div>
             </div>
 
-            <div className="flex items-start gap-3 pl-1">
+            {/* Content: Rating Icon + Text Content */}
+            <div className="flex items-start gap-2 pl-0.5">
                 <div className="mt-0.5 shrink-0" title={review.isPositive ? t('form.positive') : t('form.negative')}>
                     {review.isPositive ? (
-                        <ThumbsUp size={16} className="text-green-600/80 fill-green-600/10" />
+                        <ThumbsUp size={13} className="text-green-600/60" />
                     ) : (
-                        <ThumbsDown size={16} className="text-orange-500/80 fill-orange-500/10" />
+                        <ThumbsDown size={13} className="text-orange-500/60" />
                     )}
                 </div>
                 {review.content && (
-                    <div className="text-sm text-[#433422]/90 leading-relaxed break-words whitespace-pre-wrap font-serif">
+                    <div className="text-[13px] text-parchment-base-text/90 leading-[1.4] break-words whitespace-pre-wrap font-serif">
                         {review.content}
                     </div>
                 )}

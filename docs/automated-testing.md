@@ -34,11 +34,11 @@ npm run test:e2e
 
 ### 使用 Docker / 本地 MongoDB
 
-当你已经启动 MongoDB（例如 Docker）时，可以设置 `MONGO_URI` 让测试复用现有数据库，**避免下载内存 MongoDB 二进制**：
+当你已经启动 MongoDB（例如 Docker）时，可以设置 `MONGO_URI` 让测试复用现有数据库，**避免下载内存 MongoDB 二进制**。注意必须使用独立测试库，避免误清理开发数据：
 
 ```bash
 # PowerShell
-$env:MONGO_URI="mongodb://localhost:27017/boardgame"
+$env:MONGO_URI="mongodb://localhost:27017/boardgame_test"
 npm run test:api
 ```
 

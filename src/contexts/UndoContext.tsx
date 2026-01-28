@@ -1,4 +1,5 @@
-import React, { ReactNode, useEffect, useSyncExternalStore } from 'react';
+import React, { useEffect, useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
 import type { MatchState } from '../engine/types';
 
 interface UndoContextValue {
@@ -83,23 +84,14 @@ export const useUndoStatus = (): {
         // 我是申请者，等待批准
         status = 'isRequester';
         hasNotification = false; // 等待中不显示红点
-        if (import.meta.env.DEV) {
-            console.log('[UndoStatus] isRequester', { playerID, requesterId: request.requesterId });
-        }
     } else if (request && request.requesterId !== playerID) {
         // 对方请求撤回，需要我审批
         status = 'canReview';
         hasNotification = true; // 显示红点提醒
-        if (import.meta.env.DEV) {
-            console.log('[UndoStatus] canReview', { playerID, requesterId: request.requesterId, requiredApprovals: request.requiredApprovals });
-        }
     } else if (history.length > 0 && !request) {
         // 可以发起撤回请求
         status = 'canRequest';
         hasNotification = false;
-        if (import.meta.env.DEV) {
-            console.log('[UndoStatus] canRequest', { playerID, historyLen: history.length });
-        }
     }
     
     return { status, hasNotification };

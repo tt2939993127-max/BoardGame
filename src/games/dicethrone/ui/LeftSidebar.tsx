@@ -41,19 +41,19 @@ export const LeftSidebar = ({
 }) => {
     return (
         <div className="absolute left-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto z-[60]">
-            <div className="w-full pt-[1vw] px-[1vw]"><PhaseIndicator currentPhase={currentPhase} /></div>
+            <div className="w-full pt-[1.125rem] px-[1vw]"><PhaseIndicator currentPhase={currentPhase} /></div>
             <div className="flex-grow" />
-            <div className="w-full flex flex-col items-center gap-[1.5vw]">
+            <div className="w-full flex flex-col items-center gap-[0.5vw]">
                 {/*
                  * selfBuffRef is used as the end position for buff/status flying effects.
                  * Use a small offset above the HP container so the effect doesn't land too low.
                  */}
-                <div className="w-full px-[1vw] flex flex-col-reverse gap-[0.5vw] -mt-[0.6vw]" ref={selfBuffRef}>
+                <div className="w-full px-[1.2vw] flex flex-col-reverse gap-[0.3vw]" ref={selfBuffRef}>
                     <TokensContainer
                         tokens={viewPlayer.tokens ?? {}}
                         maxPerRow={5}
                         size="normal"
-                        className="flex-wrap-reverse justify-start"
+                        className="flex-wrap-reverse justify-start gap-[0.3vw]"
                         locale={locale}
                         atlas={statusIconAtlas}
                         onTokenClick={(tokenId) => {
@@ -72,7 +72,7 @@ export const LeftSidebar = ({
                         effects={viewPlayer.statusEffects ?? {}}
                         maxPerRow={5}
                         size="normal"
-                        className="flex-wrap-reverse justify-start"
+                        className="flex-wrap-reverse justify-start gap-[0.3vw]"
                         locale={locale}
                         atlas={statusIconAtlas}
                         onEffectClick={(effectId) => {
@@ -84,7 +84,7 @@ export const LeftSidebar = ({
                     />
                 </div>
                 <div className="w-full px-[1vw]"><PlayerStats player={viewPlayer} hpRef={selfHpRef} /></div>
-                <DrawDeck ref={drawDeckRef} count={viewPlayer.deck.length} locale={locale} />
+                <div className="w-full px-[1vw] pt-[0.5vw]"><DrawDeck ref={drawDeckRef} count={viewPlayer.deck.length} locale={locale} /></div>
             </div>
         </div>
     );

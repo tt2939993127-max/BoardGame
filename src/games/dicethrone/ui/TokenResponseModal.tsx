@@ -1,8 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ModalBase } from '../../../components/common/overlays/ModalBase';
+import { GameModal } from './components/GameModal';
+import { GameButton } from './components/GameButton';
 import type { PendingDamage, HeroState, TokenResponsePhase } from '../domain/types';
 import type { TokenDef } from '../../../systems/TokenSystem';
+import clsx from 'clsx';
+import { type StatusIconAtlasConfig, TOKEN_META, getStatusEffectIconNode } from './statusEffects';
 
 interface TokenResponseModalProps {
     /** 待处理的伤害 */
@@ -21,6 +24,8 @@ interface TokenResponseModalProps {
     locale?: string;
     /** 最近一次闪避投骰结果（用于展示） */
     lastEvasionRoll?: { value: number; success: boolean };
+    /** 状态图标图集 */
+    statusIconAtlas?: StatusIconAtlasConfig | null;
 }
 
 /**
@@ -35,17 +40,18 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     tokenDefinitions,
     onUseToken,
     onSkip,
-    locale: _locale,
+    locale,
     lastEvasionRoll,
+    statusIconAtlas,
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const [boostAmount, setBoostAmount] = React.useState(1);
 
     // 从定义中动态获取可用 Token（根据 usableTiming）
-    const boostToken = tokenDefinitions.find(def => 
+    const boostToken = tokenDefinitions.find(def =>
         def.usableTiming?.includes('beforeDamageDealt') && def.usableTiming?.includes('beforeDamageReceived')
     );
-    const evasiveToken = tokenDefinitions.find(def => 
+    const evasiveToken = tokenDefinitions.find(def =>
         def.useEffect?.type === 'rollToNegate'
     );
 
@@ -60,9 +66,23 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     // 防御方可用增益 Token 减伤或闪避
     const canUseEvasive = isDefenderPhase && evasiveToken && evasiveCount > 0 && !pendingDamage.isFullyEvaded;
 
-    // 最大增益使用量：攻击方无上限，防御方最多减到0伤害
-    const maxBoostAmount = isAttackerPhase 
-        ? boostCount 
+    // 只有在“刚刚用完 Token 导致已无可用标记”时才自动跳过。
+    const hasAnyAction = Boolean(canUseBoost || canUseEvasive);
+    const hadAnyActionRef = React.useRef<boolean>(hasAnyAction);
+
+    React.useEffect(() => {
+        const hadAnyAction = hadAnyActionRef.current;
+        if (hadAnyAction && !hasAnyAction) {
+            const timer = setTimeout(() => onSkip(), 150);
+            return () => clearTimeout(timer);
+        }
+        hadAnyActionRef.current = hasAnyAction;
+        return;
+    }, [hasAnyAction, onSkip, pendingDamage.id, responsePhase]);
+
+    // 最大增益使用量
+    const maxBoostAmount = isAttackerPhase
+        ? boostCount
         : Math.min(boostCount, pendingDamage.currentDamage);
 
     // 预览伤害
@@ -78,54 +98,60 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
         if (boostToken) {
             onUseToken(boostToken.id, boostAmount);
         }
-        setBoostAmount(1); // 重置选择
+        setBoostAmount(1);
+    };
+
+    const isOpen = Boolean(pendingDamage && responsePhase);
+
+    // 辅助函数：渲染 Token 图标
+    const renderTokenIcon = (tokenId: string, fallbackIcon: string) => {
+        const meta = TOKEN_META[tokenId];
+        if (meta && statusIconAtlas) {
+            return (
+                <div className="w-8 h-8 flex-shrink-0">
+                    {getStatusEffectIconNode(meta, locale, 'normal', statusIconAtlas)}
+                </div>
+            );
+        }
+        return <span className="text-2xl">{fallbackIcon}</span>;
     };
 
     return (
-        <ModalBase
+        <GameModal
+            isOpen={isOpen}
+            title={isAttackerPhase ? t('tokenResponse.attackerTitle') : t('tokenResponse.defenderTitle')}
+            width="lg"
             closeOnBackdrop={false}
-            overlayClassName="z-[1100] bg-black/70"
-            containerClassName="z-[1101]"
         >
-            <div className="bg-slate-900/95 border border-amber-500/40 backdrop-blur-xl p-[2vw] rounded-[1.6vw] shadow-2xl w-[36vw] flex flex-col gap-[1.5vw] pointer-events-auto">
-                {/* 标题 */}
-                <div className="text-center">
-                    <h3 className="text-[1.3vw] font-black text-white mb-[0.5vw]">
-                        {isAttackerPhase 
-                            ? t('tokenResponse.attackerTitle') 
-                            : t('tokenResponse.defenderTitle')}
-                    </h3>
-                    <p className="text-[0.9vw] text-slate-400">
-                        {isAttackerPhase
-                            ? t('tokenResponse.attackerDesc')
-                            : t('tokenResponse.defenderDesc')}
-                    </p>
-                </div>
+            <div className="flex flex-col gap-6 w-full">
+                {/* 描述 */}
+                <p className="text-sm sm:text-base text-slate-400 text-center">
+                    {isAttackerPhase
+                        ? t('tokenResponse.attackerDesc')
+                        : t('tokenResponse.defenderDesc')}
+                </p>
 
-                {/* 伤害信息 */}
-                <div className="flex justify-center items-center gap-[2vw] py-[1vw] bg-slate-800/50 rounded-xl">
+                {/* 伤害信息 (Damage Preview) */}
+                <div className="flex justify-center items-center gap-8 py-4 bg-slate-950/40 rounded-xl border border-white/5">
                     <div className="text-center">
-                        <div className="text-[0.7vw] text-slate-500 uppercase tracking-wider mb-[0.2vw]">
+                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                             {t('tokenResponse.originalDamage')}
                         </div>
-                        <div className="text-[1.6vw] font-black text-slate-400">
+                        <div className="text-3xl font-black text-slate-400">
                             {pendingDamage.originalDamage}
                         </div>
                     </div>
-                    <div className="text-[1.5vw] text-slate-600">→</div>
+                    <div className="text-2xl text-slate-600">→</div>
                     <div className="text-center">
-                        <div className="text-[0.7vw] text-slate-500 uppercase tracking-wider mb-[0.2vw]">
+                        <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                             {t('tokenResponse.currentDamage')}
                         </div>
-                        <div className={`text-[1.6vw] font-black ${
-                            pendingDamage.isFullyEvaded 
-                                ? 'text-green-400' 
-                                : pendingDamage.currentDamage < pendingDamage.originalDamage 
-                                    ? 'text-blue-400' 
-                                    : pendingDamage.currentDamage > pendingDamage.originalDamage
-                                        ? 'text-red-400'
-                                        : 'text-white'
-                        }`}>
+                        <div className={clsx("text-3xl font-black", {
+                            'text-green-400': pendingDamage.isFullyEvaded,
+                            'text-blue-400': !pendingDamage.isFullyEvaded && pendingDamage.currentDamage < pendingDamage.originalDamage,
+                            'text-red-400': !pendingDamage.isFullyEvaded && pendingDamage.currentDamage > pendingDamage.originalDamage,
+                            'text-white': !pendingDamage.isFullyEvaded && pendingDamage.currentDamage === pendingDamage.originalDamage,
+                        })}>
                             {pendingDamage.isFullyEvaded ? t('tokenResponse.evaded') : pendingDamage.currentDamage}
                         </div>
                     </div>
@@ -133,15 +159,15 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
 
                 {/* 闪避结果展示 */}
                 {lastEvasionRoll && (
-                    <div className={`text-center py-[0.8vw] rounded-lg ${
-                        lastEvasionRoll.success 
-                            ? 'bg-green-900/50 border border-green-500/40' 
-                            : 'bg-red-900/50 border border-red-500/40'
-                    }`}>
-                        <span className="text-[1vw] font-bold">
+                    <div className={clsx("text-center py-2 rounded-lg border",
+                        lastEvasionRoll.success
+                            ? 'bg-green-900/30 border-green-500/30'
+                            : 'bg-red-900/30 border-red-500/30'
+                    )}>
+                        <span className="font-bold">
                             {t('tokenResponse.evasionRoll')}: 🎲 {lastEvasionRoll.value}
                             {' - '}
-                            {lastEvasionRoll.success 
+                            {lastEvasionRoll.success
                                 ? <span className="text-green-400">{t('tokenResponse.evasionSuccess')}</span>
                                 : <span className="text-red-400">{t('tokenResponse.evasionFailed')}</span>
                             }
@@ -150,114 +176,117 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                 )}
 
                 {/* Token 使用区域 */}
-                <div className="flex flex-col gap-[1vw]">
+                <div className="flex flex-col gap-4">
                     {/* 增益 Token（伤害加成/减免） */}
                     {canUseBoost && boostToken && maxBoostAmount > 0 && (
-                        <div className="bg-slate-800/80 rounded-xl p-[1vw] border border-purple-500/30">
-                            <div className="flex items-center justify-between mb-[0.8vw]">
-                                <div className="flex items-center gap-[0.5vw]">
-                                    <span className="text-[1.3vw]">{boostToken.icon}</span>
-                                    <span className="text-[0.9vw] font-bold text-white">
+                        <div className="bg-slate-800/40 rounded-xl p-4 border border-purple-500/20">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    {renderTokenIcon(boostToken.id, boostToken.icon)}
+                                    <span className="font-bold text-white">
                                         {t(`tokens.${boostToken.id}.name`)}
                                     </span>
-                                    <span className="text-[0.75vw] text-slate-400">
+                                    <span className="text-xs text-slate-400">
                                         ({boostCount} {t('tokenResponse.available')})
                                     </span>
                                 </div>
-                                <div className="text-[0.75vw] text-slate-400">
-                                    {isAttackerPhase 
+                                <div className="text-xs text-slate-400 hidden sm:block">
+                                    {isAttackerPhase
                                         ? t('tokenResponse.taijiBoostHint')
                                         : t('tokenResponse.taijiReduceHint')}
                                 </div>
                             </div>
-                            
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-[0.8vw]">
+
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2 bg-black/20 p-1 rounded-lg">
                                     <button
                                         onClick={() => handleBoostChange(-1)}
                                         disabled={boostAmount <= 1}
-                                        className="w-[2vw] h-[2vw] rounded-lg bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-[1vw] transition-colors"
+                                        className="w-8 h-8 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-bold transition-colors"
                                     >
                                         -
                                     </button>
-                                    <span className="text-[1.2vw] font-black text-white w-[2vw] text-center">
+                                    <span className="text-xl font-black text-white w-8 text-center">
                                         {boostAmount}
                                     </span>
                                     <button
                                         onClick={() => handleBoostChange(1)}
                                         disabled={boostAmount >= maxBoostAmount}
-                                        className="w-[2vw] h-[2vw] rounded-lg bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-[1vw] transition-colors"
+                                        className="w-8 h-8 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-bold transition-colors"
                                     >
                                         +
                                     </button>
-                                    <span className="text-[0.75vw] text-slate-500 ml-[0.5vw]">
-                                        → {isAttackerPhase ? '+' : '-'}{boostAmount} {t('tokenResponse.damage')}
-                                        {' = '}
-                                        <span className={isAttackerPhase ? 'text-red-400' : 'text-blue-400'}>
-                                            {previewDamage}
-                                        </span>
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                    → {isAttackerPhase ? '+' : '-'}{boostAmount} {t('tokenResponse.damage')}
+                                    {' = '}
+                                    <span className={isAttackerPhase ? 'text-red-400' : 'text-blue-400'}>
+                                        {previewDamage}
                                     </span>
                                 </div>
-                                <button
+                                <GameButton
+                                    size="sm"
+                                    variant="primary"
                                     onClick={handleUseBoost}
-                                    className="px-[1.2vw] py-[0.5vw] rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-[0.85vw] transition-all shadow-lg"
+                                    className="ml-auto"
                                 >
                                     {t('tokenResponse.useTaiji')}
-                                </button>
+                                </GameButton>
                             </div>
                         </div>
                     )}
 
                     {/* 闪避 Token */}
                     {canUseEvasive && evasiveToken && (
-                        <div className="bg-slate-800/80 rounded-xl p-[1vw] border border-cyan-500/30">
+                        <div className="bg-slate-800/40 rounded-xl p-4 border border-cyan-500/20">
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-[0.5vw]">
-                                    <span className="text-[1.3vw]">{evasiveToken.icon}</span>
-                                    <span className="text-[0.9vw] font-bold text-white">
+                                <div className="flex items-center gap-2">
+                                    {renderTokenIcon(evasiveToken.id, evasiveToken.icon)}
+                                    <span className="font-bold text-white">
                                         {t(`tokens.${evasiveToken.id}.name`)}
                                     </span>
-                                    <span className="text-[0.75vw] text-slate-400">
+                                    <span className="text-xs text-slate-400">
                                         ({evasiveCount} {t('tokenResponse.available')})
                                     </span>
                                 </div>
-                                <div className="text-[0.75vw] text-slate-400">
-                                    {t('tokenResponse.evasiveHint')}
-                                </div>
                             </div>
-                            
-                            <div className="flex items-center justify-between mt-[0.8vw]">
-                                <span className="text-[0.75vw] text-cyan-300">
+
+                            <div className="flex items-center justify-between mt-3">
+                                <span className="text-xs text-cyan-300">
                                     {t('tokenResponse.evasiveDesc')}
                                 </span>
-                                <button
+                                <GameButton
+                                    size="sm"
+                                    variant="glass"
+                                    className="border-cyan-500/50 hover:bg-cyan-500/20 text-cyan-100"
                                     onClick={() => onUseToken(evasiveToken.id, 1)}
-                                    className="px-[1.2vw] py-[0.5vw] rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-[0.85vw] transition-all shadow-lg"
                                 >
                                     {t('tokenResponse.useEvasive')}
-                                </button>
+                                </GameButton>
                             </div>
                         </div>
                     )}
 
                     {/* 无可用 Token 提示 */}
                     {!canUseBoost && !canUseEvasive && (
-                        <div className="text-center py-[1vw] text-slate-500 text-[0.9vw]">
+                        <div className="text-center py-4 text-slate-500 font-medium">
                             {t('tokenResponse.noTokens')}
                         </div>
                     )}
                 </div>
 
                 {/* 跳过按钮 */}
-                <button
+                <GameButton
                     onClick={onSkip}
-                    className="w-full py-[0.8vw] rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold text-[0.9vw] transition-colors border border-slate-600"
+                    variant="secondary"
+                    fullWidth
+                    className="mt-2"
                 >
-                    {pendingDamage.isFullyEvaded 
+                    {pendingDamage.isFullyEvaded
                         ? t('tokenResponse.confirm')
                         : t('tokenResponse.skip')}
-                </button>
+                </GameButton>
             </div>
-        </ModalBase>
+        </GameModal>
     );
 };

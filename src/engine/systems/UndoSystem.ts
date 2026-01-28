@@ -19,6 +19,13 @@ export interface UndoSystemConfig {
     requireApproval?: boolean;
     /** 需要多少人批准 */
     requiredApprovals?: number;
+
+    /**
+     * 哪些命令需要进入撤回快照历史。
+     * - 不传：默认对所有“非 SYS_/CHEAT_/UI_/DEV_”命令做快照（兼容旧行为，但更危险）。
+     * - 传入：只对白名单命令做快照（推荐，最正确方案）。
+     */
+    snapshotCommandAllowlist?: ReadonlyArray<string> | ReadonlySet<string>;
 }
 
 // ============================================================================
@@ -51,6 +58,9 @@ export function createUndoSystem<TCore>(
         maxSnapshots = 50,
         requireApproval = true,
         requiredApprovals = 1,
+        // 由具体游戏提供：哪些“领域命令”会产生可撤回快照。
+        // 最正确方案：撤回语义属于游戏规则的一部分，必须在游戏目录内显式声明。
+        snapshotCommandAllowlist,
     } = config;
 
     return {
@@ -81,6 +91,28 @@ export function createUndoSystem<TCore>(
             }
 
             // 普通命令：保存快照
+            // 目标：只让“会改变对局领域状态”的命令进入撤回历史。
+            // 约定：
+            // - 系统命令："SYS_" 开头（永不快照）
+            // - 作弊命令："CHEAT_" 开头（永不快照）
+            // - 纯客户端/交互命令："UI_" / "DEV_" 开头（永不快照）
+            const type = command.type;
+            if (type.startsWith('SYS_') || type.startsWith('CHEAT_') || type.startsWith('UI_') || type.startsWith('DEV_')) {
+                return;
+            }
+
+            // 最正确方案：由具体游戏提供白名单。
+            // 不提供时保持兼容（对所有非系统命令快照），但这会导致 UI 高频动作也可能进入快照。
+            if (snapshotCommandAllowlist) {
+                const allow = snapshotCommandAllowlist instanceof Set
+                    ? snapshotCommandAllowlist
+                    : new Set<string>(snapshotCommandAllowlist);
+
+                if (!allow.has(type)) {
+                    return;
+                }
+            }
+
             const newState = saveSnapshot(state, maxSnapshots);
             return { state: newState };
         },

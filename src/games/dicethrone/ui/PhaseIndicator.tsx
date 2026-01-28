@@ -22,8 +22,8 @@ export const PhaseIndicator = ({ currentPhase }: { currentPhase: TurnPhase }) =>
     const [hoveredPhaseId, setHoveredPhaseId] = React.useState<string | null>(null);
 
     return (
-        <div className="flex flex-col gap-[0.4vw] pointer-events-auto opacity-90 w-full z-[80]">
-            <h3 className="text-[1.2vw] font-black text-slate-400 mb-[0.4vw] tracking-widest uppercase truncate">
+        <div className="flex flex-col gap-[0.4vw] pointer-events-auto opacity-100 w-full z-[80]">
+            <h3 className="text-[1.0vw] font-black text-slate-300/80 mb-[0.4vw] ml-[0.3vw] tracking-[0.2em] uppercase truncate drop-shadow-md">
                 {t('phase.title')}
             </h3>
             <PhaseIndicatorSkeleton
@@ -42,10 +42,10 @@ export const PhaseIndicator = ({ currentPhase }: { currentPhase: TurnPhase }) =>
                         >
                             <div
                                 className={`
-                                    relative z-10 px-[0.8vw] py-[0.4vw] text-[0.8vw] font-bold rounded-r-[0.5vw] transition-[transform,background-color,color,box-shadow] duration-300 border-l-[0.3vw] truncate cursor-help
+                                    relative z-10 px-[0.8vw] py-[0.5vw] text-[0.75vw] font-bold rounded-r-[0.6vw] transition-[all] duration-300 border-l-[0.3vw] truncate cursor-help
                                     ${isActive
-                                        ? 'bg-amber-600 text-white border-amber-300 translate-x-[0.5vw] shadow-[0_0_1vw_rgba(245,158,11,0.5)]'
-                                        : 'bg-black/40 text-slate-500 border-slate-700 hover:bg-slate-800 hover:text-slate-300'}
+                                        ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white border-amber-400 translate-x-[0.5vw] shadow-[0_0_15px_rgba(245,158,11,0.4)]'
+                                        : 'bg-slate-900/60 text-slate-400 border-slate-700/50 backdrop-blur-sm hover:bg-slate-800/80 hover:text-slate-200 hover:border-slate-500'}
                                 `}
                             >
                                 {phase.label}

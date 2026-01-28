@@ -142,14 +142,15 @@
     "pass": "跳过"
   },
   "waiting": {
-    "thinkingMessage": "正在思考中..."
+    "thinkingMessage": "正在思考中"
   },
   "dice": {
     "waitingOpponent": "对方正在思考中...",
     "locked": "已锁定",
     "rolling": "投掷中...",
     "roll": "投掷 ({{current}}/{{total}})",
-    "confirm": "确认骰面",
+    "roll_action": "投掷",
+    "confirm": "确认",
     "confirmed": "已确认",
     "bonusRoll": "额外投掷",
     "bonusRolled": "额外掷骰: {{value}} ({{face}})",

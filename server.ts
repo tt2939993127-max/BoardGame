@@ -1,14 +1,17 @@
 import 'dotenv/config'; // 加载 .env
 import type { Game } from 'boardgame.io';
 import { Server as BoardgameServer, Origins } from 'boardgame.io/server';
+import { createMatch as createBoardgameMatch } from 'boardgame.io/internal';
 import { Server as IOServer, Socket as IOSocket } from 'socket.io';
 import bodyParser from 'koa-bodyparser';
-import type { StorageAPI } from 'boardgame.io/dist/types/src/server/db';
+import koaBody from 'koa-body';
+import { nanoid } from 'nanoid';
 import { connectDB } from './src/server/db';
 import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';
-import { createClaimSeatHandler } from './src/server/claimSeat';
+import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
+import { hasOccupiedPlayers } from './src/server/matchOccupancy';
 
 // 大厅事件常量（与前端 lobbySocket.ts 保持一致）
 const LOBBY_EVENTS = {
@@ -58,7 +61,7 @@ type SupportedGame = (typeof SUPPORTED_GAMES)[number];
 const normalizeGameName = (name?: string) => (name || '').toLowerCase();
 const isSupportedGame = (gameName: string): gameName is SupportedGame => {
     return (SUPPORTED_GAMES as readonly string[]).includes(gameName);
-};
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'boardgame-secret-key-change-in-production';
 
@@ -214,12 +217,108 @@ const server = BoardgameServer({
     games: SERVER_GAMES,
     origins: SERVER_ORIGINS,
     // 启用持久化时使用 MongoDB 存储
-    ...(USE_PERSISTENT_STORAGE ? { db: mongoStorage as unknown as StorageAPI.Async } : {}),
+    ...(USE_PERSISTENT_STORAGE ? { db: mongoStorage as any } : {}),
 });
 
 // 获取底层的 Koa 应用和数据库
 const { app, db } = server;
 serverDb = db;
+
+const claimSeatHandler = createClaimSeatHandler({
+    db: {
+        fetch: async (matchID, opts) => {
+            const result = (db as any).fetch(matchID, opts as any);
+            return await Promise.resolve(result);
+        },
+        setMetadata: async (matchID, metadata) => {
+            await Promise.resolve((db as any).setMetadata(matchID, metadata));
+        },
+    },
+    auth: app.context.auth,
+    jwtSecret: JWT_SECRET,
+});
+
+const resolveOwnerFromRequest = (ctx: any, setupData: Record<string, unknown>): { ownerKey: string; ownerType: 'user' | 'guest' } => {
+    const authHeader = ctx.get('authorization');
+    const rawToken = claimSeatUtils.parseBearerToken(authHeader);
+    const payload = rawToken ? claimSeatUtils.verifyGameToken(rawToken, JWT_SECRET) : null;
+    if (rawToken && !payload?.userId) {
+        ctx.throw(401, 'Invalid token');
+        return { ownerKey: 'user:invalid', ownerType: 'user' };
+    }
+    if (payload?.userId) {
+        return { ownerKey: `user:${payload.userId}`, ownerType: 'user' };
+    }
+    const guestId = typeof setupData.guestId === 'string' && setupData.guestId.trim()
+        ? setupData.guestId.trim()
+        : undefined;
+    if (!guestId) {
+        ctx.throw(400, 'guestId is required');
+        return { ownerKey: 'guest:invalid', ownerType: 'guest' };
+    }
+    return {
+        ownerKey: `guest:${guestId}`,
+        ownerType: 'guest',
+    };
+};
+
+// 强制服务端创建房间：写入权威 ownerKey/ownerType，避免客户端伪造
+app.use(async (ctx, next) => {
+    if (ctx.method === 'POST' && ctx.path.match(/^\/games\/[^/]+\/create$/)) {
+        const parse = koaBody();
+        await (parse as any)(ctx, async () => undefined);
+
+        const gameNameFromUrl = ctx.path.match(/^\/games\/([^/]+)\/create$/)?.[1];
+        const gameName = normalizeGameName(gameNameFromUrl);
+        if (!gameName || !isSupportedGame(gameName)) {
+            ctx.throw(404, 'Game ' + (gameNameFromUrl || '') + ' not found');
+            return;
+        }
+
+        const requestBody = (ctx.request as any).body as Record<string, unknown> | undefined;
+        const numPlayers = Number.parseInt(String(requestBody?.numPlayers ?? ''));
+        if (requestBody?.numPlayers !== undefined && Number.isNaN(numPlayers)) {
+            ctx.throw(400, 'Invalid numPlayers');
+        }
+
+        const game = SERVER_GAMES.find((entry) => entry.name === gameName);
+        if (!game) {
+            ctx.throw(404, 'Game ' + gameName + ' not found');
+            return;
+        }
+
+        const rawSetupData = (requestBody?.setupData && typeof requestBody.setupData === 'object')
+            ? (requestBody.setupData as Record<string, unknown>)
+            : {};
+        const { ownerKey, ownerType } = resolveOwnerFromRequest(ctx, rawSetupData);
+        const setupData = {
+            ...rawSetupData,
+            ownerKey,
+            ownerType,
+        };
+
+        const match = createBoardgameMatch({
+            game,
+            numPlayers,
+            setupData,
+            unlisted: Boolean(requestBody?.unlisted),
+        });
+        if ('setupDataError' in match) {
+            ctx.throw(400, match.setupDataError);
+        }
+
+        const matchID = nanoid(11);
+        await (db as any).createMatch(matchID, match);
+        ctx.body = { matchID };
+
+        setTimeout(() => {
+            void handleMatchCreated(matchID, gameName);
+        }, 100);
+        return;
+    }
+
+    await next();
+});
 
 // 预处理 /leave：只释放座位，不删除房间（避免 boardgame.io 在无人时 wipe）
 // 注意：必须插入到 middleware 队列最前面，以拦截 boardgame.io 的默认路由
@@ -227,6 +326,7 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
     if (ctx.method === 'POST') {
         const match = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/leave$/);
         if (match) {
+            const gameNameFromUrl = match[1];
             const matchID = match[2];
             // 只在此路由读取 body，避免重复读取 request stream。
             const parse = bodyParser();
@@ -264,16 +364,21 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
             delete players[playerID as string].name;
             delete players[playerID as string].credentials;
 
-            // 检查是否还有玩家占座（有 name 就算占座，不看 isConnected）
-            const hasPlayers = Object.values(players).some((p: any) => p.name);
+            // 检查是否还有玩家占座（name/credentials/isConnected 任一存在）
+            const hasPlayers = hasOccupiedPlayers(players as Record<string, { name?: string; credentials?: string; isConnected?: boolean }>);
             if (hasPlayers) {
+                console.log(`[Leave] 保留房间 matchID=${matchID} playerID=${playerID} reason=occupied`);
                 // 还有人，只更新 metadata
                 await db.setMetadata(matchID, metadata);
             } else {
                 // 没人了，删除整个房间
                 await db.wipe(matchID);
-                console.log(`[Leave] 房间 ${matchID} 已无人占座，已删除`);
+                console.log(`[Leave] 房间已无人占座，已删除 matchID=${matchID} playerID=${playerID}`);
             }
+
+            setTimeout(() => {
+                void handleMatchLeft(matchID, gameNameFromUrl);
+            }, 100);
 
             ctx.body = {};
             return;
@@ -282,8 +387,45 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
     await next();
 };
 
+// 预处理 /join：校验密码
+const interceptJoinMiddleware = async (ctx: any, next: () => Promise<void>) => {
+    if (ctx.method === 'POST') {
+        // 匹配 /games/:name/:matchID/join
+        const match = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/join$/);
+        if (match) {
+            const matchID = match[2];
+
+            // 读取 body
+            const parse = bodyParser();
+            await (parse as any)(ctx, async () => undefined);
+            const body = (ctx.request as any).body as { playerID?: string; playerName?: string; data?: any } | undefined;
+            const password = body?.data?.password; // 客户端传来的密码
+
+            // 获取房间配置
+            const roomData = await db.fetch(matchID, { state: true });
+            if (!roomData) {
+                // 让 boardgame.io 处理 404
+                await next();
+                return;
+            }
+
+            // 从 G.__setupData 读取密码
+            const setupData = roomData.state?.G?.__setupData as { password?: string } | undefined;
+            const roomPassword = setupData?.password;
+
+            // 如果房间有密码，且 client 没传或者传错了 -> 403
+            if (roomPassword && roomPassword !== password) {
+                ctx.throw(403, 'Incorrect password');
+                return;
+            }
+        }
+    }
+    await next();
+};
+
 // 插到最前面，优先于 boardgame.io 内置路由
 (app as any).middleware?.unshift(interceptLeaveMiddleware);
+(app as any).middleware?.unshift(interceptJoinMiddleware);
 
 if (USE_PERSISTENT_STORAGE) {
     console.log('[Server] 使用 MongoDB 持久化存储');
@@ -296,11 +438,13 @@ const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
 // boardgame.io 会自行解析 /games/* 的 body；全局启用会导致 request stream 被重复读取，触发 "stream is not readable"。
 
 // HTTP CORS：允许前端（Vite）跨端口访问本服务的 REST 接口（例如 /games/:game/leaderboard）。
-app.use(async (ctx, next) => {
+// 注意：该中间件必须在最前执行，避免 boardgame.io 内部路由直接返回导致浏览器拿不到 CORS 头。
+const corsMiddleware = async (ctx: any, next: () => Promise<void>) => {
     const requestOrigin = ctx.get('origin');
     const allowedOrigins = new Set(LOBBY_CORS_ORIGINS);
+    const isDevOrigin = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/i.test(requestOrigin);
 
-    if (requestOrigin && allowedOrigins.has(requestOrigin)) {
+    if (requestOrigin && (allowedOrigins.has(requestOrigin) || isDevOrigin)) {
         ctx.set('Access-Control-Allow-Origin', requestOrigin);
         ctx.set('Vary', 'Origin');
         ctx.set('Access-Control-Allow-Credentials', 'true');
@@ -318,7 +462,8 @@ app.use(async (ctx, next) => {
     }
 
     await next();
-});
+};
+(app as any).middleware?.unshift(corsMiddleware);
 
 // 强制销毁房间（仅房主可用）
 // 注意：不要启用全局 bodyParser，否则会和 boardgame.io 自己的 body 解析冲突（create/join/leave 会 500）。
@@ -330,12 +475,7 @@ app.use(async (ctx, next) => {
             const matchID = claimMatch[2];
             const parse = bodyParser();
             await (parse as any)(ctx, async () => undefined);
-            const handler = createClaimSeatHandler({
-                db,
-                auth: app.context.auth,
-                jwtSecret: JWT_SECRET,
-            });
-            await handler(ctx, matchID);
+            await claimSeatHandler(ctx as any, matchID);
             return;
         }
         const match = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/destroy$/);
@@ -363,7 +503,8 @@ app.use(async (ctx, next) => {
                 ctx.throw(404, 'Match ' + matchID + ' not found');
             }
             // 经过上面的必填校验，这里 playerID 一定存在。
-            if (!metadata.players[playerID as string]) {
+            const players = metadata.players as Record<string, { name?: string; credentials?: string }>;
+            if (!players[playerID as string]) {
                 ctx.throw(404, 'Player ' + playerID + ' not found');
             }
 
@@ -432,6 +573,8 @@ interface LobbyMatch {
     roomName?: string;
     ownerKey?: string;
     ownerType?: 'user' | 'guest';
+    isLocked?: boolean;
+}
 }
 
 const lobbyCacheByGame = new Map<SupportedGame, Map<string, LobbyMatch>>();
@@ -474,7 +617,7 @@ const buildLobbyMatch = (
     matchID: string,
     metadata: { gameName?: string; players?: Record<string, PlayerMetadata>; createdAt?: number; updatedAt?: number; setupData?: unknown },
     roomName?: string,
-    setupDataFromState?: { ownerKey?: string; ownerType?: 'user' | 'guest' }
+    setupDataFromState?: { ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string }
 ): LobbyMatch => {
     const playersObj = metadata.players || {};
     const playersArray = Object.entries(playersObj).map(([id, data]) => ({
@@ -482,9 +625,10 @@ const buildLobbyMatch = (
         name: data?.name,
         isConnected: data?.isConnected,
     }));
-    const setupDataFromMeta = (metadata.setupData as { ownerKey?: string; ownerType?: 'user' | 'guest' } | undefined) || undefined;
+    const setupDataFromMeta = (metadata.setupData as { ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string } | undefined) || undefined;
     const ownerKey = setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey;
     const ownerType = setupDataFromMeta?.ownerType ?? setupDataFromState?.ownerType;
+    const password = setupDataFromMeta?.password ?? setupDataFromState?.password;
 
     return {
         matchID,
@@ -494,7 +638,9 @@ const buildLobbyMatch = (
         updatedAt: metadata.updatedAt,
         roomName,
         ownerKey,
+        ownerKey,
         ownerType,
+        isLocked: !!password && password.length > 0,
     };
 };
 
@@ -503,7 +649,7 @@ const fetchLobbyMatch = async (matchID: string): Promise<LobbyMatch | null> => {
         const match = await db.fetch(matchID, { metadata: true, state: true });
         if (!match || !match.metadata) return null;
         // 从游戏状态 G.__setupData 中读取房间名与 owner 信息
-        const setupData = match.state?.G?.__setupData as { roomName?: string; ownerKey?: string; ownerType?: 'user' | 'guest' } | undefined;
+        const setupData = match.state?.G?.__setupData as { roomName?: string; ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string } | undefined;
         const roomName = setupData?.roomName;
         return buildLobbyMatch(matchID, match.metadata, roomName, setupData);
     } catch (error) {
@@ -522,7 +668,7 @@ const fetchMatchesByGame = async (gameName: SupportedGame): Promise<LobbyMatch[]
             const match = await db.fetch(matchID, { metadata: true, state: true });
             if (!match || !match.metadata) continue;
             // 从游戏状态 G.__setupData 中读取房间名与 owner 信息
-            const setupData = match.state?.G?.__setupData as { roomName?: string; ownerKey?: string; ownerType?: 'user' | 'guest' } | undefined;
+            const setupData = match.state?.G?.__setupData as { roomName?: string; ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string } | undefined;
             const roomName = setupData?.roomName;
             results.push(buildLobbyMatch(matchID, match.metadata, roomName, setupData));
         }
@@ -732,7 +878,7 @@ const handleMatchJoined = async (matchID?: string, gameNameFromUrl?: string) => 
     }
 };
 
-const handleMatchLeft = async (matchID?: string, gameNameFromUrl?: string) => {
+async function handleMatchLeft(matchID?: string, gameNameFromUrl?: string) {
     const gameFromUrl = resolveGameFromUrl(gameNameFromUrl);
     if (gameFromUrl && lobbySubscribersByGame.get(gameFromUrl)?.size === 0) {
         markLobbyCacheDirty(gameFromUrl);
@@ -863,19 +1009,50 @@ server.run(GAME_SERVER_PORT).then(async (runningServers) => {
     // 如果使用持久化存储，连接存储后端
     if (USE_PERSISTENT_STORAGE) {
         await mongoStorage.connect();
-        // 定时清理"不保存"的空房间（每 5 分钟）
-        setInterval(async () => {
-            try {
-                const cleaned = await mongoStorage.cleanupEmptyMatches();
-                if (cleaned > 0) {
-                    for (const gameName of SUPPORTED_GAMES) {
-                        void broadcastLobbySnapshot(gameName, 'cleanupEmptyMatches');
-                    }
+        // 启动时清理损坏/临时/遗留/重复房间（仅在重启时执行一次）
+        try {
+            const cleanedEmpty = await mongoStorage.cleanupEmptyMatches();
+            if (cleanedEmpty > 0) {
+                for (const gameName of SUPPORTED_GAMES) {
+                    void broadcastLobbySnapshot(gameName, 'cleanupEmptyMatches:boot');
                 }
-            } catch (err) {
-                console.error('[MongoStorage] 清理空房间失败:', err);
             }
-        }, 5 * 60 * 1000);
+        } catch (err) {
+            console.error('[MongoStorage] 启动清理空房间失败:', err);
+        }
+
+        try {
+            const cleanedEphemeral = await mongoStorage.cleanupEphemeralMatches();
+            if (cleanedEphemeral > 0) {
+                for (const gameName of SUPPORTED_GAMES) {
+                    void broadcastLobbySnapshot(gameName, 'cleanupEphemeralMatches:boot');
+                }
+            }
+        } catch (err) {
+            console.error('[MongoStorage] 启动清理临时房间失败:', err);
+        }
+
+        try {
+            const cleanedLegacyOnBoot = await mongoStorage.cleanupLegacyMatches(0);
+            if (cleanedLegacyOnBoot > 0) {
+                for (const gameName of SUPPORTED_GAMES) {
+                    void broadcastLobbySnapshot(gameName, 'cleanupLegacyMatches:boot');
+                }
+            }
+        } catch (err) {
+            console.error('[MongoStorage] 启动清理遗留房间失败:', err);
+        }
+
+        try {
+            const cleanedDuplicateOnBoot = await mongoStorage.cleanupDuplicateOwnerMatches();
+            if (cleanedDuplicateOnBoot > 0) {
+                for (const gameName of SUPPORTED_GAMES) {
+                    void broadcastLobbySnapshot(gameName, 'cleanupDuplicateOwnerMatches:boot');
+                }
+            }
+        } catch (err) {
+            console.error('[MongoStorage] 启动清理重复 ownerKey 房间失败:', err);
+        }
     }
 
     console.log(`🎮 游戏服务器运行在 http://localhost:${GAME_SERVER_PORT}`);

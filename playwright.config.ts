@@ -10,7 +10,7 @@ const baseURL = process.env.VITE_FRONTEND_URL || `http://localhost:${port}`;
 const webServerConfig = process.env.PW_SKIP_WEB_SERVER
     ? undefined
     : {
-        command: `npx vite --port ${port} --strictPort`,
+        command: `npm run generate:manifests && npx vite --port ${port} --strictPort`,
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120000,

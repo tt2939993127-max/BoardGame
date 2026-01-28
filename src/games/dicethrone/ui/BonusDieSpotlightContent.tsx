@@ -6,12 +6,18 @@
  */
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import type { DieFace } from '../types';
 import { Dice3D } from './Dice3D';
 
 interface BonusDieSpotlightContentProps {
     value: number;
     face?: DieFace;
+    /** 效果描述 key */
+    effectKey?: string;
+    /** 效果描述参数 */
+    effectParams?: Record<string, string | number>;
     locale?: string;
     /** Dice size (css value), default 8vw */
     size?: string;
@@ -30,10 +36,14 @@ const FACE_GLOW_COLORS: Record<DieFace, string> = {
 export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> = ({
     value,
     face: propFace,
+    effectKey,
+    effectParams,
     locale,
     size = '8vw',
     rollingDurationMs = 800,
 }) => {
+
+    const { t } = useTranslation('game-dicethrone');
     const [isRolling, setIsRolling] = React.useState(true);
     const face = propFace || 'fist';
 
@@ -45,23 +55,50 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
         return () => clearTimeout(stopRolling);
     }, [value, rollingDurationMs]);
 
+    // 获取翻译后的效果文本
+    const effectText = React.useMemo(() => {
+        if (!effectKey) return null;
+        return t(effectKey, effectParams);
+    }, [t, effectKey, effectParams]);
+
     return (
-        <div className="relative">
-            <Dice3D
-                value={value}
-                isRolling={isRolling}
-                size={size}
-                locale={locale}
-                variant="spotlight"
-            />
-            {!isRolling && (
-                <div
-                    className="absolute inset-[-0.8vw] rounded-[1.2vw] animate-pulse pointer-events-none"
-                    style={{ boxShadow: `0 0 2vw 0.8vw ${FACE_GLOW_COLORS[face]}` }}
+        <div className="flex flex-col items-center gap-[1.5vw]">
+            <div className="relative">
+                <Dice3D
+                    value={value}
+                    isRolling={isRolling}
+                    size={size}
+                    locale={locale}
+                    variant="spotlight"
                 />
-            )}
+                {!isRolling && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="absolute inset-[-0.8vw] rounded-[1.2vw] animate-pulse pointer-events-none"
+                        style={{ boxShadow: `0 0 2.5vw 1vw ${FACE_GLOW_COLORS[face]}` }}
+                    />
+                )}
+            </div>
+
+            <AnimatePresence>
+                {!isRolling && effectText && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="text-white text-[1.8vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
+                        style={{
+                            textShadow: `0 0 1vw ${FACE_GLOW_COLORS[face]}`,
+                        }}
+                    >
+                        {effectText}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
+
 
 export default BonusDieSpotlightContent;

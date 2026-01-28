@@ -29,15 +29,15 @@ function validateClickCell(
     command: TicTacToeCommand & { type: 'CLICK_CELL' }
 ): ValidationResult {
     const { cellId } = command.payload;
-    const { playerId } = command;
+    const { playerId, skipValidation } = command;
 
     // 检查游戏是否已结束
     if (state.gameResult) {
         return { valid: false, error: 'gameOver' };
     }
 
-    // 检查是否轮到该玩家
-    if (playerId !== state.currentPlayer) {
+    // 检查是否轮到该玩家（本地同屏允许跳过身份校验）
+    if (!skipValidation && playerId !== state.currentPlayer) {
         return { valid: false, error: 'notYourTurn' };
     }
 

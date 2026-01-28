@@ -289,7 +289,7 @@ export const TokenBadge = ({
                         ? 'bg-transparent border-0 shadow-none'
                         : `bg-gradient-to-br ${info.color ?? 'from-gray-500 to-gray-600'} shadow-lg border border-white/30`}
                     transition-transform duration-200 hover:scale-110 ${isClickable ? 'cursor-pointer' : 'cursor-help'}
-                    ${isClickable ? 'ring-2 ring-emerald-400/50 hover:ring-emerald-400' : ''}
+                    ${isClickable ? 'ring-2 ring-amber-400/50 hover:ring-amber-400 animate-pulse' : ''}
                 `}
             >
                 {getStatusEffectIconNode(info, locale, size, atlas)}

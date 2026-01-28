@@ -41,6 +41,77 @@ export function clearMatchCredentials(matchID: string): void {
     }
 }
 
+export type ClaimSeatOptions = {
+    token?: string;
+    guestId?: string;
+    playerName?: string;
+};
+
+/**
+ * 通过 JWT 或 guestId 回归占位（无本地凭据时使用）
+ */
+export async function claimSeat(
+    gameName: string,
+    matchID: string,
+    playerID: string,
+    options: ClaimSeatOptions
+): Promise<{ success: boolean; credentials?: string }> {
+    try {
+        const normalizedGameName = (gameName || 'tictactoe').toLowerCase();
+        const baseUrl = GAME_SERVER_URL || '';
+        const url = `${baseUrl}/games/${normalizedGameName}/${matchID}/claim-seat`;
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        };
+        if (options.token) {
+            headers.Authorization = `Bearer ${options.token}`;
+        }
+        const payload: { playerID: string; guestId?: string; playerName?: string } = { playerID };
+        if (!options.token && options.guestId) {
+            payload.guestId = options.guestId;
+        }
+        if (options.playerName) {
+            payload.playerName = options.playerName;
+        }
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const message = await response.text().catch(() => '');
+            console.warn('[claimSeat] 请求失败', {
+                url,
+                status: response.status,
+                message,
+                matchID,
+                playerID,
+            });
+            return { success: false };
+        }
+
+        const data = await response.json().catch(() => null) as { playerCredentials?: string } | null;
+        const credentials = data?.playerCredentials;
+        if (!credentials) {
+            return { success: false };
+        }
+
+        persistMatchCredentials(matchID, {
+            playerID,
+            credentials,
+            matchID,
+            gameName: normalizedGameName,
+            playerName: options.playerName,
+        });
+
+        return { success: true, credentials };
+    } catch (err) {
+        console.error('[claimSeat] 请求异常:', err);
+        return { success: false };
+    }
+}
+
 export function getOwnerActiveMatch(): OwnerActiveMatch | null {
     try {
         const raw = localStorage.getItem(OWNER_ACTIVE_MATCH_KEY);

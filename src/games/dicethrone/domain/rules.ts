@@ -115,6 +115,9 @@ export const getRollerId = (state: DiceThroneCore): PlayerId => {
 export const canAdvancePhase = (state: DiceThroneCore): boolean => {
     // 有待处理选择时不可推进
     // 注意：pendingChoice 已迁移到 sys.prompt，这里只检查领域层约束
+    if (state.pendingInteraction) {
+        return false;
+    }
     
     // 弃牌阶段手牌超限时不可推进
     if (state.turnPhase === 'discard') {

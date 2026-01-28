@@ -51,6 +51,7 @@ export interface LobbyMatch {
     roomName?: string;
     ownerKey?: string;
     ownerType?: 'user' | 'guest';
+    isLocked?: boolean;
 }
 
 interface LobbySnapshotPayload {

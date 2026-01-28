@@ -33,8 +33,11 @@ export interface CardSpotlightItem {
         value: number;
         face?: DieFace;
         timestamp: number;
+        effectKey?: string;
+        effectParams?: Record<string, string | number>;
     }>;
 }
+
 
 interface CardSpotlightOverlayProps {
     /** 特写队列 */
@@ -47,7 +50,7 @@ interface CardSpotlightOverlayProps {
     onClose: (id: string) => void;
     /** 对手悬浮窗元素引用（用于计算起始位置） */
     opponentHeaderRef?: React.RefObject<HTMLElement | null>;
-    /** 自动关闭延迟（毫秒），默认 1000 */
+    /** 自动关闭延迟（毫秒），默认 2500 */
     autoCloseDelay?: number;
 }
 
@@ -57,7 +60,7 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
     locale,
     onClose,
     opponentHeaderRef,
-    autoCloseDelay = 1000,
+    autoCloseDelay = 2500,
 }) => {
     const currentItem = queue[0];
     const currentItemId = currentItem?.id;
@@ -94,6 +97,7 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
     const atlasStyle = getCardAtlasStyle(currentItem.atlasIndex, atlas);
     const hasBonusDice = !!currentItem.bonusDice && currentItem.bonusDice.length > 0;
 
+
     return (
         <SpotlightContainer
             id={currentItem.id}
@@ -128,6 +132,8 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                                 key={`${die.timestamp}-${index}`}
                                 value={die.value}
                                 face={die.face}
+                                effectKey={die.effectKey}
+                                effectParams={die.effectParams}
                                 locale={locale}
                                 size="10vw"
                             />
@@ -136,15 +142,15 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                 )}
             </div>
 
+
             {/* 队列指示器 */}
             {queue.length > 1 && (
                 <div className="absolute bottom-[-2vw] flex items-center gap-[0.4vw]">
                     {queue.map((item, index) => (
                         <div
                             key={item.id}
-                            className={`w-[0.5vw] h-[0.5vw] rounded-full transition-colors ${
-                                index === 0 ? 'bg-amber-400' : 'bg-slate-500'
-                            }`}
+                            className={`w-[0.5vw] h-[0.5vw] rounded-full transition-colors ${index === 0 ? 'bg-amber-400' : 'bg-slate-500'
+                                }`}
                         />
                     ))}
                 </div>

@@ -40,7 +40,7 @@ export const PlayerStats = ({
     const cp = player.resources[RESOURCE_IDS.CP] ?? 0;
     // 计算总护盾值
     const shield = player.damageShields?.reduce((sum, s) => sum + s.value, 0) ?? 0;
-    
+
     // 护盾不再作为独立资源条，改为图标显示
     const panelData: PlayerPanelData = useMemo(() => ({
         playerId: player.id ?? '0',
@@ -61,21 +61,35 @@ export const PlayerStats = ({
     return (
         <PlayerPanelSkeleton
             player={panelData}
-            className={`${defaultPlayerPanelClassName} z-20 hover:bg-slate-900 transition-[background-color] duration-200 overflow-visible`}
+            className={`${defaultPlayerPanelClassName} z-20 hover:bg-slate-900/90 transition-all duration-300 overflow-visible bg-slate-950/95 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.4)] rounded-[1.2vw] p-[0.6vw]`}
             renderResource={(key, value) => {
                 // 血量条特殊处理：添加护盾图标
                 if (key === 'health') {
                     const content = (
-                        <div className="flex items-center gap-[0.5vw]">
-                            <div className="flex-1">
+                        <div className="flex items-center gap-[0.5vw] group/resource">
+                            <div className="flex-1 relative rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
                                 {renderResource(key, value)}
+                                {/* 3D Highlights - Optimized for softness */}
+                                <div className="absolute inset-0 pointer-events-none">
+                                    <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/10 to-transparent" />
+                                    <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/20 to-transparent" />
+                                </div>
                             </div>
                             {shield > 0 && <ShieldIcon value={shield} />}
                         </div>
                     );
                     return hpRef ? <div ref={hpRef}>{content}</div> : content;
                 }
-                return renderResource(key, value);
+                return (
+                    <div className="relative group/resource rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
+                        {renderResource(key, value)}
+                        {/* 3D Highlights - Optimized for softness */}
+                        <div className="absolute inset-0 pointer-events-none">
+                            <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/10 to-transparent" />
+                            <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/20 to-transparent" />
+                        </div>
+                    </div>
+                );
             }}
         />
     );

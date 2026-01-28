@@ -9,6 +9,7 @@ export default defineConfig({
             'src/engine/**/__tests__/**/*.test.ts',
             'src/server/**/__tests__/**/*.test.ts',
             'apps/api/test/**/*.test.ts',
+            'apps/api/test/**/*.e2e-spec.ts',
         ],
         testTimeout: 180000,
         setupFiles: ['./apps/api/test/vitest.setup.ts'],

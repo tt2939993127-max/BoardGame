@@ -46,7 +46,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     id,
     isVisible,
     onClose,
-    autoCloseDelay = 1000,
+    autoCloseDelay = 2500,
     children,
     zIndex = 9999,
     contentMotion,
@@ -60,6 +60,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
         const closeTimer = setTimeout(() => {
             onClose();
         }, autoCloseDelay);
+
 
         return () => {
             clearTimeout(closeTimer);

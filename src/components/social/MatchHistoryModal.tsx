@@ -36,17 +36,17 @@ export const MatchHistoryModal = ({ isOpen, onClose }: MatchHistoryModalProps) =
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="relative bg-[#fcfbf9] w-full max-w-2xl max-h-[80vh] rounded-lg shadow-2xl overflow-hidden flex flex-col border border-[#e5e0d0]"
+                className="relative bg-parchment-card-bg w-full max-w-2xl max-h-[80vh] rounded-lg shadow-2xl overflow-hidden flex flex-col border border-parchment-card-border/30"
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-[#e5e0d0] bg-[#f3f0e6]">
-                    <div className="flex items-center gap-2 text-[#433422]">
+                <div className="flex items-center justify-between p-4 border-b border-parchment-card-border/30 bg-parchment-base-bg">
+                    <div className="flex items-center gap-2 text-parchment-base-text">
                         <Trophy size={20} />
                         <h2 className="font-bold text-lg">{t('social:matchHistory.title', 'Match History')}</h2>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-1.5 rounded-full hover:bg-[#e5e0d0] transition-colors text-[#433422]"
+                        className="p-1.5 rounded-full hover:bg-parchment-card-border/20 transition-colors text-parchment-base-text"
                     >
                         <X size={20} />
                     </button>
@@ -55,12 +55,12 @@ export const MatchHistoryModal = ({ isOpen, onClose }: MatchHistoryModalProps) =
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                     {MOCK_HISTORY.length === 0 ? (
-                        <div className="text-center text-[#8c7b64] py-12 italic">
+                        <div className="text-center text-parchment-light-text py-12 italic">
                             {t('social:matchHistory.empty', 'No match history found.')}
                         </div>
                     ) : (
                         MOCK_HISTORY.map(match => (
-                            <div key={match.id} className="bg-white border border-[#e5e0d0] rounded p-4 flex items-center justify-between shadow-sm">
+                            <div key={match.id} className="bg-white border border-parchment-card-border/20 rounded p-4 flex items-center justify-between shadow-sm">
                                 <div className="flex items-center gap-4">
                                     <div className={clsx(
                                         "w-10 h-10 rounded-full flex items-center justify-center font-bold text-white",
@@ -69,10 +69,10 @@ export const MatchHistoryModal = ({ isOpen, onClose }: MatchHistoryModalProps) =
                                         {match.result === 'win' ? 'W' : match.result === 'loss' ? 'L' : 'D'}
                                     </div>
                                     <div>
-                                        <div className="font-bold text-[#433422]">{match.gameName}</div>
-                                        <div className="text-xs text-[#8c7b64] flex items-center gap-2">
+                                        <div className="font-bold text-parchment-base-text">{match.gameName}</div>
+                                        <div className="text-xs text-parchment-light-text flex items-center gap-2">
                                             <span>vs {match.opponent}</span>
-                                            <span className="w-1 h-1 rounded-full bg-[#8c7b64]" />
+                                            <span className="w-1 h-1 rounded-full bg-parchment-light-text" />
                                             <span className="flex items-center gap-1"><Calendar size={10} /> {match.date}</span>
                                         </div>
                                     </div>
@@ -84,7 +84,7 @@ export const MatchHistoryModal = ({ isOpen, onClose }: MatchHistoryModalProps) =
                                     )}>
                                         {match.result}
                                     </div>
-                                    <div className="text-xs text-[#8c7b64] flex items-center justify-end gap-1 mt-1">
+                                    <div className="text-xs text-parchment-light-text flex items-center justify-end gap-1 mt-1">
                                         <Clock size={10} /> {match.duration}
                                     </div>
                                 </div>

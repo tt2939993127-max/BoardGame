@@ -142,7 +142,7 @@
     "pass": "Pass"
   },
   "waiting": {
-    "thinkingMessage": "Thinking..."
+    "thinkingMessage": "Thinking"
   },
   "dice": {
     "waitingOpponent": "Opponent is thinking...",

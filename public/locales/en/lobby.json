@@ -1,6 +1,7 @@
 {
   "home": {
-    "title": "Board Game Learning & Play",
+    "title": "Yi Board Game",
+    "subtitle": "Platform for Tutorials, Online Play, and Prototyping",
     "logoAlt": "Board Game Platform Logo",
     "audio": {
       "mute": "Mute",
@@ -56,6 +57,7 @@
   },
   "tabs": {
     "lobby": "Lobby",
+    "reviews": "Reviews",
     "leaderboard": "Leaderboard"
   },
   "leaderboard": {

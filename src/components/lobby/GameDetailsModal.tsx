@@ -5,7 +5,8 @@ import clsx from 'clsx';
 import { LobbyClient } from 'boardgame.io/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { lobbySocket, type LobbyMatch } from '../../services/lobbySocket';
-import { exitMatch, getOwnerActiveMatch, setOwnerActiveMatch, clearOwnerActiveMatch, clearMatchCredentials, listStoredMatchCredentials, getLatestStoredMatchCredentials, pruneStoredMatchCredentials, persistMatchCredentials } from '../../hooks/match/useMatchStatus';
+import { claimSeat, exitMatch, getOwnerActiveMatch, setOwnerActiveMatch, clearOwnerActiveMatch, clearMatchCredentials, listStoredMatchCredentials, getLatestStoredMatchCredentials, pruneStoredMatchCredentials, persistMatchCredentials } from '../../hooks/match/useMatchStatus';
+import { getOrCreateGuestId, getGuestName as resolveGuestName, getOwnerKey as resolveOwnerKey, getOwnerType as resolveOwnerType } from '../../hooks/match/ownerIdentity';
 import { ConfirmModal } from '../common/overlays/ConfirmModal';
 import { ModalBase } from '../common/overlays/ModalBase';
 import { useModalStack } from '../../contexts/ModalStackContext';
@@ -13,6 +14,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { GAME_SERVER_URL } from '../../config/server';
 import { getGameById } from '../../config/games.config';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
+import { GameReviews } from '../review/GameReviewSection';
+import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
 
 const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
@@ -30,6 +33,7 @@ interface Room {
     roomName?: string;
     ownerKey?: string;
     ownerType?: 'user' | 'guest';
+    isLocked?: boolean;
 }
 
 interface GameDetailsModalProps {
@@ -47,7 +51,7 @@ interface GameDetailsModalProps {
 export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop, onNavigate }: GameDetailsModalProps) => {
     const navigate = useNavigate();
     const modalRef = useRef<HTMLDivElement>(null);
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const { t } = useTranslation('lobby');
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
@@ -68,27 +72,19 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     } | null>(null);
 
     // 排行榜状态
-    const [activeTab, setActiveTab] = useState<'lobby' | 'leaderboard'>('lobby');
+    const [activeTab, setActiveTab] = useState<'lobby' | 'leaderboard' | 'reviews'>('lobby');
     const [leaderboardData, setLeaderboardData] = useState<{
         leaderboard: { name: string; wins: number; matches: number }[];
     } | null>(null);
 
     // 创建房间弹窗状态
     const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+    const [passwordModalConfig, setPasswordModalConfig] = useState<{ matchID: string; gameName: string } | null>(null);
 
-    // Helper functions (must be defined before useMemo)
-    const getGuestId = () => {
-        const key = 'guest_id';
-        const stored = localStorage.getItem(key);
-        if (stored) return stored;
-        const id = String(Math.floor(Math.random() * 9000) + 1000);
-        localStorage.setItem(key, id);
-        return id;
-    };
-
-    const getGuestName = () => t('player.guest', { id: getGuestId() });
-    const getOwnerKey = () => (user?.id ? `user:${user.id}` : `guest:${getGuestId()}`);
-    const getOwnerType = () => (user?.id ? 'user' : 'guest');
+    const getGuestId = () => getOrCreateGuestId();
+    const getGuestName = () => resolveGuestName(t, getGuestId());
+    const getOwnerKey = () => resolveOwnerKey(user?.id, getGuestId());
+    const getOwnerType = () => resolveOwnerType(user?.id);
 
     useEffect(() => {
         if (isOpen && activeTab === 'leaderboard') {
@@ -133,6 +129,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     roomName: m.roomName,
                     ownerKey: m.ownerKey,
                     ownerType: m.ownerType,
+                    isLocked: m.isLocked,
                 }));
                 setRooms(roomList);
             });
@@ -213,15 +210,39 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         setShowCreateRoomModal(true);
     };
 
+    const tryClaimSeat = async (matchID: string, gameName: string) => {
+        if (user?.id && token) {
+            const { success } = await claimSeat(gameName, matchID, '0', { token, playerName: user.username });
+            if (!success) return false;
+        } else {
+            const guestId = getGuestId();
+            const guestName = getGuestName();
+            const { success } = await claimSeat(gameName, matchID, '0', { guestId, playerName: guestName });
+            if (!success) return false;
+        }
+        setOwnerActiveMatch({
+            matchID,
+            gameName,
+            ownerKey: getOwnerKey(),
+            ownerType: getOwnerType(),
+        });
+        setLocalStorageTick(t => t + 1);
+        setShowCreateRoomModal(false);
+        onNavigate?.();
+        navigate(`/play/${gameName}/match/${matchID}?playerID=0`);
+        return true;
+    };
+
     // 实际创建房间逻辑
     const handleCreateRoom = async (config: RoomConfig) => {
         setIsLoading(true);
         try {
-            const { numPlayers, roomName, ttlSeconds } = config;
+            const { numPlayers, roomName, ttlSeconds, password } = config;
             // 获取用户名或生成游客名
             const playerName = user?.username || getGuestName();
             const ownerKey = getOwnerKey();
             const ownerType = getOwnerType();
+            const guestId = user?.id ? undefined : getGuestId();
 
             // 使用传入的 gameId，通过 setupData 传递房间名
             const setupData = {
@@ -229,8 +250,14 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 ttlSeconds,
                 ownerKey,
                 ownerType,
+                ...(guestId ? { guestId } : {}),
+                ...(password ? { password } : {}),
             };
-            const { matchID } = await lobbyClient.createMatch(gameId, { numPlayers, setupData });
+            const { matchID } = await lobbyClient.createMatch(
+                gameId,
+                { numPlayers, setupData },
+                token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+            );
 
             // 加入为 0 号玩家
             const { playerCredentials } = await lobbyClient.joinMatch(gameId, matchID, {
@@ -267,16 +294,13 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     ownerKey: getOwnerKey(),
                     ownerType: getOwnerType(),
                 });
-                toast.warning(
-                    { kind: 'i18n', key: 'error.activeMatchExists', ns: 'lobby' },
-                    undefined,
-                    {
-                        action: {
-                            label: t('action.rejoinRoom'),
-                            onClick: () => handleJoinRoom(existingMatchID, existingGameName),
-                        },
-                    }
-                );
+                const claimed = await tryClaimSeat(existingMatchID, existingGameName);
+                if (claimed) {
+                    lobbySocket.requestRefresh(normalizedGameId);
+                    return;
+                }
+                toast.warning({ kind: 'i18n', key: 'error.activeMatchExists', ns: 'lobby' });
+                void handleJoinRoom(existingMatchID, existingGameName);
                 lobbySocket.requestRefresh(normalizedGameId);
                 setShowCreateRoomModal(false);
                 return;
@@ -287,7 +311,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         }
     };
 
-    const handleJoinRoom = async (matchID: string, overrideGameName?: string) => {
+    const handleJoinRoom = async (matchID: string, overrideGameName?: string, password?: string) => {
         // 检查是否有已保存的凭证（重连场景）
         const savedCreds = localStorage.getItem(`match_creds_${matchID}`);
         if (savedCreds) {
@@ -330,6 +354,18 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         if (!match) return;
 
         const roomGameName = normalizeGameName(overrideGameName || match.gameName) || normalizedGameId || 'tictactoe';
+
+        // 检查是否有密码锁
+        if (match.isLocked && !password) {
+            setPasswordModalConfig({ matchID, gameName: roomGameName });
+            return;
+        }
+
+        const canClaimSeat = !!(match.ownerKey && match.ownerKey === getOwnerKey());
+        if (canClaimSeat) {
+            const claimed = await tryClaimSeat(matchID, roomGameName);
+            if (claimed) return;
+        }
         let targetPlayerID = '';
 
         try {
@@ -357,6 +393,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             const { playerCredentials } = await lobbyClient.joinMatch(roomGameName, matchID, {
                 playerID: targetPlayerID,
                 playerName,
+                data: password ? { password } : undefined,
             });
 
             persistMatchCredentials(matchID, {
@@ -375,6 +412,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             console.error('Join failed:', error);
             toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
         }
+    };
+
+    const handlePasswordConfirm = (password: string) => {
+        if (!passwordModalConfig) return;
+        handleJoinRoom(passwordModalConfig.matchID, passwordModalConfig.gameName, password);
+        setPasswordModalConfig(null);
     };
 
     const handleAction = (matchID: string, myPlayerID: string, myCredentials: string, isHost: boolean) => {
@@ -559,41 +602,53 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 closeOnBackdrop={closeOnBackdrop}
                 containerClassName="p-4 sm:p-8"
             >
+                <PasswordEntryModal
+                    open={!!passwordModalConfig}
+                    onClose={() => setPasswordModalConfig(null)}
+                    onConfirm={handlePasswordConfirm}
+                    closeOnBackdrop
+                />
                 <div
                     ref={modalRef}
                     className="
-                        bg-[#fcfbf9] pointer-events-auto 
+                        bg-parchment-card-bg pointer-events-auto 
                         w-full max-w-2xl 
-                        h-[27.5rem] max-h-[85vh]
-                        rounded-sm shadow-[0_10px_40px_rgba(67,52,34,0.15)] 
+                        h-[80vh] md:h-[27.5rem] max-h-[85vh]
+                        rounded-sm shadow-parchment-card-hover 
                         flex flex-col md:flex-row 
-                        border border-[#e5e0d0] relative 
+                        border border-parchment-card-border/30 relative 
                         overflow-hidden
                     "
                 >
                     {/* 装饰性边角 */}
-                    <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-[#c0a080]" />
-                    <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-[#c0a080]" />
-                    <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-[#c0a080]" />
-                    <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-[#c0a080]" />
+                    <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
+                    <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-parchment-card-border/60" />
+                    <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-parchment-card-border/60" />
+                    <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-parchment-card-border/60" />
 
                     {/* 左侧面板 - 游戏信息 */}
-                    <div className="w-full md:w-2/5 bg-[#f3f0e6]/50 border-b md:border-b-0 md:border-r border-[#e5e0d0] p-6 sm:p-8 flex flex-col items-center text-center font-serif shrink-0">
-                        <div className="w-20 h-20 bg-[#fcfbf9] border border-[#e5e0d0] rounded-[4px] shadow-sm flex items-center justify-center text-4xl text-[#433422] font-bold mb-6 overflow-hidden">
+                    <div className="w-full md:w-2/5 bg-parchment-base-bg/50 border-b md:border-b-0 md:border-r border-parchment-card-border/30 p-4 md:p-8 flex flex-col md:items-center text-left md:text-center font-serif shrink-0 transition-all">
+                        {/* Thumbnail - Hidden on mobile, visible on desktop */}
+                        <div className="hidden md:flex w-20 h-20 bg-parchment-card-bg border border-parchment-card-border/30 rounded-[4px] shadow-sm items-center justify-center text-4xl text-parchment-base-text font-bold mb-6 overflow-hidden shrink-0">
                             {thumbnail}
                         </div>
-                        <h2 className="text-xl sm:text-2xl font-bold text-[#433422] mb-2 tracking-wide">{t(titleKey, { defaultValue: titleKey })}</h2>
-                        <div className="h-px w-12 bg-[#c0a080] opacity-30 mb-4" />
-                        <p className="text-xs sm:text-sm text-[#8c7b64] mb-8 leading-relaxed italic">
-                            {t(descriptionKey, { defaultValue: descriptionKey })}
-                        </p>
 
-                        <div className="mt-auto w-full">
+                        <div className="flex-1 md:flex-none">
+                            <h2 className="text-lg md:text-2xl font-bold text-parchment-base-text mb-1 md:mb-2 tracking-wide leading-tight">
+                                {t(titleKey, { defaultValue: titleKey })}
+                            </h2>
+                            <div className="hidden md:block h-px w-12 bg-parchment-card-border/50 opacity-30 mb-4 mx-auto" />
+                            <p className="text-[11px] md:text-sm text-parchment-light-text mb-3 md:mb-8 leading-relaxed italic line-clamp-2 md:line-clamp-none">
+                                {t(descriptionKey, { defaultValue: descriptionKey })}
+                            </p>
+                        </div>
+
+                        <div className="mt-auto w-full flex flex-row md:flex-col gap-2">
                             {allowLocalMode && (
                                 <button
                                     type="button"
                                     onClick={handleLocalPlay}
-                                    className="w-full py-2 px-4 bg-[#fcfbf9] border border-[#e5e0d0] text-[#433422] font-bold rounded-[4px] hover:bg-[#efede6] transition-all flex items-center justify-center gap-2 cursor-pointer text-xs mb-2"
+                                    className="flex-1 md:w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
                                 >
                                     {t('actions.localPlay')}
                                 </button>
@@ -601,7 +656,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             <button
                                 type="button"
                                 onClick={handleTutorial}
-                                className="w-full py-2 px-4 bg-[#fcfbf9] border border-[#e5e0d0] text-[#433422] font-bold rounded-[4px] hover:bg-[#efede6] transition-all flex items-center justify-center gap-2 cursor-pointer text-xs"
+                                className="flex-1 md:w-full py-1.5 md:py-2 px-3 md:px-4 bg-parchment-card-bg border border-parchment-card-border/30 text-parchment-base-text font-bold rounded-[4px] hover:bg-parchment-base-bg transition-all flex items-center justify-center gap-2 cursor-pointer text-[10px] md:text-xs"
                             >
                                 {t('actions.tutorial')}
                             </button>
@@ -609,39 +664,50 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     </div>
 
                     {/* 右侧面板 - 大厅/排行 */}
-                    <div className="flex-1 p-6 sm:p-8 flex flex-col bg-[#fcfbf9] font-serif overflow-hidden">
-                        <div className="flex justify-between items-center mb-6">
-                            <div className="flex gap-4">
+                    <div className="flex-1 p-4 sm:p-8 flex flex-col bg-parchment-card-bg font-serif overflow-hidden">
+                        <div className="flex justify-between items-center mb-4 sm:mb-6 gap-2">
+                            <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto no-scrollbar mask-linear-fade pr-2">
                                 <button
                                     onClick={() => setActiveTab('lobby')}
                                     className={clsx(
-                                        "text-lg font-bold tracking-wider uppercase transition-colors relative",
-                                        activeTab === 'lobby' ? "text-[#433422]" : "text-[#8c7b64] hover:text-[#433422]"
+                                        "text-sm sm:text-lg font-bold tracking-wider uppercase transition-colors relative whitespace-nowrap shrink-0",
+                                        activeTab === 'lobby' ? "text-parchment-base-text" : "text-parchment-light-text hover:text-parchment-base-text"
                                     )}
                                 >
                                     {t('tabs.lobby')}
-                                    {activeTab === 'lobby' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#433422]" />}
+                                    {activeTab === 'lobby' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-parchment-base-text" />}
                                 </button>
-                                <div className="w-px bg-[#e5e0d0] h-6" />
+                                <div className="w-px bg-[#e5e0d0] h-4 sm:h-6 shrink-0" />
+                                <button
+                                    onClick={() => setActiveTab('reviews')}
+                                    className={clsx(
+                                        "text-sm sm:text-lg font-bold tracking-wider uppercase transition-colors relative whitespace-nowrap shrink-0",
+                                        activeTab === 'reviews' ? "text-parchment-base-text" : "text-parchment-light-text hover:text-parchment-base-text"
+                                    )}
+                                >
+                                    {t('tabs.reviews')}
+                                    {activeTab === 'reviews' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-parchment-base-text" />}
+                                </button>
+                                <div className="w-px bg-[#e5e0d0] h-4 sm:h-6 shrink-0" />
                                 <button
                                     onClick={() => setActiveTab('leaderboard')}
                                     className={clsx(
-                                        "text-lg font-bold tracking-wider uppercase transition-colors relative",
-                                        activeTab === 'leaderboard' ? "text-[#433422]" : "text-[#8c7b64] hover:text-[#433422]"
+                                        "text-sm sm:text-lg font-bold tracking-wider uppercase transition-colors relative whitespace-nowrap shrink-0",
+                                        activeTab === 'leaderboard' ? "text-parchment-base-text" : "text-parchment-light-text hover:text-parchment-base-text"
                                     )}
                                 >
                                     {t('tabs.leaderboard')}
-                                    {activeTab === 'leaderboard' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#433422]" />}
+                                    {activeTab === 'leaderboard' && <div className="absolute -bottom-1 left-0 w-full h-0.5 bg-parchment-base-text" />}
                                 </button>
                             </div>
-                            <button onClick={onClose} className="p-1 hover:bg-[#efede6] rounded-full text-[#8c7b64] hover:text-[#433422] transition-colors cursor-pointer">
+                            <button onClick={onClose} className="p-1.5 hover:bg-parchment-base-bg rounded-full text-parchment-light-text hover:text-parchment-base-text transition-colors cursor-pointer shrink-0">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         </div>
 
-                        {activeTab === 'lobby' ? (
+                        {activeTab === 'lobby' && (
                             <>
                                 {/* 创建操作 */}
                                 <div className="mb-6">
@@ -649,14 +715,14 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                         // 检查用户是否已在对局中
                                         if (activeMatch) {
                                             return (
-                                                <div className="w-full py-3 px-4 bg-[#f8f4e8] border border-[#c0a080] rounded-[4px] flex flex-col items-center gap-2">
-                                                    <span className="text-xs text-[#8c7b64] font-bold uppercase tracking-wider">
+                                                <div className="w-full py-3 px-4 bg-parchment-base-bg/50 border border-parchment-card-border/50 rounded-[4px] flex flex-col items-center gap-2">
+                                                    <span className="text-xs text-parchment-light-text font-bold uppercase tracking-wider">
                                                         {t('activeMatch.notice')}
                                                     </span>
                                                     <div className="flex gap-2">
                                                         <button
                                                             onClick={() => handleJoinRoom(activeMatch.matchID, activeMatch.gameName)}
-                                                            className="px-4 py-1.5 bg-[#c0a080] text-white text-xs font-bold rounded hover:bg-[#a08060] transition-colors cursor-pointer uppercase tracking-wider"
+                                                            className="px-4 py-1.5 bg-parchment-card-border text-parchment-card-bg text-xs font-bold rounded hover:bg-parchment-brown transition-colors cursor-pointer uppercase tracking-wider"
                                                         >
                                                             {t('activeMatch.return', { id: activeMatch.matchID.slice(0, 4) })}
                                                         </button>
@@ -685,7 +751,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                             <button
                                                 onClick={handleOpenCreateRoom}
                                                 disabled={isLoading}
-                                                className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
+                                                className="w-full py-3 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
                                             >
                                                 {isLoading ? t('button.processing') : t('actions.createRoom')}
                                             </button>
@@ -696,7 +762,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                 {/* 房间列表 */}
                                 <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                                     {roomItems.length === 0 ? (
-                                        <div className="text-center text-[#8c7b64] py-10 italic text-sm border border-dashed border-[#e5e0d0] rounded-[4px]">
+                                        <div className="text-center text-parchment-light-text py-10 italic text-sm border border-dashed border-parchment-card-border/30 rounded-[4px]">
                                             {t('rooms.empty')}
                                         </div>
                                     ) : (
@@ -706,22 +772,27 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                                 className={clsx(
                                                     "flex items-center justify-between p-3 rounded-[4px] border transition-colors",
                                                     room.isMyRoom
-                                                        ? "border-[#c0a080] bg-[#f8f4e8]"
-                                                        : "border-[#e5e0d0] bg-[#fcfbf9] hover:bg-[#f3f0e6]/30"
+                                                        ? "border-parchment-card-border bg-parchment-base-bg/50"
+                                                        : "border-parchment-card-border/30 bg-parchment-card-bg hover:bg-parchment-base-bg/30"
                                                 )}
                                             >
                                                 <div>
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-[#433422] text-sm">
+                                                        <span className="font-bold text-parchment-base-text text-sm">
                                                             {room.roomName || t('rooms.matchTitle', { id: room.matchID.slice(0, 4) })}
                                                         </span>
+                                                        {room.isLocked && (
+                                                            <svg className="w-3.5 h-3.5 text-parchment-light-text opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                            </svg>
+                                                        )}
                                                         {room.isMyRoom && (
-                                                            <span className="text-[8px] bg-[#c0a080] text-white px-1.5 py-0.5 rounded uppercase font-bold">
+                                                            <span className="text-[8px] bg-parchment-card-border text-parchment-card-bg px-1.5 py-0.5 rounded uppercase font-bold">
                                                                 {t('rooms.mine')}
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="text-[10px] text-[#8c7b64] mt-0.5">
+                                                    <div className="text-[10px] text-parchment-light-text mt-0.5">
                                                         {room.p0 || t('rooms.emptySlot')} vs {room.p1 || t('rooms.emptySlot')}
                                                     </div>
                                                 </div>
@@ -753,7 +824,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                                                 onNavigate?.();
                                                                 navigate(`/play/${normalizedGameId}/match/${room.matchID}?spectate=1`);
                                                             }}
-                                                            className="p-1.5 rounded-[4px] text-[#8c7b64] hover:text-[#433422] hover:bg-[#f3f0e6] transition-all cursor-pointer border border-[#e5e0d0]"
+                                                            className="p-1.5 rounded-[4px] text-parchment-light-text hover:text-parchment-base-text hover:bg-parchment-base-bg transition-all cursor-pointer border border-parchment-card-border/30"
                                                             title={t('actions.spectate')}
                                                         >
                                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -790,7 +861,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                     )}
                                 </div>
                             </>
-                        ) : (
+                        )}
+                        {activeTab === 'leaderboard' && (
                             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
                                 {!leaderboardData ? (
                                     <div className="flex items-center justify-center h-40">
@@ -829,6 +901,11 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                         </section>
                                     </div>
                                 )}
+                            </div>
+                        )}
+                        {activeTab === 'reviews' && (
+                            <div className="flex-1 overflow-hidden h-full">
+                                <GameReviews gameId={normalizedGameId} />
                             </div>
                         )}
                     </div>

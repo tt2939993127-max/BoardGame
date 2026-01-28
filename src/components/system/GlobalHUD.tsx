@@ -28,7 +28,7 @@ export const GlobalHUD = () => {
 
     const btnClass = isDark
         ? "bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 text-white/90"
-        : "bg-black/5 hover:bg-black/10 border border-black/5 hover:border-black/10 text-[#433422] shadow-sm";
+        : "bg-parchment-base-bg/50 hover:bg-parchment-base-bg/80 border border-parchment-card-border/20 text-parchment-base-text shadow-sm";
 
     return (
         <FabMenu
@@ -41,7 +41,7 @@ export const GlobalHUD = () => {
                     )}
                 </div>
             }
-            activeColor={isDark ? "text-white/80" : "text-[#433422]"}
+            activeColor={isDark ? "text-white/80" : "text-parchment-base-text"}
             className="fixed bottom-8 right-8 z-[9000] flex flex-col items-end gap-2 font-sans"
             titleExpand={t('hud.toggle.expand') || 'Expand'}
             titleCollapse={t('hud.toggle.collapse') || 'Collapse'}

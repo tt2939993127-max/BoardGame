@@ -217,7 +217,6 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             if (!hooks.onAutoContinueCheck) return;
 
             const result = hooks.onAutoContinueCheck({ state, events, random });
-            console.log('[FlowSystem afterEvents] onAutoContinueCheck result:', result);
             if (!result?.autoContinue) return;
 
             // 自动继续：执行与 ADVANCE_PHASE 相同的逻辑
@@ -226,6 +225,7 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             const syntheticCommand: Command = {
                 type: FLOW_COMMANDS.ADVANCE_PHASE,
                 playerId,
+                payload: undefined,
             };
 
             // canAdvance 校验（自动继续时通常应该允许）

@@ -210,7 +210,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
             damage(10, abilityEffectText('transcendence', 'damage10')),
             {
                 description: abilityEffectText('transcendence', 'inflictKnockdown'),
-                action: { type: 'grantStatus', target: 'opponent', statusId: 'knockdown', stacks: 1 },
+                action: { type: 'grantStatus', target: 'opponent', statusId: 'stun', value: 1 },
                 timing: 'postDamage',
                 condition: { type: 'onHit' },
             },

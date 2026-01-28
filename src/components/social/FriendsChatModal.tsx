@@ -37,23 +37,23 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatMod
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="relative bg-[#fcfbf9] w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-[#e5e0d0]"
+                className="relative bg-parchment-card-bg w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
             >
                 {/* Close Button */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 z-20 p-2 rounded-full bg-[#fcfbf9]/80 hover:bg-[#e5e0d0] transition-colors"
+                    className="absolute top-4 right-4 z-20 p-2 rounded-full bg-parchment-card-bg/80 hover:bg-parchment-base-bg transition-colors"
                 >
-                    <X size={20} className="text-[#433422]" />
+                    <X size={20} className="text-parchment-base-text" />
                 </button>
 
                 {/* Left Pane: Friend List */}
                 <div className={clsx(
-                    "w-full md:w-80 h-full border-r border-[#e5e0d0] flex flex-col transition-all duration-300 absolute md:relative z-10 bg-[#fcfbf9]",
+                    "w-full md:w-80 h-full border-r border-parchment-card-border/30 flex flex-col transition-all duration-300 absolute md:relative z-10 bg-parchment-card-bg",
                     selectedFriendId ? "-translate-x-full md:translate-x-0" : "translate-x-0"
                 )}>
-                    <div className="p-4 border-b border-[#e5e0d0] bg-[#f3f0e6]">
-                        <h2 className="font-bold text-lg text-[#433422]">{t('social:modal.title')}</h2>
+                    <div className="p-4 border-b border-parchment-card-border/30 bg-parchment-base-bg">
+                        <h2 className="font-bold text-lg text-parchment-base-text">{t('social:modal.title')}</h2>
                     </div>
                     <div className="flex-1 overflow-hidden">
                         <FriendList
@@ -65,26 +65,26 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatMod
 
                 {/* Right Pane: Chat Window */}
                 <div className={clsx(
-                    "flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-[#fcfbf9]",
+                    "flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-parchment-card-bg",
                     selectedFriendId ? "translate-x-0" : "translate-x-full md:translate-x-0"
                 )}>
                     {selectedFriendId ? (
                         <>
                             {/* Mobile Back Button */}
-                            <div className="md:hidden h-14 border-b border-[#e5e0d0] flex items-center px-2 bg-[#f3f0e6]">
+                            <div className="md:hidden h-14 border-b border-parchment-card-border/30 flex items-center px-2 bg-parchment-base-bg">
                                 <button
                                     onClick={() => setSelectedFriendId(null)}
-                                    className="p-2 hover:bg-[#e5e0d0] rounded-full"
+                                    className="p-2 hover:bg-parchment-card-border/20 rounded-full"
                                 >
-                                    <ChevronLeft size={20} className="text-[#433422]" />
+                                    <ChevronLeft size={20} className="text-parchment-base-text" />
                                 </button>
-                                <span className="font-bold text-[#433422] ml-2">{t('common:back')}</span>
+                                <span className="font-bold text-parchment-base-text ml-2">{t('common:back')}</span>
                             </div>
                             <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
                         </>
                     ) : (
-                        <div className="hidden md:flex flex-col items-center justify-center h-full text-[#8c7b64] opacity-50 space-y-4">
-                            <div className="w-32 h-32 rounded-full bg-[#e5e0d0] flex items-center justify-center">
+                        <div className="hidden md:flex flex-col items-center justify-center h-full text-parchment-light-text opacity-50 space-y-4">
+                            <div className="w-32 h-32 rounded-full bg-parchment-card-border/20 flex items-center justify-center">
                                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
                                 </svg>

@@ -411,6 +411,32 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
         },
     },
     {
+        name: '交互未确认不可推进阶段',
+        setup: (playerIds, random) => {
+            const core = DiceThroneDomain.setup(playerIds, random);
+            core.pendingInteraction = {
+                id: 'test-interaction',
+                playerId: '0',
+                sourceCardId: 'card-test',
+                type: 'modifyDie',
+                titleKey: 'interaction.selectDieToChange',
+                selectCount: 1,
+                selected: [],
+                dieModifyConfig: { mode: 'any' },
+            };
+            const sys = createInitialSystemState(playerIds, diceThroneSystemsForTest, undefined);
+            return { sys, core };
+        },
+        commands: [
+            { type: 'ADVANCE_PHASE', playerId: '0', payload: {} },
+        ],
+        expect: {
+            errorAtStep: { step: 1, error: 'cannot_advance_phase' },
+            turnPhase: 'upkeep',
+            pendingInteraction: { type: 'modifyDie', selectCount: 1, playerId: '0', dieModifyMode: 'any' },
+        },
+    },
+    {
         name: '进入防御阶段后掷骰配置正确',
         commands: [
             cmd('ADVANCE_PHASE', '0'), // upkeep -> main1（跳过收入）

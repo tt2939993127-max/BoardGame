@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ModalBase } from '../../../components/common/overlays/ModalBase';
+import { GameModal } from './components/GameModal';
+import { GameButton } from './components/GameButton';
 import type { HeroState } from '../domain/types';
 import { SelectableStatusBadge, type StatusIconAtlasConfig } from './statusEffects';
 
@@ -46,67 +47,64 @@ export const PurifyModal: React.FC<PurifyModalProps> = ({
         }
     };
 
+    // Derived presence since BoardOverlays conditionally renders this
+    const isOpen = true;
+
     return (
-        <ModalBase
+        <GameModal
+            isOpen={isOpen}
+            title={t('purify.title')}
+            width="md"
             closeOnBackdrop={false}
-            overlayClassName="z-[1100] bg-black/70"
-            containerClassName="z-[1101]"
+            footer={
+                <>
+                    <GameButton
+                        onClick={onCancel}
+                        variant="secondary"
+                        className="flex-1"
+                    >
+                        {t('purify.cancel')}
+                    </GameButton>
+                    <GameButton
+                        onClick={handleConfirm}
+                        disabled={!canConfirm}
+                        variant="primary"
+                        className="flex-1"
+                    >
+                        {t('purify.confirm')}
+                    </GameButton>
+                </>
+            }
         >
-            <div className="bg-slate-900/95 border border-emerald-500/40 backdrop-blur-xl p-[2vw] rounded-[1.6vw] shadow-2xl w-[30vw] flex flex-col gap-[1.5vw] pointer-events-auto">
-                {/* 标题 */}
-                <div className="text-center">
-                    <h3 className="text-[1.3vw] font-black text-white mb-[0.5vw]">
-                        {t('purify.title')}
-                    </h3>
-                    <p className="text-[0.9vw] text-slate-400">
-                        {t('purify.desc')}
-                    </p>
-                </div>
+            <div className="flex flex-col gap-6 w-full items-center">
+                <p className="text-sm sm:text-base text-slate-400 text-center">
+                    {t('purify.desc')}
+                </p>
 
                 {/* 负面状态列表 */}
                 {debuffs.length > 0 ? (
-                    <div className="flex justify-center gap-[1vw] py-[1vw]">
+                    <div className="flex justify-center flex-wrap gap-4 py-4">
                         {debuffs.map(([statusId, stacks]) => (
-                            <SelectableStatusBadge
-                                key={statusId}
-                                effectId={statusId}
-                                stacks={stacks}
-                                isSelected={selectedStatusId === statusId}
-                                isHighlighted
-                                onSelect={() => setSelectedStatusId(statusId)}
-                                size="normal"
-                                locale={locale}
-                                atlas={statusIconAtlas}
-                            />
+                            <div key={statusId} className="transition-transform hover:scale-110">
+                                <SelectableStatusBadge
+                                    effectId={statusId}
+                                    stacks={stacks}
+                                    isSelected={selectedStatusId === statusId}
+                                    isHighlighted
+                                    onSelect={() => setSelectedStatusId(statusId)}
+                                    size="normal"
+                                    locale={locale}
+                                    atlas={statusIconAtlas}
+                                />
+                            </div>
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-[2vw] text-slate-500 text-[0.9vw]">
+                    <div className="text-center py-8 text-slate-500 font-medium">
                         {t('purify.noDebuffs')}
                     </div>
                 )}
-
-                {/* 按钮区 */}
-                <div className="flex gap-[1vw]">
-                    <button
-                        onClick={onCancel}
-                        className="flex-1 py-[0.8vw] rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold text-[0.9vw] transition-colors border border-slate-600"
-                    >
-                        {t('purify.cancel')}
-                    </button>
-                    <button
-                        onClick={handleConfirm}
-                        disabled={!canConfirm}
-                        className={`flex-1 py-[0.8vw] rounded-xl font-bold text-[0.9vw] transition-colors ${
-                            canConfirm
-                                ? 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white'
-                                : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                        }`}
-                    >
-                        {t('purify.confirm')}
-                    </button>
-                </div>
             </div>
-        </ModalBase>
+        </GameModal>
     );
 };

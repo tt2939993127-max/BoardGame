@@ -83,17 +83,22 @@ export const ModalStackRoot = () => {
                 {stack.map((entry, index) => {
                     const isTop = index === stack.length - 1;
                     const zIndex = entry.zIndex ?? DEFAULT_Z_INDEX + index * 10;
+                    const pointerEvents = isTop
+                        ? (entry.allowPointerThrough ? 'none' : 'auto')
+                        : 'none';
                     return (
                         <div
                             key={entry.id}
                             // 非栈顶禁止交互，只保留视觉层级
                             className="fixed inset-0"
-                            style={{ zIndex, pointerEvents: isTop ? 'auto' : 'none' }}
+                            style={{ zIndex, pointerEvents }}
                         >
-                            {entry.render({
-                                close: () => closeModal(entry.id),
-                                closeOnBackdrop: entry.closeOnBackdrop ?? true,
-                            })}
+                            <div className={entry.allowPointerThrough ? 'pointer-events-auto' : undefined}>
+                                {entry.render({
+                                    close: () => closeModal(entry.id),
+                                    closeOnBackdrop: entry.closeOnBackdrop ?? true,
+                                })}
+                            </div>
                         </div>
                     );
                 })}

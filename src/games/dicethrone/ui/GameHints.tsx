@@ -84,20 +84,54 @@ const DiceInteractionHint: React.FC<{ pendingInteraction: PendingInteraction }> 
 };
 
 /**
- * 对手思考中提示（画面正中央，无背景，缓慢闪烁）
+ * 对手思考中提示（画面正中央）
+ *
+ * 之前用整体 pulse 会造成“亮度闪烁”的体感，这里改成省略号动画：
+ * - 文案本身保持稳定
+ * - 通过 3 个点的逐个淡入淡出表达“正在思考”
  */
 const OpponentThinkingHint: React.FC<{ opponentName: string }> = ({ opponentName }) => {
     const { t } = useTranslation('game-dicethrone');
-    
+
+    // 用不可见字符占位，保证宽度稳定，避免点数变化导致布局抖动。
+    const Dot: React.FC<{ delayMs: number }> = ({ delayMs }) => (
+        <span
+            className="inline-block w-[0.6em] text-amber-300/80"
+            style={{
+                animation: `dicethrone-thinking-dot 1.1s ${delayMs}ms infinite ease-in-out`,
+            }}
+            aria-hidden="true"
+        >
+            ·
+        </span>
+    );
+
     return (
         <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[600] pointer-events-none">
-            <div className="text-center animate-[pulse_2s_ease-in-out_infinite]">
+            <div className="text-center">
                 <div className="text-amber-400 text-[2vw] font-bold tracking-wider drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">
                     {opponentName}
                 </div>
+
                 <div className="text-amber-300/80 text-[1.2vw] font-medium mt-[0.3vw] drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]">
-                    {t('waiting.thinkingMessage')}
+                    <span>{t('waiting.thinkingMessage')}</span>
+                    <span className="inline-flex items-baseline">
+                        <Dot delayMs={0} />
+                        <Dot delayMs={160} />
+                        <Dot delayMs={320} />
+                    </span>
                 </div>
+
+                {/* 局部 keyframes：避免引入全局 CSS，且不依赖 Tailwind 配置 */}
+                <style>
+                    {`
+                    @keyframes dicethrone-thinking-dot {
+                        0%, 20% { opacity: 0.15; transform: translateY(0); }
+                        50% { opacity: 1; transform: translateY(-0.04em); }
+                        80%, 100% { opacity: 0.15; transform: translateY(0); }
+                    }
+                    `}
+                </style>
             </div>
         </div>
     );

@@ -7,9 +7,9 @@
 import type { GameEvent } from '../../engine/types';
 import { createGameAdapter, UNDO_COMMANDS, CHEAT_COMMANDS, createCheatSystem, createFlowSystem, createLogSystem, createUndoSystem, createPromptSystem, createRematchSystem, createResponseWindowSystem, type CheatResourceModifier, type FlowHooks, type PhaseExitResult } from '../../engine';
 import { DiceThroneDomain } from './domain';
-import type { DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, ResponseWindowOpenedEvent, StatusRemovedEvent } from './domain/types';
+import type { DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, StatusRemovedEvent } from './domain/types';
 import { createDiceThroneEventSystem } from './domain/systems';
-import { canAdvancePhase, getNextPhase, getNextPlayerId, getResponderQueue } from './domain/rules';
+import { canAdvancePhase, getNextPhase, getNextPlayerId } from './domain/rules';
 import { resolveAttack, resolveOffensivePreDefenseEffects } from './domain/attack';
 import { resourceSystem } from '../../systems/ResourceSystem';
 import { RESOURCE_IDS } from './domain/resources';
@@ -237,42 +237,21 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         // 检查是否有 TOKEN_RESPONSE_CLOSED 或 CHOICE_RESOLVED 事件
         const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
         const hasChoiceResolved = events.some(e => e.type === 'CHOICE_RESOLVED');
-        const hasInteractionCompleted = events.some(e => e.type === 'INTERACTION_COMPLETED');
-        const hasInteractionCancelled = events.some(e => e.type === 'INTERACTION_CANCELLED');
-        
-        console.log('[onAutoContinueCheck] Called with events:', {
-            eventTypes: events.map(e => e.type),
-            hasTokenResponseClosed,
-            hasChoiceResolved,
-            hasInteractionCompleted,
-            hasInteractionCancelled,
-            currentPhase: state.sys.phase,
-        });
         
         // 如果有这些事件，且没有其他阻塞条件，则自动继续
-        if (hasTokenResponseClosed || hasChoiceResolved || hasInteractionCompleted || hasInteractionCancelled) {
+        if (hasTokenResponseClosed || hasChoiceResolved) {
             // 检查是否有阻塞条件
             const hasActivePrompt = state.sys.prompt?.current !== undefined;
             const hasActiveResponseWindow = state.sys.responseWindow?.current !== undefined;
             const hasPendingInteraction = core.pendingInteraction !== undefined;
             const hasPendingDamage = core.pendingDamage !== undefined;
             
-            console.log('[onAutoContinueCheck] Checking blocking conditions:', {
-                hasActivePrompt,
-                hasActiveResponseWindow,
-                hasPendingInteraction,
-                hasPendingDamage,
-            });
-            
             // 只有在没有其他阻塞条件时才自动继续
             if (!hasActivePrompt && !hasActiveResponseWindow && !hasPendingInteraction && !hasPendingDamage) {
-                console.log('[onAutoContinueCheck] Auto-continuing phase from:', state.sys.phase);
                 return {
                     autoContinue: true,
                     playerId: core.activePlayerId,
                 };
-            } else {
-                console.log('[onAutoContinueCheck] Auto-continue blocked');
             }
         }
         
@@ -328,7 +307,37 @@ export { diceThroneFlowHooks };
 const systems = [
     createFlowSystem<DiceThroneCore>({ hooks: diceThroneFlowHooks }),
     createLogSystem({ maxEntries: 20 }),  // 极度减少，不考虑回放
-    createUndoSystem({ maxSnapshots: 10 }),  // 保留10个快照，支持10次撤销
+    createUndoSystem({
+        maxSnapshots: 10,
+        // 只对白名单命令做撤回快照，避免 UI/系统行为导致“一进局就可撤回”。
+        snapshotCommandAllowlist: [
+            'ROLL_DICE',
+            'TOGGLE_DIE_LOCK',
+            'CONFIRM_ROLL',
+            'SELECT_ABILITY',
+            'DRAW_CARD',
+            'DISCARD_CARD',
+            'SELL_CARD',
+            'UNDO_SELL_CARD',
+            'REORDER_CARD_TO_END',
+            'PLAY_CARD',
+            'PLAY_UPGRADE_CARD',
+            // 注意：阶段推进属于明确的规则行为，允许撤回。
+            'ADVANCE_PHASE',
+            // 交互/响应属于明确的规则行为，允许撤回。
+            'RESPONSE_PASS',
+            'MODIFY_DIE',
+            'REROLL_DIE',
+            'REMOVE_STATUS',
+            'TRANSFER_STATUS',
+            'CONFIRM_INTERACTION',
+            'CANCEL_INTERACTION',
+            'USE_TOKEN',
+            'SKIP_TOKEN_RESPONSE',
+            'USE_PURIFY',
+            'PAY_TO_REMOVE_STUN',
+        ],
+    }),
     createPromptSystem(),
     createRematchSystem(),
     createResponseWindowSystem(),

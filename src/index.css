@@ -1,26 +1,50 @@
 @import "tailwindcss";
 
 @theme {
+    /* Fonts */
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-serif: 'Crimson Text', serif;
+    --font-heading: 'Inter', sans-serif;
+    --font-pixel: 'Press Start 2P', cursive;
+
+    /* Parchment Theme (Classic Retro) */
+    --color-parchment-yellow: #EBC944;
+    --color-parchment-cream: #F4ECD8;
+    --color-parchment-brown: #4A3B2A;
+    --color-parchment-gold: #D4AF37;
+    --color-parchment-green: #556B2F;
+    --color-parchment-wax: #8B0000;
+
+    /* Semantic Parchment Mappings */
+    --color-parchment-base-bg: #F4ECD8;
+    --color-parchment-base-text: #433422;
+    --color-parchment-light-text: #8c7b64;
+
+    /* Neon Theme (Legacy/Alternative) */
     --color-neon-blue: #00F3FF;
     --color-neon-pink: #BC13FE;
     --color-neon-magenta: #FF00FF;
-    --color-neon-void: #0B0E14;
-    --color-neon-grid: #1A1F2B;
+    --color-neon-void: #0F172A;
+    --color-neon-grid: #1E293B;
 
-    --font-heading: 'Inter', sans-serif;
-    --font-pixel: 'Press Start 2P', cursive;
-    --font-serif: 'Crimson Text', serif;
-
+    /* Custom Shadows */
+    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+    --shadow-glass-sm: 0 4px 16px 0 rgba(31, 38, 135, 0.1);
     --shadow-neon-blue: 0 0 10px rgba(0, 243, 255, 0.5), 0 0 20px rgba(0, 243, 255, 0.3);
-    --shadow-neon-pink: 0 0 10px rgba(188, 19, 254, 0.5), 0 0 20px rgba(188, 19, 254, 0.3);
 
+    /* Component Semantics */
+    --color-parchment-card-bg: #fcfbf9;
+    --color-parchment-card-border: #C8B69E;
+    --shadow-parchment-card: 0 2px 8px rgba(67, 52, 34, 0.04);
+    --shadow-parchment-card-hover: 0 4px 16px rgba(67, 52, 34, 0.1);
 }
 
+/* Global Styles */
 @layer base {
     body {
-        background-color: #f3f0e6;
-        color: #433422;
-        font-family: var(--font-serif);
+        @apply bg-parchment-base-bg text-parchment-base-text;
+        font-family: 'Crimson Text', serif;
+        /* Default to Serif for that retro book feel */
         margin: 0;
     }
 
@@ -29,30 +53,27 @@
     }
 }
 
-/* Scrollbars - Classic style */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #8c7b64;
-    border-radius: 2px;
-}
-
+/* Scrollbars */
 @layer utilities {
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        @apply bg-parchment-light-text;
+        border-radius: 2px;
+    }
+
     .no-scrollbar::-webkit-scrollbar {
         display: none;
     }
 
     .no-scrollbar {
         -ms-overflow-style: none;
-        /* IE and Edge */
         scrollbar-width: none;
-        /* Firefox */
     }
 
-    /* 动态中心展开下划线 (需父级为 group relative) */
     .underline-center {
         @apply absolute bottom-0 left-1/2 w-0 h-[1.5px] bg-current transition-all duration-300 group-hover:w-full group-hover:left-0 pointer-events-none;
     }

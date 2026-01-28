@@ -1,8 +1,9 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { RefObject } from 'react';
 import type { AbilityCard, Die, TurnPhase } from '../types';
 import { DiceActions, DiceTray, type DiceInteractionConfig } from './DiceTray';
 import { DiscardPile } from './DiscardPile';
 import type { CardAtlasConfig } from './cardAtlas';
+import { GameButton } from './components/GameButton';
 
 export const RightSidebar = ({
     dice,
@@ -39,7 +40,7 @@ export const RightSidebar = ({
     currentPhase: TurnPhase;
     canInteractDice: boolean;
     isRolling: boolean;
-    setIsRolling: Dispatch<SetStateAction<boolean>>;
+    setIsRolling: (isRolling: boolean) => void;
     rerollingDiceIds?: number[];
     locale?: string;
     onToggleLock: (id: number) => void;
@@ -92,11 +93,15 @@ export const RightSidebar = ({
                 />
                 {/* 下一阶段按钮：始终占位，隐藏时使用 invisible 且禁用 pointer-events */}
                 <div className={`w-full flex justify-center ${showAdvancePhaseButton ? '' : 'invisible pointer-events-none'}`}>
-                    <button
+                    <GameButton
                         onClick={onAdvance}
                         disabled={!isAdvanceButtonEnabled}
-                        className={`w-[10.2vw] py-[0.7vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider transition-[background-color,color] duration-200 ${isAdvanceButtonEnabled ? 'bg-slate-800 text-amber-200 border border-amber-500/60 hover:bg-amber-600 hover:text-white' : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'}`}
-                    >{advanceLabel}</button>
+                        variant={isAdvanceButtonEnabled ? "primary" : "secondary"}
+                        className="w-[10.2vw] !text-[0.75vw] !py-[0.7vw]"
+                        size="sm"
+                    >
+                        {advanceLabel}
+                    </GameButton>
                 </div>
                 <div className="w-[10.2vw] flex justify-center">
                     <DiscardPile

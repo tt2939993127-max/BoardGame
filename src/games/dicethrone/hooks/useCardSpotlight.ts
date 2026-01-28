@@ -27,6 +27,10 @@ export interface CardSpotlightConfig {
         value: number;
         face?: DieFace;
         playerId: PlayerId;
+        /** 效果描述 key */
+        effectKey?: string;
+        /** 效果描述参数 */
+        effectParams?: Record<string, string | number>;
     };
     /** 当前玩家 ID */
     currentPlayerId: PlayerId;
@@ -46,6 +50,8 @@ export interface CardSpotlightState {
     bonusDie: {
         value?: number;
         face?: DieFace;
+        effectKey?: string;
+        effectParams?: Record<string, string | number>;
         show: boolean;
     };
     /** 关闭额外骰子特写 */
@@ -65,6 +71,8 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
     // 额外骰子状态
     const [bonusDieValue, setBonusDieValue] = useState<number | undefined>(undefined);
     const [bonusDieFace, setBonusDieFace] = useState<DieFace | undefined>(undefined);
+    const [bonusDieEffectKey, setBonusDieEffectKey] = useState<string | undefined>(undefined);
+    const [bonusDieEffectParams, setBonusDieEffectParams] = useState<Record<string, string | number> | undefined>(undefined);
     const [showBonusDie, setShowBonusDie] = useState(false);
 
     // 追踪 timestamp 避免重复触发
@@ -94,8 +102,8 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         const thresholdMs = 1500;
         const cardCandidate = [...cardQueue]
             .reverse()
-            .find((item) => 
-                item.playerId === bonusDie.playerId && 
+            .find((item) =>
+                item.playerId === bonusDie.playerId &&
                 Math.abs(item.timestamp - bonusDie.timestamp) <= thresholdMs
             );
 
@@ -108,7 +116,13 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                             ...item,
                             bonusDice: [
                                 ...(item.bonusDice || []),
-                                { value: bonusDie.value, face: bonusDie.face, timestamp: bonusDie.timestamp },
+                                {
+                                    value: bonusDie.value,
+                                    face: bonusDie.face,
+                                    timestamp: bonusDie.timestamp,
+                                    effectKey: bonusDie.effectKey,
+                                    effectParams: bonusDie.effectParams,
+                                },
                             ],
                         }
                         : item
@@ -121,6 +135,8 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         // 否则使用独立骰子特写
         setBonusDieValue(bonusDie.value);
         setBonusDieFace(bonusDie.face);
+        setBonusDieEffectKey(bonusDie.effectKey);
+        setBonusDieEffectParams(bonusDie.effectParams);
         setShowBonusDie(true);
     }, [lastBonusDieRoll]);
 
@@ -170,8 +186,11 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         bonusDie: {
             value: bonusDieValue,
             face: bonusDieFace,
+            effectKey: bonusDieEffectKey,
+            effectParams: bonusDieEffectParams,
             show: showBonusDie,
         },
         handleBonusDieClose,
     };
 }
+

@@ -53,7 +53,7 @@ export const Dice3D = ({
     const borderRadius = isSpotlight ? 'rounded-[1vw]' : 'rounded-[0.5vw]';
     const borderStyle = isSpotlight ? 'border-2 border-slate-600/50' : 'border border-slate-700/50';
     const boxShadow = isSpotlight ? 'inset 0 0 2vw rgba(0,0,0,0.8)' : 'inset 0 0 1vw rgba(0,0,0,0.8)';
-    const transitionDuration = isSpotlight ? '800ms' : '1000ms';
+    const transitionDuration = isSpotlight ? '600ms' : '1000ms';
 
     return (
         <div

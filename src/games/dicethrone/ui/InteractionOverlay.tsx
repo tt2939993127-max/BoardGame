@@ -4,9 +4,11 @@
  */
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PendingInteraction, HeroState } from '../types';
+import type { PendingInteraction, HeroState } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import { SelectableEffectsContainer, type StatusIconAtlasConfig } from './statusEffects';
+import { GameModal } from './components/GameModal';
+import { GameButton } from './components/GameButton';
 
 export interface InteractionOverlayProps {
     /** 当前交互 */
@@ -68,31 +70,48 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
         || (isPlayerSelection && selectedItems.length > 0)
         || (isTransferTargetSelection && selectedItems.length > 0);
 
-    return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-auto">
-            {/* 背景遮罩 */}
-            <div 
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                onClick={onCancel}
-            />
+    // Derived presence
+    const isOpen = true; // Controlled by BoardOverlays
 
-            {/* 交互面板 */}
-            <div className="relative bg-slate-900/95 border-2 border-amber-500 rounded-2xl p-[1.5vw] max-w-[60vw] max-h-[80vh] overflow-auto shadow-2xl">
-                {/* 标题 */}
-                <div className="text-center mb-[1vw]">
-                    <h2 className="text-amber-300 font-bold text-[1.2vw] uppercase tracking-wider">
-                        {t(interaction.titleKey, { count: interaction.selectCount })}
-                    </h2>
+    return (
+        <GameModal
+            isOpen={isOpen}
+            title={
+                <div>
+                    <div>{t(interaction.titleKey, { count: interaction.selectCount })}</div>
                     {interaction.transferConfig?.statusId && (
-                        <p className="text-slate-400 text-[0.8vw] mt-[0.3vw]">
+                        <div className="text-slate-400 text-sm mt-1 font-normal normal-case">
                             {t('interaction.transferSelectTarget')}
-                        </p>
+                        </div>
                     )}
                 </div>
-
+            }
+            width="xl"
+            closeOnBackdrop={false} // Force interaction
+            footer={
+                <>
+                    <GameButton
+                        onClick={onCancel}
+                        variant="secondary"
+                        className="px-8"
+                    >
+                        {t('common.cancel')}
+                    </GameButton>
+                    <GameButton
+                        onClick={onConfirm}
+                        disabled={!canConfirm}
+                        variant="primary"
+                        className="px-8"
+                    >
+                        {t('common.confirm')}
+                    </GameButton>
+                </>
+            }
+        >
+            <div className="flex flex-col w-full max-h-[60vh] overflow-y-auto overflow-x-hidden p-2">
                 {/* 玩家选择区域 */}
                 {(isStatusSelection || isPlayerSelection) && (
-                    <div className="flex flex-wrap gap-[1.5vw] justify-center">
+                    <div className="flex flex-wrap gap-4 justify-center">
                         {targetPlayerIds.map(pid => {
                             const player = players[pid];
                             if (!player) return null;
@@ -109,21 +128,21 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                         key={pid}
                                         onClick={() => hasStatus && onSelectPlayer(pid)}
                                         className={`
-                                            p-[1vw] rounded-xl border-2 transition-all duration-200 min-w-[15vw]
+                                            p-4 rounded-xl border-2 transition-all duration-200 min-w-[200px]
                                             ${hasStatus ? 'cursor-pointer hover:scale-105' : 'opacity-50 cursor-not-allowed'}
-                                            ${isSelected 
-                                                ? 'border-green-500 bg-green-900/30 ring-2 ring-green-400' 
-                                                : hasStatus 
-                                                    ? 'border-amber-500/50 bg-slate-800/50 hover:border-amber-400' 
+                                            ${isSelected
+                                                ? 'border-green-500 bg-green-900/30 ring-2 ring-green-400'
+                                                : hasStatus
+                                                    ? 'border-amber-500/50 bg-slate-800/50 hover:border-amber-400'
                                                     : 'border-slate-700 bg-slate-800/30'}
                                         `}
                                     >
-                                        <div className="text-center mb-[0.5vw]">
-                                            <span className={`font-bold text-[0.9vw] ${isSelf ? 'text-cyan-400' : 'text-red-400'}`}>
+                                        <div className="text-center mb-2">
+                                            <span className={`font-bold text-lg ${isSelf ? 'text-cyan-400' : 'text-red-400'}`}>
                                                 {playerLabel}
                                             </span>
                                             {isSelected && (
-                                                <span className="ml-[0.5vw] text-green-400">✓</span>
+                                                <span className="ml-2 text-green-400">✓</span>
                                             )}
                                         </div>
                                         {/* 显示玩家的状态效果（仅供参考） */}
@@ -137,7 +156,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                             atlas={statusIconAtlas}
                                         />
                                         {!hasStatus && (
-                                            <div className="text-slate-500 text-[0.7vw] text-center mt-[0.3vw]">
+                                            <div className="text-slate-500 text-sm text-center mt-2">
                                                 {t('interaction.noStatus')}
                                             </div>
                                         )}
@@ -150,14 +169,14 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                 <div
                                     key={pid}
                                     className={`
-                                        p-[1vw] rounded-xl border-2 transition-all duration-200 min-w-[15vw]
-                                        ${hasStatus 
-                                            ? 'border-amber-500/50 bg-slate-800/50' 
+                                        p-4 rounded-xl border-2 transition-all duration-200 min-w-[200px]
+                                        ${hasStatus
+                                            ? 'border-amber-500/50 bg-slate-800/50'
                                             : 'border-slate-700 bg-slate-800/30 opacity-50'}
                                     `}
                                 >
-                                    <div className="text-center mb-[0.5vw]">
-                                        <span className={`font-bold text-[0.9vw] ${isSelf ? 'text-cyan-400' : 'text-red-400'}`}>
+                                    <div className="text-center mb-2">
+                                        <span className={`font-bold text-lg ${isSelf ? 'text-cyan-400' : 'text-red-400'}`}>
                                             {playerLabel}
                                         </span>
                                     </div>
@@ -174,7 +193,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                             atlas={statusIconAtlas}
                                         />
                                     ) : (
-                                        <div className="text-slate-500 text-[0.7vw] text-center">
+                                        <div className="text-slate-500 text-sm text-center">
                                             {t('interaction.noStatus')}
                                         </div>
                                     )}
@@ -186,7 +205,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
 
                 {/* 转移目标选择（第二阶段） */}
                 {isTransferTargetSelection && (
-                    <div className="flex flex-wrap gap-[1vw] justify-center">
+                    <div className="flex flex-wrap gap-4 justify-center">
                         {targetPlayerIds
                             .filter(pid => pid !== interaction.transferConfig?.sourcePlayerId)
                             .map(pid => {
@@ -201,19 +220,19 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                         key={pid}
                                         onClick={() => onSelectPlayer(pid)}
                                         className={`
-                                            p-[1vw] rounded-xl border-2 cursor-pointer transition-all duration-200 min-w-[12vw]
+                                            p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 min-w-[150px]
                                             hover:scale-105
-                                            ${isSelected 
-                                                ? 'border-green-500 bg-green-900/30 ring-2 ring-green-400' 
+                                            ${isSelected
+                                                ? 'border-green-500 bg-green-900/30 ring-2 ring-green-400'
                                                 : 'border-amber-500/50 bg-slate-800/50 hover:border-amber-400'}
                                         `}
                                     >
                                         <div className="text-center">
-                                            <span className={`font-bold text-[1vw] ${isSelf ? 'text-cyan-400' : 'text-red-400'}`}>
+                                            <span className={`font-bold text-lg ${isSelf ? 'text-cyan-400' : 'text-red-400'}`}>
                                                 {playerLabel}
                                             </span>
                                             {isSelected && (
-                                                <span className="ml-[0.5vw] text-green-400">✓</span>
+                                                <span className="ml-2 text-green-400">✓</span>
                                             )}
                                         </div>
                                     </div>
@@ -221,28 +240,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                             })}
                     </div>
                 )}
-
-                {/* 操作按钮 */}
-                <div className="flex justify-center gap-[1vw] mt-[1.5vw]">
-                    <button
-                        onClick={onCancel}
-                        className="px-[2vw] py-[0.6vw] rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold text-[0.8vw] uppercase tracking-wider transition-colors"
-                    >
-                        {t('common.cancel')}
-                    </button>
-                    <button
-                        onClick={onConfirm}
-                        disabled={!canConfirm}
-                        className={`px-[2vw] py-[0.6vw] rounded-lg font-bold text-[0.8vw] uppercase tracking-wider transition-colors ${
-                            canConfirm
-                                ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                        }`}
-                    >
-                        {t('common.confirm')}
-                    </button>
-                </div>
             </div>
-        </div>
+        </GameModal>
     );
 };

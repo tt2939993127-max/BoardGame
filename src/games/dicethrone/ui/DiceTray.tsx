@@ -1,5 +1,6 @@
-import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
+import clsx from 'clsx';
+import { GameButton } from './components/GameButton';
 import type { Die, TurnPhase, PendingInteraction } from '../types';
 import { Dice3D } from './Dice3D';
 
@@ -82,18 +83,27 @@ export const DiceTray = ({
         }
     };
 
-    const handleSetValue = (dieId: number, value: number) => {
-        if (!interactionConfig) return;
-        interactionConfig.onModifyDie(dieId, value);
-    };
+    // Removed unused handleSetValue
 
     const isSelected = (dieId: number) => selectedDice.includes(String(dieId));
     const canSelectMore = (interaction?.selectCount ?? 0) > selectedDice.length;
 
-        return (
-        <div className={`flex flex-col items-center bg-slate-900/90 p-[0.6vw] rounded-[1vw] border backdrop-blur-lg shadow-2xl gap-[0.5vw] w-[5.6vw] shrink-0 relative ${
-            isInteractionMode ? 'border-amber-500 ring-2 ring-amber-500/50' : 'border-slate-700'
-        }`}>
+    return (
+        <div className={`
+            flex flex-col items-center p-[0.6vw] rounded-[1.5vw] gap-[0.5vw] w-[5.8vw] shrink-0 relative transition-all duration-300
+            ${isInteractionMode
+                ? 'bg-slate-950 border-[0.2vw] border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)]'
+                : 'bg-gradient-to-b from-[#1a1e36] via-[#0d0e1a] to-[#05060a] border-t-[0.12vw] border-l-[0.1vw] border-indigo-300/30 border-b-[0.2vw] border-r-[0.12vw] border-black/80 shadow-[inset_0_5px_12px_rgba(0,0,0,0.9),0_15px_30px_rgba(0,0,0,0.4)]'}
+        `}>
+            {/* Glossy overlay for metallic feel without expensive blur */}
+            <div className="absolute inset-0 rounded-[1.5vw] bg-gradient-to-tr from-white/0 via-white/5 to-transparent pointer-events-none" />
+
+            {/* Internal rim highlight - sharpen the 3D edge */}
+            <div className={`absolute inset-[0.1vw] rounded-[1.4vw] pointer-events-none border-[0.05vw] ${isInteractionMode ? 'border-amber-400/20' : 'border-t-white/20 border-l-white/10 border-transparent'} `} />
+
+            {/* Deep recess shadow at the top */}
+            <div className="absolute top-0 left-0 right-0 h-[1.5vw] rounded-t-[1.5vw] bg-gradient-to-b from-black/95 to-transparent pointer-events-none" />
+
             <div className="flex flex-col gap-[0.5vw] items-center justify-center w-full p-[0.2vw]">
                 {dice.map((d, i) => {
                     const selected = isSelected(d.id);
@@ -101,7 +111,7 @@ export const DiceTray = ({
                     // adjust 模式：选中后显示 +/- 按钮
                     const showAdjustButtons = isInteractionMode && isAdjustMode && selected;
                     // any 模式：已修改的骰子始终显示控件，未修改的骰子在未达到上限时显示控件（也用 +/- 按钮）
-                    const showAnyModeButtons = isInteractionMode && isAnyMode && 
+                    const showAnyModeButtons = isInteractionMode && isAnyMode &&
                         (isModified || modifiedDice.length < maxModifyCount);
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (canSelectMore || selected))  // any 模式不需要点选骰子，直接操作 +/-
@@ -117,11 +127,10 @@ export const DiceTray = ({
                                 <button
                                     onClick={() => handleAdjust(d.id, -1, d.value)}
                                     disabled={d.value <= 1 || (showAdjustButtons && !canAdjustDown)}
-                                    className={`w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center font-bold text-[0.8vw] transition-all duration-150 ${
-                                        (d.value <= 1 || (showAdjustButtons && !canAdjustDown))
-                                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                            : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg hover:scale-110'
-                                    }`}
+                                    className={`w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center font-bold text-[0.8vw] transition-all duration-150 ${(d.value <= 1 || (showAdjustButtons && !canAdjustDown))
+                                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                        : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg hover:scale-110'
+                                        }`}
                                 >
                                     −
                                 </button>
@@ -138,10 +147,10 @@ export const DiceTray = ({
                                     ${selected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 rounded-lg scale-105' : ''}
                                 `}
                             >
-                            <Dice3D value={d.value} isRolling={(isRolling && !d.isKept) || (rerollingDiceIds?.includes(d.id) ?? false)} index={i} size={diceSize} locale={locale} />
+                                <Dice3D value={d.value} isRolling={(isRolling && !d.isKept) || (rerollingDiceIds?.includes(d.id) ?? false)} index={i} size={diceSize} locale={locale} />
                                 {!isInteractionMode && d.isKept && (
                                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                                        <div className="text-[0.6vw] font-black text-white bg-black/50 px-[0.4vw] py-[0.1vw] rounded uppercase tracking-wider backdrop-blur-sm shadow-sm border border-white/20">
+                                        <div className="text-[0.6vw] font-black text-white bg-black/50 px-[0.4vw] py-[0.1vw] rounded uppercase tracking-wider shadow-sm border border-white/20">
                                             {t('dice.locked')}
                                         </div>
                                     </div>
@@ -159,11 +168,10 @@ export const DiceTray = ({
                                 <button
                                     onClick={() => handleAdjust(d.id, 1, d.value)}
                                     disabled={d.value >= 6 || (showAdjustButtons && !canAdjustUp)}
-                                    className={`w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center font-bold text-[0.8vw] transition-all duration-150 ${
-                                        (d.value >= 6 || (showAdjustButtons && !canAdjustUp))
-                                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                            : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg hover:scale-110'
-                                    }`}
+                                    className={`w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center font-bold text-[0.8vw] transition-all duration-150 ${(d.value >= 6 || (showAdjustButtons && !canAdjustUp))
+                                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                        : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg hover:scale-110'
+                                        }`}
                                 >
                                     +
                                 </button>
@@ -175,6 +183,8 @@ export const DiceTray = ({
         </div>
     );
 };
+
+// GameButton import removed from here.
 
 export const DiceActions = ({
     rollCount,
@@ -196,7 +206,7 @@ export const DiceActions = ({
     currentPhase: TurnPhase;
     canInteract: boolean;
     isRolling: boolean;
-    setIsRolling: Dispatch<SetStateAction<boolean>>;
+    setIsRolling: (isRolling: boolean) => void;
     /** 骰子交互模式配置 */
     interactionConfig?: DiceInteractionConfig;
 }) => {
@@ -234,55 +244,76 @@ export const DiceActions = ({
     if (isInteractionMode) {
         return (
             <div className="w-[10.2vw] grid grid-cols-2 gap-[0.6vw]">
-                <button
+                <GameButton
                     onClick={handleRollClick}
-                    className="w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-all duration-200 active:scale-95 bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600"
+                    variant="secondary"
+                    size="sm"
+                    className="!text-[0.75vw] !py-[0.8vw]"
                 >
                     {t('common.cancel')}
-                </button>
-                <button
+                </GameButton>
+                <GameButton
                     onClick={handleConfirmClick}
                     disabled={!canConfirm}
-                    className={`w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-all duration-200 active:scale-95 ${
-                        canConfirm
-                            ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:brightness-110 shadow-amber-900/50'
-                            : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                    }`}
+                    variant="primary"
+                    size="sm"
+                    className="!text-[0.75vw] !py-[0.8vw]"
                 >
                     {t('common.confirm')}
-                </button>
+                </GameButton>
             </div>
         );
     }
 
+    // 渲染投掷次数指示点 - 一列三个
+    const renderRollDots = () => {
+        const dots = [];
+        for (let i = 0; i < rollLimit; i++) {
+            const isUsed = i < rollCount;
+            dots.push(
+                <div
+                    key={i}
+                    className={`
+                        w-[0.45vw] h-[0.45vw] rounded-full border border-black/30 shadow-sm transition-all duration-300 flex-shrink-0
+                        ${isUsed ? 'bg-slate-900/60' : 'bg-white'}
+                    `}
+                />
+            );
+        }
+        return (
+            <div className="flex flex-col flex-wrap gap-[0.15vw] justify-center items-center h-[1.8vw] ml-[0.3vw] shrink-0 content-center">
+                {dots}
+            </div>
+        );
+    };
+
     return (
-        <div className="w-[10.2vw] grid grid-cols-2 gap-[0.6vw]">
-            <button
+        <div className="w-[10.2vw] grid grid-cols-2 gap-[0.4vw] items-stretch h-[2.5vw]">
+            <GameButton
                 onClick={handleRollClick}
                 disabled={!canInteract || rollConfirmed || (rollCount >= rollLimit)}
-                className={`
-                    w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-[transform,filter] duration-200 active:scale-95
-                    ${isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit
-                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:brightness-110 shadow-amber-900/50'
-                        : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}
-                `}
+                variant={isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit ? 'primary' : 'secondary'}
+                size="sm"
+                className={`!px-[0.5vw] !py-0 flex items-center justify-between h-full whitespace-nowrap overflow-hidden !rounded-[0.5vw] ${isRolling ? 'animate-pulse' : ''}`}
             >
-                {isRolling ? t('dice.rolling') : t('dice.roll', { current: rollCount, total: rollLimit })}
-            </button>
-            <button
+                <div className="truncate flex-1 text-center font-black !text-[0.7vw] tracking-tighter">
+                    {isRolling ? t('dice.rolling', '投掷中...') : t('dice.roll_action', '投掷')}
+                </div>
+                {!isRolling && renderRollDots()}
+            </GameButton>
+
+            <GameButton
                 onClick={handleConfirmClick}
                 disabled={rollConfirmed || rollCount === 0 || !canInteract}
-                className={`
-                    w-full py-[0.8vw] rounded-[0.6vw] font-bold text-[0.75vw] uppercase tracking-wider shadow-lg transition-[transform,background-color,opacity] duration-200 active:scale-95
-                    ${rollConfirmed
-                        ? 'bg-emerald-700 text-emerald-100 border border-emerald-500/60'
-                        : (canInteract ? 'bg-slate-800 text-slate-300 hover:bg-emerald-700/80 border border-slate-600' : 'bg-slate-900 text-slate-600 border border-slate-800')}
-                    ${rollCount === 0 || !canInteract ? 'opacity-60 cursor-not-allowed' : ''}
-                    ${isRollPhase ? '' : 'opacity-0 pointer-events-none'}
-                `}
+                variant={rollConfirmed ? 'glass' : 'secondary'}
+                className={clsx(
+                    "flex items-center justify-center h-full whitespace-nowrap overflow-hidden font-black !text-[0.7vw] !rounded-[0.5vw] !py-0",
+                    rollConfirmed ? "!bg-emerald-700 !text-emerald-100 !border-emerald-500/60" : ""
+                )}
+                size="sm"
             >
-                {rollConfirmed ? t('dice.confirmed') : t('dice.confirm')}
-            </button>
+                {rollConfirmed ? t('dice.confirmed', '已确认') : t('dice.confirm', '确认')}
+            </GameButton>
         </div>
     );
 };
