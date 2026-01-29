@@ -40,6 +40,11 @@ export default defineConfig({
       '/admin': {
         target: 'http://127.0.0.1:18001',
         changeOrigin: true,
+        bypass: (req) => {
+          if (req.headers.accept?.includes('text/html')) {
+            return req.url;
+          }
+        },
       },
       '/social-socket': {
         target: 'http://127.0.0.1:18001',

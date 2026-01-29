@@ -1,12 +1,16 @@
 import 'dotenv/config'; // 加载 .env
 import type { Game } from 'boardgame.io';
-import { Server as BoardgameServer, Origins } from 'boardgame.io/server';
+import { createRequire } from 'module';
 import { createMatch as createBoardgameMatch } from 'boardgame.io/internal';
 import { Server as IOServer, Socket as IOSocket } from 'socket.io';
 import bodyParser from 'koa-bodyparser';
 import koaBody from 'koa-body';
 import { nanoid } from 'nanoid';
 import { connectDB } from './src/server/db';
+
+// 使用 require 避免 tsx 在 ESM 下将 boardgame.io/server 解析到不存在的 index.jsx
+const require = createRequire(import.meta.url);
+const { Server: BoardgameServer, Origins } = require('boardgame.io/server') as typeof import('boardgame.io/server');
 import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';

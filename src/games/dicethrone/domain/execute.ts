@@ -114,10 +114,13 @@ export function execute(
         case 'ROLL_DICE': {
             const rollerId = getRollerId(state);
             const results: number[] = [];
+            const isTutorialMode = typeof window !== 'undefined'
+                && (window as Window & { __BG_GAME_MODE__?: string }).__BG_GAME_MODE__ === 'tutorial';
+            const fixedValue = 1;
             
             state.dice.slice(0, state.rollDiceCount).forEach(die => {
                 if (!die.isKept) {
-                    results.push(random.d(6));
+                    results.push(isTutorialMode ? fixedValue : random.d(6));
                 }
             });
             

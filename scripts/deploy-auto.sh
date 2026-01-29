@@ -10,7 +10,7 @@ set -euo pipefail
 #   JWT_SECRET=your-secret
 #   MONGO_URI=mongodb://mongodb:27017/boardgame
 #   WEB_ORIGINS=https://your-domain.com
-#   MIRROR_PROVIDER=xuanyuan      # 默认使用轩辕镜像
+#   MIRROR_PROVIDER=multi         # 默认使用多源 HTTPS 镜像
 #   XUANYUAN_DOMAIN=docker.xuanyuan.me
 #   CUSTOM_MIRRORS=https://xxx,https://yyy
 #   SKIP_MIRROR=1        # 跳过镜像源配置
@@ -132,7 +132,7 @@ configure_docker_mirror() {
   log "配置 Docker 镜像源"
   $SUDO mkdir -p /etc/docker
   local daemon_file="/etc/docker/daemon.json"
-  local mirror_provider="${MIRROR_PROVIDER:-xuanyuan}"
+  local mirror_provider="${MIRROR_PROVIDER:-multi}"
   local xuanyuan_domain="${XUANYUAN_DOMAIN:-docker.xuanyuan.me}"
   local custom_mirrors="${CUSTOM_MIRRORS:-}"
   local mirror_list=()
@@ -150,6 +150,14 @@ configure_docker_mirror() {
     if echo "$xuanyuan_domain" | grep -q '\.xuanyuan\.run$'; then
       mirror_list+=("https://${xuanyuan_domain%.xuanyuan.run}.xuanyuan.dev")
     fi
+  elif [ "$mirror_provider" = "multi" ]; then
+    mirror_list+=(
+      "https://mirror.aliyuncs.com"
+      "https://docker.mirrors.ustc.edu.cn"
+      "https://docker.mirrors.sjtug.sjtu.edu.cn"
+      "https://docker.m.daocloud.io"
+      "https://dockerproxy.com"
+    )
   else
     mirror_list+=("https://registry.cn-hangzhou.aliyuncs.com" "https://docker.mirrors.ustc.edu.cn" "https://hub-mirror.c.163.com")
   fi

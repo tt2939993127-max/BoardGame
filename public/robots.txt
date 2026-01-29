@@ -1,0 +1,14 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# Directories to exclude from indexing
+Disallow: /admin/
+Disallow: /dev/
+Disallow: /devtools/
+
+# Host
+Host: https://bg.example.com
+
+# Sitemap
+Sitemap: https://bg.example.com/sitemap.xml

@@ -12,12 +12,16 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
     return (
         <div className="grid grid-cols-[repeat(auto-fill,180px)] justify-center gap-5 w-full max-w-full mx-auto">
             {games.map((game, index) => (
-                <motion.div
+                <motion.a
                     key={game.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    onClick={() => onGameClick(game.id)}
+                    href={`/?game=${game.id}`}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        onGameClick(game.id);
+                    }}
                     className="
                         group relative cursor-pointer 
                         flex flex-col 
@@ -28,6 +32,7 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
                         shadow-parchment-card
                         hover:shadow-parchment-card-hover
                         transition-[transform,box-shadow,background-color] duration-300 hover:-translate-y-1
+                        no-underline
                     "
                 >
                     {/* Interactive Corner Borders - Visible by default for structure */}
@@ -80,7 +85,7 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
                             </span>
                         </div>
                     </div>
-                </motion.div>
+                </motion.a>
             ))}
         </div>
     );

@@ -170,6 +170,7 @@
     "locked": "Locked",
     "rolling": "Rolling...",
     "roll": "Roll ({{current}}/{{total}})",
+    "roll_action": "Roll",
     "confirm": "Confirm Dice",
     "confirmed": "Confirmed",
     "bonusRoll": "Bonus Roll",

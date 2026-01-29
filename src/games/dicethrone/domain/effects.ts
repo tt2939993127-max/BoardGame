@@ -462,6 +462,41 @@ function handleMeditationTaiji({ targetId, sourceAbilityId, state, timestamp }: 
     } as TokenGrantedEvent];
 }
 
+/** 清修 III：获得太极，若太极≥2则选择闪避或净化 */
+function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    const faceCounts = getFaceCounts(getActiveDice(state));
+    const amountToAdd = faceCounts.taiji;
+    const target = state.players[targetId];
+    const currentAmount = target?.tokens.taiji ?? 0;
+    const maxStacks = getTokenStackLimit(state, targetId, 'taiji');
+    const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
+    const events: DiceThroneEvent[] = [{
+        type: 'TOKEN_GRANTED',
+        payload: { targetId, tokenId: 'taiji', amount: amountToAdd, newTotal, sourceAbilityId },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as TokenGrantedEvent];
+
+    if (faceCounts.taiji >= 2) {
+        events.push({
+            type: 'CHOICE_REQUESTED',
+            payload: {
+                playerId: targetId,
+                sourceAbilityId,
+                titleKey: 'choices.evasiveOrPurifyToken',
+                options: [
+                    { tokenId: 'evasive', value: 1 },
+                    { tokenId: 'purify', value: 1 },
+                ],
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as ChoiceRequestedEvent);
+    }
+
+    return events;
+}
+
 /** 冥想：根据拳骰面数量造成伤害 */
 function handleMeditationDamage({ ctx, targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
@@ -801,6 +836,18 @@ registerCustomActionHandler('meditation-taiji', handleMeditationTaiji, {
     categories: ['resource'],
 });
 registerCustomActionHandler('meditation-damage', handleMeditationDamage, {
+    categories: ['other'],
+});
+registerCustomActionHandler('meditation-2-taiji', handleMeditationTaiji, {
+    categories: ['resource'],
+});
+registerCustomActionHandler('meditation-2-damage', handleMeditationDamage, {
+    categories: ['other'],
+});
+registerCustomActionHandler('meditation-3-taiji', handleMeditation3Taiji, {
+    categories: ['resource', 'choice'],
+});
+registerCustomActionHandler('meditation-3-damage', handleMeditationDamage, {
     categories: ['other'],
 });
 

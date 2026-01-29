@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
 import { BanUserDto } from './dtos/ban-user.dto';
 import { QueryMatchesDto } from './dtos/query-matches.dto';
+import { QueryStatsDto } from './dtos/query-stats.dto';
 import { QueryUsersDto } from './dtos/query-users.dto';
 import { AdminGuard } from './guards/admin.guard';
 import { Roles } from './guards/roles.decorator';
@@ -19,6 +20,12 @@ export class AdminController {
     async getStats(@Req() req: Request, @Res() res: Response) {
         const stats = await this.adminService.getStats();
         return res.json(stats);
+    }
+
+    @Get('stats/trend')
+    async getStatsTrend(@Query() query: QueryStatsDto, @Res() res: Response) {
+        const trend = await this.adminService.getStatsTrend(query.days);
+        return res.json(trend);
     }
 
     @Get('users')

@@ -648,7 +648,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                 const bestPlayers = gameManifest?.bestPlayers || [];
 
                                 return (
-                                    <div className="mb-4 flex flex-col items-center gap-1.5">
+                                    <div className="mb-3 flex flex-col items-center gap-1.5">
                                         <div className="flex items-center gap-2">
                                             {playerOptions.map((count) => {
                                                 const isBest = bestPlayers.includes(count);
@@ -669,8 +669,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                             })}
                                         </div>
                                         {bestPlayers.length > 0 && (
-                                            <span className="text-[10px] text-parchment-light-text font-medium opacity-70">
-                                                {t('common:game_details.recommended_players')}: {bestPlayers.join(', ')} {t('common:game_details.people')}
+                                            <span className="text-[10px] text-parchment-light-text font-medium opacity-60">
+                                                {t('common:game_details.recommended_players')}
                                             </span>
                                         )}
                                     </div>

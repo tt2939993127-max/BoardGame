@@ -19,6 +19,7 @@ import { useUrlModal } from '../hooks/routing/useUrlModal';
 import clsx from 'clsx';
 import { LobbyClient } from 'boardgame.io/client';
 import { GAME_SERVER_URL } from '../config/server';
+import { SEO } from '../components/common/SEO';
 
 const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
@@ -404,6 +405,10 @@ export const Home = () => {
 
     return (
         <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center">
+            <SEO
+                title={activeCategory === 'All' ? undefined : t(`common:category.${activeCategory}`)}
+                description={t('lobby:home.subtitle')}
+            />
             <header className="w-full relative px-6 md:px-12 pt-5 md:pt-8 pb-1">
                 {/* 顶级操作区域 - 改为标准导航条逻辑，中大屏锁定右侧，小屏居中 */}
                 <div className="md:absolute md:top-8 md:right-12 flex items-center justify-center md:justify-end gap-4 mb-4 md:mb-0">

@@ -112,7 +112,9 @@
     "returnHome": "立即返回首页",
     "noTutorial": "暂无该游戏教程",
     "noClient": "未找到游戏客户端",
-    "noGame": "未找到游戏"
+    "noGame": "未找到游戏",
+    "tutorialTitle": "正在学习 {{game}}",
+    "matchTitle": "正在对局 {{game}}"
   },
   "error": {
     "createRoomFailed": "创建房间失败",

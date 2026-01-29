@@ -122,8 +122,24 @@ describe('Admin Module (e2e)', () => {
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(200);
 
-        expect(statsRes.body.users.total).toBe(2);
-        expect(statsRes.body.matches.total).toBe(1);
+        expect(statsRes.body.totalUsers).toBe(2);
+        expect(statsRes.body.todayUsers).toBe(2);
+        expect(statsRes.body.totalMatches).toBe(1);
+        expect(statsRes.body.todayMatches).toBe(1);
+        expect(statsRes.body.bannedUsers).toBe(0);
+        expect(statsRes.body.onlineUsers).toBe(0);
+        expect(statsRes.body.activeUsers24h).toBe(0);
+
+        const trendRes = await request(app.getHttpServer())
+            .get('/admin/stats/trend?days=7')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(trendRes.body.days).toBe(7);
+        expect(trendRes.body.dailyUsers.length).toBe(7);
+        expect(trendRes.body.dailyMatches.length).toBe(7);
+        expect(trendRes.body.dailyUsers.reduce((sum: number, item: { count: number }) => sum + item.count, 0)).toBe(2);
+        expect(trendRes.body.dailyMatches.reduce((sum: number, item: { count: number }) => sum + item.count, 0)).toBe(1);
 
         const usersRes = await request(app.getHttpServer())
             .get('/admin/users?limit=10')

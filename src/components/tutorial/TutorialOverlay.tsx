@@ -4,7 +4,11 @@ import { useTutorial } from '../../contexts/TutorialContext';
 
 export const TutorialOverlay: React.FC = () => {
     const { isActive, currentStep, nextStep, isLastStep } = useTutorial();
-    const { t } = useTranslation('tutorial');
+    const stepNamespace = currentStep?.content?.includes(':')
+        ? currentStep.content.split(':')[0]
+        : undefined;
+    const namespaces = stepNamespace ? ['tutorial', stepNamespace] : ['tutorial'];
+    const { t } = useTranslation(namespaces);
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const lastStepIdRef = useRef<string | null>(null);
     const hasAutoScrolledRef = useRef(false);

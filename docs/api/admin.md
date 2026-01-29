@@ -28,15 +28,13 @@ Authorization: Bearer <admin_token>
 **响应示例**:
 ```json
 {
-  "users": {
-    "total": 156,
-    "today": 3,
-    "banned": 2
-  },
-  "matches": {
-    "total": 1024,
-    "today": 12
-  },
+  "totalUsers": 156,
+  "todayUsers": 3,
+  "bannedUsers": 2,
+  "totalMatches": 1024,
+  "todayMatches": 12,
+  "onlineUsers": 8,
+  "activeUsers24h": 32,
   "games": [
     { "name": "tictactoe", "count": 800 },
     { "name": "dicethrone", "count": 224 }
@@ -47,12 +45,63 @@ Authorization: Bearer <admin_token>
 **响应字段**:
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| users.total | number | 总用户数 |
-| users.today | number | 今日新增用户数 |
-| users.banned | number | 被封禁用户数 |
-| matches.total | number | 总对局数 |
-| matches.today | number | 今日对局数 |
+| totalUsers | number | 总用户数 |
+| todayUsers | number | 今日新增用户数 |
+| bannedUsers | number | 被封禁用户数 |
+| totalMatches | number | 总对局数 |
+| todayMatches | number | 今日对局数 |
+| onlineUsers | number | 当前在线用户数（基于 Redis 在线心跳） |
+| activeUsers24h | number | 24 小时内活跃用户数（含在线/最近在线） |
 | games | array | 各游戏对局分布 |
+
+---
+
+### GET /admin/stats/trend
+
+获取最近 7/30 天每日新增用户、每日对局数与游戏分布。
+
+**缓存**: Redis 缓存 5 分钟
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| days | number | 否 | 统计天数，可选 7 或 30，默认 7 |
+
+**请求示例**:
+```http
+GET /admin/stats/trend?days=30
+Authorization: Bearer <admin_token>
+```
+
+**响应示例**:
+```json
+{
+  "days": 7,
+  "startDate": "2026-01-19T00:00:00.000Z",
+  "endDate": "2026-01-25T23:59:59.999Z",
+  "dailyUsers": [
+    { "date": "2026-01-19", "count": 2 },
+    { "date": "2026-01-20", "count": 0 }
+  ],
+  "dailyMatches": [
+    { "date": "2026-01-19", "count": 1 },
+    { "date": "2026-01-20", "count": 0 }
+  ],
+  "games": [
+    { "name": "tictactoe", "count": 5 }
+  ]
+}
+```
+
+**响应字段**:
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| days | number | 统计天数 |
+| startDate | string | 起始日期（ISO 8601） |
+| endDate | string | 结束日期（ISO 8601） |
+| dailyUsers | array | 每日新增用户数（date=yyyy-mm-dd） |
+| dailyMatches | array | 每日对局数（date=yyyy-mm-dd） |
+| games | array | 统计周期内对局分布 |
 
 ---
 

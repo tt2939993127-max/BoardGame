@@ -16,6 +16,7 @@ import { SocketIO } from 'boardgame.io/multiplayer';
 import { GAME_SERVER_URL } from '../config/server';
 import { GameHUD } from '../components/game/GameHUD';
 import { GameModeProvider } from '../contexts/GameModeContext';
+import { SEO } from '../components/common/SEO';
 
 
 export const MatchRoom = () => {
@@ -148,7 +149,7 @@ export const MatchRoom = () => {
         const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
         let retryCount = 0;
         const maxRetries = 5;
-        
+
         const tryJoin = async () => {
             try {
                 const matchInfo = await lobbyClient.getMatch(gameId, matchId);
@@ -180,7 +181,7 @@ export const MatchRoom = () => {
                                     window.location.href = `/play/${gameId}/match/${matchId}?playerID=${data.playerID}`;
                                     return;
                                 }
-                            } catch {}
+                            } catch { }
                         }
                         setIsAutoJoining(false);
                     }
@@ -200,13 +201,13 @@ export const MatchRoom = () => {
                                 window.location.href = `/play/${gameId}/match/${matchId}?playerID=${data.playerID}`;
                                 return;
                             }
-                        } catch {}
+                        } catch { }
                     }
                     setIsAutoJoining(false);
                 }
             }
         };
-        
+
         // 延迟 1 秒，等待房主完全加入
         setTimeout(tryJoin, 1000);
     }, [shouldAutoJoin, gameId, matchId, isTutorialRoute, isAutoJoining, t]);
@@ -560,10 +561,14 @@ export const MatchRoom = () => {
             </div>
         );
     }
-
-
     return (
         <div className="relative w-full h-screen bg-black overflow-hidden font-sans">
+            <SEO
+                title={isTutorialRoute
+                    ? t('matchRoom.tutorialTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })
+                    : t('matchRoom.matchTitle', { game: gameId ? t(`common:game_names.${gameId}`, { ns: 'common' }) : '' })}
+                ogType="game"
+            />
             {/* 统一的游戏 HUD */}
             <GameHUD
                 mode={isTutorialRoute ? 'tutorial' : 'online'}

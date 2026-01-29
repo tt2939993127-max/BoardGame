@@ -37,14 +37,22 @@ const buildMetadata = (
     updatedAt: Date.now(),
 });
 
+const buildSetupData = (ownerKey?: string, ttlSeconds?: number): Record<string, unknown> => {
+    const setupData: Record<string, unknown> = {};
+    if (ownerKey) setupData.ownerKey = ownerKey;
+    if (typeof ttlSeconds === 'number') setupData.ttlSeconds = ttlSeconds;
+    return setupData;
+};
+
 const buildCreateOpts = (
     ownerKey?: string,
-    gameover?: Server.MatchData['gameover']
+    gameover?: Server.MatchData['gameover'],
+    ttlSeconds?: number
 ): StorageAPI.CreateMatchOpts => {
-    const setupData = ownerKey ? { ownerKey } : {};
+    const setupData = buildSetupData(ownerKey, ttlSeconds);
     return {
         initialState: buildState(setupData),
-        metadata: buildMetadata(ownerKey ? { ownerKey } : undefined, gameover),
+        metadata: buildMetadata(Object.keys(setupData).length > 0 ? setupData : undefined, gameover),
     };
 };
 
@@ -244,5 +252,54 @@ describe('MongoStorage 行为', () => {
         const remainingIds = remaining.map((doc: any) => doc.matchID);
         expect(remainingIds).toContain('legacy-occupied');
         expect(remainingIds).not.toContain('legacy-empty');
+    });
+
+    it('createMatch 设置 1 天游留存时写入 TTL 与 expiresAt', async () => {
+        const start = Date.now();
+        await mongoStorage.createMatch('ttl-1day', buildCreateOpts('user:ttl', undefined, 86400));
+        const end = Date.now();
+
+        const Match = mongoose.model('Match');
+        const doc = await Match.findOne({ matchID: 'ttl-1day' }).lean();
+        expect(doc?.ttlSeconds).toBe(86400);
+        expect(doc?.expiresAt).toBeInstanceOf(Date);
+
+        const expiresAt = (doc?.expiresAt as Date).getTime();
+        const ttlMs = 86400 * 1000;
+        expect(expiresAt).toBeGreaterThanOrEqual(start + ttlMs);
+        expect(expiresAt).toBeLessThanOrEqual(end + ttlMs + 1000);
+    });
+
+    it('cleanupOldMatches 清理超过 24 小时的房间', async () => {
+        const Match = mongoose.model('Match');
+        const now = Date.now();
+
+        await Match.create({
+            matchID: 'old-1day',
+            gameName: 'tictactoe',
+            state: null,
+            initialState: null,
+            metadata: buildMetadata({ ownerKey: 'user:old' }),
+            ttlSeconds: 86400,
+        });
+        await Match.create({
+            matchID: 'fresh-1day',
+            gameName: 'tictactoe',
+            state: null,
+            initialState: null,
+            metadata: buildMetadata({ ownerKey: 'user:fresh' }),
+            ttlSeconds: 86400,
+        });
+
+        await Match.updateOne({ matchID: 'old-1day' }, { updatedAt: new Date(now - 25 * 60 * 60 * 1000) });
+        await Match.updateOne({ matchID: 'fresh-1day' }, { updatedAt: new Date(now - 2 * 60 * 60 * 1000) });
+
+        const cleaned = await mongoStorage.cleanupOldMatches(24);
+        expect(cleaned).toBe(1);
+
+        const remaining = await Match.find({ matchID: { $in: ['old-1day', 'fresh-1day'] } }).lean();
+        const remainingIds = remaining.map((doc: any) => doc.matchID);
+        expect(remainingIds).toContain('fresh-1day');
+        expect(remainingIds).not.toContain('old-1day');
     });
 });

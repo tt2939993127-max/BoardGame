@@ -6,15 +6,17 @@
 
 - **开发**：`http://localhost:5173`
 - **Docker 一键部署**：`http://localhost:18080`
+- **Pages 预览域名**：`https://<project>.pages.dev`
 
 ## 一键部署脚本（推荐）
 
 适用于 Debian/Ubuntu 与 RHEL 系（含 Alibaba Cloud Linux）。脚本会自动完成：安装 Git/Docker/Compose、配置镜像源、克隆仓库、生成 `.env`、启动服务。
 
+在根目录执行
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy-auto.sh -o deploy-auto.sh
-bash deploy-auto.sh
+curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy-auto.sh -o deploy-auto.sh && bash deploy-auto.sh
 ```
+ 
 
 ### 可选环境变量
 
@@ -24,7 +26,7 @@ APP_DIR=BoardGame \                                       # 代码目录
 JWT_SECRET=your-secret \                                  # JWT 密钥（不填则自动生成）
 MONGO_URI=mongodb://mongodb:27017/boardgame \            # Mongo 连接
 WEB_ORIGINS=https://your-domain.com \                    # CORS 白名单
-MIRROR_PROVIDER=xuanyuan \                               # 镜像源方案（默认 xuanyuan）
+MIRROR_PROVIDER=multi \                                  # 镜像源方案（默认 multi）
 XUANYUAN_DOMAIN=docker.xuanyuan.me \                      # 轩辕镜像域名
 CUSTOM_MIRRORS=https://mirror1,https://mirror2 \         # 自定义镜像列表（优先级最高）
 SKIP_MIRROR=1 \                                          # 跳过镜像源配置
@@ -32,11 +34,22 @@ FORCE_ENV=1 \                                            # 强制覆盖 .env
 bash deploy-auto.sh
 ```
 
-### 镜像源说明（轩辕镜像）
+### 镜像源说明（多源 HTTPS）
 
-- 默认使用 `docker.xuanyuan.me`。
-- 若你有专属域名：设置 `XUANYUAN_DOMAIN=你的专属域名`（脚本会自动加入 `docker.xuanyuan.me` 作为备用）。
-- 若你想完全自定义：设置 `CUSTOM_MIRRORS` 为逗号分隔的镜像列表。
+- 默认使用多源 HTTPS 镜像列表（阿里云、USTC、SJTUG、DaoCloud、dockerproxy）。
+- 若你想使用轩辕镜像：设置 `MIRROR_PROVIDER=xuanyuan`，可选 `XUANYUAN_DOMAIN=你的专属域名`。
+- 若你想完全自定义：设置 `CUSTOM_MIRRORS` 为逗号分隔的镜像列表（优先级最高）。
+
+## Pages 部署（前后端分离）
+
+- **Pages 项目设置**：Cloudflare 控制台 → Workers & Pages → 选择 Pages 项目 → 设置
+  - 构建命令：`npm run build`
+  - 输出目录：`dist`
+  - 部署命令（占位即可）：`true` 或 `echo skip`
+- **Pages 环境变量**：`VITE_BACKEND_URL=https://api.<你的域名>`
+- **DNS**：
+  - 根域绑定在 Pages 的「自定义域名」，系统会自动创建 CNAME（无需手动加 A 记录）
+  - `api.<你的域名>` 需要在 Cloudflare DNS 手动添加 A 记录指向服务器公网 IP
 
 ## 同域策略
 
@@ -74,6 +87,7 @@ bash deploy-auto.sh
 
 - **端口**：前端开发 `5173`；游戏服务 `18000`；API 单体 `80`（容器内）；MongoDB `27017`
 - **CORS/Origin 白名单**：`WEB_ORIGINS`（Docker 默认 `http://localhost:18080`）
+- **前端 API 指向**：`VITE_BACKEND_URL`（仅 Pages/前端构建时配置）
 - **环境变量示例**：`.env.example`
 
 ## 单体代理说明
@@ -106,5 +120,18 @@ bash deploy-auto.sh
 
 ## 常见问题
 
+- **健康检查**：
+  - 后端：`http://<服务器IP>/health` 或 `https://api.<你的域名>/health`（若未实现则返回 404，属于正常）
+  - WebSocket：检查 `wss://api.<你的域名>/lobby-socket` 是否可建立连接
+- **排障建议**：
+  - `docker compose ps` 看容器是否都在运行
+  - `docker compose logs -f web` 查看反向代理/NestJS 日志
+  - `docker compose logs -f game-server` 查看游戏服务日志
+  - DNS 解析：`nslookup easyboardgame.top` / `nslookup api.easyboardgame.top`
 - **端口占用**：优先只改 `docker-compose.yml` 中 `web` 的端口映射，并同步 `WEB_ORIGINS`
 - **WebSocket 不通**：检查 `docker/nginx.conf` 的 Upgrade/Connection 头，以及访问路径是否以 `/default/`、`/lobby-socket/` 开头
+- **为什么 dev 没问题但部署报错**：
+  - 本地 `npm run dev:api` 使用 `tsx --tsconfig apps/api/tsconfig.json`，自动启用 `experimentalDecorators`；
+    Docker 若未指定 tsconfig，会导致 NestJS 装饰器报错。
+  - 本地 `npm run dev:game` 使用 `vite-node`，ESM 解析与 Docker 中 `tsx` 直接运行不同；
+    可能触发 `boardgame.io/server` 解析到不存在的 `index.jsx`。

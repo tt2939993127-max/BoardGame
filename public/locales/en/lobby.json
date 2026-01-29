@@ -112,7 +112,9 @@
     "returnHome": "Return to Home",
     "noTutorial": "Tutorial not available for this game",
     "noClient": "Game client not found",
-    "noGame": "Game not found"
+    "noGame": "Game not found",
+    "tutorialTitle": "Learning {{game}}",
+    "matchTitle": "Playing {{game}}"
   },
   "error": {
     "createRoomFailed": "Failed to create room",
