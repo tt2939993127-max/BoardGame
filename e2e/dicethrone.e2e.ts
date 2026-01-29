@@ -25,6 +25,56 @@ test.describe('DiceThrone E2E', () => {
         await expect(page.getByText(/Dice Throne 1v1 tutorial/i)).toBeVisible();
     });
 
+    test('Tutorial advances to roll phase after Next Phase', async ({ page }) => {
+        await setEnglishLocale(page);
+        await page.goto('/play/dicethrone/tutorial');
+
+        const clickNextStep = async () => {
+            const nextButton = page.getByRole('button', { name: /^Next$/ });
+            await expect(nextButton).toBeVisible();
+            await nextButton.click();
+        };
+
+        await expect(page.getByText(/Dice Throne 1v1 tutorial/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/resources: Health/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/Turn order lives here/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/player board/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/tip board/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/Your hand lives here/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/discard pile/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/Status effects and tokens/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/enter the roll phase/i)).toBeVisible();
+        const advanceButton = page.getByRole('button', { name: 'Next Phase' });
+        await expect(advanceButton).toBeEnabled();
+        await advanceButton.click();
+
+        await expect(page.getByText(/dice tray/i)).toBeVisible();
+        await clickNextStep();
+
+        await expect(page.getByText(/start rolling/i)).toBeVisible();
+        const rollButton = page.getByRole('button', { name: /^Roll/ });
+        await expect(rollButton).toBeEnabled({ timeout: 5000 });
+        await rollButton.click();
+
+        await expect(page.getByText(/Confirm locks the result/i)).toBeVisible();
+    });
+
     test('Online match can be created and HUD shows room info', async ({ page }) => {
         await setEnglishLocale(page);
         await page.goto('/');

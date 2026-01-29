@@ -77,7 +77,7 @@ export const CenterBoard = ({
                         </svg>
                     </button>
                 </div>
-                <div className="flex items-center relative h-[35vw]">
+                <div className="flex items-center relative h-[35vw]" data-tutorial-id="tip-board">
                     <button
                         onClick={onToggleTip}
                         className={`absolute top-[55%] -translate-y-1/2 z-50 p-[0.5vw] bg-black/30 hover:bg-black/60 text-white/50 hover:text-white rounded-full transition-[background-color,color] duration-500 border border-white/10 ${isTipOpen ? 'right-[0.8vw]' : 'left-[0.1vw]'}`}

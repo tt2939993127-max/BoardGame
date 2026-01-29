@@ -27,18 +27,18 @@
 - [x] 3.9 编写接口文档 `docs/api/admin.md`（已完成）
 
 ## 4. 前端页面
-- [ ] 4.1 创建 `AdminLayout` 组件（侧边栏 + 内容区）
-- [ ] 4.2 创建 `StatsCard` 组件（统计卡片）
-- [ ] 4.3 创建 `DataTable` 组件（通用数据表格，支持分页）
-- [ ] 4.4 实现后台首页 `src/pages/admin/index.tsx`（统计仪表盘）
-- [ ] 4.5 实现用户管理页面 `src/pages/admin/Users.tsx`
-- [ ] 4.6 实现用户详情页面 `src/pages/admin/UserDetail.tsx`
-- [ ] 4.7 实现对局记录页面 `src/pages/admin/Matches.tsx`
+- [x] 4.1 创建 `AdminLayout` 组件（侧边栏 + 内容区）
+- [x] 4.2 创建 `StatsCard` 组件（统计卡片）
+- [x] 4.3 创建 `DataTable` 组件（通用数据表格，支持分页）
+- [x] 4.4 实现后台首页 `src/pages/admin/index.tsx`（统计仪表盘）
+- [x] 4.5 实现用户管理页面 `src/pages/admin/Users.tsx`
+- [x] 4.6 实现用户详情页面 `src/pages/admin/UserDetail.tsx`
+- [x] 4.7 实现对局记录页面 `src/pages/admin/Matches.tsx`
 
 ## 5. 路由与权限
-- [ ] 5.1 在 `App.tsx` 添加 `/admin/*` 路由（React.lazy 动态导入）
-- [ ] 5.2 创建 `AdminGuard` 前端组件（检查 user.role === 'admin'）
-- [ ] 5.3 更新 `AuthContext` 确保返回 role 信息
+- [x] 5.1 在 `App.tsx` 添加 `/admin/*` 路由（React.lazy 动态导入）
+- [x] 5.2 创建 `AdminGuard` 前端组件（检查 user.role === 'admin'）
+- [x] 5.3 更新 `AuthContext` 确保返回 role 信息
 
 ## 6. 测试与验证
 - [ ] 6.1 运行 Admin 模块测试用例 `npm run test`

@@ -15,4 +15,8 @@ export interface GameManifestEntry {
     allowLocalMode?: boolean;
     /** 可选的玩家人数列表，默认 [2] */
     playerOptions?: number[];
+    /** 游戏标签，用于替代单一分类显示 */
+    tags?: string[];
+    /** 最佳游玩人数配置 */
+    bestPlayers?: number[];
 }

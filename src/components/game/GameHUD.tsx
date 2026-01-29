@@ -88,6 +88,12 @@ export const GameHUD = ({
     const isLocal = mode === 'local';
     const isTutorial = mode === 'tutorial';
     const isSpectator = isOnline && (myPlayerId === null || myPlayerId === undefined);
+    const myPlayerName = isOnline
+        ? players?.find((player) => String(player.id) === String(myPlayerId))?.name
+        : undefined;
+    const selfDisplayName = myPlayerName
+        ? `${myPlayerName} (${t('hud.status.self')})`
+        : t('hud.status.self');
 
     const totalBadge = unreadTotal + requests.length;
 
@@ -191,7 +197,7 @@ export const GameHUD = ({
                                 <div className="flex items-center justify-between text-sm">
                                     <div className="flex items-center gap-2">
                                         <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                                        <span className="text-white/90 font-medium">{t('hud.status.self')}</span>
+                                        <span className="text-white/90 font-medium">{selfDisplayName}</span>
                                     </div>
                                     <span className="text-white/40 text-xs">{t('hud.status.connected')}</span>
                                 </div>

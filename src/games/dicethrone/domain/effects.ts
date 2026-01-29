@@ -321,6 +321,12 @@ function resolveEffectAction(
             // 投掷骰子效果：投掷并根据结果触发条件效果
             if (!random || !action.conditionalEffects) break;
             const diceCount = action.diceCount ?? 1;
+            if (sourceAbilityId === 'taiji-combo') {
+                const abilityLevel = state.players[attackerId]?.abilityLevels?.['taiji-combo'] ?? 'unknown';
+                console.log(
+                    `[DiceThrone][rollDie] abilityId=taiji-combo level=${abilityLevel} diceCount=${diceCount}`
+                );
+            }
             
             for (let i = 0; i < diceCount; i++) {
                 const value = random.d(6);

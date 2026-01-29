@@ -62,9 +62,19 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
 
                         {/* Metadata Tag - Ultrapact */}
                         <div className="mt-0.5 flex items-center justify-between border-t border-parchment-cream pt-1">
-                            <span className="text-[10px] font-bold text-parchment-light-text bg-parchment-cream px-1.5 py-0.5 rounded-[2px]">
-                                {t(`common:category.${game.category}`)}
-                            </span>
+                            <div className="flex items-center gap-1 overflow-hidden">
+                                {game.tags && game.tags.length > 0 ? (
+                                    game.tags.slice(0, 2).map((tag) => (
+                                        <span key={tag} className="text-[10px] font-bold text-parchment-light-text bg-parchment-cream px-1.5 py-0.5 rounded-[2px] whitespace-nowrap">
+                                            {t(`common:game_tags.${tag}`)}
+                                        </span>
+                                    ))
+                                ) : (
+                                    <span className="text-[10px] font-bold text-parchment-light-text bg-parchment-cream px-1.5 py-0.5 rounded-[2px]">
+                                        {t(`common:category.${game.category}`)}
+                                    </span>
+                                )}
+                            </div>
                             <span className="text-[10px] text-parchment-light-text italic">
                                 {t(game.playersKey, { defaultValue: game.playersKey })}
                             </span>

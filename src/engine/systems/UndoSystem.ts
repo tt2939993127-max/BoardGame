@@ -113,7 +113,11 @@ export function createUndoSystem<TCore>(
                 }
             }
 
+            const beforeCount = state.sys.undo.snapshots.length;
             const newState = saveSnapshot(state, maxSnapshots);
+            if (IS_SERVER) {
+                console.log(`[UndoServer] snapshot-saved command=${type} before=${beforeCount} after=${newState.sys.undo.snapshots.length}`);
+            }
             return { state: newState };
         },
     };

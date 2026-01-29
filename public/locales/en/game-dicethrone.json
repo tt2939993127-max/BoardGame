@@ -55,6 +55,8 @@
       "intro": "Welcome to the Dice Throne 1v1 tutorial. Reduce your opponent to 0 Health before they do the same to you.",
       "stats": "This panel shows your resources: Health (starts at 50) and CP (starts at 2, max 15). Most healing caps at starting Health +10.",
       "phases": "Turn order lives here: Upkeep → Income → Main 1 → Offensive Roll → Defensive Roll → Main 2 → Discard. The first player skips Income on their first turn.",
+      "playerBoard": "This is your player board: ability slots and upgrades live here, and ready abilities can be activated from this area.",
+      "tipBoard": "This tip board shows your hero reference and ability requirements; you can expand or collapse it anytime.",
       "dice": "Your dice tray. You may roll up to 3 times each turn and lock dice you want to keep.",
       "rollButton": "Use “Roll” to start rolling. When you’re satisfied or out of rolls, move to confirm.",
       "confirmButton": "Confirm locks the result so you can pick a skill. If you want another roll, don’t confirm yet.",
@@ -62,7 +64,10 @@
       "hand": "Your hand lives here. In Main phases you can play action cards or upgrades, or sell cards for CP.",
       "discard": "This is the discard pile. Drag a card here to sell it for +1 CP.",
       "statusTokens": "Status effects and tokens live here. Spend Evasive/Taiji/Purify at the right time; pay 2 CP before offense to remove Stun.",
-      "advance": "Use the “Next Phase” button once you’re done with the current phase.",
+      "advance": "Use the “Next Phase” button to enter the roll phase before you start rolling.",
+      "resolveAttack": "After choosing an offensive ability, click “Resolve Attack” to apply damage and open defense if needed.",
+      "defenseRoll": "In the defense roll phase, the defender rolls once and can select a defensive ability.",
+      "defenseEnd": "When defense is complete, the defender clicks “End Defense” to finish damage resolution and move on.",
       "finish": "That’s the 1v1 core flow. Try activating abilities, playing cards, and defeating your opponent!"
     }
   },

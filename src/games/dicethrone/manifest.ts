@@ -11,6 +11,8 @@ const entry: GameManifestEntry = {
     icon: '🎲',
     allowLocalMode: false,
     playerOptions: [2, 3, 4],
+    tags: ['dice_driven', 'combat'],
+    bestPlayers: [2],
 };
 
 export const DICETHRONE_MANIFEST: GameManifestEntry = entry;

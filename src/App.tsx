@@ -20,6 +20,13 @@ import { LocalMatchRoom } from './pages/LocalMatchRoom';
 import React from 'react';
 
 const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
+const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayout'));
+const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
+const UsersPage = React.lazy(() => import('./pages/admin/Users'));
+const UserDetailPage = React.lazy(() => import('./pages/admin/UserDetail'));
+const MatchesPage = React.lazy(() => import('./pages/admin/Matches'));
+
+import AdminGuard from './components/auth/AdminGuard';
 
 const App = () => {
   return (
@@ -39,6 +46,20 @@ const App = () => {
                         <Route path="/dev/slicer" element={<React.Suspense fallback={<div>Loading...</div>}><DevToolsSlicer /></React.Suspense>} />
                         {/* 教程路由回退（如需要），或映射到对局路由 */}
                         <Route path="/play/:gameId/tutorial" element={<MatchRoom />} />
+
+                        {/* Admin Routes */}
+                        <Route path="/admin" element={
+                          <AdminGuard>
+                            <React.Suspense fallback={<div className="flex h-screen items-center justify-center">Loading Admin Panel...</div>}>
+                              <AdminLayout />
+                            </React.Suspense>
+                          </AdminGuard>
+                        }>
+                          <Route index element={<AdminDashboard />} />
+                          <Route path="users" element={<UsersPage />} />
+                          <Route path="users/:id" element={<UserDetailPage />} />
+                          <Route path="matches" element={<MatchesPage />} />
+                        </Route>
                       </Routes>
                       <GlobalHUD />
                       <ModalStackRoot />

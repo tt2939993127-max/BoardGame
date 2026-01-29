@@ -11,6 +11,18 @@
     "abstract": "Abstract",
     "tools": "Tools"
   },
+  "game_tags": {
+    "dice_driven": "Dice Driven",
+    "combat": "Combat"
+  },
+  "game_details": {
+    "best_players": "Best Players",
+    "people": "Players",
+    "player_count": "Players",
+    "best_recommendation": "Recommended as Best",
+    "best_players_hint": "* Highlighted is best",
+    "recommended_players": "Recommended"
+  },
   "language": {
     "zhCN": "Chinese",
     "en": "English"

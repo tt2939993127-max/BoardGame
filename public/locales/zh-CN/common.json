@@ -11,6 +11,18 @@
     "abstract": "抽象",
     "tools": "工具"
   },
+  "game_tags": {
+    "dice_driven": "骰驱",
+    "combat": "对战"
+  },
+  "game_details": {
+    "best_players": "最佳人数",
+    "people": "人",
+    "player_count": "支持人数",
+    "best_recommendation": "推荐最佳人数",
+    "best_players_hint": "* 高亮为最佳人数",
+    "recommended_players": "推荐人数"
+  },
   "language": {
     "zhCN": "中文",
     "en": "英文"

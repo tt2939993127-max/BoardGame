@@ -574,7 +574,6 @@ interface LobbyMatch {
     ownerType?: 'user' | 'guest';
     isLocked?: boolean;
 }
-}
 
 const lobbyCacheByGame = new Map<SupportedGame, Map<string, LobbyMatch>>();
 const lobbyCacheReadyByGame = new Map<SupportedGame, boolean>();
@@ -636,7 +635,6 @@ const buildLobbyMatch = (
         createdAt: metadata.createdAt,
         updatedAt: metadata.updatedAt,
         roomName,
-        ownerKey,
         ownerKey,
         ownerType,
         isLocked: !!password && password.length > 0,

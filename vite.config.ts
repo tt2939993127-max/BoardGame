@@ -37,6 +37,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:18001',
         changeOrigin: true,
       },
+      '/admin': {
+        target: 'http://127.0.0.1:18001',
+        changeOrigin: true,
+      },
       '/social-socket': {
         target: 'http://127.0.0.1:18001',
         changeOrigin: true,

@@ -6,7 +6,7 @@ export type PlayerSeat = {
 
 export const isSeatOccupied = (player?: PlayerSeat | null): boolean => {
     if (!player) return false;
-    return Boolean(player.name);
+    return Boolean(player.name || player.credentials || player.isConnected);
 };
 
 export const hasOccupiedPlayers = (players?: Record<string, PlayerSeat> | null): boolean => {

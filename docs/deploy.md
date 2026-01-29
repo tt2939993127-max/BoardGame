@@ -7,6 +7,37 @@
 - **开发**：`http://localhost:5173`
 - **Docker 一键部署**：`http://localhost:18080`
 
+## 一键部署脚本（推荐）
+
+适用于 Debian/Ubuntu 与 RHEL 系（含 Alibaba Cloud Linux）。脚本会自动完成：安装 Git/Docker/Compose、配置镜像源、克隆仓库、生成 `.env`、启动服务。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy-auto.sh -o deploy-auto.sh
+bash deploy-auto.sh
+```
+
+### 可选环境变量
+
+```bash
+REPO_URL=https://github.com/zhuanggenhua/BoardGame.git \   # 仓库地址
+APP_DIR=BoardGame \                                       # 代码目录
+JWT_SECRET=your-secret \                                  # JWT 密钥（不填则自动生成）
+MONGO_URI=mongodb://mongodb:27017/boardgame \            # Mongo 连接
+WEB_ORIGINS=https://your-domain.com \                    # CORS 白名单
+MIRROR_PROVIDER=xuanyuan \                               # 镜像源方案（默认 xuanyuan）
+XUANYUAN_DOMAIN=docker.xuanyuan.me \                      # 轩辕镜像域名
+CUSTOM_MIRRORS=https://mirror1,https://mirror2 \         # 自定义镜像列表（优先级最高）
+SKIP_MIRROR=1 \                                          # 跳过镜像源配置
+FORCE_ENV=1 \                                            # 强制覆盖 .env
+bash deploy-auto.sh
+```
+
+### 镜像源说明（轩辕镜像）
+
+- 默认使用 `docker.xuanyuan.me`。
+- 若你有专属域名：设置 `XUANYUAN_DOMAIN=你的专属域名`（脚本会自动加入 `docker.xuanyuan.me` 作为备用）。
+- 若你想完全自定义：设置 `CUSTOM_MIRRORS` 为逗号分隔的镜像列表。
+
 ## 同域策略
 
 - **开发（Vite 代理）**：
@@ -59,7 +90,7 @@
   - 静态资源 `/assets/*` 放对象存储（如 Cloudflare R2 / COS / OSS），避免资源随服务器迁移。
   - 数据库数据可导出导入（MongoDB 走 `mongodump/mongorestore`）。
   - `.env` 等配置文件纳入安全备份（不要只放在服务器上）。
-- **部署可重复**：使用 `docker-compose.yml` + 环境变量完成一键部署；新机器只需“装 Docker -> 拉代码/镜像 -> 起 compose”。
+- **部署可重复**：优先使用一键脚本；新机器只需“装 Docker -> 运行脚本”。
 
 ### 负载均衡/多实例（预留方向）
 

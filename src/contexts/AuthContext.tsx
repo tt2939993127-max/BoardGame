@@ -9,6 +9,8 @@ interface User {
     emailVerified?: boolean;
     lastOnline?: string;
     avatar?: string;
+    role: 'user' | 'admin';
+    banned: boolean;
 }
 
 interface AuthContextType {

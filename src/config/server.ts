@@ -27,3 +27,12 @@ const FALLBACK_AUTH_API_URL = import.meta.env.DEV
 export const AUTH_API_URL = normalizeUrl(
     import.meta.env.VITE_AUTH_API_URL || FALLBACK_AUTH_API_URL
 );
+
+// 管理 API 地址
+const FALLBACK_ADMIN_API_URL = import.meta.env.DEV
+    ? '/admin'
+    : (BACKEND_URL ? `${BACKEND_URL}/admin` : '/admin');
+
+export const ADMIN_API_URL = normalizeUrl(
+    import.meta.env.VITE_ADMIN_API_URL || FALLBACK_ADMIN_API_URL
+);

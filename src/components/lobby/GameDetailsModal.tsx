@@ -52,7 +52,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const navigate = useNavigate();
     const modalRef = useRef<HTMLDivElement>(null);
     const { user, token } = useAuth();
-    const { t } = useTranslation('lobby');
+    const { t } = useTranslation(['lobby', 'common']);
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const confirmModalIdRef = useRef<string | null>(null);
@@ -641,6 +641,41 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             <p className="text-[11px] md:text-sm text-parchment-light-text mb-3 md:mb-8 leading-relaxed italic line-clamp-2 md:line-clamp-none">
                                 {t(descriptionKey, { defaultValue: descriptionKey })}
                             </p>
+
+                            {/* Player Options Display - Optimized Vertical Space */}
+                            {(() => {
+                                const playerOptions = gameManifest?.playerOptions || [2];
+                                const bestPlayers = gameManifest?.bestPlayers || [];
+
+                                return (
+                                    <div className="mb-4 flex flex-col items-center gap-1.5">
+                                        <div className="flex items-center gap-2">
+                                            {playerOptions.map((count) => {
+                                                const isBest = bestPlayers.includes(count);
+                                                return (
+                                                    <div
+                                                        key={count}
+                                                        className={clsx(
+                                                            "flex items-center justify-center w-8 h-8 rounded-[4px] text-sm font-bold border transition-all cursor-default select-none",
+                                                            isBest
+                                                                ? "bg-parchment-base-text text-parchment-card-bg border-parchment-base-text shadow-sm scale-110"
+                                                                : "bg-transparent text-parchment-light-text border-parchment-card-border/50 opacity-70"
+                                                        )}
+                                                        title={isBest ? t('common:game_details.best_recommendation') : undefined}
+                                                    >
+                                                        {count}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {bestPlayers.length > 0 && (
+                                            <span className="text-[10px] text-parchment-light-text font-medium opacity-70">
+                                                {t('common:game_details.recommended_players')}: {bestPlayers.join(', ')} {t('common:game_details.people')}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         <div className="mt-auto w-full flex flex-row md:flex-col gap-2">
