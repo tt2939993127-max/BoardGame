@@ -74,14 +74,138 @@ bash deploy-auto.sh
 
 ## Pages 部署（前后端分离）
 
-- **Pages 项目设置**：Cloudflare 控制台 → Workers & Pages → 选择 Pages 项目 → 设置
+架构说明：
+- **前端**：Cloudflare Pages 托管（自动构建、CDN 加速）
+- **后端**：服务器 Docker + Nginx 反向代理
+- **流程**：浏览器 → Cloudflare → Pages/服务器
+
+### 1. Pages 项目设置
+
+Cloudflare 控制台 → **Workers & Pages** → 选择你的 Pages 项目 → **设置**
+
+- **构建设置**：
   - 构建命令：`npm run build`
   - 输出目录：`dist`
-  - 部署命令（占位即可）：`true` 或 `echo skip`
-- **Pages 环境变量**：`VITE_BACKEND_URL=https://api.<你的域名>`
-- **DNS**：
-  - 根域绑定在 Pages 的「自定义域名」，系统会自动创建 CNAME（无需手动加 A 记录）
-  - `api.<你的域名>` 需要在 Cloudflare DNS 手动添加 A 记录指向服务器公网 IP
+- **环境变量**（非常重要）：
+  - `VITE_BACKEND_URL` = `https://api.<你的域名>`
+  - 例如：`VITE_BACKEND_URL=https://api.easyboardgame.top`
+- **自定义域名**：
+  - 点击「自定义域名」→ 添加你的根域（如 `easyboardgame.top`）
+  - 系统会自动在 DNS 创建 CNAME 记录
+
+### 2. DNS 配置
+
+Cloudflare 控制台 → 你的域名 → **DNS** → **记录**
+
+需要添加的记录：
+
+| 类型 | 名称 | 内容 | 代理状态 |
+|------|------|------|----------|
+| A | api | 服务器公网 IP | 已代理（橙云）|
+
+> **橙云说明**：开启代理后，Cloudflare 会代理所有请求，提供 SSL、DDoS 防护、CDN 缓存。如果需要直连源站，可改为灰云（仅 DNS）。
+
+### 3. SSL/TLS 设置
+
+Cloudflare 控制台 → 你的域名 → **SSL/TLS** → **概述** → **配置**
+
+选择加密模式：
+- **灵活 (Flexible)**：浏览器 → Cloudflare 是 HTTPS，Cloudflare → 源站是 HTTP
+- **完全 (Full)**：端到端 HTTPS，需要服务器配置 SSL 证书
+
+> **推荐**：初期用「灵活」快速上线，后续配置 Let's Encrypt 后切换为「完全」。
+
+### 4. 服务器 .env 配置
+
+```bash
+# /home/admin/BoardGame/.env
+JWT_SECRET=你的密钥
+MONGO_URI=mongodb://mongodb:27017/boardgame
+REDIS_HOST=redis
+REDIS_PORT=6379
+WEB_ORIGINS=https://easyboardgame.top,https://api.easyboardgame.top,https://boardgame-xxx.pages.dev
+```
+
+> **WEB_ORIGINS** 必须包含所有可能访问后端的域名，否则会出现 CORS 错误。
+
+## 服务器 Nginx 配置（必须）
+
+Cloudflare Pages 前端 + 服务器后端的架构需要 Nginx 做反向代理：
+
+### 安装 Nginx
+
+```bash
+# Debian/Ubuntu
+sudo apt install -y nginx
+
+# RHEL/CentOS/Alibaba Cloud Linux
+sudo tee /etc/yum.repos.d/nginx.repo << 'EOF'
+[nginx-stable]
+name=nginx stable repo
+baseurl=http://nginx.org/packages/centos/8/$basearch/
+gpgcheck=0
+enabled=1
+EOF
+sudo yum install -y nginx --disableexcludes=all
+```
+
+### 配置反向代理
+
+```bash
+# API 服务代理（api.easyboardgame.top -> game-server:18000）
+sudo tee /etc/nginx/conf.d/api.conf << 'EOF'
+server {
+    listen 80;
+    server_name api.easyboardgame.top;  # 改成你的域名
+
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass http://127.0.0.1:18000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_request_buffering off;
+        proxy_buffering off;
+    }
+}
+EOF
+
+# 主站代理（可选，如果不用 Pages 而用服务器托管前端）
+sudo tee /etc/nginx/conf.d/web.conf << 'EOF'
+server {
+    listen 80;
+    server_name easyboardgame.top;  # 改成你的域名
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+
+# 启动 Nginx
+sudo nginx -t && sudo systemctl enable --now nginx
+```
+
+### Cloudflare SSL 设置
+
+**重要**：由于服务器 Nginx 只监听 HTTP (80)，需要在 Cloudflare 设置 SSL 模式：
+
+1. 进入 Cloudflare Dashboard → 你的域名 → **SSL/TLS** → **概述**
+2. 点击 **配置**
+3. 选择 **灵活 (Flexible)** 模式
+4. 保存
+
+> **说明**：灵活模式下，Cloudflare 会用 HTTP 连接你的源服务器，而浏览器到 Cloudflare 仍然是 HTTPS。如果需要端到端加密，可以在服务器配置 Let's Encrypt 证书并切换为「完全」模式。
 
 ## 同域策略
 
