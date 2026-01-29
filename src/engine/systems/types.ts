@@ -144,6 +144,7 @@ export const SYSTEM_IDS = {
     LOG: 'log',
     REMATCH: 'rematch',
     RESPONSE_WINDOW: 'responseWindow',
+    TUTORIAL: 'tutorial',
     CHEAT: 'cheat',
 } as const;
 

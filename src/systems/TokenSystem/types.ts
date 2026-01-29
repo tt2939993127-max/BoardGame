@@ -1,22 +1,60 @@
 /**
- * TokenSystem - 可消耗道具系统类型定义
+ * TokenSystem - 统一的 Token 系统类型定义
  * 
- * Token 是可主动消耗使用的道具标记，与被动状态效果（StatusEffect）区分：
- * - Token：太极、闪避、净化 - 玩家选择时机主动消耗
- * - StatusEffect：击倒、灼烧、中毒 - 在特定时机被动生效
+ * 桌游中的"状态效果"和"可消耗道具"都是以实体 Token 形式存在，统一为一个系统：
+ * - buff: 正面效果 Token
+ * - debuff: 负面效果 Token（脑震荡、眩晕、击倒等）
+ * - consumable: 可消耗道具 Token（太极、闪避、净化等）
  */
 
 // ============================================================================
-// Token 使用时机
+// Token 类型
 // ============================================================================
 
 /**
- * Token 可使用的时机
+ * Token 类型/分类
+ */
+export type TokenCategory =
+    | 'buff'          // 正面效果
+    | 'debuff'        // 负面效果（脑震荡、眩晕、击倒等）
+    | 'consumable';   // 可消耗道具（太极、闪避、净化等）
+
+// ============================================================================
+// 被动触发时机（原StatusEffect）
+// ============================================================================
+
+/**
+ * Token 被动触发时机（用于 debuff/buff 类型）
+ */
+export type PassiveTiming =
+    | 'onApply'          // 效果被施加时
+    | 'onRemove'         // 效果被移除时
+    | 'onTurnStart'      // 回合开始时
+    | 'onTurnEnd'        // 回合结束时
+    | 'onDamageDealt'    // 造成伤害时
+    | 'onDamageReceived' // 受到伤害时
+    | 'onAbilityUsed'    // 使用技能时
+    | 'onPhaseEnter'     // 进入特定阶段时（脑震荡: 跳过收入阶段）
+    | 'onAttackEnd'      // 攻击结束时（眩晕: 触发额外攻击）
+    | 'manual';          // 手动触发（消耗型）
+
+// ============================================================================
+// 主动使用时机（原Token）
+// ============================================================================
+
+/**
+ * Token 主动使用时机（用于 consumable 类型）
+ * @deprecated 使用 ActiveTiming 代替
  */
 export type TokenTiming =
     | 'beforeDamageDealt'     // 造成伤害前（太极加伤）
     | 'beforeDamageReceived'  // 受到伤害前（太极减伤、闪避）
     | 'anytime';              // 任意时点（净化）
+
+/**
+ * Token 主动使用时机
+ */
+export type ActiveTiming = TokenTiming;
 
 // ============================================================================
 // Token 使用效果
@@ -102,11 +140,107 @@ export type TokenEffectProcessor<TState = unknown> = (
 ) => TokenEffectResult;
 
 // ============================================================================
-// Token 定义
+// 被动触发配置（用于 debuff/buff 类型）
 // ============================================================================
 
 /**
- * Token 定义
+ * 选择选项类型
+ */
+export interface ChoiceOption {
+    statusId?: string;
+    tokenId?: string;
+    value: number;
+    customId?: string;
+    labelKey?: string;
+}
+
+/**
+ * RollDie 条件效果类型
+ */
+export interface RollDieConditionalEffect {
+    face: string;
+    bonusDamage?: number;
+    grantStatus?: { statusId: string; value: number };
+    grantToken?: { tokenId: string; value: number };
+    triggerChoice?: {
+        titleKey: string;
+        options: ChoiceOption[];
+    };
+}
+
+/**
+ * 被动效果行为定义（可程序化执行）
+ * 从 StatusEffectSystem 迁移而来
+ */
+export interface EffectAction {
+    type: 'damage' | 'heal' | 'modifyStat' | 'grantStatus' | 'removeStatus' | 'grantToken' | 'grantDamageShield' | 'choice' | 'rollDie' | 'custom' | 'drawCard' | 'replaceAbility' | 'modifyDie' | 'rerollDie' | 'removeAllStatus' | 'transferStatus' | 'grantExtraRoll' | 'skipPhase' | 'extraAttack';
+    target: 'self' | 'opponent' | 'all' | 'select';
+    value?: number;
+    statusId?: string;
+    tokenId?: string;
+    customActionId?: string;
+    // choice 相关
+    choiceTitleKey?: string;
+    choiceOptions?: ChoiceOption[];
+    // rollDie 相关
+    diceCount?: number;
+    conditionalEffects?: RollDieConditionalEffect[];
+    damageMode?: 'sumValues' | 'conditional';
+    // drawCard 相关
+    drawCount?: number;
+    // replaceAbility 相关
+    targetAbilityId?: string;
+    newAbilityDef?: unknown;
+    newAbilityLevel?: number;
+    // grantDamageShield 相关
+    shieldValue?: number;
+    // damage 相关
+    unblockable?: boolean;
+    // 其他可选参数
+    [key: string]: unknown;
+}
+
+/**
+ * 被动触发配置
+ * 用于 debuff/buff 类型的 Token，在特定时机自动触发
+ */
+export interface PassiveTriggerConfig {
+    /** 触发时机 */
+    timing: PassiveTiming;
+    /** 效果行为（可自动执行） */
+    actions?: EffectAction[];
+    /** 持续回合数（undefined = 永久，直到手动移除） */
+    duration?: number;
+    /** 是否可被净化/移除类效果移除 */
+    removable: boolean;
+    /** 移除此效果需要的代价（如 CP） */
+    removalCost?: { resource: string; amount: number };
+}
+
+// ============================================================================
+// 主动使用配置（用于 consumable 类型）
+// ============================================================================
+
+/**
+ * 主动使用配置
+ * 用于 consumable 类型的 Token，玩家主动消耗使用
+ */
+export interface ActiveUseConfig {
+    /** 可使用的时机 */
+    timing: ActiveTiming[];
+    /** 使用时消耗的数量（默认 1） */
+    consumeAmount: number;
+    /** 使用效果 */
+    effect: TokenUseEffect;
+}
+
+// ============================================================================
+// Token 定义（统一架构）
+// ============================================================================
+
+/**
+ * 统一的 Token 定义
+ * 支持三种类型：buff、debuff、consumable
  */
 export interface TokenDef {
     /** 唯一标识 */
@@ -121,14 +255,44 @@ export interface TokenDef {
     description: string[];
     /** 最大堆叠数（0 = 无限） */
     stackLimit: number;
-    /** 可使用的时机 */
-    usableTiming: TokenTiming[];
-    /** 使用时消耗的数量（默认 1） */
-    consumeAmount?: number;
-    /** 使用效果 */
-    useEffect: TokenUseEffect;
+    
+    /**
+     * Token 类型/分类
+     * - buff: 正面效果
+     * - debuff: 负面效果（脑震荡、眩晕、击倒等）
+     * - consumable: 可消耗道具（太极、闪避、净化等）
+     */
+    category: TokenCategory;
+    
+    /**
+     * 被动触发配置（用于 debuff/buff 类型）
+     * 在特定时机自动触发效果
+     */
+    passiveTrigger?: PassiveTriggerConfig;
+    
+    /**
+     * 主动使用配置（用于 consumable 类型）
+     * 玩家主动消耗使用
+     */
+    activeUse?: ActiveUseConfig;
+    
     /** 图集帧 ID（用于图标显示） */
     frameId?: string;
+    
+    // ============ 向后兼容字段（废弃） ============
+    
+    /**
+     * @deprecated 使用 activeUse.timing 代替
+     */
+    usableTiming?: TokenTiming[];
+    /**
+     * @deprecated 使用 activeUse.consumeAmount 代替
+     */
+    consumeAmount?: number;
+    /**
+     * @deprecated 使用 activeUse.effect 代替
+     */
+    useEffect?: TokenUseEffect;
 }
 
 // ============================================================================
@@ -141,6 +305,22 @@ export interface TokenDef {
  */
 export type TokenState = Record<string, number>;
 
+/**
+ * Token 实例（带额外信息，用于 debuff/buff 追踪）
+ */
+export interface TokenInstance {
+    /** Token 定义 ID */
+    defId: string;
+    /** 当前堆叠数 */
+    stacks: number;
+    /** 剩余持续回合（undefined = 永久） */
+    remainingDuration?: number;
+    /** 施加者 ID（用于追溯） */
+    sourcePlayerId?: string;
+    /** 施加时的回合数 */
+    appliedOnTurn?: number;
+}
+
 // ============================================================================
 // Token 系统接口
 // ============================================================================
@@ -149,6 +329,8 @@ export type TokenState = Record<string, number>;
  * Token 系统接口
  */
 export interface ITokenSystem {
+    // ============ 定义管理 ============
+    
     /** 注册 Token 定义 */
     registerDefinition(def: TokenDef): void;
     /** 批量注册 Token 定义 */
@@ -157,6 +339,10 @@ export interface ITokenSystem {
     getDefinition(id: string): TokenDef | undefined;
     /** 获取所有 Token 定义 */
     getAllDefinitions(): TokenDef[];
+    /** 获取指定类型的 Token 定义 */
+    getDefinitionsByCategory(category: TokenCategory): TokenDef[];
+    
+    // ============ 状态管理 ============
     
     /** 授予 Token */
     grant(tokens: TokenState, tokenId: string, amount: number, def?: TokenDef): TokenState;
@@ -164,4 +350,13 @@ export interface ITokenSystem {
     consume(tokens: TokenState, tokenId: string, amount?: number): { tokens: TokenState; consumed: number };
     /** 检查是否有足够的 Token */
     hasEnough(tokens: TokenState, tokenId: string, amount?: number): boolean;
+    
+    // ============ debuff/buff 特有操作 ============
+    
+    /** 获取指定时机触发的 Token */
+    getTokensByTiming(tokens: TokenState, timing: PassiveTiming): Array<{ def: TokenDef; stacks: number }>;
+    /** 获取可被移除的负面 Token */
+    getRemovableDebuffs(tokens: TokenState): Array<{ def: TokenDef; stacks: number }>;
+    /** 回合结束时处理持续时间（返回到期的 Token ID 列表） */
+    tickDurations(instances: TokenInstance[]): { updated: TokenInstance[]; expired: string[] };
 }

@@ -3,16 +3,13 @@
  */
 
 import type { DiceDefinition } from '../../../systems/DiceSystem/types';
+import { DICE_FACE_IDS } from '../domain/ids';
 
 /**
- * Monk 骰子符号常量
+ * Monk 骰子符号常量（别名，保持向后兼容）
+ * @deprecated 请使用 DICE_FACE_IDS
  */
-export const MONK_SYMBOLS = {
-    FIST: 'fist',
-    PALM: 'palm',
-    TAIJI: 'taiji',
-    LOTUS: 'lotus',
-} as const;
+export const MONK_SYMBOLS = DICE_FACE_IDS;
 
 /**
  * Monk 骰子定义
@@ -29,12 +26,12 @@ export const monkDiceDefinition: DiceDefinition = {
     sides: 6,
     category: 'hero',
     faces: [
-        { value: 1, symbols: [MONK_SYMBOLS.FIST] },
-        { value: 2, symbols: [MONK_SYMBOLS.FIST] },
-        { value: 3, symbols: [MONK_SYMBOLS.PALM] },
-        { value: 4, symbols: [MONK_SYMBOLS.TAIJI] },
-        { value: 5, symbols: [MONK_SYMBOLS.TAIJI] },
-        { value: 6, symbols: [MONK_SYMBOLS.LOTUS] },
+        { value: 1, symbols: [DICE_FACE_IDS.FIST] },
+        { value: 2, symbols: [DICE_FACE_IDS.FIST] },
+        { value: 3, symbols: [DICE_FACE_IDS.PALM] },
+        { value: 4, symbols: [DICE_FACE_IDS.TAIJI] },
+        { value: 5, symbols: [DICE_FACE_IDS.TAIJI] },
+        { value: 6, symbols: [DICE_FACE_IDS.LOTUS] },
     ],
     assets: {
         spriteSheet: '/game-data/dicethrone/monk/dice-sprite.png',

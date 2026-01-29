@@ -4,7 +4,7 @@
  * 实现 StorageAPI.Async 接口，支持 TTL 自动过期
  */
 
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model, type SchemaDefinitionProperty } from 'mongoose';
 import type { State, Server, LogEntry, StorageAPI } from 'boardgame.io';
 import { hasOccupiedPlayers } from '../matchOccupancy';
 
@@ -39,7 +39,7 @@ const MatchSchema = new Schema<IMatchDocument>(
         state: { type: Schema.Types.Mixed, default: null },
         initialState: { type: Schema.Types.Mixed, default: null },
         metadata: { type: Schema.Types.Mixed, default: null },
-        log: { type: [Schema.Types.Mixed], default: [] } as any,
+        log: { type: [Schema.Types.Mixed], default: [] } as SchemaDefinitionProperty<LogEntry[]>,
         ttlSeconds: { type: Number, default: 0 },
         expiresAt: { type: Date, default: null }, // TTL 索引
     },
@@ -311,22 +311,37 @@ export class MongoStorage implements StorageAPI.Async {
     async setMetadata(matchID: string, metadata: Server.MatchData): Promise<void> {
         const Match = getMatchModel();
         let refreshedExpiresAt: Date | null | undefined;
+        let ttlSeconds = 0;
 
         try {
             const existing = await Match.findOne({ matchID }).select('metadata ttlSeconds expiresAt').lean();
-            const ttlSeconds = existing?.ttlSeconds ?? 0;
+            ttlSeconds = existing?.ttlSeconds ?? 0;
             const expiresAt = existing?.expiresAt ?? null;
 
+            // TTL 房间：有玩家重新连接时刷新 expiresAt
             if (ttlSeconds > 0 && expiresAt && expiresAt.getTime() > Date.now()) {
                 const prevConnected = (existing?.metadata as { players?: Record<string, { isConnected?: boolean }> } | null)?.players?.['0']?.isConnected;
                 const nextConnected = (metadata as { players?: Record<string, { isConnected?: boolean }> } | null)?.players?.['0']?.isConnected;
-                // 房主从断开 -> 连接（且尚未过期）时，刷新 TTL
+
                 if (!prevConnected && nextConnected) {
                     refreshedExpiresAt = calculateExpiresAt(ttlSeconds);
                 }
             }
         } catch (error) {
             console.warn('[MongoStorage] 读取房间元数据用于 TTL 刷新失败:', error);
+        }
+
+        if (ttlSeconds === 0) {
+            const players = metadata.players as Record<string, { isConnected?: boolean }> | undefined;
+            const connected = players ? Object.values(players).some(player => Boolean(player?.isConnected)) : false;
+            const metadataWith = metadata as Server.MatchData & { disconnectedSince?: number | null };
+            if (connected) {
+                if (metadataWith.disconnectedSince) {
+                    delete metadataWith.disconnectedSince;
+                }
+            } else if (!metadataWith.disconnectedSince) {
+                metadataWith.disconnectedSince = Date.now();
+            }
         }
 
         const update: Record<string, unknown> = { metadata };
@@ -406,32 +421,25 @@ export class MongoStorage implements StorageAPI.Async {
      */
     /**
      * 清理无效房间（仅清理损坏的房间数据）
-     * 
+     *
      * 删除条件：
      * - 无 metadata 或 metadata.players 的损坏房间
-     * 
-     * 注意：
-     * - 不会因为玩家离开（name 为空）而删除房间
-     * - 房间只能通过 destroyMatch 手动删除
-     * - 如需清理长期无人房间，使用 cleanupOldMatches
      */
     async cleanupEmptyMatches(): Promise<number> {
         const Match = getMatchModel();
-        
-        // 查找 ttlSeconds=0 或未设置 ttlSeconds 的房间（兼容旧数据）
         const emptyMatches = await Match.find({
             $or: [
-                { ttlSeconds: 0 },
-                { ttlSeconds: null },
-                { ttlSeconds: { $exists: false } },
+                { metadata: null },
+                { metadata: { $exists: false } },
+                { 'metadata.players': { $exists: false } },
             ],
-        }).lean();
+        }).select('matchID metadata').lean();
 
         const toDelete: string[] = [];
-        
+
         for (const doc of emptyMatches) {
             const metadata = doc.metadata as Server.MatchData | null;
-            
+
             // 仅删除无 metadata.players 的损坏房间
             if (!metadata?.players) {
                 toDelete.push(doc.matchID);
@@ -439,7 +447,7 @@ export class MongoStorage implements StorageAPI.Async {
             }
             // 不再基于 "name 为空" 删除房间
         }
-        
+
         if (toDelete.length > 0) {
             await Match.deleteMany({ matchID: { $in: toDelete } });
             console.log(`[MongoStorage] 清理损坏房间: ${toDelete.length} 个`);
@@ -452,22 +460,38 @@ export class MongoStorage implements StorageAPI.Async {
      * 清理临时房间（ttlSeconds=0 且无在线玩家）
      * 主要用于服务重启时回收“未保存”房间
      */
-    async cleanupEphemeralMatches(): Promise<number> {
+    async cleanupEphemeralMatches(graceMs = 5 * 60 * 1000): Promise<number> {
         const Match = getMatchModel();
-
         const ephemeralMatches = await Match.find({ ttlSeconds: 0 }).lean();
         const toDelete: string[] = [];
+        const now = Date.now();
 
         for (const doc of ephemeralMatches) {
-            const metadata = doc.metadata as Server.MatchData | null;
+            const metadata = doc.metadata as (Server.MatchData & { disconnectedSince?: number | null }) | null;
             const players = metadata?.players as Record<string, { isConnected?: boolean }> | undefined;
             const hasConnectedPlayer = players
                 ? Object.values(players).some(player => Boolean(player?.isConnected))
                 : false;
 
-            if (!hasConnectedPlayer) {
+            if (hasConnectedPlayer) {
+                if (metadata?.disconnectedSince) {
+                    delete metadata.disconnectedSince;
+                    await Match.updateOne({ matchID: doc.matchID }, { metadata });
+                }
+                continue;
+            }
+
+            if (!metadata) continue;
+            const disconnectedSince = typeof metadata.disconnectedSince === 'number' ? metadata.disconnectedSince : undefined;
+            if (!disconnectedSince) {
+                metadata.disconnectedSince = now;
+                await Match.updateOne({ matchID: doc.matchID }, { metadata });
+                continue;
+            }
+
+            if (now - disconnectedSince >= graceMs) {
                 toDelete.push(doc.matchID);
-                console.log(`[Cleanup] 删除临时房间 matchID=${doc.matchID} reason=ephemeral_no_connection`);
+                console.log(`[Cleanup] 删除临时房间 matchID=${doc.matchID} reason=ephemeral_disconnected_timeout`);
             }
         }
 

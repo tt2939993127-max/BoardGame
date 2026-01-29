@@ -12,6 +12,8 @@
 - **资源提取**：`node scripts/extract_assets.js`（需先在脚本内配置本地路径常量）
 - **模拟房主流程**：`npx tsx scripts/simulate-host.ts`（用于快速验证创建/加入/离开流程）
 - **图集网格扫描（方案A）**：`npm run atlas:scan -- <image> --rows <rows> --cols <cols>`（输出行/列裁切数据）
+- **部署（全量）**：`bash scripts/deploy-auto.sh`（首次部署/装机）
+- **部署（快速更新）**：`bash scripts/deploy-quick.sh`（已部署后拉取/重建）
 
 ## 完整工具清单（scripts/）
 
@@ -41,6 +43,11 @@
 - `check-architecture.cjs`：架构解耦检查（框架层不得依赖游戏层）
 - `clean_ports.js`：清理端口进程（默认 5173/18000/18001，可配置）
 - `wait_for_ports.js`：等待端口就绪（用于脚本/CI 串联）
+
+### 部署 / 运维
+
+- `deploy-auto.sh`：全量部署（安装依赖/配置镜像/生成 .env/启动）
+- `deploy-quick.sh`：快速更新（git pull + docker compose up -d --build）
 
 ### 文档转换
 
@@ -75,7 +82,9 @@
 ### 音频压缩（compress_audio）
 
 - `FFMPEG_PATH`：ffmpeg 路径（支持相对路径，以项目根目录为基准）
-- `AUDIO_OGG_BITRATE`：输出码率
+  - 项目已内置 ffmpeg：`BordGameAsset/工具/ffmpeg-7.1.1-essentials_build/bin`
+  - 示例：`$env:FFMPEG_PATH = "BordGameAsset/工具/ffmpeg-7.1.1-essentials_build/bin"; npm run compress:audio`
+- `AUDIO_OGG_BITRATE`：输出码率（默认 96k）
 - `--clean` / `AUDIO_CLEAN=1`：清理 `compressed/` 内的 `.ogg`
 
 ### 模拟房主（simulate-host）

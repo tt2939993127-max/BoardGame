@@ -4,9 +4,14 @@ import { InjectModel } from '@nestjs/mongoose';
 import type { Cache } from 'cache-manager';
 import { Types, type Model } from 'mongoose';
 import { User, type UserDocument } from '../auth/schemas/user.schema';
+import { Friend, type FriendDocument } from '../friend/schemas/friend.schema';
+import { Message, type MessageDocument } from '../message/schemas/message.schema';
+import { Review, type ReviewDocument } from '../review/schemas/review.schema';
 import type { QueryMatchesDto } from './dtos/query-matches.dto';
+import type { QueryRoomsDto } from './dtos/query-rooms.dto';
 import type { QueryUsersDto } from './dtos/query-users.dto';
 import { MatchRecord, type MatchRecordDocument, type MatchRecordPlayer } from './schemas/match-record.schema';
+import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from './schemas/room-match.schema';
 
 const ADMIN_STATS_CACHE_KEY = 'admin:stats';
 const ADMIN_STATS_TREND_CACHE_PREFIX = 'admin:stats:trend:';
@@ -14,6 +19,9 @@ const ADMIN_STATS_TTL_SECONDS = 300;
 const RECENT_MATCH_LIMIT = 10;
 const DEFAULT_TREND_DAYS = 7;
 const ONLINE_KEY_PREFIX = 'social:online:';
+const UNREAD_KEY_PREFIX = 'social:unread:';
+const UNREAD_TOTAL_KEY_PREFIX = 'social:unread:total:';
+const DELETED_USER_PLACEHOLDER = '[已删除用户]';
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -117,6 +125,10 @@ type BanUserResult =
     | { ok: true; user: { id: string; username: string; banned: boolean; bannedAt: Date | null; bannedReason: string | null } }
     | { ok: false; code: 'notFound' | 'cannotBanAdmin' };
 
+type DeleteUserResult =
+    | { ok: true; user: { id: string; username: string } }
+    | { ok: false; code: 'notFound' | 'cannotDeleteAdmin' };
+
 type UserDetailResult =
     | { ok: true; data: UserDetail }
     | { ok: false; code: 'notFound' };
@@ -138,6 +150,40 @@ type MatchDetail = {
     createdAt: Date;
     endedAt: Date;
     duration: number;
+};
+
+type RoomPlayerItem = {
+    id: number;
+    name?: string;
+    isConnected?: boolean;
+};
+
+type RoomListItem = {
+    matchID: string;
+    gameName: string;
+    roomName?: string;
+    ownerKey?: string;
+    ownerType?: 'user' | 'guest';
+    isLocked: boolean;
+    players: RoomPlayerItem[];
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type RoomMatchSetupData = {
+    roomName?: string;
+    ownerKey?: string;
+    ownerType?: 'user' | 'guest';
+    password?: string;
+};
+
+type RoomMatchLean = {
+    matchID: string;
+    gameName: string;
+    state?: Record<string, unknown> | null;
+    metadata?: Record<string, unknown> | null;
+    createdAt: Date;
+    updatedAt: Date;
 };
 
 const isValidStats = (value: unknown): value is AdminStatsBase => {
@@ -170,7 +216,11 @@ const isValidTrend = (value: unknown, days: number): value is AdminStatsTrend =>
 export class AdminService {
     constructor(
         @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+        @InjectModel(Friend.name) private readonly friendModel: Model<FriendDocument>,
+        @InjectModel(Message.name) private readonly messageModel: Model<MessageDocument>,
+        @InjectModel(Review.name) private readonly reviewModel: Model<ReviewDocument>,
         @InjectModel(MatchRecord.name) private readonly matchRecordModel: Model<MatchRecordDocument>,
+        @InjectModel(ROOM_MATCH_MODEL_NAME) private readonly roomMatchModel: Model<RoomMatchDocument>,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
 
@@ -262,6 +312,43 @@ export class AdminService {
         return trend;
     }
 
+    async getRooms(query: QueryRoomsDto) {
+        const page = query.page || 1;
+        const limit = query.limit || 20;
+        const filter: Record<string, unknown> = {};
+
+        if (query.gameName) {
+            const escaped = escapeRegExp(query.gameName.trim());
+            filter.gameName = { $regex: `^${escaped}$`, $options: 'i' };
+        }
+
+        const [records, total] = await Promise.all([
+            this.roomMatchModel
+                .find(filter)
+                .sort({ updatedAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .select('matchID gameName metadata state createdAt updatedAt')
+                .lean<RoomMatchLean[]>(),
+            this.roomMatchModel.countDocuments(filter),
+        ]);
+
+        const items: RoomListItem[] = records.map(record => this.buildRoomListItem(record));
+
+        return {
+            items,
+            page,
+            limit,
+            total,
+            hasMore: page * limit < total,
+        };
+    }
+
+    async destroyRoom(matchID: string): Promise<boolean> {
+        const result = await this.roomMatchModel.deleteOne({ matchID });
+        return (result.deletedCount ?? 0) > 0;
+    }
+
     async getUsers(query: QueryUsersDto) {
         const page = query.page || 1;
         const limit = query.limit || 20;
@@ -341,6 +428,44 @@ export class AdminService {
                 },
                 stats,
                 recentMatches,
+            },
+        };
+    }
+
+    async deleteUser(userId: string): Promise<DeleteUserResult> {
+        const user = await this.userModel.findById(userId).lean<LeanUser | null>();
+        if (!user) {
+            return { ok: false, code: 'notFound' };
+        }
+        if (user.role === 'admin') {
+            return { ok: false, code: 'cannotDeleteAdmin' };
+        }
+
+        const username = user.username;
+        await Promise.all([
+            this.friendModel.deleteMany({ $or: [{ user: userId }, { friend: userId }] }),
+            this.messageModel.deleteMany({ $or: [{ from: userId }, { to: userId }] }),
+            this.reviewModel.deleteMany({ user: userId }),
+            this.userModel.deleteOne({ _id: userId }),
+            this.matchRecordModel.updateMany(
+                { 'players.name': username },
+                { $set: { 'players.$[player].name': DELETED_USER_PLACEHOLDER } },
+                { arrayFilters: [{ 'player.name': username }] }
+            ),
+        ]);
+
+        await this.cacheManager.del(`${ONLINE_KEY_PREFIX}${userId}`);
+        await this.cacheManager.del(`${UNREAD_TOTAL_KEY_PREFIX}${userId}`);
+        await this.removeCacheByPattern(`${UNREAD_KEY_PREFIX}${userId}:*`);
+        await this.removeCacheByPattern(`${UNREAD_KEY_PREFIX}*:${userId}`);
+        await this.cacheManager.del(ADMIN_STATS_CACHE_KEY);
+        await this.removeCacheByPattern(`${ADMIN_STATS_TREND_CACHE_PREFIX}*`);
+
+        return {
+            ok: true,
+            user: {
+                id: userId,
+                username,
             },
         };
     }
@@ -581,19 +706,83 @@ export class AdminService {
         return stats;
     }
 
+    private buildRoomListItem(record: RoomMatchLean): RoomListItem {
+        const metadata = record.metadata as { players?: Record<string, { name?: string; isConnected?: boolean }>; setupData?: RoomMatchSetupData } | null | undefined;
+        const state = record.state as { G?: { __setupData?: RoomMatchSetupData } } | null | undefined;
+        const setupDataFromMeta = metadata?.setupData;
+        const setupDataFromState = state?.G?.__setupData;
+        const setupData: RoomMatchSetupData = {
+            roomName: setupDataFromMeta?.roomName ?? setupDataFromState?.roomName,
+            ownerKey: setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey,
+            ownerType: setupDataFromMeta?.ownerType ?? setupDataFromState?.ownerType,
+            password: setupDataFromMeta?.password ?? setupDataFromState?.password,
+        };
+        const playersObj = metadata?.players ?? {};
+        const players: RoomPlayerItem[] = Object.entries(playersObj).map(([id, data]) => ({
+            id: Number(id),
+            name: data?.name,
+            isConnected: data?.isConnected,
+        }));
+        const isLocked = Boolean(setupData.password && String(setupData.password).length > 0);
+
+        return {
+            matchID: record.matchID,
+            gameName: record.gameName,
+            roomName: setupData.roomName,
+            ownerKey: setupData.ownerKey,
+            ownerType: setupData.ownerType,
+            isLocked,
+            players,
+            createdAt: record.createdAt,
+            updatedAt: record.updatedAt,
+        };
+    }
+
     private async getOnlineUserIds(): Promise<string[]> {
+        const keys = await this.getCacheKeys(`${ONLINE_KEY_PREFIX}*`);
+        return this.extractOnlineUserIds(keys);
+    }
+
+    private extractOnlineUserIds(keys: string[]) {
+        return keys
+            .filter(key => key.startsWith(ONLINE_KEY_PREFIX))
+            .map(key => key.slice(ONLINE_KEY_PREFIX.length))
+            .filter(Boolean);
+    }
+
+    private async removeCacheByPattern(pattern: string) {
+        const keys = await this.getCacheKeys(pattern);
+        if (!keys.length) return;
+        const store = this.cacheManager.store as { getClient?: () => any; client?: any };
+        const client = store?.getClient ? store.getClient() : store?.client;
+        if (client?.del) {
+            const result = client.del.length >= 2
+                ? new Promise<void>((resolve, reject) => {
+                    client.del(keys, (err: Error | null) => {
+                        if (err) return reject(err);
+                        resolve();
+                    });
+                })
+                : client.del(keys);
+            await Promise.resolve(result);
+            return;
+        }
+        await Promise.all(keys.map(key => this.cacheManager.del(key)));
+    }
+
+    private async getCacheKeys(pattern: string): Promise<string[]> {
         const store = this.cacheManager.store as { getClient?: () => any; client?: any; keys?: (pattern: string) => Promise<string[]> | string[] };
         try {
             if (store?.getClient) {
                 const client = store.getClient();
-                return await this.resolveRedisKeys(client);
+                return await this.resolveRedisKeys(client, pattern);
             }
             if (store?.client) {
-                return await this.resolveRedisKeys(store.client);
+                return await this.resolveRedisKeys(store.client, pattern);
             }
             if (store?.keys) {
-                const keys = await Promise.resolve(store.keys(`${ONLINE_KEY_PREFIX}*`));
-                return this.extractOnlineUserIds(keys ?? []);
+                const keys = await Promise.resolve(store.keys(pattern));
+                return Array.isArray(keys) ? keys : [];
             }
         } catch {
             return [];
@@ -601,9 +790,8 @@ export class AdminService {
         return [];
     }
 
-    private async resolveRedisKeys(client: { keys?: (...args: any[]) => any } | null): Promise<string[]> {
+    private async resolveRedisKeys(client: { keys?: (...args: any[]) => any } | null, pattern: string): Promise<string[]> {
         if (!client?.keys) return [];
-        const pattern = `${ONLINE_KEY_PREFIX}*`;
         const result = client.keys.length >= 2
             ? new Promise<string[]>((resolve, reject) => {
                 client.keys?.(pattern, (err: Error | null, keys: string[]) => {
@@ -613,13 +801,7 @@ export class AdminService {
             })
             : client.keys(pattern);
         const keys = await Promise.resolve(result);
-        return this.extractOnlineUserIds(Array.isArray(keys) ? keys : []);
-    }
-
-    private extractOnlineUserIds(keys: string[]) {
-        return keys
-            .map(key => (key.startsWith(ONLINE_KEY_PREFIX) ? key.slice(ONLINE_KEY_PREFIX.length) : key))
-            .filter(Boolean);
+        return Array.isArray(keys) ? keys : [];
     }
 
     private async countActiveUsers24h(onlineUserIds: string[]): Promise<number> {

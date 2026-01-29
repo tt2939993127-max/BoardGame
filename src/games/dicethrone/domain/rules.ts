@@ -15,6 +15,7 @@ import type {
 } from './types';
 import { HAND_LIMIT, PHASE_ORDER } from './types';
 import { RESOURCE_IDS } from './resources';
+import { DICE_FACE_IDS } from './ids';
 
 // ============================================================================
 // 骰子规则
@@ -26,10 +27,10 @@ import { RESOURCE_IDS } from './resources';
  */
 export const getDieFace = (value: number): DieFace => {
     // 硬编码映射作为回退（兼容无 definitionId 的场景）
-    if (value === 1 || value === 2) return 'fist';
-    if (value === 3) return 'palm';
-    if (value === 4 || value === 5) return 'taiji';
-    return 'lotus';
+    if (value === 1 || value === 2) return DICE_FACE_IDS.FIST;
+    if (value === 3) return DICE_FACE_IDS.PALM;
+    if (value === 4 || value === 5) return DICE_FACE_IDS.TAIJI;
+    return DICE_FACE_IDS.LOTUS;
 };
 
 /**
@@ -44,7 +45,7 @@ export const getFaceCounts = (dice: Die[]): Record<DieFace, number> => {
             acc[face] += 1;
             return acc;
         },
-        { fist: 0, palm: 0, taiji: 0, lotus: 0 }
+        { [DICE_FACE_IDS.FIST]: 0, [DICE_FACE_IDS.PALM]: 0, [DICE_FACE_IDS.TAIJI]: 0, [DICE_FACE_IDS.LOTUS]: 0 }
     );
 };
 
@@ -116,6 +117,11 @@ export const canAdvancePhase = (state: DiceThroneCore): boolean => {
     // 有待处理选择时不可推进
     // 注意：pendingChoice 已迁移到 sys.prompt，这里只检查领域层约束
     if (state.pendingInteraction) {
+        return false;
+    }
+
+    // 有待处理的奖励骰重掷时不可推进（需要先完成重掷交互）
+    if (state.pendingBonusDiceSettlement) {
         return false;
     }
     
@@ -773,10 +779,10 @@ export const hasRespondableContent = (
         }
     }
 
-    // 检查是否有可消耗的状态效果（timing=manual）
-    for (const statusDef of state.statusDefinitions) {
-        if (statusDef.timing !== 'manual') continue;
-        const stacks = player.statusEffects[statusDef.id] ?? 0;
+    // 检查是否有可消耗的状态效果（passiveTrigger.timing='manual'）
+    for (const tokenDef of state.tokenDefinitions) {
+        if (tokenDef.passiveTrigger?.timing !== 'manual') continue;
+        const stacks = player.statusEffects[tokenDef.id] ?? 0;
         if (stacks > 0) {
             return true;
         }

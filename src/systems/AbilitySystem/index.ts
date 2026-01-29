@@ -30,6 +30,7 @@ export {
     type DiceSetCondition,
     type DiceStraightCondition,
     type PhaseCondition,
+    type AllSymbolsPresentCondition,
     // 旧上下文类型（向后兼容）
     type AbilityContext,
     type EffectResolutionContext,
@@ -45,6 +46,7 @@ export {
     evaluateSmallStraight,
     evaluateLargeStraight,
     evaluatePhase,
+    evaluateAllSymbolsPresent,
 } from './conditions';
 
 // 类型定义

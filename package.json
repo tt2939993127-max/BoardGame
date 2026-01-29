@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/clean_ports.js && node scripts/generate_game_manifests.js",
+    "predev": "node scripts/clean_ports.js && node scripts/generate_game_manifests.js && docker compose up -d mongodb",
     "dev": "concurrently \"npm:dev:game\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
+    "db:start": "docker compose up -d mongodb",
+    "db:stop": "docker compose stop mongodb",
     "dev:frontend": "vite",
     "dev:frontend:wait": "node scripts/wait_for_ports.js 18000 18001 && vite",
     "dev:api": "tsx --tsconfig apps/api/tsconfig.json apps/api/src/main.ts",
@@ -84,6 +86,9 @@
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.4.0",
     "three": "^0.182.0"
+  },
+  "overrides": {
+    "is-generator-function": "1.0.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

@@ -2,7 +2,7 @@
  * 技能管理器
  */
 
-import type { EffectAction } from '../StatusEffectSystem';
+import type { EffectAction } from '../TokenSystem/types';
 import type {
     AbilityContext,
     TriggerCondition,

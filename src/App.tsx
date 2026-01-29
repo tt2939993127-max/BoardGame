@@ -25,6 +25,7 @@ const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
 const UsersPage = React.lazy(() => import('./pages/admin/Users'));
 const UserDetailPage = React.lazy(() => import('./pages/admin/UserDetail'));
 const MatchesPage = React.lazy(() => import('./pages/admin/Matches'));
+const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 
 import AdminGuard from './components/auth/AdminGuard';
 
@@ -50,7 +51,7 @@ const App = () => {
                         {/* Admin Routes */}
                         <Route path="/admin" element={
                           <AdminGuard>
-                            <React.Suspense fallback={<div className="flex h-screen items-center justify-center">Loading Admin Panel...</div>}>
+                            <React.Suspense fallback={<div className="flex bg-zinc-50 h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>}>
                               <AdminLayout />
                             </React.Suspense>
                           </AdminGuard>
@@ -59,6 +60,7 @@ const App = () => {
                           <Route path="users" element={<UsersPage />} />
                           <Route path="users/:id" element={<UserDetailPage />} />
                           <Route path="matches" element={<MatchesPage />} />
+                          <Route path="feedback" element={<FeedbackPage />} />
                         </Route>
                       </Routes>
                       <GlobalHUD />

@@ -111,6 +111,7 @@ export const DiceTray = ({
                 {dice.map((d, i) => {
                     const selected = isSelected(d.id);
                     const isModified = modifiedDice.includes(String(d.id));
+                    const showRerollButton = isInteractionMode && interaction?.type === 'selectDie';
                     // adjust 模式：选中后显示 +/- 按钮
                     const showAdjustButtons = isInteractionMode && isAdjustMode && selected;
                     // any 模式：已修改的骰子始终显示控件，未修改的骰子在未达到上限时显示控件（也用 +/- 按钮）
@@ -139,30 +140,47 @@ export const DiceTray = ({
                                 </button>
                             )}
 
-                            {/* 骰子本体 */}
-                            <div
-                                onClick={() => clickable && handleDieClick(d.id)}
-                                className={`
-                                    relative flex-shrink-0 group transition-all duration-200
-                                    ${!isInteractionMode && d.isKept ? 'opacity-80' : ''}
-                                    ${!clickable && !showAdjustButtons && !showAnyModeButtons ? 'cursor-not-allowed opacity-50' : ''}
-                                    ${clickable ? 'cursor-pointer hover:scale-110' : ''}
-                                    ${selected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 rounded-lg scale-105' : ''}
-                                `}
-                            >
-                                <Dice3D value={d.value} isRolling={(isRolling && !d.isKept) || (rerollingDiceIds?.includes(d.id) ?? false)} index={i} size={diceSize} locale={locale} />
-                                {!isInteractionMode && d.isKept && (
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                                        <div className="text-[0.6vw] font-black text-white bg-black/50 px-[0.4vw] py-[0.1vw] rounded uppercase tracking-wider shadow-sm border border-white/20">
-                                            {t('dice.locked')}
+                            {/* 骰子本体 + 重投按钮 */}
+                            <div className="relative flex flex-col items-center gap-[0.25vw]">
+                                <div
+                                    onClick={() => clickable && handleDieClick(d.id)}
+                                    className={`
+                                        relative flex-shrink-0 group transition-all duration-200
+                                        ${!isInteractionMode && d.isKept ? 'opacity-80' : ''}
+                                        ${!clickable && !showAdjustButtons && !showAnyModeButtons ? 'cursor-not-allowed opacity-50' : ''}
+                                        ${clickable ? 'cursor-pointer hover:scale-110' : ''}
+                                        ${selected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 rounded-lg scale-105' : ''}
+                                    `}
+                                >
+                                    <Dice3D value={d.value} isRolling={(isRolling && !d.isKept) || (rerollingDiceIds?.includes(d.id) ?? false)} index={i} size={diceSize} locale={locale} />
+                                    {!isInteractionMode && d.isKept && (
+                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                                            <div className="text-[0.6vw] font-black text-white bg-black/50 px-[0.4vw] py-[0.1vw] rounded uppercase tracking-wider shadow-sm border border-white/20">
+                                                {t('dice.locked')}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
-                                {/* 选中标记 */}
-                                {selected && !showAdjustButtons && !showAnyModeButtons && (
-                                    <div className="absolute -top-[0.3vw] -right-[0.3vw] w-[1vw] h-[1vw] bg-amber-500 rounded-full flex items-center justify-center z-30">
-                                        <span className="text-[0.6vw] text-white font-bold">✓</span>
-                                    </div>
+                                    )}
+                                    {/* 选中标记 */}
+                                    {selected && !showAdjustButtons && !showAnyModeButtons && (
+                                        <div className="absolute -top-[0.3vw] -right-[0.3vw] w-[1vw] h-[1vw] bg-amber-500 rounded-full flex items-center justify-center z-30">
+                                            <span className="text-[0.6vw] text-white font-bold">✓</span>
+                                        </div>
+                                    )}
+                                </div>
+                                {showRerollButton && (
+                                    <button
+                                        type="button"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            if (clickable) handleDieClick(d.id);
+                                        }}
+                                        disabled={!clickable}
+                                        className={`px-[0.6vw] py-[0.15vw] rounded-full text-[0.6vw] font-bold transition-[background-color,transform] duration-150 border ${selected
+                                            ? 'bg-amber-500 text-black border-amber-200/80'
+                                            : 'bg-slate-800 text-slate-200 border-white/10'} ${!clickable ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                                    >
+                                        {selected ? t('dice.rerollSelected', '已选') : t('dice.reroll', '重投')}
+                                    </button>
                                 )}
                             </div>
 

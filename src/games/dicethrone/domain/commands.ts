@@ -31,7 +31,9 @@ import type {
     UseTokenCommand,
     SkipTokenResponseCommand,
     UsePurifyCommand,
-    PayToRemoveStunCommand,
+    PayToRemoveKnockdownCommand,
+    RerollBonusDieCommand,
+    SkipBonusDiceRerollCommand,
 } from './types';
 import {
     getRollerId,
@@ -42,6 +44,7 @@ import {
     getAvailableAbilityIds,
 } from './rules';
 import { RESOURCE_IDS } from './resources';
+import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
 
 // ============================================================================
 // 验证函数
@@ -49,6 +52,11 @@ import { RESOURCE_IDS } from './resources';
 
 const ok = (): ValidationResult => ({ valid: true });
 const fail = (error: string): ValidationResult => ({ valid: false, error });
+
+const isCommandType = <TType extends DiceThroneCommand['type']>(
+    command: DiceThroneCommand,
+    type: TType
+): command is Extract<DiceThroneCommand, { type: TType }> => command.type === type;
 
 /**
  * 验证掷骰命令
@@ -660,7 +668,7 @@ const validateUsePurify = (
     if (!p) {
         return fail('player_not_found');
     }
-    const amount = p.tokens['purify'] ?? 0;
+    const amount = p.tokens[TOKEN_IDS.PURIFY] ?? 0;
     if (amount <= 0) {
         return fail('no_token');
     }
@@ -675,9 +683,9 @@ const validateUsePurify = (
  * 验证花费 CP 移除击倒命令
  * 规则：攻击掷骰阶段前可花费 2CP 移除击倒标记
  */
-const validatePayToRemoveStun = (
+const validatePayToRemoveKnockdown = (
     state: DiceThroneCore,
-    _cmd: PayToRemoveStunCommand,
+    _cmd: PayToRemoveKnockdownCommand,
     playerId: PlayerId
 ): ValidationResult => {
     // 只能在自己回合的主要阶段使用（offensiveRoll 前）
@@ -695,9 +703,9 @@ const validatePayToRemoveStun = (
     }
     
     // 检查是否有击倒状态
-    const stunStacks = p.statusEffects['stun'] ?? 0;
-    if (stunStacks <= 0) {
-        return fail('no_stun');
+    const knockdownStacks = p.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+    if (knockdownStacks <= 0) {
+        return fail('no_knockdown');
     }
     
     // 检查 CP 是否足够
@@ -706,6 +714,54 @@ const validatePayToRemoveStun = (
         return fail('not_enough_cp');
     }
     
+    return ok();
+};
+
+/**
+ * 验证重掷奖励骰命令
+ */
+const validateRerollBonusDie = (
+    state: DiceThroneCore,
+    cmd: RerollBonusDieCommand,
+    playerId: PlayerId
+): ValidationResult => {
+    if (!state.pendingBonusDiceSettlement) {
+        return fail('no_pending_bonus_dice');
+    }
+    if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
+        return fail('player_mismatch');
+    }
+    // 检查 Token 是否足够
+    const p = state.players[playerId];
+    const tokenId = state.pendingBonusDiceSettlement.rerollCostTokenId;
+    const costAmount = state.pendingBonusDiceSettlement.rerollCostAmount;
+    const currentAmount = p?.tokens?.[tokenId] ?? 0;
+    if (currentAmount < costAmount) {
+        return fail('not_enough_token');
+    }
+    // 检查骰子索引是否有效
+    const dieIndex = cmd.payload.dieIndex;
+    const die = state.pendingBonusDiceSettlement.dice.find(d => d.index === dieIndex);
+    if (!die) {
+        return fail('invalid_die_index');
+    }
+    return ok();
+};
+
+/**
+ * 验证跳过奖励骰重掷命令
+ */
+const validateSkipBonusDiceReroll = (
+    state: DiceThroneCore,
+    _cmd: SkipBonusDiceRerollCommand,
+    playerId: PlayerId
+): ValidationResult => {
+    if (!state.pendingBonusDiceSettlement) {
+        return fail('no_pending_bonus_dice');
+    }
+    if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
+        return fail('player_mismatch');
+    }
     return ok();
 };
 
@@ -725,60 +781,36 @@ export const validateCommand = (
     }
 
     const playerId = command.playerId;
-    switch (command.type) {
-        case 'ROLL_DICE':
-            return validateRollDice(state, command, playerId);
-        case 'ROLL_BONUS_DIE':
-            return validateRollBonusDie(state, command, playerId);
-        case 'TOGGLE_DIE_LOCK':
-            return validateToggleDieLock(state, command, playerId);
-        case 'CONFIRM_ROLL':
-            return validateConfirmRoll(state, command, playerId);
-        case 'SELECT_ABILITY':
-            return validateSelectAbility(state, command, playerId);
-        case 'DRAW_CARD':
-            return validateDrawCard(state, command, playerId);
-        case 'DISCARD_CARD':
-            return validateDiscardCard(state, command, playerId);
-        case 'SELL_CARD':
-            return validateSellCard(state, command, playerId);
-        case 'UNDO_SELL_CARD':
-            return validateUndoSellCard(state, command, playerId);
-        case 'REORDER_CARD_TO_END':
-            return validateReorderCardToEnd(state, command, playerId);
-        case 'PLAY_CARD':
-            return validatePlayCard(state, command, playerId);
-        case 'PLAY_UPGRADE_CARD':
-            return validatePlayUpgradeCard(state, command, playerId);
-        case 'RESOLVE_CHOICE':
-            return validateResolveChoice(state, command, playerId);
-        case 'ADVANCE_PHASE':
-            return validateAdvancePhase(state, command, playerId);
-        case 'RESPONSE_PASS':
-            return validateResponsePass(state, command, playerId);
-        case 'MODIFY_DIE':
-            return validateModifyDie(state, command, playerId);
-        case 'REROLL_DIE':
-            return validateRerollDie(state, command, playerId);
-        case 'REMOVE_STATUS':
-            return validateRemoveStatus(state, command, playerId);
-        case 'TRANSFER_STATUS':
-            return validateTransferStatus(state, command, playerId);
-        case 'CONFIRM_INTERACTION':
-            return validateConfirmInteraction(state, command, playerId);
-        case 'CANCEL_INTERACTION':
-            return validateCancelInteraction(state, command, playerId);
-        case 'USE_TOKEN':
-            return validateUseToken(state, command, playerId);
-        case 'SKIP_TOKEN_RESPONSE':
-            return validateSkipTokenResponse(state, command, playerId);
-        case 'USE_PURIFY':
-            return validateUsePurify(state, command, playerId);
-        case 'PAY_TO_REMOVE_STUN':
-            return validatePayToRemoveStun(state, command, playerId);
-        default: {
-            const _exhaustive: never = command;
-            return fail(`unknown_command: ${(_exhaustive as DiceThroneCommand).type}`);
-        }
+    if (isCommandType(command, 'ROLL_DICE')) return validateRollDice(state, command, playerId);
+    if (isCommandType(command, 'ROLL_BONUS_DIE')) return validateRollBonusDie(state, command, playerId);
+    if (isCommandType(command, 'TOGGLE_DIE_LOCK')) return validateToggleDieLock(state, command, playerId);
+    if (isCommandType(command, 'CONFIRM_ROLL')) return validateConfirmRoll(state, command, playerId);
+    if (isCommandType(command, 'SELECT_ABILITY')) return validateSelectAbility(state, command, playerId);
+    if (isCommandType(command, 'DRAW_CARD')) return validateDrawCard(state, command, playerId);
+    if (isCommandType(command, 'DISCARD_CARD')) return validateDiscardCard(state, command, playerId);
+    if (isCommandType(command, 'SELL_CARD')) return validateSellCard(state, command, playerId);
+    if (isCommandType(command, 'UNDO_SELL_CARD')) return validateUndoSellCard(state, command, playerId);
+    if (isCommandType(command, 'REORDER_CARD_TO_END')) return validateReorderCardToEnd(state, command, playerId);
+    if (isCommandType(command, 'PLAY_CARD')) return validatePlayCard(state, command, playerId);
+    if (isCommandType(command, 'PLAY_UPGRADE_CARD')) return validatePlayUpgradeCard(state, command, playerId);
+    if (isCommandType(command, 'RESOLVE_CHOICE')) return validateResolveChoice(state, command, playerId);
+    if (isCommandType(command, 'ADVANCE_PHASE')) return validateAdvancePhase(state, command, playerId);
+    if (isCommandType(command, 'RESPONSE_PASS')) return validateResponsePass(state, command, playerId);
+    if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDie(state, command, playerId);
+    if (isCommandType(command, 'REROLL_DIE')) return validateRerollDie(state, command, playerId);
+    if (isCommandType(command, 'REMOVE_STATUS')) return validateRemoveStatus(state, command, playerId);
+    if (isCommandType(command, 'TRANSFER_STATUS')) return validateTransferStatus(state, command, playerId);
+    if (isCommandType(command, 'CONFIRM_INTERACTION')) return validateConfirmInteraction(state, command, playerId);
+    if (isCommandType(command, 'CANCEL_INTERACTION')) return validateCancelInteraction(state, command, playerId);
+    if (isCommandType(command, 'USE_TOKEN')) return validateUseToken(state, command, playerId);
+    if (isCommandType(command, 'SKIP_TOKEN_RESPONSE')) return validateSkipTokenResponse(state, command, playerId);
+    if (isCommandType(command, 'USE_PURIFY')) return validateUsePurify(state, command, playerId);
+    if (isCommandType(command, DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN)) {
+        return validatePayToRemoveKnockdown(state, command, playerId);
     }
+    if (isCommandType(command, 'REROLL_BONUS_DIE')) return validateRerollBonusDie(state, command, playerId);
+    if (isCommandType(command, 'SKIP_BONUS_DICE_REROLL')) return validateSkipBonusDiceReroll(state, command, playerId);
+
+    const _exhaustive: never = command;
+    return fail(`unknown_command: ${(_exhaustive as DiceThroneCommand).type}`);
 };

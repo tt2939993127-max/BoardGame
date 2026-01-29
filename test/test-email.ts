@@ -45,13 +45,13 @@ async function testEmail() {
 
             console.log(`✅ 邮件发送成功！Message ID: ${info.messageId}`);
             return;
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(`\n❌ 端口 ${port} 失败！错误详情如下：`);
             console.error('----------------------------------------');
             console.error(error);
             console.error('----------------------------------------');
 
-            if (error.code === 'EAUTH') {
+            if (typeof error === 'object' && error && 'code' in error && (error as { code?: string }).code === 'EAUTH') {
                 console.log('\n💡 分析: 认证失败。通常是 邮箱账号 或 授权码 填写错误。');
                 console.log('   请检查 .env 文件中的 SMTP_PASS 是否为刚才生成的 16 位授权码 (不是QQ密码!)');
                 return;

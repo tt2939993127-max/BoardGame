@@ -72,8 +72,8 @@
     }
   },
   "statusEffects": {
-    "stun": {
-      "name": "Stun",
+    "knockdown": {
+      "name": "Knockdown",
       "description": [
         "Before the Offensive Roll Phase, you may spend 2 CP to remove this token",
         "If not removed, you must skip the phase and remove this token"
@@ -81,9 +81,9 @@
       "clickToRemove": "Click to spend 2 CP to remove"
     }
   },
-  "confirmRemoveStun": {
-    "title": "Remove Stun?",
-    "description": "Spend 2 CP to remove Stun, allowing you to proceed with the Offensive Roll Phase this turn.",
+  "confirmRemoveKnockdown": {
+    "title": "Remove Knockdown?",
+    "description": "Spend 2 CP to remove Knockdown, allowing you to proceed with the Offensive Roll Phase this turn.",
     "confirm": "Spend 2 CP to Remove",
     "cancel": "Cancel"
   },
@@ -171,10 +171,12 @@
     "rolling": "Rolling...",
     "roll": "Roll ({{current}}/{{total}})",
     "roll_action": "Roll",
-    "confirm": "Confirm Dice",
+    "reroll": "Reroll",
+    "rerollSelected": "Selected",
+    "confirm": "Confirm",
     "confirmed": "Confirmed",
     "bonusRoll": "Bonus Roll",
-    "bonusRolled": "Bonus Roll: {{value}} ({{face}})",
+    "bonusRolled": "Bonus roll: {{value}} ({{face}})",
     "face": {
       "fist": "Fist",
       "palm": "Palm",
@@ -192,8 +194,15 @@
       "lotus": "Lotus: Choose Evasive or Purify",
       "gainCp": "Gain {{cp}} CP",
       "enlightenmentLotus": "Lotus! Gain 2 Taiji + Evasive + Purify",
-      "enlightenmentOther": "Draw 1 card"
-    }
+      "enlightenmentOther": "Draw 1 card",
+      "thunderStrike2Die": "Rolled {{value}}",
+      "thunderStrike2Reroll": "Rerolled to {{value}}"
+    },
+    "selectToReroll": "Click a die to spend 1 Chi to reroll",
+    "noTokenToReroll": "No Chi tokens available to reroll",
+    "total": "Total Damage",
+    "confirmDamage": "Confirm Damage",
+    "continue": "Continue"
   },
   "error": {
     "confirmRoll": "Please confirm the roll result first",

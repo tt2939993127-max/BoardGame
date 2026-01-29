@@ -1,7 +1,26 @@
-import type { TutorialManifest } from '../../contexts/TutorialContext';
+import type { TutorialManifest, TutorialEventMatcher } from '../../engine/types';
+
+const MATCH_PHASE_OFFENSIVE: TutorialEventMatcher = {
+    type: 'SYS_PHASE_CHANGED',
+    match: { to: 'offensiveRoll' },
+};
+
+const MATCH_PHASE_DEFENSE: TutorialEventMatcher = {
+    type: 'SYS_PHASE_CHANGED',
+    match: { to: 'defensiveRoll' },
+};
+
+const MATCH_PHASE_MAIN2: TutorialEventMatcher = {
+    type: 'SYS_PHASE_CHANGED',
+    match: { to: 'main2' },
+};
 
 export const DiceThroneTutorial: TutorialManifest = {
     id: 'dicethrone-basic',
+    randomPolicy: {
+        mode: 'fixed',
+        values: [1],
+    },
     steps: [
         {
             id: 'intro',
@@ -65,6 +84,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'advance-phase-button',
             position: 'left',
             requireAction: true,
+            advanceOnEvents: [MATCH_PHASE_OFFENSIVE],
         },
         {
             id: 'dice-tray',
@@ -79,6 +99,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'dice-roll-button',
             position: 'left',
             requireAction: true,
+            advanceOnEvents: [{ type: 'DICE_ROLLED' }],
         },
         {
             id: 'dice-confirm',
@@ -86,6 +107,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'dice-confirm-button',
             position: 'left',
             requireAction: true,
+            advanceOnEvents: [{ type: 'ROLL_CONFIRMED' }],
         },
         {
             id: 'abilities',
@@ -93,6 +115,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'ability-slots',
             position: 'left',
             requireAction: true,
+            advanceOnEvents: [{ type: 'ABILITY_ACTIVATED' }],
         },
         {
             id: 'resolve-attack',
@@ -100,6 +123,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'advance-phase-button',
             position: 'left',
             requireAction: true,
+            advanceOnEvents: [MATCH_PHASE_DEFENSE, MATCH_PHASE_MAIN2],
         },
         {
             id: 'defense-roll',
@@ -107,6 +131,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'dice-tray',
             position: 'left',
             requireAction: false,
+            advanceOnEvents: [{ type: 'DICE_ROLLED' }],
         },
         {
             id: 'defense-end',
@@ -114,6 +139,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'advance-phase-button',
             position: 'left',
             requireAction: false,
+            advanceOnEvents: [MATCH_PHASE_MAIN2],
         },
         {
             id: 'finish',

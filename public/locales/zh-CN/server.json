@@ -15,7 +15,9 @@
       "invalidEmail": "请输入有效的邮箱地址",
       "emailAlreadyBound": "该邮箱已被其他账户绑定",
       "missingEmailCode": "请输入邮箱和验证码",
-      "invalidEmailCode": "验证码错误或已过期"
+      "invalidEmailCode": "验证码错误或已过期",
+      "missingRegisterFields": "请填写完整的注册信息",
+      "emailAlreadyUsed": "该邮箱已被注册"
     },
     "success": {
       "register": "注册成功",
@@ -80,12 +82,16 @@
     "error": {
       "userNotFound": "用户不存在",
       "matchNotFound": "对局不存在",
+      "roomNotFound": "房间不存在",
       "missingBanReason": "请输入封禁原因",
-      "cannotBanAdmin": "不能封禁管理员账号"
+      "cannotBanAdmin": "不能封禁管理员账号",
+      "cannotDeleteAdmin": "不能删除管理员账号"
     },
     "success": {
       "userBanned": "用户已封禁",
-      "userUnbanned": "用户已解封"
+      "userUnbanned": "用户已解封",
+      "roomDestroyed": "房间已销毁",
+      "userDeleted": "用户已删除"
     }
   },
   "email": {

@@ -1,5 +1,7 @@
+
 import type { ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
+import { motion } from 'framer-motion';
 
 interface StatsCardProps {
     title: string;
@@ -16,17 +18,27 @@ interface StatsCardProps {
 
 export default function StatsCard({ title, value, icon, trend, className, loading }: StatsCardProps) {
     return (
-        <div className={cn("bg-white p-6 rounded-xl border border-slate-200 shadow-sm", className)}>
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cn("bg-white p-6 rounded-2xl border border-zinc-100 shadow-xl shadow-zinc-200/50 hover:shadow-2xl hover:shadow-zinc-200/60 transition-all duration-300", className)}
+        >
             <div className="flex items-start justify-between">
                 <div>
-                    <p className="text-sm font-medium text-slate-500">{title}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-1">{title}</p>
                     {loading ? (
-                        <div className="h-8 w-24 bg-slate-100 rounded animate-pulse mt-1" />
+                        <div className="h-8 w-24 bg-zinc-100 rounded-lg animate-pulse" />
                     ) : (
-                        <h3 className="text-2xl font-bold text-slate-800 mt-1">{value}</h3>
+                        <motion.h3
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: 1 }}
+                            className="text-3xl font-bold text-zinc-900 tracking-tight"
+                        >
+                            {value}
+                        </motion.h3>
                     )}
                 </div>
-                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl shadow-inner-sm">
                     {icon}
                 </div>
             </div>
@@ -34,15 +46,15 @@ export default function StatsCard({ title, value, icon, trend, className, loadin
                 <div className="mt-4 flex items-center text-sm">
                     <span
                         className={cn(
-                            "font-medium mr-2",
-                            trend.isPositive ? "text-green-600" : "text-red-600"
+                            "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold mr-2",
+                            trend.isPositive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                         )}
                     >
-                        {trend.isPositive ? '+' : ''}{trend.value}%
+                        {trend.isPositive ? '↑' : '↓'} {trend.value}%
                     </span>
-                    <span className="text-slate-400">{trend.label}</span>
+                    <span className="text-zinc-400 text-xs font-medium">{trend.label}</span>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 }

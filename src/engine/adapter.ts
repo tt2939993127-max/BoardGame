@@ -14,6 +14,8 @@ import type {
     MatchState,
     PlayerId,
     RandomFn,
+    TutorialRandomPolicy,
+    TutorialState,
 } from './types';
 import type { EngineSystem, GameSystemsConfig } from './systems/types';
 import {
@@ -27,6 +29,7 @@ import { UNDO_COMMANDS } from './systems/UndoSystem';
 import { REMATCH_COMMANDS } from './systems/RematchSystem';
 import { PROMPT_COMMANDS } from './systems/PromptSystem';
 import { FLOW_COMMANDS } from './systems/FlowSystem';
+import { TUTORIAL_COMMANDS } from './systems/TutorialSystem';
 
 // 所有系统命令（自动合并到 commandTypes）
 const ALL_SYSTEM_COMMANDS: string[] = [
@@ -34,7 +37,90 @@ const ALL_SYSTEM_COMMANDS: string[] = [
     ...Object.values(UNDO_COMMANDS),
     ...Object.values(REMATCH_COMMANDS),
     ...Object.values(PROMPT_COMMANDS),
+    ...Object.values(TUTORIAL_COMMANDS),
 ];
+
+const RANDOM_SEQUENCE_MAX = 1000000;
+
+const normalizePolicyValue = (value: number, max: number): number => {
+    if (!Number.isFinite(value) || max <= 0) return 1;
+    const floored = Math.floor(value);
+    if (floored <= 0) return 1;
+    if (floored > max) return ((floored - 1) % max) + 1;
+    return floored;
+};
+
+const getTutorialPolicy = (tutorial?: TutorialState): TutorialRandomPolicy | undefined => {
+    if (!tutorial?.active) return undefined;
+    const policy = tutorial.randomPolicy;
+    if (!policy || policy.values.length === 0) return undefined;
+    return policy;
+};
+
+type TutorialRandomTracker = { consumed: number };
+
+const createTutorialRandom = (
+    base: RandomFn,
+    getTutorial: () => TutorialState | undefined,
+    tracker: TutorialRandomTracker
+): RandomFn => {
+    const consume = (max: number): number | null => {
+        const policy = getTutorialPolicy(getTutorial());
+        if (!policy) return null;
+        const values = policy.values;
+        if (values.length === 0) return null;
+        if (policy.mode === 'fixed') {
+            return normalizePolicyValue(values[0], max);
+        }
+        const cursor = policy.cursor ?? 0;
+        const index = (cursor + tracker.consumed) % values.length;
+        tracker.consumed += 1;
+        return normalizePolicyValue(values[index], max);
+    };
+
+    return {
+        random: () => {
+            const value = consume(RANDOM_SEQUENCE_MAX);
+            if (value === null) return base.random();
+            return (value - 1) / RANDOM_SEQUENCE_MAX;
+        },
+        d: (max: number) => {
+            const value = consume(max);
+            return value ?? base.d(max);
+        },
+        range: (min: number, max: number) => {
+            const span = max - min + 1;
+            const value = consume(span);
+            return value === null ? base.range(min, max) : min + value - 1;
+        },
+        shuffle: <T>(array: T[]): T[] => {
+            const policy = getTutorialPolicy(getTutorial());
+            if (!policy) return base.shuffle(array);
+            const result = [...array];
+            for (let i = result.length - 1; i > 0; i--) {
+                const value = consume(i + 1);
+                if (value === null) return base.shuffle(array);
+                const j = value - 1;
+                [result[i], result[j]] = [result[j], result[i]];
+            }
+            return result;
+        },
+    };
+};
+
+const applyTutorialRandomCursor = (tutorial: TutorialState, consumed: number): TutorialState => {
+    if (!tutorial.active || consumed <= 0) return tutorial;
+    const policy = tutorial.randomPolicy;
+    if (!policy || policy.mode !== 'sequence') return tutorial;
+    const cursor = policy.cursor ?? 0;
+    return {
+        ...tutorial,
+        randomPolicy: {
+            ...policy,
+            cursor: cursor + consumed,
+        },
+    };
+};
 
 // ============================================================================
 // 适配器配置
@@ -131,6 +217,17 @@ export function createGameAdapter<
                 skipValidation: shouldSkipValidation,
             };
 
+            // 教程调试日志
+            if (commandType.startsWith('SYS_TUTORIAL')) {
+                console.log('[Tutorial][Adapter] 收到教程命令', {
+                    commandType,
+                    playerId: normalizedPlayerId,
+                    isLocalLikeMode,
+                    globalMode,
+                    currentTutorialActive: (G as MatchState<TCore>).sys?.tutorial?.active,
+                });
+            }
+
             // 撤销调试日志只在 DEV 下输出，避免正常开发被刷屏。
             if (isUndoCommand && import.meta.env.DEV) {
                 console.log('[撤销调试][命令]', {
@@ -141,13 +238,20 @@ export function createGameAdapter<
                 });
             }
 
+            const tutorialTracker: TutorialRandomTracker = { consumed: 0 };
+
             // 创建随机数生成器（包装 Boardgame.io 的 random）
-            const randomFn: RandomFn = {
+            const baseRandom: RandomFn = {
                 random: () => random.Number(),
                 d: (max: number) => random.Die(max),
                 range: (min: number, max: number) => min + Math.floor(random.Number() * (max - min + 1)),
                 shuffle: <T>(array: T[]): T[] => random.Shuffle(array),
             };
+            const randomFn = createTutorialRandom(
+                baseRandom,
+                () => (G as MatchState<TCore>).sys?.tutorial,
+                tutorialTracker
+            );
 
             // 获取玩家列表
             const playerIds = (ctx.playOrder as Array<string | number>).map((id) => String(id)) as PlayerId[];
@@ -168,13 +272,32 @@ export function createGameAdapter<
                 });
             }
 
-            const result = executePipeline(
+            let result = executePipeline(
                 pipelineConfig,
                 G,
                 command,
                 randomFn,
                 playerIds
             );
+
+            if (result.success && tutorialTracker.consumed > 0) {
+                const updatedTutorial = applyTutorialRandomCursor(
+                    result.state.sys.tutorial,
+                    tutorialTracker.consumed
+                );
+                if (updatedTutorial !== result.state.sys.tutorial) {
+                    result = {
+                        ...result,
+                        state: {
+                            ...result.state,
+                            sys: {
+                                ...result.state.sys,
+                                tutorial: updatedTutorial,
+                            },
+                        },
+                    };
+                }
+            }
 
             // 调试日志
             if (commandType === 'ADVANCE_PHASE') {
@@ -204,8 +327,25 @@ export function createGameAdapter<
                 return;
             }
 
+            // 教程调试日志
+            if (commandType.startsWith('SYS_TUTORIAL')) {
+                console.log('[Tutorial][Adapter] pipeline 结果', {
+                    success: result.success,
+                    resultTutorialActive: result.state.sys?.tutorial?.active,
+                    resultTutorialStepId: result.state.sys?.tutorial?.step?.id,
+                });
+            }
+
             // 直接修改 G（Boardgame.io 使用 Immer）
             Object.assign(G, result.state);
+
+            // 教程调试日志
+            if (commandType.startsWith('SYS_TUTORIAL')) {
+                console.log('[Tutorial][Adapter] Object.assign 后', {
+                    G_tutorialActive: (G as MatchState<TCore>).sys?.tutorial?.active,
+                    G_tutorialStepId: (G as MatchState<TCore>).sys?.tutorial?.step?.id,
+                });
+            }
         };
     };
 

@@ -72,7 +72,7 @@
     }
   },
   "statusEffects": {
-    "stun": {
+    "knockdown": {
       "name": "击倒",
       "description": [
         "攻击掷骰阶段前可花费2CP移除此标记",
@@ -81,7 +81,7 @@
       "clickToRemove": "点击花费 2CP 移除"
     }
   },
-  "confirmRemoveStun": {
+  "confirmRemoveKnockdown": {
     "title": "确认移除击倒？",
     "description": "花费 2CP 移除击倒状态，允许你在本回合正常进行攻击掷骰阶段。",
     "confirm": "花费 2CP 移除",
@@ -171,6 +171,8 @@
     "rolling": "投掷中...",
     "roll": "投掷 ({{current}}/{{total}})",
     "roll_action": "投掷",
+    "reroll": "重投",
+    "rerollSelected": "已选",
     "confirm": "确认",
     "confirmed": "已确认",
     "bonusRoll": "额外投掷",
@@ -193,8 +195,14 @@
       "gainCp": "获得 {{cp}} CP",
       "enlightenmentLotus": "莲花！获得 2太极 + 闪避 + 净化",
       "enlightenmentOther": "抽 1 张牌",
-      "thunderStrike2Die": "投出 {{value}}"
-    }
+      "thunderStrike2Die": "投出 {{value}}",
+      "thunderStrike2Reroll": "重掷得 {{value}}"
+    },
+    "selectToReroll": "点击骰子花费1气重掷",
+    "noTokenToReroll": "没有太极标记可用于重掷",
+    "total": "总伤害",
+    "confirmDamage": "确认伤害",
+    "continue": "继续"
   },
   "error": {
     "confirmRoll": "请先确认投掷结果",

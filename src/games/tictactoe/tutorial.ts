@@ -20,7 +20,7 @@ export const TicTacToeTutorial: TutorialManifest = {
         {
             id: 'opponent-turn',
             content: '', // 隐藏步骤 - AI 自动移动
-            aiMove: 0 // AI 点击左上角格子
+            aiActions: [{ commandType: 'makeMove', payload: { index: 0 } }] // AI 点击左上角格子
         },
         {
             id: 'block-strategy',

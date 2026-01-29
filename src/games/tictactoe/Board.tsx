@@ -7,7 +7,7 @@ import { GameDebugPanel } from '../../components/GameDebugPanel';
 import { EndgameOverlay } from '../../components/game/EndgameOverlay';
 import { UndoProvider } from '../../contexts/UndoContext';
 import { useDebug } from '../../contexts/DebugContext';
-import { useTutorial } from '../../contexts/TutorialContext';
+import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
 import { motion } from 'framer-motion';
@@ -151,7 +151,8 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
     };
 
     // 教学系统集成
-    const { isActive, currentStep, nextStep, registerMoveCallback } = useTutorial();
+    useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
+    const { isActive, currentStep, nextStep } = useTutorial();
     const { setPlayerID } = useDebug();
 
     // 重赛系统（多人模式使用 socket）
@@ -173,15 +174,6 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
     const isGameOverRef = useRef(isGameOver);
     const cellsRef = useRef(G.core.cells);
     const didCountResultRef = useRef(false);
-
-    useEffect(() => {
-        registerMoveCallback((cellId: number) => {
-            if (isSpectator) return;
-            if (isGameOverRef.current) return;
-            if (cellsRef.current[cellId] !== null) return;
-            moves.CLICK_CELL({ cellId });
-        });
-    }, [registerMoveCallback, moves, isSpectator]);
 
     const getWinningLine = (cells: (string | null)[]) => {
         if (!isWinner) return null;

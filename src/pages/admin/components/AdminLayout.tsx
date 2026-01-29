@@ -1,7 +1,8 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
-import { LayoutDashboard, Users, Gamepad2, LogOut } from 'lucide-react';
-import { cn } from '../../../lib/utils'; // Assuming cn utility is available, found in most shadcn/ui projects or I'll implement a simple one or confirm.
+import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning } from 'lucide-react';
+import { cn } from '../../../lib/utils';
+import { motion } from 'framer-motion';
 
 export default function AdminLayout() {
     const { user, logout } = useAuth();
@@ -11,6 +12,7 @@ export default function AdminLayout() {
         { icon: LayoutDashboard, label: '概览', path: '/admin' },
         { icon: Users, label: '用户管理', path: '/admin/users' },
         { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
+        { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
     ];
 
     const isActive = (path: string) => {
@@ -19,76 +21,103 @@ export default function AdminLayout() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex">
+        <div className="min-h-screen bg-zinc-50 flex font-sans text-zinc-900">
             {/* Sidebar */}
-            <aside className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col">
-                <div className="p-6 border-b border-slate-700">
-                    <h1 className="text-xl font-bold flex items-center gap-2">
-                        <span className="text-blue-400">ADMIN</span>
-                        <span>PANEL</span>
-                    </h1>
-                </div>
-
-                <nav className="flex-1 p-4 space-y-2">
-                    {navItems.map((item) => (
-                        <Link
-                            key={item.path}
-                            to={item.path}
-                            className={cn(
-                                "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
-                                isActive(item.path)
-                                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
-                                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                            )}
-                        >
-                            <item.icon size={20} />
-                            <span className="font-medium">{item.label}</span>
-                        </Link>
-                    ))}
-                </nav>
-
-                <div className="p-4 border-t border-slate-700">
-                    <div className="flex items-center gap-3 mb-4 px-4">
-                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden">
-                            {user?.avatar ? (
-                                <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
-                            ) : (
-                                <span className="text-sm font-bold">{user?.username?.[0]?.toUpperCase()}</span>
-                            )}
+            <aside className="w-72 bg-zinc-950 text-zinc-400 flex-shrink-0 flex flex-col shadow-xl z-20">
+                <div className="p-6">
+                    <div className="flex items-center gap-3 px-2">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                            <span className="text-white font-bold text-lg">A</span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{user?.username}</p>
-                            <p className="text-xs text-slate-500 truncate">{user?.email || 'Admin'}</p>
+                        <div>
+                            <h1 className="text-sm font-bold text-white tracking-wide">ADMIN PANEL</h1>
+                            <p className="text-[10px] uppercase tracking-wider font-semibold opacity-60">BoardGame Platform</p>
                         </div>
                     </div>
-                    <button
-                        onClick={logout}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                    >
-                        <LogOut size={16} />
-                        退出登录
-                    </button>
+                </div>
+
+                <div className="flex-1 px-4 py-4 space-y-1">
+                    <div className="px-4 pb-2">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Menu</p>
+                    </div>
+                    {navItems.map((item) => {
+                        const active = isActive(item.path);
+                        return (
+                            <Link
+                                key={item.path}
+                                to={item.path}
+                                className={cn(
+                                    "group relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                                    active ? "text-white" : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                                )}
+                            >
+                                {active && (
+                                    <motion.div
+                                        layoutId="sidebar-active"
+                                        className="absolute inset-0 bg-indigo-600/10 border border-indigo-500/20 rounded-xl"
+                                        initial={false}
+                                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                    />
+                                )}
+                                <item.icon size={20} className={cn("relative z-10 transition-colors", active ? "text-indigo-400" : "text-zinc-500 group-hover:text-zinc-300")} />
+                                <span className="relative z-10 font-medium">{item.label}</span>
+                                {active && <ChevronRight size={16} className="relative z-10 ml-auto text-indigo-400 opacity-80" />}
+                            </Link>
+                        );
+                    })}
+                </div>
+
+                <div className="p-4 mt-auto">
+                    <div className="bg-zinc-900/50 rounded-2xl p-4 border border-zinc-800/50">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-zinc-800 border-2 border-zinc-700 overflow-hidden flex-shrink-0">
+                                {user?.avatar ? (
+                                    <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-zinc-400 font-bold bg-zinc-800">
+                                        {user?.username?.[0]?.toUpperCase()}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold text-white truncate">{user?.username}</p>
+                                <p className="text-xs text-zinc-500 truncate">{user?.role || 'Admin'}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={logout}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-red-400 bg-red-400/10 hover:bg-red-400/20 rounded-lg transition-colors border border-transparent hover:border-red-400/20"
+                        >
+                            <LogOut size={14} />
+                            退出登录
+                        </button>
+                    </div>
+                    <div className="mt-4 text-center">
+                        <Link to="/" className="text-xs text-zinc-600 hover:text-indigo-400 transition-colors">
+                            返回主站首页 &rarr;
+                        </Link>
+                    </div>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="h-16 bg-white border-b border-slate-200 flex items-center px-8 justify-between">
-                    <h2 className="text-lg font-semibold text-slate-800">
-                        {navItems.find(i => isActive(i.path))?.label || 'Dashboard'}
-                    </h2>
-                    <Link to="/" className="text-sm text-slate-500 hover:text-blue-600">
-                        返回主站 &rarr;
-                    </Link>
+            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+                <header className="h-20 flex items-center px-8 justify-between z-10">
+                    <div>
+                        <h2 className="text-2xl font-bold text-zinc-800 tracking-tight">
+                            {navItems.find(i => isActive(i.path))?.label || 'Dashboard'}
+                        </h2>
+                        <p className="text-sm text-zinc-500">今日概况与数据统计</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        {/* Header actions can go here */}
+                    </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-8">
+                <div className="flex-1 overflow-auto px-8 pb-8">
                     <Outlet />
                 </div>
             </main>
         </div>
     );
 }
-
-// Simple fallback for cn if it doesn't exist
-// I should verify if lib/utils exists.

@@ -13,6 +13,7 @@ export { createLogSystem, getCommands, getEvents, getEventsByType, getRecentLogs
 export { createRematchSystem, resetRematchState, getPlayerVote, isRematchReady, getVotedPlayers, REMATCH_COMMANDS } from './RematchSystem';
 export { createResponseWindowSystem, createResponseWindow, openResponseWindow, closeResponseWindow, hasActiveResponseWindow, getResponseWindowResponderId, RESPONSE_WINDOW_COMMANDS, RESPONSE_WINDOW_EVENTS } from './ResponseWindowSystem';
 export { createCheatSystem, CHEAT_COMMANDS, type CheatResourceModifier, type AddResourcePayload, type SetResourcePayload, type SetPhasePayload, type SetDicePayload } from './CheatSystem';
+export { createTutorialSystem, TUTORIAL_COMMANDS, TUTORIAL_EVENTS, TUTORIAL_ERRORS } from './TutorialSystem';
 
 // 默认系统集合
 import { createUndoSystem } from './UndoSystem';
@@ -20,6 +21,7 @@ import { createPromptSystem } from './PromptSystem';
 import { createLogSystem } from './LogSystem';
 import { createRematchSystem } from './RematchSystem';
 import { createResponseWindowSystem } from './ResponseWindowSystem';
+import { createTutorialSystem } from './TutorialSystem';
 import type { EngineSystem } from './types';
 
 /**
@@ -32,5 +34,6 @@ export function createDefaultSystems<TCore>(): EngineSystem<TCore>[] {
         createPromptSystem(),
         createRematchSystem(),
         createResponseWindowSystem(),
+        createTutorialSystem(),
     ];
 }

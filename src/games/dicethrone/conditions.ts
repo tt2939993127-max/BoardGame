@@ -11,6 +11,7 @@ import {
     evaluateSmallStraight,
     evaluateLargeStraight,
     evaluatePhase,
+    evaluateAllSymbolsPresent,
 } from '../../systems/AbilitySystem';
 
 let registered = false;
@@ -28,4 +29,5 @@ export function registerDiceThroneConditions(): void {
     conditionRegistry.register('smallStraight', evaluateSmallStraight);
     conditionRegistry.register('largeStraight', evaluateLargeStraight);
     conditionRegistry.register('phase', evaluatePhase);
+    conditionRegistry.register('allSymbolsPresent', evaluateAllSymbolsPresent);
 }

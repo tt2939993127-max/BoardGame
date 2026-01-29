@@ -4,11 +4,14 @@
  */
 
 import type { PlayerId, RandomFn } from '../../../engine/types';
-import type { EffectAction, RollDieConditionalEffect } from '../../../systems/StatusEffectSystem';
+import type { EffectAction, RollDieConditionalEffect } from '../../../systems/TokenSystem/types';
+
+export type { RollDieConditionalEffect };
 import type { AbilityEffect, EffectTiming, EffectResolutionContext } from '../../../systems/AbilitySystem';
 import { abilityManager } from '../../../systems/AbilitySystem';
 import { getActiveDice, getFaceCounts, getDieFace, getTokenStackLimit } from './rules';
 import { RESOURCE_IDS } from './resources';
+import { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS } from './ids';
 import type {
     DiceThroneCore,
     DiceThroneEvent,
@@ -237,7 +240,7 @@ function resolveEffectAction(
             if (!action.statusId) break;
             const target = state.players[targetId];
             const currentStacks = target?.statusEffects[action.statusId] ?? 0;
-            const def = state.statusDefinitions.find(e => e.id === action.statusId);
+            const def = state.tokenDefinitions.find(e => e.id === action.statusId);
             const maxStacks = def?.stackLimit || 99;
             const stacksToAdd = action.value ?? 1;
             const newTotal = Math.min(currentStacks + stacksToAdd, maxStacks);
@@ -449,14 +452,14 @@ const bonusDieEvent: BonusDieRolledEvent = {
 /** 冥想：根据太极骰面数量获得太极 Token */
 function handleMeditationTaiji({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
-    const amountToAdd = faceCounts.taiji;
+    const amountToAdd = faceCounts[DICE_FACE_IDS.TAIJI];
     const target = state.players[targetId];
-    const currentAmount = target?.tokens.taiji ?? 0;
-    const maxStacks = getTokenStackLimit(state, targetId, 'taiji');
+    const currentAmount = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
+    const maxStacks = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
     const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
     return [{
         type: 'TOKEN_GRANTED',
-        payload: { targetId, tokenId: 'taiji', amount: amountToAdd, newTotal, sourceAbilityId },
+        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as TokenGrantedEvent];
@@ -465,19 +468,19 @@ function handleMeditationTaiji({ targetId, sourceAbilityId, state, timestamp }: 
 /** 清修 III：获得太极，若太极≥2则选择闪避或净化 */
 function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
-    const amountToAdd = faceCounts.taiji;
+    const amountToAdd = faceCounts[DICE_FACE_IDS.TAIJI];
     const target = state.players[targetId];
-    const currentAmount = target?.tokens.taiji ?? 0;
-    const maxStacks = getTokenStackLimit(state, targetId, 'taiji');
+    const currentAmount = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
+    const maxStacks = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
     const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
     const events: DiceThroneEvent[] = [{
         type: 'TOKEN_GRANTED',
-        payload: { targetId, tokenId: 'taiji', amount: amountToAdd, newTotal, sourceAbilityId },
+        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as TokenGrantedEvent];
 
-    if (faceCounts.taiji >= 2) {
+    if (faceCounts[DICE_FACE_IDS.TAIJI] >= 2) {
         events.push({
             type: 'CHOICE_REQUESTED',
             payload: {
@@ -485,8 +488,8 @@ function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }:
                 sourceAbilityId,
                 titleKey: 'choices.evasiveOrPurifyToken',
                 options: [
-                    { tokenId: 'evasive', value: 1 },
-                    { tokenId: 'purify', value: 1 },
+                    { tokenId: TOKEN_IDS.EVASIVE, value: 1 },
+                    { tokenId: TOKEN_IDS.PURIFY, value: 1 },
                 ],
             },
             sourceCommandType: 'ABILITY_EFFECT',
@@ -500,7 +503,7 @@ function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }:
 /** 冥想：根据拳骰面数量造成伤害 */
 function handleMeditationDamage({ ctx, targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
-    const amount = faceCounts.fist;
+    const amount = faceCounts[DICE_FACE_IDS.FIST];
     const target = state.players[targetId];
     const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
     const actualDamage = target ? Math.min(amount, targetHp) : 0;
@@ -542,7 +545,7 @@ function handleEnlightenmentRoll({ targetId, sourceAbilityId, state, timestamp, 
     const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
     const face = getDieFace(dieValue);
-    const isLotus = face === 'lotus';
+    const isLotus = face === DICE_FACE_IDS.LOTUS;
 events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: { value: dieValue, face, playerId: targetId, targetPlayerId: targetId, effectKey: isLotus ? 'bonusDie.effect.enlightenmentLotus' : 'bonusDie.effect.enlightenmentOther' },
@@ -551,15 +554,15 @@ events.push({
     } as BonusDieRolledEvent);
     if (isLotus) {
         const target = state.players[targetId];
-        const taijiMax = getTokenStackLimit(state, targetId, 'taiji');
-        const taijiCurrent = target?.tokens.taiji ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: 'taiji', amount: 2, newTotal: Math.min(taijiCurrent + 2, taijiMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-        const evasiveMax = getTokenStackLimit(state, targetId, 'evasive');
-        const evasiveCurrent = target?.tokens.evasive ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: 'evasive', amount: 1, newTotal: Math.min(evasiveCurrent + 1, evasiveMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-        const purifyMax = getTokenStackLimit(state, targetId, 'purify');
-        const purifyCurrent = target?.tokens.purify ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: 'purify', amount: 1, newTotal: Math.min(purifyCurrent + 1, purifyMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
+        const taijiMax = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
+        const taijiCurrent = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
+        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: 2, newTotal: Math.min(taijiCurrent + 2, taijiMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
+        const evasiveMax = getTokenStackLimit(state, targetId, TOKEN_IDS.EVASIVE);
+        const evasiveCurrent = target?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
+        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.EVASIVE, amount: 1, newTotal: Math.min(evasiveCurrent + 1, evasiveMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
+        const purifyMax = getTokenStackLimit(state, targetId, TOKEN_IDS.PURIFY);
+        const purifyCurrent = target?.tokens[TOKEN_IDS.PURIFY] ?? 0;
+        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.PURIFY, amount: 1, newTotal: Math.min(purifyCurrent + 1, purifyMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
     } else {
         events.push(...buildDrawEvents(state, targetId, 1, random, 'ABILITY_EFFECT', timestamp));
     }
@@ -568,7 +571,7 @@ events.push({
 
 /** 莲花掌：可花费2太极令此次攻击不可防御 */
 function handleLotusPalmUnblockableChoice({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const taijiCount = state.players[targetId]?.tokens?.taiji ?? 0;
+    const taijiCount = state.players[targetId]?.tokens?.[TOKEN_IDS.TAIJI] ?? 0;
     if (taijiCount < 2) return [];
     return [{
         type: 'CHOICE_REQUESTED',
@@ -577,7 +580,7 @@ function handleLotusPalmUnblockableChoice({ targetId, sourceAbilityId, state, ti
             sourceAbilityId,
             titleKey: 'choices.lotusPalmUnblockable.title',
             options: [
-                { tokenId: 'taiji', value: -2, customId: 'lotus-palm-unblockable-pay', labelKey: 'choices.lotusPalmUnblockable.pay2' },
+                { tokenId: TOKEN_IDS.TAIJI, value: -2, customId: 'lotus-palm-unblockable-pay', labelKey: 'choices.lotusPalmUnblockable.pay2' },
                 { value: 0, customId: 'lotus-palm-unblockable-skip', labelKey: 'choices.lotusPalmUnblockable.skip' },
             ],
         },
@@ -590,45 +593,109 @@ function handleLotusPalmUnblockableChoice({ targetId, sourceAbilityId, state, ti
 function handleLotusPalmTaijiCapUpAndFill({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const player = state.players[targetId];
     if (!player) return [];
-    const currentLimitRaw = player.tokenStackLimits?.taiji;
-    const currentLimit = typeof currentLimitRaw === 'number' ? (currentLimitRaw === 0 ? Infinity : currentLimitRaw) : getTokenStackLimit(state, targetId, 'taiji');
+    const currentLimitRaw = player.tokenStackLimits?.[TOKEN_IDS.TAIJI];
+    const currentLimit = typeof currentLimitRaw === 'number' ? (currentLimitRaw === 0 ? Infinity : currentLimitRaw) : getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
     if (currentLimit === Infinity) return [];
     const events: DiceThroneEvent[] = [];
     const newLimit = currentLimit + 1;
-    events.push({ type: 'TOKEN_LIMIT_CHANGED', payload: { playerId: targetId, tokenId: 'taiji', delta: 1, newLimit, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenLimitChangedEvent);
-    const currentAmount = player.tokens?.taiji ?? 0;
+    events.push({ type: 'TOKEN_LIMIT_CHANGED', payload: { playerId: targetId, tokenId: TOKEN_IDS.TAIJI, delta: 1, newLimit, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenLimitChangedEvent);
+    const currentAmount = player.tokens?.[TOKEN_IDS.TAIJI] ?? 0;
     const newTotal = Math.min(newLimit, Math.max(0, newLimit));
     const amountToAdd = Math.max(0, newTotal - currentAmount);
     if (amountToAdd > 0) {
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: 'taiji', amount: amountToAdd, newTotal, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
+        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
     }
     return events;
 }
 
-/** 雷霆一击 II: 投掷3骰，造成总和伤害，>=12施加倒地 */
-function handleThunderStrike2RollDamage({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+/**
+ * 雷霆一击 II / 风暴突袭 II: 投掷3骰，造成总和伤害，>=12施加倒地
+ * 实现延后结算：投掷完成后存储到 pendingBonusDiceSettlement，等待重掷交互完成后再结算伤害
+ */
+function handleThunderStrike2RollDamage({ targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+    console.log('[DiceThrone][handleThunderStrike2RollDamage] 被调用', {
+        attackerId,
+        targetId,
+        sourceAbilityId,
+        attackerTaiji: state.players[attackerId]?.tokens?.[TOKEN_IDS.TAIJI] ?? 0,
+    });
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
-    const dieValues: number[] = [];
+    const dice: import('./types').BonusDieInfo[] = [];
+
+    // 投掷 3 颗骰子
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
-        dieValues.push(value);
         const face = getDieFace(value);
-events.push({ type: 'BONUS_DIE_ROLLED', payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.thunderStrike2Die', effectParams: { value } }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as BonusDieRolledEvent);
+        dice.push({ index: i, value, face });
+        // 每颗骰子都发出 BONUS_DIE_ROLLED 事件用于 UI 特写
+        events.push({
+            type: 'BONUS_DIE_ROLLED',
+            payload: {
+                value,
+                face,
+                playerId: attackerId,
+                targetPlayerId: targetId,
+                effectKey: 'bonusDie.effect.thunderStrike2Die',
+                effectParams: { value, index: i },
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + i, // 确保时间戳唯一
+        } as BonusDieRolledEvent);
     }
-    const totalDamage = dieValues.reduce((sum, v) => sum + v, 0);
-    const target = state.players[targetId];
-    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-    const actualDamage = target ? Math.min(totalDamage, targetHp) : 0;
-    events.push({ type: 'DAMAGE_DEALT', payload: { targetId, amount: totalDamage, actualDamage, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as DamageDealtEvent);
-    ctx.damageDealt += actualDamage;
-    if (totalDamage >= 12) {
-        const currentStacks = target?.statusEffects['stun'] ?? 0;
-        const def = state.statusDefinitions.find(e => e.id === 'stun');
-        const maxStacks = def?.stackLimit || 99;
-        const newTotal = Math.min(currentStacks + 1, maxStacks);
-        events.push({ type: 'STATUS_APPLIED', payload: { targetId, statusId: 'stun', stacks: 1, newTotal, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as StatusAppliedEvent);
+
+    // 检查攻击者是否有太极 Token，有则进入重掷交互流程
+    const attacker = state.players[attackerId];
+    const hasTaiji = (attacker?.tokens?.[TOKEN_IDS.TAIJI] ?? 0) >= 1;
+
+    if (hasTaiji) {
+        // 创建待结算的奖励骰状态，进入重掷交互流程
+        const settlement: import('./types').PendingBonusDiceSettlement = {
+            id: `thunder-strike-${timestamp}`,
+            sourceAbilityId,
+            attackerId,
+            targetId,
+            dice,
+            rerollCostTokenId: TOKEN_IDS.TAIJI,
+            rerollCostAmount: 1,
+            rerollCount: 0,
+            threshold: 12,
+            thresholdEffect: 'knockdown',
+            readyToSettle: false,
+        };
+        events.push({
+            type: 'BONUS_DICE_REROLL_REQUESTED',
+            payload: { settlement },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as import('./types').BonusDiceRerollRequestedEvent);
+    } else {
+        // 没有太极，直接结算伤害
+        const totalDamage = dice.reduce((sum, d) => sum + d.value, 0);
+        const target = state.players[targetId];
+        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+        const actualDamage = target ? Math.min(totalDamage, targetHp) : 0;
+        events.push({
+            type: 'DAMAGE_DEALT',
+            payload: { targetId, amount: totalDamage, actualDamage, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DamageDealtEvent);
+        // 判断是否触发倒地
+        if (totalDamage >= 12) {
+            const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+            const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
+            const maxStacks = def?.stackLimit || 99;
+            const newTotal = Math.min(currentStacks + 1, maxStacks);
+            events.push({
+                type: 'STATUS_APPLIED',
+                payload: { targetId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal, sourceAbilityId },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            } as StatusAppliedEvent);
+        }
     }
+
     return events;
 }
 
@@ -956,7 +1023,7 @@ function resolveConditionalEffect(
         const { statusId, value } = effect.grantStatus;
         const target = state.players[targetId];
         const currentStacks = target?.statusEffects[statusId] ?? 0;
-        const def = state.statusDefinitions.find(e => e.id === statusId);
+        const def = state.tokenDefinitions.find(e => e.id === statusId);
         const maxStacks = def?.stackLimit || 99;
         const newTotal = Math.min(currentStacks + value, maxStacks);
         

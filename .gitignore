@@ -28,6 +28,7 @@ dist-ssr
 
 # 环境变量文件
 .env
+.env.server
 .env.local
 .env.development.local
 .env.test.local
@@ -58,7 +59,7 @@ nul
 # - public/assets/ 默认忽略全部资源
 # - 仅允许提交 assets-manifest.json 与 public/assets/demo/ 下的少量示例资源
 public/assets/**
-public/**/*.png
+**/*.png
 public/**/*.jpg
 public/**/*.jpeg
 public/**/*.gif
@@ -81,6 +82,7 @@ public/**/*.webm
 !public/assets/**/assets-manifest.json
 !public/assets/demo/
 !public/assets/demo/**
+!public/assets/dicethrone/thumbnails/
 
 # 可能的 3D/模型/动画/纹理素材
 public/**/*.glb

@@ -9,6 +9,7 @@ import manifest1 from './dicethrone/manifest';
 import Game1 from './dicethrone/game';
 import Board1 from './dicethrone/Board';
 import Tutorial1 from './dicethrone/tutorial';
+import Thumbnail1 from './dicethrone/thumbnail';
 
 import manifest2 from './tictactoe/manifest';
 import Game2 from './tictactoe/game';
@@ -26,7 +27,7 @@ const entry1: GameClientManifestEntry = {
     game: Game1,
     board: Board1,
     tutorial: Tutorial1,
-    thumbnail: <DefaultGameThumbnail titleKey={manifest1.titleKey} icon={manifest1.icon} />,
+    thumbnail: <Thumbnail1 />,
 };
 
 const entry2: GameClientManifestEntry = {

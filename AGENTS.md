@@ -153,6 +153,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### 新引擎系统注意事项（强制）
 - **数据驱动优先（强制）**：规则/配置/清单优先做成可枚举的数据（如 manifest、常量表、定义对象），由引擎/系统解析执行；避免在组件或 move 内写大量分支硬编码，确保可扩展、可复用、可验证。
+- **领域 ID 常量表（强制）**：所有领域内的稳定 ID（如状态效果、Token、骰面符号、命令类型）必须在 `domain/ids.ts` 中定义常量表，禁止在代码中直接使用字符串字面量（如 `'knockdown'`、`'taiji'`）。
+  - **常量表结构**：使用 `as const` 确保类型安全，并导出派生类型（如 `StatusId`、`TokenId`）。
+  - **示例**：`STATUS_IDS.KNOCKDOWN`、`TOKEN_IDS.TAIJI`、`DICE_FACE_IDS.FIST`。
+  - **例外**：国际化 key（如 `t('dice.face.fist')`）、类型定义（如 `type DieFace = 'fist' | ...`）可保留字符串字面量。
+  - **好处**：重命名成本低、IDE 自动补全、类型安全、序列化兼容（字符串值保留）。
 - **新机制先检查引擎**：实现新游戏机制（如骰子、卡牌、资源）前，必须先检查 `src/systems/` 是否已有对应系统；若无，必须先在引擎层抽象通用类型和接口，再在游戏层实现。原因：UGC 游戏需要复用这些能力。充分考虑未来可能性而不是只看当下。
 - **引擎层系统清单**：
   - `DiceSystem` - 骰子定义/创建/掷骰/统计/触发条件
@@ -345,6 +350,7 @@ src/
 | 游戏逻辑 | `src/games/<游戏名>/game.ts` |
 | 游戏 UI | `src/games/<游戏名>/Board.tsx` |
 | 英雄定义 | `src/games/<游戏名>/<英雄>/` |
+| 领域 ID 常量表 | `src/games/<游戏名>/domain/ids.ts` |
 | 应用入口 | `src/App.tsx` |
 | 证据归档 | `evidence/` |
 

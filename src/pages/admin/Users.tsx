@@ -4,8 +4,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import DataTable, { type Column } from './components/DataTable';
 import { ADMIN_API_URL } from '../../config/server';
 import { useToast } from '../../contexts/ToastContext';
-import { Search, Ban, CheckCircle, Eye } from 'lucide-react';
-import { cn } from '../../lib/utils'; // Fixed import path
+import { Search, Ban, CheckCircle, Eye, Shield, ShieldAlert, BadgeCheck } from 'lucide-react';
+import { cn } from '../../lib/utils';
+
 
 interface User {
     id: string;
@@ -55,7 +56,7 @@ export default function UsersPage() {
     useEffect(() => {
         fetchUsers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, token]); // Search triggers separate fetch usually or debounced, here simplifying
+    }, [page, token]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -88,16 +89,17 @@ export default function UsersPage() {
             header: '用户',
             cell: (user) => (
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-zinc-100 border border-zinc-200 overflow-hidden flex items-center justify-center flex-shrink-0 relative">
                         {user.avatar ? (
                             <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
                         ) : (
-                            <span className="text-xs font-bold text-slate-500">{user.username[0]?.toUpperCase()}</span>
+                            <span className="text-sm font-bold text-zinc-400">{user.username[0]?.toUpperCase()}</span>
                         )}
+                        <span className={cn("absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white", user.lastOnline ? "bg-green-500" : "bg-zinc-300")} title={user.lastOnline ? "在线" : "离线"} />
                     </div>
                     <div>
-                        <div className="font-medium text-slate-900">{user.username}</div>
-                        <div className="text-xs text-slate-500">{user.email || 'No email'}</div>
+                        <div className="font-semibold text-zinc-900">{user.username}</div>
+                        <div className="text-xs text-zinc-500 font-mono">{user.email || '未绑定邮箱'}</div>
                     </div>
                 </div>
             )
@@ -106,12 +108,18 @@ export default function UsersPage() {
             header: '角色',
             accessorKey: 'role',
             cell: (user) => (
-                <span className={cn(
-                    "px-2 py-1 text-xs rounded-full font-medium",
-                    user.role === 'admin' ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-700"
-                )}>
-                    {user.role}
-                </span>
+                <div className="flex items-center">
+                    {user.role === 'admin' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                            <Shield size={12} fill="currentColor" className="opacity-80" />
+                            管理员
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200">
+                            用户
+                        </span>
+                    )}
+                </div>
             )
         },
         {
@@ -119,10 +127,12 @@ export default function UsersPage() {
             accessorKey: 'banned',
             cell: (user) => (
                 <span className={cn(
-                    "px-2 py-1 text-xs rounded-full font-medium inline-flex items-center gap-1",
-                    user.banned ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+                    "px-2.5 py-1 text-xs rounded-full font-semibold inline-flex items-center gap-1.5 border",
+                    user.banned
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-green-50 text-green-700 border-green-200"
                 )}>
-                    {user.banned ? <Ban size={12} /> : <CheckCircle size={12} />}
+                    {user.banned ? <ShieldAlert size={12} /> : <BadgeCheck size={12} />}
                     {user.banned ? '已封禁' : '正常'}
                 </span>
             )
@@ -130,28 +140,31 @@ export default function UsersPage() {
         {
             header: '注册时间',
             accessorKey: 'createdAt',
-            cell: (user) => new Date(user.createdAt).toLocaleDateString()
+            cell: (user) => <span className="text-zinc-500 font-medium text-xs font-mono">{new Date(user.createdAt).toLocaleDateString()}</span>
         },
         {
             header: '操作',
+            className: 'text-right',
             cell: (user) => (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-end gap-2">
                     <Link
                         to={`/admin/users/${user.id}`}
-                        className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                        className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
                         title="查看详情"
                     >
-                        <Eye size={18} />
+                        <Eye size={16} />
                     </Link>
                     <button
                         onClick={() => handleBanToggle(user)}
                         className={cn(
-                            "p-1 transition-colors",
-                            user.banned ? "text-green-600 hover:bg-green-50" : "text-red-400 hover:text-red-600"
+                            "p-1.5 rounded-lg transition-colors border border-transparent",
+                            user.banned
+                                ? "text-green-600 hover:bg-green-50 hover:border-green-100"
+                                : "text-red-400 hover:text-red-600 hover:bg-red-50 hover:border-red-100"
                         )}
                         title={user.banned ? "解封" : "封禁"}
                     >
-                        {user.banned ? <CheckCircle size={18} /> : <Ban size={18} />}
+                        {user.banned ? <CheckCircle size={16} /> : <Ban size={16} />}
                     </button>
                 </div>
             )
@@ -159,17 +172,20 @@ export default function UsersPage() {
     ];
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-slate-800">用户管理</h1>
-                <form onSubmit={handleSearch} className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <div className="space-y-6 max-w-[1600px] mx-auto">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">用户管理</h1>
+                    <p className="text-sm text-zinc-500 mt-1">管理平台用户及其权限状态</p>
+                </div>
+                <form onSubmit={handleSearch} className="relative group">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                     <input
                         type="text"
-                        placeholder="搜索用户..."
+                        placeholder="搜索用户名或邮箱..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                        className="pl-10 pr-4 py-2.5 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-full md:w-80 shadow-sm transition-all text-sm"
                     />
                 </form>
             </div>

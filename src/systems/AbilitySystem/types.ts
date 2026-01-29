@@ -2,7 +2,7 @@
  * 技能系统类型定义
  */
 
-import type { EffectAction } from '../StatusEffectSystem';
+import type { EffectAction } from '../TokenSystem/types';
 import type { TriggerCondition, EffectCondition } from './conditions';
 
 // ============================================================================
@@ -83,6 +83,8 @@ export interface AbilityVariantDef {
     effects: AbilityEffect[];
     /** 优先级（用于自动选择最优变体） */
     priority?: number;
+    /** 变体特有标签（如不可防御） */
+    tags?: AbilityTag[];
 }
 
 /**

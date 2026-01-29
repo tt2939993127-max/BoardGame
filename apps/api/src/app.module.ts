@@ -11,6 +11,8 @@ import { InviteModule } from './modules/invite/invite.module';
 import { MessageModule } from './modules/message/message.module';
 import { ReviewModule } from './modules/review/review.module';
 
+import { FeedbackModule } from './modules/feedback/feedback.module';
+
 @Module({
     imports: [
         ConfigModule.forRoot({
@@ -25,16 +27,23 @@ import { ReviewModule } from './modules/review/review.module';
         CacheModule.registerAsync({
             isGlobal: true,
             inject: [ConfigService],
-            useFactory: (configService: ConfigService) => {
+            useFactory: async (configService: ConfigService) => {
                 const redisHost = configService.get<string>('REDIS_HOST');
                 const redisPort = configService.get<string>('REDIS_PORT');
                 if (!redisHost && !redisPort) {
                     return {} as never;
                 }
+
+                const host = redisHost || 'localhost';
+                const port = Number(redisPort || 6379);
+
                 return {
-                    store: redisStore as unknown as never,
-                    host: redisHost || 'localhost',
-                    port: Number(redisPort || 6379),
+                    store: await redisStore({
+                        socket: {
+                            host,
+                            port,
+                        },
+                    }),
                 } as never;
             },
         }),
@@ -44,7 +53,8 @@ import { ReviewModule } from './modules/review/review.module';
         MessageModule,
         InviteModule,
         ReviewModule,
+        FeedbackModule,
         HealthModule,
     ],
 })
-export class AppModule {}
+export class AppModule { }

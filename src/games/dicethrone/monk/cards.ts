@@ -4,6 +4,7 @@
  */
 
 import type { AbilityCard } from '../types';
+import { DICE_FACE_IDS, TOKEN_IDS, STATUS_IDS } from '../domain/ids';
 import type { RandomFn } from '../../../engine/types';
 import type { AbilityEffect, AbilityDef } from '../../../systems/AbilitySystem';
 
@@ -93,19 +94,19 @@ const FIST_TECHNIQUE_2: AbilityDef = {
     variants: [
         {
             id: 'fist-technique-2-3',
-            trigger: { type: 'diceSet', faces: { fist: 3 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3 } },
             effects: [damage(7, abilityEffectText('fist-technique-2-3', 'damage7'))],
             priority: 1,
         },
         {
             id: 'fist-technique-2-4',
-            trigger: { type: 'diceSet', faces: { fist: 4 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 4 } },
             effects: [damage(8, abilityEffectText('fist-technique-2-4', 'damage8'))],
             priority: 2,
         },
         {
             id: 'fist-technique-2-5',
-            trigger: { type: 'diceSet', faces: { fist: 5 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 5 } },
             effects: [damage(9, abilityEffectText('fist-technique-2-5', 'damage9'))],
             priority: 3,
         },
@@ -122,25 +123,25 @@ const FIST_TECHNIQUE_3: AbilityDef = {
     variants: [
         {
             id: 'fist-technique-3-3',
-            trigger: { type: 'diceSet', faces: { fist: 3 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3 } },
             effects: [damage(7, abilityEffectText('fist-technique-3-3', 'damage7'))],
             priority: 1,
         },
         {
             id: 'fist-technique-3-4',
-            trigger: { type: 'diceSet', faces: { fist: 4 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 4 } },
             effects: [
                 damage(8, abilityEffectText('fist-technique-3-4', 'damage8')),
-                inflictStatus('stun', 1, abilityEffectText('fist-technique-3-4', 'inflictStun')),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('fist-technique-3-4', 'inflictStun')),
             ],
             priority: 2,
         },
         {
             id: 'fist-technique-3-5',
-            trigger: { type: 'diceSet', faces: { fist: 5 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 5 } },
             effects: [
                 damage(9, abilityEffectText('fist-technique-3-5', 'damage9')),
-                inflictStatus('stun', 1, abilityEffectText('fist-technique-3-5', 'inflictStun')),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('fist-technique-3-5', 'inflictStun')),
             ],
             priority: 3,
         },
@@ -186,14 +187,14 @@ const LOTUS_PALM_2: AbilityDef = {
         // 莲花之道（3莲花触发）- 最低优先级
         {
             id: 'lotus-palm-2-3',
-            trigger: { type: 'diceSet', faces: { lotus: 3 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 3 } },
             effects: [
                 damage(2, abilityEffectText('lotus-palm-2-3', 'damage2')),
-                grantToken('evasive', 1, abilityEffectText('lotus-palm-2-3', 'gainEvasive'), {
+                grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('lotus-palm-2-3', 'gainEvasive'), {
                     timing: 'postDamage',
                     condition: { type: 'onHit' },
                 }),
-                grantToken('taiji', 2, abilityEffectText('lotus-palm-2-3', 'gainTaiji2'), {
+                grantToken(TOKEN_IDS.TAIJI, 2, abilityEffectText('lotus-palm-2-3', 'gainTaiji2'), {
                     timing: 'postDamage',
                     condition: { type: 'onHit' },
                 }),
@@ -203,24 +204,26 @@ const LOTUS_PALM_2: AbilityDef = {
         // 4莲花触发 - 中优先级
         {
             id: 'lotus-palm-2-4',
-            trigger: { type: 'diceSet', faces: { lotus: 4 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 4 } },
             effects: [
                 damage(6, abilityEffectText('lotus-palm-2-4', 'damage6')),
-                // 获得太极 Token：onHit 条件 + postDamage 时机，获得6气
-                grantToken('taiji', 6, abilityEffectText('lotus-palm-2-4', 'taijiCapMax'), {
+                // 太极上限+1，并获得6气：onHit 条件 + postDamage 时机
+                {
+                    description: abilityEffectText('lotus-palm-2-4', 'taijiCapUp'),
+                    action: { type: 'custom', target: 'self', customActionId: 'lotus-palm-taiji-cap-up-and-fill' },
                     timing: 'postDamage',
                     condition: { type: 'onHit' },
-                }),
+                },
             ],
             priority: 1,
         },
         // 5莲花触发 - 最高优先级
         {
             id: 'lotus-palm-2-5',
-            trigger: { type: 'diceSet', faces: { lotus: 5 } },
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 5 } },
             effects: [
                 damage(10, abilityEffectText('lotus-palm-2-5', 'damage10')),
-                grantToken('taiji', 6, abilityEffectText('lotus-palm-2-5', 'taijiCapMax'), {
+                grantToken(TOKEN_IDS.TAIJI, 6, abilityEffectText('lotus-palm-2-5', 'taijiCapMax'), {
                     timing: 'postDamage',
                     condition: { type: 'onHit' },
                 }),
@@ -237,7 +240,7 @@ const TAIJI_COMBO_2: AbilityDef = {
     name: abilityText('taiji-combo-2', 'name'),
     type: 'offensive',
     description: abilityText('taiji-combo-2', 'description'),
-    trigger: { type: 'diceSet', faces: { fist: 3, palm: 1 } },
+    trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3, [DICE_FACE_IDS.PALM]: 1 } },
     effects: [
         {
             description: abilityEffectText('taiji-combo-2', 'rollDie'),
@@ -246,16 +249,16 @@ const TAIJI_COMBO_2: AbilityDef = {
                 target: 'self',
                 diceCount: 2, // 投掷2骰
                 conditionalEffects: [
-                    { face: 'fist', bonusDamage: 2 },  // 增加2×拳伤害
-                    { face: 'palm', bonusDamage: 3 },  // 增加3×掌伤害
-                    { face: 'taiji', grantToken: { tokenId: 'taiji', value: 2 } }, // 获得2×太极的气
+                    { face: DICE_FACE_IDS.FIST, bonusDamage: 2 },  // 增加2×拳伤害
+                    { face: DICE_FACE_IDS.PALM, bonusDamage: 3 },  // 增加3×掌伤害
+                    { face: DICE_FACE_IDS.TAIJI, grantToken: { tokenId: TOKEN_IDS.TAIJI, value: 2 } }, // 获得2×太极的气
                     {
-                        face: 'lotus',
+                        face: DICE_FACE_IDS.LOTUS,
                         triggerChoice: {
                             titleKey: 'choices.evasiveOrPurifyToken',
                             options: [
-                                { tokenId: 'evasive', value: 1 },
-                                { tokenId: 'purify', value: 1 },
+                                { tokenId: TOKEN_IDS.EVASIVE, value: 1 },
+                                { tokenId: TOKEN_IDS.PURIFY, value: 1 },
                             ],
                         },
                     },
@@ -274,7 +277,7 @@ const THUNDER_STRIKE_2: AbilityDef = {
     name: abilityText('thunder-strike-2', 'name'),
     type: 'offensive',
     description: abilityText('thunder-strike-2', 'description'),
-    trigger: { type: 'diceSet', faces: { palm: 3 } },
+    trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.PALM]: 3 } },
     effects: [
         {
             description: abilityEffectText('thunder-strike-2', 'roll3Damage'),
@@ -285,24 +288,47 @@ const THUNDER_STRIKE_2: AbilityDef = {
     ],
 };
 
-// 定水神拳 II（升级自 calm-water）
+// 定水神拳 II / 止禅拳法 II（升级自 calm-water）
+// 描述: 大顺子触发：造成7伤害，然后获得闪避和3气，施加倒地
+//       武僧之路（拳+掌+太极+莲花触发）：获得2闪避，造成3不可防御伤害
 const CALM_WATER_2: AbilityDef = {
     id: 'calm-water',
     name: abilityText('calm-water-2', 'name'),
     type: 'offensive',
     description: abilityText('calm-water-2', 'description'),
-    trigger: { type: 'largeStraight' },
-    effects: [
-        damage(9, abilityEffectText('calm-water-2', 'damage9')),
-        // 获得太极 Token：onHit 条件 + postDamage 时机
-        grantToken('taiji', 3, abilityEffectText('calm-water-2', 'gainTaiji3'), {
-            timing: 'postDamage',
-            condition: { type: 'onHit' },
-        }),
-        grantToken('evasive', 1, abilityEffectText('calm-water-2', 'gainEvasive'), {
-            timing: 'postDamage',
-            condition: { type: 'onHit' },
-        }),
+    variants: [
+        // 武僧之路（拳+掌+太极+莲花触发）- 优先级0，不可防御
+        {
+            id: 'calm-water-2-way-of-monk',
+            trigger: { type: 'allSymbolsPresent', symbols: [DICE_FACE_IDS.FIST, DICE_FACE_IDS.PALM, DICE_FACE_IDS.TAIJI, DICE_FACE_IDS.LOTUS] },
+            effects: [
+                grantToken(TOKEN_IDS.EVASIVE, 2, abilityEffectText('calm-water-2-way-of-monk', 'gainEvasive2')),
+                damage(3, abilityEffectText('calm-water-2-way-of-monk', 'damage3')),
+            ],
+            priority: 0,
+            tags: ['unblockable'],
+        },
+        // 大顺子触发 - 优先级1
+        {
+            id: 'calm-water-2-large-straight',
+            trigger: { type: 'largeStraight' },
+            effects: [
+                damage(7, abilityEffectText('calm-water-2', 'damage7')),
+                grantToken(TOKEN_IDS.TAIJI, 3, abilityEffectText('calm-water-2', 'gainTaiji3'), {
+                    timing: 'postDamage',
+                    condition: { type: 'onHit' },
+                }),
+                grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('calm-water-2', 'gainEvasive'), {
+                    timing: 'postDamage',
+                    condition: { type: 'onHit' },
+                }),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('calm-water-2', 'inflictKnockdown'), {
+                    timing: 'postDamage',
+                    condition: { type: 'onHit' },
+                }),
+            ],
+            priority: 1,
+        },
     ],
 };
 
@@ -317,7 +343,7 @@ const HARMONY_2: AbilityDef = {
     effects: [
         damage(6, abilityEffectText('harmony-2', 'damage6')), // 造成6伤害
         // 获得太极 Token：onHit 条件 + postDamage 时机
-        grantToken('taiji', 3, abilityEffectText('harmony-2', 'gainTaiji3'), {
+        grantToken(TOKEN_IDS.TAIJI, 3, abilityEffectText('harmony-2', 'gainTaiji3'), {
             timing: 'postDamage',
             condition: { type: 'onHit' },
         }),
@@ -326,16 +352,37 @@ const HARMONY_2: AbilityDef = {
 
 // 禅忘 II（升级自 zen-forget）
 // 描述: 3太极触发：获得6气，获得闪避和净化
+//       禅武归一（拳+掌+太极触发）：造成6伤害，然后获得2气
 const ZEN_FORGET_2: AbilityDef = {
     id: 'zen-forget',
     name: abilityText('zen-forget-2', 'name'),
     type: 'offensive',
     description: abilityText('zen-forget-2', 'description'),
-    trigger: { type: 'diceSet', faces: { taiji: 3 } },
-    effects: [
-        grantToken('taiji', 6, abilityEffectText('zen-forget-2', 'gainTaiji6')), // 获得6气
-        grantToken('evasive', 1, abilityEffectText('zen-forget-2', 'gainEvasive')),
-        grantToken('purify', 1, abilityEffectText('zen-forget-2', 'gainPurify')),
+    variants: [
+        // 禅武归一（拳+掌+太极触发）- 优先级0
+        {
+            id: 'zen-forget-2-zen-combat',
+            trigger: { type: 'allSymbolsPresent', symbols: [DICE_FACE_IDS.FIST, DICE_FACE_IDS.PALM, DICE_FACE_IDS.TAIJI] },
+            effects: [
+                damage(6, abilityEffectText('zen-forget-2-zen-combat', 'damage6')),
+                grantToken(TOKEN_IDS.TAIJI, 2, abilityEffectText('zen-forget-2-zen-combat', 'gainTaiji2'), {
+                    timing: 'postDamage',
+                    condition: { type: 'onHit' },
+                }),
+            ],
+            priority: 0,
+        },
+        // 3太极触发 - 优先级1
+        {
+            id: 'zen-forget-2-3',
+            trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.TAIJI]: 3 } },
+            effects: [
+                grantToken(TOKEN_IDS.TAIJI, 6, abilityEffectText('zen-forget-2', 'gainTaiji6')),
+                grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('zen-forget-2', 'gainEvasive')),
+                grantToken(TOKEN_IDS.PURIFY, 1, abilityEffectText('zen-forget-2', 'gainPurify')),
+            ],
+            priority: 1,
+        },
     ],
 };
 
@@ -396,7 +443,7 @@ export const MONK_CARDS: AbilityCard[] = [
             'en': { name: 'Inner Peace!', description: 'Gain 2 Chi.' },
         },
         effects: [
-            grantToken('taiji', 2, '获得2太极', { timing: 'immediate' }),
+            grantToken(TOKEN_IDS.TAIJI, 2, '获得2太极', { timing: 'immediate' }),
         ],
     },
     {
@@ -412,7 +459,7 @@ export const MONK_CARDS: AbilityCard[] = [
             'en': { name: 'Deep Thought!', description: 'Gain 5 Chi.' },
         },
         effects: [
-            grantToken('taiji', 5, '获得5太极', { timing: 'immediate' }),
+            grantToken(TOKEN_IDS.TAIJI, 5, '获得5太极', { timing: 'immediate' }),
         ],
     },
     // --- 行动卡 - main (蓝色) ---
@@ -429,10 +476,10 @@ export const MONK_CARDS: AbilityCard[] = [
             'en': { name: 'Buddha Light!', description: 'Gain 1 Chi, Evasive and Purify; inflict Stun on 1 opponent.' },
         },
         effects: [
-            grantToken('taiji', 1, '获得1太极', { timing: 'immediate' }),
-            grantToken('evasive', 1, '获得1闪避', { timing: 'immediate' }),
-            grantToken('purify', 1, '获得1净化', { timing: 'immediate' }),
-            inflictStatus('stun', 1, '对手倒地'),
+            grantToken(TOKEN_IDS.TAIJI, 1, '获得1太极', { timing: 'immediate' }),
+            grantToken(TOKEN_IDS.EVASIVE, 1, '获得1闪避', { timing: 'immediate' }),
+            grantToken(TOKEN_IDS.PURIFY, 1, '获得1净化', { timing: 'immediate' }),
+            inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手倒地'),
         ],
     },
     {
@@ -448,7 +495,7 @@ export const MONK_CARDS: AbilityCard[] = [
             'en': { name: 'Palm Strike!', description: 'Inflict Stun on 1 opponent.' },
         },
         effects: [
-            inflictStatus('stun', 1, '对手倒地'),
+            inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手倒地'),
         ],
     },
     // --- 升级卡 (绿色) ---

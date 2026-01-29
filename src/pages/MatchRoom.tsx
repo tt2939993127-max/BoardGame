@@ -273,7 +273,12 @@ export const MatchRoom = () => {
         if (!isActive && !tutorialStartedRef.current) {
             const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
             if (impl?.tutorial) {
-                startTutorial(impl.tutorial);
+                // 延迟启动教程，等待 boardgame.io client 完全初始化
+                const timer = setTimeout(() => {
+                    console.log('[Tutorial][MatchRoom] 调用 startTutorial', { gameId, manifestId: impl.tutorial!.id });
+                    startTutorial(impl.tutorial!);
+                }, 100);
+                return () => clearTimeout(timer);
             }
         }
     }, [startTutorial, isTutorialRoute, isActive, gameId]);
@@ -596,7 +601,7 @@ export const MatchRoom = () => {
             <div className="w-full h-full">
                 {isTutorialRoute ? (
                     <GameModeProvider mode="tutorial">
-                        {TutorialClient ? <TutorialClient playerID={null} /> : (
+                        {TutorialClient ? <TutorialClient playerID="0" /> : (
                             <div className="w-full h-full flex items-center justify-center text-white/50">
                                 {t('matchRoom.noTutorial')}
                             </div>

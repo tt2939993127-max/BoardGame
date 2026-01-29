@@ -56,6 +56,8 @@ const buildCreateOpts = (
     };
 };
 
+type MatchIdDoc = { matchID: string };
+
 describe('MongoStorage 行为', () => {
     let mongo: MongoMemoryServer;
 
@@ -74,15 +76,10 @@ describe('MongoStorage 行为', () => {
         await mongo.stop();
     });
 
-    it('同一 ownerKey 创建新房间会清理旧房间', async () => {
+    it('同一 ownerKey 创建新房间会被阻止', async () => {
         await mongoStorage.createMatch('match-1', buildCreateOpts('user:1'));
         await expect(mongoStorage.createMatch('match-2', buildCreateOpts('user:1')))
-            .resolves.toBeUndefined();
-
-        const Match = mongoose.model('Match');
-        const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean();
-        const remainingIds = remaining.map((doc: any) => doc.matchID);
-        expect(remainingIds).toEqual(['match-2']);
+            .rejects.toThrow('[Lobby] ACTIVE_MATCH_EXISTS');
     });
 
     it('不同 ownerKey 允许创建多个房间', async () => {
@@ -91,7 +88,7 @@ describe('MongoStorage 行为', () => {
             .resolves.toBeUndefined();
     });
 
-    it('空房间不阻止新建房间', async () => {
+    it('空房间依然阻止新建房间', async () => {
         const Match = mongoose.model('Match');
         await Match.create({
             matchID: 'match-1',
@@ -111,7 +108,7 @@ describe('MongoStorage 行为', () => {
             ttlSeconds: 0,
         });
         await expect(mongoStorage.createMatch('match-2', buildCreateOpts('user:1')))
-            .resolves.toBeUndefined();
+            .rejects.toThrow('[Lobby] ACTIVE_MATCH_EXISTS');
     });
 
     it('cleanupDuplicateOwnerMatches 仅保留最新房间', async () => {
@@ -151,13 +148,14 @@ describe('MongoStorage 行为', () => {
         const cleaned = await mongoStorage.cleanupDuplicateOwnerMatches();
         expect(cleaned).toBe(1);
 
-        const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:dup' }).lean();
-        const remainingIds = remaining.map((doc: any) => doc.matchID);
+        const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:dup' }).lean<MatchIdDoc[]>();
+        const remainingIds = remaining.map(doc => doc.matchID);
         expect(remainingIds).toEqual(['dup-new']);
     });
 
-    it('cleanupEphemeralMatches 删除无在线玩家的临时房间', async () => {
+    it('cleanupEphemeralMatches 在断线超时后清理临时房间', async () => {
         const Match = mongoose.model('Match');
+        const disconnectedSince = Date.now() - 6 * 60 * 1000;
         await Match.create({
             matchID: 'ephemeral-empty',
             gameName: 'tictactoe',
@@ -170,6 +168,7 @@ describe('MongoStorage 行为', () => {
                     1: { id: 1, isConnected: false },
                 },
                 setupData: { ownerKey: 'user:ephemeral' },
+                disconnectedSince,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
             },
@@ -196,8 +195,8 @@ describe('MongoStorage 行为', () => {
         const cleaned = await mongoStorage.cleanupEphemeralMatches();
         expect(cleaned).toBe(1);
 
-        const remaining = await Match.find({ matchID: { $in: ['ephemeral-empty', 'ephemeral-active'] } }).lean();
-        const remainingIds = remaining.map((doc: any) => doc.matchID);
+        const remaining = await Match.find({ matchID: { $in: ['ephemeral-empty', 'ephemeral-active'] } }).lean<MatchIdDoc[]>();
+        const remainingIds = remaining.map(doc => doc.matchID);
         expect(remainingIds).toContain('ephemeral-active');
         expect(remainingIds).not.toContain('ephemeral-empty');
     });
@@ -248,8 +247,8 @@ describe('MongoStorage 行为', () => {
         const cleaned = await mongoStorage.cleanupLegacyMatches(0);
         expect(cleaned).toBe(1);
 
-        const remaining = await Match.find({ matchID: { $in: ['legacy-empty', 'legacy-occupied'] } }).lean();
-        const remainingIds = remaining.map((doc: any) => doc.matchID);
+        const remaining = await Match.find({ matchID: { $in: ['legacy-empty', 'legacy-occupied'] } }).lean<MatchIdDoc[]>();
+        const remainingIds = remaining.map(doc => doc.matchID);
         expect(remainingIds).toContain('legacy-occupied');
         expect(remainingIds).not.toContain('legacy-empty');
     });
@@ -269,38 +268,5 @@ describe('MongoStorage 行为', () => {
         const ttlMs = 86400 * 1000;
         expect(expiresAt).toBeGreaterThanOrEqual(start + ttlMs);
         expect(expiresAt).toBeLessThanOrEqual(end + ttlMs + 1000);
-    });
-
-    it('cleanupOldMatches 清理超过 24 小时的房间', async () => {
-        const Match = mongoose.model('Match');
-        const now = Date.now();
-
-        await Match.create({
-            matchID: 'old-1day',
-            gameName: 'tictactoe',
-            state: null,
-            initialState: null,
-            metadata: buildMetadata({ ownerKey: 'user:old' }),
-            ttlSeconds: 86400,
-        });
-        await Match.create({
-            matchID: 'fresh-1day',
-            gameName: 'tictactoe',
-            state: null,
-            initialState: null,
-            metadata: buildMetadata({ ownerKey: 'user:fresh' }),
-            ttlSeconds: 86400,
-        });
-
-        await Match.updateOne({ matchID: 'old-1day' }, { updatedAt: new Date(now - 25 * 60 * 60 * 1000) });
-        await Match.updateOne({ matchID: 'fresh-1day' }, { updatedAt: new Date(now - 2 * 60 * 60 * 1000) });
-
-        const cleaned = await mongoStorage.cleanupOldMatches(24);
-        expect(cleaned).toBe(1);
-
-        const remaining = await Match.find({ matchID: { $in: ['old-1day', 'fresh-1day'] } }).lean();
-        const remainingIds = remaining.map((doc: any) => doc.matchID);
-        expect(remainingIds).toContain('fresh-1day');
-        expect(remainingIds).not.toContain('old-1day');
     });
 });

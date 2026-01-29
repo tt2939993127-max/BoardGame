@@ -1,7 +1,6 @@
 import 'dotenv/config'; // 加载 .env
 import type { Game } from 'boardgame.io';
 import { createRequire } from 'module';
-import { createMatch as createBoardgameMatch } from 'boardgame.io/internal';
 import { Server as IOServer, Socket as IOSocket } from 'socket.io';
 import bodyParser from 'koa-bodyparser';
 import koaBody from 'koa-body';
@@ -11,9 +10,11 @@ import { connectDB } from './src/server/db';
 // 使用 require 避免 tsx 在 ESM 下将 boardgame.io/server 解析到不存在的 index.jsx
 const require = createRequire(import.meta.url);
 const { Server: BoardgameServer, Origins } = require('boardgame.io/server') as typeof import('boardgame.io/server');
+const { createMatch: createBoardgameMatch } = require('boardgame.io/internal') as typeof import('boardgame.io/internal');
 import { MatchRecord } from './src/server/models/MatchRecord';
 import { GAME_SERVER_MANIFEST } from './src/games/manifest.server';
 import { mongoStorage } from './src/server/storage/MongoStorage';
+import { hybridStorage } from './src/server/storage/HybridStorage';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { hasOccupiedPlayers } from './src/server/matchOccupancy';
 
@@ -220,8 +221,8 @@ const USE_PERSISTENT_STORAGE = process.env.USE_PERSISTENT_STORAGE !== 'false';
 const server = BoardgameServer({
     games: SERVER_GAMES,
     origins: SERVER_ORIGINS,
-    // 启用持久化时使用 MongoDB 存储
-    ...(USE_PERSISTENT_STORAGE ? { db: mongoStorage as any } : {}),
+    // 启用持久化时使用混合存储（用户房间 MongoDB / 游客房间内存）
+    ...(USE_PERSISTENT_STORAGE ? { db: hybridStorage as any } : {}),
 });
 
 // 获取底层的 Koa 应用和数据库
@@ -369,15 +370,9 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
 
             // 检查是否还有玩家占座（name/credentials/isConnected 任一存在）
             const hasPlayers = hasOccupiedPlayers(players as Record<string, { name?: string; credentials?: string; isConnected?: boolean }>);
-            if (hasPlayers) {
-                console.log(`[Leave] 保留房间 matchID=${matchID} playerID=${playerID} reason=occupied`);
-                // 还有人，只更新 metadata
-                await db.setMetadata(matchID, metadata);
-            } else {
-                // 没人了，删除整个房间
-                await db.wipe(matchID);
-                console.log(`[Leave] 房间已无人占座，已删除 matchID=${matchID} playerID=${playerID}`);
-            }
+            console.log(`[Leave] 释放座位 matchID=${matchID} playerID=${playerID} hasPlayers=${hasPlayers}`);
+            // 仅更新 metadata，不在 /leave 时销毁房间
+            await db.setMetadata(matchID, metadata);
 
             setTimeout(() => {
                 void handleMatchLeft(matchID, gameNameFromUrl);
@@ -1009,7 +1004,7 @@ server.run(GAME_SERVER_PORT).then(async (runningServers) => {
 
     // 如果使用持久化存储，连接存储后端
     if (USE_PERSISTENT_STORAGE) {
-        await mongoStorage.connect();
+        await hybridStorage.connect();
         // 启动时清理损坏/临时/遗留/重复房间（仅在重启时执行一次）
         try {
             const cleanedEmpty = await mongoStorage.cleanupEmptyMatches();
@@ -1023,7 +1018,7 @@ server.run(GAME_SERVER_PORT).then(async (runningServers) => {
         }
 
         try {
-            const cleanedEphemeral = await mongoStorage.cleanupEphemeralMatches();
+            const cleanedEphemeral = await hybridStorage.cleanupEphemeralMatches();
             if (cleanedEphemeral > 0) {
                 for (const gameName of SUPPORTED_GAMES) {
                     void broadcastLobbySnapshot(gameName, 'cleanupEphemeralMatches:boot');
@@ -1032,6 +1027,20 @@ server.run(GAME_SERVER_PORT).then(async (runningServers) => {
         } catch (err) {
             console.error('[MongoStorage] 启动清理临时房间失败:', err);
         }
+
+        // 定时清理断线超时的临时房间
+        setInterval(async () => {
+            try {
+                const cleaned = await hybridStorage.cleanupEphemeralMatches();
+                if (cleaned > 0) {
+                    for (const gameName of SUPPORTED_GAMES) {
+                        void broadcastLobbySnapshot(gameName, 'cleanupEphemeralMatches:timer');
+                    }
+                }
+            } catch (err) {
+                console.error('[HybridStorage] 定时清理临时房间失败:', err);
+            }
+        }, 60 * 1000);
 
         try {
             const cleanedLegacyOnBoot = await mongoStorage.cleanupLegacyMatches(0);

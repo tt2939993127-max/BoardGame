@@ -12,6 +12,7 @@ import {
     type FlowHooks,
 } from '../FlowSystem';
 import type { MatchState, Command, RandomFn } from '../../types';
+import { DEFAULT_TUTORIAL_STATE } from '../../types';
 
 // 模拟 RandomFn
 const mockRandom: RandomFn = {
@@ -33,6 +34,7 @@ const createTestState = (phase: string): MatchState<TestCore> => ({
         log: { entries: [], maxEntries: 1000 },
         rematch: { votes: {}, ready: false },
         responseWindow: { current: undefined },
+        tutorial: { ...DEFAULT_TUTORIAL_STATE },
         turnNumber: 1,
         phase,
     },

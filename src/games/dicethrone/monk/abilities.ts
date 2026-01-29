@@ -4,6 +4,7 @@
  */
 
 import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../systems/AbilitySystem';
+import { TOKEN_IDS, STATUS_IDS, DICE_FACE_IDS } from '../domain/ids';
 
 // 游戏特定条件注册已移至 ../conditions.ts，由 domain/index.ts 统一调用
 
@@ -39,19 +40,19 @@ export const MONK_ABILITIES: AbilityDef[] = [
         variants: [
             {
                 id: 'fist-technique-3',
-                trigger: { type: 'diceSet', faces: { fist: 3 } },
+                trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3 } },
                 effects: [damage(4, abilityEffectText('fist-technique-3', 'damage4'))],
                 priority: 1,
             },
             {
                 id: 'fist-technique-4',
-                trigger: { type: 'diceSet', faces: { fist: 4 } },
+                trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 4 } },
                 effects: [damage(6, abilityEffectText('fist-technique-4', 'damage6'))],
                 priority: 2,
             },
             {
                 id: 'fist-technique-5',
-                trigger: { type: 'diceSet', faces: { fist: 5 } },
+                trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 5 } },
                 effects: [damage(8, abilityEffectText('fist-technique-5', 'damage8'))],
                 priority: 3,
             },
@@ -62,9 +63,9 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('zen-forget', 'name'),
         type: 'offensive',
         description: abilityText('zen-forget', 'description'),
-        trigger: { type: 'diceSet', faces: { taiji: 3 } },
+        trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.TAIJI]: 3 } },
         effects: [
-            grantToken('taiji', 5, abilityEffectText('zen-forget', 'gainTaiji5')),
+            grantToken(TOKEN_IDS.TAIJI, 5, abilityEffectText('zen-forget', 'gainTaiji5')),
             // 选择效果：获得闪避或净化 Token
             {
                 description: abilityEffectText('zen-forget', 'gainChoice'),
@@ -73,8 +74,8 @@ export const MONK_ABILITIES: AbilityDef[] = [
                     target: 'self',
                     choiceTitleKey: 'choices.evasiveOrPurifyToken',
                     choiceOptions: [
-                        { tokenId: 'evasive', value: 1 },
-                        { tokenId: 'purify', value: 1 },
+                        { tokenId: TOKEN_IDS.EVASIVE, value: 1 },
+                        { tokenId: TOKEN_IDS.PURIFY, value: 1 },
                     ],
                 },
                 timing: 'preDefense',
@@ -91,7 +92,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
             // 伤害效果：默认 withDamage 时机
             damage(5, abilityEffectText('harmony', 'damage5')),
             // 然后获得太极 Token：onHit 条件 + postDamage 时机
-            grantToken('taiji', 2, abilityEffectText('harmony', 'gainTaiji2'), {
+            grantToken(TOKEN_IDS.TAIJI, 2, abilityEffectText('harmony', 'gainTaiji2'), {
                 timing: 'postDamage',
                 condition: { type: 'onHit' },
             }),
@@ -102,7 +103,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('lotus-palm', 'name'),
         type: 'offensive',
         description: abilityText('lotus-palm', 'description'),
-        trigger: { type: 'diceSet', faces: { lotus: 4 } },
+        trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 4 } },
         effects: [
             // 你可以花费2个太极标记令此次攻击不可防御（在进入防御阶段前选择）
             {
@@ -125,7 +126,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('taiji-combo', 'name'),
         type: 'offensive',
         description: abilityText('taiji-combo', 'description'),
-        trigger: { type: 'diceSet', faces: { fist: 3, palm: 1 } },
+        trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3, [DICE_FACE_IDS.PALM]: 1 } },
         effects: [
             // 投掷骰子效果：先投掷，根据结果累加 bonusDamage
             {
@@ -135,16 +136,16 @@ export const MONK_ABILITIES: AbilityDef[] = [
                     target: 'self',
                     diceCount: 1,
                     conditionalEffects: [
-                        { face: 'fist', bonusDamage: 2 },
-                        { face: 'palm', bonusDamage: 3 },
-                        { face: 'taiji', grantToken: { tokenId: 'taiji', value: 2 } },
+                        { face: DICE_FACE_IDS.FIST, bonusDamage: 2 },
+                        { face: DICE_FACE_IDS.PALM, bonusDamage: 3 },
+                        { face: DICE_FACE_IDS.TAIJI, grantToken: { tokenId: TOKEN_IDS.TAIJI, value: 2 } },
                         {
-                            face: 'lotus',
+                            face: DICE_FACE_IDS.LOTUS,
                             triggerChoice: {
                                 titleKey: 'choices.evasiveOrPurifyToken',
                                 options: [
-                                    { tokenId: 'evasive', value: 1 },
-                                    { tokenId: 'purify', value: 1 },
+                                    { tokenId: TOKEN_IDS.EVASIVE, value: 1 },
+                                    { tokenId: TOKEN_IDS.PURIFY, value: 1 },
                                 ],
                             },
                         },
@@ -161,7 +162,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('thunder-strike', 'name'),
         type: 'offensive',
         description: abilityText('thunder-strike', 'description'),
-        trigger: { type: 'diceSet', faces: { palm: 3 } },
+        trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.PALM]: 3 } },
         effects: [
             damage(10, abilityEffectText('thunder-strike', 'roll3Damage')),
             { description: abilityEffectText('thunder-strike', 'rerollOne') },
@@ -176,12 +177,12 @@ export const MONK_ABILITIES: AbilityDef[] = [
         effects: [
             damage(7, abilityEffectText('calm-water', 'damage7')),
             // 然后获得太极 Token：onHit 条件 + postDamage 时机
-            grantToken('taiji', 2, abilityEffectText('calm-water', 'gainTaiji2'), {
+            grantToken(TOKEN_IDS.TAIJI, 2, abilityEffectText('calm-water', 'gainTaiji2'), {
                 timing: 'postDamage',
                 condition: { type: 'onHit' },
             }),
             // 然后获得闪避 Token：onHit 条件 + postDamage 时机
-            grantToken('evasive', 1, abilityEffectText('calm-water', 'gainEvasive'), {
+            grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('calm-water', 'gainEvasive'), {
                 timing: 'postDamage',
                 condition: { type: 'onHit' },
             }),
@@ -204,19 +205,19 @@ export const MONK_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('transcendence', 'description'),
         tags: ['ultimate'],
-        trigger: { type: 'diceSet', faces: { lotus: 5 } },
+        trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 5 } },
         effects: [
             // 造成10伤害，造成击倒
             damage(10, abilityEffectText('transcendence', 'damage10')),
             {
                 description: abilityEffectText('transcendence', 'inflictKnockdown'),
-                action: { type: 'grantStatus', target: 'opponent', statusId: 'stun', value: 1 },
+                action: { type: 'grantStatus', target: 'opponent', statusId: STATUS_IDS.KNOCKDOWN, value: 1 },
                 timing: 'postDamage',
                 condition: { type: 'onHit' },
             },
             // 获得闪避和净化
-            grantToken('evasive', 1, abilityEffectText('transcendence', 'gainEvasive'), { timing: 'preDefense' }),
-            grantToken('purify', 1, abilityEffectText('transcendence', 'gainPurify'), { timing: 'preDefense' }),
+            grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('transcendence', 'gainEvasive'), { timing: 'preDefense' }),
+            grantToken(TOKEN_IDS.PURIFY, 1, abilityEffectText('transcendence', 'gainPurify'), { timing: 'preDefense' }),
             // 太极上限+1，并立即补满太极
             {
                 description: abilityEffectText('transcendence', 'taijiCapMax'),

@@ -7,7 +7,21 @@ export class RegisterDto {
 
     @IsOptional()
     @IsString()
+    email?: string;
+
+    @IsOptional()
+    @IsString()
+    code?: string;
+
+    @IsOptional()
+    @IsString()
     password?: string;
+}
+
+export class SendRegisterCodeDto {
+    @IsOptional()
+    @IsString()
+    email?: string;
 }
 
 export class LoginDto {

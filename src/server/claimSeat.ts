@@ -1,13 +1,19 @@
 import jwt from 'jsonwebtoken';
+import type { Server, State } from 'boardgame.io';
 
 export type GameJwtPayload = {
     userId?: string;
     username?: string;
 };
 
+type ClaimSeatFetchResult = {
+    metadata?: Server.MatchData;
+    state?: State;
+};
+
 type ClaimSeatDb = {
-    fetch: (matchID: string, opts: { metadata?: boolean; state?: boolean }) => Promise<{ metadata?: any; state?: any }>;
-    setMetadata: (matchID: string, metadata: any) => Promise<void>;
+    fetch: (matchID: string, opts: { metadata?: boolean; state?: boolean }) => Promise<ClaimSeatFetchResult>;
+    setMetadata: (matchID: string, metadata: Server.MatchData) => Promise<void>;
 };
 
 type ClaimSeatContext = {

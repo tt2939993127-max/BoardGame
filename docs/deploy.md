@@ -25,7 +25,30 @@ curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts
 cd /home/admin/BoardGame
 bash scripts/deploy-quick.sh
 ```
- 
+
+## 部署前本地自检（强烈建议）
+
+在发版前先在本机跑一遍“生产式”流程，能提前暴露构建/代理/端口问题。
+
+```bash
+# 1) 本地构建验证（等同于容器内 build）
+npm run build
+
+# 2) 构建镜像并启动（可加 --no-cache）
+docker compose build --no-cache
+docker compose up -d
+
+# 3) 验证容器状态与入口
+docker compose ps
+curl -I http://127.0.0.1/
+```
+
+**注意**：浏览器侧的 WebSocket/接口应走同域入口：
+
+- 正确：`http://127.0.0.1/` → `/lobby-socket`、`/games/*`
+- 错误：直接访问 `http://127.0.0.1:18000`（该端口仅供容器内部使用）
+
+如果你本地用 Vite 直连后端，请确认 `VITE_BACKEND_URL` 指向正确的同域入口或代理入口。
 
 ### 可选环境变量
 
@@ -99,6 +122,39 @@ bash deploy-auto.sh
 - **前端 API 指向**：`VITE_BACKEND_URL`（仅 Pages/前端构建时配置）
 - **环境变量示例**：`.env.example`
 
+### 环境自动区分
+
+`.env` 保持本地开发配置（`localhost`），Docker 通过 `docker-compose.yml` 自动覆盖为容器名：
+
+| 环境 | MONGO_URI | REDIS_HOST |
+|------|-----------|------------|
+| `npm run dev` | `localhost:27017` | 留空（内存缓存） |
+| `docker compose up` | `mongodb:27017` | `redis` |
+
+> **无需手动切换**：Docker 会自动覆盖 `.env` 中的数据库/Redis 配置。
+
+### .env 配置说明
+
+`.env` 保持本地开发默认值：
+
+```bash
+# 数据库（本地开发用 localhost，Docker 自动覆盖为 mongodb）
+MONGO_URI=mongodb://localhost:27017/boardgame
+
+# Redis（本地开发注释掉用内存缓存，Docker 自动覆盖）
+# REDIS_HOST=localhost
+# REDIS_PORT=6379
+
+# JWT 密钥（生产环境必须修改）
+JWT_SECRET=your-secret-key
+
+# 邮件服务（可选）
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=xxx@qq.com
+SMTP_PASS=授权码
+```
+
 ## 单体代理说明
 
 - **/games、/default、/lobby-socket、/socket.io** 由 NestJS 反向代理到 game-server
@@ -145,10 +201,22 @@ bash deploy-auto.sh
   - DNS 解析：`nslookup easyboardgame.top` / `nslookup api.easyboardgame.top`
 - **521 / 无响应**：Cloudflare 无法连接源站，多为 80 端口未监听或源站服务重启；先确认 `docker compose ps` 与 `ss -lntp | grep ':80'`。
 - **容器反复重启**：通常是构建或运行时报错，先看 `docker compose logs -f web` 与 `docker compose logs -f game-server`。
-- **端口占用**：优先只改 `docker-compose.yml` 中 `web` 的端口映射，并同步 `WEB_ORIGINS`
+- **web 启动即退出 / Redis 连接失败**：
+  - 日志出现 `ECONNREFUSED 127.0.0.1:6379` 多为 Redis 未运行。
+  - Docker 下不要写 `REDIS_HOST=localhost`；可选择：
+    1) 删除 `.env` 中 `REDIS_HOST/REDIS_PORT`（关闭 Redis，使用内存缓存）。
+    2) 在 `docker-compose.yml` 增加 redis 服务，并设 `REDIS_HOST=redis`。
+- **端口占用**：
+  - 现象：`docker compose up` 提示 `bind: Only one usage of each socket address`。
+  - Windows：`netstat -ano | findstr :18000` → `taskkill /F /PID <pid>`
+  - Linux：`ss -lntp | grep ':18000'` 或 `lsof -i :18000` → `kill -9 <pid>`
+  - 或者只改 `docker-compose.yml` 中 `web` 的端口映射，并同步 `WEB_ORIGINS`
 - **WebSocket 不通**：检查 `docker/nginx.conf` 的 Upgrade/Connection 头，以及访问路径是否以 `/default/`、`/lobby-socket/` 开头
+- **Vite 本地直连 18000**：
+  - `VITE_GAME_SERVER_URL` 仅用于分离部署；本地 dev 建议留空，走 Vite 代理。
+  - 查看 `src/config/server.ts` 的回退逻辑，确保 dev 时不会强制指向 `http://127.0.0.1:18000`。
 - **为什么 dev 没问题但部署报错**：
   - 本地 `npm run dev:api` 使用 `tsx --tsconfig apps/api/tsconfig.json`，自动启用 `experimentalDecorators`；
     Docker 若未指定 tsconfig，会导致 NestJS 装饰器报错。
   - 本地 `npm run dev:game` 使用 `vite-node`，ESM 解析与 Docker 中 `tsx` 直接运行不同；
-    可能触发 `boardgame.io/server` 解析到不存在的 `index.jsx`。
+    可能触发 `boardgame.io/server` 解析到不存在的 `index.jsx`.

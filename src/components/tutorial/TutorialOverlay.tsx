@@ -152,7 +152,7 @@ export const TutorialOverlay: React.FC = () => {
     if (!isActive || !currentStep) return null;
 
     // 在 AI 回合期间不显示遮罩层 - 让 AI 静默移动
-    if (currentStep.aiMove !== undefined) return null;
+    if (currentStep.aiActions && currentStep.aiActions.length > 0) return null;
 
 
 
@@ -215,7 +215,7 @@ export const TutorialOverlay: React.FC = () => {
 
                     {!currentStep.requireAction && (
                         <button
-                            onClick={nextStep}
+                            onClick={() => nextStep('manual')}
                             className="w-full py-2 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center text-center relative z-10 pointer-events-auto"
                         >
                             {isLastStep ? t('overlay.finish') : t('overlay.next')}

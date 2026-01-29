@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasOccupiedPlayers, isSeatOccupied } from '../matchOccupancy';
+import { hasOccupiedPlayers, isSeatOccupied, type PlayerSeat } from '../matchOccupancy';
 
 describe('matchOccupancy', () => {
     it('isSeatOccupied: name/credentials/isConnected 任一成立视为占座', () => {
@@ -12,7 +12,9 @@ describe('matchOccupancy', () => {
 
     it('hasOccupiedPlayers: 任意玩家占座返回 true', () => {
         expect(hasOccupiedPlayers(undefined)).toBe(false);
-        expect(hasOccupiedPlayers({ 0: { id: 0 } as any, 1: { id: 1 } as any })).toBe(false);
-        expect(hasOccupiedPlayers({ 0: { name: 'P0' } as any, 1: { id: 1 } as any })).toBe(true);
+        const emptyPlayers: Record<string, PlayerSeat> = { 0: {}, 1: {} };
+        const occupiedPlayers: Record<string, PlayerSeat> = { 0: { name: 'P0' }, 1: {} };
+        expect(hasOccupiedPlayers(emptyPlayers)).toBe(false);
+        expect(hasOccupiedPlayers(occupiedPlayers)).toBe(true);
     });
 });

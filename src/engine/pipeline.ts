@@ -22,6 +22,7 @@ import type {
     SystemState,
     ValidationResult,
 } from './types';
+import { DEFAULT_TUTORIAL_STATE } from './types';
 import type { EngineSystem, GameSystemsConfig } from './systems/types';
 
 function sortSystems<TCore>(systems: EngineSystem<TCore>[]): EngineSystem<TCore>[] {
@@ -97,6 +98,7 @@ export function createInitialSystemState(
         responseWindow: {
             current: undefined,
         },
+        tutorial: { ...DEFAULT_TUTORIAL_STATE },
         turnNumber: 0,
         phase: '',
     };

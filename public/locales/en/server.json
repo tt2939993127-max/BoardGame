@@ -15,7 +15,9 @@
       "invalidEmail": "Please enter a valid email address",
       "emailAlreadyBound": "This email is already bound to another account",
       "missingEmailCode": "Please enter email and verification code",
-      "invalidEmailCode": "Invalid or expired verification code"
+      "invalidEmailCode": "Invalid or expired verification code",
+      "missingRegisterFields": "Please fill in all required registration fields",
+      "emailAlreadyUsed": "This email is already registered"
     },
     "success": {
       "register": "Registration successful",
@@ -80,12 +82,16 @@
     "error": {
       "userNotFound": "User not found",
       "matchNotFound": "Match not found",
+      "roomNotFound": "Room not found",
       "missingBanReason": "Please provide a ban reason",
-      "cannotBanAdmin": "Cannot ban admin account"
+      "cannotBanAdmin": "Cannot ban admin account",
+      "cannotDeleteAdmin": "Cannot delete admin account"
     },
     "success": {
       "userBanned": "User banned",
-      "userUnbanned": "User unbanned"
+      "userUnbanned": "User unbanned",
+      "roomDestroyed": "Room destroyed",
+      "userDeleted": "User deleted"
     }
   },
   "email": {

@@ -684,7 +684,7 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
             player.tokens[tokenId] = nextAmount;
         } else if (statusId) {
             // 处理状态选择
-            const def = newState.statusDefinitions.find(e => e.id === statusId);
+            const def = newState.tokenDefinitions.find(e => e.id === statusId);
             const maxStacks = def?.stackLimit || 99;
             const currentStacks = player.statusEffects[statusId] || 0;
             player.statusEffects[statusId] = Math.min(currentStacks + value, maxStacks);
@@ -1094,7 +1094,7 @@ const handleTokenResponseClosed: EventHandler<Extract<DiceThroneEvent, { type: '
 };
 
 /**
- * 处理技能重选事件（骰面被修改后触发）
+ * 技能重选事件（骰面被修改后触发）
  * - 清除 pendingAttack（回到技能选择状态）
  * - 设置 rollConfirmed = false（允许继续重掷，如果还有次数）
  */
@@ -1107,6 +1107,79 @@ const handleAbilityReselectionRequired: EventHandler<Extract<DiceThroneEvent, { 
     newState.pendingAttack = null;
     // 允许继续重掷（如果还有次数）
     newState.rollConfirmed = false;
+    return newState;
+};
+
+// ============================================================================
+// 奖励骰重掷事件处理器
+// ============================================================================
+
+/**
+ * 处理奖励骰重掷请求事件
+ * 启动延后结算流程
+ */
+const handleBonusDiceRerollRequested: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DICE_REROLL_REQUESTED' }>> = (
+    state,
+    event
+) => {
+    const newState = cloneState(state);
+    newState.pendingBonusDiceSettlement = event.payload.settlement;
+    return newState;
+};
+
+/**
+ * 处理奖励骰重掷事件
+ * 更新待结算的骰子状态，消耗 Token
+ */
+const handleBonusDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DIE_REROLLED' }>> = (
+    state,
+    event
+) => {
+    const newState = cloneState(state);
+    const { dieIndex, newValue, newFace, costTokenId, costAmount, playerId } = event.payload;
+
+    // 更新 pendingBonusDiceSettlement 中的骰子
+    if (newState.pendingBonusDiceSettlement) {
+        const dieToUpdate = newState.pendingBonusDiceSettlement.dice.find(d => d.index === dieIndex);
+        if (dieToUpdate) {
+            dieToUpdate.value = newValue;
+            dieToUpdate.face = newFace;
+        }
+        newState.pendingBonusDiceSettlement.rerollCount++;
+    }
+
+    // 消耗 Token
+    const player = newState.players[playerId];
+    if (player && player.tokens) {
+        const currentAmount = player.tokens[costTokenId] ?? 0;
+        player.tokens[costTokenId] = Math.max(0, currentAmount - costAmount);
+    }
+
+    // 更新 lastBonusDieRoll 用于 UI 特写
+    newState.lastBonusDieRoll = {
+        value: newValue,
+        face: newFace,
+        playerId,
+        targetPlayerId: newState.pendingBonusDiceSettlement?.targetId,
+        timestamp: event.timestamp,
+        effectKey: 'bonusDie.effect.thunderStrike2Reroll',
+        effectParams: { value: newValue, index: dieIndex },
+    };
+
+    return newState;
+};
+
+/**
+ * 处理奖励骰结算事件
+ * 清除 pendingBonusDiceSettlement，应用伤害和状态效果
+ */
+const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DICE_SETTLED' }>> = (
+    state,
+    _event
+) => {
+    const newState = cloneState(state);
+    // 清除待结算状态，伤害由 DAMAGE_DEALT 事件处理
+    newState.pendingBonusDiceSettlement = undefined;
     return newState;
 };
 
@@ -1205,6 +1278,12 @@ export const reduce = (
             return handleTokenResponseClosed(state, event);
         case 'ABILITY_RESELECTION_REQUIRED':
             return handleAbilityReselectionRequired(state, event);
+        case 'BONUS_DICE_REROLL_REQUESTED':
+            return handleBonusDiceRerollRequested(state, event);
+        case 'BONUS_DIE_REROLLED':
+            return handleBonusDieRerolled(state, event);
+        case 'BONUS_DICE_SETTLED':
+            return handleBonusDiceSettled(state, event);
         default: {
             // 处理系统层事件：SYS_PHASE_CHANGED 同步到 core.turnPhase
             if ((event as { type: string }).type === FLOW_EVENTS.PHASE_CHANGED) {

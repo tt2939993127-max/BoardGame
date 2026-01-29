@@ -5,19 +5,49 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
 import { generateCode, sendVerificationEmailWithCode } from '../../../../../src/server/email';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, SendEmailCodeDto, VerifyEmailDto, UpdateAvatarDto } from './dtos/auth.dto';
+import { LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, VerifyEmailDto, UpdateAvatarDto } from './dtos/auth.dto';
 
 @Controller('auth')
 export class AuthController {
     constructor(@Inject(AuthService) private readonly authService: AuthService) { }
 
+    @Post('send-register-code')
+    async sendRegisterCode(@Body() body: SendRegisterCodeDto, @Req() req: Request, @Res() res: Response) {
+        const { t, locale } = createRequestI18n(req);
+        const email = body.email?.trim();
+
+        if (!email) {
+            return this.sendError(res, 400, t('auth.error.missingEmail'));
+        }
+
+        const emailRegex = /^\S+@\S+\.\S+$/;
+        if (!emailRegex.test(email)) {
+            return this.sendError(res, 400, t('auth.error.invalidEmail'));
+        }
+
+        const existingUser = await this.authService.findByEmail(email);
+        if (existingUser) {
+            return this.sendError(res, 409, t('auth.error.emailAlreadyUsed'));
+        }
+
+        const code = generateCode();
+        const result = await sendVerificationEmailWithCode(email, code, locale);
+        if (!result.success) {
+            return this.sendError(res, 500, result.message);
+        }
+
+        await this.authService.storeEmailCode(email, code);
+
+        return res.json({ message: result.message });
+    }
+
     @Post('register')
     async register(@Body() body: RegisterDto, @Req() req: Request, @Res() res: Response) {
         const { t } = createRequestI18n(req);
-        const { username, password } = body;
+        const { username, email, code, password } = body;
 
-        if (!username || !password) {
-            return this.sendError(res, 400, t('auth.error.missingCredentials'));
+        if (!username || !email || !code || !password) {
+            return this.sendError(res, 400, t('auth.error.missingRegisterFields'));
         }
 
         if (username.length < 3 || username.length > 20) {
@@ -28,12 +58,28 @@ export class AuthController {
             return this.sendError(res, 400, t('auth.error.passwordLength'));
         }
 
-        const existing = await this.authService.findByUsername(username);
-        if (existing) {
+        const emailRegex = /^\S+@\S+\.\S+$/;
+        if (!emailRegex.test(email)) {
+            return this.sendError(res, 400, t('auth.error.invalidEmail'));
+        }
+
+        // 验证邮箱验证码
+        const isCodeValid = await this.authService.verifyEmailCode(email, code);
+        if (!isCodeValid) {
+            return this.sendError(res, 400, t('auth.error.invalidEmailCode'));
+        }
+
+        const existingUsername = await this.authService.findByUsername(username);
+        if (existingUsername) {
             return this.sendError(res, 409, t('auth.error.usernameTaken'));
         }
 
-        const user = await this.authService.createUser(username, password);
+        const existingEmail = await this.authService.findByEmail(email);
+        if (existingEmail) {
+            return this.sendError(res, 409, t('auth.error.emailAlreadyUsed'));
+        }
+
+        const user = await this.authService.createUser(username, password, email);
         const token = this.authService.createToken(user);
 
         return res.status(201).json({
@@ -41,6 +87,8 @@ export class AuthController {
             user: {
                 id: user._id.toString(),
                 username: user.username,
+                email: user.email,
+                emailVerified: user.emailVerified,
                 role: user.role,
                 banned: user.banned,
             },

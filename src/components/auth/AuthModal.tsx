@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -15,23 +15,68 @@ interface AuthModalProps {
 export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackdrop }: AuthModalProps) => {
     const [mode, setMode] = useState<'login' | 'register'>(initialMode);
     const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
+    const [code, setCode] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isSendingCode, setIsSendingCode] = useState(false);
+    const [codeSent, setCodeSent] = useState(false);
+    const [countdown, setCountdown] = useState(0);
+    const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const { t } = useTranslation('auth');
-    const { login, register } = useAuth();
+    const { login, register, sendRegisterCode } = useAuth();
 
     useEffect(() => {
         if (isOpen) {
             setMode(initialMode);
             setError('');
             setUsername('');
+            setEmail('');
+            setCode('');
             setPassword('');
             setConfirmPassword('');
+            setCodeSent(false);
+            setCountdown(0);
         }
     }, [isOpen, initialMode]);
+
+    useEffect(() => {
+        return () => {
+            if (countdownRef.current) {
+                clearInterval(countdownRef.current);
+            }
+        };
+    }, []);
+
+    const handleSendCode = async () => {
+        if (!email) {
+            setError(t('email.error.missingEmail'));
+            return;
+        }
+        setError('');
+        setIsSendingCode(true);
+        try {
+            await sendRegisterCode(email);
+            setCodeSent(true);
+            setCountdown(60);
+            countdownRef.current = setInterval(() => {
+                setCountdown(prev => {
+                    if (prev <= 1) {
+                        if (countdownRef.current) clearInterval(countdownRef.current);
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : t('email.error.sendFailed'));
+        } finally {
+            setIsSendingCode(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -46,7 +91,10 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                 if (password !== confirmPassword) {
                     throw new Error(t('error.passwordMismatch'));
                 }
-                await register(username, password);
+                if (!code) {
+                    throw new Error(t('email.error.missingCode'));
+                }
+                await register(username, email, code, password);
                 onClose();
             }
         } catch (err) {
@@ -59,6 +107,11 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
     const toggleMode = () => {
         setMode(mode === 'login' ? 'register' : 'login');
         setError('');
+        setCodeSent(false);
+        setCountdown(0);
+        if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+        }
     };
 
     return (
@@ -89,6 +142,60 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-5 font-serif">
+                    {mode === 'register' && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className="space-y-5"
+                        >
+                            <div>
+                                <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
+                                    {t('email.label.address')}
+                                </label>
+                                <div className="flex gap-2 items-end">
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="flex-1 px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
+                                        placeholder={t('email.placeholder.address')}
+                                        required
+                                        autoFocus
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleSendCode}
+                                        disabled={isSendingCode || countdown > 0}
+                                        className="px-3 py-1.5 bg-[#8c7b64] hover:bg-[#6b5d4a] text-white text-xs uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer"
+                                    >
+                                        {isSendingCode
+                                            ? t('email.button.sending')
+                                            : countdown > 0
+                                                ? t('email.button.resendCountdown', { count: countdown })
+                                                : codeSent
+                                                    ? t('email.button.resend')
+                                                    : t('email.button.sendCode')}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
+                                    {t('email.label.code')}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value)}
+                                    className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
+                                    placeholder={t('email.placeholder.code')}
+                                    required
+                                    maxLength={6}
+                                />
+                            </div>
+                        </motion.div>
+                    )}
+
                     <div>
                         <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
                             {t('label.username')}
@@ -100,7 +207,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                             className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
                             placeholder={t('placeholder.username')}
                             required
-                            autoFocus
+                            autoFocus={mode === 'login'}
                         />
                     </div>
 
@@ -124,7 +231,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                         >
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2 mt-4">
+                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
                                 {t('label.confirmPassword')}
                             </label>
                             <input

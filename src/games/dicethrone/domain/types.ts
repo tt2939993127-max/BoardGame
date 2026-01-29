@@ -4,10 +4,10 @@
  */
 
 import type { Command, GameEvent, PlayerId, ResponseWindowType } from '../../../engine/types';
-import type { StatusEffectDef } from '../../../systems/StatusEffectSystem';
 import type { AbilityDef, AbilityEffect } from '../../../systems/AbilitySystem';
 import type { ResourcePool } from '../../../systems/ResourceSystem/types';
 import type { TokenDef, TokenState } from '../../../systems/TokenSystem';
+import type { PayToRemoveKnockdownCommandType } from './ids';
 
 // ============================================================================
 // 基础类型（从 types.ts 迁移）
@@ -213,6 +213,51 @@ export interface PendingDamage {
  */
 export type TokenResponsePhase = 'attackerBoost' | 'defenderMitigation';
 
+// ============================================================================
+// 奖励骰重掷系统类型
+// ============================================================================
+
+/**
+ * 单颗奖励骰信息
+ */
+export interface BonusDieInfo {
+    /** 骰子索引（0-based） */
+    index: number;
+    /** 当前点数 */
+    value: number;
+    /** 骰面符号 */
+    face: DieFace;
+}
+
+/**
+ * 待结算的奖励骰（等待重掷交互）
+ * 用于雷霆万钧/风暴突袭的延后结算
+ */
+export interface PendingBonusDiceSettlement {
+    /** 唯一 ID */
+    id: string;
+    /** 来源技能 ID */
+    sourceAbilityId: string;
+    /** 攻击者玩家 ID */
+    attackerId: PlayerId;
+    /** 目标玩家 ID */
+    targetId: PlayerId;
+    /** 奖励骰列表 */
+    dice: BonusDieInfo[];
+    /** 重掷消耗的 Token ID（如 'taiji'） */
+    rerollCostTokenId: string;
+    /** 每次重掷消耗的 Token 数量 */
+    rerollCostAmount: number;
+    /** 已用重掷次数（无上限，消耗 Token 即可） */
+    rerollCount: number;
+    /** 结算阈值（如 12，用于判断是否触发额外效果） */
+    threshold?: number;
+    /** 达到阈值时的额外效果（如施加倒地） */
+    thresholdEffect?: 'knockdown';
+    /** 是否已完成重掷交互（准备结算） */
+    readyToSettle: boolean;
+}
+
 export interface HeroState {
     id: string;
     characterId: 'monk';
@@ -254,9 +299,7 @@ export interface DiceThroneCore {
     startingPlayerId: PlayerId;
     turnNumber: number;
     pendingAttack: PendingAttack | null;
-    /** 被动状态效果定义 */
-    statusDefinitions: StatusEffectDef[];
-    /** 可消耗道具定义 */
+    /** Token 定义（包含状态效果和可消耗道具） */
     tokenDefinitions: TokenDef[];
     activatingAbilityId?: string;
     lastEffectSourceByPlayerId?: Record<PlayerId, string | undefined>;
@@ -278,6 +321,8 @@ export interface DiceThroneCore {
     pendingInteraction?: PendingInteraction;
     /** 待处理的伤害（等待 Token 响应） */
     pendingDamage?: PendingDamage;
+    /** 待结算的奖励骰（等待重掷交互） */
+    pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
     /** 待展示的卡牌特写（等待交互完成或确认无交互后触发） */
     pendingCardSpotlight?: {
         /** 卡牌 ID */
@@ -477,7 +522,20 @@ export interface UsePurifyCommand extends Command<'USE_PURIFY'> {
 }
 
 /** 花费 CP 移除击倒命令 */
-export interface PayToRemoveStunCommand extends Command<'PAY_TO_REMOVE_STUN'> {
+export interface PayToRemoveKnockdownCommand extends Command<PayToRemoveKnockdownCommandType> {
+    payload: Record<string, never>;
+}
+
+/** 重掷奖励骰命令 */
+export interface RerollBonusDieCommand extends Command<'REROLL_BONUS_DIE'> {
+    payload: {
+        /** 要重掷的骰子索引（0-based） */
+        dieIndex: number;
+    };
+}
+
+/** 跳过奖励骰重掷命令 */
+export interface SkipBonusDiceRerollCommand extends Command<'SKIP_BONUS_DICE_REROLL'> {
     payload: Record<string, never>;
 }
 
@@ -507,7 +565,9 @@ export type DiceThroneCommand =
     | UseTokenCommand
     | SkipTokenResponseCommand
     | UsePurifyCommand
-    | PayToRemoveStunCommand;
+    | PayToRemoveKnockdownCommand
+    | RerollBonusDieCommand
+    | SkipBonusDiceRerollCommand;
 
 // ============================================================================
 // 事件定义
@@ -778,7 +838,7 @@ export interface ChoiceRequestedEvent extends GameEvent<'CHOICE_REQUESTED'> {
         sourceAbilityId: string;
         titleKey: string;
         options: Array<{
-            /** 被动状态 ID（如 stun） */
+            /** 被动状态 ID（如 STATUS_IDS.KNOCKDOWN） */
             statusId?: string;
             /** Token ID（如 taiji/evasive/purify） */
             tokenId?: string;
@@ -960,6 +1020,56 @@ export interface AbilityReselectionRequiredEvent extends GameEvent<'ABILITY_RESE
     };
 }
 
+// ============================================================================
+// 奖励骰重掷事件
+// ============================================================================
+
+/** 奖励骰重掷请求事件（延后结算流程启动） */
+export interface BonusDiceRerollRequestedEvent extends GameEvent<'BONUS_DICE_REROLL_REQUESTED'> {
+    payload: {
+        /** 待结算的奖励骰信息 */
+        settlement: PendingBonusDiceSettlement;
+    };
+}
+
+/** 奖励骰重掷事件（单颗重掷） */
+export interface BonusDieRerolledEvent extends GameEvent<'BONUS_DIE_REROLLED'> {
+    payload: {
+        /** 重掷的骰子索引 */
+        dieIndex: number;
+        /** 旧点数 */
+        oldValue: number;
+        /** 新点数 */
+        newValue: number;
+        /** 新骰面符号 */
+        newFace: DieFace;
+        /** 消耗的 Token ID */
+        costTokenId: string;
+        /** 消耗的 Token 数量 */
+        costAmount: number;
+        /** 玩家 ID */
+        playerId: PlayerId;
+    };
+}
+
+/** 奖励骰结算事件（重掷交互结束，执行伤害结算） */
+export interface BonusDiceSettledEvent extends GameEvent<'BONUS_DICE_SETTLED'> {
+    payload: {
+        /** 最终骰子结果 */
+        finalDice: BonusDieInfo[];
+        /** 总伤害 */
+        totalDamage: number;
+        /** 是否触发阈值效果 */
+        thresholdTriggered: boolean;
+        /** 攻击者玩家 ID */
+        attackerId: PlayerId;
+        /** 目标玩家 ID */
+        targetId: PlayerId;
+        /** 来源技能 ID */
+        sourceAbilityId: string;
+    };
+}
+
 /** 所有 DiceThrone 事件 */
 export type DiceThroneEvent =
     | DiceRolledEvent
@@ -1004,7 +1114,10 @@ export type DiceThroneEvent =
     | TokenResponseRequestedEvent
     | TokenUsedEvent
     | TokenResponseClosedEvent
-    | AbilityReselectionRequiredEvent;
+    | AbilityReselectionRequiredEvent
+    | BonusDiceRerollRequestedEvent
+    | BonusDieRerolledEvent
+    | BonusDiceSettledEvent;
 
 // ============================================================================
 // 常量

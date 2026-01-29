@@ -30,8 +30,12 @@ export class AuthService {
         return this.userModel.findOne({ email, _id: { $ne: userId } });
     }
 
-    async createUser(username: string, password: string): Promise<UserDocument> {
-        const user = new this.userModel({ username, password });
+    async findByEmail(email: string): Promise<UserDocument | null> {
+        return this.userModel.findOne({ email });
+    }
+
+    async createUser(username: string, password: string, email: string): Promise<UserDocument> {
+        const user = new this.userModel({ username, password, email, emailVerified: true });
         return user.save();
     }
 

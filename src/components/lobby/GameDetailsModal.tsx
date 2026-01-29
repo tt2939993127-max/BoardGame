@@ -612,8 +612,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     ref={modalRef}
                     className="
                         bg-parchment-card-bg pointer-events-auto 
-                        w-full max-w-2xl 
-                        h-[80vh] md:h-[27.5rem] max-h-[85vh]
+                        w-[90vw] md:w-full max-w-sm md:max-w-2xl
+                        h-[60vh] md:h-[27.5rem] max-h-[80vh]
                         rounded-sm shadow-parchment-card-hover 
                         flex flex-col md:flex-row 
                         border border-parchment-card-border/30 relative 
@@ -627,7 +627,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-parchment-card-border/60" />
 
                     {/* 左侧面板 - 游戏信息 */}
-                    <div className="w-full md:w-2/5 bg-parchment-base-bg/50 border-b md:border-b-0 md:border-r border-parchment-card-border/30 p-4 md:p-8 flex flex-col md:items-center text-left md:text-center font-serif shrink-0 transition-all">
+                    <div className="w-full md:w-2/5 bg-parchment-base-bg/50 border-b md:border-b-0 md:border-r border-parchment-card-border/30 p-3 md:p-8 flex flex-col md:items-center text-left md:text-center font-serif shrink-0 transition-all">
                         {/* Thumbnail - Hidden on mobile, visible on desktop */}
                         <div className="hidden md:flex w-20 h-20 bg-parchment-card-bg border border-parchment-card-border/30 rounded-[4px] shadow-sm items-center justify-center text-4xl text-parchment-base-text font-bold mb-6 overflow-hidden shrink-0">
                             {thumbnail}
@@ -699,7 +699,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     </div>
 
                     {/* 右侧面板 - 大厅/排行 */}
-                    <div className="flex-1 p-4 sm:p-8 flex flex-col bg-parchment-card-bg font-serif overflow-hidden">
+                    <div className="flex-1 p-3 sm:p-8 flex flex-col bg-parchment-card-bg font-serif overflow-hidden">
                         <div className="flex justify-between items-center mb-4 sm:mb-6 gap-2">
                             <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto no-scrollbar mask-linear-fade pr-2">
                                 <button

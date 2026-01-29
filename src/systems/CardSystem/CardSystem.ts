@@ -91,6 +91,7 @@ class CardSystemImpl implements ICardSystem {
         config: DrawConfig,
         _random?: RandomFn
     ): { zones: CardZone[]; drawnCards: Card[] } {
+        void _random;
         const fromZone = zones.find(z => z.id === config.fromZoneId);
         const toZone = zones.find(z => z.id === config.toZoneId);
 

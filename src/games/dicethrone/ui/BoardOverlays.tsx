@@ -11,7 +11,7 @@ import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
 import { ConfirmSkipModal } from './ConfirmSkipModal';
-import { ConfirmRemoveStunModal } from './ConfirmRemoveStunModal';
+import { ConfirmRemoveKnockdownModal } from './ConfirmRemoveKnockdownModal';
 import { ChoiceModal } from './ChoiceModal';
 import { BonusDieOverlay } from './BonusDieOverlay';
 import { CardSpotlightOverlay } from './CardSpotlightOverlay';
@@ -22,7 +22,7 @@ import { EndgameOverlay } from '../../../components/game/EndgameOverlay';
 import { ASSETS } from './assets';
 import { getCardAtlasStyle, type CardAtlasConfig } from './cardAtlas';
 import type { StatusIconAtlasConfig } from './statusEffects';
-import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponsePhase } from '../domain/types';
+import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponsePhase, PendingBonusDiceSettlement } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
@@ -46,9 +46,9 @@ export interface BoardOverlaysProps {
     onConfirmPurify: (statusId: string) => void;
     onCancelPurify: () => void;
 
-    isConfirmRemoveStunOpen: boolean;
-    onConfirmRemoveStun: () => void;
-    onCancelRemoveStun: () => void;
+    isConfirmRemoveKnockdownOpen: boolean;
+    onConfirmRemoveKnockdown: () => void;
+    onCancelRemoveKnockdown: () => void;
 
     // 选择弹窗
     choice: {
@@ -74,6 +74,12 @@ export interface BoardOverlaysProps {
         show: boolean;
     };
     onBonusDieClose: () => void;
+
+    // 奖励骰重掷交互
+    pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
+    canRerollBonusDie: boolean;
+    onRerollBonusDie?: (dieIndex: number) => void;
+    onSkipBonusDiceReroll?: () => void;
 
 
     // Token 响应
@@ -187,12 +193,12 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 )}
 
                 {/* 击倒移除确认弹窗 */}
-                {props.isConfirmRemoveStunOpen && (
-                    <ConfirmRemoveStunModal
-                        key="confirm-remove-stun"
-                        isOpen={props.isConfirmRemoveStunOpen}
-                        onCancel={props.onCancelRemoveStun}
-                        onConfirm={props.onConfirmRemoveStun}
+                {props.isConfirmRemoveKnockdownOpen && (
+                    <ConfirmRemoveKnockdownModal
+                        key="confirm-remove-knockdown"
+                        isOpen={props.isConfirmRemoveKnockdownOpen}
+                        onCancel={props.onCancelRemoveKnockdown}
+                        onConfirm={props.onConfirmRemoveKnockdown}
                     />
                 )}
 
@@ -261,17 +267,22 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                     />
                 )}
 
-                {/* 额外骰子特写 */}
-                {props.bonusDie.show && (
+                {/* 额外骰子特写 / 重掷交互 */}
+                {(props.bonusDie.show || props.pendingBonusDiceSettlement) && (
                     <BonusDieOverlay
                         key="bonus-die"
                         value={props.bonusDie.value}
                         face={props.bonusDie.face}
                         effectKey={props.bonusDie.effectKey}
                         effectParams={props.bonusDie.effectParams}
-                        isVisible={props.bonusDie.show}
+                        isVisible={props.bonusDie.show || Boolean(props.pendingBonusDiceSettlement)}
                         onClose={props.onBonusDieClose}
                         locale={props.locale}
+                        bonusDice={props.pendingBonusDiceSettlement?.dice}
+                        canReroll={props.canRerollBonusDie}
+                        onReroll={props.onRerollBonusDie}
+                        onSkipReroll={props.onSkipBonusDiceReroll}
+                        showTotal
                     />
                 )}
 

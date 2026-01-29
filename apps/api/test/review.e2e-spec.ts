@@ -7,6 +7,8 @@ import { Test } from '@nestjs/testing';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import request from 'supertest';
 import type { Model } from 'mongoose';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { AuthModule } from '../src/modules/auth/auth.module';
 import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema';
 import { ReviewModule } from '../src/modules/review/review.module';
@@ -18,6 +20,7 @@ describe('Review Module (e2e)', () => {
     let app: import('@nestjs/common').INestApplication;
     let userModel: Model<UserDocument>;
     let reviewModel: Model<ReviewDocument>;
+    let cacheManager: Cache;
 
     beforeAll(async () => {
         process.env.REVIEW_CONTENT_BLACKLIST = 'bad,违规';
@@ -31,7 +34,7 @@ describe('Review Module (e2e)', () => {
         const moduleRef = await Test.createTestingModule({
             imports: [
                 CacheModule.register({ isGlobal: true }),
-                MongooseModule.forRoot(mongoUri),
+                MongooseModule.forRoot(mongoUri, externalMongoUri ? { dbName: 'boardgame_test_review' } : undefined),
                 AuthModule,
                 ReviewModule,
             ],
@@ -40,6 +43,7 @@ describe('Review Module (e2e)', () => {
         app = moduleRef.createNestApplication();
         userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
         reviewModel = moduleRef.get<Model<ReviewDocument>>(getModelToken(Review.name));
+        cacheManager = moduleRef.get<Cache>(CACHE_MANAGER);
         app.useGlobalPipes(
             new ValidationPipe({
                 whitelist: true,
@@ -55,6 +59,7 @@ describe('Review Module (e2e)', () => {
             userModel.deleteMany({}),
             reviewModel.deleteMany({}),
         ]);
+        await cacheManager.del('review:stats:dicethrone');
     });
 
     afterAll(async () => {

@@ -35,7 +35,7 @@ describe('Social Modules (e2e)', () => {
         const moduleRef = await Test.createTestingModule({
             imports: [
                 CacheModule.register({ isGlobal: true }),
-                MongooseModule.forRoot(mongoUri),
+                MongooseModule.forRoot(mongoUri, externalMongoUri ? { dbName: 'boardgame_test_social' } : undefined),
                 AuthModule,
                 FriendModule,
                 MessageModule,

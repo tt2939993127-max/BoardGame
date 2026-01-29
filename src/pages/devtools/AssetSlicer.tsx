@@ -110,8 +110,15 @@ export const AssetSlicer = () => {
     // 动态锚点：支持从任意方向拖拽后，光标相对选区的位置
     // { x: 0, y: 0 } = 鼠标在左上角 (默认)
     // { x: 1, y: 1 } = 鼠标在右下角
-    const [anchorPoint, setAnchorPoint] = useState({ x: 0, y: 0 });
+    const [anchorPoint, setAnchorPoint] = useState({ x: 0.5, y: 0.5 });
+    const anchorPointRef = useRef({ x: 0.5, y: 0.5 }); // 同步版本，避免 setState 延迟
     const mousePos = useRef({ x: 0, y: 0 }); // 记录鼠标位置用于非移动时的更新
+
+    // 封装 setAnchorPoint，同时更新 ref
+    const updateAnchorPoint = (newAnchor: { x: number; y: number }) => {
+        anchorPointRef.current = newAnchor;
+        setAnchorPoint(newAnchor);
+    };
 
     // 高级功能状态
 
@@ -148,11 +155,10 @@ export const AssetSlicer = () => {
         cursorRef.current.style.width = `${currentWidth}px`;
         cursorRef.current.style.height = `${currentHeight}px`;
 
-        // 根据锚点计算位置
-        // 如果 anchor.x = 0 (左), left = mouseX
-        // 如果 anchor.x = 1 (右), left = mouseX - width
-        const left = mousePos.current.x - (currentWidth * anchorPoint.x);
-        const top = mousePos.current.y - (currentHeight * anchorPoint.y);
+        // 使用 ref 的值（同步），避免 setState 延迟导致的跳动
+        const anchor = anchorPointRef.current;
+        const left = mousePos.current.x - (currentWidth * anchor.x);
+        const top = mousePos.current.y - (currentHeight * anchor.y);
 
         cursorRef.current.style.left = `${left}px`;
         cursorRef.current.style.top = `${top}px`;
@@ -183,10 +189,10 @@ export const AssetSlicer = () => {
 
             // 提取尺寸快捷键 (Photoshop 风格: [ 减小, ] 增大) - 统一缩放
             if (e.key === '[') {
-                updateSize(-4);
+                updateSize(4);  // 正值 -> 缩小
             }
             if (e.key === ']') {
-                updateSize(4);
+                updateSize(-4); // 负值 -> 放大
             }
 
 
@@ -222,6 +228,26 @@ export const AssetSlicer = () => {
         };
     }, [cropSize]); // 依赖 cropSize
 
+    // 失焦时清理 Alt / 拖拽状态，避免进入页面处于“拖拽模式”
+    useEffect(() => {
+        const handleBlur = () => {
+            setIsAltPressed(false);
+            setIsPanning(false);
+        };
+        const handleVisibility = () => {
+            if (document.hidden) {
+                setIsAltPressed(false);
+                setIsPanning(false);
+            }
+        };
+        window.addEventListener('blur', handleBlur);
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.removeEventListener('blur', handleBlur);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, []);
+
     // 图像缩放逻辑封装 (支持以特定点为中心缩放)
     const handleImageZoom = (deltaY: number, mouseX?: number, mouseY?: number) => {
         const zoomIntensity = 0.001;
@@ -231,7 +257,7 @@ export const AssetSlicer = () => {
         if (!isDrawingRef.current) {
             // 缩放时以裁剪框中心为锚点，保持视觉位置稳定
             mousePos.current = currentCenter;
-            setAnchorPoint({ x: 0.5, y: 0.5 });
+            updateAnchorPoint({ x: 0.5, y: 0.5 });
         }
 
         setTransform(prev => {
@@ -286,8 +312,8 @@ export const AssetSlicer = () => {
 
     // 提取区域尺寸逻辑封装 (指数增长更丝滑，保持宽高比)
     const updateSize = (deltaY: number) => {
-        // 调整尺寸时，强制将锚点设为中心，解决“以右下角为原点”的问题
-        setAnchorPoint({ x: 0.5, y: 0.5 });
+        // 调整尺寸时，强制将锚点设为中心，解决"以右下角为原点"的问题
+        updateAnchorPoint({ x: 0.5, y: 0.5 });
 
         setCropSize(prev => {
             const zoomIntensity = 0.001;
@@ -337,8 +363,10 @@ export const AssetSlicer = () => {
         setImageName(file.name.replace(/\.[^/.]+$/, ""));
         setExtractedAssets([]);
         setTransform({ x: 0, y: 0, scale: 1 });
-        // 重置状态，默认使用中心锚点，符合用户“以中心缩放”的直觉
-        setAnchorPoint({ x: 0.5, y: 0.5 });
+        setIsPanning(false);
+        setIsAltPressed(false);
+        // 重置状态，默认使用中心锚点，符合用户"以中心缩放"的直觉
+        updateAnchorPoint({ x: 0.5, y: 0.5 });
         setCropSize({ width: 64, height: 64 });
         isDrawingRef.current = false;
     };
@@ -377,8 +405,8 @@ export const AssetSlicer = () => {
 
         let targetX = imgCenterX - (width / 2);
         let targetY = imgCenterY - (height / 2);
-        let targetW = width;
-        let targetH = height;
+        const targetW = width;
+        const targetH = height;
 
         // 生成预览图
         const canvas = document.createElement('canvas');
@@ -515,6 +543,7 @@ export const AssetSlicer = () => {
 
 
     const handleMouseDown = (e: React.MouseEvent) => {
+        // 中键拖拽（平移）
         if (e.button === 1 || (e.button === 0 && isAltPressed)) {
             e.preventDefault();
             setIsPanning(true);
@@ -577,8 +606,9 @@ export const AssetSlicer = () => {
                 const screenH = h * transform.scale;
                 cursorRef.current.style.width = `${screenW}px`;
                 cursorRef.current.style.height = `${screenH}px`;
-                cursorRef.current.style.left = `${dx > 0 ? startX : startX - screenW}px`;
-                cursorRef.current.style.top = `${dy > 0 ? startY : startY - screenH}px`;
+                // 框覆盖从起点到鼠标的区域，使用 >= 避免 dx=dy=0 时跳到右下角
+                cursorRef.current.style.left = `${dx >= 0 ? startX : startX - screenW}px`;
+                cursorRef.current.style.top = `${dy >= 0 ? startY : startY - screenH}px`;
             }
         } else {
             updateCursorStyle();
@@ -613,11 +643,11 @@ export const AssetSlicer = () => {
                     const imgCenterY = displayY * scaleFactor;
                     performExtraction(imgCenterX, imgCenterY, cropSize.width, cropSize.height);
 
-                    setAnchorPoint({ x: 0, y: 0 });
+                    updateAnchorPoint({ x: 0.5, y: 0.5 });
                 } else {
                     // 非快裁模式：计算新的锚点，使选区视觉上保持在原位
                     // dx > 0: 鼠标在右 -> Anchor X = 1
-                    setAnchorPoint({
+                    updateAnchorPoint({
                         x: dx > 0 ? 1 : 0,
                         y: dy > 0 ? 1 : 0
                     });
@@ -780,8 +810,8 @@ export const AssetSlicer = () => {
                                     </div>
                                 </div>
                                 <div className="flex justify-between mt-2">
-                                    <button onClick={() => updateSize(-4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">缩减 [</button>
-                                    <button onClick={() => updateSize(4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">增大 ]</button>
+                                    <button onClick={() => updateSize(4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">缩减 [</button>
+                                    <button onClick={() => updateSize(-4)} className="text-[10px] bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded border border-gray-700 font-mono">增大 ]</button>
                                 </div>
                             </div>
 

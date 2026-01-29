@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
 import { BanUserDto } from './dtos/ban-user.dto';
 import { QueryMatchesDto } from './dtos/query-matches.dto';
+import { QueryRoomsDto } from './dtos/query-rooms.dto';
 import { QueryStatsDto } from './dtos/query-stats.dto';
 import { QueryUsersDto } from './dtos/query-users.dto';
 import { AdminGuard } from './guards/admin.guard';
@@ -32,6 +33,22 @@ export class AdminController {
     async getUsers(@Query() query: QueryUsersDto, @Res() res: Response) {
         const result = await this.adminService.getUsers(query);
         return res.json(result);
+    }
+
+    @Get('rooms')
+    async getRooms(@Query() query: QueryRoomsDto, @Res() res: Response) {
+        const result = await this.adminService.getRooms(query);
+        return res.json(result);
+    }
+
+    @Delete('rooms/:id')
+    async destroyRoom(@Param('id') matchId: string, @Req() req: Request, @Res() res: Response) {
+        const { t } = createRequestI18n(req);
+        const ok = await this.adminService.destroyRoom(matchId);
+        if (!ok) {
+            return this.sendError(res, 404, t('admin.error.roomNotFound'));
+        }
+        return res.status(200).json({ message: t('admin.success.roomDestroyed'), matchID: matchId });
     }
 
     @Get('users/:id')
@@ -78,6 +95,21 @@ export class AdminController {
             return this.sendError(res, 404, t('admin.error.userNotFound'));
         }
         return res.status(200).json({ message: t('admin.success.userUnbanned'), user: result.user });
+    }
+
+    @Delete('users/:id')
+    async deleteUser(@Param('id') userId: string, @Req() req: Request, @Res() res: Response) {
+        const { t } = createRequestI18n(req);
+        const result = await this.adminService.deleteUser(userId);
+        if (!result.ok) {
+            const map: Record<string, { status: number; message: string }> = {
+                notFound: { status: 404, message: t('admin.error.userNotFound') },
+                cannotDeleteAdmin: { status: 400, message: t('admin.error.cannotDeleteAdmin') },
+            };
+            const payload = map[result.code];
+            return this.sendError(res, payload.status, payload.message);
+        }
+        return res.status(200).json({ message: t('admin.success.userDeleted'), user: result.user });
     }
 
     @Get('matches')

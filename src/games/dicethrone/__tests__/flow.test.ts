@@ -8,6 +8,7 @@ import { diceThroneSystemsForTest } from '../game';
 import type { DiceThroneCore, TurnPhase, CardInteractionType } from '../domain/types';
 import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types';
 import { RESOURCE_IDS } from '../domain/resources';
+import { STATUS_IDS, TOKEN_IDS, DICETHRONE_COMMANDS } from '../domain/ids';
 import { getAvailableAbilityIds } from '../domain/rules';
 import { MONK_CARDS } from '../monk/cards';
 import type { AbilityCard } from '../types';
@@ -124,7 +125,7 @@ const createNoResponseSetup = () => {
             }
         }
         
-        const sys = createInitialSystemState(playerIds, [], undefined);
+        const sys = createInitialSystemState(playerIds, testSystems, undefined);
         return { sys, core };
     };
 };
@@ -169,6 +170,14 @@ interface DiceThroneExpectation extends StateExpectation {
         defenderId?: PlayerId;
         isDefendable?: boolean;
         sourceAbilityId?: string;
+    } | null;
+    pendingBonusDiceSettlement?: {
+        sourceAbilityId?: string;
+        attackerId?: PlayerId;
+        targetId?: PlayerId;
+        diceValues?: number[];
+        threshold?: number;
+        rerollCount?: number;
     } | null;
     availableAbilityIdsIncludes?: string[];
     roll?: {
@@ -369,6 +378,40 @@ function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpectation):
             }
             if (expect.pendingAttack.sourceAbilityId !== undefined && pending.sourceAbilityId !== expect.pendingAttack.sourceAbilityId) {
                 errors.push(`来源技能不匹配: 预期 ${expect.pendingAttack.sourceAbilityId}, 实际 ${pending.sourceAbilityId}`);
+            }
+        }
+    }
+
+    if (expect.pendingBonusDiceSettlement === null) {
+        if (state.pendingBonusDiceSettlement) {
+            errors.push('预期 pendingBonusDiceSettlement 为空，但实际存在');
+        }
+    } else if (expect.pendingBonusDiceSettlement) {
+        const settlement = state.pendingBonusDiceSettlement;
+        if (!settlement) {
+            errors.push('预期 pendingBonusDiceSettlement 存在，但实际为空');
+        } else {
+            if (expect.pendingBonusDiceSettlement.sourceAbilityId !== undefined && settlement.sourceAbilityId !== expect.pendingBonusDiceSettlement.sourceAbilityId) {
+                errors.push(`奖励骰来源技能不匹配: 预期 ${expect.pendingBonusDiceSettlement.sourceAbilityId}, 实际 ${settlement.sourceAbilityId}`);
+            }
+            if (expect.pendingBonusDiceSettlement.attackerId !== undefined && settlement.attackerId !== expect.pendingBonusDiceSettlement.attackerId) {
+                errors.push(`奖励骰攻击者不匹配: 预期 ${expect.pendingBonusDiceSettlement.attackerId}, 实际 ${settlement.attackerId}`);
+            }
+            if (expect.pendingBonusDiceSettlement.targetId !== undefined && settlement.targetId !== expect.pendingBonusDiceSettlement.targetId) {
+                errors.push(`奖励骰目标不匹配: 预期 ${expect.pendingBonusDiceSettlement.targetId}, 实际 ${settlement.targetId}`);
+            }
+            if (expect.pendingBonusDiceSettlement.threshold !== undefined && settlement.threshold !== expect.pendingBonusDiceSettlement.threshold) {
+                errors.push(`奖励骰阈值不匹配: 预期 ${expect.pendingBonusDiceSettlement.threshold}, 实际 ${settlement.threshold}`);
+            }
+            if (expect.pendingBonusDiceSettlement.rerollCount !== undefined && settlement.rerollCount !== expect.pendingBonusDiceSettlement.rerollCount) {
+                errors.push(`奖励骰重掷次数不匹配: 预期 ${expect.pendingBonusDiceSettlement.rerollCount}, 实际 ${settlement.rerollCount}`);
+            }
+            if (expect.pendingBonusDiceSettlement.diceValues) {
+                const actualValues = settlement.dice.map(d => d.value);
+                const matched = expect.pendingBonusDiceSettlement.diceValues.every((v, i) => actualValues[i] === v);
+                if (!matched) {
+                    errors.push(`奖励骰数值不匹配: 预期 ${JSON.stringify(expect.pendingBonusDiceSettlement.diceValues)}, 实际 ${JSON.stringify(actualValues)}`);
+                }
             }
         }
     }
@@ -728,17 +771,17 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand([], {
                     cp: 4,
                     mutate: (core) => {
-                        core.players['0'].statusEffects.stun = 1;
+                        core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] = 1;
                     },
                 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
-                    cmd('PAY_TO_REMOVE_STUN', '0'),
+                    cmd(DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN, '0'),
                 ],
                 expect: {
                     turnPhase: 'main1',
                     players: {
-                        '0': { cp: 2, statusEffects: { stun: 0 } },
+                        '0': { cp: 2, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 0 } },
                     },
                 },
             });
@@ -752,17 +795,17 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand([], {
                     cp: 1,
                     mutate: (core) => {
-                        core.players['0'].statusEffects.stun = 1;
+                        core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] = 1;
                     },
                 }),
                 commands: [
-                    cmd('PAY_TO_REMOVE_STUN', '0'),
+                    cmd(DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN, '0'),
                 ],
                 expect: {
                     errorAtStep: { step: 1, error: 'not_enough_cp' },
                     turnPhase: 'upkeep',
                     players: {
-                        '0': { cp: 1, statusEffects: { stun: 1 } },
+                        '0': { cp: 1, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 1 } },
                     },
                 },
             });
@@ -776,7 +819,7 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand([], {
                     cp: 2,
                     mutate: (core) => {
-                        core.players['0'].statusEffects.stun = 1;
+                        core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] = 1;
                     },
                 }),
                 commands: [
@@ -786,7 +829,7 @@ describe('王权骰铸流程测试', () => {
                 expect: {
                     turnPhase: 'main2',
                     players: {
-                        '0': { cp: 2, statusEffects: { stun: 0 } },
+                        '0': { cp: 2, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 0 } },
                     },
                 },
             });
@@ -799,17 +842,17 @@ describe('王权骰铸流程测试', () => {
                 name: '净化移除击倒',
                 setup: createSetupWithHand([], {
                     mutate: (core) => {
-                        core.players['0'].statusEffects.stun = 1;
-                        core.players['0'].tokens.purify = 1;
+                        core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] = 1;
+                        core.players['0'].tokens[TOKEN_IDS.PURIFY] = 1;
                     },
                 }),
                 commands: [
-                    cmd('USE_PURIFY', '0', { statusId: 'stun' }),
+                    cmd('USE_PURIFY', '0', { statusId: STATUS_IDS.KNOCKDOWN }),
                 ],
                 expect: {
                     turnPhase: 'upkeep',
                     players: {
-                        '0': { tokens: { purify: 0 }, statusEffects: { stun: 0 } },
+                        '0': { tokens: { [TOKEN_IDS.PURIFY]: 0 }, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 0 } },
                     },
                 },
             });
@@ -822,18 +865,18 @@ describe('王权骰铸流程测试', () => {
                 name: '净化无负面状态 - no_status',
                 setup: createSetupWithHand([], {
                     mutate: (core) => {
-                        core.players['0'].statusEffects.stun = 0;
-                        core.players['0'].tokens.purify = 1;
+                        core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] = 0;
+                        core.players['0'].tokens[TOKEN_IDS.PURIFY] = 1;
                     },
                 }),
                 commands: [
-                    cmd('USE_PURIFY', '0', { statusId: 'stun' }),
+                    cmd('USE_PURIFY', '0', { statusId: STATUS_IDS.KNOCKDOWN }),
                 ],
                 expect: {
                     errorAtStep: { step: 1, error: 'no_status' },
                     turnPhase: 'upkeep',
                     players: {
-                        '0': { tokens: { purify: 1 }, statusEffects: { stun: 0 } },
+                        '0': { tokens: { [TOKEN_IDS.PURIFY]: 1 }, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 0 } },
                     },
                 },
             });
@@ -1163,7 +1206,7 @@ describe('王权骰铸流程测试', () => {
                             tokens: { taiji: 1, evasive: 1, purify: 1 },
                         },
                         '1': {
-                            statusEffects: { stun: 1 },
+                            statusEffects: { knockdown: 1 },
                         },
                     },
                 },
@@ -1210,7 +1253,7 @@ describe('王权骰铸流程测试', () => {
                 expect: {
                     turnPhase: 'main1',
                     players: {
-                        '1': { statusEffects: { stun: 1 } },
+                        '1': { statusEffects: { knockdown: 1 } },
                     },
                 },
             });
@@ -1642,6 +1685,286 @@ describe('王权骰铸流程测试', () => {
         });
     });
 
+    describe('雷霆一击 II 奖励骰重掷', () => {
+        // 创建专用的 setup，确保手牌中有 storm-assault-2，并给予初始太极 Token
+        const createThunderStrikeSetup = (options: { taiji?: number } = {}) => {
+            return createSetupWithHand(['card-storm-assault-2'], {
+                playerId: '0',
+                mutate: (core) => {
+                    if (options.taiji !== undefined) {
+                        core.players['0'].tokens[TOKEN_IDS.TAIJI] = options.taiji;
+                    }
+                },
+            });
+        };
+
+        it('有太极时触发重掷交互流程', () => {
+            // 进攻骰(5颗): 3,3,3,1,1 → 3个 palm 触发雷霆一击
+            // 防御骰(4颗): 1,1,1,1
+            // 奖励骰(3颗): 2,3,4 → 总伤害 9
+            const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
+            const random = createQueuedRandom(diceValues);
+            
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: createThunderStrikeSetup({ taiji: 2 }),
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: '有太极时触发重掷交互',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // -> main1
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算
+                ],
+                expect: {
+                    // 应该进入重掷交互流程
+                    pendingBonusDiceSettlement: {
+                        sourceAbilityId: 'thunder-strike',
+                        attackerId: '0',
+                        targetId: '1',
+                        threshold: 12,
+                        rerollCount: 0,
+                        diceValues: [2, 3, 4],
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('重掷奖励骰并结算', () => {
+            // 进攻骰(5颗): 3,3,3,1,1 → 3个 palm
+            // 防御骰(4颗): 1,1,1,1
+            // 奖励骰(3颗): 2,3,4 → 总伤害 9
+            // 重掷第0颗得到6 → 6+3+4=13 >= 12 → 触发倒地
+            const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 6, 1, 1];
+            const random = createQueuedRandom(diceValues);
+            
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: createSetupWithHand(['card-storm-assault-2'], {
+                    playerId: '0',
+                    mutate: (core) => { core.players['0'].tokens[TOKEN_IDS.TAIJI] = 2; },
+                }),
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: '重掷奖励骰并结算',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // -> main1
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算，进入重掷交互
+                    // 重掷第0颗骰子
+                    cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
+                    // 确认结算
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingBonusDiceSettlement: null,
+                    players: {
+                        '0': { tokens: { taiji: 1 } }, // 消耗了1个太极重掷
+                        '1': { 
+                            hp: 37, // 50 - 13 = 37
+                            statusEffects: { knockdown: 1 }, // >= 12 触发倒地
+                        },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('无太极时直接结算伤害', () => {
+            // 进攻骰(5颗): 3,3,3,1,1 → 3个 palm
+            // 防御骰(4颗): 1,1,1,1
+            // 奖励骰(3颗): 2,3,4 → 总伤害 9 < 12 → 不触发倒地
+            const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
+            const random = createQueuedRandom(diceValues);
+            
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: createSetupWithHand(['card-storm-assault-2'], {
+                    playerId: '0',
+                    mutate: (core) => {
+                        // 移除对手的 instant/roll 卡，避免触发响应窗口
+                        const opponent = core.players['1'];
+                        if (opponent) {
+                            const nonResponseCards = opponent.hand.filter(c => c.timing !== 'instant' && c.timing !== 'roll');
+                            const responseCards = opponent.hand.filter(c => c.timing === 'instant' || c.timing === 'roll');
+                            opponent.deck = [...opponent.deck, ...responseCards];
+                            opponent.hand = nonResponseCards;
+                        }
+                    },
+                }),
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: '无太极时直接结算',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // -> main1
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
+                    // 不获取太极，直接进入投掷阶段
+                    cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'), // -> main2，直接结算
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingBonusDiceSettlement: null,
+                    players: {
+                        '1': { 
+                            hp: 41, // 50 - 9 = 41
+                            statusEffects: { knockdown: 0 }, // < 12 不触发倒地
+                        },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('总和 >= 12 触发倒地', () => {
+            // 进攻骰(5颗): 3,3,3,1,1 → 3个 palm
+            // 防御骰(4颗): 1,1,1,1
+            // 奖励骰(3颗): 4,4,4 → 总伤害 12 >= 12 → 触发倒地
+            const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 4, 4, 4, 1, 1];
+            const random = createQueuedRandom(diceValues);
+            
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: createSetupWithHand(['card-storm-assault-2'], {
+                    playerId: '0',
+                    mutate: (core) => {
+                        // 移除对手的 instant/roll 卡，避免触发响应窗口
+                        const opponent = core.players['1'];
+                        if (opponent) {
+                            const nonResponseCards = opponent.hand.filter(c => c.timing !== 'instant' && c.timing !== 'roll');
+                            const responseCards = opponent.hand.filter(c => c.timing === 'instant' || c.timing === 'roll');
+                            opponent.deck = [...opponent.deck, ...responseCards];
+                            opponent.hand = nonResponseCards;
+                        }
+                    },
+                }),
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: '总和 >= 12 触发倒地',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // -> main1
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'), // -> main2
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingBonusDiceSettlement: null,
+                    players: {
+                        '1': { 
+                            hp: 38, // 50 - 12 = 38
+                            statusEffects: { knockdown: 1 }, // >= 12 触发倒地
+                        },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('多次重掷并结算', () => {
+            // 进攻骰(5颗): 3,3,3,1,1 → 3个 palm
+            // 防御骰(4颗): 1,1,1,1
+            // 奖励骰(3颗): 1,1,1 → 总伤害 3
+            // 重掷第0颗得到6 → 6,1,1 = 8
+            // 重掷第1颗得到6 → 6,6,1 = 13 >= 12
+            const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 1, 1];
+            const random = createQueuedRandom(diceValues);
+            
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: createSetupWithHand(['card-storm-assault-2'], {
+                    playerId: '0',
+                    mutate: (core) => { core.players['0'].tokens[TOKEN_IDS.TAIJI] = 2; },
+                }),
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: '多次重掷并结算',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // -> main1
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'thunder-strike' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算，进入重掷交互
+                    // 重掷2次
+                    cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
+                    cmd('REROLL_BONUS_DIE', '0', { dieIndex: 1 }),
+                    // 确认结算
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingBonusDiceSettlement: null,
+                    players: {
+                        '0': { tokens: { taiji: 0 } }, // 消耗了2个太极重掷
+                        '1': { 
+                            hp: 37, // 50 - 13 = 37
+                            statusEffects: { knockdown: 1 }, // >= 12 触发倒地
+                        },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+    });
+
     describe('卡牌交互（全覆盖）', () => {
         beforeEach(() => {
             vi.useFakeTimers();
@@ -1984,18 +2307,18 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand(['card-bye-bye'], {
                     cp: 10,
                     mutate: (core) => {
-                        core.players['1'].statusEffects.stun = 1;
+                        core.players['1'].statusEffects.knockdown = 1;
                     },
                 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-bye-bye' }),
-                    cmd('REMOVE_STATUS', '0', { targetPlayerId: '1', statusId: 'stun' }),
+                    cmd('REMOVE_STATUS', '0', { targetPlayerId: '1', statusId: 'knockdown' }),
                     cmd('CONFIRM_INTERACTION', '0', { interactionId }),
                 ],
                 expect: {
                     players: {
-                        '1': { statusEffects: { stun: 0 } },
+                        '1': { statusEffects: { knockdown: 0 } },
                         '0': { discardSize: 1 },
                     },
                     pendingInteraction: null,

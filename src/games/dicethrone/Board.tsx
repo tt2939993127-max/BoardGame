@@ -4,6 +4,7 @@ import type { BoardProps } from 'boardgame.io/react';
 import { HAND_LIMIT, type TokenResponsePhase } from './domain/types';
 import type { MatchState } from '../../engine/types';
 import { RESOURCE_IDS } from './domain/resources';
+import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
@@ -20,7 +21,7 @@ import { usePulseGlow } from '../../components/common/animations/PulseGlow';
 import { getLocalizedAssetPath } from '../../core';
 import { useToast } from '../../contexts/ToastContext';
 import { UndoProvider } from '../../contexts/UndoContext';
-import { useTutorial } from '../../contexts/TutorialContext';
+import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { loadStatusIconAtlasConfig, type StatusIconAtlasConfig } from './ui/statusEffects';
 import { getAbilitySlotId } from './ui/AbilityOverlays';
 import { HandArea } from './ui/HandArea';
@@ -43,6 +44,7 @@ import { useAnimationEffects } from './hooks/useAnimationEffects';
 import { useDiceInteractionConfig } from './hooks/useDiceInteractionConfig';
 import { useCardSpotlight } from './hooks/useCardSpotlight';
 import { useUIState } from './hooks/useUIState';
+import { useDiceThroneAudio } from './hooks/useDiceThroneAudio';
 import { computeViewModeState } from './ui/viewMode';
 
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
@@ -71,7 +73,10 @@ type DiceThroneMoveMap = {
     skipTokenResponse: () => void;
     usePurify: (statusId: string) => void;
     // 击倒移除
-    payToRemoveStun: () => void;
+    payToRemoveKnockdown: () => void;
+    // 奖励骰重掷
+    rerollBonusDie: (dieIndex: number) => void;
+    skipBonusDiceReroll: () => void;
 };
 
 const requireMove = <T extends (...args: unknown[]) => void>(value: unknown, name: string): T => {
@@ -106,7 +111,10 @@ const resolveMoves = (raw: Record<string, unknown>): DiceThroneMoveMap => {
     const useTokenRaw = (raw.useToken ?? raw.USE_TOKEN) as ((payload: unknown) => void) | undefined;
     const skipTokenResponseRaw = (raw.skipTokenResponse ?? raw.SKIP_TOKEN_RESPONSE) as ((payload: unknown) => void) | undefined;
     const usePurifyRaw = (raw.usePurify ?? raw.USE_PURIFY) as ((payload: unknown) => void) | undefined;
-    const payToRemoveStunRaw = (raw.payToRemoveStun ?? raw.PAY_TO_REMOVE_STUN) as ((payload: unknown) => void) | undefined;
+    const payToRemoveKnockdownRaw = (raw.payToRemoveKnockdown ?? raw.PAY_TO_REMOVE_KNOCKDOWN) as ((payload: unknown) => void) | undefined;
+    // 奖励骰重掷 moves
+    const rerollBonusDieRaw = (raw.rerollBonusDie ?? raw.REROLL_BONUS_DIE) as ((payload: unknown) => void) | undefined;
+    const skipBonusDiceRerollRaw = (raw.skipBonusDiceReroll ?? raw.SKIP_BONUS_DICE_REROLL) as ((payload: unknown) => void) | undefined;
 
     return {
         advancePhase: () => advancePhase({}),
@@ -132,12 +140,20 @@ const resolveMoves = (raw: Record<string, unknown>): DiceThroneMoveMap => {
         skipTokenResponse: () => skipTokenResponseRaw?.({}),
         usePurify: (statusId) => usePurifyRaw?.({ statusId }),
         // 击倒移除
-        payToRemoveStun: () => payToRemoveStunRaw?.({}),
+        payToRemoveKnockdown: () => payToRemoveKnockdownRaw?.({}),
+        // 奖励骰重掷
+        rerollBonusDie: (dieIndex) => rerollBonusDieRaw?.({ dieIndex }),
+        skipBonusDiceReroll: () => skipBonusDiceRerollRaw?.({}),
     };
 };
 
 // --- Main Layout ---
 export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, moves, playerID, reset, matchData, isMultiplayer }) => {
+    // 教程调试日志
+    console.log('[Tutorial][Board] props 接收', {
+        tutorialActive: rawG.sys?.tutorial?.active,
+        tutorialStepId: rawG.sys?.tutorial?.step?.id,
+    });
     const G = rawG.core;
     const access = useDiceThroneState(rawG);
     const choice = useCurrentChoice(access);
@@ -152,6 +168,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         { logPrefix: 'Spectate[DiceThrone]' }
     ) as DiceThroneMoveMap;
     const { t, i18n } = useTranslation('game-dicethrone');
+    useTutorialBridge(rawG.sys.tutorial, moves as Record<string, unknown>);
     const { isActive: isTutorialActive, currentStep: tutorialStep, nextStep: nextTutorialStep } = useTutorial();
     const toast = useToast();
     const locale = i18n.resolvedLanguage ?? i18n.language;
@@ -176,6 +193,18 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
     // 从 access.turnPhase 读取阶段（单一权威：来自 sys.phase）
     const currentPhase = access.turnPhase;
+
+    // 判断游戏结果
+    const isWinner = isGameOver && ctx.gameover?.winner === rootPid;
+
+    // 音频系统
+    useDiceThroneAudio({
+        G,
+        currentPlayerId: rootPid,
+        currentPhase,
+        isGameOver: !!isGameOver,
+        isWinner,
+    });
 
     // 使用 useUIState Hook 整合20+个分散的UI状态
     const {
@@ -349,18 +378,18 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const thinkingOffsetClass = 'bottom-[12vw]';
 
     // 可被净化移除的负面状态：由定义驱动（支持扩展）
-    const purifiableStatusIds = (G.statusDefinitions ?? [])
-        .filter(def => def.type === 'debuff' && def.removable)
+    const purifiableStatusIds = (G.tokenDefinitions ?? [])
+        .filter(def => def.category === 'debuff' && def.passiveTrigger?.removable)
         .map(def => def.id);
 
     // 是否可以使用净化（有净化 Token 且有可移除的负面状态）
-    const canUsePurify = !isSpectator && (player.tokens?.['purify'] ?? 0) > 0 &&
+    const canUsePurify = !isSpectator && (player.tokens?.[TOKEN_IDS.PURIFY] ?? 0) > 0 &&
         Object.entries(player.statusEffects ?? {}).some(([id, stacks]) => purifiableStatusIds.includes(id) && stacks > 0);
 
     // 是否可以移除击倒（有击倒状态且 CP >= 2 且在 offensiveRoll 前的阶段）
-    const canRemoveStun = !isSpectator && isActivePlayer &&
+    const canRemoveKnockdown = !isSpectator && isActivePlayer &&
         (currentPhase === 'upkeep' || currentPhase === 'income' || currentPhase === 'main1') &&
-        (player.statusEffects?.['stun'] ?? 0) > 0 &&
+        (player.statusEffects?.[STATUS_IDS.KNOCKDOWN] ?? 0) > 0 &&
         (player.resources?.[RESOURCE_IDS.CP] ?? 0) >= 2;
 
     // 使用 useDiceInteractionConfig Hook 生成骰子交互配置（简化132行代码）
@@ -668,8 +697,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         onPurifyClick={() => openModal('purify')}
                         canUsePurify={canUsePurify}
                         tokenDefinitions={G.tokenDefinitions}
-                        onStunClick={() => openModal('removeStun')}
-                        canRemoveStun={canRemoveStun}
+                        onKnockdownClick={() => openModal('removeKnockdown')}
+                        canRemoveKnockdown={canRemoveKnockdown}
                     />
 
                     <CenterBoard
@@ -817,12 +846,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     }}
                     onCancelPurify={() => closeModal('purify')}
 
-                    isConfirmRemoveStunOpen={modals.removeStun}
-                    onConfirmRemoveStun={() => {
-                        closeModal('removeStun');
-                        engineMoves.payToRemoveStun();
+                    isConfirmRemoveKnockdownOpen={modals.removeKnockdown}
+                    onConfirmRemoveKnockdown={() => {
+                        closeModal('removeKnockdown');
+                        engineMoves.payToRemoveKnockdown();
                     }}
-                    onCancelRemoveStun={() => closeModal('removeStun')}
+                    onCancelRemoveKnockdown={() => closeModal('removeKnockdown')}
 
                     // 选择弹窗
                     choice={choice}
@@ -843,6 +872,15 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     bonusDie={bonusDie}
                     onBonusDieClose={handleBonusDieClose}
 
+                    // 奖励骰重掷交互
+                    pendingBonusDiceSettlement={G.pendingBonusDiceSettlement}
+                    canRerollBonusDie={Boolean(
+                        G.pendingBonusDiceSettlement &&
+                        G.pendingBonusDiceSettlement.attackerId === rootPid &&
+                        (player.tokens?.[TOKEN_IDS.TAIJI] ?? 0) >= (G.pendingBonusDiceSettlement?.rerollCostAmount ?? 1)
+                    )}
+                    onRerollBonusDie={(dieIndex) => engineMoves.rerollBonusDie(dieIndex)}
+                    onSkipBonusDiceReroll={() => engineMoves.skipBonusDiceReroll()}
 
                     // Token 响应
                     pendingDamage={pendingDamage}

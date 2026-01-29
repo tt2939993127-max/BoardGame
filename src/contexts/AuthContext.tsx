@@ -17,7 +17,8 @@ interface AuthContextType {
     user: User | null;
     token: string | null;
     login: (username: string, password: string) => Promise<void>;
-    register: (username: string, password: string) => Promise<void>;
+    register: (username: string, email: string, code: string, password: string) => Promise<void>;
+    sendRegisterCode: (email: string) => Promise<void>;
     logout: () => void;
     sendEmailCode: (email: string) => Promise<void>;
     verifyEmail: (email: string, code: string) => Promise<void>;
@@ -64,11 +65,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('auth_user', JSON.stringify(data.user));
     };
 
-    const register = async (username: string, password: string) => {
+    const sendRegisterCode = async (email: string) => {
+        const response = await fetch(`${AUTH_API_URL}/send-register-code`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
+            body: JSON.stringify({ email }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '发送验证码失败');
+        }
+    };
+
+    const register = async (username: string, email: string, code: string, password: string) => {
         const response = await fetch(`${AUTH_API_URL}/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
-            body: JSON.stringify({ username, password }),
+            body: JSON.stringify({ username, email, code, password }),
         });
 
         if (!response.ok) {
@@ -147,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, login, register, logout, sendEmailCode, verifyEmail, isLoading }}>
+        <AuthContext.Provider value={{ user, token, login, register, sendRegisterCode, logout, sendEmailCode, verifyEmail, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

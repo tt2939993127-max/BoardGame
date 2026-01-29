@@ -27,7 +27,7 @@ describe('AuthModule (e2e)', () => {
         const moduleRef = await Test.createTestingModule({
             imports: [
                 CacheModule.register(),
-                MongooseModule.forRoot(mongoUri),
+                MongooseModule.forRoot(mongoUri, externalMongoUri ? { dbName: 'boardgame_test_auth' } : undefined),
                 AuthModule,
             ],
         }).compile();

@@ -2,17 +2,20 @@
  * 额外骰子特写组件
  *
  * 无遮罩、无虚化背景，用于显示额外投掷的骰子结果。
+ * 支持重掷交互模式（雷霆一击 II / 风暴突袭）。
  */
 
 import React from 'react';
+import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
-import type { DieFace } from '../types';
+import type { DieFace, BonusDieInfo } from '../domain/types';
 import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 
 interface BonusDieOverlayProps {
-    /** 骰子值 (1-6) */
-    value: number | undefined;
+    /** 单颗骰子值 (1-6)，用于普通特写模式 */
+    value?: number;
     /** 骰面符号 */
     face?: DieFace;
     /** 效果描述 key */
@@ -27,6 +30,18 @@ interface BonusDieOverlayProps {
     locale?: string;
     /** 自动关闭延迟（毫秒），默认 2500 */
     autoCloseDelay?: number;
+    
+    // ===== 重掷交互模式 =====
+    /** 奖励骰列表（多颗重掷模式） */
+    bonusDice?: BonusDieInfo[];
+    /** 是否可以重掷（有足够 Token） */
+    canReroll?: boolean;
+    /** 重掷回调 */
+    onReroll?: (dieIndex: number) => void;
+    /** 跳过重掷回调 */
+    onSkipReroll?: () => void;
+    /** 显示总和 */
+    showTotal?: boolean;
 }
 
 export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
@@ -38,9 +53,111 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     onClose,
     locale,
     autoCloseDelay = 2500,
+    bonusDice,
+    canReroll,
+    onReroll,
+    onSkipReroll,
+    showTotal = false,
 }) => {
+    const { t } = useTranslation('game-dicethrone');
+    const isRerollMode = Boolean(bonusDice && bonusDice.length > 0 && onReroll);
 
-    if (!isVisible || value === undefined) return null;
+    if (!isVisible) return null;
+
+    // 重掷交互模式：显示多颗骰子
+    if (isRerollMode && bonusDice) {
+        const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
+
+        return (
+            <SpotlightContainer
+                id="bonus-dice-reroll"
+                isVisible={isVisible}
+                onClose={onClose}
+                disableAutoClose
+                disableBackdropClose
+                zIndex={9999}
+            >
+                <div className="flex flex-col items-center gap-[2vw]">
+                    {/* 提示文字 */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-white text-[2vw] font-bold text-center mb-[1vw]"
+                    >
+                        {canReroll
+                            ? t('bonusDice.selectToReroll')
+                            : t('bonusDice.noTokenToReroll')}
+                    </motion.div>
+
+                    {/* 骰子列表 */}
+                    <div className="flex gap-[2vw]">
+                        {bonusDice.map((die) => (
+                            <motion.div
+                                key={die.index}
+                                initial={{ scale: 0.5, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ delay: die.index * 0.15 }}
+                                className={`relative ${
+                                    canReroll
+                                        ? 'cursor-pointer hover:scale-110 transition-transform'
+                                        : ''
+                                }`}
+                                onClick={() => canReroll && onReroll?.(die.index)}
+                            >
+                                <BonusDieSpotlightContent
+                                    value={die.value}
+                                    face={die.face}
+                                    locale={locale}
+                                    size="7vw"
+                                    rollingDurationMs={600 + die.index * 100}
+                                />
+                                {canReroll && (
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                        <div className="bg-purple-600/80 rounded-full p-[0.5vw]">
+                                            <svg className="w-[2vw] h-[2vw] text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                )}
+                            </motion.div>
+                        ))}
+                    </div>
+
+                    {/* 总和显示 */}
+                    {showTotal && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="text-white text-[2.5vw] font-black"
+                        >
+                            {t('bonusDice.total')}: {total}
+                            {total >= 12 && (
+                                <span className="ml-[1vw] text-red-400">
+                                    (倒地!)
+                                </span>
+                            )}
+                        </motion.div>
+                    )}
+
+                    {/* 跳过按钮 */}
+                    <motion.button
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.8 }}
+                        onClick={onSkipReroll}
+                        className="mt-[1vw] px-[3vw] py-[1vw] bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-[1.5vw] transition-colors"
+                    >
+                        {canReroll ? t('bonusDice.confirmDamage') : t('bonusDice.continue')}
+                    </motion.button>
+                </div>
+            </SpotlightContainer>
+        );
+    }
+
+    // 普通单颗骰子特写模式
+    if (value === undefined) return null;
 
     return (
         <SpotlightContainer

@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { GameModal } from './components/GameModal';
 import { GameButton } from './components/GameButton';
 
-export const ConfirmRemoveStunModal = ({
+export const ConfirmRemoveKnockdownModal = ({
     isOpen,
     onCancel,
     onConfirm,
@@ -17,7 +17,7 @@ export const ConfirmRemoveStunModal = ({
         <GameModal
             isOpen={isOpen}
             onClose={onCancel}
-            title={t('confirmRemoveStun.title')}
+            title={t('confirmRemoveKnockdown.title')}
             width="sm"
             footer={
                 <>
@@ -26,20 +26,20 @@ export const ConfirmRemoveStunModal = ({
                         onClick={onCancel}
                         className="flex-1"
                     >
-                        {t('confirmRemoveStun.cancel')}
+                        {t('confirmRemoveKnockdown.cancel')}
                     </GameButton>
                     <GameButton
                         variant="primary"
                         onClick={onConfirm}
                         className="flex-1"
                     >
-                        {t('confirmRemoveStun.confirm')}
+                        {t('confirmRemoveKnockdown.confirm')}
                     </GameButton>
                 </>
             }
         >
             <p className="text-lg text-slate-200">
-                {t('confirmRemoveStun.description')}
+                {t('confirmRemoveKnockdown.description')}
             </p>
         </GameModal>
     );

@@ -155,6 +155,75 @@ export interface ResponseWindowState {
     };
 }
 
+// ============================================================================
+// 教程系统
+// ============================================================================
+
+export type TutorialStepPosition = 'top' | 'bottom' | 'left' | 'right' | 'center';
+
+export interface TutorialEventMatcher {
+    type: string;
+    match?: Record<string, unknown>;
+}
+
+export interface TutorialRandomPolicy {
+    mode: 'fixed' | 'sequence';
+    values: number[];
+    cursor?: number;
+}
+
+export interface TutorialAiAction {
+    commandType: string;
+    payload?: unknown;
+}
+
+export interface TutorialStepSnapshot {
+    id: string;
+    content: string;
+    highlightTarget?: string;
+    position?: TutorialStepPosition;
+    requireAction?: boolean;
+    showMask?: boolean;
+    allowedCommands?: string[];
+    blockedCommands?: string[];
+    advanceOnEvents?: TutorialEventMatcher[];
+    randomPolicy?: TutorialRandomPolicy;
+    aiActions?: TutorialAiAction[];
+    allowManualSkip?: boolean;
+}
+
+export interface TutorialManifest {
+    id: string;
+    steps: TutorialStepSnapshot[];
+    allowManualSkip?: boolean;
+    randomPolicy?: TutorialRandomPolicy;
+}
+
+export interface TutorialState {
+    active: boolean;
+    manifestId: string | null;
+    stepIndex: number;
+    steps: TutorialStepSnapshot[];
+    step: TutorialStepSnapshot | null;
+    /** manifest 级别配置（用于步骤推进时复用） */
+    manifestAllowManualSkip?: boolean;
+    manifestRandomPolicy?: TutorialRandomPolicy;
+    allowedCommands?: string[];
+    blockedCommands?: string[];
+    advanceOnEvents?: TutorialEventMatcher[];
+    randomPolicy?: TutorialRandomPolicy;
+    aiActions?: TutorialAiAction[];
+    allowManualSkip?: boolean;
+}
+
+export const DEFAULT_TUTORIAL_STATE: TutorialState = {
+    active: false,
+    manifestId: null,
+    stepIndex: 0,
+    steps: [],
+    step: null,
+};
+
 /**
  * 系统状态（G.sys）
  */
@@ -173,6 +242,8 @@ export interface SystemState {
     rematch: RematchState;
     /** 响应窗口状态 */
     responseWindow: ResponseWindowState;
+    /** 教程系统状态 */
+    tutorial: TutorialState;
     /** 当前回合数 */
     turnNumber: number;
     /** 当前阶段（单一权威；没有阶段概念的游戏使用空字符串） */

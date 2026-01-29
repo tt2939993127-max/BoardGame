@@ -25,6 +25,7 @@ import type {
     TokenEffectProcessor,
 } from '../../../systems/TokenSystem/types';
 import { RESOURCE_IDS } from './resources';
+import { TOKEN_IDS } from './ids';
 
 // ============================================================================
 // Token 可用性检查
@@ -37,8 +38,8 @@ export function hasDefensiveTokens(state: DiceThroneCore, playerId: PlayerId): b
     const player = state.players[playerId];
     if (!player) return false;
     
-    const taiji = player.tokens['taiji'] ?? 0;
-    const evasive = player.tokens['evasive'] ?? 0;
+    const taiji = player.tokens[TOKEN_IDS.TAIJI] ?? 0;
+    const evasive = player.tokens[TOKEN_IDS.EVASIVE] ?? 0;
     
     return taiji > 0 || evasive > 0;
 }
@@ -50,7 +51,7 @@ export function hasOffensiveTokens(state: DiceThroneCore, playerId: PlayerId): b
     const player = state.players[playerId];
     if (!player) return false;
     
-    const taiji = player.tokens['taiji'] ?? 0;
+    const taiji = player.tokens[TOKEN_IDS.TAIJI] ?? 0;
     return taiji > 0;
 }
 
@@ -61,7 +62,7 @@ export function hasPurifyToken(state: DiceThroneCore, playerId: PlayerId): boole
     const player = state.players[playerId];
     if (!player) return false;
     
-    return (player.tokens['purify'] ?? 0) > 0;
+    return (player.tokens[TOKEN_IDS.PURIFY] ?? 0) > 0;
 }
 
 /**
@@ -72,8 +73,8 @@ export function hasDebuffs(state: DiceThroneCore, playerId: PlayerId): boolean {
     if (!player) return false;
 
     // 可被净化移除的负面状态：由状态定义驱动（支持未来扩展）
-    const removableDebuffIds = (state.statusDefinitions ?? [])
-        .filter(def => def.type === 'debuff' && def.removable)
+    const removableDebuffIds = (state.tokenDefinitions ?? [])
+        .filter(def => def.category === 'debuff' && def.passiveTrigger?.removable)
         .map(def => def.id);
 
     return removableDebuffIds.some(id => (player.statusEffects[id] ?? 0) > 0);
@@ -137,7 +138,8 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
      */
     modifyDamageDealt: (ctx) => {
         const { tokenDef, amount } = ctx;
-        const modifier = (tokenDef.useEffect.value ?? 1) * amount;
+        const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
+        const modifier = (effect?.value ?? 1) * amount;
         return {
             success: true,
             damageModifier: modifier,
@@ -149,8 +151,9 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
      */
     modifyDamageReceived: (ctx) => {
         const { tokenDef, amount } = ctx;
+        const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
         // value 通常为负数（如 -1），amount 为消耗数量
-        const modifier = (tokenDef.useEffect.value ?? -1) * amount;
+        const modifier = (effect?.value ?? -1) * amount;
         return {
             success: true,
             damageModifier: modifier,
@@ -166,8 +169,9 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
             return { success: false };
         }
         
+        const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
         const rollValue = random.d(6);
-        const range = tokenDef.useEffect.rollSuccess?.range ?? [1, 2];
+        const range = effect?.rollSuccess?.range ?? [1, 2];
         const isSuccess = rollValue >= range[0] && rollValue <= range[1];
         
         return {
@@ -254,7 +258,11 @@ export function processTokenUsage(
     };
     
     // 调用对应处理器
-    const processor = effectProcessors[tokenDef.useEffect.type];
+    const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
+    if (!effect) {
+        return { events: [], result: { success: false }, newTokenAmount: currentAmount };
+    }
+    const processor = effectProcessors[effect.type];
     const result = processor(ctx);
     
     const newTokenAmount = currentAmount - actualAmount;
@@ -294,7 +302,7 @@ export function processTaijiUsage(
 ): { events: DiceThroneEvent[]; newTokenAmount: number } {
     const events: DiceThroneEvent[] = [];
     const player = state.players[playerId];
-    const currentAmount = player?.tokens['taiji'] ?? 0;
+    const currentAmount = player?.tokens[TOKEN_IDS.TAIJI] ?? 0;
     const actualAmount = Math.min(amount, currentAmount);
     
     if (actualAmount <= 0) {
@@ -307,7 +315,7 @@ export function processTaijiUsage(
         type: 'TOKEN_USED',
         payload: {
             playerId,
-            tokenId: 'taiji',
+            tokenId: TOKEN_IDS.TAIJI,
             amount: actualAmount,
             effectType,
             damageModifier: effectType === 'damageBoost' ? actualAmount : -actualAmount,
@@ -330,7 +338,7 @@ export function processEvasiveUsage(
 ): { events: DiceThroneEvent[]; newTokenAmount: number; success: boolean } {
     const events: DiceThroneEvent[] = [];
     const player = state.players[playerId];
-    const currentAmount = player?.tokens['evasive'] ?? 0;
+    const currentAmount = player?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
     
     if (currentAmount <= 0) {
         return { events, newTokenAmount: currentAmount, success: false };
@@ -345,7 +353,7 @@ export function processEvasiveUsage(
         type: 'TOKEN_USED',
         payload: {
             playerId,
-            tokenId: 'evasive',
+            tokenId: TOKEN_IDS.EVASIVE,
             amount: 1,
             effectType: 'evasionAttempt',
             evasionRoll: {
@@ -371,7 +379,7 @@ export function processPurifyUsage(
 ): { events: DiceThroneEvent[]; newTokenAmount: number } {
     const events: DiceThroneEvent[] = [];
     const player = state.players[playerId];
-    const currentAmount = player?.tokens['purify'] ?? 0;
+    const currentAmount = player?.tokens[TOKEN_IDS.PURIFY] ?? 0;
     
     if (currentAmount <= 0) {
         return { events, newTokenAmount: currentAmount };
@@ -383,7 +391,7 @@ export function processPurifyUsage(
         type: 'TOKEN_USED',
         payload: {
             playerId,
-            tokenId: 'purify',
+            tokenId: TOKEN_IDS.PURIFY,
             amount: 1,
             effectType: 'damageReduction',
             damageModifier: 0,

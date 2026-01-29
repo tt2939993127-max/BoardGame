@@ -5,8 +5,24 @@
  */
 
 import type { GameEvent } from '../../engine/types';
-import { createGameAdapter, UNDO_COMMANDS, CHEAT_COMMANDS, createCheatSystem, createFlowSystem, createLogSystem, createUndoSystem, createPromptSystem, createRematchSystem, createResponseWindowSystem, type CheatResourceModifier, type FlowHooks, type PhaseExitResult } from '../../engine';
+import {
+    createGameAdapter,
+    createCheatSystem,
+    createFlowSystem,
+    createLogSystem,
+    createPromptSystem,
+    createRematchSystem,
+    createResponseWindowSystem,
+    createTutorialSystem,
+    createUndoSystem,
+    CHEAT_COMMANDS,
+    UNDO_COMMANDS,
+    type CheatResourceModifier,
+    type FlowHooks,
+    type PhaseExitResult,
+} from '../../engine';
 import { DiceThroneDomain } from './domain';
+import { DICETHRONE_COMMANDS, STATUS_IDS } from './domain/ids';
 import type { DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, StatusRemovedEvent } from './domain/types';
 import { createDiceThroneEventSystem } from './domain/systems';
 import { canAdvancePhase, getNextPhase, getNextPlayerId } from './domain/rules';
@@ -162,15 +178,15 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         // ========== main1 阶段退出：检查击倒状态 ==========
         if (from === 'main1' && to === 'offensiveRoll') {
             const player = core.players[core.activePlayerId];
-            const stunStacks = player?.statusEffects['stun'] ?? 0;
-            if (stunStacks > 0) {
+            const knockdownStacks = player?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+            if (knockdownStacks > 0) {
                 // 有击倒状态，跳过 offensiveRoll 并移除击倒
                 const statusRemovedEvent: StatusRemovedEvent = {
                     type: 'STATUS_REMOVED',
                     payload: {
                         targetId: core.activePlayerId,
-                        statusId: 'stun',
-                        stacks: stunStacks,
+                        statusId: STATUS_IDS.KNOCKDOWN,
+                        stacks: knockdownStacks,
                     },
                     sourceCommandType: command.type,
                     timestamp,
@@ -208,7 +224,8 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                 const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
                 const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-                if (hasAttackChoice || hasTokenResponse) {
+                const hasBonusDiceRerollOff = attackEvents.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                if (hasAttackChoice || hasTokenResponse || hasBonusDiceRerollOff) {
                     return { events, halt: true };
                 }
 
@@ -219,18 +236,23 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             return { events, overrideNextPhase: 'main2' };
         }
 
-        // ========== defensiveRoll 阶段退出：直接结算攻击 ==========
+        // ========== defensiveRoll 阶段退出 ==========
         // 设计原则：不做"最后机会"响应窗口，玩家想打牌应在防御阶段主动打出
-        if (from === 'defensiveRoll' && core.pendingAttack) {
-            // 直接结算攻击
-            const attackEvents = resolveAttack(core, random);
-            events.push(...attackEvents);
+        if (from === 'defensiveRoll') {
+            if (core.pendingAttack) {
+                // 直接结算攻击
+                const attackEvents = resolveAttack(core, random);
+                events.push(...attackEvents);
 
-            const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
-            const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-            if (hasAttackChoice || hasTokenResponse) {
-                return { events, halt: true };
+                const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
+                const hasTokenResponse = attackEvents.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
+                const hasBonusDiceReroll = attackEvents.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
+                if (hasAttackChoice || hasTokenResponse || hasBonusDiceReroll) {
+                    return { events, halt: true };
+                }
             }
+            // 显式指定下一阶段为 main2（无论是否有 pendingAttack）
+            return { events, overrideNextPhase: 'main2' };
         }
 
         // ========== discard 阶段退出：切换回合 ==========
@@ -257,20 +279,22 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
     onAutoContinueCheck: ({ state, events }): { autoContinue: boolean; playerId: string } | void => {
         const core = state.core;
 
-        // 检查是否有 TOKEN_RESPONSE_CLOSED 或 CHOICE_RESOLVED 事件
+        // 检查是否有需要自动继续的事件
         const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
         const hasChoiceResolved = events.some(e => e.type === 'CHOICE_RESOLVED');
+        const hasBonusDiceSettled = events.some(e => e.type === 'BONUS_DICE_SETTLED');
 
         // 如果有这些事件，且没有其他阻塞条件，则自动继续
-        if (hasTokenResponseClosed || hasChoiceResolved) {
+        if (hasTokenResponseClosed || hasChoiceResolved || hasBonusDiceSettled) {
             // 检查是否有阻塞条件
             const hasActivePrompt = state.sys.prompt?.current !== undefined;
             const hasActiveResponseWindow = state.sys.responseWindow?.current !== undefined;
             const hasPendingInteraction = core.pendingInteraction !== undefined;
             const hasPendingDamage = core.pendingDamage !== undefined;
+            const hasPendingBonusDice = core.pendingBonusDiceSettlement !== undefined;
 
             // 只有在没有其他阻塞条件时才自动继续
-            if (!hasActivePrompt && !hasActiveResponseWindow && !hasPendingInteraction && !hasPendingDamage) {
+            if (!hasActivePrompt && !hasActiveResponseWindow && !hasPendingInteraction && !hasPendingDamage && !hasPendingBonusDice) {
                 return {
                     autoContinue: true,
                     playerId: core.activePlayerId,
@@ -342,6 +366,7 @@ const systems = [
     createPromptSystem(),
     createRematchSystem(),
     createResponseWindowSystem(),
+    createTutorialSystem(),
     createDiceThroneEventSystem(),
     createCheatSystem<DiceThroneCore>(diceThroneCheatModifier),
 ];
@@ -383,7 +408,10 @@ const COMMAND_TYPES = [
     'SKIP_TOKEN_RESPONSE',
     'USE_PURIFY',
     // 击倒移除
-    'PAY_TO_REMOVE_STUN',
+    DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN,
+    // 奖励骰重掷
+    'REROLL_BONUS_DIE',
+    'SKIP_BONUS_DICE_REROLL',
     // 撤回系统命令
     UNDO_COMMANDS.REQUEST_UNDO,
     UNDO_COMMANDS.APPROVE_UNDO,

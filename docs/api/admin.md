@@ -283,6 +283,113 @@ Authorization: Bearer <admin_token>
 
 ---
 
+### DELETE /admin/users/:id
+
+硬删除用户并清理关联数据（好友关系、私信、评论），对局记录会匿名化玩家名。
+
+**路径参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 用户 ID |
+
+**请求示例**:
+```http
+DELETE /admin/users/507f1f77bcf86cd799439011
+Authorization: Bearer <admin_token>
+```
+
+**响应示例**:
+```json
+{
+  "message": "用户已删除",
+  "user": {
+    "id": "507f1f77bcf86cd799439011",
+    "username": "testuser"
+  }
+}
+```
+
+**错误响应**:
+- `400` - 不能删除管理员账号
+- `404` - 用户不存在
+
+---
+
+## 房间管理
+
+### GET /admin/rooms
+
+获取房间列表。
+
+**查询参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | number | 否 | 页码，默认 1 |
+| limit | number | 否 | 每页数量，默认 20，最大 100 |
+| gameName | string | 否 | 游戏类型筛选 |
+
+**请求示例**:
+```http
+GET /admin/rooms?gameName=tictactoe&limit=10
+Authorization: Bearer <admin_token>
+```
+
+**响应示例**:
+```json
+{
+  "items": [
+    {
+      "matchID": "room-1",
+      "gameName": "tictactoe",
+      "roomName": "测试房间",
+      "ownerKey": "user:507f1f77bcf86cd799439011",
+      "ownerType": "user",
+      "isLocked": true,
+      "players": [
+        { "id": 0, "name": "player-a", "isConnected": true },
+        { "id": 1, "name": "player-b", "isConnected": false }
+      ],
+      "createdAt": "2026-01-24T19:30:00.000Z",
+      "updatedAt": "2026-01-24T20:00:00.000Z"
+    }
+  ],
+  "page": 1,
+  "limit": 10,
+  "total": 1,
+  "hasMore": false
+}
+```
+
+---
+
+### DELETE /admin/rooms/:id
+
+销毁房间。
+
+**路径参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 对局 ID (matchID) |
+
+**请求示例**:
+```http
+DELETE /admin/rooms/room-1
+Authorization: Bearer <admin_token>
+```
+
+**响应示例**:
+```json
+{
+  "message": "房间已销毁",
+  "matchID": "room-1"
+}
+```
+
+**错误响应**:
+- `404` - 房间不存在
+
+---
+
 ## 对局记录
 
 ### GET /admin/matches

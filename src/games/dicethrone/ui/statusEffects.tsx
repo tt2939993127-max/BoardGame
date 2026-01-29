@@ -5,6 +5,7 @@ import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
 import { ASSETS } from './assets';
+import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 
 const STATUS_ICON_ATLAS_JSON = 'dicethrone/images/monk/status-icons-atlas.json';
 
@@ -61,21 +62,21 @@ export type StatusEffectMeta = {
 
 /** 被动状态效果元数据（如击倒） */
 export const STATUS_EFFECT_META: Record<string, StatusEffectMeta> = {
-    stun: {
-        frameId: 'knockdown',
+    [STATUS_IDS.KNOCKDOWN]: {
+        frameId: STATUS_IDS.KNOCKDOWN,
     },
 };
 
 /** Token 元数据（太极、闪避、净化） */
 export const TOKEN_META: Record<string, StatusEffectMeta> = {
-    taiji: {
+    [TOKEN_IDS.TAIJI]: {
         frameId: 'tai-chi',
     },
-    evasive: {
+    [TOKEN_IDS.EVASIVE]: {
         frameId: 'dodge',
     },
-    purify: {
-        frameId: 'purify',
+    [TOKEN_IDS.PURIFY]: {
+        frameId: TOKEN_IDS.PURIFY,
     },
 };
 
@@ -177,7 +178,7 @@ export const StatusEffectBadge = ({
 
             <InfoTooltip
                 title={`${info.name}${stacks > 1 ? ` ×${stacks}` : ''}`}
-                content={isClickable ? [...info.description, t('statusEffects.stun.clickToRemove', { defaultValue: '点击花费 2CP 移除' })] : info.description}
+                content={isClickable ? [...info.description, t(`statusEffects.${STATUS_IDS.KNOCKDOWN}.clickToRemove`, { defaultValue: '点击花费 2CP 移除' })] : info.description}
                 isVisible={isHovered}
                 position="right"
             />

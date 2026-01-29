@@ -33,7 +33,7 @@ export interface ModalState {
     /** 净化弹窗 */
     purify: boolean;
     /** 确认移除击倒弹窗 */
-    removeStun: boolean;
+    removeKnockdown: boolean;
 }
 
 /**
@@ -107,7 +107,7 @@ export function useUIState(): UIState {
     const [modals, setModals] = useState<ModalState>({
         confirmSkip: false,
         purify: false,
-        removeStun: false,
+        removeKnockdown: false,
     });
     
     // 视图模式

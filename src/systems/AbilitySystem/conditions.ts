@@ -125,6 +125,17 @@ export interface PhaseCondition extends BaseCondition {
     diceCount?: number;
 }
 
+/**
+ * 所有符号都存在条件（用于"禅武归一"、"武僧之路"等）
+ * 判断骰面中是否包含所有指定的符号（每个至少1个）
+ * @deprecated 将迁移到游戏层
+ */
+export interface AllSymbolsPresentCondition extends BaseCondition {
+    type: 'allSymbolsPresent';
+    /** 需要存在的符号列表 */
+    symbols: string[];
+}
+
 // ============================================================================
 // 条件类型别名（向后兼容）
 // ============================================================================
@@ -136,7 +147,8 @@ export type Condition =
     | CoreCondition
     | DiceSetCondition
     | DiceStraightCondition
-    | PhaseCondition;
+    | PhaseCondition
+    | AllSymbolsPresentCondition;
 
 /**
  * 技能触发条件（向后兼容别名）
@@ -147,7 +159,26 @@ export type TriggerCondition =
     | PhaseCondition
     | ResourceCondition
     | HasStatusCondition
-    | CompositeCondition;
+    | CompositeCondition
+    | AllSymbolsPresentCondition;
+
+/**
+ * 骰子和点数相关条件（用于狂战士等英雄）
+ */
+export interface RollSumCondition extends BaseCondition {
+    type: 'rollSumGreaterThan';
+    threshold: number;
+}
+
+export interface DiceCountCondition extends BaseCondition {
+    type: 'diceCountAtLeast';
+    face: string;
+    count: number;
+}
+
+export interface ThreeOfAKindCondition extends BaseCondition {
+    type: 'threeOfAKind';
+}
 
 /**
  * 效果触发条件（向后兼容别名）
@@ -157,7 +188,10 @@ export type EffectCondition =
     | OnHitCondition
     | OnMissCondition
     | HasStatusCondition
-    | TargetHasStatusCondition;
+    | TargetHasStatusCondition
+    | RollSumCondition
+    | DiceCountCondition
+    | ThreeOfAKindCondition;
 
 // ============================================================================
 // 条件上下文
@@ -327,6 +361,16 @@ export const evaluatePhase: ConditionEvaluator<PhaseCondition> = (condition, ctx
         if (diceValues && diceValues.length < condition.diceCount) return false;
     }
     return true;
+};
+
+/**
+ * 判断所有指定符号是否都存在（每个至少1个）
+ * 用于"禅武归一"（拳+掌+太极）、"武僧之路"（拳+掌+太极+莲花）等触发条件
+ */
+export const evaluateAllSymbolsPresent: ConditionEvaluator<AllSymbolsPresentCondition> = (condition, ctx) => {
+    const faceCounts = ctx.faceCounts as Record<string, number> | undefined;
+    if (!faceCounts) return false;
+    return condition.symbols.every(symbol => (faceCounts[symbol] ?? 0) >= 1);
 };
 
 // ============================================================================

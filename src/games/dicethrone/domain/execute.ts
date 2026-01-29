@@ -3,7 +3,7 @@
  * Command -> Event[] 转换
  */
 
-import type { RandomFn } from '../../../engine/types';
+import type { PlayerId, RandomFn } from '../../../engine/types';
 import type {
     DiceThroneCore,
     DiceThroneCommand,
@@ -26,6 +26,8 @@ import type {
     InteractionCompletedEvent,
     InteractionCancelledEvent,
     PendingDamage,
+    DamageDealtEvent,
+    StatusAppliedEvent,
 } from './types';
 import {
     getAvailableAbilityIds,
@@ -34,12 +36,14 @@ import {
     getUpgradeTargetAbilityId,
     hasOpponentTargetEffect,
     getResponderQueue,
+    getDieFace,
 } from './rules';
 import { findPlayerAbility } from './abilityLookup';
 import { reduce } from './reducer';
 import { resourceSystem } from '../../../systems/ResourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
+import { DICETHRONE_COMMANDS, STATUS_IDS, TOKEN_IDS } from './ids';
 import { buildDrawEvents } from './deckEvents';
 import {
     processTokenUsage,
@@ -57,6 +61,11 @@ const now = () => Date.now();
 
 /**
  * 判断该进攻技能是否可被防御（是否进入防御投掷阶段）
+ * 
+ * 设计原则：
+ * - 进攻技能默认可防御（进入防御阶段）
+ * - 只有明确标记 'unblockable' 的技能才不可防御
+ * - 不再基于 hasDamage 判断，因为 custom action 也可能造成伤害（如 thunder-strike-2-roll-damage）
  */
 const isDefendableAttack = (state: DiceThroneCore, attackerId: string, abilityId: string): boolean => {
     const match = findPlayerAbility(state, attackerId, abilityId);
@@ -65,23 +74,21 @@ const isDefendableAttack = (state: DiceThroneCore, attackerId: string, abilityId
         return true;
     }
 
-    const effects = match.variant?.effects ?? match.ability.effects ?? [];
-    const hasDamage = effects.some(e => e.action?.type === 'damage' && (e.action.value ?? 0) > 0);
-    const hasUnblockableTag = match.ability.tags?.includes('unblockable');
-    const result = hasDamage && !hasUnblockableTag;
+    // 检查 variant 和 ability 的 tags
+    const variantTags = match.variant?.tags ?? [];
+    const abilityTags = match.ability.tags ?? [];
+    const hasUnblockableTag = variantTags.includes('unblockable') || abilityTags.includes('unblockable');
     
     console.log('[isDefendableAttack]', {
         abilityId,
-        hasDamage,
         hasUnblockableTag,
-        result
+        result: !hasUnblockableTag
     });
-    
-    if (!hasDamage) return false;
 
     // 不可防御标签：跳过防御阶段
     if (hasUnblockableTag) return false;
 
+    // 进攻技能默认可防御
     return true;
 };
 
@@ -141,7 +148,8 @@ export function execute(
         }
 
         case 'TOGGLE_DIE_LOCK': {
-            const die = state.dice.find(d => d.id === command.payload.dieId);
+            const payload = command.payload as { dieId: number };
+            const die = state.dice.find(d => d.id === payload.dieId);
             if (die) {
                 const event: DieLockToggledEvent = {
                     type: 'DIE_LOCK_TOGGLED',
@@ -210,7 +218,7 @@ export function execute(
         }
 
         case 'SELECT_ABILITY': {
-            const { abilityId } = command.payload;
+            const { abilityId } = command.payload as { abilityId: string };
             
             if (state.turnPhase === 'defensiveRoll') {
                 // 防御技能选择
@@ -275,7 +283,7 @@ export function execute(
         case 'DISCARD_CARD': {
             const event: CardDiscardedEvent = {
                 type: 'CARD_DISCARDED',
-                payload: { playerId: state.activePlayerId, cardId: command.payload.cardId },
+                payload: { playerId: state.activePlayerId, cardId: (command.payload as { cardId: string }).cardId },
                 sourceCommandType: command.type,
                 timestamp,
             };
@@ -289,7 +297,7 @@ export function execute(
                 type: 'CARD_SOLD',
                 payload: { 
                     playerId: actingPlayerId, 
-                    cardId: command.payload.cardId,
+                    cardId: (command.payload as { cardId: string }).cardId,
                     cpGained: 1,
                 },
                 sourceCommandType: command.type,
@@ -316,7 +324,7 @@ export function execute(
         case 'REORDER_CARD_TO_END': {
             const event: CardReorderedEvent = {
                 type: 'CARD_REORDERED',
-                payload: { playerId: state.activePlayerId, cardId: command.payload.cardId },
+                payload: { playerId: state.activePlayerId, cardId: (command.payload as { cardId: string }).cardId },
                 sourceCommandType: command.type,
                 timestamp,
             };
@@ -327,12 +335,12 @@ export function execute(
         case 'PLAY_CARD': {
             const actingPlayerId = (command.playerId || state.activePlayerId);
             const player = state.players[actingPlayerId];
-            const card = player?.hand.find(c => c.id === command.payload.cardId);
+            const card = player?.hand.find(c => c.id === (command.payload as { cardId: string }).cardId);
             
             // 详细日志：记录打出卡牌的详细信息
             console.log('[PLAY_CARD] 尝试打出卡牌:', JSON.stringify({
                 playerId: actingPlayerId,
-                cardId: command.payload.cardId,
+                cardId: (command.payload as { cardId: string }).cardId,
                 cardType: card?.type,
                 cardTiming: card?.timing,
                 cpCost: card?.cpCost,
@@ -472,10 +480,11 @@ export function execute(
 
         case 'PLAY_UPGRADE_CARD': {
             const player = state.players[state.activePlayerId];
-            const card = player?.hand.find(c => c.id === command.payload.cardId);
+            const payload = command.payload as { cardId: string; targetAbilityId: string };
+            const card = player?.hand.find(c => c.id === payload.cardId);
             if (card && player) {
-                const currentLevel = player.abilityLevels[command.payload.targetAbilityId] ?? 1;
-                const previousUpgradeCost = player.upgradeCardByAbilityId?.[command.payload.targetAbilityId]?.cpCost;
+                const currentLevel = player.abilityLevels[payload.targetAbilityId] ?? 1;
+                const previousUpgradeCost = player.upgradeCardByAbilityId?.[payload.targetAbilityId]?.cpCost;
                 let actualCost = card.cpCost;
                 if (previousUpgradeCost !== undefined && currentLevel > 1) {
                     actualCost = Math.max(0, card.cpCost - previousUpgradeCost);
@@ -539,7 +548,7 @@ export function execute(
         }
 
         case 'MODIFY_DIE': {
-            const { dieId, newValue } = command.payload;
+            const { dieId, newValue } = command.payload as { dieId: number; newValue: number };
             const die = state.dice.find(d => d.id === dieId);
             if (die) {
                 const event: DieModifiedEvent = {
@@ -571,7 +580,7 @@ export function execute(
         }
 
         case 'REROLL_DIE': {
-            const { dieId } = command.payload;
+            const { dieId } = command.payload as { dieId: number };
             const die = state.dice.find(d => d.id === dieId);
             const newValue = random.d(6);
             const event: DieRerolledEvent = {
@@ -602,7 +611,7 @@ export function execute(
         }
 
         case 'REMOVE_STATUS': {
-            const { targetPlayerId, statusId } = command.payload;
+            const { targetPlayerId, statusId } = command.payload as { targetPlayerId: PlayerId; statusId?: string };
             const targetPlayer = state.players[targetPlayerId];
             if (targetPlayer) {
                 if (statusId) {
@@ -655,7 +664,7 @@ export function execute(
         }
 
         case 'TRANSFER_STATUS': {
-            const { fromPlayerId, toPlayerId, statusId } = command.payload;
+            const { fromPlayerId, toPlayerId, statusId } = command.payload as { fromPlayerId: PlayerId; toPlayerId: PlayerId; statusId: string };
             const fromPlayer = state.players[fromPlayerId];
             const toPlayer = state.players[toPlayerId];
             if (fromPlayer && toPlayer) {
@@ -705,8 +714,9 @@ export function execute(
             if (!interaction) break;
 
             // 处理 selectDie 类型交互的批量重掷
-            if (interaction.type === 'selectDie' && command.payload.selectedDiceIds) {
-                for (const dieId of command.payload.selectedDiceIds) {
+            const payload = command.payload as { interactionId: string; selectedDiceIds?: number[] };
+            if (interaction.type === 'selectDie' && payload.selectedDiceIds) {
+                for (const dieId of payload.selectedDiceIds) {
                     const die = state.dice.find(d => d.id === dieId);
                     const newValue = random.d(6);
                     const rerollEvent: DieRerolledEvent = {
@@ -727,7 +737,7 @@ export function execute(
             const event: InteractionCompletedEvent = {
                 type: 'INTERACTION_COMPLETED',
                 payload: {
-                    interactionId: command.payload.interactionId,
+                    interactionId: payload.interactionId,
                     sourceCardId: interaction.sourceCardId,
                 },
                 sourceCommandType: command.type,
@@ -763,7 +773,7 @@ export function execute(
         }
 
         case 'USE_TOKEN': {
-            const { tokenId, amount } = command.payload;
+            const { tokenId, amount } = command.payload as { tokenId: string; amount: number };
             const pendingDamage = state.pendingDamage;
             
             if (!pendingDamage) {
@@ -845,7 +855,7 @@ export function execute(
         }
 
         case 'USE_PURIFY': {
-            const { statusId } = command.payload;
+            const { statusId } = command.payload as { statusId: string };
             const playerId = command.playerId;
             
             if (!playerId) {
@@ -854,7 +864,7 @@ export function execute(
             }
             
             const player = state.players[playerId];
-            if (!player || (player.tokens['purify'] ?? 0) <= 0) {
+            if (!player || (player.tokens[TOKEN_IDS.PURIFY] ?? 0) <= 0) {
                 console.warn('[DiceThrone] USE_PURIFY: no purify token');
                 break;
             }
@@ -876,17 +886,17 @@ export function execute(
             break;
         }
 
-        case 'PAY_TO_REMOVE_STUN': {
+        case DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN: {
             const playerId = command.playerId;
             
             if (!playerId) {
-                console.warn('[DiceThrone] PAY_TO_REMOVE_STUN: no playerId');
+                console.warn('[DiceThrone] PAY_TO_REMOVE_KNOCKDOWN: no playerId');
                 break;
             }
             
             const player = state.players[playerId];
             if (!player) {
-                console.warn('[DiceThrone] PAY_TO_REMOVE_STUN: player not found');
+                console.warn('[DiceThrone] PAY_TO_REMOVE_KNOCKDOWN: player not found');
                 break;
             }
             
@@ -905,11 +915,11 @@ export function execute(
             events.push(cpEvent);
             
             // 移除击倒状态
-            const stunStacks = player.statusEffects['stun'] ?? 0;
-            if (stunStacks > 0) {
+            const knockdownStacks = player.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+            if (knockdownStacks > 0) {
                 events.push({
                     type: 'STATUS_REMOVED',
-                    payload: { targetId: playerId, statusId: 'stun', stacks: stunStacks },
+                    payload: { targetId: playerId, statusId: STATUS_IDS.KNOCKDOWN, stacks: knockdownStacks },
                     sourceCommandType: command.type,
                     timestamp,
                 } as StatusRemovedEvent);
@@ -917,11 +927,114 @@ export function execute(
             break;
         }
 
-        default: {
-            const _exhaustive: never = command;
-            console.warn(`Unknown command type: ${(_exhaustive as DiceThroneCommand).type}`);
+        case 'REROLL_BONUS_DIE': {
+            const { dieIndex } = command.payload as { dieIndex: number };
+            const playerId = command.playerId;
+            const settlement = state.pendingBonusDiceSettlement;
+            
+            if (!playerId || !settlement) {
+                console.warn('[DiceThrone] REROLL_BONUS_DIE: invalid state');
+                break;
+            }
+            
+            const die = settlement.dice.find(d => d.index === dieIndex);
+            if (!die) {
+                console.warn('[DiceThrone] REROLL_BONUS_DIE: die not found');
+                break;
+            }
+            
+            // 重掷骰子
+            const newValue = random.d(6);
+            const newFace = getDieFace(newValue);
+            
+            // 发出 BONUS_DIE_REROLLED 事件
+            events.push({
+                type: 'BONUS_DIE_REROLLED',
+                payload: {
+                    dieIndex,
+                    oldValue: die.value,
+                    newValue,
+                    newFace,
+                    costTokenId: settlement.rerollCostTokenId,
+                    costAmount: settlement.rerollCostAmount,
+                    playerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            } as import('./types').BonusDieRerolledEvent);
+            break;
+        }
+
+        case 'SKIP_BONUS_DICE_REROLL': {
+            const playerId = command.playerId;
+            const settlement = state.pendingBonusDiceSettlement;
+            
+            if (!playerId || !settlement) {
+                console.warn('[DiceThrone] SKIP_BONUS_DICE_REROLL: invalid state');
+                break;
+            }
+            
+            // 计算最终伤害
+            const totalDamage = settlement.dice.reduce((sum, d) => sum + d.value, 0);
+            const thresholdTriggered = settlement.threshold ? totalDamage >= settlement.threshold : false;
+            
+            // 发出 BONUS_DICE_SETTLED 事件
+            events.push({
+                type: 'BONUS_DICE_SETTLED',
+                payload: {
+                    finalDice: settlement.dice,
+                    totalDamage,
+                    thresholdTriggered,
+                    attackerId: settlement.attackerId,
+                    targetId: settlement.targetId,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            } as import('./types').BonusDiceSettledEvent);
+            
+            // 应用伤害
+            const target = state.players[settlement.targetId];
+            const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+            const actualDamage = target ? Math.min(totalDamage, targetHp) : 0;
+            events.push({
+                type: 'DAMAGE_DEALT',
+                payload: {
+                    targetId: settlement.targetId,
+                    amount: totalDamage,
+                    actualDamage,
+                    sourceAbilityId: settlement.sourceAbilityId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            } as DamageDealtEvent);
+            
+            // 如果触发阈值效果（倒地）
+            if (thresholdTriggered && settlement.thresholdEffect === 'knockdown') {
+                const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+                const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
+                const maxStacks = def?.stackLimit || 99;
+                const newTotal = Math.min(currentStacks + 1, maxStacks);
+                events.push({
+                    type: 'STATUS_APPLIED',
+                    payload: {
+                        targetId: settlement.targetId,
+                        statusId: STATUS_IDS.KNOCKDOWN,
+                        stacks: 1,
+                        newTotal,
+                        sourceAbilityId: settlement.sourceAbilityId,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as StatusAppliedEvent);
+            }
+            break;
+        }
+
+         default: {
+            console.warn(`Unknown command type: ${(command as DiceThroneCommand).type}`);
         }
     }
-
+ 
     return events;
 }

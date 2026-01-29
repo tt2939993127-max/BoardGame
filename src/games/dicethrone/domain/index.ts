@@ -7,13 +7,13 @@ import { diceSystem } from '../../../systems/DiceSystem';
 import { resourceSystem } from '../../../systems/ResourceSystem';
 import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, Die, DieFace } from './types';
 import { RESOURCE_IDS } from './resources';
+import { STATUS_IDS } from './ids';
 import { validateCommand } from './commands';
 import { execute } from './execute';
 import { reduce } from './reducer';
 import { playerView } from './view';
 import { registerDiceThroneConditions } from '../conditions';
 import { MONK_ABILITIES } from '../monk/abilities';
-import { MONK_STATUS_EFFECTS } from '../monk/statusEffects';
 import { MONK_TOKENS, MONK_INITIAL_TOKENS } from '../monk/tokens';
 import { getMonkStartingDeck } from '../monk/cards';
 import { monkDiceDefinition } from '../monk/diceConfig';
@@ -54,7 +54,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
                 deck,
                 discard: [],
                 statusEffects: {
-                    stun: 0,
+                    [STATUS_IDS.KNOCKDOWN]: 0,
                 },
                 tokens: { ...MONK_INITIAL_TOKENS },
                 tokenStackLimits: Object.fromEntries(MONK_TOKENS.map(t => [t.id, t.stackLimit])),
@@ -94,7 +94,6 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             startingPlayerId: playerIds[0],
             turnNumber: 1,
             pendingAttack: null,
-            statusDefinitions: MONK_STATUS_EFFECTS,
             tokenDefinitions: MONK_TOKENS,
             lastEffectSourceByPlayerId: {},
         };
@@ -127,3 +126,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
 // 导出类型
 export type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent } from './types';
 export * from './rules';
+
+// 导出常量
+export { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS } from './ids';
+export { RESOURCE_IDS } from './resources';

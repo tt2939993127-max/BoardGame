@@ -28,6 +28,10 @@ interface SpotlightContainerProps {
     contentMotion?: SpotlightMotion;
     /** 点击内容是否关闭（默认 true） */
     closeOnContentClick?: boolean;
+    /** 禁用自动关闭（用于交互模式） */
+    disableAutoClose?: boolean;
+    /** 禁用点击背景关闭（用于交互模式） */
+    disableBackdropClose?: boolean;
 }
 
 const DEFAULT_CONTENT_MOTION: SpotlightMotion = {
@@ -51,11 +55,13 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     zIndex = 9999,
     contentMotion,
     closeOnContentClick = true,
+    disableAutoClose = false,
+    disableBackdropClose = false,
 }) => {
 
     // 自动关闭计时器
     React.useEffect(() => {
-        if (!isVisible) return;
+        if (!isVisible || disableAutoClose) return;
 
         const closeTimer = setTimeout(() => {
             onClose();
@@ -65,7 +71,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
         return () => {
             clearTimeout(closeTimer);
         };
-    }, [id, isVisible, autoCloseDelay, onClose]);
+    }, [id, isVisible, autoCloseDelay, onClose, disableAutoClose]);
 
     if (!isVisible) {
         return null;
@@ -83,7 +89,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
-                onClick={onClose}
+                onClick={disableBackdropClose ? undefined : onClose}
             >
                 {/* 内容容器 */}
                 <motion.div

@@ -1,133 +1,163 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
+import type { TutorialAiAction, TutorialManifest, TutorialState, TutorialStepSnapshot } from '../engine/types';
+export type { TutorialManifest } from '../engine/types';
+import { DEFAULT_TUTORIAL_STATE } from '../engine/types';
+import { TUTORIAL_COMMANDS } from '../engine/systems/TutorialSystem';
 
-// --- 类型定义 ---
-export interface TutorialStep {
-    id: string;
-    content: string;
-    // 要高亮的目标元素（通过 data-tutorial-id 或 id 指定）
-    highlightTarget?: string;
-    position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
+type TutorialNextReason = 'manual' | 'auto';
 
-    // 如果为 true，则隐藏“下一步”按钮，等待外部触发（例如：玩家执行了一次移动）
-    requireAction?: boolean;
-
-    // AI 对手的自动行动（格子索引）。设置后，AI 将在延迟后自动执行此操作。
-    aiMove?: number;
-
-    // 是否为此步骤显示黑色遮罩背景（默认：false/透明）
-    showMask?: boolean;
-}
-
-export interface TutorialManifest {
-    id: string;
-    steps: TutorialStep[];
+interface TutorialController {
+    start: (manifest: TutorialManifest) => void;
+    next: (reason?: TutorialNextReason) => void;
+    close: () => void;
+    consumeAi: (stepId?: string) => void;
+    dispatchCommand: (commandType: string, payload?: unknown) => void;
 }
 
 interface TutorialContextType {
+    tutorial: TutorialState;
+    currentStep: TutorialStepSnapshot | null;
     isActive: boolean;
-    currentStepIndex: number;
-    currentStep: TutorialStep | null;
     isLastStep: boolean;
-    startTutorial: (manifest?: TutorialManifest) => void;
-    nextStep: () => void;
+    startTutorial: (manifest: TutorialManifest) => void;
+    nextStep: (reason?: TutorialNextReason) => void;
     closeTutorial: () => void;
-    // 执行游戏移动的回调函数（由 Board 组件提供）
-    registerMoveCallback: (callback: (cellId: number) => void) => void;
+    consumeAi: (stepId?: string) => void;
+    bindMoves: (moves: Record<string, unknown>) => void;
+    syncTutorialState: (tutorial: TutorialState) => void;
 }
 
-// --- 上下文 (Context) ---
 const TutorialContext = createContext<TutorialContextType | undefined>(undefined);
 
-export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [isActive, setIsActive] = useState(false);
-    const [manifest, setManifest] = useState<TutorialManifest | null>(null);
-    const [currentStepIndex, setCurrentStepIndex] = useState(0);
-    const moveCallbackRef = useRef<((cellId: number) => void) | null>(null);
-    const executedAiStepsRef = useRef<Set<number>>(new Set());
-
-    const registerMoveCallback = useCallback((callback: (cellId: number) => void) => {
-        moveCallbackRef.current = callback;
-    }, []);
-
-
-    // --- 默认井字棋配置（临时方案） ---
-    // 在正式应用中，我们会根据 gameId 动态获取，但目前我们先硬编码或直接导入。
-    // 这里定义一个简单的默认值以确保按钮可用。
-    const DEFAULT_MANIFEST: TutorialManifest = {
-        id: 'tictactoe-basics',
-        steps: [
-            { id: 'welcome', content: 'default.welcome', position: 'center' },
-            { id: 'grid', content: 'default.grid', highlightTarget: 'board-grid', position: 'top', requireAction: false },
-            // More steps would go here
-        ]
+const buildTutorialController = (moves: Record<string, unknown>): TutorialController => {
+    const dispatchCommand = (commandType: string, payload?: unknown) => {
+        const move = moves[commandType] as ((value: unknown) => void) | undefined;
+        if (typeof move === 'function') {
+            move(payload ?? {});
+        }
     };
 
-    const startTutorial = useCallback((newManifest?: TutorialManifest) => {
-        setManifest(newManifest || DEFAULT_MANIFEST);
-        setCurrentStepIndex(0);
-        executedAiStepsRef.current = new Set();
-        setIsActive(true);
+    return {
+        dispatchCommand,
+        start: (manifest) => dispatchCommand(TUTORIAL_COMMANDS.START, { manifest }),
+        next: (reason) => dispatchCommand(TUTORIAL_COMMANDS.NEXT, { reason }),
+        close: () => dispatchCommand(TUTORIAL_COMMANDS.CLOSE, {}),
+        consumeAi: (stepId) => dispatchCommand(TUTORIAL_COMMANDS.AI_CONSUMED, { stepId }),
+    };
+};
+
+const shouldAutoAdvance = (step: TutorialStepSnapshot): boolean => {
+    if (!step.advanceOnEvents) return true;
+    return step.advanceOnEvents.length === 0;
+};
+
+const hasAiActions = (step: TutorialStepSnapshot): boolean =>
+    Array.isArray(step.aiActions) && step.aiActions.length > 0;
+
+export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [tutorial, setTutorial] = useState<TutorialState>({ ...DEFAULT_TUTORIAL_STATE });
+    const controllerRef = useRef<TutorialController | null>(null);
+    const pendingStartRef = useRef<TutorialManifest | null>(null);
+    const executedAiStepsRef = useRef<Set<string>>(new Set());
+
+    const bindMoves = useCallback((moves: Record<string, unknown>) => {
+        controllerRef.current = buildTutorialController(moves);
+        if (pendingStartRef.current) {
+            console.log('[Tutorial][Context] bindMoves 发现 pendingStart，立即启动', { manifestId: pendingStartRef.current.id });
+            controllerRef.current.start(pendingStartRef.current);
+            pendingStartRef.current = null;
+        }
     }, []);
 
+    const syncTutorialState = useCallback((nextTutorial: TutorialState) => {
+        setTutorial(nextTutorial);
+        if (!nextTutorial.active) {
+            executedAiStepsRef.current = new Set();
+        }
+    }, []);
+
+    const startTutorial = useCallback((manifest: TutorialManifest) => {
+        console.log('[Tutorial][Context] startTutorial 被调用', {
+            hasController: !!controllerRef.current,
+            manifestId: manifest.id,
+        });
+        if (!controllerRef.current) {
+            console.log('[Tutorial][Context] controller 未就绪，存入 pendingStartRef');
+            pendingStartRef.current = manifest;
+            return;
+        }
+        console.log('[Tutorial][Context] 直接调用 controller.start');
+        controllerRef.current.start(manifest);
+    }, []);
+
+    const nextStep = useCallback((reason?: TutorialNextReason) => {
+        controllerRef.current?.next(reason);
+    }, []);
 
     const closeTutorial = useCallback(() => {
-        setIsActive(false);
-        setManifest(null);
-        setCurrentStepIndex(0);
-        executedAiStepsRef.current = new Set();
+        controllerRef.current?.close();
     }, []);
 
-    const nextStep = useCallback(() => {
-        if (!manifest) return;
+    const consumeAi = useCallback((stepId?: string) => {
+        controllerRef.current?.consumeAi(stepId);
+    }, []);
 
-        if (currentStepIndex < manifest.steps.length - 1) {
-            setCurrentStepIndex(prev => prev + 1);
-        } else {
-            closeTutorial(); // 完成教学
-        }
-    }, [manifest, currentStepIndex, closeTutorial]);
-
-    // 当进入带有 aiMove 的步骤时，执行 AI 行动
     useEffect(() => {
-        if (!isActive || !manifest) return;
+        if (!tutorial.active || !tutorial.step || !hasAiActions(tutorial.step)) return;
 
-        const currentStep = manifest.steps[currentStepIndex];
+        const stepId = tutorial.step.id;
+        if (executedAiStepsRef.current.has(stepId)) return;
+        executedAiStepsRef.current.add(stepId);
 
-        const moveCallback = moveCallbackRef.current;
+        let moveTimer: number | undefined;
+        let advanceTimer: number | undefined;
+        let cancelled = false;
 
-        if (currentStep.aiMove !== undefined && moveCallback) {
-            if (executedAiStepsRef.current.has(currentStepIndex)) return;
-            executedAiStepsRef.current.add(currentStepIndex);
+        moveTimer = window.setTimeout(() => {
+            if (cancelled) return;
+            const controller = controllerRef.current;
+            if (!controller) return;
 
-            let advanceTimer: number | undefined;
+            tutorial.step?.aiActions?.forEach((action: TutorialAiAction) => {
+                controller.dispatchCommand(action.commandType, action.payload);
+            });
+            controller.consumeAi(stepId);
 
-            const moveTimer = window.setTimeout(() => {
-                moveCallback(currentStep.aiMove!);
+            if (tutorial.step && shouldAutoAdvance(tutorial.step)) {
+                advanceTimer = window.setTimeout(() => controller.next('auto'), 500);
+            }
+        }, 1000);
 
-                advanceTimer = window.setTimeout(() => {
-                    if (currentStepIndex < manifest.steps.length - 1) {
-                        setCurrentStepIndex(prev => (prev === currentStepIndex ? prev + 1 : prev));
-                    }
-                }, 500);
-            }, 1000);
+        return () => {
+            cancelled = true;
+            if (moveTimer !== undefined) window.clearTimeout(moveTimer);
+            if (advanceTimer !== undefined) window.clearTimeout(advanceTimer);
+        };
+    }, [tutorial]);
 
-            return () => {
-                window.clearTimeout(moveTimer);
-                if (advanceTimer !== undefined) window.clearTimeout(advanceTimer);
-            };
-        }
-    }, [isActive, currentStepIndex, manifest]);
-
-    const value: TutorialContextType = {
-        isActive,
-        currentStepIndex,
-        currentStep: manifest ? manifest.steps[currentStepIndex] : null,
-        isLastStep: Boolean(manifest && currentStepIndex >= manifest.steps.length - 1),
-        startTutorial,
-        nextStep,
-        closeTutorial,
-        registerMoveCallback,
-    };
+    const value = useMemo<TutorialContextType>(() => {
+        const currentStep = tutorial.step ?? null;
+        return {
+            tutorial,
+            currentStep,
+            isActive: tutorial.active,
+            isLastStep: tutorial.active && tutorial.stepIndex >= tutorial.steps.length - 1,
+            startTutorial,
+            nextStep,
+            closeTutorial,
+            consumeAi,
+            bindMoves,
+            syncTutorialState,
+        };
+    }, [tutorial, bindMoves, closeTutorial, consumeAi, nextStep, startTutorial, syncTutorialState]);
 
     return (
         <TutorialContext.Provider value={value}>
@@ -142,4 +172,16 @@ export const useTutorial = () => {
         throw new Error('useTutorial must be used within a TutorialProvider');
     }
     return context;
+};
+
+export const useTutorialBridge = (tutorial: TutorialState, moves: Record<string, unknown>) => {
+    const context = useContext(TutorialContext);
+    useEffect(() => {
+        console.log('[Tutorial][Bridge] syncTutorialState', { active: tutorial.active, stepId: tutorial.step?.id, stepIndex: tutorial.stepIndex });
+        context?.syncTutorialState(tutorial);
+    }, [context, tutorial]);
+    useEffect(() => {
+        console.log('[Tutorial][Bridge] bindMoves', { hasMoves: !!moves, moveKeys: moves ? Object.keys(moves).slice(0, 5) : [] });
+        context?.bindMoves(moves);
+    }, [context, moves]);
 };

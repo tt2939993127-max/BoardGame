@@ -48,7 +48,7 @@ export interface GameInvitePayload {
     message?: string;
 }
 
-type EventCallback<T = any> = (payload: T) => void;
+type EventCallback = (payload: unknown) => void;
 
 class SocialSocketService {
     private socket: Socket | null = null;
@@ -144,22 +144,22 @@ class SocialSocketService {
     /**
      * Subscribe to a specific event
      */
-    on<T = any>(event: string, callback: EventCallback<T>): () => void {
+    on<TPayload = unknown>(event: string, callback: (payload: TPayload) => void): () => void {
         if (!this.listeners.has(event)) {
             this.listeners.set(event, new Set());
         }
 
-        this.listeners.get(event)?.add(callback);
+        this.listeners.get(event)?.add(callback as EventCallback);
 
         return () => {
-            this.listeners.get(event)?.delete(callback);
+            this.listeners.get(event)?.delete(callback as EventCallback);
         };
     }
 
     /**
      * Notify local listeners
      */
-    private notifyListeners(event: string, payload: any): void {
+    private notifyListeners(event: string, payload: unknown): void {
         this.listeners.get(event)?.forEach(callback => {
             try {
                 callback(payload);

@@ -5,6 +5,7 @@ import { PhaseIndicator } from './PhaseIndicator';
 import { StatusEffectsContainer, TokensContainer, type StatusIconAtlasConfig } from './statusEffects';
 import { PlayerStats } from './PlayerStats';
 import { DrawDeck } from './DrawDeck';
+import { STATUS_IDS } from '../domain/ids';
 
 
 export const LeftSidebar = ({
@@ -18,8 +19,8 @@ export const LeftSidebar = ({
     onPurifyClick,
     canUsePurify,
     tokenDefinitions,
-    onStunClick,
-    canRemoveStun,
+    onKnockdownClick,
+    canRemoveKnockdown,
 }: {
     currentPhase: TurnPhase;
     viewPlayer: HeroState;
@@ -35,9 +36,9 @@ export const LeftSidebar = ({
     /** Token 定义列表（用于判断哪些 Token 可点击） */
     tokenDefinitions?: TokenDef[];
     /** 点击击倒状态的回调 */
-    onStunClick?: () => void;
+    onKnockdownClick?: () => void;
     /** 是否可以移除击倒（有击倒状态且 CP >= 2 且在正确阶段） */
-    canRemoveStun?: boolean;
+    canRemoveKnockdown?: boolean;
 }) => {
     return (
         <div className="absolute left-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto z-[60]">
@@ -80,11 +81,11 @@ export const LeftSidebar = ({
                         locale={locale}
                         atlas={statusIconAtlas}
                         onEffectClick={(effectId) => {
-                            if (effectId === 'stun' && onStunClick) {
-                                onStunClick();
+                            if (effectId === STATUS_IDS.KNOCKDOWN && onKnockdownClick) {
+                                onKnockdownClick();
                             }
                         }}
-                        clickableEffects={canRemoveStun ? ['stun'] : []}
+                        clickableEffects={canRemoveKnockdown ? [STATUS_IDS.KNOCKDOWN] : []}
                     />
                 </div>
                 <div className="w-full px-[1vw]" data-tutorial-id="player-stats">
