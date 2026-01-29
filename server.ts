@@ -5,6 +5,7 @@ import { Server as IOServer, Socket as IOSocket } from 'socket.io';
 import bodyParser from 'koa-bodyparser';
 import koaBody from 'koa-body';
 import { nanoid } from 'nanoid';
+import { Readable } from 'stream';
 import { connectDB } from './src/server/db';
 
 // 使用 require 避免 tsx 在 ESM 下将 boardgame.io/server 解析到不存在的 index.jsx
@@ -385,6 +386,17 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
     await next();
 };
 
+// 辅助函数：重新创建请求流，使 boardgame.io 能够再次读取 body
+const recreateRequestStream = (ctx: any, body: unknown) => {
+    const bodyString = JSON.stringify(body);
+    const newStream = Readable.from([bodyString]);
+    // 复制原始请求的必要属性
+    (newStream as any).headers = ctx.req.headers;
+    (newStream as any).method = ctx.req.method;
+    (newStream as any).url = ctx.req.url;
+    ctx.req = newStream;
+};
+
 // 预处理 /join：校验密码
 const interceptJoinMiddleware = async (ctx: any, next: () => Promise<void>) => {
     if (ctx.method === 'POST') {
@@ -402,7 +414,8 @@ const interceptJoinMiddleware = async (ctx: any, next: () => Promise<void>) => {
             // 获取房间配置
             const roomData = await db.fetch(matchID, { state: true });
             if (!roomData) {
-                // 让 boardgame.io 处理 404
+                // 让 boardgame.io 处理 404，需要先重建流
+                recreateRequestStream(ctx, body);
                 await next();
                 return;
             }
@@ -416,6 +429,9 @@ const interceptJoinMiddleware = async (ctx: any, next: () => Promise<void>) => {
                 ctx.throw(403, 'Incorrect password');
                 return;
             }
+
+            // 密码校验通过，重建流让 boardgame.io 继续处理
+            recreateRequestStream(ctx, body);
         }
     }
     await next();
