@@ -1,0 +1,512 @@
+/**
+ * 渲染预览组件
+ * 
+ * 动态执行用户生成的渲染代码并显示预览
+ */
+
+import React, { useState, useMemo, useCallback } from 'react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+import * as Babel from '@babel/standalone';
+import { HandAreaSkeleton } from '../../../components/game/framework';
+import { resolvePlayerContext } from '../utils/resolvePlayerContext';
+
+interface RenderPreviewProps {
+  renderCode: string;
+  backRenderCode?: string;
+  data: Record<string, unknown>;
+  showBack?: boolean;
+  className?: string;
+}
+
+/**
+ * 安全执行渲染代码
+ * 返回 React 元素或错误信息
+ */
+/**
+ * 解码HTML实体，确保代码可正确执行
+ */
+function decodeHtmlEntities(code: string): string {
+  const entities: Record<string, string> = {
+    '&#39;': "'",
+    '&#34;': '"',
+    '&quot;': '"',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&amp;': '&',
+    '&apos;': "'",
+  };
+  let result = code;
+  for (const [entity, char] of Object.entries(entities)) {
+    result = result.split(entity).join(char);
+  }
+  return result;
+}
+
+/**
+ * 修复缺少反引号的className模板字符串
+ * className={xxx ${...}} => className={`xxx ${...}`}
+ */
+function fixClassNameTemplate(code: string): string {
+  // 匹配 className={...} 其中包含 ${ 但缺少反引号
+  // 例如：className={relative ${...}} => className={`relative ${...}`}
+  return code.replace(
+    /className=\{([^`][^}]*\$\{[^}]*\}[^}]*)\}/g,
+    (match, content) => {
+      // 如果内容已经有反引号，不处理
+      if (content.startsWith('`') && content.endsWith('`')) {
+        return match;
+      }
+      // 添加反引号
+      return `className={\`${content}\`}`;
+    }
+  );
+}
+
+/**
+ * 移除 TypeScript 类型注解，使代码可在纯 JavaScript 中执行
+ */
+function stripTypeAnnotations(code: string): string {
+  // 先解码HTML实体
+  let result = decodeHtmlEntities(code);
+  // 修复缺少反引号的className
+  result = fixClassNameTemplate(result);
+  // 移除参数类型注解：(data: Record<string, unknown>) => ...
+  result = result.replace(/\((\w+)\s*:\s*[^)]+\)/g, '($1)');
+  // 移除变量类型注解：const x: Type = ...
+  result = result.replace(/:\s*(?:string|number|boolean|string\[\]|number\[\]|Record<[^>]+>|[A-Z]\w*(?:<[^>]+>)?)\s*(?=[=,;)\]])/g, '');
+  // 移除 as 类型断言：x as string[] 或 x as Type
+  // 支持 (data.tags as string[]) 形式
+  result = result.replace(/\s+as\s+string\[\]/g, '');
+  result = result.replace(/\s+as\s+number\[\]/g, '');
+  result = result.replace(/\s+as\s+unknown\[\]/g, '');
+  result = result.replace(/\s+as\s+(?:string|number|boolean|unknown|Record<[^>]+>|[A-Z]\w*(?:<[^>]+>)?)/g, '');
+  return result;
+}
+
+function executeRenderCode(
+  code: string, 
+  data: Record<string, unknown>
+): { element: React.ReactNode; error?: string } {
+  if (!code || !code.trim()) {
+    return { element: null, error: '无渲染代码' };
+  }
+
+  // 验证代码格式：必须以箭头函数或function开头
+  const trimmedCode = code.trim();
+  if (!trimmedCode.startsWith('(') && !trimmedCode.startsWith('function')) {
+    return { element: null, error: '代码格式错误：需要函数表达式' };
+  }
+
+  // 移除 TypeScript 类型注解
+  const jsCode = stripTypeAnnotations(trimmedCode);
+
+  try {
+    // 使用 Babel 编译 JSX
+    const compiled = Babel.transform(jsCode, {
+      presets: ['react'],
+      filename: 'render.jsx',
+    });
+    
+    if (!compiled.code) {
+      return { element: null, error: '编译失败' };
+    }
+
+    // 创建函数并执行
+    // eslint-disable-next-line no-new-func
+    const renderFn = new Function('data', 'React', `
+      "use strict";
+      const fn = ${compiled.code};
+      if (typeof fn !== 'function') {
+        throw new Error('不是有效的函数');
+      }
+      return fn(data);
+    `);
+    
+    // 传入导入的 React 对象（不使用 require）
+    const element = renderFn(data, React);
+    return { element };
+  } catch (err) {
+    console.error('[RenderPreview] 执行错误:', err, '\n原始代码:', code.substring(0, 200));
+    return { 
+      element: null, 
+      error: err instanceof Error ? err.message : '执行错误' 
+    };
+  }
+}
+
+export function RenderPreview({ 
+  renderCode, 
+  backRenderCode, 
+  data, 
+  showBack = false,
+  className = '' 
+}: RenderPreviewProps) {
+  const [key, setKey] = useState(0);
+
+  const result = useMemo(() => {
+    const code = showBack && backRenderCode ? backRenderCode : renderCode;
+    return executeRenderCode(code, data);
+  }, [renderCode, backRenderCode, data, showBack, key]);
+
+  if (result.error) {
+    return (
+      <div className={`flex flex-col items-center justify-center bg-red-900/20 border border-red-500/50 rounded-lg p-2 ${className}`}>
+        <AlertTriangle className="w-4 h-4 text-red-400 mb-1" />
+        <span className="text-red-300 text-[10px] text-center">{result.error}</span>
+        <button 
+          onClick={() => setKey(k => k + 1)}
+          className="mt-1 px-1.5 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-[10px] text-red-300"
+        >
+          <RefreshCw className="w-3 h-3 inline mr-1" />
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  // 生成的代码应该自己包含 relative 和 w-full h-full
+  // 外层容器提供 flex 确保子元素正确填满
+  return (
+    <div className={`flex ${className}`}>
+      {result.element}
+    </div>
+  );
+}
+
+/**
+ * 预览模式画布
+ * 用于显示整个场景的预览效果
+ */
+interface PreviewCanvasProps {
+  components: Array<{
+    id: string;
+    type: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    data: Record<string, unknown>;
+    renderComponentId?: string;
+  }>;
+  renderComponents: Array<{
+    id: string;
+    name: string;
+    renderCode: string;
+    backRenderCode?: string;
+    targetSchema: string;
+  }>;
+  instances: Record<string, Record<string, unknown>[]>;
+  layoutGroups?: Array<{ id: string; name: string; hidden: boolean }>;
+  className?: string;
+}
+
+interface ComponentOutput {
+  componentId: string;
+  type: string;
+  schemaId?: string;
+  items: Record<string, unknown>[];
+  itemCount: number;
+  bindEntity?: string;
+}
+
+export function PreviewCanvas({
+  components,
+  renderComponents,
+  instances,
+  layoutGroups = [],
+  className = '',
+}: PreviewCanvasProps) {
+  const [showBack, setShowBack] = useState(false);
+  
+  // 过滤隐藏分组的组件
+  const hiddenGroupIds = new Set(layoutGroups.filter(g => g.hidden).map(g => g.id));
+  const visibleComponents = components.filter(comp => {
+    const groupId = (comp.data.groupId as string) || 'default';
+    return !hiddenGroupIds.has(groupId);
+  });
+
+  const outputsByType = useMemo(() => {
+    const outputMap: Record<string, ComponentOutput[]> = {};
+    visibleComponents.forEach(comp => {
+      const schemaId = (comp.data.bindSchema || comp.data.targetSchema) as string | undefined;
+      if (!schemaId) return;
+      const items = instances[schemaId] || [];
+      const output: ComponentOutput = {
+        componentId: comp.id,
+        type: comp.type,
+        schemaId,
+        items,
+        itemCount: items.length,
+        bindEntity: comp.data.bindEntity as string | undefined,
+      };
+      if (!outputMap[comp.type]) outputMap[comp.type] = [];
+      outputMap[comp.type].push(output);
+    });
+    return outputMap;
+  }, [visibleComponents, instances]);
+
+  const outputsById = useMemo(() => {
+    const outputMap: Record<string, ComponentOutput> = {};
+    Object.values(outputsByType).forEach(list => {
+      list.forEach(output => {
+        outputMap[output.componentId] = output;
+      });
+    });
+    return outputMap;
+  }, [outputsByType]);
+
+  const renderComponentIndex = useMemo(() => {
+    return renderComponents.map(rc => ({
+      id: rc.id,
+      name: rc.name,
+      targetSchema: rc.targetSchema,
+    }));
+  }, [renderComponents]);
+
+  const renderByComponentId = useCallback(
+    (componentId: string, item: Record<string, unknown>, options?: { showBack?: boolean }) => {
+      const rc = renderComponents.find(r => r.id === componentId);
+      if (!rc) return null;
+      return (
+        <RenderPreview
+          renderCode={rc.renderCode}
+          backRenderCode={rc.backRenderCode}
+          showBack={options?.showBack}
+          data={item}
+          className="w-full h-full"
+        />
+      );
+    },
+    [renderComponents]
+  );
+  
+  return (
+    <div className={`relative bg-slate-950 rounded-lg ${className}`}>
+      {/* 背面切换按钮 */}
+      <div className="absolute top-2 right-2 z-10">
+        <button
+          onClick={() => setShowBack(!showBack)}
+          className={`px-2 py-1 rounded text-xs ${showBack ? 'bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+        >
+          {showBack ? '查看正面' : '查看背面'}
+        </button>
+      </div>
+      {visibleComponents.map(comp => {
+        const style: React.CSSProperties = {
+          position: 'absolute',
+          left: comp.x,
+          top: comp.y,
+          width: comp.width,
+          height: comp.height,
+        };
+
+        // 自定义渲染组件
+        if (comp.type === 'render-component') {
+          // 新模式：直接从 comp.data 获取渲染代码
+          const renderCode = comp.data.renderCode as string | undefined;
+          const backRenderCode = comp.data.backRenderCode as string | undefined;
+          const targetSchema = comp.data.targetSchema as string | undefined;
+          
+          // 旧模式兼容：通过 renderComponentId 查找
+          if (!renderCode && comp.data.renderComponentId) {
+            const rc = renderComponents.find(r => r.id === comp.data.renderComponentId);
+            if (rc) {
+              const schemaData = instances[rc.targetSchema]?.[0] || {};
+              return (
+                <div key={comp.id} style={style}>
+                  <RenderPreview
+                    renderCode={rc.renderCode}
+                    backRenderCode={rc.backRenderCode}
+                    data={schemaData}
+                    showBack={showBack}
+                    className="w-full h-full"
+                  />
+                </div>
+              );
+            }
+          }
+          
+          // 新模式：直接使用 comp.data 中的配置
+          if (renderCode) {
+            const schemaData = targetSchema ? (instances[targetSchema]?.[0] || {}) : {};
+            // 使用 CSS 变量传递父容器尺寸，确保生成代码的 w-full h-full 能正确计算
+            const containerStyle: React.CSSProperties = {
+              ...style,
+              display: 'flex',
+            };
+            return (
+              <div key={comp.id} style={containerStyle}>
+                <RenderPreview
+                  renderCode={renderCode}
+                  backRenderCode={backRenderCode}
+                  data={schemaData}
+                  showBack={showBack}
+                  className="w-full h-full"
+                />
+              </div>
+            );
+          }
+          
+          // 无渲染代码时显示占位
+          return (
+            <div key={comp.id} style={style} className="border-2 border-dashed border-cyan-600/50 rounded flex items-center justify-center bg-cyan-900/20">
+              <span className="text-cyan-400 text-xs">未配置渲染代码</span>
+            </div>
+          );
+        }
+
+        // 区域组件（hand-zone, play-zone 等）- 使用通用框架 HandAreaSkeleton
+        if (['hand-zone', 'play-zone', 'deck-zone', 'discard-zone'].includes(comp.type)) {
+          // 区域组件使用 bindSchema，渲染组件使用 targetSchema
+          const targetSchemaId = (comp.data.bindSchema || comp.data.targetSchema) as string | undefined;
+          const layoutCode = comp.data.layoutCode as string | undefined;
+          const selectEffectCode = comp.data.selectEffectCode as string | undefined;
+          const sortCode = comp.data.sortCode as string | undefined;
+          const filterCode = comp.data.filterCode as string | undefined;
+          const fallbackRenderComponentId = (comp.data.itemRenderComponentId || comp.data.renderComponentId || comp.renderComponentId) as string | undefined;
+          
+          // 获取关联数据
+          const items = targetSchemaId ? (instances[targetSchemaId] || []) : [];
+          
+          // 如果没有数据，显示占位
+          if (items.length === 0) {
+            return (
+              <div key={comp.id} style={style} className="border-2 border-dashed border-slate-600 rounded flex items-center justify-center">
+                <span className="text-slate-400 text-xs">{String(comp.data.name || comp.type)} (无数据)</span>
+              </div>
+            );
+          }
+          
+          // 使用通用框架 HandAreaSkeleton 渲染
+          return (
+            <div key={comp.id} style={style} className="relative border border-slate-600/50 rounded bg-slate-800/30 overflow-hidden">
+              <HandAreaSkeleton
+                cards={items}
+                canDrag={false}
+                canSelect={false}
+                layoutCode={layoutCode}
+                selectEffectCode={selectEffectCode}
+                sortCode={sortCode}
+                filterCode={filterCode}
+                className="h-full flex items-center justify-center"
+                renderCard={(item, _index, _isSelected) => {
+                  const itemRecord = item as Record<string, unknown>;
+                  const itemRenderComponentId = (itemRecord.renderComponentId as string | undefined) || fallbackRenderComponentId;
+                  const itemRenderComponent = itemRenderComponentId
+                    ? renderComponents.find(rc => rc.id === itemRenderComponentId)
+                    : undefined;
+                  const itemRenderCode = itemRenderComponent?.renderCode;
+                  const itemBackRenderCode = itemRenderComponent?.backRenderCode;
+
+                  return (
+                    <div className="w-16 h-24 bg-white rounded shadow-md border border-gray-300 flex items-center justify-center text-xs">
+                      {itemRenderCode ? (
+                        <RenderPreview
+                          renderCode={itemRenderCode}
+                          backRenderCode={itemBackRenderCode}
+                          showBack={showBack}
+                          data={itemRecord}
+                          className="w-full h-full"
+                        />
+                      ) : (
+                        <span className="text-gray-600 text-center px-1">未绑定渲染组件</span>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+            </div>
+          );
+        }
+
+        // 通用组件渲染：如果有 renderCode，使用它渲染
+        const componentRenderCode = comp.data.renderCode as string | undefined;
+        if (componentRenderCode) {
+          // 组件上下文只包含通用字段 + 组件配置 + 绑定的Schema实例数据
+          const bindSchemaId = (comp.data.bindSchema || comp.data.targetSchema) as string | undefined;
+          const boundData = bindSchemaId ? (instances[bindSchemaId] || []) : [];
+          
+          const playerContext = comp.type === 'player-area'
+            ? resolvePlayerContext({
+              items: boundData,
+              playerRef: comp.data.playerRef as
+                | 'current'
+                | 'next'
+                | 'prev'
+                | 'offset'
+                | 'index'
+                | 'id'
+                | undefined,
+              offset: Number(comp.data.playerRefOffset || 0),
+              index: typeof comp.data.playerRefIndex === 'number'
+                ? comp.data.playerRefIndex
+                : Number(comp.data.playerRefIndex ?? 0),
+              playerRefId: comp.data.playerRefId as string | undefined,
+              currentPlayerId: comp.data.currentPlayerId as string | undefined,
+              playerIds: Array.isArray(comp.data.playerIds)
+                ? (comp.data.playerIds as string[])
+                : undefined,
+              idField: comp.data.playerIdField as string | undefined,
+            })
+            : null;
+          const isCurrentPlayer = playerContext
+            ? Boolean(
+              playerContext.currentPlayerId &&
+              playerContext.resolvedPlayerId === playerContext.currentPlayerId
+            )
+            : false;
+          const componentContext: Record<string, unknown> = {
+            // 通用字段
+            type: comp.type,
+            name: comp.data.name,
+            width: comp.width,
+            height: comp.height,
+            // 组件配置数据
+            ...comp.data,
+            // 绑定的Schema实例数据（用户可以通过Schema定义任意字段）
+            items: boundData,
+            itemCount: boundData.length,
+            outputsByType,
+            outputsById,
+            renderComponentIndex,
+            renderByComponentId,
+            ...(playerContext
+              ? {
+                playerIds: playerContext.playerIds,
+                currentPlayerId: playerContext.currentPlayerId,
+                currentPlayerIndex: playerContext.currentPlayerIndex,
+                resolvedPlayerId: playerContext.resolvedPlayerId,
+                resolvedPlayerIndex: playerContext.resolvedPlayerIndex,
+                resolvedPlayer: playerContext.resolvedPlayer,
+                player: playerContext.resolvedPlayer,
+                isCurrentPlayer,
+                isCurrentTurn: isCurrentPlayer,
+              }
+              : {}),
+          };
+          
+          return (
+            <div key={comp.id} style={style}>
+              <RenderPreview 
+                renderCode={componentRenderCode} 
+                data={componentContext} 
+                className="w-full h-full" 
+              />
+            </div>
+          );
+        }
+
+        // 无渲染代码时显示占位符
+        return (
+          <div
+            key={comp.id}
+            style={style}
+            className="border-2 border-dashed border-slate-600 rounded flex items-center justify-center"
+          >
+            <span className="text-slate-400 text-xs">{String(comp.data.name || comp.type)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

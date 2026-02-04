@@ -17,16 +17,16 @@ export const ModalStackRoot = () => {
         };
     }, [closeAll, location.key]);
 
-    // 栈顶条目决定交互与 ESC 行为
+    // 栈顶条目决定交互与退出键行为
     const topEntry = stack[stack.length - 1];
 
-    // 统一渲染到 #modal-root，避免被父容器裁切
+    // 统一渲染到模态根节点，避免被父容器裁切
     const portalRoot = useMemo(() => {
         if (typeof document === 'undefined') return null;
         return document.getElementById('modal-root');
     }, []);
 
-    // 默认 ESC 关闭栈顶（可由条目关闭）
+    // 默认按退出键关闭栈顶（可由条目关闭）
     useEffect(() => {
         if (!topEntry) return;
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -48,7 +48,7 @@ export const ModalStackRoot = () => {
         }
     }, [stack.length]);
 
-    // 真正的 DOM 操作副作用
+    // 真正的文档操作副作用
     useEffect(() => {
         if (typeof document === 'undefined') return;
 
@@ -64,13 +64,13 @@ export const ModalStackRoot = () => {
             document.body.style.paddingRight = `${scrollbarWidth}px`;
         }
 
-        // 不需要 cleanup，因为我们依靠 isLocked 状态转换来清理
+        // 不需要清理函数，因为我们依靠锁定状态转换来恢复
     }, [isLocked]);
 
     if (!portalRoot) return null;
 
     return createPortal(
-        // Portal 容器必须显式层级，否则处于 auto 层会被页面正 z-index 覆盖
+        // 传送门容器必须显式层级，否则处于自动层会被页面正层级覆盖
         <div className="fixed inset-0 pointer-events-none" style={{ zIndex: DEFAULT_Z_INDEX }}>
             <AnimatePresence
                 onExitComplete={() => {

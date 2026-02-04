@@ -5,13 +5,16 @@
 import { useEffect, useRef } from 'react';
 import { AudioManager } from './AudioManager';
 import { playSynthSound, getSynthSoundKeys } from './SynthAudio';
-import type { GameAudioConfig, SoundKey } from './types';
+import type { AudioRuntimeContext, GameAudioConfig, SoundKey } from './types';
+import { resolveAudioEvent, resolveBgmKey, resolveEventSoundKey } from './audioRouting';
 import { useAudio } from '../../contexts/AudioContext';
 
-interface UseGameAudioOptions<G> {
+interface UseGameAudioOptions<G, Ctx = unknown, Meta extends Record<string, unknown> = Record<string, unknown>> {
     config: GameAudioConfig;
     G: G;
-    ctx: { gameover?: unknown; currentPlayer?: string; turn?: number };
+    ctx: Ctx;
+    eventEntries?: unknown[];
+    meta?: Meta;
 }
 
 // 追踪哪些音效加载失败，需要使用合成音
@@ -44,88 +47,114 @@ export function playSound(key: SoundKey): void {
  * 游戏音效 Hook
  * 自动监听游戏状态变化并触发音效
  */
-export function useGameAudio<G extends { cells?: unknown[] }>({
+export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unknown> = Record<string, unknown>>({
     config,
     G,
     ctx,
-}: UseGameAudioOptions<G>): void {
-    const prevGRef = useRef<G | null>(null);
-    const prevCtxRef = useRef<typeof ctx | null>(null);
+    eventEntries,
+    meta,
+}: UseGameAudioOptions<G, Ctx, Meta>): void {
     const initializedRef = useRef(false);
+    const prevRuntimeRef = useRef<AudioRuntimeContext<G, Ctx, Meta> | null>(null);
+    const prevLogIndexRef = useRef(0);
+    const currentBgmKeyRef = useRef<string | null>(null);
     const { setPlaylist, playBgm, stopBgm } = useAudio();
 
-    // 初始化音效
+    const runtimeContext: AudioRuntimeContext<G, Ctx, Meta> = { G, ctx, meta };
+
     useEffect(() => {
         if (!initializedRef.current) {
             AudioManager.initialize();
             AudioManager.registerAll(config, config.basePath || '');
 
-            // 更新上下文状态
             if (config.bgm && config.bgm.length > 0) {
+                const fallbackKey = config.bgm[0]?.key ?? null;
+                const initialBgm = resolveBgmKey(runtimeContext, config.bgmRules, fallbackKey);
                 setPlaylist(config.bgm);
-                // 默认播放第一个 BGM
-                playBgm(config.bgm[0].key);
+                if (initialBgm) {
+                    playBgm(initialBgm);
+                    currentBgmKeyRef.current = initialBgm;
+                } else {
+                    stopBgm();
+                }
             } else {
-                // 如果没有 BGM 配置，确保停止当前播放并清空歌单
                 setPlaylist([]);
                 stopBgm();
             }
 
             initializedRef.current = true;
         }
-    }, [config, setPlaylist, playBgm]);
+    }, [config, runtimeContext, setPlaylist, playBgm, stopBgm]);
 
-    // 监听 cells 变化 (落子音效)
     useEffect(() => {
-        if (!prevGRef.current) {
-            prevGRef.current = G;
+        if (!initializedRef.current) return;
+        if (!config.bgm || config.bgm.length === 0) return;
+
+        const fallbackKey = config.bgm[0]?.key ?? null;
+        const targetBgm = resolveBgmKey(runtimeContext, config.bgmRules, fallbackKey);
+
+        if (!targetBgm) {
+            stopBgm();
+            currentBgmKeyRef.current = null;
             return;
         }
 
-        const prevCells = prevGRef.current.cells;
-        const nextCells = G.cells;
+        if (currentBgmKeyRef.current !== targetBgm) {
+            playBgm(targetBgm);
+            currentBgmKeyRef.current = targetBgm;
+        }
+    }, [config.bgm, config.bgmRules, runtimeContext, playBgm, stopBgm]);
 
-        if (prevCells && nextCells && Array.isArray(prevCells) && Array.isArray(nextCells)) {
-            // 找到新落子的位置
-            for (let i = 0; i < nextCells.length; i++) {
-                if (prevCells[i] === null && nextCells[i] !== null) {
-                    // 根据落子玩家播放不同音效
-                    const soundKey = nextCells[i] === '0' ? 'place_x' : 'place_o';
-                    playSound(soundKey);
-                    break;
-                }
+    useEffect(() => {
+        if (!eventEntries || eventEntries.length === 0) return;
+
+        let startIndex = prevLogIndexRef.current;
+        if (eventEntries.length < startIndex) {
+            startIndex = 0;
+        }
+
+        const newEntries = eventEntries.slice(startIndex);
+        prevLogIndexRef.current = eventEntries.length;
+
+        for (const entry of newEntries) {
+            const event = resolveAudioEvent(entry, config.eventSelector);
+            if (!event) continue;
+            const key = resolveEventSoundKey(event, runtimeContext, config);
+            if (key) {
+                playSound(key);
+            }
+        }
+    }, [eventEntries, config, runtimeContext]);
+
+    useEffect(() => {
+        if (!prevRuntimeRef.current) {
+            prevRuntimeRef.current = runtimeContext;
+            return;
+        }
+
+        if (!config.stateTriggers || config.stateTriggers.length === 0) {
+            prevRuntimeRef.current = runtimeContext;
+            return;
+        }
+
+        for (const trigger of config.stateTriggers) {
+            if (!trigger.condition(prevRuntimeRef.current, runtimeContext)) continue;
+            const resolvedKey = trigger.resolveSound?.(prevRuntimeRef.current, runtimeContext);
+            const key = resolvedKey ?? trigger.sound;
+            if (key) {
+                playSound(key);
             }
         }
 
-        prevGRef.current = G;
-    }, [G]);
+        prevRuntimeRef.current = runtimeContext;
+    }, [config.stateTriggers, runtimeContext]);
 
-    // 组件卸载时停止 BGM
-    useEffect(() => {
-        return () => {
-            // 使用 context 的 stopBgm 确保 React 状态同步
+    useEffect(() => (
+        () => {
+            setPlaylist([]);
             stopBgm();
             AudioManager.stopBgm();
-        };
-    }, [stopBgm]);
-
-    // 监听游戏结束
-    useEffect(() => {
-        if (!prevCtxRef.current) {
-            prevCtxRef.current = ctx;
-            return;
+            currentBgmKeyRef.current = null;
         }
-
-        // 游戏刚结束
-        if (!prevCtxRef.current.gameover && ctx.gameover) {
-            const gameover = ctx.gameover as { winner?: string; draw?: boolean };
-            if (gameover.draw) {
-                playSound('draw');
-            } else if (gameover.winner !== undefined) {
-                playSound('victory');
-            }
-        }
-
-        prevCtxRef.current = ctx;
-    }, [ctx]);
+    ), [setPlaylist, stopBgm]);
 }

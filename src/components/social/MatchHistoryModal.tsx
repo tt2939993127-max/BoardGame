@@ -8,7 +8,7 @@ interface MatchHistoryModalProps {
     onClose: () => void;
 }
 
-// Mock Data
+// 模拟数据
 const MOCK_HISTORY = [
     { id: '1', gameName: 'Tic-Tac-Toe', result: 'win', opponent: 'Alice', date: '2024-03-10', duration: '5m' },
     { id: '2', gameName: 'Chess', result: 'loss', opponent: 'Bob', date: '2024-03-09', duration: '25m' },
@@ -22,7 +22,7 @@ export const MatchHistoryModal = ({ isOpen, onClose }: MatchHistoryModalProps) =
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
+            {/* 背景遮罩 */}
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -31,14 +31,14 @@ export const MatchHistoryModal = ({ isOpen, onClose }: MatchHistoryModalProps) =
                 className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
 
-            {/* Modal Content */}
+            {/* 弹窗内容 */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
                 className="relative bg-parchment-card-bg w-full max-w-2xl max-h-[80vh] rounded-lg shadow-2xl overflow-hidden flex flex-col border border-parchment-card-border/30"
             >
-                {/* Header */}
+                {/* 标题区域 */}
                 <div className="flex items-center justify-between p-4 border-b border-parchment-card-border/30 bg-parchment-base-bg">
                     <div className="flex items-center gap-2 text-parchment-base-text">
                         <Trophy size={20} />
@@ -52,7 +52,7 @@ export const MatchHistoryModal = ({ isOpen, onClose }: MatchHistoryModalProps) =
                     </button>
                 </div>
 
-                {/* Content */}
+                {/* 内容区域 */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                     {MOCK_HISTORY.length === 0 ? (
                         <div className="text-center text-parchment-light-text py-12 italic">

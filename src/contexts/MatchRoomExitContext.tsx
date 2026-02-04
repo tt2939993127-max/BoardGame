@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from 'react';
 
 export interface MatchRoomExitContextValue {
-    /** Exit the current match and navigate back to the lobby (implementation provided by MatchRoom). */
+    /** 退出当前对局并返回大厅（实现由 MatchRoom 提供） */
     exitToLobby: () => void | Promise<void>;
 }
 

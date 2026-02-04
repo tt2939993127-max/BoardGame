@@ -4,6 +4,7 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useTranslation } from 'react-i18next';
 import { LogOut, Mail, History, Image } from 'lucide-react';
 import { MatchHistoryModal } from './MatchHistoryModal';
+import { AvatarUpdateModal } from '../auth/AvatarUpdateModal';
 
 interface UserMenuProps {
     onLogout: () => void;
@@ -12,12 +13,13 @@ interface UserMenuProps {
 
 export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
     const { user } = useAuth();
-    const { openModal } = useModalStack();
+    const { openModal, closeModal } = useModalStack();
     const { t } = useTranslation(['auth', 'social']);
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const avatarModalIdRef = useRef<string | null>(null);
 
-    // Close on click outside
+    // 点击外部关闭
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -44,30 +46,27 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
         });
     };
 
-    const handleSetAvatar = async () => {
+    const handleOpenAvatar = () => {
         setIsOpen(false);
-        const url = window.prompt(t('auth:prompt.avatarUrl') || 'Enter Avatar URL:');
-        if (url) {
-            const token = localStorage.getItem('token');
-            try {
-                const res = await fetch('/api/auth/update-avatar', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ avatar: url })
-                });
-                if (res.ok) {
-                    window.location.reload();
-                } else {
-                    alert('Failed to update avatar');
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Error updating avatar');
-            }
+        if (avatarModalIdRef.current) {
+            closeModal(avatarModalIdRef.current);
+            avatarModalIdRef.current = null;
         }
+        avatarModalIdRef.current = openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            lockScroll: true,
+            onClose: () => {
+                avatarModalIdRef.current = null;
+            },
+            render: ({ close, closeOnBackdrop }) => (
+                <AvatarUpdateModal
+                    isOpen
+                    onClose={close}
+                    closeOnBackdrop={closeOnBackdrop}
+                />
+            ),
+        });
     };
 
     if (!user) return null;
@@ -94,7 +93,7 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
 
             {isOpen && (
                 <div className="absolute top-[calc(100%+0.5rem)] right-0 bg-parchment-card-bg shadow-parchment-card-hover border border-parchment-card-border rounded-sm py-2 px-2 z-50 min-w-[200px] animate-in fade-in slide-in-from-top-1 flex flex-col gap-1">
-                    {/* Match History */}
+                    {/* 对战历史 */}
                     <button
                         onClick={handleOpenHistory}
                         className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
@@ -105,16 +104,16 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
 
                     <div className="h-px bg-parchment-card-border/30 my-1 mx-2 opacity-50" />
 
-                    {/* Set Avatar */}
+                    {/* 设置头像 */}
                     <button
-                        onClick={handleSetAvatar}
+                        onClick={handleOpenAvatar}
                         className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
                     >
                         <Image size={16} />
                         {t('auth:menu.setAvatar') || 'Set Avatar'}
                     </button>
 
-                    {/* Bind Email */}
+                    {/* 绑定邮箱 */}
                     <button
                         onClick={() => { setIsOpen(false); onBindEmail(); }}
                         className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
@@ -123,7 +122,7 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                         {user.emailVerified ? t('auth:menu.emailBound') : t('auth:menu.bindEmail')}
                     </button>
 
-                    {/* Logout */}
+                    {/* 退出登录 */}
                     <button
                         onClick={() => { setIsOpen(false); onLogout(); }}
                         className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-light-text hover:text-red-500 font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"

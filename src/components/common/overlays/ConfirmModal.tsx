@@ -16,7 +16,6 @@ interface ConfirmModalTheme {
 }
 
 interface ConfirmModalProps {
-    open: boolean;
     title: string;
     description: string;
     confirmText?: string;
@@ -58,7 +57,6 @@ const themeByTone: Record<ConfirmTone, ConfirmModalTheme> = {
 };
 
 export const ConfirmModal = ({
-    open,
     title,
     description,
     confirmText,
@@ -88,7 +86,6 @@ export const ConfirmModal = ({
 
     return (
         <ModalBase
-            open={open}
             onClose={onCancel}
             closeOnBackdrop={closeOnBackdrop}
             overlayClassName={twMerge('z-[60]', mergedTheme.overlay, overlayClassName)}

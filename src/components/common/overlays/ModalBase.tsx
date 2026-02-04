@@ -1,14 +1,8 @@
 import clsx from 'clsx';
 import { motion, type Variants } from 'framer-motion';
 import { memo, type ReactNode } from 'react';
-import { useDeferredRender } from '../../../hooks/ui/useDeferredRender';
-import { useDelayedBackdropBlur } from '../../../hooks/ui/useDelayedBackdropBlur';
 
 interface ModalBaseProps {
-    /** 
-     * @deprecated 现在由 ModalStackRoot 控制挂载
-     */
-    open?: boolean;
     onClose?: () => void;
     closeOnBackdrop?: boolean;
     overlayClassName?: string;
@@ -47,9 +41,6 @@ export const ModalBase = memo(({
     containerClassName,
     children,
 }: ModalBaseProps) => {
-    const contentReady = useDeferredRender(true);
-    const blurEnabled = useDelayedBackdropBlur(true, 200);
-
     return (
         <>
             <motion.div
@@ -59,8 +50,7 @@ export const ModalBase = memo(({
                 exit="exit"
                 onClick={closeOnBackdrop ? onClose : undefined}
                 className={clsx(
-                    'fixed inset-0 bg-black/50',
-                    blurEnabled && 'backdrop-blur-sm',
+                    'fixed inset-0 bg-black/50 backdrop-blur-sm',
                     overlayClassName
                 )}
                 style={{ willChange: 'opacity' }}
@@ -77,11 +67,9 @@ export const ModalBase = memo(({
                 )}
                 style={{ willChange: 'transform, opacity' }}
             >
-                {contentReady && (
-                    <div className="w-full flex justify-center">
-                        {children}
-                    </div>
-                )}
+                <div className="w-full flex justify-center">
+                    {children}
+                </div>
             </motion.div>
         </>
     );

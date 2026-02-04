@@ -79,7 +79,7 @@ const CardDrawItem = ({
                 if (phase === 'flying') handleFlyComplete();
             }}
         >
-            {/* 3D翻转容器 - 使用 perspective 在父容器上 */}
+            {/* 3D 翻转容器 - 在父容器上使用 perspective */}
             <div
                 className="relative w-full h-full"
                 style={{ perspective: '1000px' }}
@@ -150,7 +150,7 @@ export const CardDrawAnimationLayer = ({
     );
 };
 
-// Hook: 管理抽牌动画状态
+// Hook：管理抽牌动画状态
 export const useCardDrawAnimation = () => {
     const [drawingCards, setDrawingCards] = React.useState<CardDrawData[]>([]);
 

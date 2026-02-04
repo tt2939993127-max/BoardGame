@@ -42,7 +42,7 @@ export const FriendList = ({ onSelectFriend, activeFriendId }: FriendListProps) 
 
     return (
         <div className="flex flex-col h-full bg-parchment-card-bg border-r border-parchment-card-border/30">
-            {/* Header / Tabs */}
+            {/* 顶部栏 / 标签页 */}
             <div className="flex items-center justify-around border-b border-parchment-card-border/30 p-2 bg-parchment-base-bg">
                 <button
                     onClick={() => setTab('chats')}
@@ -77,7 +77,7 @@ export const FriendList = ({ onSelectFriend, activeFriendId }: FriendListProps) 
                 </button>
             </div>
 
-            {/* Content */}
+            {/* 内容区 */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {tab === 'chats' && (
                     <div className="p-2 space-y-1">

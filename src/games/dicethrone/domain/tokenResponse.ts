@@ -138,7 +138,7 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
      */
     modifyDamageDealt: (ctx) => {
         const { tokenDef, amount } = ctx;
-        const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
+        const effect = tokenDef.activeUse?.effect;
         const modifier = (effect?.value ?? 1) * amount;
         return {
             success: true,
@@ -151,7 +151,7 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
      */
     modifyDamageReceived: (ctx) => {
         const { tokenDef, amount } = ctx;
-        const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
+        const effect = tokenDef.activeUse?.effect;
         // value 通常为负数（如 -1），amount 为消耗数量
         const modifier = (effect?.value ?? -1) * amount;
         return {
@@ -169,7 +169,7 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
             return { success: false };
         }
         
-        const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
+        const effect = tokenDef.activeUse?.effect;
         const rollValue = random.d(6);
         const range = effect?.rollSuccess?.range ?? [1, 2];
         const isSuccess = rollValue >= range[0] && rollValue <= range[1];
@@ -220,7 +220,7 @@ export function registerEffectProcessor(
 
 /**
  * 通用 Token 使用处理
- * 根据 TokenDef.useEffect.type 调用对应处理器
+ * 根据 TokenDef.activeUse.effect.type 调用对应处理器
  */
 export function processTokenUsage(
     state: DiceThroneCore,
@@ -258,11 +258,14 @@ export function processTokenUsage(
     };
     
     // 调用对应处理器
-    const effect = tokenDef.activeUse?.effect ?? tokenDef.useEffect;
+    const effect = tokenDef.activeUse?.effect;
     if (!effect) {
         return { events: [], result: { success: false }, newTokenAmount: currentAmount };
     }
     const processor = effectProcessors[effect.type];
+    if (!processor) {
+        return { events: [], result: { success: false }, newTokenAmount: currentAmount };
+    }
     const result = processor(ctx);
     
     const newTokenAmount = currentAmount - actualAmount;
@@ -287,122 +290,6 @@ export function processTokenUsage(
     return { events, result, newTokenAmount };
 }
 
-// ============================================================================
-// 兼容旧 API（保留以便渐进迁移）
-// ============================================================================
-
-/**
- * @deprecated 使用 processTokenUsage 代替
- */
-export function processTaijiUsage(
-    state: DiceThroneCore,
-    playerId: PlayerId,
-    amount: number,
-    effectType: 'damageBoost' | 'damageReduction'
-): { events: DiceThroneEvent[]; newTokenAmount: number } {
-    const events: DiceThroneEvent[] = [];
-    const player = state.players[playerId];
-    const currentAmount = player?.tokens[TOKEN_IDS.TAIJI] ?? 0;
-    const actualAmount = Math.min(amount, currentAmount);
-    
-    if (actualAmount <= 0) {
-        return { events, newTokenAmount: currentAmount };
-    }
-    
-    const newTokenAmount = currentAmount - actualAmount;
-    
-    const event: TokenUsedEvent = {
-        type: 'TOKEN_USED',
-        payload: {
-            playerId,
-            tokenId: TOKEN_IDS.TAIJI,
-            amount: actualAmount,
-            effectType,
-            damageModifier: effectType === 'damageBoost' ? actualAmount : -actualAmount,
-        },
-        sourceCommandType: 'USE_TOKEN',
-        timestamp: Date.now(),
-    };
-    events.push(event);
-    
-    return { events, newTokenAmount };
-}
-
-/**
- * @deprecated 使用 processTokenUsage 代替
- */
-export function processEvasiveUsage(
-    state: DiceThroneCore,
-    playerId: PlayerId,
-    random: RandomFn
-): { events: DiceThroneEvent[]; newTokenAmount: number; success: boolean } {
-    const events: DiceThroneEvent[] = [];
-    const player = state.players[playerId];
-    const currentAmount = player?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-    
-    if (currentAmount <= 0) {
-        return { events, newTokenAmount: currentAmount, success: false };
-    }
-    
-    const newTokenAmount = currentAmount - 1;
-    
-    const rollValue = random.d(6);
-    const success = rollValue <= 2;
-    
-    const event: TokenUsedEvent = {
-        type: 'TOKEN_USED',
-        payload: {
-            playerId,
-            tokenId: TOKEN_IDS.EVASIVE,
-            amount: 1,
-            effectType: 'evasionAttempt',
-            evasionRoll: {
-                value: rollValue,
-                success,
-            },
-        },
-        sourceCommandType: 'USE_TOKEN',
-        timestamp: Date.now(),
-    };
-    events.push(event);
-    
-    return { events, newTokenAmount, success };
-}
-
-/**
- * @deprecated 使用 processTokenUsage 代替
- */
-export function processPurifyUsage(
-    state: DiceThroneCore,
-    playerId: PlayerId,
-    _statusId: string
-): { events: DiceThroneEvent[]; newTokenAmount: number } {
-    const events: DiceThroneEvent[] = [];
-    const player = state.players[playerId];
-    const currentAmount = player?.tokens[TOKEN_IDS.PURIFY] ?? 0;
-    
-    if (currentAmount <= 0) {
-        return { events, newTokenAmount: currentAmount };
-    }
-    
-    const newTokenAmount = currentAmount - 1;
-    
-    const tokenEvent: TokenUsedEvent = {
-        type: 'TOKEN_USED',
-        payload: {
-            playerId,
-            tokenId: TOKEN_IDS.PURIFY,
-            amount: 1,
-            effectType: 'damageReduction',
-            damageModifier: 0,
-        },
-        sourceCommandType: 'USE_PURIFY',
-        timestamp: Date.now(),
-    };
-    events.push(tokenEvent);
-    
-    return { events, newTokenAmount };
-}
 
 // ============================================================================
 // Token 响应窗口关闭

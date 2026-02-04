@@ -165,9 +165,11 @@ class ResourceSystemImpl implements IResourceSystem {
 }
 
 /**
- * 资源系统单例
+ * 创建资源系统实例（每个游戏应创建独立实例）
  */
-export const resourceSystem: IResourceSystem = new ResourceSystemImpl();
+export function createResourceSystem(): IResourceSystem {
+    return new ResourceSystemImpl();
+}
 
 /**
  * 辅助函数：创建资源定义

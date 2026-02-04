@@ -64,7 +64,7 @@ export const ToastItem: React.FC<{ toast: Toast }> = ({ toast }) => {
                 <X className="w-4 h-4" />
             </button>
 
-            {/* Decorative corners to match the parchment style */}
+            {/* 装饰边角，用于匹配羊皮纸风格 */}
             <div className="absolute top-1 left-1 w-1.5 h-1.5 border-t border-l border-[#c0a080]/30" />
             <div className="absolute bottom-1 right-1 w-1.5 h-1.5 border-b border-r border-[#c0a080]/30" />
         </motion.div>

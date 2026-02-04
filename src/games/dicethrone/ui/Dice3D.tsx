@@ -14,6 +14,8 @@ export interface Dice3DProps {
     index?: number;
     /** 变体：'default' 用于托盘，'spotlight' 用于特写 */
     variant?: 'default' | 'spotlight';
+    /** 骰子资源所属角色（用于图集选择） */
+    characterId?: string;
 }
 
 /** 3D 骰子组件 */
@@ -24,6 +26,7 @@ export const Dice3D = ({
     locale,
     index = 0,
     variant = 'default',
+    characterId = 'monk',
 }: Dice3DProps) => {
     const translateZ = `calc(${size} / 2)`;
 
@@ -79,7 +82,7 @@ export const Dice3D = ({
                             className={`absolute inset-0 w-full h-full bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner`}
                             style={{
                                 transform: faceTransform,
-                                backgroundImage: buildLocalizedImageSet(ASSETS.DICE_SPRITE, locale),
+                                backgroundImage: buildLocalizedImageSet(ASSETS.DICE_SPRITE(characterId), locale),
                                 backgroundSize: DICE_BG_SIZE,
                                 backgroundPosition: `${xPos}% ${yPos}%`,
                                 boxShadow,

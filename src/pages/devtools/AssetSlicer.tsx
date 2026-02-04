@@ -169,7 +169,7 @@ export const AssetSlicer = () => {
         if (!isDrawingRef.current) {
             updateCursorStyle();
         }
-    }, [cropSize, transform, anchorPoint, isDrawing]); // Added isDrawing to dependencies
+    }, [cropSize, transform, anchorPoint, isDrawing]); // 补充 isDrawing 依赖
 
     // 快捷键与粘贴支持
     useEffect(() => {

@@ -25,7 +25,7 @@
     "audio/compressed/back": {
       "variants": {
         "ogg": {
-          "sha256": "c92069460e5e3fb7c0d5372f5c7b38dc9bac6990b29d2029924ec0663de2d8a6",
+          "sha256": "73f686f4b26fd03f4fa5d173271e2b2ba7f6c831c0918936eeed3737cdaccd78",
           "bytes": 3453,
           "mime": "audio/ogg"
         }
@@ -34,7 +34,7 @@
     "audio/compressed/click": {
       "variants": {
         "ogg": {
-          "sha256": "eea13b91876e79231b6044d85ce0b42df97424866f83295b1d75e0bbf5588d19",
+          "sha256": "cbe68b1790b6c20fd8ba2d19138482619b511cffdbac4597fb7c4a978be82c36",
           "bytes": 3175,
           "mime": "audio/ogg"
         }
@@ -43,7 +43,7 @@
     "audio/compressed/hover": {
       "variants": {
         "ogg": {
-          "sha256": "dd736993486627c3b54af3bff35b833e2b7589723a71d02a20744cb86b2ef61c",
+          "sha256": "4f198b57d357c803eef39f907bc2dda38914d976268ece7f40be55e782707b08",
           "bytes": 5352,
           "mime": "audio/ogg"
         }

@@ -2,8 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildLocalizedImageSet } from '../../../core';
 import { ASSETS } from './assets';
-import type { CardAtlasConfig } from './cardAtlas';
-import { getCardAtlasStyle } from './cardAtlas';
+import { CardPreview } from '../../../components/common/media/CardPreview';
+import type { CardPreviewRef } from '../../../systems/CardSystem';
 import { MONK_CARDS } from '../monk/cards';
 
 const INITIAL_SLOTS = [
@@ -67,12 +67,12 @@ const SLOT_TO_ABILITY_ID: Record<string, string> = {
 };
 
 /**
- * 从卡牌定义中动态查找升级卡的 atlasIndex
+ * 从卡牌定义中动态查找升级卡的预览引用
  * @param abilityId 目标技能 ID
  * @param level 升级后的等级
- * @returns 对应升级卡的 atlasIndex，未找到返回 undefined
+ * @returns 对应升级卡的预览引用，未找到返回 undefined
  */
-const getUpgradeCardAtlasIndex = (abilityId: string, level: number): number | undefined => {
+const getUpgradeCardPreviewRef = (abilityId: string, level: number): CardPreviewRef | undefined => {
     for (const card of MONK_CARDS) {
         if (card.type !== 'upgrade' || !card.effects) continue;
         for (const effect of card.effects) {
@@ -82,7 +82,7 @@ const getUpgradeCardAtlasIndex = (abilityId: string, level: number): number | un
                 action.targetAbilityId === abilityId &&
                 action.newAbilityLevel === level
             ) {
-                return card.atlasIndex;
+                return card.previewRef;
             }
         }
     }
@@ -99,7 +99,7 @@ export const AbilityOverlays = ({
     selectedAbilityId,
     activatingAbilityId,
     abilityLevels,
-    cardAtlas,
+    characterId = 'monk',
     locale,
 }: {
     isEditing: boolean;
@@ -111,7 +111,7 @@ export const AbilityOverlays = ({
     selectedAbilityId?: string;
     activatingAbilityId?: string;
     abilityLevels?: Record<string, number>;
-    cardAtlas?: CardAtlasConfig;
+    characterId?: string;
     locale?: string;
 }) => {
     const { t } = useTranslation('game-dicethrone');
@@ -173,7 +173,9 @@ export const AbilityOverlays = ({
                 const isResolved = resolveAbilityId(slot.id);
                 const baseAbilityId = SLOT_TO_ABILITY_ID[slot.id];
                 const level = baseAbilityId ? (abilityLevels?.[baseAbilityId] ?? 1) : 1;
-                const upgradeAtlasIndex = baseAbilityId && level > 1 ? getUpgradeCardAtlasIndex(baseAbilityId, level) : undefined;
+                const upgradePreviewRef = baseAbilityId && level > 1
+                    ? getUpgradeCardPreviewRef(baseAbilityId, level)
+                    : undefined;
                 const mapping = ABILITY_SLOT_MAP[slot.id];
                 const slotLabel = mapping ? t(mapping.labelKey) : slot.id;
                 const isAbilitySelected = !isEditing && selectedAbilityId === isResolved;
@@ -209,24 +211,21 @@ export const AbilityOverlays = ({
                                 <div
                                     className="w-full h-full rounded-lg pointer-events-none"
                                     style={{
-                                        backgroundImage: buildLocalizedImageSet(ASSETS.ABILITY_CARDS_BASE, locale),
+                                        backgroundImage: buildLocalizedImageSet(ASSETS.ABILITY_CARDS_BASE(characterId), locale),
                                         backgroundSize: '300% 300%',
                                         backgroundPosition: `${bgX}% ${bgY}%`,
                                         opacity: isEditing ? 0.7 : 1
                                     }}
                                 />
                                 {/* 升级卡叠加层（保持卡牌原始比例，居中覆盖） */}
-                                {upgradeAtlasIndex !== undefined && cardAtlas && (
+                                {upgradePreviewRef && (
                                     <div
                                         className="absolute inset-0 flex items-center justify-center pointer-events-none"
                                     >
-                                        <div
-                                            className="h-full rounded-lg"
-                                            style={{
-                                                aspectRatio: `${cardAtlas.colWidths[upgradeAtlasIndex % cardAtlas.cols] ?? 330} / ${cardAtlas.rowHeights[Math.floor(upgradeAtlasIndex / cardAtlas.cols)] ?? 540}`,
-                                                backgroundImage: buildLocalizedImageSet(ASSETS.CARDS_ATLAS, locale),
-                                                ...getCardAtlasStyle(upgradeAtlasIndex, cardAtlas),
-                                            }}
+                                        <CardPreview
+                                            previewRef={upgradePreviewRef}
+                                            locale={locale}
+                                            className="h-full aspect-[0.61] rounded-lg"
                                         />
                                     </div>
                                 )}

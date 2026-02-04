@@ -47,12 +47,12 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     const { t } = useTranslation('game-dicethrone');
     const [boostAmount, setBoostAmount] = React.useState(1);
 
-    // 从定义中动态获取可用 Token（根据 usableTiming）
+    // 从定义中动态获取可用 Token（根据 activeUse.timing）
     const boostToken = tokenDefinitions.find(def =>
-        def.usableTiming?.includes('beforeDamageDealt') && def.usableTiming?.includes('beforeDamageReceived')
+        def.activeUse?.timing.includes('beforeDamageDealt') && def.activeUse.timing.includes('beforeDamageReceived')
     );
     const evasiveToken = tokenDefinitions.find(def =>
-        def.useEffect?.type === 'rollToNegate'
+        def.activeUse?.effect.type === 'rollToNegate'
     );
 
     const boostCount = boostToken ? (responderState.tokens[boostToken.id] ?? 0) : 0;

@@ -1,11 +1,14 @@
 import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
 import { generateCode, sendVerificationEmailWithCode } from '../../../../../src/server/email';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, VerifyEmailDto, UpdateAvatarDto } from './dtos/auth.dto';
+import { ChangePasswordDto, LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, VerifyEmailDto, UpdateAvatarDto } from './dtos/auth.dto';
+
+const REFRESH_COOKIE_NAME = 'refresh_token';
+const REFRESH_COOKIE_PATH = '/auth';
 
 @Controller('auth')
 export class AuthController {
@@ -50,7 +53,7 @@ export class AuthController {
             return this.sendError(res, 400, t('auth.error.missingRegisterFields'));
         }
 
-        if (username.length < 3 || username.length > 20) {
+        if (username.length < 2 || username.length > 20) {
             return this.sendError(res, 400, t('auth.error.usernameLength'));
         }
 
@@ -69,11 +72,7 @@ export class AuthController {
             return this.sendError(res, 400, t('auth.error.invalidEmailCode'));
         }
 
-        const existingUsername = await this.authService.findByUsername(username);
-        if (existingUsername) {
-            return this.sendError(res, 409, t('auth.error.usernameTaken'));
-        }
-
+        // username 不再要求唯一（仅昵称）；邮箱仍为唯一标识。
         const existingEmail = await this.authService.findByEmail(email);
         if (existingEmail) {
             return this.sendError(res, 409, t('auth.error.emailAlreadyUsed'));
@@ -81,6 +80,8 @@ export class AuthController {
 
         const user = await this.authService.createUser(username, password, email);
         const token = this.authService.createToken(user);
+        const refreshToken = await this.authService.issueRefreshToken(user._id.toString());
+        this.setRefreshCookie(res, refreshToken.token, refreshToken.expiresAt);
 
         return res.status(201).json({
             message: t('auth.success.register'),
@@ -99,28 +100,52 @@ export class AuthController {
     @Post('login')
     async login(@Body() body: LoginDto, @Req() req: Request, @Res() res: Response) {
         const { t } = createRequestI18n(req);
-        const { username, password } = body;
+        const { account, password } = body;
 
-        if (!username || !password) {
-            return this.sendError(res, 400, t('auth.error.missingCredentials'));
+        if (!account || !password) {
+            return this.sendAuthFailure(res, 'AUTH_MISSING_CREDENTIALS', t('auth.error.missingCredentials'));
         }
 
-        const user = await this.authService.validateUser(username, password);
+        const trimmedAccount = account.trim();
+        const emailRegex = /^\S+@\S+\.\S+$/;
+        if (!emailRegex.test(trimmedAccount)) {
+            return this.sendAuthFailure(res, 'AUTH_INVALID_EMAIL', t('auth.error.invalidEmail'));
+        }
+
+        const clientIp = this.resolveClientIp(req);
+        const lockStatus = await this.authService.getLoginLockStatus(trimmedAccount, clientIp);
+        if (lockStatus) {
+            return this.sendAuthFailure(res, 'AUTH_LOGIN_LOCKED', t('auth.error.loginLocked', { seconds: lockStatus.retryAfterSeconds }), {
+                retryAfterSeconds: lockStatus.retryAfterSeconds,
+            });
+        }
+
+        const user = await this.authService.validateUser(trimmedAccount, password);
         if (!user) {
-            return this.sendError(res, 401, t('auth.error.invalidCredentials'));
+            const failure = await this.authService.recordLoginFailure(trimmedAccount, clientIp);
+            if (failure.locked) {
+                return this.sendAuthFailure(res, 'AUTH_LOGIN_LOCKED', t('auth.error.loginLocked', { seconds: failure.retryAfterSeconds ?? 0 }), {
+                    retryAfterSeconds: failure.retryAfterSeconds ?? 0,
+                });
+            }
+            return this.sendAuthFailure(res, 'AUTH_INVALID_CREDENTIALS', t('auth.error.invalidCredentials'));
         }
 
+        await this.authService.clearLoginFailures(trimmedAccount, clientIp);
         const token = this.authService.createToken(user);
+        const refreshToken = await this.authService.issueRefreshToken(user._id.toString());
+        this.setRefreshCookie(res, refreshToken.token, refreshToken.expiresAt);
 
-        return res.json({
-            message: t('auth.success.login'),
+        return this.sendAuthSuccess(res, 'AUTH_LOGIN_OK', t('auth.success.login'), {
+            token,
             user: {
                 id: user._id.toString(),
                 username: user.username,
+                email: user.email,
+                emailVerified: user.emailVerified,
                 role: user.role,
                 banned: user.banned,
             },
-            token,
         });
     }
 
@@ -267,6 +292,33 @@ export class AuthController {
         });
     }
 
+    @Post('refresh')
+    async refresh(@Req() req: Request, @Res() res: Response) {
+        const { t } = createRequestI18n(req);
+        const refreshToken = this.extractRefreshToken(req);
+        if (!refreshToken) {
+            return this.sendAuthFailure(res, 'AUTH_MISSING_TOKEN', t('auth.error.missingToken'));
+        }
+
+        const rotation = await this.authService.rotateRefreshToken(refreshToken);
+        if (rotation.status === 'invalid' || rotation.status === 'reuse') {
+            this.clearRefreshCookie(res);
+            return this.sendAuthFailure(res, 'AUTH_INVALID_TOKEN', t('auth.error.invalidToken'));
+        }
+
+        const user = await this.authService.findById(rotation.userId);
+        if (!user) {
+            await this.authService.revokeRefreshTokensForUser(rotation.userId);
+            this.clearRefreshCookie(res);
+            return this.sendAuthFailure(res, 'AUTH_USER_NOT_FOUND', t('auth.error.userNotFound'));
+        }
+
+        const token = this.authService.createToken(user);
+        this.setRefreshCookie(res, rotation.token, rotation.expiresAt);
+
+        return this.sendAuthSuccess(res, 'AUTH_REFRESH_OK', t('auth.success.refreshToken'), { token });
+    }
+
     @UseGuards(JwtAuthGuard)
     @Post('logout')
     async logout(@Req() req: Request, @Res() res: Response) {
@@ -274,11 +326,49 @@ export class AuthController {
         const token = this.extractToken(req);
 
         if (!token) {
-            return this.sendError(res, 401, t('auth.error.missingToken'));
+            return this.sendAuthFailure(res, 'AUTH_MISSING_TOKEN', t('auth.error.missingToken'));
         }
 
         await this.authService.blacklistToken(token);
-        return res.json({ message: t('auth.success.logout') });
+        const refreshToken = this.extractRefreshToken(req);
+        if (refreshToken) {
+            await this.authService.revokeRefreshToken(refreshToken);
+        }
+        this.clearRefreshCookie(res);
+        return this.sendAuthSuccess(res, 'AUTH_LOGOUT_OK', t('auth.success.logout'), {});
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post('change-password')
+    async changePassword(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Body() body: ChangePasswordDto,
+        @Req() req: Request,
+        @Res() res: Response
+    ) {
+        const { t } = createRequestI18n(req);
+        if (!currentUser?.userId) {
+            return this.sendError(res, 401, t('auth.error.loginRequired'));
+        }
+
+        const currentPassword = body.currentPassword ?? '';
+        const newPassword = body.newPassword ?? '';
+
+        if (!currentPassword || !newPassword) {
+            return this.sendError(res, 400, t('auth.error.missingPasswordFields'));
+        }
+
+        if (newPassword.length < 4) {
+            return this.sendError(res, 400, t('auth.error.passwordLength'));
+        }
+
+        const user = await this.authService.validateUserById(currentUser.userId, currentPassword);
+        if (!user) {
+            return this.sendError(res, 401, t('auth.error.invalidCredentials'));
+        }
+
+        await this.authService.updatePassword(currentUser.userId, newPassword);
+        return res.json({ message: t('auth.success.passwordUpdated') });
     }
 
     private extractToken(request: Request): string | null {
@@ -287,6 +377,84 @@ export class AuthController {
             return null;
         }
         return authHeader.slice(7);
+    }
+
+    private extractRefreshToken(request: Request): string | null {
+        const cookieHeader = request.headers.cookie;
+        if (!cookieHeader) {
+            return null;
+        }
+
+        const parts = cookieHeader.split(';');
+        for (const part of parts) {
+            const [key, ...rest] = part.trim().split('=');
+            if (key === REFRESH_COOKIE_NAME) {
+                return decodeURIComponent(rest.join('='));
+            }
+        }
+
+        return null;
+    }
+
+    private setRefreshCookie(res: Response, token: string, expiresAt: number) {
+        res.cookie(REFRESH_COOKIE_NAME, token, {
+            ...this.getRefreshCookieBaseOptions(),
+            expires: new Date(expiresAt * 1000),
+        });
+    }
+
+    private clearRefreshCookie(res: Response) {
+        res.clearCookie(REFRESH_COOKIE_NAME, this.getRefreshCookieBaseOptions());
+    }
+
+    private sendAuthSuccess(
+        res: Response,
+        code: string,
+        message: string,
+        data: Record<string, unknown>
+    ) {
+        return res.status(200).json({
+            success: true,
+            code,
+            message,
+            data,
+        });
+    }
+
+    private sendAuthFailure(
+        res: Response,
+        code: string,
+        message: string,
+        data: Record<string, unknown> = {}
+    ) {
+        return res.status(200).json({
+            success: false,
+            code,
+            message,
+            data,
+        });
+    }
+
+    private resolveClientIp(req: Request): string | null {
+        const forwarded = req.headers['x-forwarded-for'];
+        if (Array.isArray(forwarded) && forwarded.length > 0) {
+            return forwarded[0]?.split(',')[0]?.trim() ?? null;
+        }
+        if (typeof forwarded === 'string' && forwarded.length > 0) {
+            return forwarded.split(',')[0]?.trim() ?? null;
+        }
+        return req.socket.remoteAddress ?? null;
+    }
+
+    private getRefreshCookieBaseOptions(): CookieOptions {
+        const isProd = process.env.NODE_ENV === 'production';
+        const sameSite: CookieOptions['sameSite'] = isProd ? 'none' : 'lax';
+        return {
+            httpOnly: true,
+            secure: isProd,
+            sameSite,
+            path: REFRESH_COOKIE_PATH,
+        };
     }
 
     private sendError(res: Response, status: number, message: string) {

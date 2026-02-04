@@ -99,7 +99,7 @@ public/**/*.ktx2
 public/**/*.hdr
 
 # 本地资源缓存（不入仓）
-BordGameAsset
+BordGameAsset 
 
 # Playwright
 test-results/

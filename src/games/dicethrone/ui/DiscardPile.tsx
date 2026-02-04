@@ -1,30 +1,21 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AbilityCard } from '../types';
-import { buildLocalizedImageSet } from '../../../core';
-import type { CardAtlasConfig } from './cardAtlas';
-import { getCardAtlasStyle } from './cardAtlas';
-import { ASSETS } from './assets';
+import { CardPreview } from '../../../components/common/media/CardPreview';
 
 
 export const DiscardPile = React.forwardRef<HTMLDivElement, {
     cards: AbilityCard[];
     locale?: string;
-    atlas?: CardAtlasConfig;
     /** 点击放大按钮时触发，传入弃牌堆卡片（按时间从新到旧排列） */
     onInspectRecent?: (cards: AbilityCard[]) => void;
     canUndo?: boolean;
     onUndo?: () => void;
     isHighlighted?: boolean;
     showSellButton?: boolean;
-}>(({ cards, locale, atlas, onInspectRecent, canUndo, onUndo, isHighlighted, showSellButton }, ref) => {
+}>(({ cards, locale, onInspectRecent, canUndo, onUndo, isHighlighted, showSellButton }, ref) => {
     const { t } = useTranslation('game-dicethrone');
     const topCard = cards[cards.length - 1];
-
-    const topCardStyle = React.useMemo(() => {
-        if (!topCard || !atlas) return {};
-        return getCardAtlasStyle(topCard.atlasIndex ?? 0, atlas);
-    }, [topCard, atlas]);
 
     /** 获取弃牌堆所有卡片用于预览（从新到旧排列，即最左边是最新弃置的） */
     const getPreviewCards = React.useCallback(() => {
@@ -55,13 +46,11 @@ export const DiscardPile = React.forwardRef<HTMLDivElement, {
         >
             {!topCard && <div className="text-[0.8vw] font-bold uppercase tracking-widest text-slate-600">{t('hud.discardPile')}</div>}
             {topCard && (
-                <div
+                <CardPreview
+                    previewRef={topCard.previewRef}
+                    locale={locale}
                     className="absolute inset-0 w-full h-full"
-                    style={{
-                        backgroundImage: buildLocalizedImageSet(ASSETS.CARDS_ATLAS, locale),
-                        backgroundRepeat: 'no-repeat',
-                        ...topCardStyle,
-                    }}
+                    style={{ backgroundColor: '#0f172a' }}
                 />
             )}
             {topCard && (

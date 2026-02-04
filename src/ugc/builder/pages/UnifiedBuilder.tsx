@@ -1,0 +1,3008 @@
+/**
+ * 统一 UGC Builder
+ * 
+ * 布局：左侧一列（上：组件库，下：Schema/数据）+ 右侧始终显示 UI 画布
+ * 可拖拽分隔线 + 模态框编辑
+ */
+
+import { useState, useCallback, useMemo, useRef, useEffect, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { 
+  Save, Play, Upload, X, Download,
+  ChevronDown, ChevronRight, 
+  Square, Database, Layers,
+  Plus, Trash2, Copy, Sparkles, Edit3, GripVertical
+} from 'lucide-react';
+
+import { BaseEntitySchema, extendSchema, field, type SchemaDefinition, type FieldDefinition, type TagDefinition } from '../schema/types';
+import { DataTable } from '../ui/DataTable';
+import { SceneCanvas, type SceneComponent } from '../ui/SceneCanvas';
+import { PreviewCanvas } from '../ui/RenderPreview';
+import { PromptGenerator, type GameContext, useRenderPrompt } from '../ai';
+import { useAudio } from '../../../contexts/AudioContext';
+import { AudioManager } from '../../../lib/audio/AudioManager';
+import type { BgmDefinition } from '../../../lib/audio/types';
+import { 
+  BuilderProvider, 
+  useBuilder, 
+  type RenderComponent, 
+  type BuilderState,
+  type LayoutComponent 
+} from '../context';
+
+// 模块级变量已移除，避免热更新时跳过加载导致覆盖
+
+// ============================================================================
+// 类型定义（从 Context 导入，保留本地别名）
+// ============================================================================
+
+// 使用 Context 中的类型
+export type { RenderComponent, BuilderState, LayoutComponent };
+
+const normalizeTags = (schema?: SchemaDefinition): TagDefinition[] => schema?.tagDefinitions ?? [];
+
+// AI 生成请求类型
+type AIGenType = 'batch-data' | 'batch-tags' | 'ability-field' | null;
+
+type ModalType = 'schema' | 'data' | 'rules' | 'edit-item' | 'ai-gen' | 'template' | 'render-template' | 'tag-manager' | null;
+
+// ============================================================================
+// 初始状态
+// ============================================================================
+
+// Schema 模板定义（创建 Schema 时选择）- 不为任何特定游戏预设字段
+const SCHEMA_TEMPLATES = {
+  blank: { 
+    name: '空模板', 
+    description: '从零开始定义字段',
+    fields: {} 
+  },
+  entity: { 
+    name: '实体模板', 
+    description: '带名称和标签的通用实体',
+    fields: {
+      name: field.string('名称'),
+      tags: { type: 'array', label: '标签', itemType: 'string', tagEditor: true } as const,
+    }
+  },
+  withRender: { 
+    name: '可渲染模板', 
+    description: '带渲染组件引用的实体',
+    fields: {
+      name: field.string('名称'),
+      renderComponentId: field.string('渲染组件'),
+    }
+  },
+  player: { 
+    name: '玩家模板', 
+    description: '玩家/角色基础结构',
+    fields: {
+      name: field.string('名称'),
+      tags: { type: 'array', label: '标签', itemType: 'string', tagEditor: true } as const,
+    }
+  },
+  resource: { 
+    name: '资源模板', 
+    description: '可数值化的资源/属性',
+    fields: {
+      name: field.string('名称'),
+      value: field.number('数值', { min: 0 }),
+      max: field.number('上限'),
+    }
+  },
+};
+
+
+const INITIAL_STATE: BuilderState = {
+  name: '新游戏',
+  description: '',
+  tags: [],
+  schemas: [],
+  instances: {},
+  renderComponents: [],
+  layout: [],
+  layoutGroups: [
+    { id: 'default', name: '默认', hidden: false },
+    { id: 'hide', name: '隐藏', hidden: true },
+  ],
+  selectedSchemaId: null,
+  selectedComponentId: null,
+  rulesCode: '',
+};
+
+// ============================================================================
+// UI 布局组件定义
+// 区域组件：预制渲染逻辑 + 可覆盖
+// ============================================================================
+
+interface UIComponentDef {
+  id: string;
+  name: string;
+  type: string;
+  width: number;
+  height: number;
+  bindSchema?: string;
+  defaultData?: Record<string, unknown>;
+  // 组件接收的数据格式描述（用于AI提示词）
+  dataFormat?: string;
+  // 是否支持自定义渲染覆盖
+  customizable?: boolean;
+  // 预制功能描述
+  presetFeatures?: string;
+}
+
+const BASE_UI_COMPONENTS: { category: string; items: UIComponentDef[] }[] = [
+  {
+    category: '区域组件',
+    items: [
+      { 
+        id: 'hand-zone', 
+        name: '手牌区', 
+        type: 'hand-zone', 
+        width: 400, 
+        height: 120,
+        dataFormat: '{ cards: CardData[], playerId: string, canInteract: boolean }',
+        customizable: true,
+      },
+      { 
+        id: 'play-zone', 
+        name: '出牌区', 
+        type: 'play-zone', 
+        width: 300, 
+        height: 200,
+        dataFormat: '{ playedCards: { card: CardData, playerId: string }[] }',
+        customizable: true,
+      },
+      { 
+        id: 'deck-zone', 
+        name: '牌堆', 
+        type: 'deck-zone', 
+        width: 100, 
+        height: 140,
+        dataFormat: '{ count: number, topCard?: CardData }',
+        customizable: true,
+      },
+      { 
+        id: 'discard-zone', 
+        name: '弃牌堆', 
+        type: 'discard-zone', 
+        width: 100, 
+        height: 140,
+        dataFormat: '{ cards: CardData[], topCard?: CardData }',
+        customizable: true,
+      },
+    ],
+  },
+  {
+    category: '玩家区域',
+    items: [
+      { 
+        id: 'player-area', 
+        name: '玩家信息', 
+        type: 'player-area', 
+        width: 200, 
+        height: 150,
+        dataFormat: '{ resolvedPlayer: PlayerData, resolvedPlayerId: string, currentPlayerId: string, playerIds: string[], isCurrentPlayer: boolean, isCurrentTurn: boolean }',
+        customizable: true,
+      },
+      { 
+        id: 'resource-bar', 
+        name: '资源栏', 
+        type: 'resource-bar', 
+        width: 200, 
+        height: 40,
+        dataFormat: '{ resources: { [key: string]: number } }',
+        customizable: true,
+      },
+    ],
+  },
+  {
+    category: 'UI 元素',
+    items: [
+      { id: 'action-bar', name: '操作栏', type: 'action-bar', width: 300, height: 60 },
+      { id: 'message-log', name: '消息日志', type: 'message-log', width: 250, height: 200 },
+      { id: 'dice-area', name: '骰子区', type: 'dice-area', width: 200, height: 100 },
+      { id: 'token-area', name: '标记区', type: 'token-area', width: 150, height: 80 },
+      { id: 'render-component', name: '渲染组件', type: 'render-component', width: 100, height: 140, customizable: true },
+    ],
+  },
+  {
+    category: '系统组件',
+    items: [
+      {
+        id: 'bgm',
+        name: '背景音乐',
+        type: 'bgm',
+        width: 220,
+        height: 80,
+        presetFeatures: '场景级背景音乐配置',
+        defaultData: {
+          name: '背景音乐',
+          bgmKey: 'bgm-main',
+          bgmName: '主背景',
+          bgmSrc: '',
+          bgmBasePath: '',
+          bgmVolume: 0.6,
+          bgmEnabled: true,
+          bgmAutoPlay: true,
+        },
+      },
+    ],
+  },
+];
+
+function getUIComponents(): { category: string; items: UIComponentDef[] }[] {
+  return BASE_UI_COMPONENTS;
+}
+
+// ============================================================================
+// 通用钩子字段组件（AI辅助代码生成）
+// ============================================================================
+
+function HookField({
+  label,
+  value,
+  onChange,
+  schema,
+  hookType,
+  placeholder,
+  componentType,
+  outputsSummary,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  schema: SchemaDefinition | undefined;
+  hookType: 'sort' | 'filter' | 'layout' | 'selectEffect' | 'render';
+  placeholder: string;
+  componentType?: string;
+  outputsSummary?: string;
+}) {
+  const [inputMode, setInputMode] = useState(false);
+  const [requirement, setRequirement] = useState('');
+
+  const requirementText = requirement.trim() ? requirement.trim() : '（未填写需求）';
+
+  const generatePrompt = () => {
+    const schemaFields = schema
+      ? Object.entries(schema.fields).map(([k, f]) => `- ${k}: ${f.type} (${f.label})`).join('\n')
+      : '无 Schema';
+    
+    // 获取区域组件的数据格式描述
+    const compDef = componentType 
+      ? BASE_UI_COMPONENTS.flatMap(c => c.items).find(i => i.type === componentType)
+      : undefined;
+    const dataFormatInfo = compDef?.dataFormat 
+      ? `\n## 组件接收数据格式\n${compDef.dataFormat}\n\n## 预制功能\n${compDef.presetFeatures || '无'}`
+      : '';
+
+    // 获取当前标签信息
+    const tagsInfo = schema?.tagDefinitions?.length 
+      ? `\n## 可用标签\n${[...new Set(schema.tagDefinitions.map(t => t.group || '未分组'))]
+          .map(g => `- ${g}: ${schema.tagDefinitions?.filter(t => (t.group || '未分组') === g).map(t => t.name).join(', ')}`)
+          .join('\n')}`
+      : '';
+
+    const outputsSection = outputsSummary
+      ? `\n## 当前布局可用输出\n${outputsSummary}`
+      : '';
+    const playerContextInfo = componentType === 'player-area'
+      ? `\n## 玩家上下文（系统注入，仅 player-area 可用）\n- playerIds: string[] - 玩家 ID 列表\n- currentPlayerId: string | null - 当前玩家 ID\n- currentPlayerIndex: number - 当前玩家索引\n- resolvedPlayerId: string | null - 当前组件定位到的玩家 ID\n- resolvedPlayerIndex: number - 目标玩家索引\n- resolvedPlayer: Record<string, unknown> | undefined - 目标玩家数据\n- player: resolvedPlayer 的别名\n- isCurrentPlayer: boolean - 是否为当前玩家\n- isCurrentTurn: boolean - 预览中等价于 isCurrentPlayer\n\n### 组件配置字段（用于定位玩家）\n- playerRef: 'current' | 'next' | 'prev' | 'offset' | 'index' | 'id'\n- playerRefOffset: number (playerRef=offset 时使用)\n- playerRefIndex: number (playerRef=index 时使用)\n- playerRefId: string (playerRef=id 时使用)\n- playerIdField: string (玩家 Schema 的 ID 字段，默认使用 id/playerId)\n- currentPlayerId/playerIds: 仅用于预览态模拟\n\n### 关联示例（目标玩家的关联数据）\n\`\`\`tsx\nconst outputs = data.outputsByType?.['hand-zone'] || [];\nconst output = outputs[0];\nconst key = output?.bindEntity;\nconst relatedItems = key ? output.items.filter(item => item[key] === data.resolvedPlayerId) : [];\n\`\`\``
+      : '';
+
+    const templates: Record<string, string> = {
+      sort: `你是一个排序比较函数生成器。
+${dataFormatInfo}
+## 数据结构
+${schemaFields}
+${tagsInfo}
+
+## 用户需求
+${requirementText}
+
+## 函数签名（必须严格遵守）
+(a: TItem, b: TItem) => number
+// 返回负数：a排在b前面
+// 返回正数：b排在a前面
+// 返回0：顺序不变
+
+## 输出格式（只输出函数体，不要包装）
+\`\`\`javascript
+(a, b) => 0
+\`\`\``,
+      filter: `你是一个过滤判断函数生成器。
+${dataFormatInfo}
+## 数据结构
+${schemaFields}
+${tagsInfo}
+
+## 用户需求
+${requirementText}
+
+## 函数签名（必须严格遵守）
+(item: TItem) => boolean
+// 返回 true：显示该项
+// 返回 false：隐藏该项
+
+## 输出格式（只输出函数体，不要包装）
+\`\`\`javascript
+(item) => true
+\`\`\``,
+      layout: `你是一个布局代码生成器。
+${dataFormatInfo}
+
+## 用户需求
+${requirementText}
+
+## 函数签名
+(index: number, total: number) => React.CSSProperties
+
+## 参数说明
+- index: 当前项在列表中的索引（0开始）
+- total: 项目总数
+
+## 输出格式（只输出函数体，不要包装）
+\`\`\`javascript
+(index, total) => ({})
+\`\`\``,
+      selectEffect: `你是一个选中效果代码生成器。
+
+## 用户需求
+${requirementText}
+
+## 函数签名
+(isSelected: boolean) => React.CSSProperties
+
+## 参数说明
+- isSelected: 项是否被选中
+
+## 输出格式（只输出函数体，不要包装）
+\`\`\`javascript
+(isSelected) => (isSelected ? {} : {})
+\`\`\``,
+      render: `你是一个 React 渲染组件生成器。
+${dataFormatInfo}
+## 数据结构（Schema字段）
+${schemaFields}
+${tagsInfo}
+
+## 组件渲染上下文 (data)
+渲染代码接收的 data 对象包含以下字段：
+
+### 通用字段
+- type: string - 组件类型
+- name: string - 组件名称
+- width/height: number - 组件尺寸
+
+### 绑定数据（来自Schema）
+- items: Array - 绑定Schema的实例列表
+- itemCount: number - 实例数量
+- ...组件配置中的其他字段
+
+## 组件输出（系统注入）
+- outputsByType: Record<string, ComponentOutput[]> - 按组件类型聚合的输出
+- outputsById: Record<string, ComponentOutput> - 按组件ID聚合的输出
+
+## 渲染组件复用（系统注入）
+- renderComponentIndex: Array<{ id: string; name: string; targetSchema: string }> 渲染组件索引
+- renderByComponentId: (id: string, item: Record<string, unknown>, options?: { showBack?: boolean }) => ReactElement | null
+
+ComponentOutput 结构:
+- componentId: string
+- type: string
+- schemaId?: string
+- items: Record<string, unknown>[]
+- itemCount: number
+- bindEntity?: string  // 关联字段（用于跨组件关联）
+
+输出使用说明（通用）：
+- 只有存在对应组件时才会出现 outputsByType['hand-zone'] 等输出
+- bindEntity 表示“关联字段名”，例如 hand-zone 绑定的 Schema 若有 ownerId，则可设置 bindEntity = ownerId
+- 其它组件可用 data.items 中的实体字段与 output.items 里的 bindEntity 字段进行关联过滤
+${outputsSection}
+
+## 关联示例（通用）
+\`\`\`tsx
+const outputs = data.outputsByType?.['hand-zone'] || [];
+const output = outputs[0];
+const key = output?.bindEntity;
+const relatedItems = key ? output.items.filter(item => item[key] === (data as any)[key]) : [];
+\`\`\`
+${playerContextInfo}
+
+## 渲染组件复用示例（通用）
+\`\`\`tsx
+const renderer = data.renderByComponentId;
+const componentId = data.renderComponentIndex?.[0]?.id;
+const node = componentId && renderer ? renderer(componentId, relatedItems[0] || {}, { showBack: true }) : null;
+\`\`\`
+
+### 渲染组件字段
+当渲染单个数据项时，data 直接是该项对象，包含 Schema 定义的所有字段。
+用户通过 Schema 定义自己需要的字段（如 playerName、cardCount 等）。
+
+## 用户需求
+${requirementText}
+
+## 技术栈
+- **Tailwind CSS 4**
+- React 19 + TypeScript
+- Lucide React 图标库
+
+## 样式要求
+- 根元素使用 \`className="relative w-full h-full"\`
+- 定位使用内联样式 \`style={{ top: '8%', left: '8%' }}\`
+
+## 输出格式
+\`\`\`tsx
+(data: Record<string, unknown>) => (
+  <div className="relative w-full h-full ...">
+    {/* 使用 data.items / data.outputsByType 等字段 */}
+  </div>
+)
+\`\`\``,
+    };
+
+    return templates[hookType] || '';
+  };
+
+// ...
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-slate-400">{label}</label>
+        <button
+          onClick={() => setInputMode(!inputMode)}
+          className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[10px]"
+        >
+          {inputMode ? '收起' : 'AI生成'}
+        </button>
+      </div>
+      {inputMode && (
+        <div className="mb-2 space-y-1">
+          <input
+            type="text"
+            value={requirement}
+            onChange={e => setRequirement(e.target.value)}
+            placeholder={placeholder}
+            className="w-full px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-[10px]"
+          />
+          <button
+            onClick={() => navigator.clipboard.writeText(generatePrompt())}
+            className="w-full px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-[10px] text-slate-300"
+          >
+            复制提示词
+          </button>
+        </div>
+      )}
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onPaste={e => {
+          const text = e.clipboardData.getData('text');
+          if (text.trim()) {
+            onChange(text);
+          }
+        }}
+        placeholder="粘贴AI生成结果..."
+        className="w-full h-14 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white font-mono text-[10px] resize-none"
+      />
+    </div>
+  );
+}
+
+// ============================================================================
+// 模态框组件
+// ============================================================================
+
+function Modal({ 
+  open, 
+  onClose, 
+  title, 
+  children,
+  width = 'max-w-4xl'
+}: { 
+  open: boolean; 
+  onClose: () => void; 
+  title: string; 
+  children: React.ReactNode;
+  width?: string;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className={`bg-slate-800 rounded-xl shadow-2xl ${width} w-full max-h-[85vh] flex flex-col`}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <button onClick={onClose} className="p-1 text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================================================
+// 主组件（包装 Provider）
+// ============================================================================
+
+export function UnifiedBuilder() {
+  return (
+    <BuilderProvider>
+      <UnifiedBuilderInner />
+    </BuilderProvider>
+  );
+}
+
+// ============================================================================
+// 内部组件（使用 Context）
+// ============================================================================
+
+function UnifiedBuilderInner() {
+  // 从 Context 获取状态（暂未使用，渐进迁移后启用）
+  const builderCtx = useBuilder();
+  const { playBgm, stopBgm, setPlaylist } = useAudio();
+  
+  // 临时：仍使用本地状态，后续逐步替换为 Context
+  // TODO: 迁移完成后删除本地 state，直接使用 contextState
+  const [state, setState] = useState<BuilderState>(INITIAL_STATE);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['卡牌机制']));
+  const isLoadedRef = useRef(false);
+  const hasHydratedData = useMemo(() => {
+    return (
+      state.schemas.length > 0 ||
+      state.layout.length > 0 ||
+      state.renderComponents.length > 0 ||
+      Object.keys(state.instances).length > 0
+    );
+  }, [state.schemas, state.layout, state.renderComponents, state.instances]);
+  const [promptOutput, setPromptOutput] = useState('');
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [editingItem, setEditingItem] = useState<Record<string, unknown> | null>(null);
+  
+  // AI 生成相关状态
+  const [aiGenType, setAiGenType] = useState<AIGenType>(null);
+  const [aiGenInput, setAiGenInput] = useState('');
+  const [rulesRequirement, setRulesRequirement] = useState('');
+  
+  // 标签编辑状态
+  const [editingTagIndex, setEditingTagIndex] = useState<number | null>(null);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagGroup, setNewTagGroup] = useState('');
+
+  const layoutOutputsSummary = useMemo(() => {
+    const lines = state.layout
+      .filter(comp => comp.data.bindSchema || comp.data.targetSchema)
+      .map(comp => {
+        const schemaId = (comp.data.bindSchema || comp.data.targetSchema) as string | undefined;
+        const schemaName = schemaId ? state.schemas.find(s => s.id === schemaId)?.name : undefined;
+        const bindEntity = (comp.data.bindEntity as string | undefined) || '未设置';
+        return `- ${String(comp.data.name || comp.type)} (type=${comp.type}, id=${comp.id}) -> schema=${schemaName || '未知'} (${schemaId || '未绑定'}), bindEntity=${bindEntity}`;
+      });
+    return lines.length > 0 ? lines.join('\n') : '';
+  }, [state.layout, state.schemas]);
+  
+  // 预览模式状态
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  const bgmEntries = useMemo(() => {
+    return state.layout
+      .filter(comp => comp.type === 'bgm')
+      .map((comp, index) => {
+        const rawKey = comp.data.bgmKey ?? comp.data.key;
+        const rawName = comp.data.bgmName ?? comp.data.name;
+        const rawSrc = comp.data.bgmSrc ?? comp.data.src;
+        const rawBasePath = comp.data.bgmBasePath ?? comp.data.basePath;
+        const rawVolume = comp.data.bgmVolume;
+        const rawEnabled = comp.data.bgmEnabled;
+        const rawAutoPlay = comp.data.bgmAutoPlay;
+        const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+        const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : `背景音乐${index + 1}`;
+        const src = typeof rawSrc === 'string' ? rawSrc.trim() : '';
+        const basePath = typeof rawBasePath === 'string' ? rawBasePath.trim() : '';
+        const volume = typeof rawVolume === 'number' && !Number.isNaN(rawVolume) ? rawVolume : 0.6;
+        const enabled = rawEnabled !== false;
+        const autoPlay = rawAutoPlay !== false;
+        return {
+          key,
+          name,
+          src,
+          basePath,
+          volume: Math.max(0, Math.min(1, volume)),
+          enabled,
+          autoPlay,
+        };
+      });
+  }, [state.layout]);
+
+  const bgmList = useMemo<BgmDefinition[]>(() => {
+    return bgmEntries
+      .filter(entry => entry.enabled && entry.key && entry.src)
+      .map(entry => ({
+        key: entry.key,
+        name: entry.name,
+        src: entry.src,
+        volume: entry.volume,
+      }));
+  }, [bgmEntries]);
+
+  const bgmBasePath = useMemo(() => {
+    const uniquePaths = Array.from(new Set(bgmEntries.map(entry => entry.basePath).filter(Boolean)));
+    return uniquePaths.length === 1 ? uniquePaths[0] : '';
+  }, [bgmEntries]);
+
+  const autoPlayBgmKey = useMemo(() => {
+    const target = bgmEntries.find(entry => entry.enabled && entry.autoPlay && entry.key && entry.src);
+    return target?.key ?? null;
+  }, [bgmEntries]);
+
+  useEffect(() => {
+    if (!isPreviewMode) {
+      setPlaylist([]);
+      stopBgm();
+      return;
+    }
+
+    if (bgmList.length === 0) {
+      setPlaylist([]);
+      stopBgm();
+      return;
+    }
+
+    AudioManager.registerAll({ bgm: bgmList }, bgmBasePath);
+    setPlaylist(bgmList);
+    if (autoPlayBgmKey) {
+      playBgm(autoPlayBgmKey);
+    } else {
+      stopBgm();
+    }
+  }, [isPreviewMode, bgmList, bgmBasePath, autoPlayBgmKey, playBgm, stopBgm, setPlaylist]);
+  
+  // 可拖拽分隔线状态
+  const [leftPanelWidth, setLeftPanelWidth] = useState(280);
+  const [topPanelRatio, setTopPanelRatio] = useState(0.5);
+  const isDraggingH = useRef(false);
+  const isDraggingV = useRef(false);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+
+  // 同步本地状态到 Context（临时方案，迁移完成后删除）
+  // 使用 ref 避免 builderCtx 变化导致无限循环
+  const dispatchRef = useRef(builderCtx.dispatch);
+  dispatchRef.current = builderCtx.dispatch;
+  
+  useEffect(() => {
+    dispatchRef.current({ type: 'LOAD_STATE', payload: state });
+  }, [state]);
+
+  // 当前选中的 Schema（使用本地状态，迁移后使用 ctxCurrentSchema）
+  const currentSchema = useMemo(() => 
+    state.schemas.find(s => s.id === state.selectedSchemaId),
+    [state.schemas, state.selectedSchemaId]
+  );
+
+  // 当前 Schema 的数据实例（使用本地状态，迁移后使用 ctxCurrentInstances）
+  const currentInstances = useMemo(() => 
+    state.selectedSchemaId ? (state.instances[state.selectedSchemaId] || []) : [],
+    [state.instances, state.selectedSchemaId]
+  );
+
+  // AI 上下文
+  const aiContext = useMemo<GameContext>(() => ({
+    name: state.name,
+    description: state.description,
+    tags: state.tags,
+    schemas: state.schemas,
+    instances: state.instances,
+    layout: state.layout,
+  }), [state]);
+
+  const promptGenerator = useMemo(() => new PromptGenerator(aiContext), [aiContext]);
+
+  // 渲染组件提示词生成器（必须在顶层调用）
+  const { generateFront, generateBack } = useRenderPrompt();
+
+  // ========== 拖拽分隔线 ==========
+  const handleHorizontalDragStart = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    isDraggingH.current = true;
+  }, []);
+
+  const handleVerticalDragStart = useCallback((e: ReactMouseEvent) => {
+    e.preventDefault();
+    isDraggingV.current = true;
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingH.current) {
+        const newWidth = Math.max(200, Math.min(400, e.clientX));
+        setLeftPanelWidth(newWidth);
+      }
+      if (isDraggingV.current && leftPanelRef.current) {
+        const rect = leftPanelRef.current.getBoundingClientRect();
+        const relativeY = e.clientY - rect.top;
+        const ratio = Math.max(0.2, Math.min(0.8, relativeY / rect.height));
+        setTopPanelRatio(ratio);
+      }
+    };
+    const handleMouseUp = () => {
+      isDraggingH.current = false;
+      isDraggingV.current = false;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  // ========== Schema 操作 ==========
+  const [schemaTemplateModal, setSchemaTemplateModal] = useState(false);
+
+  const handleAddSchemaWithTemplate = useCallback((templateKey: keyof typeof SCHEMA_TEMPLATES) => {
+    const template = SCHEMA_TEMPLATES[templateKey];
+    const id = `schema_${Date.now()}`;
+    const newSchema = extendSchema(BaseEntitySchema, {
+      id,
+      name: template.name === '空模板' ? '新 Schema' : template.name.replace('模板', ''),
+      description: template.description,
+      fields: { ...template.fields },
+    });
+    setState(prev => ({
+      ...prev,
+      schemas: [...prev.schemas, newSchema],
+      instances: { ...prev.instances, [id]: [] },
+      selectedSchemaId: id,
+    }));
+    setSchemaTemplateModal(false);
+    setActiveModal('schema');
+  }, []);
+
+  const handleAddSchema = useCallback(() => {
+    setSchemaTemplateModal(true);
+  }, []);
+
+  const handleDeleteSchema = useCallback((schemaId: string) => {
+    setState(prev => {
+      const { [schemaId]: _, ...restInstances } = prev.instances;
+      return {
+        ...prev,
+        schemas: prev.schemas.filter(s => s.id !== schemaId),
+        instances: restInstances,
+        selectedSchemaId: prev.selectedSchemaId === schemaId ? prev.schemas[0]?.id || null : prev.selectedSchemaId,
+      };
+    });
+  }, []);
+
+  const handleSchemaChange = useCallback((schemaId: string, updates: Partial<SchemaDefinition>) => {
+    setState(prev => ({
+      ...prev,
+      schemas: prev.schemas.map(s => s.id === schemaId ? { ...s, ...updates } : s),
+    }));
+  }, []);
+
+  const handleAddField = useCallback((schemaId: string, key: string, fieldDef: FieldDefinition) => {
+    setState(prev => ({
+      ...prev,
+      schemas: prev.schemas.map(s => 
+        s.id === schemaId 
+          ? { ...s, fields: { ...s.fields, [key]: fieldDef } }
+          : s
+      ),
+    }));
+  }, []);
+
+  const handleDeleteField = useCallback((schemaId: string, fieldKey: string) => {
+    setState(prev => ({
+      ...prev,
+      schemas: prev.schemas.map(s => {
+        if (s.id !== schemaId) return s;
+        const { [fieldKey]: _, ...restFields } = s.fields;
+        return { ...s, fields: restFields };
+      }),
+    }));
+  }, []);
+
+  const handleUpdateField = useCallback((schemaId: string, fieldKey: string, updates: Partial<FieldDefinition>) => {
+    setState(prev => ({
+      ...prev,
+      schemas: prev.schemas.map(s => {
+        if (s.id !== schemaId) return s;
+        const existingField = s.fields[fieldKey];
+        if (!existingField) return s;
+        return {
+          ...s,
+          fields: {
+            ...s.fields,
+            [fieldKey]: { ...existingField, ...updates } as FieldDefinition,
+          },
+        };
+      }),
+    }));
+  }, []);
+
+  const handleChangeFieldType = useCallback((schemaId: string, fieldKey: string, newType: string) => {
+    const typeMap: Record<string, () => FieldDefinition> = {
+      string: () => field.string(''),
+      number: () => field.number(''),
+      boolean: () => field.boolean(''),
+      sfxKey: () => field.sfxKey('音效'),
+      array: () => field.tags(''),  // UI中是array，对应tags类型
+      abilities: () => field.abilities(''),
+      renderComponent: () => ({ type: 'renderComponent', label: '', showInTable: true } as FieldDefinition),
+    };
+    const factory = typeMap[newType];
+    if (!factory) return;
+    
+    setState(prev => ({
+      ...prev,
+      schemas: prev.schemas.map(s => {
+        if (s.id !== schemaId) return s;
+        const existingField = s.fields[fieldKey];
+        if (!existingField) return s;
+        const newField = factory();
+        newField.label = existingField.label; // 保留 label
+        return {
+          ...s,
+          fields: { ...s.fields, [fieldKey]: newField },
+        };
+      }),
+    }));
+  }, []);
+
+  // ========== 数据实例操作 ==========
+  const handleInstanceChange = useCallback((schemaId: string, instances: Record<string, unknown>[]) => {
+    setState(prev => ({
+      ...prev,
+      instances: { ...prev.instances, [schemaId]: instances },
+    }));
+  }, []);
+
+  const handleAddInstance = useCallback(() => {
+    if (!state.selectedSchemaId || !currentSchema) return;
+    // 自增ID：找到当前最大ID序号，+1
+    const existingIds = currentInstances
+      .map(item => String(item.id))
+      .filter(id => /^item_\d+$/.test(id))
+      .map(id => parseInt(id.replace('item_', ''), 10));
+    const nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+    const newInstance: Record<string, unknown> = { id: `item_${nextId}` };
+    Object.keys(currentSchema.fields).forEach(key => {
+      if (key !== 'id') newInstance[key] = '';
+    });
+    handleInstanceChange(state.selectedSchemaId, [...currentInstances, newInstance]);
+  }, [state.selectedSchemaId, currentSchema, currentInstances, handleInstanceChange]);
+
+  const handleEditItem = useCallback((item: Record<string, unknown>) => {
+    setEditingItem({ ...item });
+    setActiveModal('edit-item');
+  }, []);
+
+  const handleSaveEditItem = useCallback(() => {
+    if (!editingItem || !state.selectedSchemaId) return;
+    const id = String(editingItem.id);
+    const updated = currentInstances.map(item => 
+      String(item.id) === id ? editingItem : item
+    );
+    handleInstanceChange(state.selectedSchemaId, updated);
+    setActiveModal('data');
+    setEditingItem(null);
+  }, [editingItem, state.selectedSchemaId, currentInstances, handleInstanceChange]);
+
+  const handleEditItemField = useCallback((key: string, value: unknown) => {
+    setEditingItem(prev => prev ? { ...prev, [key]: value } : null);
+  }, []);
+
+  // ========== UI 布局操作 ==========
+  const handleDragStart = useCallback((comp: UIComponentDef, e: DragEvent) => {
+    const baseData = { name: comp.name, bindSchema: comp.bindSchema };
+    const data = comp.type === 'player-area'
+      ? { ...baseData, playerRef: 'current' }
+      : baseData;
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      type: comp.type,
+      width: comp.width,
+      height: comp.height,
+      data,
+    }));
+    e.dataTransfer.effectAllowed = 'copy';
+  }, []);
+
+  const handleLayoutChange = useCallback((layout: SceneComponent[]) => {
+    setState(prev => ({ ...prev, layout }));
+  }, []);
+
+  // ========== 规则生成 ==========
+  const handleGenerateFullRules = useCallback(() => {
+    setPromptOutput(promptGenerator.generateFullPrompt(rulesRequirement));
+  }, [promptGenerator, rulesRequirement]);
+
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
+  };
+
+  // ========== 保存/加载 ==========
+  const STORAGE_KEY = 'ugc-builder-state';
+
+  // 自动保存（防抖500ms，仅在加载完成后）
+  useEffect(() => {
+    if (!isLoadedRef.current) return; // 等待数据加载完成
+    
+    const timer = setTimeout(() => {
+      const saveData = {
+        name: state.name,
+        description: state.description,
+        tags: state.tags,
+        schemas: state.schemas,
+        instances: state.instances,
+        renderComponents: state.renderComponents,
+        layout: state.layout,
+        layoutGroups: state.layoutGroups,
+        rulesCode: state.rulesCode,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [state]);
+
+  const handleSave = useCallback(() => {
+    const saveData = {
+      name: state.name,
+      description: state.description,
+      tags: state.tags,
+      schemas: state.schemas,
+      instances: state.instances,
+      renderComponents: state.renderComponents,
+      layout: state.layout,
+      layoutGroups: state.layoutGroups,
+      rulesCode: state.rulesCode,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
+    alert('已保存到本地');
+  }, [state]);
+
+  const handleExport = useCallback(() => {
+    const saveData = {
+      name: state.name,
+      description: state.description,
+      tags: state.tags,
+      schemas: state.schemas,
+      instances: state.instances,
+      renderComponents: state.renderComponents,
+      layout: state.layout,
+      layoutGroups: state.layoutGroups,
+      rulesCode: state.rulesCode,
+    };
+    const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${state.name || 'game'}.ugc.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [state]);
+
+  const handleImport = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target?.result as string);
+          setState(prev => ({
+            ...prev,
+            name: data.name || prev.name,
+            description: data.description || '',
+            tags: data.tags || [],
+            schemas: data.schemas || prev.schemas,
+            instances: data.instances || prev.instances,
+            renderComponents: data.renderComponents || prev.renderComponents,
+            layout: data.layout || [],
+            layoutGroups: data.layoutGroups || prev.layoutGroups,
+            rulesCode: data.rulesCode || '',
+          }));
+        } catch (err) {
+          alert('导入失败：无效的 JSON 文件');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, []);
+
+  // 页面加载时恢复（仅在无数据时才从 localStorage 还原）
+  useEffect(() => {
+    if (isLoadedRef.current) return;
+    if (hasHydratedData) {
+      isLoadedRef.current = true;
+      return;
+    }
+    
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        setState(prev => {
+          const schemas = data.schemas || prev.schemas;
+          // 确保 selectedSchemaId 有效
+          const selectedSchemaId = schemas.length > 0 ? schemas[0].id : null;
+          return {
+            ...prev,
+            name: data.name || prev.name,
+            description: data.description || '',
+            tags: data.tags || [],
+            schemas,
+            instances: data.instances || prev.instances,
+            renderComponents: data.renderComponents || prev.renderComponents,
+            layout: data.layout || [],
+            layoutGroups: data.layoutGroups || prev.layoutGroups,
+            selectedSchemaId,
+            rulesCode: data.rulesCode || '',
+          };
+        });
+      } catch (err) {
+        console.error('Failed to load saved state:', err);
+      }
+    }
+    // 标记加载完成，允许自动保存
+    isLoadedRef.current = true;
+  }, [hasHydratedData]);
+
+  // ========== 渲染 ==========
+  return (
+    <div className="h-screen flex flex-col bg-slate-900 text-white select-none">
+      {/* 顶部工具栏 */}
+      <header className="flex items-center justify-between px-4 py-2 border-b border-slate-700 shrink-0">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-semibold">UGC Builder</h1>
+          <button 
+            onClick={() => setActiveModal('template')}
+            className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-sm"
+          >
+            <Plus className="w-4 h-4" /> 新建
+          </button>
+          <input
+            type="text"
+            value={state.name}
+            onChange={e => setState(prev => ({ ...prev, name: e.target.value }))}
+            className="px-3 py-1 bg-slate-800 border border-slate-600 rounded text-sm focus:outline-none focus:border-amber-500"
+            placeholder="游戏名称"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleImport}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+          >
+            <Upload className="w-4 h-4" /> 导入
+          </button>
+          <button 
+            onClick={handleExport}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+          >
+            <Download className="w-4 h-4" /> 导出
+          </button>
+          <button 
+            onClick={handleSave}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+          >
+            <Save className="w-4 h-4" /> 保存
+          </button>
+          <button 
+            onClick={() => {
+              if (confirm('确定清空所有数据？此操作不可撤销')) {
+                localStorage.removeItem(STORAGE_KEY);
+                setState(INITIAL_STATE);
+              }
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded text-sm"
+          >
+            <Trash2 className="w-4 h-4" /> 清空
+          </button>
+          <button 
+            onClick={() => setActiveModal('rules')}
+            className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-sm"
+          >
+            <Sparkles className="w-4 h-4" /> 生成规则
+          </button>
+          <button 
+            onClick={() => setIsPreviewMode(!isPreviewMode)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${isPreviewMode ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'}`}
+          >
+            <Play className="w-4 h-4" /> {isPreviewMode ? '退出预览' : '预览'}
+          </button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* 左侧面板：上下分隔 */}
+        <div 
+          ref={leftPanelRef}
+          className="flex flex-col border-r border-slate-700" 
+          style={{ width: leftPanelWidth }}
+        >
+          {/* 上：组件库 */}
+          <div className="overflow-hidden flex flex-col" style={{ height: `${topPanelRatio * 100}%` }}>
+            <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-400">组件库</span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {/* 所有组件（包含渲染组件） */}
+              {getUIComponents().map(({ category, items }) => (
+                <div key={category}>
+                  <button
+                    onClick={() => toggleCategory(category)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800 text-sm ${
+                      category === '渲染组件' ? 'text-cyan-400' : ''
+                    }`}
+                  >
+                    {expandedCategories.has(category) 
+                      ? <ChevronDown className="w-4 h-4 text-slate-400" /> 
+                      : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                    <span>{category}</span>
+                    {category === '渲染组件' && <span className="text-xs text-slate-500">({items.length})</span>}
+                  </button>
+                  {expandedCategories.has(category) && (
+                    <div className="ml-4 space-y-0.5">
+                      {items.length === 0 && category === '渲染组件' ? (
+                        <div className="text-xs text-slate-500 py-1">
+                          暂无渲染组件
+                        </div>
+                      ) : (
+                        items.map(item => (
+                          <div
+                            key={item.id}
+                            draggable
+                            onDragStart={e => handleDragStart(item, e)}
+                            className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-700 cursor-grab text-sm ${
+                              item.type === 'render-component' ? 'text-cyan-300' : 'text-slate-300'
+                            }`}
+                          >
+                            {item.type === 'render-component' 
+                              ? <Layers className="w-3 h-3" />
+                              : <Square className="w-3 h-3 text-amber-500" />
+                            }
+                            <span className="flex-1">{item.name}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 垂直分隔线 */}
+          <div 
+            className="h-1 bg-slate-700 hover:bg-amber-500 cursor-row-resize shrink-0"
+            onMouseDown={handleVerticalDragStart}
+          />
+
+          {/* 下：Schema/数据概览 */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-400">Schema & 数据</span>
+              <button onClick={handleAddSchema} className="p-1 text-slate-400 hover:text-white" title="新建 Schema">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {state.schemas.map(s => (
+                <div 
+                  key={s.id}
+                  className={`p-2 rounded cursor-pointer hover:bg-slate-800 ${state.selectedSchemaId === s.id ? 'bg-slate-700' : ''}`}
+                  onClick={() => setState(prev => ({ ...prev, selectedSchemaId: s.id }))}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm font-medium">{s.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={e => { e.stopPropagation(); setActiveModal('schema'); }}
+                        className="p-1 text-slate-400 hover:text-white"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                      {s.id !== 'card' && (
+                        <button 
+                          onClick={e => { e.stopPropagation(); handleDeleteSchema(s.id); }}
+                          className="p-1 text-slate-400 hover:text-red-400"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                    <span>{Object.keys(s.fields).length} 字段</span>
+                    <span>·</span>
+                    <span>{state.instances[s.id]?.length || 0} 条数据</span>
+                  </div>
+                  {/* 快速操作按钮 */}
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      onClick={e => { e.stopPropagation(); setActiveModal('data'); }}
+                      className="px-1.5 py-0.5 bg-slate-600 hover:bg-slate-500 rounded text-[10px]"
+                    >
+                      编辑数据
+                    </button>
+                    <button
+                      onClick={e => { 
+                        e.stopPropagation(); 
+                        setState(prev => ({ ...prev, selectedSchemaId: s.id }));
+                        setAiGenType('batch-data');
+                        setActiveModal('ai-gen');
+                      }}
+                      className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[10px]"
+                    >
+                      <Sparkles className="w-2.5 h-2.5 inline mr-0.5" />AI生成
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 垂直分隔线2 */}
+          <div 
+            className="h-1 bg-slate-700 hover:bg-amber-500 cursor-row-resize shrink-0"
+          />
+
+          {/* 下：场景层次 */}
+          <div className="h-48 overflow-hidden flex flex-col border-t border-slate-700">
+            <div className="px-3 py-2 border-b border-slate-700 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-400">场景层次</span>
+              <button 
+                onClick={() => {
+                  const newGroup = {
+                    id: `group-${Date.now()}`,
+                    name: '新分组',
+                    hidden: false,
+                  };
+                  setState(prev => ({
+                    ...prev,
+                    layoutGroups: [...(prev.layoutGroups || [{ id: 'default', name: '默认', hidden: false }, { id: 'hide', name: '隐藏', hidden: true }]), newGroup],
+                  }));
+                }}
+                className="p-1 text-slate-400 hover:text-white" 
+                title="新建分组"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {/* 分组列表 */}
+              {(state.layoutGroups || [{ id: 'default', name: '默认', hidden: false }, { id: 'hide', name: '隐藏', hidden: true }]).map(group => {
+                const groupComponents = state.layout.filter(c => (c.data.groupId || 'default') === group.id);
+                return (
+                  <div 
+                    key={group.id} 
+                    className={group.hidden ? 'opacity-50' : ''}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      const compId = e.dataTransfer.getData('compId');
+                      if (compId) {
+                        setState(prev => ({
+                          ...prev,
+                          layout: prev.layout.map(c => 
+                            c.id === compId 
+                              ? { ...c, data: { ...c.data, groupId: group.id } }
+                              : c
+                          ),
+                        }));
+                      }
+                    }}
+                  >
+                    <div className="flex items-center gap-2 px-2 py-1 text-sm text-slate-400">
+                      <Layers className="w-3 h-3" />
+                      <span className="flex-1">{group.name}</span>
+                      <span className="text-xs">{groupComponents.length}</span>
+                    </div>
+                    <div className="ml-4 space-y-0.5">
+                      {groupComponents.map(comp => (
+                        <div
+                          key={comp.id}
+                          draggable
+                          onDragStart={e => {
+                            e.dataTransfer.setData('compId', comp.id);
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onClick={() => setState(prev => ({ ...prev, selectedComponentId: comp.id }))}
+                          className={`flex items-center gap-2 px-2 py-1 rounded cursor-grab text-xs ${
+                            state.selectedComponentId === comp.id ? 'bg-blue-600/50' : 'hover:bg-slate-700/50'
+                          }`}
+                        >
+                          <GripVertical className="w-2.5 h-2.5 text-slate-500" />
+                          <Square className="w-2.5 h-2.5" />
+                          <span className="truncate">{String(comp.data.name || comp.type)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* 水平分隔线 */}
+        <div 
+          className="w-1 bg-slate-700 hover:bg-amber-500 cursor-col-resize shrink-0"
+          onMouseDown={handleHorizontalDragStart}
+        />
+
+        {/* 中间：UI 画布 */}
+        <div className="flex-1 flex flex-col">
+          {isPreviewMode ? (
+            <PreviewCanvas
+              components={state.layout}
+              renderComponents={state.renderComponents}
+              instances={state.instances}
+              layoutGroups={state.layoutGroups}
+              className="flex-1"
+            />
+          ) : (
+            <SceneCanvas
+              components={state.layout}
+              onChange={handleLayoutChange}
+              selectedId={state.selectedComponentId ?? undefined}
+              onSelect={id => setState(prev => ({ ...prev, selectedComponentId: id }))}
+              onNewRenderComponent={comp => {
+                // 拖入新建渲染组件时，自动创建renderComponent并关联
+                const newRc: RenderComponent = {
+                  id: `rc-${Date.now()}`,
+                  name: String(comp.data.name || '新渲染组件'),
+                  targetSchema: state.schemas[0]?.id || '',
+                  renderCode: '',
+                  description: '',
+                };
+                setState(prev => ({
+                  ...prev,
+                  renderComponents: [...prev.renderComponents, newRc],
+                  layout: prev.layout.map(c => 
+                    c.id === comp.id 
+                      ? { ...c, data: { ...c.data, renderComponentId: newRc.id, isNew: undefined } }
+                      : c
+                  ),
+                }));
+              }}
+              className="flex-1"
+            />
+          )}
+        </div>
+
+        {/* 右侧：属性面板 */}
+        <div className="w-72 border-l border-slate-700 flex flex-col overflow-hidden">
+          <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 shrink-0">
+            属性面板
+          </div>
+          <div className="flex-1 overflow-y-auto p-3">
+            {state.selectedComponentId ? (() => {
+              const comp = state.layout.find(c => c.id === state.selectedComponentId);
+              if (!comp) return <div className="text-slate-500 text-sm">组件不存在</div>;
+              
+              const updateComp = (updates: Partial<typeof comp>) => {
+                handleLayoutChange(state.layout.map(c => 
+                  c.id === comp.id ? { ...c, ...updates } : c
+                ));
+              };
+              
+              const updateCompData = (key: string, value: unknown) => {
+                updateComp({ data: { ...comp.data, [key]: value } });
+              };
+              
+              return (
+                <div className="space-y-4">
+                  {/* 基本信息 */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-amber-500">基本信息</h3>
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-slate-400">类型</label>
+                        <div className="text-white bg-slate-800 px-2 py-1 rounded">{comp.type}</div>
+                      </div>
+                      <div>
+                        <label className="text-slate-400">名称</label>
+                        <input
+                          type="text"
+                          value={String(comp.data.name || '')}
+                          onChange={e => updateCompData('name', e.target.value)}
+                          placeholder="组件名称"
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                        />
+                      </div>
+                      {/* 显示区域组件的数据格式 */}
+                      {(() => {
+                        const compDef = BASE_UI_COMPONENTS.flatMap(c => c.items).find(i => i.type === comp.type);
+                        if (!compDef?.dataFormat) return null;
+                        return (
+                          <div className="space-y-1">
+                            <label className="text-slate-400">接收数据格式</label>
+                            <div className="text-cyan-400 bg-slate-800 px-2 py-1 rounded text-[10px] font-mono">
+                              {compDef.dataFormat}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 位置和尺寸 */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-amber-500">变换</h3>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-slate-400">X</label>
+                        <input
+                          type="number"
+                          value={comp.x}
+                          onChange={e => updateComp({ x: Number(e.target.value) })}
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400">Y</label>
+                        <input
+                          type="number"
+                          value={comp.y}
+                          onChange={e => updateComp({ y: Number(e.target.value) })}
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400">宽</label>
+                        <input
+                          type="number"
+                          value={comp.width}
+                          onChange={e => updateComp({ width: Number(e.target.value) })}
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-slate-400">高</label>
+                        <input
+                          type="number"
+                          value={comp.height}
+                          onChange={e => updateComp({ height: Number(e.target.value) })}
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BGM 配置 */}
+                  {comp.type === 'bgm' && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-amber-500">背景音乐</h3>
+                      <div className="space-y-2 text-xs">
+                        <div>
+                          <label className="text-slate-400">BGM Key</label>
+                          <input
+                            type="text"
+                            value={String(comp.data.bgmKey || '')}
+                            onChange={e => updateCompData('bgmKey', e.target.value)}
+                            placeholder="如：bgm-main"
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400">名称</label>
+                          <input
+                            type="text"
+                            value={String(comp.data.bgmName || '')}
+                            onChange={e => updateCompData('bgmName', e.target.value)}
+                            placeholder="显示名称"
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400">音频路径</label>
+                          <input
+                            type="text"
+                            value={String(comp.data.bgmSrc || '')}
+                            onChange={e => updateCompData('bgmSrc', e.target.value)}
+                            placeholder="如：common/audio/compressed/main.ogg"
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400">资源前缀</label>
+                          <input
+                            type="text"
+                            value={String(comp.data.bgmBasePath || '')}
+                            onChange={e => updateCompData('bgmBasePath', e.target.value)}
+                            placeholder="如：dicethrone/audio"
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400">音量 (0-1)</label>
+                          <input
+                            type="number"
+                            step="0.05"
+                            min="0"
+                            max="1"
+                            value={Number(comp.data.bgmVolume ?? 0.6)}
+                            onChange={e => updateCompData('bgmVolume', Number(e.target.value))}
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-slate-400">启用</label>
+                          <input
+                            type="checkbox"
+                            checked={comp.data.bgmEnabled !== false}
+                            onChange={e => updateCompData('bgmEnabled', e.target.checked)}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-slate-400">预览自动播放</label>
+                          <input
+                            type="checkbox"
+                            checked={comp.data.bgmAutoPlay !== false}
+                            onChange={e => updateCompData('bgmAutoPlay', e.target.checked)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 数据绑定 */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-amber-500">数据绑定</h3>
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <label className="text-slate-400">绑定 Schema</label>
+                        <select
+                          value={String(comp.data.bindSchema || '')}
+                          onChange={e => updateCompData('bindSchema', e.target.value || undefined)}
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                        >
+                          <option value="">无</option>
+                          {state.schemas.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-slate-400">关联实体字段</label>
+                        <input
+                          type="text"
+                          value={String(comp.data.bindEntity || '')}
+                          onChange={e => updateCompData('bindEntity', e.target.value)}
+                          placeholder="如：playerId"
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 玩家区域：目标玩家配置 */}
+                  {comp.type === 'player-area' && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-amber-500">目标玩家</h3>
+                      <div className="space-y-2 text-xs">
+                        <div>
+                          <label className="text-slate-400">定位方式</label>
+                          <select
+                            value={String(comp.data.playerRef || 'current')}
+                            onChange={e => updateCompData('playerRef', e.target.value)}
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          >
+                            <option value="current">当前玩家</option>
+                            <option value="next">下一位玩家</option>
+                            <option value="prev">上一位玩家</option>
+                            <option value="offset">相对偏移</option>
+                            <option value="index">指定序号</option>
+                            <option value="id">指定 ID</option>
+                          </select>
+                        </div>
+                        {comp.data.playerRef === 'offset' && (
+                          <div>
+                            <label className="text-slate-400">偏移量</label>
+                            <input
+                              type="number"
+                              value={Number(comp.data.playerRefOffset || 0)}
+                              onChange={e => updateCompData('playerRefOffset', Number(e.target.value || 0))}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                        )}
+                        {comp.data.playerRef === 'index' && (
+                          <div>
+                            <label className="text-slate-400">玩家序号（0开始）</label>
+                            <input
+                              type="number"
+                              value={Number(comp.data.playerRefIndex || 0)}
+                              onChange={e => updateCompData('playerRefIndex', Number(e.target.value || 0))}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                        )}
+                        {comp.data.playerRef === 'id' && (
+                          <div>
+                            <label className="text-slate-400">目标玩家 ID</label>
+                            <input
+                              type="text"
+                              value={String(comp.data.playerRefId || '')}
+                              onChange={e => updateCompData('playerRefId', e.target.value)}
+                              placeholder="如：player-1"
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-slate-400">玩家 ID 字段</label>
+                          <input
+                            type="text"
+                            value={String(comp.data.playerIdField || '')}
+                            onChange={e => updateCompData('playerIdField', e.target.value)}
+                            placeholder="默认使用 id / playerId"
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400">预览当前玩家 ID</label>
+                          <input
+                            type="text"
+                            value={String(comp.data.currentPlayerId || '')}
+                            onChange={e => updateCompData('currentPlayerId', e.target.value)}
+                            placeholder="预览用，可留空"
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-slate-400">预览玩家列表</label>
+                          <input
+                            type="text"
+                            value={Array.isArray(comp.data.playerIds) ? (comp.data.playerIds as string[]).join(',') : ''}
+                            onChange={e => {
+                              const next = e.target.value
+                                .split(',')
+                                .map(v => v.trim())
+                                .filter(Boolean);
+                              updateCompData('playerIds', next.length > 0 ? next : undefined);
+                            }}
+                            placeholder="player-1,player-2"
+                            className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 手牌区：布局、选中、排序、过滤（引擎层 HandAreaSkeleton 支持） */}
+                  {comp.type === 'hand-zone' && (
+                    <>
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-amber-500">布局与选中</h3>
+                        <p className="text-slate-500 text-[10px]">由引擎层 HandAreaSkeleton 执行</p>
+                        <div className="space-y-2 text-xs">
+                          <HookField label="布局代码" value={String(comp.data.layoutCode || '')} onChange={v => updateCompData('layoutCode', v)} schema={currentSchema} hookType="layout" placeholder="顺序排开，卡牌间距-30px" componentType={comp.type} />
+                          <HookField label="选中效果" value={String(comp.data.selectEffectCode || '')} onChange={v => updateCompData('selectEffectCode', v)} schema={currentSchema} hookType="selectEffect" placeholder="抬高一点" componentType={comp.type} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-amber-500">排序与过滤</h3>
+                        <p className="text-slate-500 text-[10px]">由引擎层 HandAreaSkeleton 执行</p>
+                        <div className="space-y-2 text-xs">
+                          <HookField label="排序代码" value={String(comp.data.sortCode || '')} onChange={v => updateCompData('sortCode', v)} schema={currentSchema} hookType="sort" placeholder="按点数从小到大排序" componentType={comp.type} />
+                          <HookField label="过滤代码" value={String(comp.data.filterCode || '')} onChange={v => updateCompData('filterCode', v)} schema={currentSchema} hookType="filter" placeholder="只显示可出的牌" componentType={comp.type} />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* 出牌区：布局（引擎层 HandAreaSkeleton 支持） */}
+                  {comp.type === 'play-zone' && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-amber-500">布局</h3>
+                      <p className="text-slate-500 text-[10px]">由引擎层 HandAreaSkeleton 执行</p>
+                      <div className="space-y-2 text-xs">
+                        <HookField label="布局代码" value={String(comp.data.layoutCode || '')} onChange={v => updateCompData('layoutCode', v)} schema={currentSchema} hookType="layout" placeholder="居中堆叠" componentType={comp.type} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 手牌区/出牌区：单项渲染组件引用 */}
+                  {['hand-zone', 'play-zone'].includes(comp.type) && (() => {
+                    const bindSchemaId = comp.data.bindSchema as string | undefined;
+                    const availableRenderComponents = bindSchemaId
+                      ? state.renderComponents.filter(rc => rc.targetSchema === bindSchemaId)
+                      : state.renderComponents;
+                    return (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-amber-500">单项渲染组件</h3>
+                        <p className="text-slate-500 text-[10px]">引用渲染组件，复用正/背面渲染代码</p>
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <label className="text-slate-400">渲染组件</label>
+                            <select
+                              value={String(comp.data.itemRenderComponentId || '')}
+                              onChange={e => updateCompData('itemRenderComponentId', e.target.value || undefined)}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            >
+                              <option value="">选择渲染组件</option>
+                              {availableRenderComponents.map(rc => (
+                                <option key={rc.id} value={rc.id}>{rc.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 渲染组件专属配置 */}
+                  {comp.type === 'render-component' && (() => {
+                    const targetSchema = state.schemas.find(s => s.id === comp.data.targetSchema);
+                    return (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-cyan-500">渲染组件配置</h3>
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <label className="text-slate-400">绑定 Schema</label>
+                            <select
+                              value={String(comp.data.targetSchema || '')}
+                              onChange={e => updateCompData('targetSchema', e.target.value || undefined)}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            >
+                              <option value="">选择数据源</option>
+                              {state.schemas.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-slate-400">需求描述</label>
+                            <input
+                              type="text"
+                              value={String(comp.data.renderRequirement || '')}
+                              onChange={e => updateCompData('renderRequirement', e.target.value)}
+                              placeholder="如：显示图标和属性信息"
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-slate-400">正面渲染代码</label>
+                              <button
+                                onClick={() => {
+                                  const prompt = generateFront({
+                                    requirement: String(comp.data.renderRequirement || '显示数据的基本信息'),
+                                    schema: targetSchema,
+                                  });
+                                  navigator.clipboard.writeText(prompt);
+                                }}
+                                className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[10px]"
+                              >
+                                复制提示词
+                              </button>
+                            </div>
+                            <textarea
+                              value={String(comp.data.renderCode || '')}
+                              onChange={e => updateCompData('renderCode', e.target.value)}
+                              onPaste={e => {
+                                const text = e.clipboardData.getData('text');
+                                if (text.trim()) {
+                                  updateCompData('renderCode', text);
+                                }
+                              }}
+                              placeholder="(data) => <div>...</div>"
+                              rows={4}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white font-mono text-[10px]"
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-slate-400">背面渲染代码</label>
+                              <button
+                                onClick={() => {
+                                  const prompt = generateBack({
+                                    requirement: String(comp.data.renderRequirement || '生成背面样式'),
+                                  });
+                                  navigator.clipboard.writeText(prompt);
+                                }}
+                                className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[10px]"
+                              >
+                                复制提示词
+                              </button>
+                            </div>
+                            <textarea
+                              value={String(comp.data.backRenderCode || '')}
+                              onChange={e => updateCompData('backRenderCode', e.target.value)}
+                              onPaste={e => {
+                                const text = e.clipboardData.getData('text');
+                                if (text.trim()) {
+                                  updateCompData('backRenderCode', text);
+                                }
+                              }}
+                              placeholder="(data) => <div>背面</div>"
+                              rows={3}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white font-mono text-[10px]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 注：点击/拖入交互由引擎层 HandAreaSkeleton 的 onPlayCard/onSellCard 处理，无需额外配置 */}
+
+                  {/* 通用渲染代码配置（所有组件都可以有） */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-purple-500">渲染代码</h3>
+                    <div className="space-y-2 text-xs">
+                      <p className="text-slate-500 text-[10px]">
+                        通过渲染代码控制组件显示。上下文包含：组件类型、绑定数据、组件输出等
+                      </p>
+                      <HookField 
+                        label="组件渲染" 
+                        value={String(comp.data.renderCode || '')} 
+                        onChange={v => updateCompData('renderCode', v)} 
+                        schema={currentSchema} 
+                        hookType="render" 
+                        placeholder="根据上下文数据渲染组件内容" 
+                        componentType={comp.type} 
+                        outputsSummary={layoutOutputsSummary}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 删除组件 */}
+                  <button
+                    onClick={() => {
+                      handleLayoutChange(state.layout.filter(c => c.id !== comp.id));
+                      setState(prev => ({ ...prev, selectedComponentId: null }));
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded text-xs"
+                  >
+                    <Trash2 className="w-3 h-3" /> 删除组件
+                  </button>
+                </div>
+              );
+            })() : (
+              <div className="text-slate-500 text-sm text-center py-8">
+                拖拽组件到画布后<br/>点击选中查看属性
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 底部状态栏 */}
+      <footer className="px-4 py-1 bg-slate-800 border-t border-slate-700 text-xs text-slate-500 flex gap-4 shrink-0">
+        <span>Schema: {state.schemas.length}</span>
+        <span>数据: {Object.values(state.instances).flat().length}</span>
+        <span>布局组件: {state.layout.length}</span>
+      </footer>
+
+      {/* ===== 模态框 ===== */}
+
+      {/* Schema 编辑模态框 */}
+      <Modal open={activeModal === 'schema'} onClose={() => setActiveModal(null)} title="Schema 编辑">
+        {currentSchema && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-400">名称</label>
+                <input
+                  type="text"
+                  value={currentSchema.name}
+                  onChange={e => handleSchemaChange(currentSchema.id, { name: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">ID</label>
+                <input type="text" value={currentSchema.id} disabled className="w-full mt-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded text-sm text-slate-500" />
+              </div>
+            </div>
+            {/* 可用标签管理 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs text-slate-400">
+                  可用标签 ({currentSchema.tagDefinitions?.length || 0})
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setAiGenType('batch-tags');
+                      setAiGenInput('');
+                      setActiveModal('ai-gen');
+                    }}
+                    className="text-xs text-purple-500 hover:text-purple-400"
+                  >
+                    AI生成
+                  </button>
+                  <button
+                    onClick={() => setActiveModal('tag-manager')}
+                    className="text-xs text-cyan-500 hover:text-cyan-400"
+                  >
+                    管理标签
+                  </button>
+                </div>
+              </div>
+              {/* 按分组显示标签 */}
+              {(() => {
+                const tags = normalizeTags(currentSchema);
+                const groups = [...new Set(tags.map(t => t.group || '未分组'))];
+                return groups.length > 0 ? (
+                  <div className="space-y-2">
+                    {groups.map(group => (
+                      <div key={group}>
+                        <div className="text-[10px] text-slate-500 mb-1">{group}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {tags.filter(t => (t.group || '未分组') === group).map((tag, idx) => (
+                            <span 
+                              key={`${tag.name}-${idx}`} 
+                              className="px-2 py-0.5 bg-cyan-900 text-cyan-300 rounded text-xs cursor-pointer hover:bg-cyan-800"
+                              onClick={() => {
+                                setEditingTagIndex(tags.findIndex(t => t.name === tag.name));
+                                setNewTagName(tag.name);
+                                setNewTagGroup(tag.group || '');
+                                setActiveModal('tag-manager');
+                              }}
+                            >
+                              {tag.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-500">暂无标签，点击上方管理或AI生成</span>
+                );
+              })()}
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs text-slate-400">字段 ({Object.keys(currentSchema.fields).length})</label>
+                <button
+                  onClick={() => {
+                    const key = `field_${Date.now()}`;
+                    handleAddField(currentSchema.id, key, field.string('新字段'));
+                  }}
+                  className="text-xs text-amber-500 hover:text-amber-400"
+                >
+                  + 添加字段
+                </button>
+              </div>
+              <div className="space-y-2">
+                {Object.entries(currentSchema.fields).map(([key, f]) => (
+                  <div key={key} className="px-3 py-2 bg-slate-700 rounded text-sm space-y-2">
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 text-slate-500 cursor-grab" />
+                      <input
+                        type="text"
+                        value={f.label}
+                        onChange={e => handleUpdateField(currentSchema.id, key, { label: e.target.value })}
+                        className="flex-1 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                        placeholder="字段名称"
+                      />
+                      <select
+                        value={f.type}
+                        onChange={e => handleChangeFieldType(currentSchema.id, key, e.target.value)}
+                        className="px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                      >
+                        <option value="string">文本</option>
+                        <option value="number">数字</option>
+                        <option value="boolean">布尔</option>
+                        <option value="sfxKey">音效</option>
+                        <option value="array">标签</option>
+                        <option value="abilities">能力 (GAS)</option>
+                        <option value="renderComponent">渲染组件</option>
+                      </select>
+                      {f.aiGenerated && <span className="px-1.5 py-0.5 bg-purple-600 text-[10px] rounded">AI</span>}
+                      <button
+                        onClick={() => handleDeleteField(currentSchema.id, key)}
+                        className="p-1 text-slate-400 hover:text-red-400"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {/* 渲染组件选择（当类型为renderComponent时显示默认值选择） */}
+                    {(f.type as string) === 'renderComponent' && (
+                      <div className="flex items-center gap-2 ml-6">
+                        <span className="text-xs text-slate-400">默认组件:</span>
+                        <select
+                          value={String(f.default || '')}
+                          onChange={e => handleUpdateField(currentSchema.id, key, { 
+                            default: e.target.value || undefined 
+                          })}
+                          className="flex-1 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-xs"
+                        >
+                          <option value="">无默认值</option>
+                          {state.renderComponents.map(rc => (
+                            <option key={rc.id} value={rc.id}>{rc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {/* 其他类型的默认值设置 */}
+                    {f.type === 'string' && (
+                      <div className="flex items-center gap-2 ml-6">
+                        <span className="text-xs text-slate-400">默认值:</span>
+                        <input
+                          type="text"
+                          value={String(f.default || '')}
+                          onChange={e => handleUpdateField(currentSchema.id, key, { default: e.target.value || undefined })}
+                          placeholder="无默认值"
+                          className="flex-1 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-xs"
+                        />
+                      </div>
+                    )}
+                    {f.type === 'array' && (
+                      <div className="flex items-center gap-2 ml-6">
+                        <span className="text-xs text-slate-400">默认标签:</span>
+                        <input
+                          type="text"
+                          value={Array.isArray(f.default) ? f.default.join(', ') : ''}
+                          onChange={e => handleUpdateField(currentSchema.id, key, { 
+                            default: e.target.value ? e.target.value.split(',').map(s => s.trim()) : undefined 
+                          })}
+                          placeholder="用逗号分隔"
+                          className="flex-1 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 数据编辑模态框 */}
+      <Modal open={activeModal === 'data'} onClose={() => setActiveModal(null)} title="数据管理" width="max-w-5xl">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-400">Schema:</span>
+            {state.schemas.map(s => (
+              <button
+                key={s.id}
+                onClick={() => setState(prev => ({ ...prev, selectedSchemaId: s.id }))}
+                className={`px-2 py-1 rounded text-xs ${state.selectedSchemaId === s.id ? 'bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+              >
+                {s.name} ({state.instances[s.id]?.length || 0})
+              </button>
+            ))}
+            <div className="ml-auto flex gap-2">
+              <button 
+                onClick={() => { setAiGenType('batch-data'); setAiGenInput(''); setActiveModal('ai-gen'); }}
+                className="px-2 py-1 bg-purple-600 hover:bg-purple-500 rounded text-xs flex items-center gap-1"
+              >
+                <Sparkles className="w-3 h-3" /> AI批量生成
+              </button>
+              <button onClick={handleAddInstance} className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-xs">
+                + 添加数据
+              </button>
+            </div>
+          </div>
+          {currentSchema && (
+            <DataTable
+              schema={currentSchema}
+              data={currentInstances}
+              onChange={items => handleInstanceChange(currentSchema.id, items)}
+              onRowDoubleClick={handleEditItem}
+              availableTags={normalizeTags(currentSchema)}
+              availableRenderComponents={state.renderComponents.map(rc => ({ id: rc.id, name: rc.name }))}
+              className="max-h-[60vh]"
+            />
+          )}
+        </div>
+      </Modal>
+
+      {/* 规则生成模态框 */}
+      <Modal open={activeModal === 'rules'} onClose={() => setActiveModal(null)} title="AI 规则生成" width="max-w-5xl">
+        <div className="flex gap-4 h-[60vh]">
+          <div className="w-64 shrink-0 space-y-3">
+            <button
+              onClick={handleGenerateFullRules}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded text-sm"
+            >
+              <Sparkles className="w-4 h-4" /> 完整规则
+            </button>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">规则需求（可选）</label>
+              <textarea
+                value={rulesRequirement}
+                onChange={e => setRulesRequirement(e.target.value)}
+                placeholder="描述胜利条件、回合流程、特殊规则等"
+                className="w-full h-32 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200 resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col border-l border-slate-700 pl-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-slate-400">提示词 ({promptOutput.length} 字符)</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(promptOutput)}
+                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs"
+              >
+                <Copy className="w-3 h-3 inline mr-1" /> 复制
+              </button>
+            </div>
+            <pre className="flex-1 p-3 bg-slate-900 rounded overflow-auto text-xs text-slate-300 font-mono whitespace-pre-wrap">
+              {promptOutput || '点击生成规则提示词'}
+            </pre>
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-slate-400">粘贴 AI 生成的规则代码</span>
+                {state.rulesCode && (
+                  <button
+                    onClick={() => navigator.clipboard.writeText(String(state.rulesCode))}
+                    className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs"
+                  >
+                    <Copy className="w-3 h-3 inline mr-1" /> 复制代码
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={String(state.rulesCode || '')}
+                onChange={e => setState(prev => ({ ...prev, rulesCode: e.target.value }))}
+                onPaste={e => {
+                  const text = e.clipboardData.getData('text');
+                  if (text.trim()) {
+                    setState(prev => ({ ...prev, rulesCode: text }));
+                  }
+                }}
+                placeholder="粘贴 AI 生成的规则代码"
+                className="w-full h-32 px-3 py-2 bg-slate-900 border border-slate-700 rounded text-xs text-slate-300 font-mono resize-none"
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 数据项编辑模态框 */}
+      <Modal open={activeModal === 'edit-item'} onClose={() => { setActiveModal('data'); setEditingItem(null); }} title="编辑数据">
+        {editingItem && currentSchema && (
+          <div className="space-y-4">
+            {Object.entries(currentSchema.fields).map(([key, f]) => (
+              <div key={key}>
+                <label className="text-xs text-slate-400">{f.label}</label>
+                {f.type === 'boolean' ? (
+                  <div className="mt-1">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editingItem[key])}
+                      onChange={e => handleEditItemField(key, e.target.checked)}
+                      className="rounded border-slate-500"
+                    />
+                  </div>
+                ) : f.type === 'number' ? (
+                  <input
+                    type="number"
+                    value={Number(editingItem[key]) || 0}
+                    onChange={e => handleEditItemField(key, Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                  />
+                ) : f.type === 'array' && 'tagEditor' in f ? (
+                  /* 标签字段 - 多级下拉（按分组） */
+                  <div className="mt-1 space-y-1">
+                    <div className="flex flex-wrap gap-1">
+                      {(Array.isArray(editingItem[key]) ? editingItem[key] as string[] : []).map((tag: string) => (
+                        <span key={tag} className="px-2 py-0.5 bg-cyan-900 text-cyan-300 rounded text-xs flex items-center gap-1">
+                          {tag}
+                          <button
+                            onClick={() => handleEditItemField(key, (editingItem[key] as string[]).filter(t => t !== tag))}
+                            className="text-cyan-400 hover:text-red-400"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    {/* 多级下拉：按分组显示 */}
+                    {(() => {
+                      const tags = normalizeTags(currentSchema);
+                      const groups = [...new Set(tags.map(t => t.group || '未分组'))];
+                      const selectedTags = Array.isArray(editingItem[key]) ? editingItem[key] as string[] : [];
+                      
+                      return (
+                        <select
+                          value=""
+                          onChange={e => {
+                            if (e.target.value) {
+                              if (!selectedTags.includes(e.target.value)) {
+                                handleEditItemField(key, [...selectedTags, e.target.value]);
+                              }
+                            }
+                          }}
+                          className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                        >
+                          <option value="">+ 添加标签</option>
+                          {groups.map(group => (
+                            <optgroup key={group} label={group}>
+                              {tags
+                                .filter(t => (t.group || '未分组') === group)
+                                .filter(t => !selectedTags.includes(t.name))
+                                .map(t => (
+                                  <option key={t.name} value={t.name}>{t.name}</option>
+                                ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      );
+                    })()}
+                  </div>
+                ) : (f.type as string) === 'renderComponent' ? (
+                  /* 渲染组件字段 - 单选下拉 */
+                  <select
+                    value={String(editingItem[key] ?? '')}
+                    onChange={e => handleEditItemField(key, e.target.value || undefined)}
+                    className="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                  >
+                    <option value="">无</option>
+                    {state.renderComponents.map(rc => (
+                      <option key={rc.id} value={rc.id}>{rc.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={String(editingItem[key] ?? '')}
+                    onChange={e => handleEditItemField(key, e.target.value)}
+                    className="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                  />
+                )}
+              </div>
+            ))}
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                onClick={() => { setActiveModal('data'); setEditingItem(null); }}
+                className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveEditItem}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded text-sm"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* AI 生成模态框 */}
+      <Modal open={activeModal === 'ai-gen'} onClose={() => { setActiveModal('data'); setAiGenType(null); }} title="AI 批量生成" width="max-w-4xl">
+        <div className="space-y-4">
+          {/* 生成类型选择 */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setAiGenType('batch-data')}
+              className={`px-3 py-2 rounded text-sm ${aiGenType === 'batch-data' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+            >
+              批量数据
+            </button>
+            <button
+              onClick={() => setAiGenType('batch-tags')}
+              className={`px-3 py-2 rounded text-sm ${aiGenType === 'batch-tags' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+            >
+              批量 Tag
+            </button>
+            <button
+              onClick={() => setAiGenType('ability-field')}
+              className={`px-3 py-2 rounded text-sm ${aiGenType === 'ability-field' ? 'bg-purple-600' : 'bg-slate-700 hover:bg-slate-600'}`}
+            >
+              能力块 (GAS)
+            </button>
+          </div>
+
+          {/* 需求输入 */}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">
+              {aiGenType === 'batch-data' && '描述数据需求（如：生成多类实体，包含名称/数值/状态等属性）'}
+              {aiGenType === 'batch-tags' && '描述 Tag 需求（如：分类/阵营/稀有度等标签）'}
+              {aiGenType === 'ability-field' && '描述能力需求（如：选择目标后转移资源；属性为0则触发死亡）'}
+              {!aiGenType && '请先选择生成类型'}
+            </label>
+            <textarea
+              value={aiGenInput}
+              onChange={e => setAiGenInput(e.target.value)}
+              placeholder="输入你的需求描述..."
+              className="w-full h-24 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white resize-none"
+              disabled={!aiGenType}
+            />
+          </div>
+
+          {/* 生成的提示词 */}
+          {aiGenInput && aiGenType && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-400">生成的提示词</label>
+                <button
+                  onClick={() => {
+                    const prompt = generateAIPrompt(aiGenType, aiGenInput, currentSchema, state);
+                    navigator.clipboard.writeText(prompt);
+                  }}
+                  className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs"
+                >
+                  <Copy className="w-3 h-3 inline mr-1" /> 复制
+                </button>
+              </div>
+              <pre className="p-3 bg-slate-900 rounded text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-48 overflow-auto">
+                {generateAIPrompt(aiGenType, aiGenInput, currentSchema, state)}
+              </pre>
+            </div>
+          )}
+
+          {/* 导入区域 */}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">
+              {aiGenType === 'batch-tags' ? '粘贴 AI 生成的标签 JSON' : aiGenType === 'ability-field' ? '粘贴 AI 生成的能力块 JSON' : '粘贴 AI 生成的 JSON 数据'}
+            </label>
+            <textarea
+              placeholder={aiGenType === 'batch-tags' 
+                ? '[{"name": "分类A", "group": "分类"}, {"name": "状态A", "group": "状态"}]' 
+                : aiGenType === 'ability-field'
+                  ? '[{"id": "entity-1", "abilities": [{"id": "ability-1", "name": "能力名称", "trigger": {"type": "always"}, "effects": [{"id": "effect-1", "operations": [{"type": "modifyAttribute", "target": "target", "attrId": "attributeA", "value": -1}]}]}]}]'
+                  : '[{"id": "entity-1", "name": "实体A", ...}]'}
+              className="w-full h-24 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white font-mono resize-none"
+              onPaste={e => {
+                try {
+                  const text = e.clipboardData.getData('text');
+                  const data = JSON.parse(text);
+                  if (Array.isArray(data) && currentSchema) {
+                    if (aiGenType === 'batch-tags') {
+                      // 导入标签
+                      const existingTags = normalizeTags(currentSchema);
+                      const newTags = data.filter((t: { name: string }) => 
+                        !existingTags.some(et => et.name === t.name)
+                      );
+                      handleSchemaChange(currentSchema.id, { 
+                        tagDefinitions: [...existingTags, ...newTags]
+                      });
+                      setActiveModal('schema');
+                    } else if (aiGenType === 'ability-field') {
+                      const updatesById = new Map(
+                        data.map((item: Record<string, unknown>) => [String(item.id || ''), item])
+                      );
+                      const nextInstances = currentInstances.map(item => {
+                        const key = String(item.id || '');
+                        const update = updatesById.get(key) as Record<string, unknown> | undefined;
+                        if (!update) return item;
+                        const next: Record<string, unknown> = { ...item };
+                        if (Array.isArray(update.abilities)) {
+                          next.abilities = update.abilities;
+                        }
+                        return next;
+                      });
+                      handleInstanceChange(currentSchema.id, nextInstances);
+                      setActiveModal('data');
+                    } else {
+                      // 导入数据
+                      handleInstanceChange(currentSchema.id, [...currentInstances, ...data]);
+                      setActiveModal('data');
+                    }
+                    setAiGenType(null);
+                  }
+                } catch {
+                  // 忽略解析错误
+                }
+              }}
+            />
+            <p className="text-xs text-slate-500 mt-1">粘贴后自动导入</p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Schema 模板选择模态框 */}
+      <Modal open={schemaTemplateModal} onClose={() => setSchemaTemplateModal(false)} title="选择 Schema 模板">
+        <div className="grid grid-cols-3 gap-4">
+          {(Object.entries(SCHEMA_TEMPLATES) as [keyof typeof SCHEMA_TEMPLATES, typeof SCHEMA_TEMPLATES[keyof typeof SCHEMA_TEMPLATES]][]).map(([key, tpl]) => (
+            <button
+              key={key}
+              onClick={() => handleAddSchemaWithTemplate(key)}
+              className="p-4 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-600 hover:border-amber-500 text-left transition-colors"
+            >
+              <div className="text-sm font-medium">{tpl.name}</div>
+              <div className="text-xs text-slate-400 mt-1">{tpl.description}</div>
+              <div className="text-xs text-slate-500 mt-2">
+                {Object.keys(tpl.fields).length} 个预设字段
+              </div>
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      {/* 渲染组件编辑模态框 */}
+      <Modal open={activeModal === 'render-template'} onClose={() => setActiveModal(null)} title="编辑渲染代码" width="max-w-4xl">
+        <RenderComponentManager
+          components={state.renderComponents}
+          schemas={state.schemas}
+          onChange={components => setState(prev => ({ ...prev, renderComponents: components }))}
+          selectedId={(() => {
+            const comp = state.layout.find(c => c.id === state.selectedComponentId);
+            return comp?.data.renderComponentId as string | undefined;
+          })()}
+        />
+      </Modal>
+
+      {/* 标签管理模态框 */}
+      <Modal 
+        open={activeModal === 'tag-manager'} 
+        onClose={() => { 
+          setActiveModal('schema'); 
+          setEditingTagIndex(null); 
+          setNewTagName(''); 
+          setNewTagGroup(''); 
+        }} 
+        title="标签管理"
+        width="max-w-2xl"
+      >
+        {currentSchema && (
+          <div className="space-y-4">
+            {/* 添加/编辑标签 */}
+            <div className="p-3 bg-slate-800 rounded space-y-3">
+              <div className="text-sm font-medium">{editingTagIndex !== null ? '编辑标签' : '添加标签'}</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400">标签名称</label>
+                  <input
+                    type="text"
+                    value={newTagName}
+                    onChange={e => setNewTagName(e.target.value)}
+                    placeholder="如：稀有、普通、传说"
+                    className="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400">所属分组（可选）</label>
+                  <input
+                    type="text"
+                    value={newTagGroup}
+                    onChange={e => setNewTagGroup(e.target.value)}
+                    placeholder="如：稀有度、花色、类型"
+                    className="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-white"
+                    list="tag-groups"
+                  />
+                  <datalist id="tag-groups">
+                    {[...new Set(normalizeTags(currentSchema).map(t => t.group).filter(Boolean))].map(group => (
+                      <option key={group} value={group} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (!newTagName.trim()) return;
+                    const tags = normalizeTags(currentSchema);
+                    
+                    if (editingTagIndex !== null) {
+                      const updated = [...tags];
+                      updated[editingTagIndex] = { name: newTagName.trim(), group: newTagGroup.trim() || undefined };
+                      handleSchemaChange(currentSchema.id, { tagDefinitions: updated });
+                    } else {
+                      if (tags.some(t => t.name === newTagName.trim())) return;
+                      handleSchemaChange(currentSchema.id, { 
+                        tagDefinitions: [...tags, { name: newTagName.trim(), group: newTagGroup.trim() || undefined }]
+                      });
+                    }
+                    setNewTagName('');
+                    setNewTagGroup('');
+                    setEditingTagIndex(null);
+                  }}
+                  disabled={!newTagName.trim()}
+                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 rounded text-sm"
+                >
+                  {editingTagIndex !== null ? '保存修改' : '添加'}
+                </button>
+                {editingTagIndex !== null && (
+                  <button
+                    onClick={() => {
+                      const tags = normalizeTags(currentSchema);
+                      const updated = tags.filter((_, i) => i !== editingTagIndex);
+                      handleSchemaChange(currentSchema.id, { tagDefinitions: updated });
+                      setEditingTagIndex(null);
+                      setNewTagName('');
+                      setNewTagGroup('');
+                    }}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm"
+                  >
+                    删除
+                  </button>
+                )}
+                {editingTagIndex !== null && (
+                  <button
+                    onClick={() => {
+                      setEditingTagIndex(null);
+                      setNewTagName('');
+                      setNewTagGroup('');
+                    }}
+                    className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-sm"
+                  >
+                    取消
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 现有标签列表（按分组） */}
+            <div>
+              <div className="text-sm font-medium mb-2">现有标签</div>
+              {(() => {
+                const tags = normalizeTags(currentSchema);
+                const groups = [...new Set(tags.map(t => t.group || '未分组'))];
+                
+                return groups.length > 0 ? (
+                  <div className="space-y-3">
+                    {groups.map(group => (
+                      <div key={group} className="p-2 bg-slate-800 rounded">
+                        <div className="text-xs text-slate-500 mb-2">{group}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {tags.filter(t => (t.group || '未分组') === group).map((tag, idx) => {
+                            const globalIdx = tags.findIndex(t => t.name === tag.name);
+                            return (
+                              <span 
+                                key={`${tag.name}-${idx}`}
+                                onClick={() => {
+                                  setEditingTagIndex(globalIdx);
+                                  setNewTagName(tag.name);
+                                  setNewTagGroup(tag.group || '');
+                                }}
+                                className={`px-2 py-1 rounded text-xs cursor-pointer transition-colors ${
+                                  editingTagIndex === globalIdx 
+                                    ? 'bg-cyan-600 text-white' 
+                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                }`}
+                              >
+                                {tag.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500">暂无标签</div>
+                );
+              })()}
+            </div>
+
+            {/* AI批量生成提示 */}
+            <div className="p-3 bg-purple-900/30 border border-purple-700/50 rounded">
+              <div className="text-xs text-purple-300">
+                💡 使用 AI 批量生成：点击 Schema 编辑中的「AI生成」按钮，描述你需要的标签（如：扑克牌的四种花色、13种点数、大小王等）
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+    </div>
+  );
+}
+
+// 渲染组件管理组件
+function RenderComponentManager({
+  components,
+  schemas,
+  onChange,
+  selectedId,
+}: {
+  components: RenderComponent[];
+  schemas: SchemaDefinition[];
+  onChange: (components: RenderComponent[]) => void;
+  selectedId?: string;
+}) {
+  const [editing, setEditing] = useState<RenderComponent | null>(() => {
+    if (selectedId) {
+      return components.find(c => c.id === selectedId) || null;
+    }
+    return null;
+  });
+  const [requirement, setRequirement] = useState('');
+  
+  // 使用渲染组件专用的提示词生成器
+  const { generateFront, generateBack } = useRenderPrompt();
+
+  const handleAdd = () => {
+    setEditing({
+      id: `rc-${Date.now()}`,
+      name: '新渲染组件',
+      targetSchema: schemas[0]?.id || '',
+      renderCode: '',
+      description: '',
+    });
+  };
+
+  const handleSave = () => {
+    if (!editing) return;
+    const exists = components.find(c => c.id === editing.id);
+    if (exists) {
+      onChange(components.map(c => c.id === editing.id ? editing : c));
+    } else {
+      onChange([...components, editing]);
+    }
+    setEditing(null);
+  };
+
+  const handleDelete = (id: string) => {
+    onChange(components.filter(c => c.id !== id));
+  };
+
+  const targetSchema = schemas.find(s => s.id === editing?.targetSchema);
+
+  // 使用渲染组件专用的提示词生成器
+  const generatePrompt = () => generateFront({
+    requirement: requirement || '显示数据的基本信息',
+    schema: targetSchema,
+  });
+  
+  const generateBackPrompt = () => generateBack({
+    requirement: requirement || '生成背面样式',
+  });
+
+  return (
+    <div className="space-y-4">
+      {!editing ? (
+        <>
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-slate-400">制作渲染组件，AI根据数据结构生成显示代码</p>
+            <button onClick={handleAdd} className="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-sm">
+              + 新建组件
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {components.map(c => (
+              <div key={c.id} className="p-3 bg-slate-800 rounded border border-slate-600">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 mr-2">
+                    <div className="font-medium">{c.name}</div>
+                    {/* 直接在列表中更新 targetSchema */}
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-xs text-slate-400">适用:</span>
+                      <select
+                        value={schemas.find(s => s.id === c.targetSchema) ? c.targetSchema : ''}
+                        onChange={e => {
+                          const updated = components.map(comp => 
+                            comp.id === c.id ? { ...comp, targetSchema: e.target.value } : comp
+                          );
+                          onChange(updated);
+                        }}
+                        className={`px-1 py-0.5 bg-slate-700 border rounded text-xs text-white ${
+                          !schemas.find(s => s.id === c.targetSchema) ? 'border-red-500' : 'border-slate-600'
+                        }`}
+                      >
+                        <option value="">选择 Schema</option>
+                        {schemas.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => setEditing(c)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">编辑</button>
+                    <button onClick={() => handleDelete(c.id)} className="px-2 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded text-xs">删除</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {components.length === 0 && <div className="col-span-2 text-center text-slate-500 py-8">暂无渲染组件，点击“新建组件”创建</div>}
+          </div>
+        </>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400">组件名称</label>
+              <input
+                type="text"
+                value={editing.name}
+                onChange={e => setEditing({ ...editing, name: e.target.value })}
+                className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400">适用 Schema</label>
+              <select
+                value={editing.targetSchema}
+                onChange={e => setEditing({ ...editing, targetSchema: e.target.value })}
+                className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+              >
+                {schemas.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400">输入需求描述</label>
+            <input
+              type="text"
+              value={requirement}
+              onChange={e => setRequirement(e.target.value)}
+              placeholder="如：显示图标和属性信息"
+              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-400">正面渲染结果（粘贴导入）</label>
+                <button
+                  onClick={() => navigator.clipboard.writeText(generatePrompt())}
+                  className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[10px]"
+                >
+                  复制正面提示词
+                </button>
+              </div>
+              <textarea
+                value={editing.renderCode}
+                onPaste={e => {
+                  const text = e.clipboardData.getData('text');
+                  if (text.trim()) {
+                    setEditing({ ...editing, renderCode: text });
+                  }
+                }}
+                readOnly
+                placeholder="粘贴AI生成结果"
+                className="w-full h-32 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white font-mono text-xs resize-none"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-slate-400">背面渲染结果（粘贴导入）</label>
+                <button
+                  onClick={() => navigator.clipboard.writeText(generateBackPrompt())}
+                  className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[10px]"
+                >
+                  复制背面提示词
+                </button>
+              </div>
+              <textarea
+                value={editing.backRenderCode || ''}
+                onPaste={e => {
+                  const text = e.clipboardData.getData('text');
+                  if (text.trim()) {
+                    setEditing({ ...editing, backRenderCode: text });
+                  }
+                }}
+                readOnly
+                placeholder="粘贴AI生成结果"
+                className="w-full h-32 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white font-mono text-xs resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setEditing(null)} className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-sm">取消</button>
+            <button onClick={handleSave} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-sm">保存</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// AI 提示词生成函数 - 包含丰富上下文
+function generateAIPrompt(
+  type: AIGenType, 
+  input: string, 
+  schema: SchemaDefinition | undefined,
+  state: BuilderState
+): string {
+  if (!type || !schema) return '';
+  
+  // 构建完整上下文
+  const schemaFields = Object.entries(schema.fields)
+    .map(([k, f]) => `- ${k}: ${f.type} (${f.label})${f.description ? ` - ${f.description}` : ''}`)
+    .join('\n');
+
+  const allSchemas = state.schemas
+    .map(s => `- ${s.name} (${s.id}): ${Object.keys(s.fields).length}个字段`)
+    .join('\n');
+
+  const existingData = state.instances[schema.id] || [];
+  const existingDataSample = existingData.length > 0 
+    ? `\n已有数据示例 (${existingData.length}条):\n${JSON.stringify(existingData.slice(0, 2), null, 2)}`
+    : '';
+
+  const renderComponents = state.renderComponents.length > 0
+    ? `\n渲染组件: ${state.renderComponents.map(rc => rc.name).join(', ')}`
+    : '';
+
+  const gameContext = `## 游戏上下文
+游戏名称: ${state.name}
+游戏描述: ${state.description || '未设置'}
+所有 Schema:
+${allSchemas}${renderComponents}`;
+
+  // 检查是否有tags字段
+  const hasTagsField = Object.entries(schema.fields).some(([, f]) => f.type === 'array' && 'tagEditor' in f);
+  
+  // 获取可用标签信息
+  const availableTagsInfo = schema.tagDefinitions?.length 
+    ? `\n## 可用标签（请从中选择）\n${[...new Set(schema.tagDefinitions.map(t => t.group || '未分组'))]
+        .map(g => `- ${g}: ${schema.tagDefinitions?.filter(t => (t.group || '未分组') === g).map(t => t.name).join(', ')}`)
+        .join('\n')}`
+    : '';
+
+  if (type === 'batch-data') {
+    const tagGuidance = hasTagsField ? `
+## Tag 使用说明
+- tags 字段应使用上方"可用标签"中定义的标签
+- 一个实体可以有多个 Tag，表示不同维度的属性
+- Tag 用于筛选/分组/规则匹配
+${availableTagsInfo}
+` : '';
+
+    return `你是一个游戏数据生成器。请根据需求生成 JSON 数据数组。
+
+${gameContext}
+
+## 目标 Schema: ${schema.name}
+${schema.description || ''}
+
+## 字段定义
+${schemaFields}
+${existingDataSample}
+${tagGuidance}
+## 用户需求
+${input}
+
+## 技术栈
+- Tailwind CSS 4
+- React 19
+- TypeScript
+
+## 输出格式
+请输出 JSON 数组，每个元素包含所有字段。例如:
+[
+  { "id": "xxx-1", "name": "...", "tags": ["tag1", "tag2"], ... },
+  { "id": "xxx-2", "name": "...", "tags": ["tag3"], ... }
+]
+
+注意：
+1. id 字段必须唯一，建议使用有意义的前缀
+2. 严格按照 Schema 字段类型生成
+3. 只输出纯 JSON，不要 markdown 代码块或其他解释
+4. 参考已有数据的格式和命名风格
+5. tags 字段必须使用已定义的可用标签`;
+  }
+
+  if (type === 'batch-tags') {
+    // 获取已有标签分组
+    const existingGroups = [...new Set((schema.tagDefinitions || []).map(t => t.group).filter(Boolean))];
+    const existingGroupsInfo = existingGroups.length > 0 
+      ? `\n已有分组: ${existingGroups.join(', ')}`
+      : '';
+    
+    return `你是一个游戏 Tag 系统设计器。请根据需求设计 Tag 列表。
+
+${gameContext}
+
+## 目标 Schema: ${schema.name}
+${schema.description || ''}
+${existingGroupsInfo}
+
+## 用户需求
+${input}
+
+## Tag 设计原则
+Tag 用于描述**单个实体的固有属性**，不是组合规则或游戏逻辑。
+
+✅ 正确使用 Tag：
+- 阵营（联盟/部落/中立）
+- 类型（攻击/防御/辅助）
+- 稀有度（普通/稀有/史诗）
+- 角色职业（战士/法师/游侠）
+- 资源类别（金币/能量/耐力）
+
+❌ 错误使用 Tag（这些是规则/逻辑，不是属性）：
+- 组合判定（连击、套装效果）→ 应在规则代码中定义
+- 行为限制 → 应在 moves/规则代码中定义
+- 胜负条件 → 应在 endgame 中定义
+
+## 输出格式
+请输出 JSON 数组，每个 Tag 包含 name 和可选的 group（分组，用于配置时分类）。
+
+示例:
+[
+  { "name": "联盟", "group": "阵营" },
+  { "name": "部落", "group": "阵营" },
+  { "name": "攻击", "group": "类型" },
+  { "name": "防御", "group": "类型" },
+  { "name": "史诗", "group": "稀有度" }
+]
+
+注意：
+1. 只输出纯 JSON，不要 markdown 代码块
+2. name 是实际使用的标签值
+3. group 用于配置时分类，同类型标签放同一组
+4. 只描述单个实体的固有属性，不要包含组合规则`;
+  }
+
+  if (type === 'ability-field') {
+    const attributeCandidates = state.schemas
+      .map(s => {
+        const fields = Object.entries(s.fields)
+          .filter(([, f]) => f.type === 'number')
+          .map(([key]) => key);
+        return fields.length > 0 ? `- ${s.name} (${s.id}): ${fields.join(', ')}` : null;
+      })
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+    const attributeInfo = attributeCandidates
+      ? `\n## 可能的属性/资源字段（可用作 attrId/cost）\n${attributeCandidates}`
+      : '\n## 可能的属性/资源字段（可用作 attrId/cost）\n无';
+
+    return `你是一个 GAS 能力数据生成器。请根据需求生成 AbilityDefinition JSON（不是代码）。
+
+${gameContext}
+
+## 目标 Schema: ${schema.name}
+字段定义:
+${schemaFields}
+${attributeInfo}
+
+## 用户需求
+${input}
+
+## GAS 结构要求（必须严格遵守）
+- AbilityDefinition 字段: id, name, description?, tags?, trigger?, effects?, variants?, cooldown?, cost?
+- trigger/condition 使用 EffectCondition：
+  - always / hasTag / attributeCompare / and / or / not
+- EffectDefinition 字段: id, name?, description?, operations, condition?
+- EffectOperation 类型：
+  - modifyAttribute / setAttribute / addTag / removeTag / custom
+- TargetRef: self | target | allPlayers | allEnemies | { entityId: string }
+- Expression: number | { type: 'attribute', entityId, attrId } | add/subtract/multiply/min/max
+- custom 操作使用 actionId + params，自定义逻辑由游戏层实现
+
+## custom actionId 命名规范
+- 使用 kebab-case
+- 建议以 abilityId 作为前缀，例如 "ability-1-transfer-resource"
+
+## 输出格式（JSON 数组）
+[
+  {
+    "id": "entity-1",
+    "abilities": [
+      {
+        "id": "ability-1",
+        "name": "能力名称",
+        "trigger": { "type": "always" },
+        "effects": [
+          {
+            "id": "effect-1",
+            "operations": [
+              { "type": "modifyAttribute", "target": "target", "attrId": "attributeA", "value": -1 }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
+
+要求：
+1. 只输出纯 JSON，不要 markdown 代码块或解释
+2. abilities 为数组，每个元素是 AbilityDefinition
+3. trigger/condition 必须使用 EffectCondition 结构，不要使用字符串条件
+4. operations 必须是数组，单步也用数组表示`;
+  }
+
+  return '';
+}

@@ -47,7 +47,7 @@ export const PhaseIndicatorSkeleton = memo(function PhaseIndicatorSkeleton({
             className={className}
             data-orientation={orientation}
             role="list"
-            aria-label="Game phases"
+            aria-label="游戏阶段"
         >
             {phases.map((phase, index) => {
                 const isActive = phase.id === currentPhaseId;

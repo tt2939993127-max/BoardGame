@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import type { PhaseInfo } from '../../../core/ui';
 
 // ============================================================================
-// PhaseIndicator 预设
+// 阶段指示器预设
 // ============================================================================
 
 export interface PhaseItemPresetOptions {
@@ -62,11 +62,11 @@ export function createPhaseItemRender(options: PhaseItemPresetOptions = {}) {
 export const defaultPhaseItemRender = createPhaseItemRender();
 
 // ============================================================================
-// PlayerPanel / ResourceBar 预设
+// 玩家面板 / 资源条预设
 // ============================================================================
 
 export interface ResourceBarPresetOptions {
-    /** 资源配置：key -> { max, gradient, labelColor, label } */
+    /** 资源配置：键名 -> { max, gradient, labelColor, label } */
     resources?: Record<string, {
         max: number;
         gradient: string;
@@ -148,7 +148,7 @@ export function createResourceBarRender(options: ResourceBarPresetOptions = {}) 
 export const defaultResourceBarRender = createResourceBarRender();
 
 // ============================================================================
-// PlayerPanel 容器预设
+// 玩家面板容器预设
 // ============================================================================
 
 export interface PlayerPanelPresetOptions {
@@ -161,7 +161,7 @@ export const defaultPlayerPanelClassName =
     'flex flex-col gap-[0.8vw] w-full bg-slate-900/80 p-[0.8vw] rounded-[0.8vw] border border-slate-600/50 shadow-xl backdrop-blur-md';
 
 // ============================================================================
-// SpotlightSkeleton 预设
+// 聚焦骨架预设
 // ============================================================================
 
 export interface SpotlightPresetOptions {
@@ -171,10 +171,10 @@ export interface SpotlightPresetOptions {
     containerClassName?: string;
 }
 
-/** 默认 Spotlight 背景样式 */
+/** 默认聚焦背景样式 */
 export const defaultSpotlightBackdrop = 'bg-black/60 backdrop-blur-sm';
 
-/** 默认 Spotlight 容器样式 */
+/** 默认聚焦容器样式 */
 export const defaultSpotlightContainer = 'flex flex-col items-center gap-[2vw]';
 
 // ============================================================================

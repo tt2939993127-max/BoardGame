@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { AUTH_API_URL } from '../config/server';
 import i18n from '../lib/i18n';
 
@@ -16,12 +16,15 @@ interface User {
 interface AuthContextType {
     user: User | null;
     token: string | null;
-    login: (username: string, password: string) => Promise<void>;
+    // account: 邮箱
+    login: (email: string, password: string) => Promise<void>;
     register: (username: string, email: string, code: string, password: string) => Promise<void>;
     sendRegisterCode: (email: string) => Promise<void>;
     logout: () => void;
     sendEmailCode: (email: string) => Promise<void>;
     verifyEmail: (email: string, code: string) => Promise<void>;
+    changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+    updateAvatar: (avatar: string) => Promise<User>;
     isLoading: boolean;
 }
 
@@ -39,33 +42,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const savedUser = localStorage.getItem('auth_user');
 
         if (savedToken && savedUser) {
-            setToken(savedToken);
-            setUser(JSON.parse(savedUser));
+            try {
+                const parsedUser = JSON.parse(savedUser) as User;
+                setToken(savedToken);
+                setUser(parsedUser);
+            } catch (error) {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user');
+            }
         }
         setIsLoading(false);
     }, []);
 
-    const login = async (username: string, password: string) => {
+    const login = useCallback(async (email: string, password: string) => {
         const response = await fetch(`${AUTH_API_URL}/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
-            body: JSON.stringify({ username, password }),
+            body: JSON.stringify({ account: email, password }),
         });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '登录失败');
+        const payload = await response.json().catch(() => null) as null | {
+            success: boolean;
+            message?: string;
+            data?: { token?: string; user?: User };
+        };
+
+        if (!response.ok || !payload) {
+            throw new Error('登录失败');
         }
 
-        const data = await response.json();
-        setToken(data.token);
-        setUser(data.user);
+        if (!payload.success) {
+            throw new Error(payload.message || '登录失败');
+        }
 
-        localStorage.setItem('auth_token', data.token);
-        localStorage.setItem('auth_user', JSON.stringify(data.user));
-    };
+        const token = payload.data?.token ?? '';
+        const user = payload.data?.user ?? null;
+        if (!token || !user) {
+            throw new Error('登录响应异常');
+        }
 
-    const sendRegisterCode = async (email: string) => {
+        setToken(token);
+        setUser(user);
+
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('auth_user', JSON.stringify(user));
+    }, []);
+
+    const sendRegisterCode = useCallback(async (email: string) => {
         const response = await fetch(`${AUTH_API_URL}/send-register-code`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
@@ -76,9 +99,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const error = await response.json();
             throw new Error(error.error || '发送验证码失败');
         }
-    };
+    }, []);
 
-    const register = async (username: string, email: string, code: string, password: string) => {
+    const register = useCallback(async (username: string, email: string, code: string, password: string) => {
         const response = await fetch(`${AUTH_API_URL}/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
@@ -96,9 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         localStorage.setItem('auth_token', data.token);
         localStorage.setItem('auth_user', JSON.stringify(data.user));
-    };
+    }, []);
 
-    const logout = () => {
+    const logout = useCallback(() => {
         if (token) {
             fetch(`${AUTH_API_URL}/logout`, {
                 method: 'POST',
@@ -115,9 +138,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
-    };
+    }, [token]);
 
-    const sendEmailCode = async (email: string) => {
+    const sendEmailCode = useCallback(async (email: string) => {
         if (!token) throw new Error('请先登录');
 
         const response = await fetch(`${AUTH_API_URL}/send-email-code`, {
@@ -134,9 +157,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const error = await response.json();
             throw new Error(error.error || '发送验证码失败');
         }
-    };
+    }, [token]);
 
-    const verifyEmail = async (email: string, code: string) => {
+    const verifyEmail = useCallback(async (email: string, code: string) => {
         if (!token) throw new Error('请先登录');
 
         const response = await fetch(`${AUTH_API_URL}/verify-email`, {
@@ -158,10 +181,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const updatedUser = data.user;
         setUser(updatedUser);
         localStorage.setItem('auth_user', JSON.stringify(updatedUser));
-    };
+    }, [token]);
+
+    const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+        if (!token) throw new Error('请先登录');
+
+        const response = await fetch(`${AUTH_API_URL}/change-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept-Language': i18n.language,
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ currentPassword, newPassword }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '修改密码失败');
+        }
+    }, [token]);
+
+    const updateAvatar = useCallback(async (avatar: string) => {
+        if (!token) throw new Error('请先登录');
+        const normalizedAvatar = avatar.trim();
+        if (!normalizedAvatar) throw new Error('请输入头像地址');
+
+        const response = await fetch(`${AUTH_API_URL}/update-avatar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept-Language': i18n.language,
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ avatar: normalizedAvatar }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '头像更新失败');
+        }
+
+        const data = await response.json();
+        const updatedUser = { ...user, ...data.user } as User;
+        setUser(updatedUser);
+        localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+        return updatedUser;
+    }, [token, user]);
+
+    const contextValue = useMemo(() => ({
+        user,
+        token,
+        login,
+        register,
+        sendRegisterCode,
+        logout,
+        sendEmailCode,
+        verifyEmail,
+        changePassword,
+        updateAvatar,
+        isLoading,
+    }), [
+        user,
+        token,
+        login,
+        register,
+        sendRegisterCode,
+        logout,
+        sendEmailCode,
+        verifyEmail,
+        changePassword,
+        updateAvatar,
+        isLoading,
+    ]);
 
     return (
-        <AuthContext.Provider value={{ user, token, login, register, sendRegisterCode, logout, sendEmailCode, verifyEmail, isLoading }}>
+        <AuthContext.Provider value={contextValue}>
             {children}
         </AuthContext.Provider>
     );

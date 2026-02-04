@@ -33,7 +33,7 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
 
                     <div className="relative text-center text-white">
                         <h2 className="text-3xl font-bold tracking-tight">BoardGame</h2>
-                        <p className="text-indigo-200 text-sm font-medium">Platform</p>
+                        <p className="text-indigo-200 text-sm font-medium">平台</p>
                     </div>
 
                     <button
@@ -46,8 +46,9 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
 
                 <div className="p-6 space-y-6">
                     <div className="space-y-4">
+                        {/* 待办：请替换为实际仓库地址 */}
                         <a
-                            href="https://github.com/your-repo/boardgame" // Replace with actual URL
+                            href="https://github.com/your-repo/boardgame"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-4 p-4 rounded-xl bg-zinc-50 hover:bg-zinc-100 transition-colors group"
@@ -57,7 +58,7 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                             </div>
                             <div>
                                 <h3 className="font-bold text-zinc-900">GitHub</h3>
-                                <p className="text-xs text-zinc-500">View source code & contribute</p>
+                                <p className="text-xs text-zinc-500">查看源码并参与贡献</p>
                             </div>
                         </a>
 
@@ -66,8 +67,8 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                                 <MessageCircle size={24} />
                             </div>
                             <div>
-                                <h3 className="font-bold text-zinc-900">QQ Group</h3>
-                                <p className="text-xs text-zinc-500">Join our community: <span className="font-mono font-bold text-zinc-700">123456789</span></p>
+                                <h3 className="font-bold text-zinc-900">QQ群</h3>
+                                <p className="text-xs text-zinc-500">加入社区：<span className="font-mono font-bold text-zinc-700">123456789</span></p>
                             </div>
                         </div>
                     </div>
@@ -76,23 +77,23 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                         <div className="text-center mb-4">
                             <h3 className="text-sm font-bold text-zinc-900 flex items-center justify-center gap-2">
                                 <Heart size={16} className="text-rose-500 fill-rose-500" />
-                                Support Us
+                                支持我们
                             </h3>
-                            <p className="text-xs text-zinc-500 mt-1">Scan QR code to donate via WeChat/Alipay</p>
+                            <p className="text-xs text-zinc-500 mt-1">扫码赞助（微信 / 支付宝）</p>
                         </div>
                         <div className="flex justify-center gap-4">
-                            {/* Placeholders for QR Codes */}
+                            {/* 二维码占位 */}
                             <div className="w-32 h-32 bg-zinc-100 rounded-lg flex items-center justify-center text-xs text-zinc-400 border border-zinc-200">
-                                WeChat Pay
+                                微信
                             </div>
                             <div className="w-32 h-32 bg-zinc-100 rounded-lg flex items-center justify-center text-xs text-zinc-400 border border-zinc-200">
-                                Alipay
+                                支付宝
                             </div>
                         </div>
                     </div>
 
                     <div className="text-center text-[10px] text-zinc-400">
-                        Version 0.1.0-beta
+                        版本 0.1.0-beta
                     </div>
                 </div>
             </motion.div>

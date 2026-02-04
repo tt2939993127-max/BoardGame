@@ -31,7 +31,7 @@ export const ShakeContainer = ({
     );
 };
 
-// Hook: 管理震动状态
+// Hook：管理震动状态
 export const useShake = (duration = 500) => {
     const [isShaking, setIsShaking] = React.useState(false);
 

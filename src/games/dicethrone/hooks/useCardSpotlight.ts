@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlayerId } from '../../../engine/types';
+import type { CardPreviewRef } from '../../../systems/CardSystem';
 import type { DieFace } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
 
@@ -18,7 +19,7 @@ export interface CardSpotlightConfig {
     lastPlayedCard?: {
         timestamp: number;
         cardId: string;
-        atlasIndex?: number;
+        previewRef?: CardPreviewRef;
         playerId: PlayerId;
     };
     /** 最后的额外骰子投掷 */
@@ -186,12 +187,10 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
 
         if (!isSpectator && cardPlayerId === selfPlayerId) return;
 
-        const resolvedAtlasIndex = card.atlasIndex ?? 0;
-
         const newItem: CardSpotlightItem = {
             id: `${card.cardId}-${card.timestamp}`,
             timestamp: card.timestamp,
-            atlasIndex: resolvedAtlasIndex,
+            previewRef: card.previewRef,
             playerId: card.playerId,
             playerName: opponentName, // 注意：如果是自己，这里的名字可能不对，但 UI 暂未显示名字
         };

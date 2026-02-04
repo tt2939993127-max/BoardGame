@@ -69,22 +69,24 @@ export const useUndoStatus = (): {
 } => {
     const undoState = useUndo();
     
-    if (!undoState || undoState.isGameOver || !undoState.playerID) {
+    if (!undoState || undoState.isGameOver || undoState.playerID == null) {
         return { status: null, hasNotification: false };
     }
 
     const { G, playerID } = undoState;
+    const normalizedPlayerId = String(playerID);
     const history = G.sys?.undo?.snapshots || [];
     const request = G.sys?.undo?.pendingRequest;
+    const requesterId = request?.requesterId != null ? String(request.requesterId) : null;
     
     let status: 'canRequest' | 'canReview' | 'isRequester' | null = null;
     let hasNotification = false;
     
-    if (request?.requesterId === playerID) {
+    if (requesterId && requesterId === normalizedPlayerId) {
         // 我是申请者，等待批准
         status = 'isRequester';
         hasNotification = false; // 等待中不显示红点
-    } else if (request && request.requesterId !== playerID) {
+    } else if (requesterId && requesterId !== normalizedPlayerId) {
         // 对方请求撤回，需要我审批
         status = 'canReview';
         hasNotification = true; // 显示红点提醒

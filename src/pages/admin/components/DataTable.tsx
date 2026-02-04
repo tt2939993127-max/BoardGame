@@ -45,7 +45,7 @@ export default function DataTable<T extends { id: string | number }>({
                                 >
                                     <div className="flex items-center gap-1 group cursor-pointer hover:text-zinc-800 transition-colors">
                                         {col.header}
-                                        {/* Placeholder for sorting */}
+                                        {/* 排序占位 */}
                                         {/* <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-50 transition-opacity" /> */}
                                     </div>
                                 </th>

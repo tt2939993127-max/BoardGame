@@ -51,7 +51,7 @@ export const AudioControlSection: React.FC<AudioControlSectionProps> = ({ isDark
 
     return (
         <div className={clsx("space-y-4 pt-2 border-t", borderClass)}>
-            {/* Volume Sliders */}
+            {/* 音量滑块 */}
             <div className="space-y-3">
                 <div className="space-y-1.5">
                     <div className={clsx("flex items-center justify-between text-[10px] uppercase tracking-wider font-bold", labelClass)}>
@@ -96,7 +96,7 @@ export const AudioControlSection: React.FC<AudioControlSectionProps> = ({ isDark
                 </div>
             </div>
 
-            {/* BGM Info & Switcher */}
+            {/* 背景音乐信息与切换 */}
             <div className={clsx("flex items-center justify-between p-2 rounded-xl border", cardBgClass)}>
                 <div className="flex items-center gap-2 overflow-hidden">
                     <motion.div

@@ -8,6 +8,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import type { Model } from 'mongoose';
 import request from 'supertest';
 import { AuthModule } from '../src/modules/auth/auth.module';
+import { AuthService } from '../src/modules/auth/auth.service';
 import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema';
 import { FriendModule } from '../src/modules/friend/friend.module';
 import { Friend, type FriendDocument } from '../src/modules/friend/schemas/friend.schema';
@@ -23,6 +24,7 @@ describe('Social Modules (e2e)', () => {
     let userModel: Model<UserDocument>;
     let friendModel: Model<FriendDocument>;
     let messageModel: Model<MessageDocument>;
+    let authService: AuthService;
 
     beforeAll(async () => {
         const externalMongoUri = process.env.MONGO_URI;
@@ -47,6 +49,7 @@ describe('Social Modules (e2e)', () => {
         userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
         friendModel = moduleRef.get<Model<FriendDocument>>(getModelToken(Friend.name));
         messageModel = moduleRef.get<Model<MessageDocument>>(getModelToken(Message.name));
+        authService = moduleRef.get<AuthService>(AuthService);
         app.useGlobalPipes(
             new ValidationPipe({
                 whitelist: true,
@@ -75,14 +78,20 @@ describe('Social Modules (e2e)', () => {
     });
 
     it('好友请求/消息/邀请流程', async () => {
+        const emailA = 'alice@example.com';
+        const codeA = '123456';
+        await authService.storeEmailCode(emailA, codeA);
         const registerA = await request(app.getHttpServer())
             .post('/auth/register')
-            .send({ username: 'alice', password: 'pass1234' })
+            .send({ username: 'alice', email: emailA, code: codeA, password: 'pass1234' })
             .expect(201);
 
+        const emailB = 'bob@example.com';
+        const codeB = '654321';
+        await authService.storeEmailCode(emailB, codeB);
         const registerB = await request(app.getHttpServer())
             .post('/auth/register')
-            .send({ username: 'bob', password: 'pass1234' })
+            .send({ username: 'bob', email: emailB, code: codeB, password: 'pass1234' })
             .expect(201);
 
         const tokenA = registerA.body.token as string;

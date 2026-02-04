@@ -5,7 +5,7 @@ interface InfoTooltipProps {
     content: React.ReactNode[];
     isVisible: boolean;
     position?: 'right' | 'left';
-    className?: string; // Extra styles
+    className?: string; // 额外样式
 }
 
 /**
@@ -33,7 +33,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
                 ${className}
             `}
         >
-            {/* Arrow */}
+            {/* 箭头 */}
             <div
                 className={`
                     absolute top-[0.6vw] w-[0.6vw] h-[0.6vw] bg-slate-900 
@@ -42,12 +42,12 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
                 `}
             />
 
-            {/* Title */}
+            {/* 标题 */}
             <div className="text-amber-400 font-bold text-[0.9vw] mb-[0.4vw] pb-[0.2vw] border-b border-white/10 leading-tight">
                 {title}
             </div>
 
-            {/* Content List */}
+            {/* 内容列表 */}
             <div className="flex flex-col gap-[0.2vw]">
                 {content.map((line, i) => (
                     <div key={i} className="text-[0.7vw] text-slate-300 flex items-start leading-snug">

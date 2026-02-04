@@ -249,7 +249,9 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                             牌库剩余: {G?.core?.players?.[dealPlayer]?.deck?.length ?? 0} 张
                             {(() => {
                                 const targetAtlasIndex = Number(deckIndex);
-                                const cardInDeck = G?.core?.players?.[dealPlayer]?.deck?.find((c: any) => c.atlasIndex === targetAtlasIndex);
+                                const cardInDeck = G?.core?.players?.[dealPlayer]?.deck?.find(
+                                    (c: any) => c.previewRef?.type === 'atlas' && c.previewRef.index === targetAtlasIndex
+                                );
                                 return cardInDeck ? (
                                     <span className="ml-1">| 牌库中存在: {cardInDeck.id}</span>
                                 ) : (

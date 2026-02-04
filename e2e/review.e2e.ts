@@ -9,9 +9,16 @@ const mockUser = {
 
 test.describe('Game Review System', () => {
     test.beforeEach(async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('i18nextLng', 'en');
+        });
+        await page.addInitScript((user) => {
+            localStorage.setItem('auth_token', 'e2e-token');
+            localStorage.setItem('auth_user', JSON.stringify(user));
+        }, mockUser);
         // Mock user login
         await page.route('**/auth/me', async route => {
-            await route.fulfill({ json: { user: mockUser } });
+            await route.fulfill({ json: { user: mockUser }, status: 200 });
         });
 
         // Mock initial stats (empty)
@@ -45,13 +52,34 @@ test.describe('Game Review System', () => {
             });
         });
 
+        await page.route('**/auth/reviews/*', async route => {
+            if (route.request().method() === 'GET') {
+                await route.fulfill({
+                    json: {
+                        items: [],
+                        page: 1,
+                        limit: 5,
+                        total: 0,
+                        hasMore: false
+                    }
+                });
+            } else {
+                await route.fallback();
+            }
+        });
+
         await page.goto('/?game=tictactoe');
     });
 
     test('should allow a logged-in user to post a review', async ({ page }) => {
-        // 1. Check if review section is visible
-        const reviewSection = page.getByRole('heading', { name: '游戏评价' });
-        await expect(reviewSection).toBeVisible();
+        const serviceUnavailable = page.getByRole('heading', { name: /Service Unavailable|服务不可用/i });
+        if (await serviceUnavailable.isVisible().catch(() => false)) {
+            await page.getByRole('button', { name: /Close|关闭/i }).first().click();
+        }
+        // 1. Switch to Reviews tab and ensure stats visible
+        const modalRoot = page.locator('#modal-root');
+        await modalRoot.getByRole('button', { name: /Reviews|评价/i }).click();
+        await expect(modalRoot.getByText(/Few Reviews|评价较少/i)).toBeVisible();
 
         // 2. Mock create review response
         await page.route('**/auth/reviews/tictactoe', async route => {
@@ -59,34 +87,43 @@ test.describe('Game Review System', () => {
                 await route.fulfill({
                     status: 201,
                     json: {
-                        message: 'Review saved',
-                        review: {
-                            isPositive: true,
-                            content: 'Great game!',
-                            createdAt: new Date().toISOString(),
-                            user: { _id: mockUser.id, username: mockUser.username }
-                        }
+                        isPositive: true,
+                        content: 'Great game!',
+                        createdAt: new Date().toISOString(),
+                        user: { _id: mockUser.id, username: mockUser.username }
                     }
                 });
+                return;
             }
+            if (route.request().method() === 'GET') {
+                await route.fulfill({
+                    json: {
+                        items: [],
+                        page: 1,
+                        limit: 5,
+                        total: 0,
+                        hasMore: false
+                    }
+                });
+                return;
+            }
+            await route.fallback();
         });
 
-        // 3. Select game if needed (ensure we are on tictactoe)
-        // Find the select element inside the review section
-        const select = reviewSection.locator('..').locator('select');
-        // Or just strictly select by role if it's the only combobox or easy to pinpoint
-        await page.getByRole('combobox').selectOption('tictactoe');
+        // 3. Open review modal
+        const writeButton = modalRoot.getByRole('button', { name: /写评价|撰写评价|Write|Review/i }).first();
+        await expect(writeButton).toBeVisible();
+        await writeButton.click();
 
         // 4. Fill and submit form
-        // Use a more flexible locator in case of i18n delay or mismatch
-        const positiveBtn = page.getByRole('button', { name: /推荐|Positive|form\.positive/i });
-        await expect(positiveBtn).toBeVisible();
+        const positiveBtn = modalRoot.getByRole('button', { name: /推荐|Recommend/i });
+        await expect(positiveBtn).toBeVisible({ timeout: 10000 });
         await positiveBtn.click();
 
-        const textarea = page.getByPlaceholder('写点什么...');
+        const textarea = modalRoot.getByPlaceholder(/写点什么|Write something/i);
         await textarea.fill('Great game!');
 
-        const submitBtn = page.getByRole('button', { name: '发布评论' });
+        const submitBtn = modalRoot.getByRole('button', { name: /发布评论|Post Review/i });
 
         // Mock refresh stats after submit
         await page.route('**/auth/reviews/tictactoe/stats', async route => {
@@ -133,8 +170,8 @@ test.describe('Game Review System', () => {
         await submitBtn.click();
 
         // 4. Verify toast or update
-        await expect(page.getByText('评价已发布')).toBeVisible();
-        await expect(page.getByText('100% 好评')).toBeVisible(); // stats updated
+        await expect(page.getByText(/评价已发布|Review saved|Review posted/i)).toBeVisible();
+        await expect(page.getByText(/100%\s*(好评|Positive)/i)).toBeVisible(); // stats updated
         await expect(page.getByText('ReviewerBot', { exact: true })).toBeVisible(); // list updated
     });
 });

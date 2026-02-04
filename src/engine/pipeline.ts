@@ -91,6 +91,10 @@ export function createInitialSystemState(
             entries: [],
             maxEntries: 1000,
         },
+        actionLog: {
+            entries: [],
+            maxEntries: 50,
+        },
         rematch: {
             votes: {},
             ready: false,

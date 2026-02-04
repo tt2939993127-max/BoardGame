@@ -18,14 +18,14 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
     const { success, error } = useToast();
     const { openModal } = useModalStack();
 
-    // Fetch stats
+    // 获取统计数据
     const { data: stats, isError: isStatsError } = useQuery({
         queryKey: ['reviewStats', gameId],
         queryFn: () => fetchReviewStats(gameId),
         enabled: !!gameId,
     });
 
-    // Fetch my review
+    // 获取我的评价
     const { data: myReview } = useQuery({
         queryKey: ['myReview', gameId],
         queryFn: () => fetchMyReview(gameId),
@@ -47,7 +47,7 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
             render: ({ close }) => (
                 <ModalBase onClose={close}>
                     <div className="bg-parchment-card-bg w-full max-w-lg rounded-sm shadow-parchment-card border border-parchment-card-border/30 overflow-hidden pointer-events-auto flex flex-col">
-                        {/* Modal Header */}
+                        {/* 弹窗头部 */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-parchment-card-border/10">
                             <span className="text-lg font-bold text-parchment-base-text uppercase tracking-widest">
                                 {myReview ? t('form.editTitle', '修改我的评价') : t('form.newTitle', '撰写评价')}
@@ -57,7 +57,7 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
                             </button>
                         </div>
 
-                        {/* Modal Content */}
+                        {/* 弹窗内容 */}
                         <div className="p-6">
                             <ReviewForm
                                 onSubmit={async (data) => {
@@ -92,7 +92,7 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
 
     return (
         <div className="flex flex-col gap-2.5 h-full px-0.5">
-            {/* Ultra-compact Header with Stats at Top */}
+            {/* 顶部紧凑统计区 */}
             <div className="shrink-0 flex flex-col gap-2">
                 {stats ? (
                     <div className="flex flex-col gap-1.5">
@@ -134,7 +134,7 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
                 </div>
             )}
 
-            {/* Review List - Scrollable */}
+            {/* 评价列表 - 可滚动 */}
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 mt-0.5">
                 <ReviewListWrapper
                     gameId={gameId}

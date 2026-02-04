@@ -164,5 +164,9 @@ class TokenSystemImpl implements ITokenSystem {
     }
 }
 
-/** Token 系统单例 */
-export const tokenSystem = new TokenSystemImpl();
+/**
+ * 创建 Token 系统实例（每个游戏应创建独立实例）
+ */
+export function createTokenSystem(): ITokenSystem {
+    return new TokenSystemImpl();
+}

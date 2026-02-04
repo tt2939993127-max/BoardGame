@@ -34,18 +34,18 @@ export const SEO: React.FC<SEOProps> = ({
             {description && <meta name="description" content={description} />}
             {keywords && <meta name="keywords" content={keywords} />}
 
-            {/* Open Graph */}
+            {/* Open Graph 元信息 */}
             <meta property="og:title" content={ogTitle || fullTitle} />
             {ogDescription && <meta property="og:description" content={ogDescription} />}
             {ogImage && <meta property="og:image" content={ogImage} />}
             <meta property="og:type" content={ogType} />
 
-            {/* Twitter */}
+            {/* Twitter 元信息 */}
             <meta name="twitter:card" content="summary_large_image" />
             <meta name="twitter:title" content={ogTitle || fullTitle} />
             {ogDescription && <meta name="twitter:description" content={ogDescription} />}
 
-            {/* Canonical */}
+            {/* 规范链接 */}
             {canonical && <link rel="canonical" href={canonical} />}
         </>
     );

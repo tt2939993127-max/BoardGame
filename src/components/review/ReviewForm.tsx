@@ -18,7 +18,7 @@ export const ReviewForm = ({ onSubmit, initialData, isSubmitting }: ReviewFormPr
     const [content, setContent] = useState(initialData?.content || '');
     const [error, setError] = useState<string | null>(null);
 
-    // Initial data might load later
+    // 初始数据可能稍后加载
     useEffect(() => {
         if (initialData) {
             setIsPositive(initialData.isPositive);
@@ -43,7 +43,7 @@ export const ReviewForm = ({ onSubmit, initialData, isSubmitting }: ReviewFormPr
         try {
             await onSubmit({ isPositive, content });
         } catch (err) {
-            // Error handling usually done by parent or toast
+            // 错误处理通常由父组件或提示条完成
             console.error(err);
         }
     };

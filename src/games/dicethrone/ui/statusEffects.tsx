@@ -108,7 +108,9 @@ export const getStatusEffectIconNode = (
         <span
             className={`block ${sizeClass} drop-shadow-md`}
             style={{
-                backgroundImage: buildLocalizedImageSet(ASSETS.EFFECT_ICONS, locale),
+                // 注意：ASSETS.EFFECT_ICONS 是一个根据角色返回路径的函数，必须调用后再传入 AssetLoader。
+                // 否则 buildLocalizedImageSet 会收到非字符串，返回空 background-image，导致图标不显示。
+                backgroundImage: buildLocalizedImageSet(ASSETS.EFFECT_ICONS(), locale),
                 backgroundSize: frameStyle.backgroundSize,
                 backgroundPosition: frameStyle.backgroundPosition,
                 backgroundRepeat: 'no-repeat',

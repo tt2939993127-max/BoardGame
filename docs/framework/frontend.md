@@ -39,10 +39,8 @@ src/
 │   ├── pipeline.ts           # 执行管线
 │   └── types.ts              # 引擎类型
 ├── systems/                 # 通用游戏系统（跨游戏复用）
-│   ├── AbilitySystem/
-│   │   ├── conditions.ts     # 条件注册表
-│   │   ├── index.ts          # 导出
-│   │   ├── manager.ts        # 运行时管理
+│   ├── core/                # 通用核心（Attribute/Tag/Effect/Condition/Ability）
+│   ├── presets/             # 游戏类型预设（combat 等）
 │   │   └── types.ts          # 类型
 │   ├── CardSystem/
 │   │   ├── CardSystem.ts     # 卡牌系统
@@ -155,7 +153,8 @@ src/
   - `ResponseWindowSystem.ts`（响应窗口）
   - `UndoSystem.ts`（撤销）
 - **Game Systems（`src/systems/`）**
-  - `AbilitySystem/`（能力与条件）
+  - `core/`（能力/条件/效果/属性/标签）
+  - `presets/`（战斗类等预设）
   - `CardSystem/`（卡牌）
   - `DiceSystem/`（骰子）
   - `ResourceSystem/`（资源）
@@ -171,7 +170,7 @@ src/
    - `src/games/<gameId>/Board.tsx`：UI
    - `src/games/<gameId>/types.ts`：状态/类型
    - 如有英雄模块：`src/games/<gameId>/<hero>/`
-4) **通用系统优先**：状态/技能优先使用 `StatusEffectSystem` / `AbilitySystem`。
+4) **通用系统优先**：状态/技能优先使用 `StatusEffectSystem` / `systems/core` / `systems/presets`。
 
 ## 4. DiceThrone 领域扩展（数据驱动注册表）
 

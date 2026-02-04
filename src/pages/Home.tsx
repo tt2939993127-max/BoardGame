@@ -15,6 +15,7 @@ import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { LanguageSwitcher } from '../components/common/i18n/LanguageSwitcher';
 import { UserMenu } from '../components/social/UserMenu';
 import { useModalStack } from '../contexts/ModalStackContext';
+import { useToast } from '../contexts/ToastContext';
 import { useUrlModal } from '../hooks/routing/useUrlModal';
 import clsx from 'clsx';
 import { LobbyClient } from 'boardgame.io/client';
@@ -41,6 +42,7 @@ export const Home = () => {
 
     const { user, token, logout } = useAuth();
     const { openModal, closeModal } = useModalStack();
+    const toast = useToast();
     const { t } = useTranslation(['lobby', 'auth']);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory]);
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
@@ -74,6 +76,10 @@ export const Home = () => {
     const handleGameClick = (id: string) => {
         if (id === 'assetslicer') {
             navigate('/dev/slicer');
+            return;
+        }
+        if (id === 'ugcbuilder') {
+            navigate('/dev/ugc');
             return;
         }
         setSearchParams({ game: id });
@@ -135,7 +141,7 @@ export const Home = () => {
         });
     };
 
-    // 检查是否有活跃对局（基于 localStorage，跨游戏）
+    // 检查是否有活跃对局（基于本地存储，跨游戏）
     useEffect(() => {
         const handleStorage = () => setLocalStorageTick(t => t + 1);
         const handleCredentialsChange = () => setLocalStorageTick(t => t + 1);
@@ -233,7 +239,7 @@ export const Home = () => {
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;
 
-        // 优先使用 myMatchRole 中保存的 gameName，否则回退到 activeMatch 中的 gameName，最后默认 tictactoe
+        // 优先使用 myMatchRole 中保存的游戏名，否则回退到 activeMatch 中的游戏名，最后默认 tictactoe
         const gameId = myMatchRole.gameName || activeMatch.gameName || 'tictactoe';
 
         console.log(
@@ -246,7 +252,7 @@ export const Home = () => {
             return;
         }
 
-        // 无凭证：登录用户优先 claim-seat 回归
+        // 无凭证：登录用户优先走席位认领回归
         void (async () => {
             try {
                 if (user?.id && token) {
@@ -312,7 +318,7 @@ export const Home = () => {
                     navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${targetPlayerID}`);
                 }
             } catch {
-                // ignore
+                // 忽略错误
             }
         })();
     };
@@ -336,38 +342,48 @@ export const Home = () => {
         });
     };
 
-    const handleConfirmAction = async () => {
+    const handleConfirmAction = useCallback(async () => {
         if (!pendingAction) return;
 
         let gameName = 'tictactoe';
-        // 尝试获取正确的 gameName
+        // 尝试获取正确的游戏名
         if (myMatchRole && myMatchRole.gameName) {
             gameName = myMatchRole.gameName;
         } else if (activeMatch && activeMatch.gameName) {
             gameName = activeMatch.gameName;
         }
 
-        const success = await exitMatch(
+        const result = await exitMatch(
             gameName,
             pendingAction.matchID,
             pendingAction.playerID,
             pendingAction.credentials,
             pendingAction.isHost
         );
-        if (!success) {
-            // Keep state as-is so the user can retry or decide what to do next.
+        if (!result.success) {
+            const errorKey = result.error === 'forbidden'
+                ? 'error.destroyForbidden'
+                : result.error === 'network'
+                    ? 'error.destroyNetwork'
+                    : 'error.actionFailed';
+            toast.error({ kind: 'i18n', key: errorKey, ns: 'lobby' });
             return;
         }
 
-        // On success, the backend has released the slot; update local state to match.
+        if (result.cleanedLocal) {
+            toast.warning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
+        }
+
+        // 成功后后端释放座位，本地状态同步更新
         clearMatchCredentials(pendingAction.matchID);
+        clearOwnerActiveMatch(pendingAction.matchID);
         setPendingAction(null);
         setLocalStorageTick(t => t + 1);
-    };
+    }, [activeMatch, myMatchRole, pendingAction]);
 
-    const handleCancelAction = () => {
+    const handleCancelAction = useCallback(() => {
         setPendingAction(null);
-    };
+    }, []);
 
     useEffect(() => {
         if (pendingAction && !confirmModalIdRef.current) {
@@ -381,7 +397,6 @@ export const Home = () => {
                 },
                 render: ({ close, closeOnBackdrop }) => (
                     <ConfirmModal
-                        open
                         title={pendingAction.isHost ? t('lobby:confirm.destroy.title') : t('lobby:confirm.leave.title')}
                         description={pendingAction.isHost ? t('lobby:confirm.destroy.description') : t('lobby:confirm.leave.description')}
                         onConfirm={() => {

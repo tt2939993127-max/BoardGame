@@ -1,9 +1,9 @@
 /**
  * 僧侣英雄的技能定义
- * 使用通用 AbilitySystem
+ * 使用战斗预设技能系统
  */
 
-import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../systems/AbilitySystem';
+import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../systems/presets/combat';
 import { TOKEN_IDS, STATUS_IDS, DICE_FACE_IDS } from '../domain/ids';
 
 // 游戏特定条件注册已移至 ../conditions.ts，由 domain/index.ts 统一调用
@@ -164,7 +164,11 @@ export const MONK_ABILITIES: AbilityDef[] = [
         description: abilityText('thunder-strike', 'description'),
         trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.PALM]: 3 } },
         effects: [
-            damage(10, abilityEffectText('thunder-strike', 'roll3Damage')),
+            {
+                description: abilityEffectText('thunder-strike', 'roll3Damage'),
+                action: { type: 'custom', target: 'opponent', customActionId: 'thunder-strike-roll-damage' },
+                timing: 'withDamage',
+            },
             { description: abilityEffectText('thunder-strike', 'rerollOne') },
         ],
     },

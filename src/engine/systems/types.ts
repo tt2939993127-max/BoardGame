@@ -14,7 +14,7 @@ import type {
 } from '../types';
 
 // ============================================================================
-// 系统生命周期 Hooks
+// 系统生命周期 Hook
 // ============================================================================
 
 /**
@@ -142,6 +142,7 @@ export const SYSTEM_IDS = {
     UNDO: 'undo',
     PROMPT: 'prompt',
     LOG: 'log',
+    ACTION_LOG: 'actionLog',
     REMATCH: 'rematch',
     RESPONSE_WINDOW: 'responseWindow',
     TUTORIAL: 'tutorial',

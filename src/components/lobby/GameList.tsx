@@ -8,7 +8,7 @@ interface GameListProps {
 }
 
 export const GameList = ({ games, onGameClick }: GameListProps) => {
-    const { t } = useTranslation(['lobby', 'common']);
+    const { t, i18n } = useTranslation(['lobby', 'common']);
     return (
         <div className="grid grid-cols-[repeat(auto-fill,180px)] justify-center gap-5 w-full max-w-full mx-auto">
             {games.map((game, index) => (
@@ -35,13 +35,13 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
                         no-underline
                     "
                 >
-                    {/* Interactive Corner Borders - Visible by default for structure */}
+                    {/* 交互式角落边框 - 默认可见以突出结构 */}
                     <div className="absolute top-[4px] left-[4px] w-2 h-2 border-t-2 border-l-2 border-parchment-card-border opacity-30 group-hover:opacity-100 transition-opacity duration-300" />
                     <div className="absolute top-[4px] right-[4px] w-2 h-2 border-t-2 border-r-2 border-parchment-card-border opacity-30 group-hover:opacity-100 transition-opacity duration-300" />
                     <div className="absolute bottom-[4px] left-[4px] w-2 h-2 border-b-2 border-l-2 border-parchment-card-border opacity-30 group-hover:opacity-100 transition-opacity duration-300" />
                     <div className="absolute bottom-[4px] right-[4px] w-2 h-2 border-b-2 border-r-2 border-parchment-card-border opacity-30 group-hover:opacity-100 transition-opacity duration-300" />
 
-                    {/* Thumbnail - 保持 4/3 但缩减下边距 */}
+                    {/* 缩略图 - 保持 4/3 但缩减下边距 */}
                     <div className="w-full aspect-[4/3] mb-1.5 relative overflow-hidden rounded-sm bg-slate-900 ring-1 ring-black/5">
                         <div className="w-full h-full transition-transform duration-500 group-hover:scale-110">
                             {game.thumbnail ? (
@@ -54,7 +54,7 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
                         </div>
                     </div>
 
-                    {/* Content - 极紧凑垂直结构 */}
+                    {/* 内容 - 极紧凑垂直结构 */}
                     <div className="flex flex-col flex-1 justify-between">
                         <div>
                             <h3 className="text-sm font-serif font-bold text-parchment-base-text leading-tight mb-0.5">
@@ -65,7 +65,7 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
                             </p>
                         </div>
 
-                        {/* Metadata Tag - Ultrapact */}
+                        {/* 元信息标签 - 超紧凑 */}
                         <div className="mt-0.5 flex items-center justify-between border-t border-parchment-cream pt-1">
                             <div className="flex items-center gap-1 overflow-hidden">
                                 {game.tags && game.tags.length > 0 ? (
@@ -81,7 +81,15 @@ export const GameList = ({ games, onGameClick }: GameListProps) => {
                                 )}
                             </div>
                             <span className="text-[10px] text-parchment-light-text italic">
-                                {t(game.playersKey, { defaultValue: game.playersKey })}
+                                {game.type === 'game' && game.playerOptions && game.playerOptions.length > 1
+                                    ? (() => {
+                                        const min = Math.min(...game.playerOptions);
+                                        const max = Math.max(...game.playerOptions);
+                                        const unit = t('common:game_details.people');
+                                        const sep = i18n.language.startsWith('en') ? ' ' : '';
+                                        return `${min}-${max}${sep}${unit}`;
+                                    })()
+                                    : t(game.playersKey, { defaultValue: game.playersKey })}
                             </span>
                         </div>
                     </div>

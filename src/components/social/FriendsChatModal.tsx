@@ -23,7 +23,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatMod
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
+            {/* 遮罩层 */}
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -32,14 +32,14 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatMod
                 className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
 
-            {/* Modal Content */}
+            {/* 弹窗内容 */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
                 className="relative bg-parchment-card-bg w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
             >
-                {/* Close Button */}
+                {/* 关闭按钮 */}
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 z-20 p-2 rounded-full bg-parchment-card-bg/80 hover:bg-parchment-base-bg transition-colors"
@@ -47,7 +47,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatMod
                     <X size={20} className="text-parchment-base-text" />
                 </button>
 
-                {/* Left Pane: Friend List */}
+                {/* 左侧区域：好友列表 */}
                 <div className={clsx(
                     "w-full md:w-80 h-full border-r border-parchment-card-border/30 flex flex-col transition-all duration-300 absolute md:relative z-10 bg-parchment-card-bg",
                     selectedFriendId ? "-translate-x-full md:translate-x-0" : "translate-x-0"
@@ -63,14 +63,14 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatMod
                     </div>
                 </div>
 
-                {/* Right Pane: Chat Window */}
+                {/* 右侧区域：聊天窗口 */}
                 <div className={clsx(
                     "flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-parchment-card-bg",
                     selectedFriendId ? "translate-x-0" : "translate-x-full md:translate-x-0"
                 )}>
                     {selectedFriendId ? (
                         <>
-                            {/* Mobile Back Button */}
+                            {/* 移动端返回按钮 */}
                             <div className="md:hidden h-14 border-b border-parchment-card-border/30 flex items-center px-2 bg-parchment-base-bg">
                                 <button
                                     onClick={() => setSelectedFriendId(null)}

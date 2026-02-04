@@ -12,14 +12,16 @@ interface GameControlsProps {
 
 export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playerID }) => {
     const { t } = useTranslation('game');
-    if (!playerID) return null; // 观战者或未连接
+    if (playerID == null) return null; // 观战者或未连接
+
+    const normalizedPlayerId = String(playerID);
 
     const history = G.sys?.undo?.snapshots || [];
     const request = G.sys?.undo?.pendingRequest;
 
     // 逻辑：
-    // - '等待中' 的玩家（上一回合行动者）想要撤销 -> canRequest
-    // - '当前行动' 的玩家（本回合行动者）需要批准 -> canReview
+    // - “等待中”的玩家（上一回合行动者）想要撤销 -> canRequest（可申请）
+    // - “当前行动”的玩家（本回合行动者）需要批准 -> canReview（可审查）
 
     const coreCurrentPlayer = (G.core as { currentPlayer?: string | number } | undefined)?.currentPlayer;
     const currentPlayer = coreCurrentPlayer ?? ctx.currentPlayer;
@@ -27,9 +29,9 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
         ? String(currentPlayer)
         : null;
 
-    // 检查是否在本地对战（通常没有绑定特定的 playerID 意味着热座模式，
-    // 但在 boardgame.io 网络模式下，每个人都有特定的 ID）
-    const isCurrentPlayer = normalizedCurrentPlayer !== null && playerID === normalizedCurrentPlayer;
+    // 检查是否在本地对战（通常没有绑定特定的玩家编号意味着热座模式，
+    // 但在联机模式下，每个人都有特定编号）
+    const isCurrentPlayer = normalizedCurrentPlayer !== null && normalizedPlayerId === normalizedCurrentPlayer;
 
     // 申请逻辑：
     // 你可以申请撤销，如果：
@@ -43,14 +45,15 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
     // 1. 存在一个申请
     // 2. 你不是发起申请的人
     // 3. 你是当前行动玩家（你现在控制棋盘）
-    const canReview = !!request && request.requesterId !== playerID && isCurrentPlayer;
+    const requesterId = request?.requesterId != null ? String(request.requesterId) : null;
+    const canReview = !!requesterId && requesterId !== normalizedPlayerId && isCurrentPlayer;
 
     // 检查玩家是否是申请者（用于显示等待状态）
-    const isRequester = request?.requesterId === playerID;
+    const isRequester = requesterId === normalizedPlayerId;
 
     // 临时日志：排查撤销按钮不显示及请求未同步问题
     console.log('[UndoDebug]', {
-        playerID,
+        playerID: normalizedPlayerId,
         currentPlayer: normalizedCurrentPlayer,
         isCurrentPlayer,
         historyLen: history.length,

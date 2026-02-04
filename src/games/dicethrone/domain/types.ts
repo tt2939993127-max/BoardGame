@@ -4,7 +4,8 @@
  */
 
 import type { Command, GameEvent, PlayerId, ResponseWindowType } from '../../../engine/types';
-import type { AbilityDef, AbilityEffect } from '../../../systems/AbilitySystem';
+import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { AbilityDef, AbilityEffect } from '../../../systems/presets/combat';
 import type { ResourcePool } from '../../../systems/ResourceSystem/types';
 import type { TokenDef, TokenState } from '../../../systems/TokenSystem';
 import type { PayToRemoveKnockdownCommandType } from './ids';
@@ -23,7 +24,38 @@ export type TurnPhase =
     | 'main2'
     | 'discard';
 
-export type DieFace = 'fist' | 'palm' | 'taiji' | 'lotus';
+export type DieFace = 'fist' | 'palm' | 'taiji' | 'lotus' | 'sword' | 'heart' | 'strength';
+
+// ============================================================================
+// 角色编目
+// ============================================================================
+
+export type CharacterId = 'unselected' | 'monk' | 'barbarian' | 'pyromancer' | 'shadow_thief' | 'moon_elf' | 'paladin' | 'ninja' | 'treant' | 'vampire_lord' | 'cursed_pirate' | 'gunslinger' | 'samurai' | 'tactician' | 'huntress' | 'seraph';
+
+export type SelectableCharacterId = Exclude<CharacterId, 'unselected'>;
+
+export interface CharacterDefinition {
+    id: SelectableCharacterId;
+    nameKey: string;
+}
+
+export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
+    { id: 'monk', nameKey: 'characters.monk' },
+    { id: 'barbarian', nameKey: 'characters.barbarian' },
+    { id: 'pyromancer', nameKey: 'characters.pyromancer' },
+    { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
+    { id: 'moon_elf', nameKey: 'characters.moon_elf' },
+    { id: 'paladin', nameKey: 'characters.paladin' },
+    { id: 'ninja', nameKey: 'characters.ninja' },
+    { id: 'treant', nameKey: 'characters.treant' },
+    { id: 'vampire_lord', nameKey: 'characters.vampire_lord' },
+    { id: 'cursed_pirate', nameKey: 'characters.cursed_pirate' },
+    { id: 'gunslinger', nameKey: 'characters.gunslinger' },
+    { id: 'samurai', nameKey: 'characters.samurai' },
+    { id: 'tactician', nameKey: 'characters.tactician' },
+    { id: 'huntress', nameKey: 'characters.huntress' },
+    { id: 'seraph', nameKey: 'characters.seraph' },
+];
 
 /**
  * 骰子实例
@@ -85,9 +117,11 @@ export interface AbilityCard {
     type: 'upgrade' | 'action';
     cpCost: number;
     timing: 'main' | 'roll' | 'instant';
+    /** 卡牌音效 key（用于卡牌级别音效） */
+    sfxKey?: string;
     /** @deprecated 使用 i18n 字段代替，此字段由构建脚本自动生成 */
     description: string;
-    atlasIndex?: number;
+    previewRef?: CardPreviewRef;
     /** 卡牌效果列表（行动卡的即时效果，或升级卡的 replaceAbility 效果） */
     effects?: AbilityEffect[];
     /** 卡牌打出的额外条件 */
@@ -250,6 +284,10 @@ export interface PendingBonusDiceSettlement {
     rerollCostAmount: number;
     /** 已用重掷次数（无上限，消耗 Token 即可） */
     rerollCount: number;
+    /** 最大可重掷次数（不填表示无限制） */
+    maxRerollCount?: number;
+    /** 重掷特写文案 key（用于 UI） */
+    rerollEffectKey?: string;
     /** 结算阈值（如 12，用于判断是否触发额外效果） */
     threshold?: number;
     /** 达到阈值时的额外效果（如施加倒地） */
@@ -260,7 +298,7 @@ export interface PendingBonusDiceSettlement {
 
 export interface HeroState {
     id: string;
-    characterId: 'monk';
+    characterId: CharacterId;
     /** 资源池（hp, cp 等） */
     resources: ResourcePool;
     hand: AbilityCard[];
@@ -289,6 +327,14 @@ export interface HeroState {
  */
 export interface DiceThroneCore {
     players: Record<PlayerId, HeroState>;
+    /** 玩家选角状态（未选时为 unselected） */
+    selectedCharacters: Record<PlayerId, CharacterId>;
+    /** 玩家准备状态（选角后点击准备） */
+    readyPlayers: Record<PlayerId, boolean>;
+    /** 房主玩家 ID（默认首位玩家） */
+    hostPlayerId: PlayerId;
+    /** 房主是否已点击开始 */
+    hostStarted: boolean;
     dice: Die[];
     rollCount: number;
     rollLimit: number;
@@ -329,8 +375,8 @@ export interface DiceThroneCore {
         cardId: string;
         /** 打出卡牌的玩家 ID */
         playerId: PlayerId;
-        /** 卡牌图集索引（用于渲染） */
-        atlasIndex: number;
+        /** 卡牌预览引用（用于渲染） */
+        previewRef?: CardPreviewRef;
         /** 时间戳（用于区分多次打出） */
         timestamp: number;
     };
@@ -340,24 +386,17 @@ export interface DiceThroneCore {
         cardId: string;
         /** 打出卡牌的玩家 ID */
         playerId: PlayerId;
-        /** 卡牌图集索引（用于渲染） */
-        atlasIndex: number;
-        /** 时间戳（用于区分多次打出） */
+        /** 卡牌预览引用（用于渲染） */
+        previewRef?: CardPreviewRef;
+        /** 触发时间戳 */
         timestamp: number;
     };
 }
-
-// ============================================================================
 // 命令定义
 // ============================================================================
 
 /** 掷骰命令 */
 export interface RollDiceCommand extends Command<'ROLL_DICE'> {
-    payload: Record<string, never>;
-}
-
-/** 投掷额外骰子命令（太极连击） */
-export interface RollBonusDieCommand extends Command<'ROLL_BONUS_DIE'> {
     payload: Record<string, never>;
 }
 
@@ -435,6 +474,23 @@ export interface ResolveChoiceCommand extends Command<'RESOLVE_CHOICE'> {
 
 /** 推进阶段命令 */
 export interface AdvancePhaseCommand extends Command<'ADVANCE_PHASE'> {
+    payload: Record<string, never>;
+}
+
+/** 选择角色命令 */
+export interface SelectCharacterCommand extends Command<'SELECT_CHARACTER'> {
+    payload: {
+        characterId: SelectableCharacterId;
+    };
+}
+
+/** 房主开始命令 */
+export interface HostStartGameCommand extends Command<'HOST_START_GAME'> {
+    payload: Record<string, never>;
+}
+
+/** 玩家准备命令 */
+export interface PlayerReadyCommand extends Command<'PLAYER_READY'> {
     payload: Record<string, never>;
 }
 
@@ -542,7 +598,6 @@ export interface SkipBonusDiceRerollCommand extends Command<'SKIP_BONUS_DICE_RER
 /** 所有 DiceThrone 命令 */
 export type DiceThroneCommand =
     | RollDiceCommand
-    | RollBonusDieCommand
     | ToggleDieLockCommand
     | ConfirmRollCommand
     | SelectAbilityCommand
@@ -555,6 +610,9 @@ export type DiceThroneCommand =
     | PlayUpgradeCardCommand
     | ResolveChoiceCommand
     | AdvancePhaseCommand
+    | SelectCharacterCommand
+    | HostStartGameCommand
+    | PlayerReadyCommand
     | ResponsePassCommand
     | ModifyDieCommand
     | RerollDieCommand
@@ -606,6 +664,38 @@ export interface DieLockToggledEvent extends GameEvent<'DIE_LOCK_TOGGLED'> {
 
 /** 骰子确认事件 */
 export interface RollConfirmedEvent extends GameEvent<'ROLL_CONFIRMED'> {
+    payload: {
+        playerId: PlayerId;
+    };
+}
+
+/** 角色选择事件 */
+export interface CharacterSelectedEvent extends GameEvent<'CHARACTER_SELECTED'> {
+    payload: {
+        playerId: PlayerId;
+        characterId: SelectableCharacterId;
+        /** 初始牌库（已洗牌） */
+        initialDeckCardIds: string[];
+    };
+}
+
+/** 英雄初始化事件（选角结束进入游戏前） */
+export interface HeroInitializedEvent extends GameEvent<'HERO_INITIALIZED'> {
+    payload: {
+        playerId: PlayerId;
+        characterId: SelectableCharacterId;
+    };
+}
+
+/** 房主开始事件 */
+export interface HostStartedEvent extends GameEvent<'HOST_STARTED'> {
+    payload: {
+        playerId: PlayerId;
+    };
+}
+
+/** 玩家准备事件 */
+export interface PlayerReadyEvent extends GameEvent<'PLAYER_READY'> {
     payload: {
         playerId: PlayerId;
     };
@@ -1076,7 +1166,10 @@ export type DiceThroneEvent =
     | BonusDieRolledEvent
     | DieLockToggledEvent
     | RollConfirmedEvent
-    // PhaseChangedEvent 已移除，使用 FlowSystem 的 SYS_PHASE_CHANGED
+    | CharacterSelectedEvent
+    | HeroInitializedEvent
+    | HostStartedEvent
+    | PlayerReadyEvent
     | AbilityActivatedEvent
     | DamageDealtEvent
     | HealAppliedEvent
@@ -1129,6 +1222,7 @@ export const CP_MAX = 15;
 export const HAND_LIMIT = 6;
 
 export const PHASE_ORDER: TurnPhase[] = [
+    'setup',
     'upkeep',
     'income',
     'main1',

@@ -197,7 +197,14 @@ export function SocialProvider({ children }: { children: ReactNode }) {
             method: 'POST',
             body: JSON.stringify({ toUserId, content, type }),
         });
-        await refreshConversations(); // 更新最后一条消息
+
+        // 发送成功后立即刷新会话列表与该会话消息历史，避免“只看得到对方消息 / 刷新后自己消息丢失”。
+        // 临时策略：不做全局消息仓库，仅保证 ChatWindow 重新打开/刷新时能从服务端拿到完整历史。
+        await refreshConversations();
+
+        // fire-and-forget：不阻塞 UI
+        void authenticatedFetch(`/messages/${toUserId}`).catch(() => undefined);
+
         return data.message;
     };
 

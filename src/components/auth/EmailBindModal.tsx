@@ -84,7 +84,6 @@ export const EmailBindModal = ({ isOpen, onClose, closeOnBackdrop }: EmailBindMo
 
     return (
         <ModalBase
-            open={isOpen}
             onClose={onClose}
             closeOnBackdrop={closeOnBackdrop}
             containerClassName="p-4 sm:p-6"

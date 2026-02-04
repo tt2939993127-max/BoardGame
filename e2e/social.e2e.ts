@@ -65,8 +65,13 @@ test.describe('Social Hub E2E', () => {
         await page.route('**/auth/login', async route => {
             await route.fulfill({
                 json: {
-                    token: 'fake_jwt_token',
-                    user: mockUser
+                    success: true,
+                    code: 'AUTH_LOGIN_OK',
+                    message: '登录成功',
+                    data: {
+                        token: 'fake_jwt_token',
+                        user: mockUser
+                    }
                 }
             });
         });
@@ -135,16 +140,15 @@ test.describe('Social Hub E2E', () => {
     });
 
     test('Should open Social Hub via Global HUD and view friend chat', async ({ page }) => {
-        // 1. Wait for GlobalHUD to appear (bottom right fab)
-        const fabContainer = page.locator('.fixed.bottom-8.right-8');
-        const hudTrigger = fabContainer.locator('button').first();
+        // 1. Wait for GlobalHUD to appear
+        const hudTrigger = page.locator('[data-testid="fab-menu"] [data-fab-id]').first();
         await expect(hudTrigger).toBeVisible();
 
         // 2. Expand HUD
         await hudTrigger.click();
 
         // 3. Click "Social" button in the menu
-        const socialButton = page.getByRole('button').filter({ hasText: /Social|好友|社交/i }).first();
+        const socialButton = page.locator('[data-fab-id="social"]');
         await expect(socialButton).toBeVisible();
         await socialButton.click();
 

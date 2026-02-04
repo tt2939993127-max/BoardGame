@@ -4,7 +4,7 @@
  * 通用 UI，显示投票状态与按钮
  * 
  * 多人模式：使用 socket 投票（绕过 gameover 限制）
- * 单人模式：直接调用 reset
+ * 单人模式：直接调用重置函数
  */
 
 import React from 'react';
@@ -14,9 +14,9 @@ import type { RematchVoteState } from '../../services/matchSocket';
 import { HoverOverlayLabel } from '../common/labels/HoverOverlayLabel';
 
 export interface RematchActionsProps {
-    /** 当前玩家 ID */
+    /** 当前玩家 playerID */
     playerID: string | null;
-    /** reset 函数（来自 BoardProps） */
+    /** 重置函数（来自 BoardProps） */
     reset?: () => void;
     /** 是否多人模式 */
     isMultiplayer?: boolean;
@@ -28,7 +28,7 @@ export interface RematchActionsProps {
     rematchState?: RematchVoteState;
     /** 投票回调（多人模式，调用 socket.vote） */
     onVote?: () => void;
-    /** 返回大厅回调（多人模式应该在这里执行 leave/destroy），不传则仅导航 */
+    /** 返回大厅回调（多人模式应在此执行离开/销毁），不传则仅导航 */
     onBackToLobby?: () => void | Promise<void>;
 }
 
@@ -82,7 +82,7 @@ export function RematchActions({
         navigate('/');
     };
 
-    // 单人模式：直接 reset
+    // 单人模式：直接重置
     if (!isMultiplayer) {
         return (
             <div className={`flex items-center gap-3 ${className}`}>

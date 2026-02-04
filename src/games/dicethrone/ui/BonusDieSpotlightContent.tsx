@@ -14,6 +14,7 @@ import { Dice3D } from './Dice3D';
 interface BonusDieSpotlightContentProps {
     value: number;
     face?: DieFace;
+
     /** 效果描述 key */
     effectKey?: string;
     /** 效果描述参数 */
@@ -23,6 +24,8 @@ interface BonusDieSpotlightContentProps {
     size?: string;
     /** Rolling duration in ms, default 800 */
     rollingDurationMs?: number;
+    /** 骰子资源所属角色（用于图集选择） */
+    characterId?: string;
 }
 
 /** Die face glow colors */
@@ -31,6 +34,9 @@ const FACE_GLOW_COLORS: Record<DieFace, string> = {
     palm: 'rgba(96,165,250,0.5)',
     taiji: 'rgba(192,132,252,0.5)',
     lotus: 'rgba(52,211,153,0.5)',
+    sword: 'rgba(148,163,184,0.5)',
+    heart: 'rgba(244,63,94,0.5)',
+    strength: 'rgba(245,158,11,0.5)',
 };
 
 export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> = ({
@@ -41,6 +47,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     locale,
     size = '8vw',
     rollingDurationMs = 800,
+    characterId = 'monk',
 }) => {
 
     const { t } = useTranslation('game-dicethrone');
@@ -70,6 +77,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
                     size={size}
                     locale={locale}
                     variant="spotlight"
+                    characterId={characterId}
                 />
                 {!isRolling && (
                     <motion.div

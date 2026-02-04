@@ -86,11 +86,16 @@
     "dicethrone": {
       "title": "王权骰铸",
       "description": "快节奏的骰子对战游戏。率领传奇英雄进行1v1对决。",
-      "players": "2人游戏"
+      "players": "2人"
     },
     "assetslicer": {
       "title": "素材切片机",
       "description": "专为棋牌游戏设计的素材提取工具。支持圆形/方形裁切、批量导出精灵图。",
+      "players": "单人工具"
+    },
+    "ugcbuilder": {
+      "title": "UGC 原型制作器",
+      "description": "快速创建桌游原型。支持卡牌设计、规则配置、AI辅助生成。",
       "players": "单人工具"
     }
   },
@@ -118,7 +123,13 @@
   },
   "error": {
     "createRoomFailed": "创建房间失败",
+    "activeMatchStale": "检测到旧房间已失效，已自动清理，现在可以重新创建房间。",
+    "destroyForbidden": "无法销毁房间：凭证无效或已失效，请重新进入房间后再试。",
+    "destroyNetwork": "销毁房间失败：网络或服务异常，请稍后重试。",
+    "destroyFailedLocalCleaned": "房间销毁请求异常，已清理本地状态以恢复操作。",
     "activeMatchExists": "您已有未结束的房间，请先返回或销毁后再创建。",
+    "leaveForbidden": "无法离开房间：凭证无效或已失效，请重新进入房间后再试。",
+    "leaveNetwork": "离开房间失败：网络或服务异常，请稍后重试。",
     "roomFull": "房间已满",
     "joinRoomFailed": "加入房间失败",
     "actionFailed": "操作失败，请稍后重试。",

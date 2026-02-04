@@ -162,7 +162,7 @@ export function getResponseWindowResponderId<TCore>(
 const ALLOWED_COMMANDS_DURING_RESPONSE = [
     'RESPONSE_PASS',      // 跳过响应
     'PLAY_CARD',          // 打出卡牌（响应卡）
-    'SYS_PROMPT_RESPOND', // Prompt 响应
+    'SYS_PROMPT_RESPOND', // Prompt 响应命令
     // 卡牌交互相关命令
     'MODIFY_DIE',         // 修改骰子数值
     'REROLL_DIE',         // 重掷骰子
@@ -182,7 +182,7 @@ export function createResponseWindowSystem<TCore>(
     return {
         id: SYSTEM_IDS.RESPONSE_WINDOW,
         name: '响应窗口系统',
-        priority: 15, // 在 Prompt(20) 之前执行
+        priority: 15, // 优先级 15（在 Prompt(20) 之前执行）
 
         setup: (): Partial<{ responseWindow: ResponseWindowState }> => ({
             responseWindow: {
@@ -202,7 +202,10 @@ export function createResponseWindowSystem<TCore>(
 
             // 处理 RESPONSE_PASS 命令
             if (command.type === RESPONSE_WINDOW_COMMANDS.PASS) {
-                // 支持代替离线玩家 pass：如果 payload 中有 forPlayerId，则使用它
+                if (currentWindow.pendingInteractionId) {
+                    return { halt: true, error: '交互处理中，无法跳过响应' };
+                }
+                // 支持代替离线玩家 pass（跳过）：如果 payload 中有 forPlayerId，则使用它
                 const payload = command.payload as { forPlayerId?: PlayerId } | undefined;
                 const targetPlayerId = payload?.forPlayerId ?? command.playerId;
                 

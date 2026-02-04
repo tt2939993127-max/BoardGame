@@ -12,7 +12,10 @@ import {
     evaluateLargeStraight,
     evaluatePhase,
     evaluateAllSymbolsPresent,
-} from '../../systems/AbilitySystem';
+    evaluateRollSumGreaterThan,
+    evaluateDiceCountAtLeast,
+    evaluateThreeOfAKind,
+} from '../../systems/presets/combat';
 
 let registered = false;
 
@@ -30,4 +33,7 @@ export function registerDiceThroneConditions(): void {
     conditionRegistry.register('largeStraight', evaluateLargeStraight);
     conditionRegistry.register('phase', evaluatePhase);
     conditionRegistry.register('allSymbolsPresent', evaluateAllSymbolsPresent);
+    conditionRegistry.register('rollSumGreaterThan', evaluateRollSumGreaterThan);
+    conditionRegistry.register('diceCountAtLeast', evaluateDiceCountAtLeast);
+    conditionRegistry.register('threeOfAKind', evaluateThreeOfAKind);
 }

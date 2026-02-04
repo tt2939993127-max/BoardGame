@@ -10,8 +10,8 @@
 
 import type { AbilityCard } from '../types';
 import type { RandomFn } from '../../../engine/types';
-import type { AbilityEffect, EffectTiming, EffectCondition, AbilityDef } from '../../../systems/AbilitySystem';
-import { STATUS_IDS, BARBARIAN_DICE_FACE_IDS } from '../domain/ids';
+import type { AbilityEffect, EffectTiming, EffectCondition, AbilityDef } from '../../../systems/presets/combat';
+import { STATUS_IDS, BARBARIAN_DICE_FACE_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
@@ -277,7 +277,7 @@ const VIOLENT_ASSAULT_2: AbilityDef = {
 
 /**
  * 狂战士手牌定义
- * atlasIndex 对应 barbarian-ability-cards.png 图集中的位置
+ * previewRef.atlas 对应 barbarian-ability-cards.png 图集中的位置（从左到右、从上到下，0起始）
  * 
  * 卡牌时机：
  * - main (蓝色): 仅在 Main Phase 1/2 打出
@@ -305,7 +305,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-energetic', 'description'),
-        atlasIndex: 0,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 0 },
         i18n: {
             'zh-CN': { name: '精力充沛！', description: '投掷1骰：如果投出⭐，治疗2并对1名对手施加脑震荡；否则抽取1张牌。' },
             'en': { name: 'Energetic!', description: 'Roll 1 die: if ⭐, heal 2 and inflict Concussion on 1 opponent; otherwise draw 1 card.' },
@@ -331,7 +331,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-dizzy', 'description'),
-        atlasIndex: 3,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 3 },
         i18n: {
             'zh-CN': { name: '头昏目眩！', description: '如果你在1名对手的防御结束后，成功对其造成至少8伤害，则将本卡打出以施加脑震荡。' },
             'en': { name: 'Dizzy!', description: 'If you deal at least 8 damage to an opponent after their defense, play this card to inflict Concussion.' },
@@ -356,7 +356,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-head-blow', 'description'),
-        atlasIndex: 4,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 4 },
         i18n: {
             'zh-CN': { name: '当头棒喝！', description: '对1名对手施加脑震荡。' },
             'en': { name: 'Head Blow!', description: 'Inflict Concussion on 1 opponent.' },
@@ -381,7 +381,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'roll',
         description: cardText('card-lucky', 'description'),
-        atlasIndex: 1,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 1 },
         i18n: {
             'zh-CN': { name: '大吉大利！', description: '投掷3骰：治疗 1 + 2×❤️。' },
             'en': { name: 'Lucky!', description: 'Roll 3 dice: heal 1 + 2×❤️.' },
@@ -406,7 +406,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'roll',
         description: cardText('card-more-please', 'description'),
-        atlasIndex: 2,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 2 },
         i18n: {
             'zh-CN': { name: '再来点儿！', description: '【攻击修正】投掷5骰：增加 1×⚔️ 伤害，施加脑震荡。' },
             'en': { name: 'More Please!', description: '[Attack Modifier] Roll 5 dice: +1×⚔️ damage, inflict Concussion.' },
@@ -442,7 +442,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-thick-skin-2', 'description'),
-        atlasIndex: 5,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 5 },
         i18n: {
             'zh-CN': { name: '皮糙肉厚 II', description: '防御投掷4骰。治疗 2×❤️。如果投出❤️❤️，你还可以防止1个即将受到的状态效果。' },
             'en': { name: 'Thick Skin II', description: 'Defensive roll 4 dice. Heal 2×❤️. If ❤️❤️, you may also prevent 1 incoming status effect.' },
@@ -464,7 +464,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-reckless-strike-2', 'description'),
-        atlasIndex: 6,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 6 },
         i18n: {
             'zh-CN': { name: '悍然不顾 II', description: '大顺子触发：造成20伤害，自身受到5伤害。（只有成功造成至少1伤害时，自身才会受到伤害）' },
             'en': { name: 'Reckless Strike II', description: 'Large Straight: Deal 20 damage, take 5 self-damage. (Self-damage only if at least 1 damage dealt)' },
@@ -486,7 +486,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-suppress-2', 'description'),
-        atlasIndex: 7,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 7 },
         i18n: {
             'zh-CN': { name: '力大无穷 II', description: '⚔️⚔️⚔️⭐⭐: 投掷3骰，造成等同于投掷结果总和的伤害。如果>=10，施加脑震荡。\n战吼(⚔️⚔️❤️): 治疗2，造成2不可防御伤害。' },
             'en': { name: 'Mighty II', description: '⚔️⚔️⚔️⭐⭐: Roll 3 dice, deal damage equal to sum. If >=10, inflict Concussion.\nBattle Cry(⚔️⚔️❤️): Heal 2, deal 2 undefendable damage.' },
@@ -508,7 +508,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-steadfast-2', 'description'),
-        atlasIndex: 8,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 8 },
         i18n: {
             'zh-CN': { name: '百折不挠 II', description: '❤️❤️❤️: 治疗5 / ❤️❤️❤️❤️: 治疗6 / ❤️❤️❤️❤️❤️: 治疗7。如果投出3个相同数字，你可以从自己身上移除1个状态效果。' },
             'en': { name: 'Steadfast II', description: '3❤️: Heal 5 / 4❤️: Heal 6 / 5❤️: Heal 7. If 3 of a kind, you may remove 1 status effect from yourself.' },
@@ -530,7 +530,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-violent-assault-2', 'description'),
-        atlasIndex: 9,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 9 },
         i18n: {
             'zh-CN': { name: '撼地重击 II', description: '⭐⭐⭐⭐⭐: 施加眩晕，然后造成7不可防御伤害。\n粉碎重击(⭐⭐⭐): 施加脑震荡，然后造成2不可防御伤害。' },
             'en': { name: 'Ground Slam II', description: '5⭐: Inflict Daze, then deal 7 undefendable damage.\nCrush(3⭐): Inflict Concussion, then deal 2 undefendable damage.' },

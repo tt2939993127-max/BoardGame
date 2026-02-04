@@ -166,7 +166,12 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
     }, [isMultiplayer, reset, registerReset]);
 
     // 音效系统
-    useGameAudio({ config: TIC_TAC_TOE_AUDIO_CONFIG, G: G.core, ctx });
+    useGameAudio({
+        config: TIC_TAC_TOE_AUDIO_CONFIG,
+        G: G.core,
+        ctx,
+        eventEntries: G.sys.log.entries,
+    });
 
 
     // 追踪先前的激活状态（必须在顶层）

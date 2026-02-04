@@ -69,7 +69,7 @@ export default function AdminFeedbackPage() {
 
             if (!res.ok) throw new Error('Failed to update status');
 
-            // Optimistic update or refetch
+            // 乐观更新或重新拉取
             setFeedbacks(prev => prev.map(f => f._id === id ? { ...f, status: newStatus as any } : f));
             success('状态已更新');
         } catch (err) {
@@ -147,7 +147,7 @@ export default function AdminFeedbackPage() {
                                 className="bg-white p-5 rounded-xl border border-zinc-100 shadow-sm hover:shadow-md transition-shadow group"
                             >
                                 <div className="flex items-start gap-4">
-                                    {/* Status Checkbox-like Action */}
+                                    {/* 状态切换按钮（仿勾选交互） */}
                                     <button
                                         onClick={() => handleStatusUpdate(item._id, item.status === 'resolved' ? 'open' : 'resolved')}
                                         className={cn(
@@ -203,7 +203,7 @@ export default function AdminFeedbackPage() {
                                                 )}
                                             </div>
 
-                                            {/* Quick Actions */}
+                                            {/* 快捷操作 */}
                                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {item.status !== 'in_progress' && item.status !== 'resolved' && (
                                                     <button

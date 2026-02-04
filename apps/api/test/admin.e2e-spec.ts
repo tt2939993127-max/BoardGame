@@ -10,6 +10,7 @@ import { Types, type Model } from 'mongoose';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { AuthModule } from '../src/modules/auth/auth.module';
+import { AuthService } from '../src/modules/auth/auth.service';
 import { AdminModule } from '../src/modules/admin/admin.module';
 import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema';
 import { Friend, type FriendDocument } from '../src/modules/friend/schemas/friend.schema';
@@ -29,6 +30,7 @@ describe('Admin Module (e2e)', () => {
     let messageModel: Model<MessageDocument>;
     let reviewModel: Model<ReviewDocument>;
     let cacheManager: Cache;
+    let authService: AuthService;
 
     beforeAll(async () => {
         const externalMongoUri = process.env.MONGO_URI;
@@ -49,6 +51,7 @@ describe('Admin Module (e2e)', () => {
 
         app = moduleRef.createNestApplication();
         userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
+        authService = moduleRef.get<AuthService>(AuthService);
         matchRecordModel = moduleRef.get<Model<MatchRecordDocument>>(getModelToken(MatchRecord.name));
         roomMatchModel = moduleRef.get<Model<RoomMatchDocument>>(getModelToken(ROOM_MATCH_MODEL_NAME));
         friendModel = moduleRef.get<Model<FriendDocument>>(getModelToken(Friend.name));
@@ -94,18 +97,24 @@ describe('Admin Module (e2e)', () => {
     });
 
     const seedUsers = async () => {
+        const adminEmail = 'admin-user@example.com';
+        const adminCode = '123456';
+        await authService.storeEmailCode(adminEmail, adminCode);
         const adminRegister = await request(app.getHttpServer())
             .post('/auth/register')
-            .send({ username: 'admin-user', password: 'pass1234' })
+            .send({ username: 'admin-user', email: adminEmail, code: adminCode, password: 'pass1234' })
             .expect(201);
 
         const adminToken = adminRegister.body.token as string;
         const adminId = adminRegister.body.user.id as string;
         await userModel.updateOne({ _id: adminId }, { role: 'admin' });
 
+        const userEmail = 'player-a@example.com';
+        const userCode = '654321';
+        await authService.storeEmailCode(userEmail, userCode);
         const userRegister = await request(app.getHttpServer())
             .post('/auth/register')
-            .send({ username: 'player-a', password: 'pass1234' })
+            .send({ username: 'player-a', email: userEmail, code: userCode, password: 'pass1234' })
             .expect(201);
 
         const userToken = userRegister.body.token as string;

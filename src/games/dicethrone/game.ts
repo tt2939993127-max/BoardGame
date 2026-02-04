@@ -4,9 +4,10 @@
  * 使用领域内核 + 引擎适配器
  */
 
-import type { GameEvent } from '../../engine/types';
+import type { ActionLogEntry, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
 import {
     createGameAdapter,
+    createActionLogSystem,
     createCheatSystem,
     createFlowSystem,
     createLogSystem,
@@ -23,11 +24,11 @@ import {
 } from '../../engine';
 import { DiceThroneDomain } from './domain';
 import { DICETHRONE_COMMANDS, STATUS_IDS } from './domain/ids';
-import type { DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, StatusRemovedEvent } from './domain/types';
+import type { AbilityCard, DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, StatusRemovedEvent } from './domain/types';
 import { createDiceThroneEventSystem } from './domain/systems';
 import { canAdvancePhase, getNextPhase, getNextPlayerId } from './domain/rules';
 import { resolveAttack, resolveOffensivePreDefenseEffects } from './domain/attack';
-import { resourceSystem } from '../../systems/ResourceSystem';
+import { resourceSystem } from './domain/resourceSystem';
 import { RESOURCE_IDS } from './domain/resources';
 import { buildDrawEvents } from './domain/deckEvents';
 import { reduce } from './domain/reducer';
@@ -122,7 +123,9 @@ const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
         if (!player) return core;
 
         // 在牌库中查找具有指定 atlasIndex 的卡牌
-        const deckIndex = player.deck.findIndex(card => card.atlasIndex === atlasIndex);
+        const deckIndex = player.deck.findIndex(
+            (card) => card.previewRef?.type === 'atlas' && card.previewRef.index === atlasIndex
+        );
         if (deckIndex === -1) return core;
 
         const newDeck = [...player.deck];
@@ -152,7 +155,7 @@ const now = () => Date.now();
 // DiceThrone FlowHooks 实现（符合 openspec/changes/add-flow-system/design.md Decision 3）
 // sys.phase 是阶段的单一权威来源，所有阶段副作用通过 FlowHooks 实现
 const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
-    initialPhase: 'upkeep',
+    initialPhase: 'setup',
 
     canAdvance: ({ state }) => {
         const ok = canAdvancePhase(state.core);
@@ -174,6 +177,38 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         const core = state.core;
         const events: GameEvent[] = [];
         const timestamp = now();
+
+        // ========== setup 阶段退出：初始化所有玩家角色数据 ==========
+        if (from === 'setup') {
+            const playerIds = Object.keys(core.players);
+            const initEvents: GameEvent[] = [];
+
+            for (const pid of playerIds) {
+                const charId = core.selectedCharacters[pid];
+                if (charId && charId !== 'unselected') {
+                    // 发送初始化事件（此处由于 reducer 已处理部分，可能需要专门的 INIT_HERO_STATE 事件或直接在 reducer 处理）
+                    // 按照架构，最好是发送一个事件，让 reducer 执行 initHeroState 逻辑
+                    initEvents.push({
+                        type: 'HERO_INITIALIZED',
+                        payload: {
+                            playerId: pid,
+                            characterId: charId as any,
+                            // 牌库已经在 CHARACTER_SELECTED 时确定了（payload.initialDeckCardIds），
+                            // 但为了严谨，这里可以再次确认或由 reducer 从 core.selectedCharacters 读取
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as any);
+                }
+            }
+
+            // 同时创建骰子（如果是首位玩家，通常使用他的角色骰子，或者由系统在 EnterRollPhase 时切换）
+            // 初始骰子逻辑在进入 RollPhase 时会自动 resetDice
+            
+            if (initEvents.length > 0) {
+                events.push(...initEvents);
+            }
+        }
 
         // ========== main1 阶段退出：检查击倒状态 ==========
         if (from === 'main1' && to === 'offensiveRoll') {
@@ -279,6 +314,14 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
     onAutoContinueCheck: ({ state, events }): { autoContinue: boolean; playerId: string } | void => {
         const core = state.core;
 
+        // setup 阶段：房主开始或玩家准备后，若满足条件则自动推进
+        if (core.turnPhase === 'setup') {
+            const hasSetupGateEvent = events.some(e => e.type === 'HOST_STARTED' || e.type === 'PLAYER_READY');
+            if (hasSetupGateEvent && canAdvancePhase(core)) {
+                return { autoContinue: true, playerId: core.activePlayerId };
+            }
+        }
+
         // 检查是否有需要自动继续的事件
         const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
         const hasChoiceResolved = events.some(e => e.type === 'CHOICE_RESOLVED');
@@ -348,20 +391,103 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 // 导出 FlowHooks 供测试使用
 export { diceThroneFlowHooks };
 
+// ============================================================================
+// ActionLog 共享白名单 + 格式化
+// ============================================================================
+
+const ACTION_ALLOWLIST = [
+    'PLAY_CARD',
+    'PLAY_UPGRADE_CARD',
+    // 注意：阶段推进属于明确的规则行为，允许撤回 + 记录。
+    'ADVANCE_PHASE',
+] as const;
+
+function formatDiceThroneActionEntry({
+    command,
+    state,
+}: {
+    command: Command;
+    state: MatchState<unknown>;
+}): ActionLogEntry | null {
+    const core = (state as MatchState<DiceThroneCore>).core;
+    const timestamp = command.timestamp ?? Date.now();
+
+    if (command.type === 'PLAY_CARD' || command.type === 'PLAY_UPGRADE_CARD') {
+        const cardId = (command.payload as { cardId: string }).cardId;
+        const card = findDiceThroneCard(core, cardId, command.playerId);
+        if (!card || !card.previewRef) return null;
+
+        const actionText = command.type === 'PLAY_UPGRADE_CARD' ? '打出升级卡 ' : '打出卡牌 ';
+
+        return {
+            id: `${command.type}-${command.playerId}-${timestamp}`,
+            timestamp,
+            actorId: command.playerId,
+            kind: command.type,
+            segments: [
+                { type: 'text', text: actionText },
+                {
+                    type: 'card',
+                    cardId: card.id,
+                    previewText: card.name,
+                },
+            ],
+        };
+    }
+
+    if (command.type === 'ADVANCE_PHASE') {
+        const nextPhase = getNextPhase(core);
+        const phaseLabel = nextPhase ? `推进阶段：${nextPhase}` : '推进阶段';
+        return {
+            id: `${command.type}-${command.playerId}-${timestamp}`,
+            timestamp,
+            actorId: command.playerId,
+            kind: command.type,
+            segments: [{ type: 'text', text: phaseLabel }],
+        };
+    }
+
+    return null;
+}
+
+function findDiceThroneCard(
+    core: DiceThroneCore,
+    cardId: string,
+    playerId?: PlayerId
+): AbilityCard | undefined {
+    if (playerId && core.players[playerId]) {
+        const player = core.players[playerId];
+        return (
+            player.hand.find(card => card.id === cardId)
+            ?? player.deck.find(card => card.id === cardId)
+            ?? player.discard.find(card => card.id === cardId)
+        );
+    }
+
+    for (const player of Object.values(core.players)) {
+        const found = player.hand.find(card => card.id === cardId)
+            ?? player.deck.find(card => card.id === cardId)
+            ?? player.discard.find(card => card.id === cardId);
+        if (found) return found;
+    }
+
+    return undefined;
+}
+
 // 创建系统集合（默认系统 + FlowSystem + DiceThrone 专用系统 + 作弊系统）
 // FlowSystem 配置由 FlowHooks 提供，符合设计规范
 // 注意：撤销快照保留 1 个 + 极度缩减日志（maxEntries: 20）以避免 MongoDB 16MB 限制
 const systems = [
     createFlowSystem<DiceThroneCore>({ hooks: diceThroneFlowHooks }),
     createLogSystem({ maxEntries: 20 }),  // 极度减少，不考虑回放
+    createActionLogSystem({
+        commandAllowlist: ACTION_ALLOWLIST,
+        formatEntry: formatDiceThroneActionEntry,
+    }),
     createUndoSystem({
         maxSnapshots: 10,
         // 只对白名单命令做撤回快照，避免 UI/系统行为导致“一进局就可撤回”。
-        snapshotCommandAllowlist: [
-            'PLAY_CARD',
-            // 注意：阶段推进属于明确的规则行为，允许撤回。
-            'ADVANCE_PHASE',
-        ],
+        snapshotCommandAllowlist: ACTION_ALLOWLIST,
     }),
     createPromptSystem(),
     createRematchSystem(),
@@ -378,7 +504,6 @@ export { systems as diceThroneSystemsForTest };
 const COMMAND_TYPES = [
     // 骰子操作
     'ROLL_DICE',
-    'ROLL_BONUS_DIE',
     'TOGGLE_DIE_LOCK',
     'CONFIRM_ROLL',
     // 技能选择
@@ -403,6 +528,10 @@ const COMMAND_TYPES = [
     'TRANSFER_STATUS',
     'CONFIRM_INTERACTION',
     'CANCEL_INTERACTION',
+    // 选角相关
+    'SELECT_CHARACTER',
+    'HOST_START_GAME',
+    'PLAYER_READY',
     // Token 响应系统
     'USE_TOKEN',
     'SKIP_TOKEN_RESPONSE',
@@ -433,7 +562,7 @@ export const DiceThroneGame = createGameAdapter({
     domain: DiceThroneDomain,
     systems,
     minPlayers: 2,
-    maxPlayers: 4, // 支持 2-4 人游戏
+    maxPlayers: 2, // 固定 2 人游戏
     commandTypes: COMMAND_TYPES,
 });
 

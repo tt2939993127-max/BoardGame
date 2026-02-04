@@ -3,13 +3,23 @@ import type { HeroState } from '../types';
 import type { TranslateFn } from './utils';
 import { buildLocalizedImageSet } from '../../../core';
 
+const getCharacterAssetBase = (charId: string = 'monk') => (
+    charId === 'barbarian'
+        ? `dicethrone/images/${charId}`
+        : `dicethrone/images/${charId}/compressed`
+);
+
+const withLegacyPng = (path: string, charId: string) => (
+    charId === 'barbarian' ? `${path}.png` : path
+);
+
 export const ASSETS = {
-    PLAYER_BOARD: 'dicethrone/images/monk/compressed/monk-player-board',
-    TIP_BOARD: 'dicethrone/images/monk/compressed/monk-tip-board',
-    CARDS_ATLAS: 'dicethrone/images/monk/compressed/monk-ability-cards',
-    ABILITY_CARDS_BASE: 'dicethrone/images/monk/compressed/monk-base-ability-cards',
-    DICE_SPRITE: 'dicethrone/images/monk/compressed/dice-sprite',
-    EFFECT_ICONS: 'dicethrone/images/monk/compressed/status-icons-atlas',
+    PLAYER_BOARD: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-player-board`, charId),
+    TIP_BOARD: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-tip-board`, charId),
+    CARDS_ATLAS: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-ability-cards`, charId),
+    ABILITY_CARDS_BASE: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-base-ability-cards`, charId),
+    DICE_SPRITE: (charId: string = 'monk') => `${getCharacterAssetBase(charId)}/dice-sprite`,
+    EFFECT_ICONS: (charId: string = 'monk') => `${getCharacterAssetBase(charId)}/status-icons-atlas`,
     CARD_BG: 'dicethrone/images/Common/compressed/card-background',
     AVATAR: 'dicethrone/images/Common/compressed/character-portraits',
 };
@@ -69,8 +79,22 @@ const PORTRAIT_BG_SIZE = {
     y: (PORTRAIT_ATLAS.imageH / PORTRAIT_CELL_H) * 100,
 };
 
-const CHARACTER_PORTRAIT_INDEX: Record<HeroState['characterId'], number> = {
+const CHARACTER_PORTRAIT_INDEX: Record<string, number> = {
+    barbarian: 13,
+    moon_elf: 1,
+    pyromancer: 2,
     monk: 3,
+    shadow_thief: 4,
+    paladin: 5,
+    ninja: 6,
+    treant: 7,
+    vampire_lord: 8,
+    cursed_pirate: 9,
+    gunslinger: 10,
+    samurai: 11,
+    tactician: 12,
+    huntress: 0,
+    seraph: 14,
 };
 
 const getPortraitAtlasPosition = (index: number) => {
@@ -91,6 +115,6 @@ export const getPortraitStyle = (characterId: HeroState['characterId'], locale?:
         backgroundImage: buildLocalizedImageSet(ASSETS.AVATAR, locale),
         backgroundSize: `${PORTRAIT_BG_SIZE.x}% ${PORTRAIT_BG_SIZE.y}%`,
         backgroundRepeat: 'no-repeat',
-        backgroundPosition: `${xPos}% ${yPos}%`,
+        backgroundPosition: `${xPos.toFixed(4)}% ${yPos.toFixed(4)}%`,
     } as CSSProperties;
 };

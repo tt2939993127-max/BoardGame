@@ -25,7 +25,7 @@ export const GameModeProvider: React.FC<{ mode: GameMode; isSpectator?: boolean;
             if (holder.__BG_GAME_MODE__ === mode) {
                 holder.__BG_GAME_MODE__ = undefined;
             }
-            // Always clear spectator flag when unmounting this provider instance.
+            // 卸载此 Provider 实例时总是清理 spectator 标记。
             holder.__BG_IS_SPECTATOR__ = undefined;
         };
     }, [mode, isSpectator, isMultiplayer]);

@@ -92,6 +92,11 @@
       "title": "Asset Slicer",
       "description": "A toolkit for board game assets. Supports circular/square cuts and sprite exports.",
       "players": "Solo Tool"
+    },
+    "ugcbuilder": {
+      "title": "UGC Prototype Builder",
+      "description": "Quickly create board game prototypes. Supports card design, rule config, and AI-assisted generation.",
+      "players": "Solo Tool"
     }
   },
   "matchRoom": {
@@ -118,7 +123,13 @@
   },
   "error": {
     "createRoomFailed": "Failed to create room",
+    "activeMatchStale": "Your previous room no longer exists. It has been cleared so you can create a new one.",
+    "destroyForbidden": "Unable to destroy the room: invalid or expired credentials. Please re-enter the match and try again.",
+    "destroyNetwork": "Failed to destroy the room due to network or service issues. Please try again later.",
+    "destroyFailedLocalCleaned": "Destroy request failed. Local state has been cleared so you can continue.",
     "activeMatchExists": "You already have an active room. Please return to it or destroy it before creating a new one.",
+    "leaveForbidden": "Unable to leave the room: invalid or expired credentials. Please re-enter the match and try again.",
+    "leaveNetwork": "Failed to leave the room due to network or service issues. Please try again later.",
     "roomFull": "Room is full",
     "joinRoomFailed": "Failed to join room",
     "actionFailed": "Action failed, please try again later.",

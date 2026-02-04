@@ -27,11 +27,21 @@ export class SendRegisterCodeDto {
 export class LoginDto {
     @IsOptional()
     @IsString()
-    username?: string;
+    account?: string;
 
     @IsOptional()
     @IsString()
     password?: string;
+}
+
+export class ChangePasswordDto {
+    @IsOptional()
+    @IsString()
+    currentPassword?: string;
+
+    @IsOptional()
+    @IsString()
+    newPassword?: string;
 }
 
 export class SendEmailCodeDto {

@@ -40,7 +40,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastsRef = useRef<Toast[]>([]);
 
-    // Keep ref in sync for timeouts
+    // 保持 ref 与状态同步，便于 timeout 使用
     useEffect(() => {
         toastsRef.current = toasts;
     }, [toasts]);
@@ -52,12 +52,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const show = useCallback((toastInput: Omit<Toast, 'id' | 'createdAt'>) => {
         const { dedupeKey, tone } = toastInput;
 
-        // Deduplication check
+        // 去重检查
         if (dedupeKey) {
             const existing = toastsRef.current.find((t) => t.dedupeKey === dedupeKey);
             if (existing) {
-                // If it exists, just update its timestamp to keep it alive or ignore if too recent
-                // For now, let's just ignore to prevent spamming
+                // 如果已存在，可更新其时间戳以延长展示，或在过近时忽略
+                // 目前直接忽略以避免刷屏
                 return existing.id;
             }
         }

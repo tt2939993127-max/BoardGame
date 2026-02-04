@@ -1,5 +1,8 @@
 import { io } from 'socket.io-client';
 import { setTimeout as delay } from 'node:timers/promises';
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from '../../apps/api/src/app.module';
+import { AuthService } from '../../apps/api/src/modules/auth/auth.service';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://127.0.0.1:18001';
 const DEFAULT_HEADERS = { 'Content-Type': 'application/json' };
@@ -17,6 +20,34 @@ const requestJson = async (path: string, options: RequestInit = {}) => {
         throw new Error(`${path} 请求失败: ${response.status} ${JSON.stringify(data)}`);
     }
     return data;
+};
+
+const ensureUsers = async (userAEmail: string, userAName: string, userBEmail: string, userBName: string, password: string) => {
+    const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+    try {
+        const authService = app.get(AuthService);
+        const existingA = await authService.findByEmail(userAEmail);
+        if (!existingA) {
+            await authService.createUser(userAName, password, userAEmail);
+        }
+        const existingB = await authService.findByEmail(userBEmail);
+        if (!existingB) {
+            await authService.createUser(userBName, password, userBEmail);
+        }
+    } finally {
+        await app.close();
+    }
+};
+
+const loginUser = async (email: string, password: string) => {
+    const payload = await requestJson('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ account: email, password }),
+    });
+    if (!payload?.success) {
+        throw new Error(`/auth/login 失败: ${payload?.message || 'unknown'}`);
+    }
+    return payload.data?.token as string;
 };
 
 const waitForHealth = async () => {
@@ -60,23 +91,17 @@ const run = async () => {
     const password = 'pass1234';
     const userAName = `ws-a-${suffix}`;
     const userBName = `ws-b-${suffix}`;
+    const userAEmail = `ws-a-${suffix}@example.com`;
+    const userBEmail = `ws-b-${suffix}@example.com`;
 
-    const userA = await requestJson('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ username: userAName, password }),
-    });
-    const userB = await requestJson('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ username: userBName, password }),
-    });
+    await ensureUsers(userAEmail, userAName, userBEmail, userBName, password);
 
-    await requestJson('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ username: userAName, password }),
-    });
+    const tokenA = await loginUser(userAEmail, password);
+    const tokenB = await loginUser(userBEmail, password);
 
-    const tokenA = userA.token as string;
-    const tokenB = userB.token as string;
+    const userB = await requestJson('/auth/me', {
+        headers: { Authorization: `Bearer ${tokenB}` },
+    });
     const userBId = userB.user.id as string;
 
     const socketB = await connectSocket(tokenB);

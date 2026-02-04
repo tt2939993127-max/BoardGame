@@ -33,12 +33,14 @@
     "test:e2e": "npx playwright test",
     "test": "vitest run",
     "test:watch": "vitest",
+    "init:admin": "tsx scripts/init_admin.ts",
     "check:arch": "node scripts/check-architecture.cjs",
     "typecheck": "tsc --noEmit",
     "assets:upload": "node scripts/upload-to-r2.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.975.0",
+    "@babel/standalone": "^7.29.0",
     "@nestjs/cache-manager": "^2.2.1",
     "@nestjs/common": "^10.3.9",
     "@nestjs/config": "^3.2.3",
@@ -95,6 +97,7 @@
     "@nestjs/testing": "^10.3.9",
     "@playwright/test": "^1.58.0",
     "@tailwindcss/postcss": "^4.1.18",
+    "@types/babel__standalone": "^7.1.9",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^4.17.21",
     "@types/howler": "^2.2.12",

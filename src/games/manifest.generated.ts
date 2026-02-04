@@ -5,11 +5,13 @@ import type { GameManifestEntry } from './manifest.types';
 import entry0 from './assetslicer/manifest';
 import entry1 from './dicethrone/manifest';
 import entry2 from './tictactoe/manifest';
+import entry3 from './ugcbuilder/manifest';
 
 export const GAME_MANIFEST: GameManifestEntry[] = [
     entry0,
     entry1,
     entry2,
+    entry3,
 ];
 
 export const GAME_MANIFEST_BY_ID: Record<string, GameManifestEntry> = Object.fromEntries(

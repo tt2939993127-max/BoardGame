@@ -21,6 +21,61 @@ const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
 const normalizeGameName = (name?: string) => (name || '').toLowerCase();
 
+const buildCreateRoomErrorTip = (error: unknown): { title: string; message: string } | null => {
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    const details = (error as { details?: unknown } | null)?.details;
+    const detailText = typeof details === 'string'
+        ? details
+        : details
+            ? JSON.stringify(details)
+            : '';
+    const combined = `${rawMessage} ${detailText}`.toLowerCase();
+
+    if (combined.includes('failed to fetch') || combined.includes('networkerror')) {
+        return {
+            title: '创建房间失败',
+            message: '无法连接游戏服务，请确认服务已启动，并检查跨域/代理设置。',
+        };
+    }
+    if (combined.includes('access-control-allow-origin') || combined.includes('cors')) {
+        return {
+            title: '创建房间失败',
+            message: '浏览器拦截了跨域请求，请使用本地代理或检查 CORS 配置。',
+        };
+    }
+    if (combined.includes('http status 401') || combined.includes('invalid token')) {
+        return {
+            title: '创建房间失败',
+            message: '登录信息已过期或无效，请重新登录后再试。',
+        };
+    }
+    if (combined.includes('guestid is required')) {
+        return {
+            title: '创建房间失败',
+            message: '游客身份异常，请刷新页面后重试。',
+        };
+    }
+    if (combined.includes('http status 403')) {
+        return {
+            title: '创建房间失败',
+            message: '当前权限不足，无法创建房间。',
+        };
+    }
+    if (combined.includes('http status 404')) {
+        return {
+            title: '创建房间失败',
+            message: '游戏服务未找到该游戏，请刷新页面后重试。',
+        };
+    }
+    if (combined.includes('request size did not match content length')) {
+        return {
+            title: '创建房间失败',
+            message: '请求数据异常，请刷新页面后再试。',
+        };
+    }
+    return null;
+};
+
 interface RoomPlayer {
     id: number;
     name?: string;
@@ -44,13 +99,14 @@ interface GameDetailsModalProps {
     descriptionKey: string;
     thumbnail: ReactNode;
     closeOnBackdrop?: boolean;
-    /** 导航前调用，通知父组件不要清理 URL */
+    /** 导航前调用，通知父组件不要清理地址参数 */
     onNavigate?: () => void;
 }
 
 export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop, onNavigate }: GameDetailsModalProps) => {
     const navigate = useNavigate();
     const modalRef = useRef<HTMLDivElement>(null);
+    const activeMatchCheckRef = useRef<string | null>(null);
     const { user, token } = useAuth();
     const { t } = useTranslation(['lobby', 'common']);
     const { openModal, closeModal } = useModalStack();
@@ -104,7 +160,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         pruneStoredMatchCredentials();
     }, [isOpen]);
 
-    // 使用 WebSocket 订阅房间列表更新（替代轮询）
+    // 使用 socket 订阅房间列表更新（替代轮询）
     useEffect(() => {
         if (isOpen) {
             let storageTimeout: NodeJS.Timeout;
@@ -121,7 +177,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
             // 订阅大厅更新（仅当前游戏）
             const unsubscribeMatches = lobbySocket.subscribe(normalizedGameId, (matches: LobbyMatch[]) => {
-                // 转换为 Room 格式
+                // 转换为房间格式
                 const roomList: Room[] = matches.map(m => ({
                     matchID: m.matchID,
                     players: m.players,
@@ -137,7 +193,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             // 订阅连接状态
             const unsubscribeStatus = lobbySocket.subscribeStatus((status) => {
                 if (status.lastError) {
-                    // Surface backend connection issues to the user.
+                    // 将后端连接问题提示给用户
                     toast.error(
                         { kind: 'i18n', key: 'error.serviceUnavailable.desc', ns: 'lobby' },
                         { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
@@ -172,7 +228,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         return null;
     }, [localStorageTick, user]);
 
-    // 同步 ownerActiveMatch 与房间列表（避免状态滞后或丢失）
+    // 同步房主激活对局与房间列表（避免状态滞后或丢失）
     useEffect(() => {
         const ownerKey = getOwnerKey();
         if (!ownerKey) return;
@@ -244,7 +300,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             const ownerType = getOwnerType();
             const guestId = user?.id ? undefined : getGuestId();
 
-            // 使用传入的 gameId，通过 setupData 传递房间名
+            // 使用传入的游戏编号传递房间名
             const setupData = {
                 ...(roomName ? { roomName } : {}),
                 ttlSeconds,
@@ -265,7 +321,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 playerName,
             });
 
-            // 保存凭据，以便 MatchRoom 获取
+            // 保存凭据，供对局页面获取
             persistMatchCredentials(matchID, {
                 playerID: '0',
                 credentials: playerCredentials,
@@ -283,7 +339,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         } catch (error) {
             console.error('Failed to create match:', error);
             const message = error instanceof Error ? error.message : String(error);
-            // 解析 ACTIVE_MATCH_EXISTS:游戏ID:matchID 格式
+            // 解析 ACTIVE_MATCH_EXISTS:游戏编号:matchID 格式
             const activeMatchPattern = /ACTIVE_MATCH_EXISTS:([^:]+):([^:]+)/;
             const activeMatch = message.match(activeMatchPattern);
             if (activeMatch) {
@@ -303,6 +359,11 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 void handleJoinRoom(existingMatchID, existingGameName);
                 lobbySocket.requestRefresh(normalizedGameId);
                 setShowCreateRoomModal(false);
+                return;
+            }
+            const friendlyTip = buildCreateRoomErrorTip(error);
+            if (friendlyTip) {
+                toast.error(friendlyTip.message, friendlyTip.title);
                 return;
             }
             toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
@@ -335,7 +396,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     if (!seat || seatTakenByOther) {
                         clearMatchCredentials(matchID);
                     } else {
-                        // 直接重连：让 server/client 侧用 credentials 校验
+                        // 直接重连：让服务端/客户端用凭据校验
                         onNavigate?.();
                         navigate(`/play/${roomGameName}/match/${matchID}?playerID=${data.playerID}`);
                         return;
@@ -435,23 +496,32 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         const { matchID, myPlayerID, myCredentials, isHost } = pendingAction;
         console.log('[LobbyModal] 确认执行', { matchID, myPlayerID, isHost });
 
-        // 尝试从本地存储或房间列表获取 gameName
+        // 尝试从本地存储或房间列表获取游戏名
         const saved = localStorage.getItem(`match_creds_${matchID}`);
-        let gameName = gameId; // 默认使用当前模态框的 gameId
+        let gameName = gameId; // 默认使用当前模态框的游戏编号
         if (saved) {
             const data = JSON.parse(saved);
             if (data.gameName) gameName = data.gameName;
         } else {
-            // 如果本地没有，尝试从 rooms 列表找
+            // 如果本地没有，尝试从房间列表查找
             const room = rooms.find(r => r.matchID === matchID);
             if (room?.gameName) gameName = room.gameName;
         }
 
-        const success = await exitMatch(gameName, matchID, myPlayerID, myCredentials, isHost);
-        console.log('[LobbyModal] 执行完成', { success });
-        if (!success) {
-            toast.error({ kind: 'i18n', key: 'error.actionFailed', ns: 'lobby' });
+        const result = await exitMatch(gameName, matchID, myPlayerID, myCredentials, isHost);
+        console.log('[LobbyModal] 执行完成', { result });
+        if (!result.success) {
+            const errorKey = result.error === 'forbidden'
+                ? 'error.destroyForbidden'
+                : result.error === 'network'
+                    ? 'error.destroyNetwork'
+                    : 'error.actionFailed';
+            toast.error({ kind: 'i18n', key: errorKey, ns: 'lobby' });
             return;
+        }
+
+        if (result.cleanedLocal) {
+            toast.warning({ kind: 'i18n', key: 'error.destroyFailedLocalCleaned', ns: 'lobby' });
         }
         setPendingAction(null);
         setLocalStorageTick(t => t + 1);
@@ -477,7 +547,6 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 },
                 render: ({ close, closeOnBackdrop: stackCloseOnBackdrop }) => (
                     <ConfirmModal
-                        open
                         title={pendingAction.isHost ? t('confirm.destroy.title') : t('confirm.leave.title')}
                         description={pendingAction.isHost ? t('confirm.destroy.description') : t('confirm.leave.description')}
                         onConfirm={() => {
@@ -512,7 +581,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const allRoomItems = useMemo(() => {
         if (rooms.length === 0) return [];
 
-        // 预先获取缓存的 creds 索引，避免在 map 中反复查询 localStorage.getItem
+        // 预先获取缓存凭据索引，避免在映射中反复查询本地存储
         const credsMap = new Map<string, any>();
         listStoredMatchCredentials().forEach((item) => {
             if (item.matchID) {
@@ -594,10 +663,31 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         return null;
     }, [localStorageTick, normalizedGameId, rooms, user]);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!activeMatch?.matchID) return;
+        if (activeMatchCheckRef.current === activeMatch.matchID) return;
+
+        activeMatchCheckRef.current = activeMatch.matchID;
+
+        lobbyClient.getMatch(activeMatch.gameName, activeMatch.matchID)
+            .catch((err) => {
+                const status = (err as { status?: number }).status;
+                const message = (err as { message?: string }).message ?? '';
+                if (status === 404 || message.includes('404')) {
+                    clearMatchCredentials(activeMatch.matchID);
+                    clearOwnerActiveMatch(activeMatch.matchID);
+                    setLocalStorageTick((t) => t + 1);
+                    toast.warning({ kind: 'i18n', key: 'error.activeMatchStale', ns: 'lobby' });
+                    return;
+                }
+                activeMatchCheckRef.current = null;
+            });
+    }, [activeMatch, isOpen]);
+
     return (
         <>
             <ModalBase
-                open={isOpen}
                 onClose={onClose}
                 closeOnBackdrop={closeOnBackdrop}
                 containerClassName="p-4 sm:p-8"
@@ -628,7 +718,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
                     {/* 左侧面板 - 游戏信息 */}
                     <div className="w-full md:w-2/5 bg-parchment-base-bg/50 border-b md:border-b-0 md:border-r border-parchment-card-border/30 p-3 md:p-8 flex flex-col md:items-center text-left md:text-center font-serif shrink-0 transition-all">
-                        {/* Thumbnail - Hidden on mobile, visible on desktop */}
+                        {/* 缩略图 - 移动端隐藏，桌面端显示 */}
                         <div className="hidden md:flex w-20 h-20 bg-parchment-card-bg border border-parchment-card-border/30 rounded-[4px] shadow-sm items-center justify-center text-4xl text-parchment-base-text font-bold mb-6 overflow-hidden shrink-0">
                             {thumbnail}
                         </div>
@@ -642,7 +732,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                 {t(descriptionKey, { defaultValue: descriptionKey })}
                             </p>
 
-                            {/* Player Options Display - Optimized Vertical Space */}
+                            {/* 人数显示 - 优化纵向空间 */}
                             {(() => {
                                 const playerOptions = gameManifest?.playerOptions || [2];
                                 const bestPlayers = gameManifest?.bestPlayers || [];

@@ -2,7 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { AUTH_API_URL } from '../config/server';
 
 export const SOCIAL_EVENTS = {
-    // Server -> Client
+    // 服务端 -> 客户端
     FRIEND_ONLINE: 'social:friendOnline',
     FRIEND_OFFLINE: 'social:friendOffline',
     FRIEND_REQUEST: 'social:friendRequest',
@@ -10,8 +10,8 @@ export const SOCIAL_EVENTS = {
     GAME_INVITE: 'social:gameInvite',
     HEARTBEAT: 'social:heartbeat',
 
-    // Client -> Server
-    HEARTBEAT_ACK: 'social:heartbeat', // If needed, though normally heartbeat is just ping/pong or custom
+    // 客户端 -> 服务端
+    HEARTBEAT_ACK: 'social:heartbeat', // 如需 ACK，可用该事件（通常 heartbeat 为 ping/pong 或自定义）
 } as const;
 
 export interface FriendStatusPayload {
@@ -43,7 +43,7 @@ export interface GameInvitePayload {
         id: string;
         username: string;
     };
-    gameId?: string; // e.g. 'tic-tac-toe'
+    gameId?: string; // 例如 'tic-tac-toe'
     roomId?: string;
     message?: string;
 }
@@ -57,7 +57,7 @@ class SocialSocketService {
     private token: string | null = null;
 
     constructor() {
-        // Initialize listeners map for supported events
+        // 初始化事件监听映射
         Object.values(SOCIAL_EVENTS).forEach(event => {
             this.listeners.set(event, new Set());
         });
@@ -74,8 +74,7 @@ class SocialSocketService {
         this.token = token;
 
         if (!this.socket) {
-            // Determine URL base. If AUTH_API_URL is absolute, use its origin.
-            // Otherwise use current window origin (relying on proxy).
+            // 确定 URL 基地址：若 AUTH_API_URL 为绝对路径则取其 origin；否则使用当前 window origin（依赖 proxy）。
             const baseUrl = AUTH_API_URL.startsWith('http')
                 ? new URL(AUTH_API_URL).origin
                 : window.location.origin;
@@ -123,7 +122,7 @@ class SocialSocketService {
             this.isConnected = false;
         });
 
-        // Register handlers for all social events
+        // 注册所有社交事件的处理器
         Object.values(SOCIAL_EVENTS).forEach(eventName => {
             this.socket?.on(eventName, (payload) => {
                 console.log(`[SocialSocket] Event ${eventName}:`, payload);
@@ -142,7 +141,7 @@ class SocialSocketService {
     }
 
     /**
-     * Subscribe to a specific event
+     * 订阅指定事件
      */
     on<TPayload = unknown>(event: string, callback: (payload: TPayload) => void): () => void {
         if (!this.listeners.has(event)) {
@@ -157,7 +156,7 @@ class SocialSocketService {
     }
 
     /**
-     * Notify local listeners
+     * 通知本地监听器
      */
     private notifyListeners(event: string, payload: unknown): void {
         this.listeners.get(event)?.forEach(callback => {

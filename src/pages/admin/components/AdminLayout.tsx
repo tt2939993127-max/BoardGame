@@ -22,7 +22,7 @@ export default function AdminLayout() {
 
     return (
         <div className="min-h-screen bg-zinc-50 flex font-sans text-zinc-900">
-            {/* Sidebar */}
+            {/* 侧边栏 */}
             <aside className="w-72 bg-zinc-950 text-zinc-400 flex-shrink-0 flex flex-col shadow-xl z-20">
                 <div className="p-6">
                     <div className="flex items-center gap-3 px-2">
@@ -100,7 +100,7 @@ export default function AdminLayout() {
                 </div>
             </aside>
 
-            {/* Main Content */}
+            {/* 主内容区 */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 <header className="h-20 flex items-center px-8 justify-between z-10">
                     <div>
@@ -110,7 +110,7 @@ export default function AdminLayout() {
                         <p className="text-sm text-zinc-500">今日概况与数据统计</p>
                     </div>
                     <div className="flex items-center gap-4">
-                        {/* Header actions can go here */}
+                        {/* 预留顶部操作区 */}
                     </div>
                 </header>
 

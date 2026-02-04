@@ -8,12 +8,12 @@ export type UserDocument = HydratedDocument<User> & {
 
 @Schema({ timestamps: true })
 export class User {
+    // username 仅作为昵称，不再作为唯一身份标识。
     @Prop({
         type: String,
         required: true,
-        unique: true,
         trim: true,
-        minlength: 3,
+        minlength: 2,
         maxlength: 20,
     })
     username!: string;
@@ -25,6 +25,7 @@ export class User {
     })
     password!: string;
 
+    // 邮箱作为唯一标识（登录首选）；历史数据允许为空，但一旦存在则必须唯一。
     @Prop({
         type: String,
         unique: true,

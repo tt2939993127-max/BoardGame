@@ -7,8 +7,8 @@ import type { PlayerId, RandomFn } from '../../../engine/types';
 import type { EffectAction, RollDieConditionalEffect } from '../../../systems/TokenSystem/types';
 
 export type { RollDieConditionalEffect };
-import type { AbilityEffect, EffectTiming, EffectResolutionContext } from '../../../systems/AbilitySystem';
-import { abilityManager } from '../../../systems/AbilitySystem';
+import type { AbilityEffect, EffectTiming, EffectResolutionContext } from '../../../systems/presets/combat';
+import { combatAbilityManager } from './combatAbility';
 import { getActiveDice, getFaceCounts, getDieFace, getTokenStackLimit } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS } from './ids';
@@ -35,7 +35,7 @@ import {
     createPendingDamage,
     createTokenResponseRequestedEvent,
 } from './tokenResponse';
-import type { AbilityDef } from '../../../systems/AbilitySystem';
+import type { AbilityDef } from '../../../systems/presets/combat';
 
 // ============================================================================
 // 效果上下文
@@ -162,7 +162,8 @@ function resolveEffectAction(
     action: EffectAction,
     ctx: EffectContext,
     bonusDamage?: number,
-    random?: RandomFn
+    random?: RandomFn,
+    sfxKey?: string
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const timestamp = Date.now();
@@ -215,6 +216,7 @@ function resolveEffectAction(
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(event);
             ctx.damageDealt += actualDamage;
@@ -231,6 +233,7 @@ function resolveEffectAction(
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(event);
             break;
@@ -256,6 +259,7 @@ function resolveEffectAction(
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(event);
             break;
@@ -272,6 +276,7 @@ function resolveEffectAction(
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(event);
             break;
@@ -297,6 +302,7 @@ function resolveEffectAction(
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(tokenEvent);
             break;
@@ -315,6 +321,7 @@ function resolveEffectAction(
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(choiceEvent);
             break;
@@ -339,24 +346,25 @@ function resolveEffectAction(
                 const matchedEffect = action.conditionalEffects.find(e => e.face === face);
                 
                 // 生成 BONUS_DIE_ROLLED 事件（总是提供 effectKey）
-const bonusDieEvent: BonusDieRolledEvent = {
-    type: 'BONUS_DIE_ROLLED',
-    payload: {
-        value,
-        face,
-        playerId: targetId,
-        targetPlayerId: targetId,
-        // 骰面效果描述：使用通用的 bonusDie.effect.{face} key
-        effectKey: `bonusDie.effect.${face}`,
-    },
-    sourceCommandType: 'ABILITY_EFFECT',
-    timestamp,
-};
+                const bonusDieEvent: BonusDieRolledEvent = {
+                    type: 'BONUS_DIE_ROLLED',
+                    payload: {
+                        value,
+                        face,
+                        playerId: targetId,
+                        targetPlayerId: targetId,
+                        // 骰面效果描述：使用通用的 bonusDie.effect.{face} key
+                        effectKey: `bonusDie.effect.${face}`,
+                    },
+                    sourceCommandType: 'ABILITY_EFFECT',
+                    timestamp,
+                    sfxKey,
+                };
                 events.push(bonusDieEvent);
                 
                 // 触发匹配的条件效果
                 if (matchedEffect) {
-                    events.push(...resolveConditionalEffect(matchedEffect, ctx, targetId, sourceAbilityId, timestamp));
+                    events.push(...resolveConditionalEffect(matchedEffect, ctx, targetId, sourceAbilityId, timestamp, sfxKey));
                 }
             }
             break;
@@ -364,9 +372,7 @@ const bonusDieEvent: BonusDieRolledEvent = {
 
         case 'custom': {
             const actionId = action.customActionId;
-            console.log('[DiceThrone][resolveEffectAction] 处理 custom action', { customActionId: actionId });
             if (!actionId) {
-                console.log('[DiceThrone][resolveEffectAction] customActionId 为空，跳过');
                 break;
             }
 
@@ -382,7 +388,15 @@ const bonusDieEvent: BonusDieRolledEvent = {
                     timestamp,
                     random,
                 };
-                events.push(...handler(handlerCtx));
+                const handledEvents = handler(handlerCtx);
+                if (sfxKey) {
+                    handledEvents.forEach(handledEvent => {
+                        if (!handledEvent.sfxKey) {
+                            handledEvent.sfxKey = sfxKey;
+                        }
+                    });
+                }
+                events.push(...handledEvents);
             } else {
                 console.warn(`[DiceThrone] 未注册的 customAction: ${actionId}`);
             }
@@ -417,6 +431,7 @@ const bonusDieEvent: BonusDieRolledEvent = {
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(replaceEvent);
             break;
@@ -436,6 +451,7 @@ const bonusDieEvent: BonusDieRolledEvent = {
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
+                sfxKey,
             };
             events.push(shieldEvent);
             break;
@@ -608,27 +624,30 @@ function handleLotusPalmTaijiCapUpAndFill({ targetId, sourceAbilityId, state, ti
     return events;
 }
 
-/**
- * 雷霆一击 II / 风暴突袭 II: 投掷3骰，造成总和伤害，>=12施加倒地
- * 实现延后结算：投掷完成后存储到 pendingBonusDiceSettlement，等待重掷交互完成后再结算伤害
- */
-function handleThunderStrike2RollDamage({ targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    console.log('[DiceThrone][handleThunderStrike2RollDamage] 被调用', {
-        attackerId,
-        targetId,
-        sourceAbilityId,
-        attackerTaiji: state.players[attackerId]?.tokens?.[TOKEN_IDS.TAIJI] ?? 0,
-    });
+type ThunderStrikeBonusConfig = {
+    diceCount: number;
+    rerollCostTokenId: string;
+    rerollCostAmount: number;
+    maxRerollCount?: number;
+    dieEffectKey: string;
+    rerollEffectKey: string;
+    threshold?: number;
+    thresholdEffect?: 'knockdown';
+};
+
+const createThunderStrikeRollDamageEvents = (
+    { targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext,
+    config: ThunderStrikeBonusConfig
+): DiceThroneEvent[] => {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: import('./types').BonusDieInfo[] = [];
 
-    // 投掷 3 颗骰子
-    for (let i = 0; i < 3; i++) {
+    // 投掷奖励骰
+    for (let i = 0; i < config.diceCount; i++) {
         const value = random.d(6);
         const face = getDieFace(value);
         dice.push({ index: i, value, face });
-        // 每颗骰子都发出 BONUS_DIE_ROLLED 事件用于 UI 特写
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: {
@@ -636,31 +655,31 @@ function handleThunderStrike2RollDamage({ targetId, attackerId, sourceAbilityId,
                 face,
                 playerId: attackerId,
                 targetPlayerId: targetId,
-                effectKey: 'bonusDie.effect.thunderStrike2Die',
+                effectKey: config.dieEffectKey,
                 effectParams: { value, index: i },
             },
             sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + i, // 确保时间戳唯一
+            timestamp: timestamp + i,
         } as BonusDieRolledEvent);
     }
 
-    // 检查攻击者是否有太极 Token，有则进入重掷交互流程
     const attacker = state.players[attackerId];
-    const hasTaiji = (attacker?.tokens?.[TOKEN_IDS.TAIJI] ?? 0) >= 1;
+    const hasToken = (attacker?.tokens?.[config.rerollCostTokenId] ?? 0) >= config.rerollCostAmount;
 
-    if (hasTaiji) {
-        // 创建待结算的奖励骰状态，进入重掷交互流程
+    if (hasToken) {
         const settlement: import('./types').PendingBonusDiceSettlement = {
-            id: `thunder-strike-${timestamp}`,
+            id: `${sourceAbilityId}-${timestamp}`,
             sourceAbilityId,
             attackerId,
             targetId,
             dice,
-            rerollCostTokenId: TOKEN_IDS.TAIJI,
-            rerollCostAmount: 1,
+            rerollCostTokenId: config.rerollCostTokenId,
+            rerollCostAmount: config.rerollCostAmount,
             rerollCount: 0,
-            threshold: 12,
-            thresholdEffect: 'knockdown',
+            maxRerollCount: config.maxRerollCount,
+            rerollEffectKey: config.rerollEffectKey,
+            threshold: config.threshold,
+            thresholdEffect: config.thresholdEffect,
             readyToSettle: false,
         };
         events.push({
@@ -670,7 +689,6 @@ function handleThunderStrike2RollDamage({ targetId, attackerId, sourceAbilityId,
             timestamp,
         } as import('./types').BonusDiceRerollRequestedEvent);
     } else {
-        // 没有太极，直接结算伤害
         const totalDamage = dice.reduce((sum, d) => sum + d.value, 0);
         const target = state.players[targetId];
         const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
@@ -681,8 +699,7 @@ function handleThunderStrike2RollDamage({ targetId, attackerId, sourceAbilityId,
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as DamageDealtEvent);
-        // 判断是否触发倒地
-        if (totalDamage >= 12) {
+        if (config.threshold !== undefined && totalDamage >= config.threshold && config.thresholdEffect === 'knockdown') {
             const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
             const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
             const maxStacks = def?.stackLimit || 99;
@@ -697,6 +714,36 @@ function handleThunderStrike2RollDamage({ targetId, attackerId, sourceAbilityId,
     }
 
     return events;
+};
+
+/**
+ * 雷霆万钧: 投掷3骰，造成总和伤害，可花费2太极重掷其中1颗
+ */
+function handleThunderStrikeRollDamage(context: CustomActionContext): DiceThroneEvent[] {
+    return createThunderStrikeRollDamageEvents(context, {
+        diceCount: 3,
+        rerollCostTokenId: TOKEN_IDS.TAIJI,
+        rerollCostAmount: 2,
+        maxRerollCount: 1,
+        dieEffectKey: 'bonusDie.effect.thunderStrikeDie',
+        rerollEffectKey: 'bonusDie.effect.thunderStrikeReroll',
+    });
+}
+
+/**
+ * 雷霆一击 II / 风暴突袭 II: 投掷3骰，造成总和伤害，>=12施加倒地
+ * 实现延后结算：投掷完成后存储到 pendingBonusDiceSettlement，等待重掷交互完成后再结算伤害
+ */
+function handleThunderStrike2RollDamage(context: CustomActionContext): DiceThroneEvent[] {
+    return createThunderStrikeRollDamageEvents(context, {
+        diceCount: 3,
+        rerollCostTokenId: TOKEN_IDS.TAIJI,
+        rerollCostAmount: 1,
+        dieEffectKey: 'bonusDie.effect.thunderStrike2Die',
+        rerollEffectKey: 'bonusDie.effect.thunderStrike2Reroll',
+        threshold: 12,
+        thresholdEffect: 'knockdown',
+    });
 }
 
 /** 获得2CP */
@@ -931,6 +978,9 @@ registerCustomActionHandler('lotus-palm-unblockable-choice', handleLotusPalmUnbl
 registerCustomActionHandler('lotus-palm-taiji-cap-up-and-fill', handleLotusPalmTaijiCapUpAndFill, {
     categories: ['resource'],
 });
+registerCustomActionHandler('thunder-strike-roll-damage', handleThunderStrikeRollDamage, {
+    categories: ['dice', 'other'],
+});
 registerCustomActionHandler('thunder-strike-2-roll-damage', handleThunderStrike2RollDamage, {
     categories: ['dice', 'other'],
 });
@@ -1008,7 +1058,8 @@ function resolveConditionalEffect(
     ctx: EffectContext,
     targetId: PlayerId,
     sourceAbilityId: string,
-    timestamp: number
+    timestamp: number,
+    sfxKey?: string
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const { state } = ctx;
@@ -1038,6 +1089,7 @@ function resolveConditionalEffect(
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
+            sfxKey,
         };
         events.push(event);
     }
@@ -1061,6 +1113,7 @@ function resolveConditionalEffect(
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
+            sfxKey,
         };
         events.push(tokenEvent);
     }
@@ -1077,6 +1130,7 @@ function resolveConditionalEffect(
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
+            sfxKey,
         };
         events.push(choiceEvent);
     }
@@ -1096,14 +1150,8 @@ export function resolveEffectsToEvents(
     const events: DiceThroneEvent[] = [];
     let bonusApplied = false;
 
-    console.log('[DiceThrone][resolveEffectsToEvents] 开始解析效果:', JSON.stringify({
-        sourceAbilityId: ctx.sourceAbilityId,
-        timing,
-        effectsCount: effects.length,
-        effects: effects.map(e => ({ description: e.description, timing: e.timing, actionType: e.action?.type, customActionId: e.action?.customActionId })),
-    }));
-
     // 构建 EffectResolutionContext 用于条件检查
+    const activeDice = getActiveDice(ctx.state);
     const resolutionCtx: EffectResolutionContext = {
         attackerId: ctx.attackerId,
         defenderId: ctx.defenderId,
@@ -1111,28 +1159,19 @@ export function resolveEffectsToEvents(
         damageDealt: ctx.damageDealt,
         attackerStatusEffects: ctx.state.players[ctx.attackerId]?.statusEffects,
         defenderStatusEffects: ctx.state.players[ctx.defenderId]?.statusEffects,
+        diceValues: activeDice.map(die => die.value),
+        faceCounts: getFaceCounts(activeDice),
     };
 
-    const timedEffects = abilityManager.getEffectsByTiming(effects, timing);
-    console.log('[DiceThrone][resolveEffectsToEvents] 过滤后的时机效果:', JSON.stringify({
-        timedEffectsCount: timedEffects.length,
-        timedEffects: timedEffects.map(e => ({ description: e.description, actionType: e.action?.type, customActionId: e.action?.customActionId })),
-    }));
+    const timedEffects = combatAbilityManager.getEffectsByTiming(effects, timing);
 
     for (const effect of timedEffects) {
         if (!effect.action) {
-            console.log('[DiceThrone][resolveEffectsToEvents] 效果无 action，跳过:', effect.description);
             continue;
         }
-        if (!abilityManager.checkEffectCondition(effect, resolutionCtx)) {
-            console.log('[DiceThrone][resolveEffectsToEvents] 效果条件不满足，跳过:', effect.description);
+        if (!combatAbilityManager.checkEffectCondition(effect, resolutionCtx)) {
             continue;
         }
-        console.log('[DiceThrone][resolveEffectsToEvents] 执行效果:', JSON.stringify({ 
-            description: effect.description, 
-            actionType: effect.action.type,
-            customActionId: effect.action.customActionId,
-        }));
 
         // 计算额外伤害：包括配置的 bonusDamage + rollDie 累加的 accumulatedBonusDamage
         let totalBonus = 0;
@@ -1143,7 +1182,7 @@ export function resolveEffectsToEvents(
             totalBonus += ctx.accumulatedBonusDamage;
         }
         
-        const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random);
+        const effectEvents = resolveEffectAction(effect.action, ctx, totalBonus || undefined, config?.random, effect.sfxKey);
         events.push(...effectEvents);
 
         // 如果产生伤害且只允许一次加成

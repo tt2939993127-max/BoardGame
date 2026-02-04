@@ -124,7 +124,26 @@
     "shieldLabel": "护盾: {{value}}"
   },
   "hero": {
-    "monk": "僧侣"
+    "monk": "僧侣",
+    "barbarian": "狂战士"
+  },
+  "characters": {
+    "monk": "僧侣",
+    "barbarian": "狂战士"
+  },
+  "selection": {
+    "title": "选择你的英雄",
+    "selectHero": "选择英雄",
+    "choosing": "选择中...",
+    "startGame": "开始游戏",
+    "waiting": "等待中...",
+    "waitingAll": "等待全员就绪",
+    "waitingForHost": "等待房主开始...",
+    "notSelected": "未选择",
+    "pressStart": "开始游戏",
+    "ready": "准备",
+    "readyWaiting": "等待其他玩家...",
+    "readyProgress": "准备进度"
   },
   "imageAlt": {
     "deck": "牌堆",
@@ -195,11 +214,13 @@
       "gainCp": "获得 {{cp}} CP",
       "enlightenmentLotus": "莲花！获得 2太极 + 闪避 + 净化",
       "enlightenmentOther": "抽 1 张牌",
+      "thunderStrikeDie": "投出 {{value}}",
+      "thunderStrikeReroll": "重掷得 {{value}}",
       "thunderStrike2Die": "投出 {{value}}",
       "thunderStrike2Reroll": "重掷得 {{value}}"
     },
-    "selectToReroll": "点击骰子花费1气重掷",
-    "noTokenToReroll": "没有太极标记可用于重掷",
+    "selectToReroll": "点击骰子花费{{cost}}{{token}}重掷",
+    "noTokenToReroll": "没有{{token}}标记可用于重掷",
     "total": "总伤害",
     "confirmDamage": "确认伤害",
     "continue": "继续"

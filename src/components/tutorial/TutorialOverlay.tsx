@@ -12,6 +12,22 @@ export const TutorialOverlay: React.FC = () => {
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const lastStepIdRef = useRef<string | null>(null);
     const hasAutoScrolledRef = useRef(false);
+    const lastLogKeyRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (!isActive || !currentStep) return;
+        const stepId = currentStep.id ?? 'unknown';
+        const showMask = Boolean(currentStep.showMask);
+        const highlightTarget = currentStep.highlightTarget ?? 'none';
+        const requireAction = Boolean(currentStep.requireAction);
+        const aiActionsCount = currentStep.aiActions?.length ?? 0;
+        const logKey = `${stepId}-${showMask}-${highlightTarget}-${requireAction}-${aiActionsCount}`;
+        if (lastLogKeyRef.current === logKey) return;
+        lastLogKeyRef.current = logKey;
+        console.info(
+            `[TutorialOverlay] stepId=${stepId} showMask=${showMask} highlightTarget=${highlightTarget} requireAction=${requireAction} aiActionsCount=${aiActionsCount}`
+        );
+    }, [currentStep, isActive]);
 
 
 
@@ -151,15 +167,15 @@ export const TutorialOverlay: React.FC = () => {
 
     if (!isActive || !currentStep) return null;
 
-    // 在 AI 回合期间不显示遮罩层 - 让 AI 静默移动
+    // 在智能回合期间不显示遮罩层 - 让智能方静默移动
     if (currentStep.aiActions && currentStep.aiActions.length > 0) return null;
 
 
 
-    // SVG 路径用于带孔洞的遮罩
+    // 矢量路径用于带孔洞的遮罩
     let maskPath = `M0 0 h${window.innerWidth} v${window.innerHeight} h-${window.innerWidth} z`;
     if (targetRect) {
-        // 逆时针矩形用于创建挖空效果 (fill-rule: evenodd)
+        // 逆时针矩形用于创建挖空效果（偶奇填充规则）
         const { left, top, right, bottom } = targetRect;
         const p = 8;
         maskPath += ` M${left - p} ${top - p} v${(bottom - top) + p * 2} h${(right - left) + p * 2} v-${(bottom - top) + p * 2} z`;
@@ -169,7 +185,7 @@ export const TutorialOverlay: React.FC = () => {
 
     return (
         <div className="fixed inset-0 z-[9999] pointer-events-none">
-            {/* 遮罩层 - 仅在 showMask 为 true 时阻止点击 */}
+            {/* 遮罩层 - 仅在遮罩开关为真时阻止点击 */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300">
                 <path
                     d={maskPath}
@@ -181,7 +197,7 @@ export const TutorialOverlay: React.FC = () => {
                 />
             </svg>
 
-            {/* 目标高亮环（Apple 风格蓝色光晕）- 目标存在时始终可见 */}
+            {/* 目标高亮环（苹果风格蓝色光晕）- 目标存在时始终可见 */}
             {targetRect && (
                 <div
                     className="absolute pointer-events-none transition-all duration-300"
@@ -201,7 +217,7 @@ export const TutorialOverlay: React.FC = () => {
                 className="pointer-events-auto transition-all duration-300 ease-out flex flex-col items-center absolute"
                 style={tooltipStyles.style}
             >
-                {/* CSS 三角箭头 */}
+                {/* 样式三角箭头 */}
                 <div className={`absolute w-0 h-0 border-solid ${tooltipStyles.arrowClass}`} />
 
                 {/* 内容卡片 */}

@@ -33,7 +33,7 @@ export interface PhaseChangedEvent extends GameEvent<typeof FLOW_EVENTS.PHASE_CH
 }
 
 // ============================================================================
-// Hooks
+// 钩子
 // ============================================================================
 
 export interface CanAdvanceResult {

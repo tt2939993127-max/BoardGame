@@ -52,7 +52,7 @@ export default function AdminDashboard() {
             icon: <Activity size={24} />,
             color: "text-emerald-600 bg-emerald-50",
             trend: {
-                value: 12, // Mock trend for premium feel visual
+                value: 12, // 模拟趋势数据，用于提升视觉质感
                 isPositive: true,
                 label: "vs yesterday"
             }
@@ -91,7 +91,7 @@ export default function AdminDashboard() {
                 ))}
             </div>
 
-            {/* Placeholder for future charts */}
+            {/* 预留给后续图表区域 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-2xl border border-zinc-100 shadow-xl shadow-zinc-200/50 min-h-[300px] flex items-center justify-center text-zinc-400 font-medium border-dashed">
                     用户增长趋势 (Coming Soon)

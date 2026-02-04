@@ -3,4 +3,4 @@
  */
 
 export * from './types';
-export { tokenSystem } from './TokenSystem';
+export { createTokenSystem } from './TokenSystem';

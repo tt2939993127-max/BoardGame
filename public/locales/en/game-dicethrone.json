@@ -195,11 +195,13 @@
       "gainCp": "Gain {{cp}} CP",
       "enlightenmentLotus": "Lotus! Gain 2 Taiji + Evasive + Purify",
       "enlightenmentOther": "Draw 1 card",
+      "thunderStrikeDie": "Rolled {{value}}",
+      "thunderStrikeReroll": "Rerolled to {{value}}",
       "thunderStrike2Die": "Rolled {{value}}",
       "thunderStrike2Reroll": "Rerolled to {{value}}"
     },
-    "selectToReroll": "Click a die to spend 1 Chi to reroll",
-    "noTokenToReroll": "No Chi tokens available to reroll",
+    "selectToReroll": "Click a die to spend {{cost}} {{token}} to reroll",
+    "noTokenToReroll": "No {{token}} tokens available to reroll",
     "total": "Total Damage",
     "confirmDamage": "Confirm Damage",
     "continue": "Continue"

@@ -7,7 +7,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence } from 'framer-motion';
-import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
+import { getLocalizedAssetPath } from '../../../core';
+import { CardPreview } from '../../../components/common/media/CardPreview';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
 import { ConfirmSkipModal } from './ConfirmSkipModal';
@@ -19,10 +20,8 @@ import { TokenResponseModal } from './TokenResponseModal';
 import { PurifyModal } from './PurifyModal';
 import { InteractionOverlay } from './InteractionOverlay';
 import { EndgameOverlay } from '../../../components/game/EndgameOverlay';
-import { ASSETS } from './assets';
-import { getCardAtlasStyle, type CardAtlasConfig } from './cardAtlas';
 import type { StatusIconAtlasConfig } from './statusEffects';
-import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponsePhase, PendingBonusDiceSettlement } from '../domain/types';
+import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponsePhase, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
@@ -113,15 +112,19 @@ export interface BoardOverlaysProps {
     onRematchVote: () => void;
 
     // 其他
-    cardAtlas: CardAtlasConfig | null;
     statusIconAtlas?: StatusIconAtlasConfig | null;
     locale: string;
     moves: Record<string, unknown>;
+    currentPhase: TurnPhase;
+
+    // 选角相关
+    selectedCharacters: Record<PlayerId, CharacterId>;
+    playerNames: Record<PlayerId, string>;
+    hostPlayerId: PlayerId;
 }
 
 export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     const { t } = useTranslation('game-dicethrone');
-    const cardAtlas = props.cardAtlas;
 
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('monk-player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
@@ -145,31 +148,24 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         containerClassName={magnifyContainerClassName}
                         closeLabel={t('actions.closePreview')}
                     >
-                        {isMultiCardPreview && cardAtlas ? (
+                        {isMultiCardPreview ? (
                             <div className="flex flex-nowrap items-center justify-start gap-[2vw] p-[2vw] w-fit">
-                                {props.magnifiedCards.map((card, idx) => (
-                                    <div
+                                {props.magnifiedCards.map((card) => (
+                                    <CardPreview
                                         key={card.id}
                                         className="w-[28vw] aspect-[0.61] max-w-[350px] max-h-[574px] rounded-xl shadow-2xl border border-white/20 flex-shrink-0"
-                                        style={{
-                                            backgroundImage: buildLocalizedImageSet(ASSETS.CARDS_ATLAS, props.locale),
-                                            backgroundRepeat: 'no-repeat',
-                                            backgroundColor: '#0f172a',
-                                            ...getCardAtlasStyle(card.atlasIndex ?? 0, cardAtlas),
-                                        }}
-                                        title={`#${idx + 1}`}
+                                        style={{ backgroundColor: '#0f172a' }}
+                                        previewRef={card.previewRef}
+                                        locale={props.locale}
                                     />
                                 ))}
                             </div>
-                        ) : props.magnifiedCard && cardAtlas ? (
-                            <div
+                        ) : props.magnifiedCard ? (
+                            <CardPreview
                                 className="w-[40vw] h-[65vw] max-w-[400px] max-h-[650px]"
-                                style={{
-                                    backgroundImage: buildLocalizedImageSet(ASSETS.CARDS_ATLAS, props.locale),
-                                    backgroundRepeat: 'no-repeat',
-                                    backgroundColor: '#0f172a',
-                                    ...getCardAtlasStyle(props.magnifiedCard.atlasIndex ?? 0, cardAtlas),
-                                }}
+                                style={{ backgroundColor: '#0f172a' }}
+                                previewRef={props.magnifiedCard.previewRef}
+                                locale={props.locale}
                             />
                         ) : (
                             <OptimizedImage
@@ -283,6 +279,8 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         onReroll={props.onRerollBonusDie}
                         onSkipReroll={props.onSkipBonusDiceReroll}
                         showTotal
+                        rerollCostAmount={props.pendingBonusDiceSettlement?.rerollCostAmount}
+                        rerollCostTokenId={props.pendingBonusDiceSettlement?.rerollCostTokenId}
                     />
                 )}
 
@@ -293,7 +291,6 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                     <CardSpotlightOverlay
                         key="card-spotlight"
                         queue={props.cardSpotlightQueue}
-                        atlas={cardAtlas}
                         locale={props.locale}
                         onClose={props.onCardSpotlightClose}
                         opponentHeaderRef={props.opponentHeaderRef}

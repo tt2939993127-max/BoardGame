@@ -10,6 +10,7 @@ import type { Model } from 'mongoose';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { AuthModule } from '../src/modules/auth/auth.module';
+import { AuthService } from '../src/modules/auth/auth.service';
 import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema';
 import { ReviewModule } from '../src/modules/review/review.module';
 import { Review, type ReviewDocument } from '../src/modules/review/schemas/review.schema';
@@ -21,6 +22,7 @@ describe('Review Module (e2e)', () => {
     let userModel: Model<UserDocument>;
     let reviewModel: Model<ReviewDocument>;
     let cacheManager: Cache;
+    let authService: AuthService;
 
     beforeAll(async () => {
         process.env.REVIEW_CONTENT_BLACKLIST = 'bad,违规';
@@ -44,6 +46,7 @@ describe('Review Module (e2e)', () => {
         userModel = moduleRef.get<Model<UserDocument>>(getModelToken(User.name));
         reviewModel = moduleRef.get<Model<ReviewDocument>>(getModelToken(Review.name));
         cacheManager = moduleRef.get<Cache>(CACHE_MANAGER);
+        authService = moduleRef.get<AuthService>(AuthService);
         app.useGlobalPipes(
             new ValidationPipe({
                 whitelist: true,
@@ -72,9 +75,12 @@ describe('Review Module (e2e)', () => {
     });
 
     it('评论创建/更新/删除流程', async () => {
+        const email = 'reviewer@example.com';
+        const code = '123456';
+        await authService.storeEmailCode(email, code);
         const registerRes = await request(app.getHttpServer())
             .post('/auth/register')
-            .send({ username: 'reviewer', password: 'pass1234' })
+            .send({ username: 'reviewer', email, code, password: 'pass1234' })
             .expect(201);
 
         const token = registerRes.body.token as string;
@@ -136,9 +142,12 @@ describe('Review Module (e2e)', () => {
     });
 
     it('评论内容校验 - contentTooLong/contentBlocked', async () => {
+        const email = 'reviewer-2@example.com';
+        const code = '654321';
+        await authService.storeEmailCode(email, code);
         const registerRes = await request(app.getHttpServer())
             .post('/auth/register')
-            .send({ username: 'reviewer-2', password: 'pass1234' })
+            .send({ username: 'reviewer-2', email, code, password: 'pass1234' })
             .expect(201);
 
         const token = registerRes.body.token as string;

@@ -201,6 +201,49 @@ describe('MongoStorage 行为', () => {
         expect(remainingIds).not.toContain('ephemeral-empty');
     });
 
+    it('cleanupEphemeralMatches 标记重启遗留连接但不立即删除', async () => {
+        const Match = mongoose.model('Match');
+        const now = Date.now();
+        const staleUpdatedAt = new Date(now - 60 * 1000);
+
+        await Match.create({
+            matchID: 'ephemeral-stale',
+            gameName: 'tictactoe',
+            state: null,
+            initialState: null,
+            metadata: {
+                gameName: 'tictactoe',
+                players: {
+                    0: { id: 0, isConnected: true },
+                    1: { id: 1, isConnected: false },
+                },
+                setupData: { ownerKey: 'user:stale' },
+                createdAt: now,
+                updatedAt: now,
+            },
+            ttlSeconds: 0,
+            updatedAt: staleUpdatedAt,
+        });
+
+        await Match.collection.updateOne(
+            { matchID: 'ephemeral-stale' },
+            { $set: { updatedAt: staleUpdatedAt } }
+        );
+
+        (mongoStorage as unknown as { bootTimeMs: number }).bootTimeMs = now;
+
+        const cleaned = await mongoStorage.cleanupEphemeralMatches();
+        expect(cleaned).toBe(0);
+
+        const doc = await Match.findOne({ matchID: 'ephemeral-stale' }).lean<{
+            metadata?: { players?: Record<string, { isConnected?: boolean }>; disconnectedSince?: number | null } | null;
+        }>();
+        expect(doc).toBeTruthy();
+        const players = doc?.metadata?.players ?? {};
+        expect(players['0']?.isConnected).toBe(false);
+        expect(typeof doc?.metadata?.disconnectedSince).toBe('number');
+    });
+
     it('cleanupLegacyMatches 仅清理缺失 ownerKey 且无人占座的遗留房间', async () => {
         const Match = mongoose.model('Match');
         const legacyPlayers = {

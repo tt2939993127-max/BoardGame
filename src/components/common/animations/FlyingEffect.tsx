@@ -107,7 +107,7 @@ export const FlyingEffectsLayer = ({
     );
 };
 
-// Hook: 管理飞行效果状态
+// Hook：管理飞行效果状态
 export const useFlyingEffects = () => {
     const [effects, setEffects] = React.useState<FlyingEffectData[]>([]);
 

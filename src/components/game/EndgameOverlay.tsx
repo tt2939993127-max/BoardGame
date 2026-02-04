@@ -33,9 +33,9 @@ export interface EndgameOverlayProps {
     isGameOver: boolean;
     /** 游戏结果 */
     result?: GameOverResult;
-    /** 当前玩家 ID */
+    /** 当前玩家 playerID */
     playerID?: string | null;
-    /** reset 函数（来自 BoardProps） */
+    /** 重置函数（来自 BoardProps） */
     reset?: () => void;
     /** 是否多人模式 */
     isMultiplayer?: boolean;
@@ -59,7 +59,7 @@ function DefaultContent({ result, playerID }: ContentSlotProps): React.ReactElem
 
     if (!result) return null;
 
-    // boardgame.io 的 winner 可能是 number 或 string；这里统一转 string 再比较。
+    // boardgame.io 的获胜者字段可能是数字或字符串；这里统一转字符串再比较。
     // 规则：
     // - 如果当前客户端是旁观者/本地同屏（没有 playerID），不显示“胜利/失败”，只显示“游戏结束”。
     // - 如果有 playerID，则基于 winner 与 playerID 判断胜负。
@@ -148,7 +148,7 @@ export function EndgameOverlay({
         prevGameOverRef.current = isGameOver;
     }, [isGameOver, result]);
 
-    // 如果游戏重置（isGameOver 变回 false），关闭 overlay
+    // 如果游戏重置（isGameOver 变回 false），关闭遮罩
     useEffect(() => {
         if (!isGameOver) {
             setShouldShow(false);
@@ -209,7 +209,7 @@ export function EndgameOverlay({
         </AnimatePresence>
     );
 
-    // 使用 Portal 挂到 document.body
+    // 使用传送门挂到 document.body
     if (typeof document === 'undefined') {
         return null;
     }

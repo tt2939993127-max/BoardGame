@@ -13,7 +13,7 @@ const hideCardContent = (card: AbilityCard): AbilityCard => ({
     ...card,
     name: '???',
     description: '???',
-    atlasIndex: undefined,
+    previewRef: undefined,
 });
 
 /**

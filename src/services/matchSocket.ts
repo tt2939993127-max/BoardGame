@@ -18,6 +18,14 @@ export const REMATCH_EVENTS = {
     DEBUG_NEW_ROOM: 'debug:newRoom',
 } as const;
 
+// 对局聊天事件常量（与服务端 server.ts 保持一致）
+export const MATCH_CHAT_EVENTS = {
+    JOIN: 'matchChat:join',
+    LEAVE: 'matchChat:leave',
+    SEND: 'matchChat:send',
+    MESSAGE: 'matchChat:message',
+} as const;
+
 // 重赛投票状态
 export interface RematchVoteState {
     votes: Record<string, boolean>;
@@ -28,10 +36,20 @@ export interface RematchVoteState {
     revision: number;
 }
 
+export interface MatchChatMessage {
+    id: string;
+    matchId: string;
+    senderId?: string;
+    senderName: string;
+    text: string;
+    createdAt: string;
+}
+
 // 状态更新回调
 export type RematchStateCallback = (state: RematchVoteState) => void;
 export type RematchResetCallback = () => void;
 export type NewRoomCallback = (url: string) => void;
+export type MatchChatCallback = (message: MatchChatMessage) => void;
 
 class MatchSocketService {
     private socket: Socket | null = null;
@@ -42,8 +60,10 @@ class MatchSocketService {
     private stateCallbacks: Set<RematchStateCallback> = new Set();
     private resetCallbacks: Set<RematchResetCallback> = new Set();
     private newRoomCallbacks: Set<NewRoomCallback> = new Set();
+    private chatCallbacks: Set<MatchChatCallback> = new Set();
     private currentState: RematchVoteState = { votes: {}, ready: false, revision: 0 };
     private lastAcceptedRevision = 0;
+    private currentChatMatchId: string | null = null;
 
     /**
      * 连接到对局 Socket 服务
@@ -88,6 +108,10 @@ class MatchSocketService {
                     playerId: this.currentPlayerId,
                 });
             }
+
+            if (this.currentChatMatchId) {
+                this.socket?.emit(MATCH_CHAT_EVENTS.JOIN, { matchId: this.currentChatMatchId });
+            }
         });
 
         this.socket.on('disconnect', () => {
@@ -125,6 +149,11 @@ class MatchSocketService {
         // 接收新房间通知（调试用）
         this.socket.on(REMATCH_EVENTS.DEBUG_NEW_ROOM, (data: { url: string }) => {
             this.notifyNewRoomCallbacks(data.url);
+        });
+
+        // 接收聊天消息
+        this.socket.on(MATCH_CHAT_EVENTS.MESSAGE, (payload: MatchChatMessage) => {
+            this.notifyChatCallbacks(payload);
         });
     }
 
@@ -168,6 +197,19 @@ class MatchSocketService {
     }
 
     /**
+     * 通知聊天回调
+     */
+    private notifyChatCallbacks(message: MatchChatMessage): void {
+        this.chatCallbacks.forEach((callback) => {
+            try {
+                callback(message);
+            } catch (error) {
+                console.error('[MatchSocket] 聊天回调错误:', error);
+            }
+        });
+    }
+
+    /**
      * 加入对局（订阅重赛状态）
      */
     joinMatch(matchId: string, playerId: string): void {
@@ -194,6 +236,49 @@ class MatchSocketService {
         this.currentPlayerId = null;
         this.currentState = { votes: {}, ready: false, revision: 0 };
         this.lastAcceptedRevision = 0;
+    }
+
+    /**
+     * 加入聊天房间
+     */
+    joinChat(matchId: string): void {
+        if (this.currentChatMatchId && this.currentChatMatchId !== matchId && this.socket?.connected) {
+            this.socket.emit(MATCH_CHAT_EVENTS.LEAVE);
+        }
+        this.currentChatMatchId = matchId;
+        if (!this.socket?.connected) {
+            this.connect();
+        } else {
+            this.socket.emit(MATCH_CHAT_EVENTS.JOIN, { matchId });
+        }
+    }
+
+    /**
+     * 离开聊天房间
+     */
+    leaveChat(): void {
+        if (this.socket?.connected && this.currentChatMatchId) {
+            this.socket.emit(MATCH_CHAT_EVENTS.LEAVE);
+        }
+        this.currentChatMatchId = null;
+    }
+
+    /**
+     * 发送聊天消息
+     */
+    sendChat(text: string, senderId?: string, senderName?: string): { ok: boolean; reason?: 'not_connected' | 'not_joined' } {
+        if (!this.socket?.connected) {
+            return { ok: false, reason: 'not_connected' };
+        }
+        if (!this.currentChatMatchId) {
+            return { ok: false, reason: 'not_joined' };
+        }
+        this.socket.emit(MATCH_CHAT_EVENTS.SEND, {
+            text,
+            senderId,
+            senderName,
+        });
+        return { ok: true };
     }
 
     /**
@@ -259,6 +344,16 @@ class MatchSocketService {
     }
 
     /**
+     * 订阅聊天消息
+     */
+    subscribeChat(callback: MatchChatCallback): () => void {
+        this.chatCallbacks.add(callback);
+        return () => {
+            this.chatCallbacks.delete(callback);
+        };
+    }
+
+    /**
      * 获取当前状态
      */
     getState(): RematchVoteState {
@@ -277,6 +372,7 @@ class MatchSocketService {
      */
     disconnect(): void {
         this.leaveMatch();
+        this.leaveChat();
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
@@ -284,6 +380,7 @@ class MatchSocketService {
         }
         this.stateCallbacks.clear();
         this.resetCallbacks.clear();
+        this.chatCallbacks.clear();
     }
 }
 

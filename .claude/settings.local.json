@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:www.claudepluginhub.com)",
+      "WebFetch(domain:aibit.im)",
+      "Bash(echo:*)"
+    ]
+  }
+}

@@ -39,7 +39,7 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
     const getGuestId = () => getOrCreateGuestId();
     const getGuestName = () => resolveGuestName(t, getGuestId());
 
-    // 动作参数的状态
+    // 动作参数状态
     const [moveArgs, setMoveArgs] = useState<Record<string, string>>({});
     
     
@@ -84,13 +84,13 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
     };
 
     // 监听当前玩家变化，实现自动切换视角
-    // 优先使用领域内核的 currentPlayer（G.core.currentPlayer），回退到 ctx.currentPlayer
+    // 优先使用领域内核的当前玩家字段（G.core.currentPlayer），回退到 ctx.currentPlayer
     const coreCurrentPlayer = G?.core?.currentPlayer as string | undefined;
     const activePlayer = coreCurrentPlayer ?? ctx.currentPlayer;
     React.useEffect(() => {
         if (!autoSwitch) return;
         if (activePlayer && activePlayer !== playerID) {
-            // 延迟一点切换，让用户看到上一步的结果
+            // 延迟切换，让用户看到上一步的结果
             const timer = setTimeout(() => {
                 setPlayerID(activePlayer);
             }, 500);
@@ -356,7 +356,7 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                                     playerName,
                                                 });
                                                 
-                                                // 2. 广播新房间 URL 给其他玩家（在跳转前广播）
+                                                // 2. 广播新房间地址给其他玩家（在跳转前广播）
                                                 const newRoomUrl = `/play/${gameId}/match/${newMatchID}`;
                                                 matchSocket.broadcastNewRoom(newRoomUrl);
                                                 

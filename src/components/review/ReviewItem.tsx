@@ -25,7 +25,7 @@ export const ReviewItem = ({ review, isMine, onDelete }: ReviewItemProps) => {
 
     return (
         <div className="bg-parchment-card-bg border border-parchment-card-border/15 rounded p-2.5 flex flex-col gap-1.5 shadow-sm hover:shadow-md transition-shadow">
-            {/* Header: User Avatar (optional) + Name | Date + Actions */}
+            {/* 顶部：头像（可选）+ 昵称 | 日期 + 操作 */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {review.user?.avatar && (
@@ -54,7 +54,7 @@ export const ReviewItem = ({ review, isMine, onDelete }: ReviewItemProps) => {
                 </div>
             </div>
 
-            {/* Content: Rating Icon + Text Content */}
+            {/* 内容：好评/差评图标 + 文本 */}
             <div className="flex items-start gap-2 pl-0.5">
                 <div className="mt-0.5 shrink-0" title={review.isPositive ? t('form.positive') : t('form.negative')}>
                     {review.isPositive ? (

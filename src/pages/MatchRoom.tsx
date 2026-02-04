@@ -33,8 +33,8 @@ export const MatchRoom = () => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
         const impl = GAME_IMPLEMENTATIONS[gameId];
 
-        // boardgame.io's SocketIO transport connects via socket.io (`/socket.io`).
-        // In dev we rely on Vite proxy to forward `/socket.io` to the game-server.
+        // boardgame.io 的 SocketIO 传输会通过 socket.io（`/socket.io`）连接。
+        // 开发环境依赖 Vite 代理将 `/socket.io` 转发到游戏服务端。
         return Client({
             game: impl.game,
             board: impl.board,
@@ -56,11 +56,8 @@ export const MatchRoom = () => {
 
     const [isLeaving, setIsLeaving] = useState(false);
     const [isGameNamespaceReady, setIsGameNamespaceReady] = useState(true);
-    const [autoExitMessage, setAutoExitMessage] = useState<string | null>(null);
     const [destroyModalId, setDestroyModalId] = useState<string | null>(null);
     const tutorialStartedRef = useRef(false);
-    const autoExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const autoExitModalIdRef = useRef<string | null>(null);
     const tutorialModalIdRef = useRef<string | null>(null);
     const errorToastRef = useRef<{ key: string; timestamp: number } | null>(null);
 
@@ -89,11 +86,27 @@ export const MatchRoom = () => {
         };
     }, [gameId, i18n]);
 
-    // 从 URL 查询参数中获取 playerID
+    // 从地址查询参数中获取 playerID
     const urlPlayerID = searchParams.get('playerID');
     const shouldAutoJoin = searchParams.get('join') === 'true';
     const spectateParam = searchParams.get('spectate');
-    const isSpectatorRoute = !isTutorialRoute && !shouldAutoJoin && !urlPlayerID && (spectateParam === null || spectateParam === '1' || spectateParam === 'true');
+    const storedMatchCreds = useMemo(() => {
+        if (!matchId) return null;
+        const raw = localStorage.getItem(`match_creds_${matchId}`);
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw) as { playerID?: string; credentials?: string };
+        } catch {
+            return null;
+        }
+    }, [matchId]);
+    const storedPlayerID = storedMatchCreds?.playerID;
+    const hasStoredSeat = Boolean(storedPlayerID);
+    const isSpectatorRoute = !isTutorialRoute
+        && !shouldAutoJoin
+        && !urlPlayerID
+        && !hasStoredSeat
+        && (spectateParam === null || spectateParam === '1' || spectateParam === 'true');
     useEffect(() => {
         if (!import.meta.env.DEV) return;
         console.info('[Spectate][MatchRoom]', {
@@ -212,19 +225,20 @@ export const MatchRoom = () => {
         setTimeout(tryJoin, 1000);
     }, [shouldAutoJoin, gameId, matchId, isTutorialRoute, isAutoJoining, t]);
 
-    // 获取凭据 (Credentials)
+    // 获取凭据
     const credentials = useMemo(() => {
-        if (matchId && urlPlayerID) {
-            const stored = localStorage.getItem(`match_creds_${matchId}`);
-            if (stored) {
-                const data = JSON.parse(stored);
-                if (data.playerID === urlPlayerID) {
-                    return data.credentials;
-                }
+        if (!matchId) return undefined;
+        const resolvedPlayerID = urlPlayerID ?? storedPlayerID;
+        if (!resolvedPlayerID) return undefined;
+        const stored = localStorage.getItem(`match_creds_${matchId}`);
+        if (stored) {
+            const data = JSON.parse(stored);
+            if (data.playerID === resolvedPlayerID) {
+                return data.credentials;
             }
         }
         return undefined;
-    }, [matchId, urlPlayerID]);
+    }, [matchId, urlPlayerID, storedPlayerID]);
 
     useEffect(() => {
         if (!matchId || !gameId) return;
@@ -254,26 +268,32 @@ export const MatchRoom = () => {
         setPlayerID(urlPlayerID);
     }, [debugPlayerID, isTutorialRoute, setPlayerID, urlPlayerID]);
 
-    // 联机对局优先使用 URL playerID，避免调试默认值覆盖真实身份
-    const effectivePlayerID = (isActive || isTutorialRoute)
+    // 联机对局始终使用地址中的玩家编号，缺失时回退到本地凭据
+    const effectivePlayerID = isTutorialRoute
         ? tutorialPlayerID
-        : (urlPlayerID ?? undefined);
+        : (urlPlayerID ?? storedPlayerID ?? undefined);
 
     const statusPlayerID = isTutorialRoute
         ? (urlPlayerID ?? debugPlayerID ?? null)
-        : (urlPlayerID ?? null);
+        : (urlPlayerID ?? storedPlayerID ?? null);
 
-    // 使用房间状态 Hook（以真实玩家身份为准）
+    useEffect(() => {
+        if (isTutorialRoute) return;
+        if (urlPlayerID || !storedPlayerID) return;
+        if (spectateParam === '1' || spectateParam === 'true') return;
+        if (!gameId || !matchId) return;
+        navigate(`/play/${gameId}/match/${matchId}?playerID=${storedPlayerID}`, { replace: true });
+    }, [gameId, matchId, navigate, spectateParam, storedPlayerID, urlPlayerID, isTutorialRoute]);
+
+    // 使用房间状态钩子（以真实玩家身份为准）
     const matchStatus = useMatchStatus(gameId, matchId, statusPlayerID);
-    const hostSlot = matchStatus.players.find(player => player.id === 0);
-
     useEffect(() => {
         if (!isTutorialRoute) return;
         // 只有首次进入且当前未激活时才启动，避免结束后被再次拉起导致提示闪现
         if (!isActive && !tutorialStartedRef.current) {
             const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
             if (impl?.tutorial) {
-                // 延迟启动教程，等待 boardgame.io client 完全初始化
+                // 延迟启动教程，等待 boardgame.io 客户端完全初始化
                 const timer = setTimeout(() => {
                     console.log('[Tutorial][MatchRoom] 调用 startTutorial', { gameId, manifestId: impl.tutorial!.id });
                     startTutorial(impl.tutorial!);
@@ -407,7 +427,6 @@ export const MatchRoom = () => {
             },
             render: ({ close, closeOnBackdrop }) => (
                 <ConfirmModal
-                    open
                     title={t('matchRoom.destroy.title')}
                     description={t('matchRoom.destroy.description')}
                     onConfirm={() => {
@@ -436,78 +455,8 @@ export const MatchRoom = () => {
         }
     }, [matchStatus.error, isTutorialRoute, navigate]);
 
-    // 房主销毁/离开导致座位清空时，非房主自动退出
-    useEffect(() => {
-        if (isTutorialRoute) return;
-        if (matchStatus.isLoading) return;
-        if (matchStatus.isHost) return;
-        if (!hostSlot || hostSlot.name) return;
-        if (autoExitMessage) return;
-
-        clearMatchCredentials();
-        if (matchId && statusPlayerID && credentials) {
-            void leaveMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
-        }
-        setAutoExitMessage(t('matchRoom.autoExit.message'));
-        autoExitTimerRef.current = setTimeout(() => {
-            navigate('/');
-        }, 1600);
-
-        return () => {
-            if (autoExitTimerRef.current) {
-                clearTimeout(autoExitTimerRef.current);
-                autoExitTimerRef.current = null;
-            }
-        };
-    }, [autoExitMessage, clearMatchCredentials, credentials, hostSlot, matchId, matchStatus.isHost, matchStatus.isLoading, isTutorialRoute, navigate, statusPlayerID]);
-
-    useEffect(() => {
-        if (autoExitMessage && !isTutorialRoute && !autoExitModalIdRef.current) {
-            autoExitModalIdRef.current = openModal({
-                closeOnBackdrop: false,
-                closeOnEsc: false,
-                lockScroll: true,
-                onClose: () => {
-                    autoExitModalIdRef.current = null;
-                },
-                render: ({ close, closeOnBackdrop }) => (
-                    <ConfirmModal
-                        open
-                        title={t('matchRoom.autoExit.title')}
-                        description={autoExitMessage}
-                        confirmText={t('matchRoom.autoExit.confirm')}
-                        showCancel={false}
-                        onConfirm={() => {
-                            close();
-                            navigate('/');
-                        }}
-                        onCancel={() => {
-                            close();
-                        }}
-                        tone="cool"
-                        panelClassName="bg-black/70 border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.35)] font-sans"
-                        titleClassName="text-white/80 text-sm font-semibold tracking-wide"
-                        descriptionClassName="text-white/70 text-base"
-                        actionsClassName="justify-center"
-                        confirmClassName="px-4 py-2 text-xs font-bold uppercase tracking-wider bg-white/10 text-white/80 hover:bg-white/20 rounded-full"
-                        closeOnBackdrop={closeOnBackdrop}
-                    />
-                ),
-            });
-        }
-
-        if ((!autoExitMessage || isTutorialRoute) && autoExitModalIdRef.current) {
-            closeModal(autoExitModalIdRef.current);
-            autoExitModalIdRef.current = null;
-        }
-    }, [autoExitMessage, closeModal, isTutorialRoute, navigate, openModal]);
-
     useEffect(() => {
         return () => {
-            if (autoExitModalIdRef.current) {
-                closeModal(autoExitModalIdRef.current);
-                autoExitModalIdRef.current = null;
-            }
             if (destroyModalId) {
                 closeModal(destroyModalId);
                 setDestroyModalId(null);

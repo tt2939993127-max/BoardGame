@@ -152,7 +152,14 @@ export const DiceTray = ({
                                         ${selected ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900 rounded-lg scale-105' : ''}
                                     `}
                                 >
-                                    <Dice3D value={d.value} isRolling={(isRolling && !d.isKept) || (rerollingDiceIds?.includes(d.id) ?? false)} index={i} size={diceSize} locale={locale} />
+                                    <Dice3D
+                                        value={d.value}
+                                        isRolling={(isRolling && !d.isKept) || (rerollingDiceIds?.includes(d.id) ?? false)}
+                                        index={i}
+                                        size={diceSize}
+                                        locale={locale}
+                                        characterId={d.definitionId?.replace('-dice', '')}
+                                    />
                                     {!isInteractionMode && d.isKept && (
                                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                                             <div className="text-[0.6vw] font-black text-white bg-black/50 px-[0.4vw] py-[0.1vw] rounded uppercase tracking-wider shadow-sm border border-white/20">

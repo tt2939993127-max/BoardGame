@@ -3,7 +3,25 @@ import { OptimizedImage } from '../../../components/common/media/OptimizedImage'
 import { getLocalizedAssetPath } from '../../../core';
 import { AbilityOverlays } from './AbilityOverlays';
 import { ASSETS } from './assets';
-import type { CardAtlasConfig } from './cardAtlas';
+
+export interface CenterBoardProps {
+    coreAreaHighlighted: boolean;
+    isTipOpen: boolean;
+    onToggleTip: () => void;
+    isLayoutEditing: boolean;
+    isSelfView: boolean;
+    availableAbilityIds: string[];
+    canSelectAbility: boolean;
+    canHighlightAbility: boolean;
+    onSelectAbility: (abilityId: string) => void;
+    onHighlightedAbilityClick?: () => void;
+    selectedAbilityId?: string;
+    activatingAbilityId?: string;
+    abilityLevels?: Record<string, number>;
+    characterId?: string;
+    locale?: string;
+    onMagnifyImage: (image: string) => void;
+}
 
 export const CenterBoard = ({
     coreAreaHighlighted,
@@ -19,28 +37,14 @@ export const CenterBoard = ({
     selectedAbilityId,
     activatingAbilityId,
     abilityLevels,
-    cardAtlas,
+    characterId = 'monk',
     locale,
     onMagnifyImage,
-}: {
-    coreAreaHighlighted: boolean;
-    isTipOpen: boolean;
-    onToggleTip: () => void;
-    isLayoutEditing: boolean;
-    isSelfView: boolean;
-    availableAbilityIds: string[];
-    canSelectAbility: boolean;
-    canHighlightAbility: boolean;
-    onSelectAbility: (abilityId: string) => void;
-    onHighlightedAbilityClick?: () => void;
-    selectedAbilityId?: string;
-    activatingAbilityId?: string;
-    abilityLevels?: Record<string, number>;
-    cardAtlas?: CardAtlasConfig;
-    locale?: string;
-    onMagnifyImage: (image: string) => void;
-}) => {
+}: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
+
+    const playerBoardPath = ASSETS.PLAYER_BOARD(characterId);
+    const tipBoardPath = ASSETS.TIP_BOARD(characterId);
 
     return (
         <div className="absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto">
@@ -50,8 +54,8 @@ export const CenterBoard = ({
                     data-tutorial-id="player-board"
                 >
                     <OptimizedImage
-                        src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD, locale)}
-                        fallbackSrc={ASSETS.PLAYER_BOARD}
+                        src={getLocalizedAssetPath(playerBoardPath, locale)}
+                        fallbackSrc={playerBoardPath}
                         className="w-auto h-full object-contain"
                         alt={t('imageAlt.playerBoard')}
                     />
@@ -65,11 +69,11 @@ export const CenterBoard = ({
                         selectedAbilityId={selectedAbilityId}
                         activatingAbilityId={activatingAbilityId}
                         abilityLevels={abilityLevels}
-                        cardAtlas={cardAtlas}
+                        characterId={characterId}
                         locale={locale}
                     />
                     <button
-                        onClick={(e) => { e.stopPropagation(); onMagnifyImage(ASSETS.PLAYER_BOARD); }}
+                        onClick={(e) => { e.stopPropagation(); onMagnifyImage(playerBoardPath); }}
                         className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20 z-20"
                     >
                         <svg className="w-[1.2vw] h-[1.2vw] fill-current" viewBox="0 0 20 20">
@@ -85,13 +89,13 @@ export const CenterBoard = ({
                     <div className={`relative h-full transition-[width,opacity,transform] duration-500 overflow-hidden rounded-[0.8vw] ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}>
                         <div className="relative h-full w-auto aspect-[1311/2048] group">
                             <OptimizedImage
-                                src={getLocalizedAssetPath(ASSETS.TIP_BOARD, locale)}
-                                fallbackSrc={ASSETS.TIP_BOARD}
+                                src={getLocalizedAssetPath(tipBoardPath, locale)}
+                                fallbackSrc={tipBoardPath}
                                 className="w-auto h-full object-contain"
                                 alt={t('imageAlt.tipBoard')}
                             />
                             <button
-                                onClick={(e) => { e.stopPropagation(); onMagnifyImage(ASSETS.TIP_BOARD); }}
+                                onClick={(e) => { e.stopPropagation(); onMagnifyImage(tipBoardPath); }}
                                 className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20 z-20"
                             >
                                 <svg className="w-[1.2vw] h-[1.2vw] fill-current" viewBox="0 0 20 20">

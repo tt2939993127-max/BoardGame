@@ -26,6 +26,12 @@ import type { PlayerId } from '../../../engine/types';
 import type { StatusIconAtlasConfig } from '../ui/statusEffects';
 import { STATUS_EFFECT_META, getStatusEffectIconNode } from '../ui/statusEffects';
 import { getElementCenter } from '../../../components/common/animations/FlyingEffect';
+import { 
+    getSlashPresetByDamage, 
+    getHitStopPresetByDamage,
+    type SlashConfig,
+    type HitStopConfig 
+} from '../../../components/common/animations';
 import { RESOURCE_IDS } from '../domain/resources';
 
 /**
@@ -60,6 +66,12 @@ export interface AnimationEffectsConfig {
     }) => void;
     /** 触发对手震动效果的函数（可选） */
     triggerOpponentShake?: () => void;
+    /** 触发斜切效果的函数（可选） */
+    triggerSlash?: (config: SlashConfig) => void;
+    /** 触发钝帧效果的函数（可选） */
+    triggerHitStop?: (config: HitStopConfig) => void;
+    /** 触发自己受击效果的函数（可选） */
+    triggerSelfImpact?: (damage: number) => void;
     /** 当前语言 */
     locale?: string;
     /** 状态图标图集配置 */
@@ -80,13 +92,16 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         getEffectStartPos,
         pushFlyingEffect,
         triggerOpponentShake,
+        triggerSlash,
+        triggerHitStop,
+        triggerSelfImpact,
         locale,
         statusIconAtlas
     } = config;
 
-    // 追踪上一次的 HP 值
-    const prevOpponentHealthRef = useRef(opponent?.resources[RESOURCE_IDS.HP]);
-    const prevPlayerHealthRef = useRef(player?.resources[RESOURCE_IDS.HP]);
+    // 追踪上一次的 HP 值（防御性读取，player/opponent 可能 undefined）
+    const prevOpponentHealthRef = useRef(opponent?.resources?.[RESOURCE_IDS.HP]);
+    const prevPlayerHealthRef = useRef(player?.resources?.[RESOURCE_IDS.HP]);
 
     // 追踪上一次的状态效果
     const prevOpponentStatusRef = useRef<Record<string, number>>({ ...(opponent?.statusEffects || {}) });
@@ -98,7 +113,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
     useEffect(() => {
         if (!opponent) return;
         
-        const currentHealth = opponent.resources[RESOURCE_IDS.HP] ?? 0;
+        const currentHealth = opponent.resources?.[RESOURCE_IDS.HP] ?? 0;
         const prevHealth = prevOpponentHealthRef.current;
         
         // 检测 HP 下降（受到伤害）
@@ -113,15 +128,20 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
             
             // 触发震动效果
             triggerOpponentShake?.();
+            
+            // 触发打击感效果（斜切 + 钝帧）
+            triggerSlash?.(getSlashPresetByDamage(damage));
+            triggerHitStop?.(getHitStopPresetByDamage(damage));
         }
         
         prevOpponentHealthRef.current = currentHealth;
-    }, [opponent?.resources, opponent, pushFlyingEffect, triggerOpponentShake, getEffectStartPos, opponentId, refs.opponentHp]);
+    }, [opponent?.resources, opponent, pushFlyingEffect, triggerOpponentShake, triggerSlash, triggerHitStop, getEffectStartPos, opponentId, refs.opponentHp]);
 
     /**
      * 监听玩家 HP 变化（伤害动画）
      */
     useEffect(() => {
+        if (!player?.resources) return;
         const currentHealth = player.resources[RESOURCE_IDS.HP] ?? 0;
         const prevHealth = prevPlayerHealthRef.current;
         
@@ -134,10 +154,13 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 startPos: getEffectStartPos(currentPlayerId),
                 endPos: getElementCenter(refs.selfHp.current),
             });
+            
+            // 触发自己受击效果
+            triggerSelfImpact?.(damage);
         }
         
         prevPlayerHealthRef.current = currentHealth;
-    }, [player.resources, pushFlyingEffect, getEffectStartPos, currentPlayerId, refs.selfHp]);
+    }, [player.resources, pushFlyingEffect, getEffectStartPos, currentPlayerId, triggerSelfImpact, refs.selfHp]);
 
     /**
      * 监听对手状态效果变化（增益/减益动画）

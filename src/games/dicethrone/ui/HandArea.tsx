@@ -5,9 +5,8 @@ import { useTranslation } from 'react-i18next';
 import type { AbilityCard, TurnPhase } from '../types';
 import { buildLocalizedImageSet } from '../../../core';
 import { ENGINE_NOTIFICATION_EVENT, type EngineNotificationDetail } from '../../../engine/notifications';
+import { CardPreview } from '../../../components/common/media/CardPreview';
 import { ASSETS } from './assets';
-import type { CardAtlasConfig } from './cardAtlas';
-import { getCardAtlasStyle } from './cardAtlas';
 import { getAbilitySlotId } from './AbilityOverlays';
 
 /** 飞出卡牌信息（成功使用后的动画） */
@@ -25,7 +24,6 @@ const DRAG_PLAY_THRESHOLD = -150; // 向上拖拽超过此距离触发打出
 export const HandArea = ({
     hand,
     locale,
-    atlas,
     currentPhase,
     playerCp: _playerCp = 0,
     onPlayCard,
@@ -44,7 +42,6 @@ export const HandArea = ({
 }: {
     hand: AbilityCard[];
     locale?: string;
-    atlas: CardAtlasConfig;
     currentPhase?: TurnPhase;
     playerCp?: number;
     onPlayCard?: (cardId: string) => void;
@@ -86,7 +83,6 @@ export const HandArea = ({
     const pendingPlayTimeoutRef = React.useRef<number | null>(null);
     const handRef = React.useRef(hand);
     const cardBackImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARD_BG, locale), [locale]);
-    const cardFrontImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARDS_ATLAS, locale), [locale]);
     const handAreaRef = React.useRef<HTMLDivElement>(null);
     const dragValueMapRef = React.useRef(new Map<string, { x: MotionValue<number>; y: MotionValue<number> }>());
 
@@ -497,8 +493,6 @@ export const HandArea = ({
                         const offset = i - centerIndex;
                         const rotation = offset * 5;
                         const yOffset = Math.abs(offset) * 0.8;
-                        const spriteIndex = (card.atlasIndex ?? i) % (atlas.cols * atlas.rows);
-                        const atlasStyle = getCardAtlasStyle(spriteIndex, atlas);
                         const isDragging = draggingCardId === card.id;
                         const isDealing = dealingCardId === card.id;
                         const isFlipped = flippedCardIds.has(card.id);
@@ -616,13 +610,11 @@ export const HandArea = ({
                                             animate={{ rotateY: isFlipped ? 0 : 180 }}
                                             transition={{ duration: 0.6 }}
                                         >
-                                            <div
+                                            <CardPreview
+                                                previewRef={card.previewRef}
+                                                locale={locale}
                                                 className="absolute inset-0 w-full h-full rounded-[0.8vw] backface-hidden border border-slate-700"
-                                                style={{
-                                                    backgroundImage: cardFrontImage,
-                                                    backgroundRepeat: 'no-repeat',
-                                                    ...atlasStyle,
-                                                }}
+                                                style={{ backgroundColor: '#1e293b' }}
                                             />
                                             <div
                                                 className="absolute inset-0 w-full h-full rounded-[0.8vw] backface-hidden border border-slate-700"
@@ -642,10 +634,8 @@ export const HandArea = ({
 
                 {/* 飞出动画卡牌（成功使用后飞向目标） */}
                 <AnimatePresence>
-                    {flyingOutCard && atlas && (() => {
+                    {flyingOutCard && (() => {
                         const { card, startOffset, startIndex, targetType, targetSlotId } = flyingOutCard;
-                        const spriteIndex = (card.atlasIndex ?? 0) % (atlas.cols * atlas.rows);
-                        const atlasStyle = getCardAtlasStyle(spriteIndex, atlas);
                         const flyingCenterIndex = (hand.length) / 2; // 使用移除后的手牌数量计算
                         const startIndexOffset = startIndex - flyingCenterIndex;
                         const startYOffset = Math.abs(startIndexOffset) * 0.8;
@@ -683,13 +673,11 @@ export const HandArea = ({
                                 transition={{ duration: 0.35, ease: 'easeInOut' }}
                                 onAnimationComplete={() => setFlyingOutCard(null)}
                             >
-                                <div
+                                <CardPreview
+                                    previewRef={card.previewRef}
+                                    locale={locale}
                                     className="w-full h-full rounded-[0.8vw] border border-slate-700 shadow-2xl"
-                                    style={{
-                                        backgroundImage: cardFrontImage,
-                                        backgroundRepeat: 'no-repeat',
-                                        ...atlasStyle,
-                                    }}
+                                    style={{ backgroundColor: '#1e293b' }}
                                 />
                             </motion.div>
                         );

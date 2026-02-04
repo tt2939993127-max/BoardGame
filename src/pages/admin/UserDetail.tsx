@@ -5,7 +5,7 @@ import { ADMIN_API_URL } from '../../config/server';
 import { useToast } from '../../contexts/ToastContext';
 import { ArrowLeft, Mail, Calendar, Hash, Ban, CheckCircle, Clock } from 'lucide-react';
 import { cn } from '../../lib/utils';
-// import DataTable from './components/DataTable'; // If we want match history here
+// import DataTable from './components/DataTable'; // 如需在此显示对局历史
 
 interface UserDetail {
     id: string;
@@ -18,7 +18,7 @@ interface UserDetail {
     createdAt: string;
     lastOnline?: string;
     avatar?: string;
-    // matches: Match[]; // If API returns matches
+    // matches: Match[]; // 如果 API 返回 matches 列表
 }
 
 export default function UserDetailPage() {
@@ -111,7 +111,7 @@ export default function UserDetailPage() {
                         </div>
 
                         <div className="flex gap-2 mb-2">
-                            {/* Action buttons could go here */}
+                            {/* 预留操作按钮区域 */}
                             <button className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/20">
                                 发送消息
                             </button>
@@ -181,7 +181,7 @@ export default function UserDetailPage() {
                                 </div>
                             )}
 
-                            {/* Stats Placeholder */}
+                            {/* 统计信息占位 */}
                             <div className="bg-zinc-900 text-white p-6 rounded-2xl shadow-xl">
                                 <h3 className="text-sm font-bold opacity-80 mb-4">游戏数据</h3>
                                 <div className="space-y-4">

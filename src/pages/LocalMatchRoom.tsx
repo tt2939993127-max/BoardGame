@@ -14,7 +14,7 @@ export const LocalMatchRoom = () => {
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
 
-    // 从 URL 参数获取种子，如果没有则生成新的
+    // 从地址参数获取种子，如果没有则生成新的
     const seedFromUrl = searchParams.get('seed');
     const gameSeed = seedFromUrl || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 

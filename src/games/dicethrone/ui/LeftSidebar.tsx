@@ -6,6 +6,7 @@ import { StatusEffectsContainer, TokensContainer, type StatusIconAtlasConfig } f
 import { PlayerStats } from './PlayerStats';
 import { DrawDeck } from './DrawDeck';
 import { STATUS_IDS } from '../domain/ids';
+import type { HitStopConfig, SlashConfig } from '../../../components/common/animations';
 
 
 export const LeftSidebar = ({
@@ -15,6 +16,10 @@ export const LeftSidebar = ({
     statusIconAtlas,
     selfBuffRef,
     selfHpRef,
+    hitStopActive,
+    hitStopConfig,
+    slashActive,
+    slashConfig,
     drawDeckRef,
     onPurifyClick,
     canUsePurify,
@@ -28,6 +33,10 @@ export const LeftSidebar = ({
     statusIconAtlas?: StatusIconAtlasConfig | null;
     selfBuffRef?: RefObject<HTMLDivElement | null>;
     selfHpRef?: RefObject<HTMLDivElement | null>;
+    hitStopActive?: boolean;
+    hitStopConfig?: HitStopConfig;
+    slashActive?: boolean;
+    slashConfig?: SlashConfig;
     drawDeckRef?: RefObject<HTMLDivElement | null>;
     /** 点击净化 Token 的回调 */
     onPurifyClick?: () => void;
@@ -64,12 +73,12 @@ export const LeftSidebar = ({
                         onTokenClick={(tokenId) => {
                             // 从定义中查找该 Token 是否有 removeDebuff 效果（即净化类 Token）
                             const tokenDef = tokenDefinitions?.find(def => def.id === tokenId);
-                            if (tokenDef?.useEffect?.type === 'removeDebuff' && onPurifyClick) {
+                            if (tokenDef?.activeUse?.effect.type === 'removeDebuff' && onPurifyClick) {
                                 onPurifyClick();
                             }
                         }}
                         clickableTokens={canUsePurify
-                            ? (tokenDefinitions ?? []).filter(def => def.useEffect?.type === 'removeDebuff').map(def => def.id)
+                            ? (tokenDefinitions ?? []).filter(def => def.activeUse?.effect.type === 'removeDebuff').map(def => def.id)
                             : []
                         }
                     />
@@ -89,7 +98,14 @@ export const LeftSidebar = ({
                     />
                 </div>
                 <div className="w-full px-[1vw]" data-tutorial-id="player-stats">
-                    <PlayerStats player={viewPlayer} hpRef={selfHpRef} />
+                    <PlayerStats
+                        player={viewPlayer}
+                        hpRef={selfHpRef}
+                        hitStopActive={hitStopActive}
+                        hitStopConfig={hitStopConfig}
+                        slashActive={slashActive}
+                        slashConfig={slashConfig}
+                    />
                 </div>
                 <div className="w-full px-[1vw] pt-[0.5vw]" data-tutorial-id="draw-deck">
                     <DrawDeck ref={drawDeckRef} count={viewPlayer.deck.length} locale={locale} />

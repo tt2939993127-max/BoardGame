@@ -7,6 +7,7 @@ import koaBody from 'koa-body';
 import { nanoid } from 'nanoid';
 import { Readable } from 'stream';
 import { connectDB } from './src/server/db';
+import { MAX_CHAT_LENGTH, sanitizeChatText } from './src/server/chatUtils';
 
 // 使用 require 避免 tsx 在 ESM 下将 boardgame.io/server 解析到不存在的 index.jsx
 const require = createRequire(import.meta.url);
@@ -40,6 +41,15 @@ const REMATCH_EVENTS = {
     // 调试用：广播新房间
     DEBUG_NEW_ROOM: 'debug:newRoom',
 } as const;
+
+// 对局聊天事件常量（与前端 matchSocket.ts 保持一致）
+const MATCH_CHAT_EVENTS = {
+    JOIN: 'matchChat:join',
+    LEAVE: 'matchChat:leave',
+    SEND: 'matchChat:send',
+    MESSAGE: 'matchChat:message',
+} as const;
+
 
 // 重赛投票状态（按 matchID 维护）
 interface RematchVoteState {
@@ -247,8 +257,10 @@ const claimSeatHandler = createClaimSeatHandler({
 const resolveOwnerFromRequest = (ctx: any, setupData: Record<string, unknown>): { ownerKey: string; ownerType: 'user' | 'guest' } => {
     const authHeader = ctx.get('authorization');
     const rawToken = claimSeatUtils.parseBearerToken(authHeader);
+    const tokenLength = rawToken ? rawToken.length : 0;
     const payload = rawToken ? claimSeatUtils.verifyGameToken(rawToken, JWT_SECRET) : null;
     if (rawToken && !payload?.userId) {
+        console.warn(`[CreateAuthDebug] result=invalid_token hasAuth=${!!authHeader} tokenLength=${tokenLength}`);
         ctx.throw(401, 'Invalid token');
         return { ownerKey: 'user:invalid', ownerType: 'user' };
     }
@@ -259,6 +271,7 @@ const resolveOwnerFromRequest = (ctx: any, setupData: Record<string, unknown>): 
         ? setupData.guestId.trim()
         : undefined;
     if (!guestId) {
+        console.warn(`[CreateAuthDebug] result=missing_guest hasAuth=${!!authHeader} tokenLength=${tokenLength}`);
         ctx.throw(400, 'guestId is required');
         return { ownerKey: 'guest:invalid', ownerType: 'guest' };
     }
@@ -366,12 +379,12 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
             }
 
             // 清除该玩家的占位
-            delete players[playerID as string].name;
-            delete players[playerID as string].credentials;
+            const leavingSeat = players[playerID as string] as { name?: string; credentials?: string; isConnected?: boolean };
+            delete leavingSeat.name;
+            delete leavingSeat.credentials;
+            leavingSeat.isConnected = false;
 
             // 检查是否还有玩家占座（name/credentials/isConnected 任一存在）
-            const hasPlayers = hasOccupiedPlayers(players as Record<string, { name?: string; credentials?: string; isConnected?: boolean }>);
-            console.log(`[Leave] 释放座位 matchID=${matchID} playerID=${playerID} hasPlayers=${hasPlayers}`);
             // 仅更新 metadata，不在 /leave 时销毁房间
             await db.setMetadata(matchID, metadata);
 
@@ -388,10 +401,14 @@ const interceptLeaveMiddleware = async (ctx: any, next: () => Promise<void>) => 
 
 // 辅助函数：重新创建请求流，使 boardgame.io 能够再次读取 body
 const recreateRequestStream = (ctx: any, body: unknown) => {
-    const bodyString = JSON.stringify(body);
-    const newStream = Readable.from([bodyString]);
-    // 复制原始请求的必要属性
-    (newStream as any).headers = ctx.req.headers;
+    const bodyString = JSON.stringify(body ?? {});
+    const bodyBuffer = Buffer.from(bodyString, 'utf8');
+    const newStream = Readable.from([bodyBuffer]);
+    // 复制原始请求的必要属性，并同步 Content-Length 以匹配新 body
+    const headers = { ...ctx.req.headers } as Record<string, string | string[] | undefined>;
+    headers['content-length'] = String(bodyBuffer.length);
+    delete headers['transfer-encoding'];
+    (newStream as any).headers = headers;
     (newStream as any).method = ctx.req.method;
     (newStream as any).url = ctx.req.url;
     ctx.req = newStream;
@@ -406,9 +423,17 @@ const interceptJoinMiddleware = async (ctx: any, next: () => Promise<void>) => {
             const matchID = match[2];
 
             // 读取 body
-            const parse = bodyParser();
-            await (parse as any)(ctx, async () => undefined);
-            const body = (ctx.request as any).body as { playerID?: string; playerName?: string; data?: any } | undefined;
+            let body: { playerID?: string; playerName?: string; data?: any } | undefined;
+            try {
+                const parse = bodyParser();
+                await (parse as any)(ctx, async () => undefined);
+                body = (ctx.request as any).body as { playerID?: string; playerName?: string; data?: any } | undefined;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`[Join] 解析失败 matchID=${matchID} message=${message}`);
+                throw error;
+            }
+
             const password = body?.data?.password; // 客户端传来的密码
 
             // 获取房间配置
@@ -1153,6 +1178,13 @@ server.run(GAME_SERVER_PORT).then(async (runningServers) => {
             socket.data.rematchMatchId = undefined;
             socket.data.rematchPlayerId = undefined;
 
+            // 清理聊天订阅
+            const chatMatchId = socket.data.chatMatchId as string | undefined;
+            if (chatMatchId) {
+                socket.leave(`matchchat:${chatMatchId}`);
+            }
+            socket.data.chatMatchId = undefined;
+
             console.log(`[LobbyIO] ${socket.id} 断开连接`);
         });
 
@@ -1276,6 +1308,61 @@ server.run(GAME_SERVER_PORT).then(async (runningServers) => {
                     }
                 }, 1000);
             }
+        });
+
+        // ========== 对局聊天事件处理（不落库） ==========
+        socket.on(MATCH_CHAT_EVENTS.JOIN, (payload?: { matchId?: string }) => {
+            const matchId = payload?.matchId;
+            if (!matchId) {
+                console.warn(`[MatchChat] ${socket.id} 加入失败：缺少 matchId`);
+                return;
+            }
+
+            const prevMatchId = socket.data.chatMatchId as string | undefined;
+            if (prevMatchId && prevMatchId !== matchId) {
+                socket.leave(`matchchat:${prevMatchId}`);
+            }
+
+            socket.data.chatMatchId = matchId;
+            socket.join(`matchchat:${matchId}`);
+            console.log(`[MatchChat] ${socket.id} 加入对局聊天 ${matchId}`);
+        });
+
+        socket.on(MATCH_CHAT_EVENTS.LEAVE, () => {
+            const matchId = socket.data.chatMatchId as string | undefined;
+            if (matchId) {
+                socket.leave(`matchchat:${matchId}`);
+            }
+            socket.data.chatMatchId = undefined;
+            console.log(`[MatchChat] ${socket.id} 离开对局聊天`);
+        });
+
+        socket.on(MATCH_CHAT_EVENTS.SEND, (payload?: { text?: string; senderId?: string; senderName?: string }) => {
+            const matchId = socket.data.chatMatchId as string | undefined;
+            if (!matchId) {
+                console.warn(`[MatchChat] ${socket.id} 发送失败：未加入对局聊天`);
+                return;
+            }
+
+            const text = sanitizeChatText(payload?.text ?? '');
+            if (!text) {
+                if ((payload?.text ?? '').length > MAX_CHAT_LENGTH) {
+                    console.warn(`[MatchChat] ${socket.id} 消息过长: ${(payload?.text ?? '').length}`);
+                }
+                return;
+            }
+
+            const senderName = String(payload?.senderName ?? '玩家');
+            const senderId = payload?.senderId ? String(payload.senderId) : undefined;
+
+            lobbyIO?.to(`matchchat:${matchId}`).emit(MATCH_CHAT_EVENTS.MESSAGE, {
+                id: nanoid(),
+                matchId,
+                senderId,
+                senderName,
+                text,
+                createdAt: new Date().toISOString(),
+            });
         });
     });
 

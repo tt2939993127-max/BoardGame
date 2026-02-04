@@ -223,13 +223,18 @@ async function preloadAudioFile(src: string): Promise<void> {
 // ============================================================================
 
 /** 判断是否为穿透源（data/blob/http），独立资源域名不算穿透 */
+const isString = (value: unknown): value is string => typeof value === 'string';
 const isHttpUrl = (src: string) => src.startsWith('http://') || src.startsWith('https://');
 const isInternalAssetsUrl = (src: string) => isHttpUrl(assetsBaseUrl) && src.startsWith(assetsBaseUrl);
-const isPassthroughSource = (src: string) => (
-    src.startsWith('data:')
-    || src.startsWith('blob:')
-    || (isHttpUrl(src) && !isInternalAssetsUrl(src))
-);
+const isPassthroughSource = (src: unknown) => {
+    if (!isString(src)) return false;
+    return (
+        src.startsWith('data:')
+        || src.startsWith('blob:')
+        || (isHttpUrl(src) && !isInternalAssetsUrl(src))
+    );
+};
+const isSvgSource = (src: string) => /\.svg(\?|#|$)/i.test(src);
 
 /** 移除扩展名 */
 const stripExtension = (src: string) => {
@@ -253,6 +258,7 @@ const stripAssetsBasePrefix = (normalized: string) => {
  * 支持相对路径转换
  */
 export function assetsPath(path: string): string {
+    if (!isString(path)) return '';
     if (isPassthroughSource(path)) return path;
     if (!path) return assetsBaseUrl;
     if (path === assetsBaseUrl || path.startsWith(`${assetsBaseUrl}/`)) return path;
@@ -269,8 +275,14 @@ export type ImageUrlSet = { avif: string; webp: string };
 export type LocalizedImageUrls = { primary: ImageUrlSet; fallback: ImageUrlSet };
 
 export function getOptimizedImageUrls(src: string): ImageUrlSet {
+    if (!isString(src) || !src) {
+        return { avif: '', webp: '' };
+    }
     const normalized = assetsPath(src);
-    if (isPassthroughSource(normalized)) {
+    if (!normalized) {
+        return { avif: '', webp: '' };
+    }
+    if (isPassthroughSource(normalized) || isSvgSource(normalized)) {
         return { avif: normalized, webp: normalized };
     }
     const base = stripExtension(normalized);
@@ -311,6 +323,10 @@ export function getLocalizedImageUrls(src: string, locale?: string): LocalizedIm
  * 返回支持 image-set 的 CSS 值，并包含回退层
  */
 export function buildLocalizedImageSet(src: string, locale?: string): string {
+    if (!isString(src) || !src) {
+        console.warn(`[AssetLoader] invalid_src type=${typeof src} value=${String(src)}`);
+        return '';
+    }
     const { primary, fallback } = getLocalizedImageUrls(src, locale);
     const primarySet = `image-set(url("${primary.avif}") type("image/avif"), url("${primary.webp}") type("image/webp"))`;
     const fallbackSet = `image-set(url("${fallback.avif}") type("image/avif"), url("${fallback.webp}") type("image/webp"))`;

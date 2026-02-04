@@ -4,9 +4,9 @@
  */
 
 import type { AbilityCard } from '../types';
-import { DICE_FACE_IDS, TOKEN_IDS, STATUS_IDS } from '../domain/ids';
+import { DICE_FACE_IDS, TOKEN_IDS, STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import type { RandomFn } from '../../../engine/types';
-import type { AbilityEffect, AbilityDef } from '../../../systems/AbilitySystem';
+import type { AbilityEffect, AbilityDef } from '../../../systems/presets/combat';
 
 // 辅助函数：创建伤害效果
 // 注意：不指定 timing，让系统使用默认的 withDamage 时机
@@ -15,7 +15,7 @@ const damage = (value: number, description: string): AbilityEffect => ({
     action: { type: 'damage', target: 'opponent', value },
 });
 
-import type { EffectTiming, EffectCondition } from '../../../systems/AbilitySystem';
+import type { EffectTiming, EffectCondition } from '../../../systems/presets/combat';
 
 
 // 辅助函数：创建 Token 效果（给自己，用于太极、闪避、净化）
@@ -47,7 +47,7 @@ const inflictStatus = (
 ): AbilityEffect => ({
     description,
     action: { type: 'grantStatus', target: 'opponent', statusId, value },
-    // 卡牌效果默认立即生效（否则会走 AbilitySystem 的默认时机并被过滤掉）
+    // 卡牌效果默认立即生效（否则会走默认时机并被过滤掉）
     timing: opts?.timing ?? 'immediate',
     condition: opts?.condition,
 });
@@ -401,7 +401,7 @@ const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${f
 
 /**
  * 僧侣手牌定义
- * atlasIndex 对应 monk-ability-cards.png 图集中的位置（从左到右、从上到下，0起始）
+ * previewRef.atlas 对应 monk-ability-cards.png 图集中的位置（从左到右、从上到下，0起始）
  */
 export const MONK_CARDS: AbilityCard[] = [
     // ============================================
@@ -416,7 +416,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-enlightenment', 'description'),
-        atlasIndex: 0,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 0 },
         i18n: {
             'zh-CN': { name: '顿悟！', description: '投掷1骰：如果投出莲花，获得2气、闪避和净化；否则抽取1张牌。' },
             'en': { name: 'Enlightenment!', description: 'Roll 1 die: if Lotus, gain 2 Chi, Evasive and Purify; otherwise draw 1 card.' },
@@ -437,7 +437,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'instant',
         description: cardText('card-inner-peace', 'description'),
-        atlasIndex: 1,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 1 },
         i18n: {
             'zh-CN': { name: '静心！', description: '获得2气。' },
             'en': { name: 'Inner Peace!', description: 'Gain 2 Chi.' },
@@ -453,7 +453,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'instant',
         description: cardText('card-deep-thought', 'description'),
-        atlasIndex: 2,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 2 },
         i18n: {
             'zh-CN': { name: '沉思！', description: '获得5气。' },
             'en': { name: 'Deep Thought!', description: 'Gain 5 Chi.' },
@@ -470,7 +470,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-buddha-light', 'description'),
-        atlasIndex: 3,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 3 },
         i18n: {
             'zh-CN': { name: '佛光普照！', description: '获得1气、闪避和净化；对1名对手施加倒地。' },
             'en': { name: 'Buddha Light!', description: 'Gain 1 Chi, Evasive and Purify; inflict Stun on 1 opponent.' },
@@ -489,7 +489,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-palm-strike', 'description'),
-        atlasIndex: 4,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 4 },
         i18n: {
             'zh-CN': { name: '掌击！', description: '对1名对手施加倒地。' },
             'en': { name: 'Palm Strike!', description: 'Inflict Stun on 1 opponent.' },
@@ -506,7 +506,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-meditation-3', 'description'),
-        atlasIndex: 5,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 5 },
         i18n: {
             'zh-CN': { name: '清修 III', description: '防御投掷5骰。获得1×气数值的气，造成1×拳伤害。如果投出2个太极，获得闪避 -或- 净化。' },
             'en': { name: 'Meditation III', description: 'Defensive roll 5 dice. Gain Chi equal to Taiji faces; deal damage equal to Fist faces. If 2+ Taiji, gain Evasive -or- Purify.' },
@@ -523,7 +523,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'roll',
         description: cardText('card-play-six', 'description'),
-        atlasIndex: 15,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 15 },
         i18n: {
             'zh-CN': { name: '玩得六啊！', description: '将你1颗骰子的数值改至6。' },
             'en': { name: 'Play Six!', description: 'Set 1 of your dice to 6.' },
@@ -549,7 +549,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-meditation-2', 'description'),
-        atlasIndex: 6,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 6 },
         i18n: {
             'zh-CN': { name: '清修 II', description: '防御投掷5骰。获得1×气数值的气，造成1×拳伤害。' },
             'en': { name: 'Meditation II', description: 'Defensive roll 5 dice. Gain Chi equal to Taiji faces; deal damage equal to Fist faces.' },
@@ -565,7 +565,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-zen-fist-2', 'description'),
-        atlasIndex: 7,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 7 },
         i18n: {
             'zh-CN': { name: '止禅拳法 II', description: '大顺子触发：造成7伤害，然后获得闪避和3气，施加倒地。武僧之路（拳掌太极莲花触发）：获得2闪避，造成3不可防御伤害。' },
             'en': { name: 'Zen Fist II', description: 'Large Straight: Deal 7 damage, gain Evasive and 3 Chi, inflict Stun. Way of the Monk (Fist+Palm+Taiji+Lotus): Gain 2 Evasive, deal 3 undefendable damage.' },
@@ -581,7 +581,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-storm-assault-2', 'description'),
-        atlasIndex: 8,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 8 },
         i18n: {
             'zh-CN': { name: '风暴突袭 II', description: '投掷3骰，造成等同于投掷结果总和的伤害。你可以花费1个气以重掷以上三颗中的任何一颗骰子。如果投掷结果大于等于12，则施加倒地。' },
             'en': { name: 'Storm Assault II', description: 'Roll 3 dice; deal damage equal to sum. Spend 1 Chi to reroll any die. If sum ≥12, inflict Stun.' },
@@ -597,7 +597,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-combo-punch-2', 'description'),
-        atlasIndex: 9,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 9 },
         i18n: {
             'zh-CN': { name: '连段冲拳 II', description: '造成5伤害并投掷2骰。增加2×拳伤害，增加3×掌伤害。获得2×太极的气。每投出1个莲花，获得闪避 -或- 净化。' },
             'en': { name: 'Combo Punch II', description: 'Deal 5 damage and roll 2 dice. +2 damage per Fist, +3 per Palm. Gain 2 Chi per Taiji. Gain Evasive -or- Purify per Lotus.' },
@@ -619,7 +619,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-lotus-bloom-2', 'description'),
-        atlasIndex: 10,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 10 },
         i18n: {
             'zh-CN': { name: '花开贝佛 II', description: '4莲花触发：造成6不可防御伤害，然后气的堆叠上限提升1，并获得6气。莲花之道（3莲花触发）：造成2不可防御伤害，然后获得闪避和2气。' },
             'en': { name: 'Lotus Bloom II', description: '4 Lotus: Deal 6 undefendable damage, Chi cap +1, gain 6 Chi. 3 Lotus: Deal 2 undefendable damage, gain Evasive and 2 Chi.' },
@@ -635,7 +635,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-mahayana-2', 'description'),
-        atlasIndex: 11,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 11 },
         i18n: {
             'zh-CN': { name: '大乘拳法 II', description: '小顺子触发：造成6伤害，然后获得3气。' },
             'en': { name: 'Mahayana II', description: 'Small Straight: Deal 6 damage, then gain 3 Chi.' },
@@ -651,7 +651,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-thrust-punch-2', 'description'),
-        atlasIndex: 12,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 12 },
         i18n: {
             'zh-CN': { name: '冲拳 II', description: '拳拳造成7伤害 / 拳拳掌造成8伤害 / 拳拳掌掌造成9伤害。' },
             'en': { name: 'Thrust Punch II', description: '2 Fist: 7 damage / 3 Fist: 8 damage / 4 Fist: 9 damage.' },
@@ -667,7 +667,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-thrust-punch-3', 'description'),
-        atlasIndex: 13,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 13 },
         i18n: {
             'zh-CN': { name: '冲拳 III', description: '拳拳造成7伤害 / 拳拳掌造成8伤害 / 拳拳掌掌造成9伤害。如果投出4个相同数字，施加倒地。' },
             'en': { name: 'Thrust Punch III', description: '2 Fist: 7 damage / 3 Fist: 8 damage / 4 Fist: 9 damage. If 4 of a kind, inflict Stun.' },
@@ -683,7 +683,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-contemplation-2', 'description'),
-        atlasIndex: 14,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 14 },
         i18n: {
             'zh-CN': { name: '冥想 II', description: '3太极触发：获得6气，获得闪避和净化。禅武归一（拳掌太极触发）：造成6伤害，然后获得2气。' },
             'en': { name: 'Contemplation II', description: '3 Taiji: Gain 6 Chi, Evasive and Purify. Zen Combat (Fist+Palm+Taiji): Deal 6 damage, gain 2 Chi.' },
@@ -700,7 +700,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'roll',
         description: cardText('card-just-this', 'description'),
-        atlasIndex: 16,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 16 },
         i18n: {
             'zh-CN': { name: '就这？', description: '1名玩家可以在其防御投掷阶段，对至5颗骰子进行1次额外的投掷尝试。' },
             'en': { name: 'Just This?', description: '1 player may make 1 extra roll attempt with up to 5 dice during their defensive roll phase.' },
@@ -728,7 +728,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'roll',
         description: cardText('card-give-hand', 'description'),
-        atlasIndex: 17,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 17 },
         i18n: {
             'zh-CN': { name: '抬一手！', description: '选择对手的1颗骰子，强制他重投该骰子。' },
             'en': { name: 'Give a Hand!', description: 'Select 1 opponent\'s die and force them to reroll it.' },
@@ -757,7 +757,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'roll',
         description: cardText('card-i-can-again', 'description'),
-        atlasIndex: 18,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 18 },
         i18n: {
             'zh-CN': { name: '我又行了！', description: '1名玩家可以在其进攻投掷阶段，对至多5颗骰子进行1次额外的投掷尝试。' },
             'en': { name: 'I Can Again!', description: '1 player may make 1 extra roll attempt with up to 5 dice during their offensive roll phase.' },
@@ -784,7 +784,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'roll',
         description: cardText('card-me-too', 'description'),
-        atlasIndex: 19,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 19 },
         i18n: {
             'zh-CN': { name: '俺也一样！', description: '将你1颗骰子的数值变为和你另一颗骰子的数值一样（同一阶段使用且目的相同）。' },
             'en': { name: 'Me Too!', description: 'Set 1 of your dice to match another of your dice (same phase and purpose).' },
@@ -816,7 +816,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'roll',
         description: cardText('card-surprise', 'description'),
-        atlasIndex: 20,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 20 },
         i18n: {
             'zh-CN': { name: '惊不惊喜？！', description: '改变任意1颗骰子的数值。' },
             'en': { name: 'Surprise!', description: 'Change any 1 die to any value.' },
@@ -841,7 +841,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'roll',
         description: cardText('card-worthy-of-me', 'description'),
-        atlasIndex: 21,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 21 },
         i18n: {
             'zh-CN': { name: '不愧是我！', description: '你或1名队友可以重掷至多2颗骰子（可以是同一颗骰子重掷2次或两颗骰子各重掷1次）。' },
             'en': { name: 'Worthy of Me!', description: 'You or 1 teammate may reroll up to 2 dice (same die twice or 2 different dice once each).' },
@@ -867,7 +867,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'roll',
         description: cardText('card-unexpected', 'description'),
-        atlasIndex: 22,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 22 },
         i18n: {
             'zh-CN': { name: '意不意外？！', description: '改变任意2颗骰子的数值。' },
             'en': { name: 'Unexpected!', description: 'Change any 2 dice to any values.' },
@@ -892,7 +892,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'instant',
         description: cardText('card-next-time', 'description'),
-        atlasIndex: 23,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 23 },
         i18n: {
             'zh-CN': { name: '下次一定！', description: '一名玩家防止6点即将受到的伤害。' },
             'en': { name: 'Next Time!', description: 'One player prevents 6 points of incoming damage.' },
@@ -909,7 +909,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'instant',
         description: cardText('card-boss-generous', 'description'),
-        atlasIndex: 24,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 24 },
         i18n: {
             'zh-CN': { name: '老板大气！', description: '获得2CP。' },
             'en': { name: 'Boss Generous!', description: 'Gain 2 CP.' },
@@ -930,7 +930,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'instant',
         description: cardText('card-flick', 'description'),
-        atlasIndex: 25,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 25 },
         i18n: {
             'zh-CN': { name: '弹一手！', description: '增加或减少任意1颗骰子的数值1点（数值1无法再减少，数值6无法再增加）。' },
             'en': { name: 'Flick!', description: 'Increase or decrease any 1 die by 1 (1 cannot go lower, 6 cannot go higher).' },
@@ -955,7 +955,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'instant',
         description: cardText('card-bye-bye', 'description'),
-        atlasIndex: 26,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 26 },
         i18n: {
             'zh-CN': { name: '拜拜了您内！', description: '从1名玩家身上移除1个状态效果。' },
             'en': { name: 'Bye Bye!', description: 'Remove 1 status effect from 1 player.' },
@@ -975,7 +975,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'instant',
         description: cardText('card-double', 'description'),
-        atlasIndex: 27,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 27 },
         i18n: {
             'zh-CN': { name: '加倍！', description: '抽取2张牌。' },
             'en': { name: 'Double!', description: 'Draw 2 cards.' },
@@ -991,7 +991,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'instant',
         description: cardText('card-super-double', 'description'),
-        atlasIndex: 28,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 28 },
         i18n: {
             'zh-CN': { name: '超级加倍！', description: '抽取3张牌。' },
             'en': { name: 'Super Double!', description: 'Draw 3 cards.' },
@@ -1008,7 +1008,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-get-away', 'description'),
-        atlasIndex: 29,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 29 },
         i18n: {
             'zh-CN': { name: '起开！', description: '从1名玩家身上移除1个状态效果。' },
             'en': { name: 'Get Away!', description: 'Remove 1 status effect from 1 player.' },
@@ -1034,7 +1034,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-one-throw-fortune', 'description'),
-        atlasIndex: 30,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 30 },
         i18n: {
             'zh-CN': { name: '一掷千金！', description: '投掷1骰：获得½数值的CP（向上取整）。' },
             'en': { name: 'One Throw Fortune!', description: 'Roll 1 die: gain CP equal to half the value (rounded up).' },
@@ -1054,7 +1054,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-what-status', 'description'),
-        atlasIndex: 31,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 31 },
         i18n: {
             'zh-CN': { name: '状什么态？', description: '移除1名玩家的所有状态效果。' },
             'en': { name: 'What Status?', description: 'Remove all status effects from 1 player.' },
@@ -1074,7 +1074,7 @@ export const MONK_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-transfer-status', 'description'),
-        atlasIndex: 32,
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 32 },
         i18n: {
             'zh-CN': { name: '乾坤大挪移！', description: '将1名玩家身上的1个状态效果转移至另1名玩家。' },
             'en': { name: 'Transfer Status!', description: 'Transfer 1 status effect from 1 player to another player.' },

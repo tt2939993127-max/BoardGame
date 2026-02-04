@@ -15,11 +15,11 @@ export interface UseHandAreaConfig<TCard> {
     getCardId: (card: TCard, index: number) => string;
     /** 是否启用发牌动画 */
     dealAnimation?: boolean;
-    /** 发牌动画间隔 (ms) */
+    /** 发牌动画间隔（毫秒） */
     dealInterval?: number;
     /** 打出卡牌的拖拽阈值 */
     playThreshold?: number;
-    /** 售卖区域 ref */
+    /** 售卖区域引用 */
     sellZoneRef?: React.RefObject<HTMLElement | null>;
 }
 

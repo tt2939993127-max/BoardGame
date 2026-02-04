@@ -11,6 +11,8 @@ export interface GameManifestEntry {
     category: GameCategory;
     playersKey: string;
     icon: string;
+    /** 缩略图资源路径（不含扩展名，可指向 compressed 目录） */
+    thumbnailPath?: string;
     /** 是否允许本地同屏模式，默认 true */
     allowLocalMode?: boolean;
     /** 可选的玩家人数列表，默认 [2] */

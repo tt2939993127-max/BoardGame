@@ -5,7 +5,7 @@
  * 这是一个基础实现，提供核心的拖拽检测逻辑。
  */
 
-import { memo, useState, useCallback, useRef, useEffect } from 'react';
+import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { HandAreaSkeletonProps } from './types';
 import type { DragOffset } from '../../../core/ui';
 
@@ -43,9 +43,16 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     cards,
     maxCards,
     canDrag = true,
+    canSelect = false,
+    selectedCardIds = [],
+    onSelectChange,
     onPlayCard,
     onSellCard,
     renderCard,
+    layoutCode,
+    selectEffectCode,
+    sortCode,
+    filterCode,
     className,
     dealAnimation = false,
     dragThreshold = 150,
@@ -205,20 +212,121 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
         prevCardIdsRef.current = currentIds;
     }, [cards, dealAnimation]);
 
+    // 处理卡牌点击（选中/取消选中）
+    const handleCardClick = useCallback(
+        (cardId: string) => {
+            if (!canSelect || isDraggingRef.current) return;
+            const isCurrentlySelected = selectedCardIds.includes(cardId);
+            onSelectChange?.(cardId, !isCurrentlySelected);
+        },
+        [canSelect, selectedCardIds, onSelectChange]
+    );
+
+    // 解析并执行排序代码
+    const getSortFn = useMemo(() => {
+        if (!sortCode) return undefined;
+        try {
+            // eslint-disable-next-line no-new-func
+            return new Function('a', 'b', `return (${sortCode})(a, b)`) as (a: TCard, b: TCard) => number;
+        } catch {
+            return undefined;
+        }
+    }, [sortCode]);
+
+    // 解析并执行过滤代码
+    const getFilterFn = useMemo(() => {
+        if (!filterCode) return undefined;
+        try {
+            // eslint-disable-next-line no-new-func
+            return new Function('card', `return (${filterCode})(card)`) as (card: TCard) => boolean;
+        } catch {
+            return undefined;
+        }
+    }, [filterCode]);
+
+    // 应用排序和过滤后的卡牌列表
+    const processedCards = useMemo(() => {
+        let result = [...cards];
+        if (getFilterFn) {
+            result = result.filter(getFilterFn);
+        }
+        if (getSortFn) {
+            result = result.sort(getSortFn);
+        }
+        return result;
+    }, [cards, getFilterFn, getSortFn]);
+
+    // 解析并执行布局代码
+    const getLayoutStyle = useMemo(() => {
+        if (!layoutCode) return undefined;
+        try {
+            // layoutCode 应该是函数体字符串
+            // eslint-disable-next-line no-new-func
+            return new Function('index', 'total', `return (${layoutCode})(index, total)`) as (index: number, total: number) => React.CSSProperties;
+        } catch {
+            return undefined;
+        }
+    }, [layoutCode]);
+
+    // 解析并执行选中效果代码
+    const getSelectStyle = useMemo(() => {
+        if (!selectEffectCode) return undefined;
+        try {
+            // eslint-disable-next-line no-new-func
+            return new Function('isSelected', `return (${selectEffectCode})(isSelected)`) as (isSelected: boolean) => React.CSSProperties;
+        } catch {
+            return undefined;
+        }
+    }, [selectEffectCode]);
+
+    // 计算卡牌位置样式
+    const getCardPositionStyle = useCallback(
+        (index: number, isSelected: boolean, isDragging: boolean) => {
+            const baseStyle: React.CSSProperties = {
+                touchAction: 'none',
+                cursor: canDrag ? 'grab' : canSelect ? 'pointer' : 'default',
+                transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+            };
+
+            // 应用布局代码
+            const layoutStyle = getLayoutStyle?.(index, cards.length);
+            if (layoutStyle) {
+                Object.assign(baseStyle, layoutStyle);
+            }
+
+            // 应用选中效果代码
+            const selectStyle = getSelectStyle?.(isSelected);
+            if (selectStyle && !isDragging) {
+                Object.assign(baseStyle, selectStyle);
+            }
+
+            // 拖拽偏移
+            if (isDragging) {
+                baseStyle.transform = `translate(${dragOffset.x}px, ${dragOffset.y}px)`;
+                baseStyle.zIndex = 100;
+            }
+
+            return baseStyle;
+        },
+        [getLayoutStyle, getSelectStyle, dragOffset, canDrag, canSelect, processedCards.length]
+    );
+
     return (
         <div
             className={className}
             data-hand-area="root"
-            data-card-count={cards.length}
+            data-card-count={processedCards.length}
             data-max-cards={maxCards}
             data-is-dragging={!!draggingCardId}
             role="list"
-            aria-label="Hand cards"
+            aria-label="手牌列表"
+            style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end' }}
         >
-            {cards.map((card, index) => {
+            {processedCards.map((card, index) => {
                 const cardId = getCardId(card, index);
                 const isDragging = cardId === draggingCardId;
                 const isVisible = !dealAnimation || visibleCardIds.has(cardId);
+                const isSelected = selectedCardIds.includes(cardId);
 
                 return (
                     <div
@@ -227,21 +335,18 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
                         data-card-id={cardId}
                         data-is-dragging={isDragging}
                         data-is-visible={isVisible}
+                        data-is-selected={isSelected}
                         style={{
-                            transform: isDragging
-                                ? `translate(${dragOffset.x}px, ${dragOffset.y}px)`
-                                : undefined,
+                            ...getCardPositionStyle(index, isSelected, isDragging),
                             opacity: isVisible ? 1 : 0,
-                            transition: isDragging ? 'none' : 'transform 0.2s, opacity 0.3s',
-                            touchAction: 'none',
-                            cursor: canDrag ? 'grab' : 'default',
                         }}
                         onPointerDown={(e) => handlePointerDown(cardId, e)}
                         onPointerMove={handlePointerMove}
                         onPointerUp={handlePointerUp}
                         onPointerCancel={handlePointerCancel}
+                        onClick={() => handleCardClick(cardId)}
                     >
-                        {renderCard(card, index)}
+                        {renderCard(card, index, isSelected)}
                     </div>
                 );
             })}

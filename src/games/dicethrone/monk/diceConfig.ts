@@ -6,12 +6,6 @@ import type { DiceDefinition } from '../../../systems/DiceSystem/types';
 import { DICE_FACE_IDS } from '../domain/ids';
 
 /**
- * Monk 骰子符号常量（别名，保持向后兼容）
- * @deprecated 请使用 DICE_FACE_IDS
- */
-export const MONK_SYMBOLS = DICE_FACE_IDS;
-
-/**
  * Monk 骰子定义
  * 
  * 骰面映射：
@@ -38,7 +32,3 @@ export const monkDiceDefinition: DiceDefinition = {
     },
 };
 
-/**
- * Monk 骰面类型（兼容旧代码）
- */
-export type MonkDieFace = typeof MONK_SYMBOLS[keyof typeof MONK_SYMBOLS];

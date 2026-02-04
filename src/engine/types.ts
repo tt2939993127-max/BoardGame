@@ -36,6 +36,8 @@ export interface GameEvent<TType extends string = string, TPayload = unknown> {
     payload: TPayload;
     sourceCommandType?: string;
     timestamp: number;
+    /** 可选的音效 key（用于音频系统自定义播放） */
+    sfxKey?: string;
 }
 
 /**
@@ -113,6 +115,39 @@ export interface LogState {
 }
 
 /**
+ * 操作日志片段
+ * - text: 纯文本
+ * - card: 卡牌片段（用于 hover 预览）
+ */
+export type ActionLogSegment =
+    | { type: 'text'; text: string }
+    | {
+          type: 'card';
+          cardId: string;
+          previewText?: string;
+      };
+
+/**
+ * 操作日志条目
+ */
+export interface ActionLogEntry {
+    id: string;
+    timestamp: number;
+    actorId: PlayerId;
+    /** 行为类型（通常为 command type） */
+    kind: string;
+    segments: ActionLogSegment[];
+}
+
+/**
+ * 操作日志系统状态
+ */
+export interface ActionLogState {
+    entries: ActionLogEntry[];
+    maxEntries: number;
+}
+
+/**
  * 重赛系统状态
  */
 export interface RematchState {
@@ -125,11 +160,10 @@ export interface RematchState {
 /**
  * 响应窗口类型
  * - afterRollConfirmed: 确认骰面后（所有有骰子相关卡牌的玩家可响应）
- * - preResolve: 攻击结算前/最后出牌机会（所有玩家可响应）
  * - afterCardPlayed: 卡牌打出后（受影响玩家可响应）
  * - thenBreakpoint: "然后"断点（所有玩家可响应）
  */
-export type ResponseWindowType = 'afterRollConfirmed' | 'preResolve' | 'afterCardPlayed' | 'thenBreakpoint';
+export type ResponseWindowType = 'afterRollConfirmed' | 'afterCardPlayed' | 'thenBreakpoint';
 
 /**
  * 响应窗口状态
@@ -230,7 +264,7 @@ export const DEFAULT_TUTORIAL_STATE: TutorialState = {
 export interface SystemState {
     /** Schema 版本（用于迁移） */
     schemaVersion: number;
-    /** Match ID */
+    /** matchID */
     matchId?: string;
     /** 撤销系统状态 */
     undo: UndoState;
@@ -238,6 +272,8 @@ export interface SystemState {
     prompt: PromptState;
     /** 日志系统状态 */
     log: LogState;
+    /** 操作日志系统状态 */
+    actionLog: ActionLogState;
     /** 重赛系统状态 */
     rematch: RematchState;
     /** 响应窗口状态 */

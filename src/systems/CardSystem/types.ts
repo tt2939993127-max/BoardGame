@@ -4,7 +4,7 @@
  * 支持各类桌游卡牌机制：
  * - 手牌管理（DiceThrone、UNO）
  * - 牌库/弃牌堆（大部分卡牌游戏）
- * - 卡牌效果（与 AbilitySystem 集成）
+ * - 卡牌效果（与战斗预设/效果系统集成）
  */
 
 import type { RandomFn } from '../../engine/types';
@@ -12,6 +12,30 @@ import type { RandomFn } from '../../engine/types';
 // ============================================================================
 // 卡牌定义（模板）
 // ============================================================================
+
+/**
+ * 卡牌预览引用（必须可序列化）
+ */
+export type CardPreviewRef =
+    | {
+        type: 'image';
+        src: string;
+    }
+    | {
+        type: 'atlas';
+        atlasId: string;
+        index: number;
+    }
+    | {
+        type: 'svg';
+        svgId: string;
+        props?: Record<string, string | number>;
+    }
+    | {
+        type: 'renderer';
+        rendererId: string;
+        payload?: Record<string, unknown>;
+    };
 
 /**
  * 卡牌定义基础接口
@@ -26,13 +50,8 @@ export interface CardDefinition {
     description?: string;
     /** 分类标签（用于筛选） */
     tags?: string[];
-    /** 视觉资源 */
-    assets?: {
-        /** 图片路径 */
-        image?: string;
-        /** 图集索引 */
-        atlasIndex?: number;
-    };
+    /** 预览渲染引用（可序列化） */
+    previewRef?: CardPreviewRef;
 }
 
 /**

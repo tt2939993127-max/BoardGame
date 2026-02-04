@@ -39,6 +39,8 @@ class AudioManagerClass {
     private bgms: Map<string, Howl> = new Map();
     private failedKeys: Set<SoundKey> = new Set();
 
+    private bgmListeners: Set<(currentBgm: string | null) => void> = new Set();
+
     private _muted: boolean = false;
     private _masterVolume: number = 1.0;
     private _sfxVolume: number = 1.0;
@@ -46,6 +48,10 @@ class AudioManagerClass {
 
     private _currentBgm: string | null = null;
     private _initialized: boolean = false;
+
+    private notifyBgmChange(): void {
+        this.bgmListeners.forEach((listener) => listener(this._currentBgm));
+    }
 
     /**
      * 初始化音频管理器
@@ -170,6 +176,7 @@ class AudioManagerClass {
             howl.play();
             howl.fade(0, this._bgmVolume, 1000);
             this._currentBgm = key;
+            this.notifyBgmChange();
         } else {
             console.warn(`[AudioManager] BGM "${key}" 未注册`);
         }
@@ -182,6 +189,7 @@ class AudioManagerClass {
         if (this._currentBgm) {
             this.bgms.get(this._currentBgm)?.stop();
             this._currentBgm = null;
+            this.notifyBgmChange();
         }
     }
 
@@ -231,9 +239,19 @@ class AudioManagerClass {
         localStorage.setItem('audio_muted', String(muted));
     }
 
+    onBgmChange(listener: (currentBgm: string | null) => void): () => void {
+        this.bgmListeners.add(listener);
+        return () => {
+            this.bgmListeners.delete(listener);
+        };
+    }
+
     stopAll(): void {
         Howler.stop();
-        this._currentBgm = null;
+        if (this._currentBgm !== null) {
+            this._currentBgm = null;
+            this.notifyBgmChange();
+        }
     }
 
     unloadAll(): void {
@@ -241,7 +259,10 @@ class AudioManagerClass {
         for (const howl of this.bgms.values()) howl.unload();
         this.sounds.clear();
         this.bgms.clear();
-        this._currentBgm = null;
+        if (this._currentBgm !== null) {
+            this._currentBgm = null;
+            this.notifyBgmChange();
+        }
     }
 }
 

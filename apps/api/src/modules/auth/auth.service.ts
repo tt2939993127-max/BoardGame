@@ -2,6 +2,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Cache } from 'cache-manager';
+import { createHash, randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
 import type { Model } from 'mongoose';
 import { User, type UserDocument } from './schemas/user.schema';
@@ -9,7 +10,33 @@ import { User, type UserDocument } from './schemas/user.schema';
 const JWT_SECRET = process.env.JWT_SECRET || 'boardgame-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 const DEFAULT_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 14;
+const REFRESH_TOKEN_PREFIX = 'refresh:token:';
+const REFRESH_TOKEN_USER_PREFIX = 'refresh:user:';
 const EMAIL_CODE_TTL_SECONDS = 5 * 60;
+const LOGIN_FAIL_WINDOW_SECONDS = 10 * 60;
+const LOGIN_FAIL_MAX_COUNT = 5;
+const LOGIN_LOCK_SECONDS = 30 * 60;
+const LOGIN_FAIL_PREFIX = 'login:fail:';
+const LOGIN_LOCK_PREFIX = 'login:lock:';
+
+type RefreshTokenRecord = {
+    userId: string;
+    issuedAt: number;
+    expiresAt: number;
+    revokedAt?: number;
+    replacedBy?: string;
+};
+
+type LoginFailRecord = {
+    count: number;
+    firstFailedAt: number;
+};
+
+export type RefreshTokenRotationResult =
+    | { status: 'ok'; userId: string; token: string; expiresAt: number }
+    | { status: 'reuse'; userId: string }
+    | { status: 'invalid' };
 
 @Injectable()
 export class AuthService {
@@ -18,20 +45,26 @@ export class AuthService {
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
 
-    async findByUsername(username: string): Promise<UserDocument | null> {
-        return this.userModel.findOne({ username });
-    }
-
-    async findById(userId: string): Promise<UserDocument | null> {
-        return this.userModel.findById(userId).select('-password').exec() as Promise<UserDocument | null>;
+    async findByEmail(email: string): Promise<UserDocument | null> {
+        return this.userModel.findOne({ email });
     }
 
     async findByEmailExcludingUser(email: string, userId: string): Promise<UserDocument | null> {
         return this.userModel.findOne({ email, _id: { $ne: userId } });
     }
 
-    async findByEmail(email: string): Promise<UserDocument | null> {
-        return this.userModel.findOne({ email });
+    // 登录仅支持邮箱：account 字段保留，但必须是邮箱格式
+    async findByAccount(account: string): Promise<UserDocument | null> {
+        const trimmed = account.trim();
+        const emailRegex = /^\S+@\S+\.\S+$/;
+        if (!emailRegex.test(trimmed)) {
+            return null;
+        }
+        return this.userModel.findOne({ email: trimmed.toLowerCase() });
+    }
+
+    async findById(userId: string): Promise<UserDocument | null> {
+        return this.userModel.findById(userId).select('-password').exec() as Promise<UserDocument | null>;
     }
 
     async createUser(username: string, password: string, email: string): Promise<UserDocument> {
@@ -39,11 +72,69 @@ export class AuthService {
         return user.save();
     }
 
-    async validateUser(username: string, password: string): Promise<UserDocument | null> {
-        const user = await this.userModel.findOne({ username });
+    async validateUserById(userId: string, password: string): Promise<UserDocument | null> {
+        const user = await this.userModel.findById(userId);
         if (!user) return null;
         const isMatch = await (user as UserDocument).comparePassword(password);
         return isMatch ? user : null;
+    }
+
+    async validateUser(account: string, password: string): Promise<UserDocument | null> {
+        const user = await this.findByAccount(account);
+        if (!user) return null;
+        const isMatch = await (user as UserDocument).comparePassword(password);
+        return isMatch ? user : null;
+    }
+
+    async getLoginLockStatus(email: string, ip: string | null): Promise<{ locked: boolean; retryAfterSeconds: number } | null> {
+        const lockKey = this.loginLockKey(email, ip);
+        const lockedUntil = await this.cacheManager.get<number>(lockKey);
+        if (!lockedUntil) {
+            return null;
+        }
+
+        const nowSeconds = this.nowSeconds();
+        const retryAfterSeconds = Math.max(lockedUntil - nowSeconds, 0);
+        if (retryAfterSeconds <= 0) {
+            await this.cacheManager.del(lockKey);
+            return null;
+        }
+
+        return { locked: true, retryAfterSeconds };
+    }
+
+    async recordLoginFailure(email: string, ip: string | null): Promise<{ locked: boolean; retryAfterSeconds?: number }> {
+        const failKey = this.loginFailKey(email, ip);
+        const nowSeconds = this.nowSeconds();
+        const existing = await this.cacheManager.get<LoginFailRecord>(failKey);
+        const firstFailedAt = existing?.firstFailedAt ?? nowSeconds;
+        const nextCount = (existing?.count ?? 0) + 1;
+        const ttlSeconds = Math.max(LOGIN_FAIL_WINDOW_SECONDS - (nowSeconds - firstFailedAt), 1);
+
+        if (nextCount >= LOGIN_FAIL_MAX_COUNT) {
+            const lockedUntil = nowSeconds + LOGIN_LOCK_SECONDS;
+            await this.cacheManager.set(this.loginLockKey(email, ip), lockedUntil, LOGIN_LOCK_SECONDS);
+            await this.cacheManager.del(failKey);
+            return { locked: true, retryAfterSeconds: LOGIN_LOCK_SECONDS };
+        }
+
+        await this.cacheManager.set(failKey, { count: nextCount, firstFailedAt }, ttlSeconds);
+        return { locked: false };
+    }
+
+    async clearLoginFailures(email: string, ip: string | null): Promise<void> {
+        await Promise.all([
+            this.cacheManager.del(this.loginFailKey(email, ip)),
+            this.cacheManager.del(this.loginLockKey(email, ip)),
+        ]);
+    }
+
+    async updatePassword(userId: string, newPassword: string): Promise<void> {
+        // 直接 save() 以触发 schema 的 pre('save') hash。
+        const user = await this.userModel.findById(userId);
+        if (!user) return;
+        user.password = newPassword;
+        await user.save();
     }
 
     async updateEmail(userId: string, email: string): Promise<UserDocument | null> {
@@ -68,6 +159,92 @@ export class AuthService {
             JWT_SECRET,
             { expiresIn: JWT_EXPIRES_IN }
         );
+    }
+
+    async issueRefreshToken(userId: string): Promise<{ token: string; expiresAt: number }> {
+        const token = this.createRefreshToken();
+        const tokenHash = this.hashRefreshToken(token);
+        const nowSeconds = this.nowSeconds();
+        const expiresAt = nowSeconds + REFRESH_TOKEN_TTL_SECONDS;
+        const record: RefreshTokenRecord = {
+            userId,
+            issuedAt: nowSeconds,
+            expiresAt,
+        };
+
+        const existingHash = await this.cacheManager.get<string>(this.refreshUserKey(userId));
+        if (existingHash) {
+            const existingRecord = await this.getRefreshTokenRecord(existingHash);
+            if (existingRecord) {
+                await this.markRefreshTokenRevoked(existingHash, existingRecord, tokenHash);
+            }
+        }
+
+        await this.cacheManager.set(this.refreshTokenKey(tokenHash), record, REFRESH_TOKEN_TTL_SECONDS);
+        await this.cacheManager.set(this.refreshUserKey(userId), tokenHash, REFRESH_TOKEN_TTL_SECONDS);
+
+        return { token, expiresAt };
+    }
+
+    async rotateRefreshToken(refreshToken: string): Promise<RefreshTokenRotationResult> {
+        const tokenHash = this.hashRefreshToken(refreshToken);
+        const record = await this.getRefreshTokenRecord(tokenHash);
+        if (!record) {
+            return { status: 'invalid' };
+        }
+
+        if (record.revokedAt || record.replacedBy) {
+            await this.revokeRefreshTokensForUser(record.userId);
+            return { status: 'reuse', userId: record.userId };
+        }
+
+        const nowSeconds = this.nowSeconds();
+        if (record.expiresAt <= nowSeconds) {
+            await this.revokeRefreshTokensForUser(record.userId);
+            return { status: 'invalid' };
+        }
+
+        const newToken = this.createRefreshToken();
+        const newHash = this.hashRefreshToken(newToken);
+        const newExpiresAt = nowSeconds + REFRESH_TOKEN_TTL_SECONDS;
+        const newRecord: RefreshTokenRecord = {
+            userId: record.userId,
+            issuedAt: nowSeconds,
+            expiresAt: newExpiresAt,
+        };
+
+        await this.cacheManager.set(this.refreshTokenKey(newHash), newRecord, REFRESH_TOKEN_TTL_SECONDS);
+        await this.cacheManager.set(this.refreshUserKey(record.userId), newHash, REFRESH_TOKEN_TTL_SECONDS);
+        await this.markRefreshTokenRevoked(tokenHash, record, newHash);
+
+        return { status: 'ok', userId: record.userId, token: newToken, expiresAt: newExpiresAt };
+    }
+
+    async revokeRefreshToken(refreshToken: string): Promise<void> {
+        const tokenHash = this.hashRefreshToken(refreshToken);
+        const record = await this.getRefreshTokenRecord(tokenHash);
+        if (!record) {
+            return;
+        }
+
+        await this.markRefreshTokenRevoked(tokenHash, record);
+        const currentHash = await this.cacheManager.get<string>(this.refreshUserKey(record.userId));
+        if (currentHash === tokenHash) {
+            await this.cacheManager.del(this.refreshUserKey(record.userId));
+        }
+    }
+
+    async revokeRefreshTokensForUser(userId: string): Promise<void> {
+        const currentHash = await this.cacheManager.get<string>(this.refreshUserKey(userId));
+        if (!currentHash) {
+            return;
+        }
+
+        const record = await this.getRefreshTokenRecord(currentHash);
+        if (record) {
+            await this.markRefreshTokenRevoked(currentHash, record);
+        }
+        await this.cacheManager.del(this.refreshUserKey(userId));
     }
 
     async blacklistToken(token: string): Promise<void> {
@@ -98,5 +275,66 @@ export class AuthService {
             }
         }
         return DEFAULT_TOKEN_TTL_SECONDS;
+    }
+
+    private createRefreshToken(): string {
+        return randomBytes(32).toString('hex');
+    }
+
+    private hashRefreshToken(token: string): string {
+        return createHash('sha256').update(token).digest('hex');
+    }
+
+    private refreshTokenKey(tokenHash: string): string {
+        return `${REFRESH_TOKEN_PREFIX}${tokenHash}`;
+    }
+
+    private refreshUserKey(userId: string): string {
+        return `${REFRESH_TOKEN_USER_PREFIX}${userId}`;
+    }
+
+    private loginFailKey(email: string, ip: string | null): string {
+        return `${LOGIN_FAIL_PREFIX}${email.toLowerCase()}:${this.normalizeIpKey(ip)}`;
+    }
+
+    private loginLockKey(email: string, ip: string | null): string {
+        return `${LOGIN_LOCK_PREFIX}${email.toLowerCase()}:${this.normalizeIpKey(ip)}`;
+    }
+
+    private normalizeIpKey(ip: string | null): string {
+        return (ip ?? 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '_');
+    }
+
+    private nowSeconds(): number {
+        return Math.floor(Date.now() / 1000);
+    }
+
+    private async getRefreshTokenRecord(tokenHash: string): Promise<RefreshTokenRecord | null> {
+        const record = await this.cacheManager.get<RefreshTokenRecord>(this.refreshTokenKey(tokenHash));
+        return record ?? null;
+    }
+
+    private resolveRefreshTokenTtlSeconds(expiresAt: number): number {
+        const ttl = Math.floor(expiresAt - Date.now() / 1000);
+        return ttl > 0 ? ttl : 1;
+    }
+
+    private async markRefreshTokenRevoked(
+        tokenHash: string,
+        record: RefreshTokenRecord,
+        replacedBy?: string
+    ): Promise<void> {
+        const revokedAt = record.revokedAt ?? this.nowSeconds();
+        const updated: RefreshTokenRecord = {
+            ...record,
+            revokedAt,
+            replacedBy: replacedBy ?? record.replacedBy,
+        };
+
+        await this.cacheManager.set(
+            this.refreshTokenKey(tokenHash),
+            updated,
+            this.resolveRefreshTokenTtlSeconds(record.expiresAt)
+        );
     }
 }

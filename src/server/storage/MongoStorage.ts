@@ -75,6 +75,7 @@ const calculateExpiresAt = (ttlSeconds: number): Date | null => {
  * MongoDB 存储实现
  */
 export class MongoStorage implements StorageAPI.Async {
+    private bootTimeMs = Date.now();
 
     type(): StorageTypeValue {
         return STORAGE_TYPE.ASYNC;
@@ -84,6 +85,7 @@ export class MongoStorage implements StorageAPI.Async {
         // mongoose 连接由 connectDB() 统一管理
         // 这里只确保模型已初始化
         getMatchModel();
+        this.bootTimeMs = Date.now();
         console.log('[MongoStorage] 已连接');
     }
 
@@ -108,6 +110,7 @@ export class MongoStorage implements StorageAPI.Async {
         const setupData = { ...setupDataFromMetadata, ...setupDataFromState };
         const ttlSeconds = setupData.ttlSeconds ?? 0;
         const ownerKey = setupData.ownerKey;
+        const ownerType = setupData.ownerType;
         const isGuestOwner = setupData.ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false);
 
         // 全局单房间限制：同一 ownerKey 只能有一个占用房间（gameover 仍视为占用）
@@ -146,7 +149,7 @@ export class MongoStorage implements StorageAPI.Async {
             expiresAt,
         });
 
-        console.log(`[MongoStorage] 创建房间 ${matchID}, TTL=${ttlSeconds}s`);
+        console.log(`[MongoStorage] 创建房间 matchID=${matchID} ttlSeconds=${ttlSeconds} ownerKey=${ownerKey ?? 'null'} ownerType=${ownerType ?? 'unknown'}`);
     }
 
     async setState(matchID: string, state: State, deltalog?: LogEntry[]): Promise<void> {
@@ -337,9 +340,11 @@ export class MongoStorage implements StorageAPI.Async {
             const metadataWith = metadata as Server.MatchData & { disconnectedSince?: number | null };
             if (connected) {
                 if (metadataWith.disconnectedSince) {
+                    console.log(`[MongoStorage] 清理断线标记 matchID=${matchID} reason=reconnected`);
                     delete metadataWith.disconnectedSince;
                 }
             } else if (!metadataWith.disconnectedSince) {
+                console.log(`[MongoStorage] 记录断线时间 matchID=${matchID}`);
                 metadataWith.disconnectedSince = Date.now();
             }
         }
@@ -472,8 +477,37 @@ export class MongoStorage implements StorageAPI.Async {
             const hasConnectedPlayer = players
                 ? Object.values(players).some(player => Boolean(player?.isConnected))
                 : false;
+            const playerValues = players ? Object.values(players) : [];
+            const connectedCount = playerValues.filter(player => Boolean(player?.isConnected)).length;
+            const occupiedCount = playerValues.filter(player => Boolean(player?.isConnected || (player as { name?: string }).name || (player as { credentials?: string }).credentials)).length;
+            const updatedAtMs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : now;
+            const idleMs = now - updatedAtMs;
+            const isStaleConnected = hasConnectedPlayer && updatedAtMs < this.bootTimeMs;
 
             if (hasConnectedPlayer) {
+                if (isStaleConnected) {
+                    const metadataWith = metadata as Server.MatchData & { disconnectedSince?: number | null };
+                    const seatValues = playerValues as Array<{ isConnected?: boolean | null }>;
+                    let changed = false;
+                    seatValues.forEach((seat) => {
+                        if (seat?.isConnected) {
+                            seat.isConnected = false;
+                            changed = true;
+                        }
+                    });
+                    if (!metadataWith.disconnectedSince) {
+                        metadataWith.disconnectedSince = now;
+                        changed = true;
+                    }
+                    if (changed) {
+                        await Match.updateOne({ matchID: doc.matchID }, { metadata });
+                    }
+                    console.warn(`[Cleanup] 标记重启遗留连接 matchID=${doc.matchID} connected=${connectedCount} occupied=${occupiedCount} updatedAtMs=${updatedAtMs} bootTimeMs=${this.bootTimeMs}`);
+                    continue;
+                }
+                if (idleMs >= graceMs) {
+                    console.warn(`[Cleanup] 跳过临时房间 matchID=${doc.matchID} reason=connected_but_idle connected=${connectedCount} occupied=${occupiedCount} idleMs=${idleMs}`);
+                }
                 if (metadata?.disconnectedSince) {
                     delete metadata.disconnectedSince;
                     await Match.updateOne({ matchID: doc.matchID }, { metadata });
@@ -484,6 +518,7 @@ export class MongoStorage implements StorageAPI.Async {
             if (!metadata) continue;
             const disconnectedSince = typeof metadata.disconnectedSince === 'number' ? metadata.disconnectedSince : undefined;
             if (!disconnectedSince) {
+                console.log(`[Cleanup] 标记断线时间 matchID=${doc.matchID} reason=disconnected_since_missing connected=${connectedCount} occupied=${occupiedCount}`);
                 metadata.disconnectedSince = now;
                 await Match.updateOne({ matchID: doc.matchID }, { metadata });
                 continue;
@@ -492,6 +527,8 @@ export class MongoStorage implements StorageAPI.Async {
             if (now - disconnectedSince >= graceMs) {
                 toDelete.push(doc.matchID);
                 console.log(`[Cleanup] 删除临时房间 matchID=${doc.matchID} reason=ephemeral_disconnected_timeout`);
+            } else {
+                console.log(`[Cleanup] 等待断线宽限 matchID=${doc.matchID} remainingMs=${graceMs - (now - disconnectedSince)} connected=${connectedCount} occupied=${occupiedCount}`);
             }
         }
 

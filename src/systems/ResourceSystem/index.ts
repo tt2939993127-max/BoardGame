@@ -3,4 +3,4 @@
  */
 
 export * from './types';
-export { resourceSystem, createResourceDefinition } from './ResourceSystem';
+export { createResourceSystem, createResourceDefinition } from './ResourceSystem';

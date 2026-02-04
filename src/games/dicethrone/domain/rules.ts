@@ -4,7 +4,8 @@
  */
 
 import type { PlayerId, ResponseWindowType } from '../../../engine/types';
-import { abilityManager, type AbilityContext } from '../../../systems/AbilitySystem';
+import type { AbilityContext } from '../../../systems/presets/combat';
+import { combatAbilityManager } from './combatAbility';
 import { isCustomActionCategory } from './effects';
 import type {
     DiceThroneCore,
@@ -15,7 +16,7 @@ import type {
 } from './types';
 import { HAND_LIMIT, PHASE_ORDER } from './types';
 import { RESOURCE_IDS } from './resources';
-import { DICE_FACE_IDS } from './ids';
+import { DICE_FACE_IDS, BARBARIAN_DICE_FACE_IDS } from './ids';
 
 // ============================================================================
 // 骰子规则
@@ -42,10 +43,20 @@ export const getFaceCounts = (dice: Die[]): Record<DieFace, number> => {
         (acc, die) => {
             // 优先使用已解析的 symbol，回退到 getDieFace
             const face = (die.symbol as DieFace) || getDieFace(die.value);
-            acc[face] += 1;
+            if (face) {
+                acc[face] = (acc[face] ?? 0) + 1;
+            }
             return acc;
         },
-        { [DICE_FACE_IDS.FIST]: 0, [DICE_FACE_IDS.PALM]: 0, [DICE_FACE_IDS.TAIJI]: 0, [DICE_FACE_IDS.LOTUS]: 0 }
+        { 
+            [DICE_FACE_IDS.FIST]: 0, 
+            [DICE_FACE_IDS.PALM]: 0, 
+            [DICE_FACE_IDS.TAIJI]: 0, 
+            [DICE_FACE_IDS.LOTUS]: 0,
+            [BARBARIAN_DICE_FACE_IDS.SWORD]: 0,
+            [BARBARIAN_DICE_FACE_IDS.HEART]: 0,
+            [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 0,
+        } as Record<DieFace, number>
     );
 };
 
@@ -114,6 +125,14 @@ export const getRollerId = (state: DiceThroneCore): PlayerId => {
  * 检查是否可以推进阶段
  */
 export const canAdvancePhase = (state: DiceThroneCore): boolean => {
+    // 选角阶段门禁
+    if (state.turnPhase === 'setup') {
+        const playerIds = Object.keys(state.players);
+        const allSelected = playerIds.every(pid => state.selectedCharacters[pid] && state.selectedCharacters[pid] !== 'unselected');
+        const allNonHostReady = playerIds.every(pid => pid === state.hostPlayerId || state.readyPlayers[pid]);
+        return allSelected && allNonHostReady && state.hostStarted;
+    }
+
     // 有待处理选择时不可推进
     // 注意：pendingChoice 已迁移到 sys.prompt，这里只检查领域层约束
     if (state.pendingInteraction) {
@@ -210,14 +229,14 @@ export const getAvailableAbilityIds = (
 
         if (def.variants?.length) {
             for (const variant of def.variants) {
-                if (abilityManager.checkTrigger(variant.trigger, context)) {
+                if (combatAbilityManager.checkTrigger(variant.trigger, context)) {
                     available.push(variant.id);
                 }
             }
             continue;
         }
 
-        if (def.trigger && abilityManager.checkTrigger(def.trigger, context)) {
+        if (def.trigger && combatAbilityManager.checkTrigger(def.trigger, context)) {
             available.push(def.id);
         }
     }
@@ -403,18 +422,6 @@ export const checkPlayCard = (
     return { ok: true };
 };
 
-/**
- * 检查是否可以打出卡牌（简化版，返回 boolean）
- * @deprecated 使用 checkPlayCard 获取详细原因
- */
-export const canPlayCard = (
-    state: DiceThroneCore,
-    playerId: PlayerId,
-    card: AbilityCard
-): boolean => {
-    return checkPlayCard(state, playerId, card).ok;
-};
-
 /** 升级卡打出失败原因 */
 export type UpgradeCardPlayFailReason =
     | 'playerNotFound'
@@ -485,19 +492,6 @@ export const checkPlayUpgradeCard = (
     }
     
     return { ok: true };
-};
-
-/**
- * 检查是否可以打出升级卡（简化版，返回 boolean）
- * @deprecated 使用 checkPlayUpgradeCard 获取详细原因
- */
-export const canPlayUpgradeCard = (
-    state: DiceThroneCore,
-    playerId: PlayerId,
-    card: AbilityCard,
-    targetAbilityId: string
-): boolean => {
-    return checkPlayUpgradeCard(state, playerId, card, targetAbilityId).ok;
 };
 
 /**
@@ -672,12 +666,6 @@ export const isCardPlayableInResponseWindow = (
             }
             break;
         }
-            
-        case 'preResolve':
-            // @deprecated 已废弃 - 不再使用"最后机会"窗口设计
-            // 设计原则：响应窗口必须有明确的效果覆盖，玩家想打牌应在防御阶段主动打出
-            // 保留此 case 仅为类型完整性，实际不会触发
-            return false;
             
         case 'afterCardPlayed':
             // 卡牌打出后的响应窗口

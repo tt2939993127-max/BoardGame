@@ -2,7 +2,6 @@ import type { RefObject } from 'react';
 import type { AbilityCard, Die, TurnPhase } from '../types';
 import { DiceActions, DiceTray, type DiceInteractionConfig } from './DiceTray';
 import { DiscardPile } from './DiscardPile';
-import type { CardAtlasConfig } from './cardAtlas';
 import { GameButton } from './components/GameButton';
 
 export const RightSidebar = ({
@@ -25,7 +24,6 @@ export const RightSidebar = ({
     onAdvance,
     discardPileRef,
     discardCards,
-    cardAtlas,
     onInspectRecentCards,
     canUndoDiscard,
     onUndoDiscard,
@@ -52,7 +50,6 @@ export const RightSidebar = ({
     onAdvance: () => void;
     discardPileRef: RefObject<HTMLDivElement | null>;
     discardCards: AbilityCard[];
-    cardAtlas?: CardAtlasConfig;
     /** 点击弃牌堆放大按钮时触发，传入最近的卡片列表 */
     onInspectRecentCards?: (cards: AbilityCard[]) => void;
     canUndoDiscard: boolean;
@@ -109,7 +106,6 @@ export const RightSidebar = ({
                         ref={discardPileRef}
                         cards={discardCards}
                         locale={locale}
-                        atlas={cardAtlas}
                         onInspectRecent={onInspectRecentCards}
                         canUndo={canUndoDiscard}
                         onUndo={onUndoDiscard}

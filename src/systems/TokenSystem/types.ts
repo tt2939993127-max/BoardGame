@@ -43,18 +43,12 @@ export type PassiveTiming =
 // ============================================================================
 
 /**
- * Token 主动使用时机（用于 consumable 类型）
- * @deprecated 使用 ActiveTiming 代替
+ * Token 主动使用时机
  */
-export type TokenTiming =
+export type ActiveTiming =
     | 'beforeDamageDealt'     // 造成伤害前（太极加伤）
     | 'beforeDamageReceived'  // 受到伤害前（太极减伤、闪避）
     | 'anytime';              // 任意时点（净化）
-
-/**
- * Token 主动使用时机
- */
-export type ActiveTiming = TokenTiming;
 
 // ============================================================================
 // Token 使用效果
@@ -279,20 +273,6 @@ export interface TokenDef {
     /** 图集帧 ID（用于图标显示） */
     frameId?: string;
     
-    // ============ 向后兼容字段（废弃） ============
-    
-    /**
-     * @deprecated 使用 activeUse.timing 代替
-     */
-    usableTiming?: TokenTiming[];
-    /**
-     * @deprecated 使用 activeUse.consumeAmount 代替
-     */
-    consumeAmount?: number;
-    /**
-     * @deprecated 使用 activeUse.effect 代替
-     */
-    useEffect?: TokenUseEffect;
 }
 
 // ============================================================================

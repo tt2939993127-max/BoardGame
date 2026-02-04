@@ -40,7 +40,7 @@ export const CategoryPills = ({ activeCategory, onSelect }: CategoryPillsProps) 
                                 {t(categoryLabelKeys[category])}
                             </span>
 
-                            {/* Active Pill Background */}
+                            {/* 当前选中背景 */}
                             {isActive && (
                                 <motion.div
                                     layoutId="activeCategory"

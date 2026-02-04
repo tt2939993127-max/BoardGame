@@ -37,6 +37,22 @@ export const ModalStackProvider = ({ children }: { children: ReactNode }) => {
     const stackRef = useRef<ModalEntry[]>([]);
     const pendingOnCloseRef = useRef<Array<() => void>>([]);
 
+    const logModalAction = useCallback(
+        (action: string, entry?: Partial<ModalEntry> & { id?: string }, nextSize?: number) => {
+            const id = entry?.id ?? 'unknown';
+            const closeOnBackdrop = entry?.closeOnBackdrop ?? 'default';
+            const closeOnEsc = entry?.closeOnEsc ?? 'default';
+            const lockScroll = entry?.lockScroll ?? 'default';
+            const allowPointerThrough = entry?.allowPointerThrough ?? 'default';
+            const zIndex = entry?.zIndex ?? 'default';
+            const size = nextSize ?? stackRef.current.length;
+            console.info(
+                `[ModalStack] action=${action} id=${id} stackSize=${size} closeOnBackdrop=${closeOnBackdrop} closeOnEsc=${closeOnEsc} lockScroll=${lockScroll} allowPointerThrough=${allowPointerThrough} zIndex=${zIndex}`
+            );
+        },
+        []
+    );
+
     const enqueueOnClose = useCallback((callbacks: Array<(() => void) | undefined>) => {
         callbacks.forEach((cb) => {
             if (cb) pendingOnCloseRef.current.push(cb);
@@ -54,41 +70,46 @@ export const ModalStackProvider = ({ children }: { children: ReactNode }) => {
     // 追加栈顶（默认行为由 ModalStackRoot 统一处理）
     const openModal = useCallback((entry: Omit<ModalEntry, 'id'> & { id?: string }) => {
         const id = entry.id ?? createId();
+        logModalAction('open', { ...entry, id }, stackRef.current.length + 1);
         setStack((prev) => [...prev, { ...entry, id }]);
         return id;
-    }, []);
+    }, [logModalAction]);
 
     // 精确关闭某个栈条目
     const closeModal = useCallback((id: string) => {
         const target = stackRef.current.find((item) => item.id === id);
+        logModalAction('close', { ...target, id }, Math.max(0, stackRef.current.length - 1));
         enqueueOnClose([target?.onClose]);
         setStack((prev) => prev.filter((item) => item.id !== id));
-    }, [enqueueOnClose]);
+    }, [enqueueOnClose, logModalAction]);
 
     // 关闭栈顶
     const closeTop = useCallback(() => {
         const target = stackRef.current[stackRef.current.length - 1];
+        logModalAction('closeTop', target, Math.max(0, stackRef.current.length - 1));
         enqueueOnClose([target?.onClose]);
         setStack((prev) => prev.slice(0, -1));
-    }, [enqueueOnClose]);
+    }, [enqueueOnClose, logModalAction]);
 
     // 替换栈顶，用于从一个弹窗跳转到另一个弹窗
     const replaceTop = useCallback((entry: Omit<ModalEntry, 'id'> & { id?: string }) => {
         const id = entry.id ?? createId();
         const target = stackRef.current[stackRef.current.length - 1];
+        logModalAction('replaceTop', { ...entry, id }, stackRef.current.length);
         enqueueOnClose([target?.onClose]);
         setStack((prev) => [...prev.slice(0, -1), { ...entry, id }]);
         return id;
-    }, [enqueueOnClose]);
+    }, [enqueueOnClose, logModalAction]);
 
     // 关闭所有弹窗（默认触发各自 onClose，可按需跳过）
     const closeAll = useCallback((options?: { skipOnClose?: boolean }) => {
         const targets = stackRef.current;
+        logModalAction('closeAll', undefined, 0);
         if (!options?.skipOnClose) {
             enqueueOnClose(targets.map((item) => item.onClose));
         }
         setStack([]);
-    }, [enqueueOnClose]);
+    }, [enqueueOnClose, logModalAction]);
 
     const value = useMemo(
         () => ({ stack, openModal, closeModal, closeTop, replaceTop, closeAll }),

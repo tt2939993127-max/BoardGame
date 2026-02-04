@@ -44,7 +44,7 @@ export const CreateRoomModal = ({
 }: CreateRoomModalProps) => {
     const { t } = useTranslation('lobby');
 
-    // 人数选项：从 manifest 读取，默认 [2]
+    // 人数选项：从清单配置读取，默认 [2]
     const playerOptions = gameManifest.playerOptions ?? [2];
     const hasPlayerOptions = playerOptions.length > 1;
 

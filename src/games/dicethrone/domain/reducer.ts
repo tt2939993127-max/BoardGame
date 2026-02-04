@@ -9,10 +9,11 @@ import type {
     TurnPhase,
 } from './types';
 import { getDieFace, getTokenStackLimit } from './rules';
-import { resourceSystem } from '../../../systems/ResourceSystem';
+import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
 import { MONK_CARDS } from '../monk/cards';
+import { initHeroState, createCharacterDice } from './characters';
 
 // ============================================================================
 // Choice Effect 处理器注册表
@@ -190,6 +191,44 @@ const handleRollConfirmed: EventHandler<Extract<DiceThroneEvent, { type: 'ROLL_C
 
     newState.rollConfirmed = true;
 
+    return newState;
+};
+
+/**
+ * 处理房主开始事件
+ */
+const handleHostStarted: EventHandler<Extract<DiceThroneEvent, { type: 'HOST_STARTED' }>> = (
+    state,
+    _event
+) => {
+    const newState = cloneState(state);
+    newState.hostStarted = true;
+    return newState;
+};
+
+/**
+ * 处理玩家准备事件
+ */
+const handlePlayerReady: EventHandler<Extract<DiceThroneEvent, { type: 'PLAYER_READY' }>> = (
+    state,
+    event
+) => {
+    const newState = cloneState(state);
+    newState.readyPlayers[event.payload.playerId] = true;
+    return newState;
+};
+
+/**
+ * 处理奖励骰结算事件
+ * 清除 pendingBonusDiceSettlement，应用伤害和状态效果
+ */
+const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DICE_SETTLED' }>> = (
+    state,
+    _event
+) => {
+    const newState = cloneState(state);
+    // 清除待结算状态，伤害由 DAMAGE_DEALT 事件处理
+    newState.pendingBonusDiceSettlement = undefined;
     return newState;
 };
 
@@ -522,14 +561,13 @@ const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CARD_PLAY
 
             // 直接设置 lastPlayedCard（立即触发特写）
             // 如果后续有 INTERACTION_REQUESTED 事件，会在那里清除并暂存
-            const resolvedAtlasIndex = MONK_CARDS.find(cardDef => cardDef.id === cardId)?.atlasIndex
-                ?? card.atlasIndex
-                ?? 0;
+            const resolvedPreviewRef = MONK_CARDS.find(cardDef => cardDef.id === cardId)?.previewRef
+                ?? card.previewRef;
 
             newState.lastPlayedCard = {
                 cardId,
                 playerId,
-                atlasIndex: resolvedAtlasIndex,
+                previewRef: resolvedPreviewRef,
                 timestamp: event.timestamp,
             };
         }
@@ -991,13 +1029,12 @@ const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABIL
             player.upgradeCardByAbilityId[oldAbilityId] = { cardId: card.id, cpCost: card.cpCost };
 
             // 触发特写系统
-            const resolvedAtlasIndex = MONK_CARDS.find(cardDef => cardDef.id === card.id)?.atlasIndex
-                ?? card.atlasIndex
-                ?? 0;
+            const resolvedPreviewRef = MONK_CARDS.find(cardDef => cardDef.id === card.id)?.previewRef
+                ?? card.previewRef;
             newState.lastPlayedCard = {
                 cardId: card.id,
                 playerId,
-                atlasIndex: resolvedAtlasIndex,
+                previewRef: resolvedPreviewRef,
                 timestamp: event.timestamp,
             };
         }
@@ -1156,13 +1193,14 @@ const handleBonusDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
     }
 
     // 更新 lastBonusDieRoll 用于 UI 特写
+    const rerollEffectKey = newState.pendingBonusDiceSettlement?.rerollEffectKey ?? 'bonusDie.effect.thunderStrike2Reroll';
     newState.lastBonusDieRoll = {
         value: newValue,
         face: newFace,
         playerId,
         targetPlayerId: newState.pendingBonusDiceSettlement?.targetId,
         timestamp: event.timestamp,
-        effectKey: 'bonusDie.effect.thunderStrike2Reroll',
+        effectKey: rerollEffectKey,
         effectParams: { value: newValue, index: dieIndex },
     };
 
@@ -1170,16 +1208,63 @@ const handleBonusDieRerolled: EventHandler<Extract<DiceThroneEvent, { type: 'BON
 };
 
 /**
- * 处理奖励骰结算事件
- * 清除 pendingBonusDiceSettlement，应用伤害和状态效果
+ * 处理角色选择事件
  */
-const handleBonusDiceSettled: EventHandler<Extract<DiceThroneEvent, { type: 'BONUS_DICE_SETTLED' }>> = (
+const handleCharacterSelected: EventHandler<Extract<DiceThroneEvent, { type: 'CHARACTER_SELECTED' }>> = (
     state,
-    _event
+    event
 ) => {
     const newState = cloneState(state);
-    // 清除待结算状态，伤害由 DAMAGE_DEALT 事件处理
-    newState.pendingBonusDiceSettlement = undefined;
+    const { playerId, characterId, initialDeckCardIds } = event.payload;
+
+    // 更新 selectedCharacters 映射
+    if (!newState.selectedCharacters) {
+        newState.selectedCharacters = {};
+    }
+    newState.selectedCharacters[playerId] = characterId;
+
+    // 同步更新 HeroState.characterId（如果玩家对象已存在）
+    const player = newState.players[playerId];
+    if (player) {
+        player.characterId = characterId;
+        
+        // 如果提供了初始牌库（通常仅在初始化时），则设置它
+        if (initialDeckCardIds && initialDeckCardIds.length > 0) {
+            // 找到对应的全量卡牌数据（目前主要用于测试或首次初始化）
+            // 在实际流程中，setup 阶段不应直接填满手牌，而是在进入游戏时 HERO_INITIALIZED 处理
+            // 这里仅记录选角完成，具体初始化留给 handleHeroInitialized
+        }
+    }
+
+    return newState;
+};
+
+/**
+ * 处理英雄初始化事件
+ */
+const handleHeroInitialized: EventHandler<Extract<DiceThroneEvent, { type: 'HERO_INITIALIZED' }>> = (
+    state,
+    event
+) => {
+    const newState = cloneState(state);
+    const { playerId, characterId } = event.payload;
+
+    // 使用辅助函数执行完整初始化
+    // 注意：这里需要传入一个假的 random，因为 shuffle 已在 execute 层完成并写入了 event
+    const dummyRandom: any = { shuffle: (arr: any[]) => arr };
+    const heroState = initHeroState(playerId, characterId, dummyRandom);
+    
+    // 如果 CHARACTER_SELECTED 已经确定了牌库顺序，这里应该保留它
+    // 但目前逻辑是 CHARACTER_SELECTED 产生 initialDeckCardIds，
+    // 我们需要确保 HeroState 使用那个顺序。
+    
+    newState.players[playerId] = heroState;
+
+    // 如果是首位玩家初始化，或者当前活跃玩家，顺便创建骰子（如果还未创建）
+    if (newState.dice.length === 0 || playerId === state.activePlayerId) {
+        newState.dice = createCharacterDice(characterId);
+    }
+
     return newState;
 };
 
@@ -1284,6 +1369,14 @@ export const reduce = (
             return handleBonusDieRerolled(state, event);
         case 'BONUS_DICE_SETTLED':
             return handleBonusDiceSettled(state, event);
+        case 'CHARACTER_SELECTED':
+            return handleCharacterSelected(state, event);
+        case 'HERO_INITIALIZED':
+            return handleHeroInitialized(state, event);
+        case 'HOST_STARTED':
+            return handleHostStarted(state, event);
+        case 'PLAYER_READY':
+            return handlePlayerReady(state, event);
         default: {
             // 处理系统层事件：SYS_PHASE_CHANGED 同步到 core.turnPhase
             if ((event as { type: string }).type === FLOW_EVENTS.PHASE_CHANGED) {

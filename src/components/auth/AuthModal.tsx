@@ -14,6 +14,7 @@ interface AuthModalProps {
 
 export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackdrop }: AuthModalProps) => {
     const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+    const [account, setAccount] = useState('');
     const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [code, setCode] = useState('');
@@ -33,6 +34,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
         if (isOpen) {
             setMode(initialMode);
             setError('');
+            setAccount('');
             setUsername('');
             setEmail('');
             setCode('');
@@ -85,7 +87,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
 
         try {
             if (mode === 'login') {
-                await login(username, password);
+                await login(account, password);
                 onClose();
             } else {
                 if (password !== confirmPassword) {
@@ -116,13 +118,12 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
 
     return (
         <ModalBase
-            open={isOpen}
             onClose={onClose}
             closeOnBackdrop={closeOnBackdrop}
             containerClassName="p-0"
         >
             <div className="bg-[#fcfbf9] pointer-events-auto w-[calc(100vw-2rem)] max-w-[400px] shadow-[0_10px_40px_rgba(67,52,34,0.1)] border border-[#e5e0d0] p-6 sm:p-10 relative rounded-sm mx-4">
-                {/* Decorative Corners */}
+                {/* 装饰边角 */}
                 <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-[#c0a080]" />
                 <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-[#c0a080]" />
                 <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-[#c0a080]" />
@@ -196,20 +197,36 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                         </motion.div>
                     )}
 
-                    <div>
-                        <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                            {t('label.username')}
-                        </label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                            placeholder={t('placeholder.username')}
-                            required
-                            autoFocus={mode === 'login'}
-                        />
-                    </div>
+                    {mode === 'login' ? (
+                        <div>
+                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
+                                {t('label.account', { defaultValue: '邮箱' })}
+                            </label>
+                            <input
+                                type="text"
+                                value={account}
+                                onChange={(e) => setAccount(e.target.value)}
+                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
+                                placeholder={t('placeholder.account', { defaultValue: '输入邮箱' })}
+                                required
+                                autoFocus
+                            />
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
+                                {t('label.username')}
+                            </label>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
+                                placeholder={t('placeholder.username')}
+                                required
+                            />
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">

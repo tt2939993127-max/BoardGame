@@ -12,7 +12,7 @@ export { HandAreaSkeleton } from './HandAreaSkeleton';
 export { ResourceTraySkeleton } from './ResourceTraySkeleton';
 export { SpotlightSkeleton } from './SpotlightSkeleton';
 
-// Hooks
+// 钩子
 export {
     useGameBoard,
     useHandArea,
@@ -27,17 +27,17 @@ export type {
 
 // 预设渲染函数
 export {
-    // PhaseIndicator 预设
+    // 阶段指示器预设
     createPhaseItemRender,
     defaultPhaseItemRender,
-    // PlayerPanel / ResourceBar 预设
+    // 玩家面板 / 资源条预设
     createResourceBarRender,
     defaultResourceBarRender,
     defaultPlayerPanelClassName,
-    // StatusEffect 预设
+    // 状态效果预设
     createStatusEffectRender,
     defaultStatusEffectRender,
-    // Spotlight 预设
+    // 聚焦预设
     defaultSpotlightBackdrop,
     defaultSpotlightContainer,
 } from './presets';

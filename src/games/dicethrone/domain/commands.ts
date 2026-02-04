@@ -8,7 +8,6 @@ import type {
     DiceThroneCore,
     DiceThroneCommand,
     RollDiceCommand,
-    RollBonusDieCommand,
     ToggleDieLockCommand,
     ConfirmRollCommand,
     SelectAbilityCommand,
@@ -21,6 +20,9 @@ import type {
     PlayUpgradeCardCommand,
     ResolveChoiceCommand,
     AdvancePhaseCommand,
+    SelectCharacterCommand,
+    HostStartGameCommand,
+    PlayerReadyCommand,
     ResponsePassCommand,
     ModifyDieCommand,
     RerollDieCommand,
@@ -99,16 +101,66 @@ const validateRollDice = (
 };
 
 /**
- * 验证额外骰子命令
- * @deprecated 额外骰子现在在 resolveAttack 中自动投掷
+ * 验证选择角色命令
  */
-const validateRollBonusDie = (
-    _state: DiceThroneCore,
-    _cmd: RollBonusDieCommand,
-    _playerId: PlayerId
+const validateSelectCharacter = (
+    state: DiceThroneCore,
+    cmd: SelectCharacterCommand,
+    playerId: PlayerId
 ): ValidationResult => {
-    // 已废弃：额外骰子现在在 resolveAttack 中自动投掷
-    return fail('deprecated_command');
+    if (state.turnPhase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!state.players[playerId]) {
+        return fail('player_not_found');
+    }
+
+    if (!cmd.payload.characterId) {
+        return fail('invalid_character');
+    }
+
+    return ok();
+};
+
+/**
+ * 验证房主开始命令
+ */
+const validateHostStartGame = (
+    state: DiceThroneCore,
+    _cmd: HostStartGameCommand,
+    playerId: PlayerId
+): ValidationResult => {
+    if (state.turnPhase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isMoveAllowed(playerId, state.hostPlayerId)) {
+        return fail('player_mismatch');
+    }
+
+    return ok();
+};
+
+/**
+ * 验证玩家准备命令
+ */
+const validatePlayerReady = (
+    state: DiceThroneCore,
+    _cmd: PlayerReadyCommand,
+    playerId: PlayerId
+): ValidationResult => {
+    if (state.turnPhase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    // 必须已选角才能准备
+    const char = state.selectedCharacters[playerId];
+    if (!char || char === 'unselected') {
+        return fail('character_not_selected');
+    }
+
+    return ok();
 };
 
 /**
@@ -731,6 +783,10 @@ const validateRerollBonusDie = (
     if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
         return fail('player_mismatch');
     }
+    const { rerollCount, maxRerollCount } = state.pendingBonusDiceSettlement;
+    if (maxRerollCount !== undefined && rerollCount >= maxRerollCount) {
+        return fail('bonus_reroll_limit_reached');
+    }
     // 检查 Token 是否足够
     const p = state.players[playerId];
     const tokenId = state.pendingBonusDiceSettlement.rerollCostTokenId;
@@ -782,7 +838,6 @@ export const validateCommand = (
 
     const playerId = command.playerId;
     if (isCommandType(command, 'ROLL_DICE')) return validateRollDice(state, command, playerId);
-    if (isCommandType(command, 'ROLL_BONUS_DIE')) return validateRollBonusDie(state, command, playerId);
     if (isCommandType(command, 'TOGGLE_DIE_LOCK')) return validateToggleDieLock(state, command, playerId);
     if (isCommandType(command, 'CONFIRM_ROLL')) return validateConfirmRoll(state, command, playerId);
     if (isCommandType(command, 'SELECT_ABILITY')) return validateSelectAbility(state, command, playerId);
@@ -795,6 +850,9 @@ export const validateCommand = (
     if (isCommandType(command, 'PLAY_UPGRADE_CARD')) return validatePlayUpgradeCard(state, command, playerId);
     if (isCommandType(command, 'RESOLVE_CHOICE')) return validateResolveChoice(state, command, playerId);
     if (isCommandType(command, 'ADVANCE_PHASE')) return validateAdvancePhase(state, command, playerId);
+    if (isCommandType(command, 'SELECT_CHARACTER')) return validateSelectCharacter(state, command, playerId);
+    if (isCommandType(command, 'HOST_START_GAME')) return validateHostStartGame(state, command, playerId);
+    if (isCommandType(command, 'PLAYER_READY')) return validatePlayerReady(state, command, playerId);
     if (isCommandType(command, 'RESPONSE_PASS')) return validateResponsePass(state, command, playerId);
     if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDie(state, command, playerId);
     if (isCommandType(command, 'REROLL_DIE')) return validateRerollDie(state, command, playerId);

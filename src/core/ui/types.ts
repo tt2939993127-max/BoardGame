@@ -71,12 +71,42 @@ export interface HandAreaConfig<TCard = unknown> {
     maxCards?: number;
     /** 是否可拖拽 */
     canDrag?: boolean;
+    /** 是否可选中（点击选中/取消选中） */
+    canSelect?: boolean;
+    /** 已选中的卡牌ID列表 */
+    selectedCardIds?: string[];
+    /** 选中状态变化回调 */
+    onSelectChange?: (cardId: string, selected: boolean) => void;
     /** 打出卡牌回调 */
     onPlayCard?: (cardId: string) => void;
     /** 售卖/弃置卡牌回调 */
     onSellCard?: (cardId: string) => void;
     /** 卡牌渲染函数 */
-    renderCard: (card: TCard, index: number) => ReactNode;
+    renderCard: (card: TCard, index: number, isSelected: boolean) => ReactNode;
+    /** 
+     * 布局代码（AI生成）
+     * 函数签名：(index: number, total: number) => React.CSSProperties
+     * 示例："顺序排开" → 生成水平排列代码
+     */
+    layoutCode?: string;
+    /**
+     * 选中效果代码（AI生成）
+     * 函数签名：(isSelected: boolean) => React.CSSProperties
+     * 示例："抬高一点" → 生成 translateY(-20px) 代码
+     */
+    selectEffectCode?: string;
+    /**
+     * 排序代码（AI生成）
+     * 函数签名：(a: TCard, b: TCard) => number
+     * 示例："按点数从小到大" → 生成 a.value - b.value
+     */
+    sortCode?: string;
+    /**
+     * 过滤代码（AI生成）
+     * 函数签名：(card: TCard) => boolean
+     * 示例："只显示红色牌" → 生成 card.color === 'red'
+     */
+    filterCode?: string;
 }
 
 // ============================================================================

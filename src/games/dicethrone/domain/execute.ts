@@ -28,6 +28,9 @@ import type {
     PendingDamage,
     DamageDealtEvent,
     StatusAppliedEvent,
+    CharacterSelectedEvent,
+    HostStartedEvent,
+    PlayerReadyEvent,
 } from './types';
 import {
     getAvailableAbilityIds,
@@ -40,14 +43,15 @@ import {
 } from './rules';
 import { findPlayerAbility } from './abilityLookup';
 import { reduce } from './reducer';
-import { resourceSystem } from '../../../systems/ResourceSystem';
+import { resourceSystem } from './resourceSystem';
+
 import { RESOURCE_IDS } from './resources';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { DICETHRONE_COMMANDS, STATUS_IDS, TOKEN_IDS } from './ids';
 import { buildDrawEvents } from './deckEvents';
+import { CHARACTER_DATA_MAP } from './characters';
 import {
     processTokenUsage,
-    processPurifyUsage,
     finalizeTokenResponse,
     hasDefensiveTokens,
     createTokenResponseRequestedEvent,
@@ -141,9 +145,51 @@ export function execute(
             break;
         }
 
-        case 'ROLL_BONUS_DIE': {
-            // 已废弃：额外骰子现在在 resolveAttack 中自动投掷
-            console.warn('[DiceThrone] ROLL_BONUS_DIE is deprecated - bonus dice are now rolled automatically during attack resolution');
+        case 'SELECT_CHARACTER': {
+            const { characterId } = command.payload;
+            const data = CHARACTER_DATA_MAP[characterId];
+            if (!data || !random) break;
+
+            const initialDeck = data.getStartingDeck(random);
+            const initialDeckCardIds = initialDeck.map(c => c.id);
+
+            const selectedEvent: CharacterSelectedEvent = {
+                type: 'CHARACTER_SELECTED',
+                payload: {
+                    playerId: command.playerId,
+                    characterId,
+                    initialDeckCardIds,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(selectedEvent);
+            break;
+        }
+
+        case 'HOST_START_GAME': {
+            const hostEvent: HostStartedEvent = {
+                type: 'HOST_STARTED',
+                payload: {
+                    playerId: command.playerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(hostEvent);
+            break;
+        }
+
+        case 'PLAYER_READY': {
+            const readyEvent: PlayerReadyEvent = {
+                type: 'PLAYER_READY',
+                payload: {
+                    playerId: command.playerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(readyEvent);
             break;
         }
 
@@ -868,9 +914,19 @@ export function execute(
                 console.warn('[DiceThrone] USE_PURIFY: no purify token');
                 break;
             }
+
+            const tokenDef = state.tokenDefinitions.find(def => def.id === TOKEN_IDS.PURIFY);
+            if (!tokenDef) {
+                console.warn('[DiceThrone] USE_PURIFY: token definition not found');
+                break;
+            }
+            if (!tokenDef.activeUse?.effect) {
+                console.warn('[DiceThrone] USE_PURIFY: token effect not configured');
+                break;
+            }
             
             // 消耗净化 Token
-            const { events: tokenEvents } = processPurifyUsage(state, playerId, statusId);
+            const { events: tokenEvents } = processTokenUsage(state, tokenDef, playerId, 1);
             events.push(...tokenEvents);
             
             // 移除负面状态

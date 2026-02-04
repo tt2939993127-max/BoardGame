@@ -30,12 +30,18 @@ export interface OwnerActiveMatch {
     updatedAt?: number;
 }
 
+export interface ExitMatchResult {
+    success: boolean;
+    cleanedLocal?: boolean;
+    error?: 'not_found' | 'forbidden' | 'server_error' | 'network' | 'unknown';
+}
+
 export function clearMatchCredentials(matchID: string): void {
     if (!matchID) return;
     localStorage.removeItem(`${MATCH_CREDENTIALS_PREFIX}${matchID}`);
 
-    // Let same-tab listeners (Home active match banner, lobby modals) refresh immediately.
-    // The native `storage` event does NOT fire in the same document.
+    // 让同一标签页监听器（Home 活跃对局横幅、lobby 弹窗）立即刷新。
+    // 原生 `storage` 事件不会在同一 document 触发。
     if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('match-credentials-changed'));
     }
@@ -247,7 +253,7 @@ export async function destroyMatch(
     matchID: string,
     playerID: string,
     credentials: string
-): Promise<boolean> {
+): Promise<ExitMatchResult> {
     try {
         const normalizedGameName = (gameName || 'tictactoe').toLowerCase();
 
@@ -275,7 +281,19 @@ export async function destroyMatch(
                     matchID,
                     playerID,
                 });
-                return false;
+                clearMatchCredentials(matchID);
+                clearOwnerActiveMatch(matchID);
+                return { success: true, cleanedLocal: true, error: 'not_found' };
+            }
+
+            if (response.status === 403) {
+                return { success: false, error: 'forbidden' };
+            }
+
+            if (response.status >= 500) {
+                clearMatchCredentials(matchID);
+                clearOwnerActiveMatch(matchID);
+                return { success: true, cleanedLocal: true, error: 'server_error' };
             }
 
             const message = await response.text().catch(() => '');
@@ -293,10 +311,10 @@ export async function destroyMatch(
 
         clearMatchCredentials(matchID);
         clearOwnerActiveMatch(matchID);
-        return true;
+        return { success: true };
     } catch (err) {
         console.error('[destroyMatch] 销毁房间失败:', err);
-        return false;
+        return { success: false, error: 'network' };
     }
 }
 
@@ -392,7 +410,7 @@ export async function leaveMatch(
     matchID: string,
     playerID: string,
     credentials: string
-): Promise<boolean> {
+): Promise<ExitMatchResult> {
     try {
         await lobbyClient.leaveMatch(gameName, matchID, {
             playerID,
@@ -400,15 +418,15 @@ export async function leaveMatch(
         });
         // 清理本地凭证
         clearMatchCredentials(matchID);
-        return true;
+        return { success: true };
     } catch (err: any) {
         console.error('离开房间失败:', err);
         // 404 说明房间已不存在，视为成功并清理凭据
         if (err?.message?.includes('404') || err?.message?.includes('not found')) {
             clearMatchCredentials(matchID);
-            return true;
+            return { success: true, cleanedLocal: true, error: 'not_found' };
         }
-        return false;
+        return { success: false, error: 'unknown' };
     }
 }
 
@@ -421,7 +439,7 @@ export async function exitMatch(
     playerID: string,
     credentials: string,
     isHost?: boolean
-): Promise<boolean> {
+): Promise<ExitMatchResult> {
     if (isHost) {
         return destroyMatch(gameName, matchID, playerID, credentials);
     }

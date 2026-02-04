@@ -33,6 +33,8 @@ export function useUrlModal({ paramKey, getModalConfig }: UseUrlModalOptions) {
     // 当前管理的弹窗 ID 与对应的参数值
     const modalIdRef = useRef<string | null>(null);
     const boundValueRef = useRef<string | null>(null);
+    // 记录正在关闭的参数值，避免 URL 还未清理时被误判为需要重新打开
+    const closingValueRef = useRef<string | null>(null);
     // 标记是否正在进行路由导航（用于区分关闭原因）
     const isNavigatingRef = useRef(false);
 
@@ -52,6 +54,7 @@ export function useUrlModal({ paramKey, getModalConfig }: UseUrlModalOptions) {
             return;
         }
 
+        closingValueRef.current = boundValueRef.current;
         modalIdRef.current = null;
         boundValueRef.current = null;
 
@@ -72,6 +75,11 @@ export function useUrlModal({ paramKey, getModalConfig }: UseUrlModalOptions) {
                 modalIdRef.current = null;
                 boundValueRef.current = null;
             }
+            closingValueRef.current = null;
+            return;
+        }
+
+        if (closingValueRef.current === paramValue) {
             return;
         }
 
@@ -101,6 +109,7 @@ export function useUrlModal({ paramKey, getModalConfig }: UseUrlModalOptions) {
             return;
         }
 
+        closingValueRef.current = null;
         boundValueRef.current = paramValue;
         modalIdRef.current = openModal({
             closeOnBackdrop: config.closeOnBackdrop ?? true,

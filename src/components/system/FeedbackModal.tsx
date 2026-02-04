@@ -28,8 +28,21 @@ const FeedbackSeverity = {
 
 type FeedbackSeverity = typeof FeedbackSeverity[keyof typeof FeedbackSeverity];
 
+const FEEDBACK_TYPE_LABELS: Record<FeedbackType, string> = {
+    [FeedbackType.BUG]: '缺陷',
+    [FeedbackType.SUGGESTION]: '建议',
+    [FeedbackType.OTHER]: '其他',
+};
+
+const FEEDBACK_SEVERITY_LABELS: Record<FeedbackSeverity, string> = {
+    [FeedbackSeverity.LOW]: '低',
+    [FeedbackSeverity.MEDIUM]: '中',
+    [FeedbackSeverity.HIGH]: '高',
+    [FeedbackSeverity.CRITICAL]: '严重',
+};
+
 export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
-    // const { t } = useTranslation('common'); // Unused for now
+    // 预留国际化翻译函数（暂未使用）
     const { token } = useAuth();
     const { success, error } = useToast();
     const location = useLocation();
@@ -43,7 +56,7 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
-        // Auto-detect game from URL
+        // 自动从地址检测游戏名
         const path = location.pathname;
         if (path.startsWith('/play/')) {
             const parts = path.split('/');
@@ -63,7 +76,7 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
         e.preventDefault();
         if (!content.trim()) return;
         if (!token) {
-            error('Please login to submit feedback');
+            error('请先登录再提交反馈');
             return;
         }
 
@@ -86,11 +99,11 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
 
             if (!res.ok) throw new Error('Failed to submit feedback');
 
-            success('Feedback submitted successfully. Thank you!');
+            success('反馈已提交，感谢支持！');
             onClose();
         } catch (err) {
             console.error(err);
-            error('Failed to submit feedback');
+            error('提交失败，请稍后再试');
         } finally {
             setSubmitting(false);
         }
@@ -122,8 +135,8 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
                             <MessageSquareWarning size={20} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-white tracking-wide">Feedback</h2>
-                            <p className="text-xs text-zinc-400">Help us improve your experience</p>
+                            <h2 className="text-lg font-bold text-white tracking-wide">反馈</h2>
+                            <p className="text-xs text-zinc-400">帮助我们改进体验</p>
                         </div>
                     </div>
                     <button
@@ -135,25 +148,25 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6">
-                    {/* Game Selection */}
+                    {/* 游戏选择 */}
                     <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Related Game (Optional)</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">关联游戏（可选）</label>
                         <select
                             value={gameName}
                             onChange={(e) => setGameName(e.target.value)}
                             className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 transition-colors"
                         >
-                            <option value="">-- General Feedback --</option>
-                            <option value="dicethrone">Dice Throne</option>
-                            <option value="tictactoe">Tic Tac Toe</option>
-                            {/* Add other games dynamically if possible */}
+                            <option value="">-- 通用反馈 --</option>
+                            <option value="dicethrone">骰子王座</option>
+                            <option value="tictactoe">井字棋</option>
+                            {/* 若可能，后续改为动态加载其他游戏 */}
                         </select>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        {/* Type Selection */}
+                        {/* 类型选择 */}
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Type</label>
+                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">类型</label>
                             <div className="flex bg-zinc-50 p-1 rounded-xl border border-zinc-200">
                                 {Object.values(FeedbackType).map((t) => (
                                     <button
@@ -168,49 +181,49 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
                                         )}
                                     >
                                         {getTypeIcon(t)}
-                                        <span className="capitalize">{t}</span>
+                                        <span>{FEEDBACK_TYPE_LABELS[t]}</span>
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Severity Selection */}
+                        {/* 严重度选择 */}
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Priority</label>
+                            <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">优先级</label>
                             <select
                                 value={severity}
                                 onChange={(e) => setSeverity(e.target.value as FeedbackSeverity)}
-                                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 transition-colors capitalize"
+                                className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 transition-colors"
                             >
                                 {Object.values(FeedbackSeverity).map((s) => (
-                                    <option key={s} value={s}>{s}</option>
+                                    <option key={s} value={s}>{FEEDBACK_SEVERITY_LABELS[s]}</option>
                                 ))}
                             </select>
                         </div>
                     </div>
 
-                    {/* Content */}
+                    {/* 内容 */}
                     <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Description</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">描述</label>
                         <textarea
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                             rows={4}
                             className="block p-3 w-full text-sm text-zinc-900 bg-zinc-50 rounded-xl border border-zinc-200 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
-                            placeholder="Describe the issue or suggestion..."
+                            placeholder="请描述问题或建议..."
                             required
                         ></textarea>
                     </div>
 
-                    {/* Contact Info */}
+                    {/* 联系方式 */}
                     <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Contact (Optional)</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">联系方式（可选）</label>
                         <input
                             type="text"
                             value={contactInfo}
                             onChange={(e) => setContactInfo(e.target.value)}
                             className="bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5"
-                            placeholder="Email or QQ for follow-up"
+                            placeholder="邮箱或 QQ（便于跟进）"
                         />
                     </div>
 
@@ -221,7 +234,7 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
                             className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/20"
                         >
                             {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                            Submit Feedback
+                            提交反馈
                         </button>
                     </div>
                 </form>

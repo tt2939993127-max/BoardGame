@@ -1,9 +1,9 @@
 /**
  * 狂战士英雄的技能定义
- * 使用通用 AbilitySystem
+ * 使用战斗预设技能系统
  */
 
-import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../systems/AbilitySystem';
+import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../systems/presets/combat';
 import { STATUS_IDS, BARBARIAN_DICE_FACE_IDS } from '../domain/ids';
 
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;

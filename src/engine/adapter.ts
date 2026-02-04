@@ -185,20 +185,20 @@ export function createGameAdapter<
                 return;
             }
 
-            // IMPORTANT: In online mode, a missing playerID must NOT be allowed to act as ctx.currentPlayer.
-            // Otherwise spectators can mutate state.
+            // 重要：在 online 模式下，缺失 playerID 时不能允许用 ctx.currentPlayer 行动。
+            // 否则旁观者可能修改状态。
             const isMissingPlayer = playerID === null || playerID === undefined;
             if (!isLocalLikeMode && isMissingPlayer) {
-                // On the server, all matches are online; on the client, this indicates spectator mode.
+                // 在服务端所有对局都是 online；在客户端这表示旁观者模式。
                 return;
             }
 
-            // Only local/tutorial should bypass validation.
+            // 仅 local/tutorial 可跳过校验。
             const shouldSkipValidation = isLocalLikeMode;
 
-            // Resolve acting playerId.
-            // - local/tutorial: hotseat 模式下由当前回合玩家行动（忽略 boardgame.io 的 playerID，避免永远是 P0）。
-            // - online: require explicit playerID.
+            // 解析实际行动者 playerId。
+            // - local/tutorial：hotseat 模式下由当前回合玩家行动（忽略 boardgame.io 的 playerID，避免永远是 P0）。
+            // - online：要求显式 playerID。
             const resolvedPlayerId = isLocalLikeMode
                 ? (coreCurrentPlayer ?? ctx.currentPlayer)
                 : playerID;

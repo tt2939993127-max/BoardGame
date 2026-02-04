@@ -70,6 +70,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - **禁止以"改动最小"作为最正确方案的首要理由**；如果改动小但架构不正确，必须选择架构正确的方案并说明为什么不能用补丁。
 - **未讨论方案先自检（强制）**：当准备直接给出并执行某个修改方案、且该方案未经过讨论/确认时，必须先自检：是否为最正确方案、是否合理、是否符合现有架构与设计模式原则；若存在不确定点，先提出并等待确认。
 - **重构清理遗留代码（强制）**：重构应尽可能删除/迁移不再使用的代码与资源；若确实无法清理，必须明确告知哪些遗留被保留、原因、以及后续清理计划/风险。
+- **字段准入（Schema Gate）（强制）**：任何“布局/契约结构”只允许进入**有架构意义的数据**（稳定、可复用、跨模块边界需要共享的字段）；严禁把“历史回放数据、局部 UI 状态、调试缓存/临时派生值”等回灌进布局结构。确需使用时，放入组件局部 state、专用模块状态或专用缓存结构，避免结构膨胀与语义误导。
+- **命名冲突裁决机制（强制）**：当出现多种命名并存时，必须给出唯一裁决并做**全链路统一**（类型/文件名/导出名/调用点/文档）。裁决依据使用：覆盖范围 + 已实现程度 + 架构权重；禁止为了“改动最小”保留多头命名。
+- **临时实现债务登记（强制）**：允许为打通流程做临时实现，但必须标注 TODO，并写清：回填逻辑（最终应如何收敛）+ 清理触发条件（何时/由谁删除临时代码）。若不确定方案，优先扩展阅读或暂停提问，禁止硬写“糊过去”。
 - **样式开发约束（核心规定）**：**当任务目标为优化样式/视觉效果时，严禁修改任何业务逻辑代码**（如状态判定、Button 的 disabled 条件、Phase 转换逻辑等）。如需修改逻辑，必须单独申请。
 - **目录/游戏边界严格区分（强制）**：本仓库为综合性游戏项目，存在同名/近似命名文件夹；修改/引用前必须以完整路径与所属 gameId（如 `src/games/dicethrone/...`）核对，禁止把不同游戏/模块的目录当成同一个。
 - **规则文档指代（强制）**：当我说“规则”时，默认指该游戏目录下 `rule/` 文件夹中的规则 Markdown（如 `src/games/dicethrone/rule/王权骰铸规则.md`）。
@@ -79,6 +82,26 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **日志不需要开关，调试完后将移除（强制）**
 - **日志格式**：新增/临时日志尽量是“可直接复制”的纯文本，不要直接打印对象（避免控制台折叠与难复制）；推荐用 key=value 形式把关键字段展开，例如：`[模块] 事件=xxx userId=... matchId=... step=... costMs=...`。
 - **新增功能必须补充测试（强制）**：新增任何功能、技能、卡牌、效果或 API 端点时，必须同步补充对应的测试用例。测试应覆盖正常流程和异常场景，确保效果与描述一致。补充测试后必须自行运行测试确保通过。详见 `docs/automated-testing.md`。
+- **框架复用优先（强制）**：
+  - **禁止为特定游戏实现无法复用的系统**。所有UI组件、逻辑Hook、动画系统必须先实现为通用骨架/框架（放在 `/core/` 或 `/components/game/framework/`），游戏层通过配置/回调注入差异。
+  - **复用架构三层模型**：
+    1. `/core/ui/` - 类型契约层（接口定义）
+    2. `/components/game/framework/` - 骨架组件层（通用实现，泛型）
+    3. `/games/<gameId>/` - 游戏层（样式注入、配置覆盖）
+  - **新增任何系统/组件/Hook前强制检查清单**：
+    1. `find_by_name` 搜索 `/core/`、`/components/game/framework/`、`/engine/` 等目录，检查是否已有相关实现
+    2. `grep_search` 搜索关键词（如 "Skeleton"、功能名、Hook名），确认是否已有可复用实现
+    3. 若已有实现，必须复用；若需扩展，在框架层扩展而非游戏/模块层重复实现
+    4. 若确实需要新建，必须先设计为可跨游戏/跨模块复用的通用实现
+  - **判定标准**：如果为了复用需要增加大量不必要代码，说明框架设计有问题，必须重新设计而非硬塞。
+  - **适用范围**：手牌区、出牌区、资源栏、阶段指示器等UI骨架组件。
+  - **系统层设计原则**：
+    - **接口 + 通用逻辑骨架**：系统层包含可跨游戏复用的接口定义和通用逻辑（如边界检查、叠加计算），不包含游戏特化逻辑。
+    - **游戏特化下沉**：游戏特有概念放在`/games/<gameId>/`目录。
+    - **预设扩展**：常见游戏类型（战斗类、棋盘类）可提供预设扩展，游戏按需引用。
+    - **每游戏独立实例**：禁止全局单例，每个游戏创建自己的系统实例并注册定义。
+    - **UGC通过AI生成代码**：AI提示词包含系统接口规范，生成符合规范的定义代码，运行时动态注册。
+    - **Schema自包含作为备选**：简单UGC场景可用Schema字段直接包含min/max等约束，不依赖系统注册。
 
 ### 1.1 证据链与排查规范（修bug时强制）
 - **事实/未知/假设**：提出任何方案/排查/评审结论前，必须列出：
@@ -108,6 +131,15 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### React Hooks 规则（强制）
 > **禁止在条件语句或 return 之后调用 Hooks**。永远将 Hooks 置于组件顶部。
+
+### Auth / 状态管理（强制）
+- **禁止在组件内直接读写 `localStorage` 作为业务状态**（例如 token）。优先通过 Context/状态流获取，避免 key 不一致与状态不同步。
+- **Context Provider 的 `value` 必须 `useMemo`，内部方法用 `useCallback`**，避免全局无意义重渲染。
+
+### 交互与弹窗（强制）
+- **禁止使用 `window.prompt` / `window.alert` / `window.location.reload` 作为业务流程**；一律用 Modal + 状态更新，保证单向数据流。
+- **弹窗逻辑依赖稳定**：`useEffect` 依赖的 handler 必须 `useCallback`，避免重复触发与关闭/打开抖动。
+- **Toast 用于非阻塞提示**：可用于“成功/失败/告警”轻提示，但不可替代需要用户确认/输入的交互。
 
 ### CSS 布局与父容器约束（强制）
 > **`overflow` 属性会被父级容器覆盖，导致子组件布局失效**。
@@ -143,13 +175,22 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **Hover 颜色复用**：按钮 hover 颜色变化优先使用通用 `HoverOverlayLabel`（叠层 + opacity）模式，减少重复实现。
 
 ### 文档索引与使用时机（强制）
-- **工具脚本文档**：`docs/tools.md`（涉及脚本使用、资源处理、图集扫描、联机模拟时必须先读）
-- **DiceThrone 国际化说明**：`docs/dicethrone-i18n.md`（新增/修改文案、卡牌、状态效果或图片本地化时必须先读）
-- **部署说明**：`docs/deploy.md`（本地/线上部署、端口与服务编排调整时必须先读）
-- **测试模式说明**：`docs/test-mode.md`（需要测试入口、调试面板或测试流程时必须先读）
-- **自动化测试**：`docs/automated-testing.md`（编写游戏测试用例、API 测试、E2E 测试时必须先读）
-- **前端框架封装**：`docs/framework/frontend.md`（涉及前端架构/封装约定时必须先读）
-- **后端框架封装**：`docs/framework/backend.md`（涉及后端架构/封装约定时必须先读）
+
+| 场景 / 行为 | 必须阅读的文档 | 关注重点 |
+| :--- | :--- | :--- |
+| **处理资源** (图片/音频/图集/清单) | `docs/tools.md` | 压缩指令、扫描参数、清单校验 |
+| **修改 DiceThrone** (文案/资源) | `docs/dicethrone-i18n.md` | 翻译 Key 结构、Scheme A 取图函数 |
+| **环境配置 / 部署** (端口/同域代理) | `docs/deploy.md` | 端口映射、环境变量、Nginx 参数 |
+| **本地联机测试** (单人同步调试) | `docs/test-mode.md` | 测试模式开关及其对视角的影响 |
+| **编写或修复测试** (Vitest/Playwright) | `docs/automated-testing.md` | 测试库配置、错误码命名规范 |
+| **开发前端 / 新增游戏** (引擎/组件) | `docs/framework/frontend.md` | 系统复用 (Ability/Status)、动画组件、解耦规范 |
+| **开发后端 / 数据库** (NestJS/Mongo) | `docs/framework/backend.md` | 模块划分、Socket 网关、存储适配器 |
+| **接口调用 / 联调** (REST/WS) | `docs/api/README.md` | 认证方式、分页约定、实时通信事件 |
+| **使用 Undo / Fab 功能** | `docs/components/UndoFab.md` | UndoFab 组件的 Props 要求与环境依赖 |
+| **新增作弊/调试指令** | `docs/debug-tool-refactor.md` | 游戏专属调试配置的解耦注入方式 |
+| **状态同步/存储调优** (16MB 限制) | `docs/mongodb-16mb-fix.md` | 状态裁剪策略、Log 限制、Undo 快照优化 |
+| **复杂任务规划** (多文件/长流程) | `.agent/skills/planning-with-files/SKILL.md` | 必须维护 `task_plan.md`，定期转存 `findings.md` |
+| **UI/UX 设计** (配色/组件/动效) | `.agent/skills/ui-ux-pro-max/SKILL.md` | 使用 `python3 ... search.py` 生成设计系统与样式 |
 
 ### 新引擎系统注意事项（强制）
 - **数据驱动优先（强制）**：规则/配置/清单优先做成可枚举的数据（如 manifest、常量表、定义对象），由引擎/系统解析执行；避免在组件或 move 内写大量分支硬编码，确保可扩展、可复用、可验证。
@@ -199,6 +240,15 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - **视角区分**：UI 允许/需要根据玩家视角与阶段进行交互限制。
 - **教学模式（tutorial）**：
   - 走 `MatchRoom` 的 `GameModeProvider`，具体权限策略按需求明确，默认与联机一致。
+
+### 本地模式配置来源（强制）
+- **唯一判断来源**：`src/games/*/manifest.ts` 的 `allowLocalMode`。
+- **规则**：文档与代码逻辑必须严格以该字段为准，禁止再写“判定准则”。
+- **落地要求**：
+  - `allowLocalMode=false` 时，不得新增任何 local 专用流程（自动选角/自动准备/跳过校验）。
+  - 教学模式仍可保留，但逻辑与联机一致。
+
+> DiceThrone：`allowLocalMode=false`，仅保留 tutorial；联机流程为唯一权威路径。
 
 ### i18n 配置方法（强制）
 - **通用 vs 游戏**：通用组件文案放 `public/locales/{lang}/common.json`；单游戏文案放 `public/locales/{lang}/game-<id>.json`。
@@ -429,6 +479,7 @@ src/
   - **常规交互**（Hover/Focus）：使用简单 `transition`（150-200ms）
   - **高频交互**（快速点击/连续操作）：仅用颜色/透明度变化，禁止复杂动画
 - **布局稳定性 (Layout)**：动态内容通过 `absolute` 或预留空间实现。**辅助按钮严禁占据核心业务流空间，必须以悬浮 (Overlay) 方式贴边/贴底显示。**
+- **数据/逻辑/UI 分离（强制）**：UI 只负责展示与交互，业务逻辑放在引擎/系统/领域层，数据定义与配置（manifest、常量表、资源清单、文案 key）用纯数据文件维护。
 
 ### 2. 多端布局策略 (Multi-Device Layout Strategy)
 - **PC 核心驱动 (PC-First)**：以 PC 端 (16:9) 为核心设计基准，追求极致的大屏沉浸感与专业级交互操作。
@@ -462,4 +513,5 @@ src/
 
 
 ---
+
 

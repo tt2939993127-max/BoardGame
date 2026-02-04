@@ -7,6 +7,11 @@
 import type { MatchState, PlayerId, UndoState } from '../types';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
+import {
+    isCommandAllowlisted,
+    normalizeCommandAllowlist,
+    type CommandAllowlist,
+} from './commandAllowlist';
 
 // ============================================================================
 // 撤销系统配置
@@ -25,7 +30,7 @@ export interface UndoSystemConfig {
      * - 不传：默认对所有“非 SYS_/CHEAT_/UI_/DEV_”命令做快照（兼容旧行为，但更危险）。
      * - 传入：只对白名单命令做快照（推荐，最正确方案）。
      */
-    snapshotCommandAllowlist?: ReadonlyArray<string> | ReadonlySet<string>;
+    snapshotCommandAllowlist?: CommandAllowlist;
 }
 
 // ============================================================================
@@ -55,13 +60,14 @@ export function createUndoSystem<TCore>(
     config: UndoSystemConfig = {}
 ): EngineSystem<TCore> {
     const {
-        maxSnapshots = 50,
+        maxSnapshots = 1,
         requireApproval = true,
         requiredApprovals = 1,
         // 由具体游戏提供：哪些“领域命令”会产生可撤回快照。
         // 最正确方案：撤回语义属于游戏规则的一部分，必须在游戏目录内显式声明。
         snapshotCommandAllowlist,
     } = config;
+    const normalizedAllowlist = normalizeCommandAllowlist(snapshotCommandAllowlist);
 
     return {
         id: SYSTEM_IDS.UNDO,
@@ -96,25 +102,36 @@ export function createUndoSystem<TCore>(
             // - 系统命令："SYS_" 开头（永不快照）
             // - 作弊命令："CHEAT_" 开头（永不快照）
             // - 纯客户端/交互命令："UI_" / "DEV_" 开头（永不快照）
+            let workingState = state;
+            let didCancelPending = false;
             const type = command.type;
-            if (type.startsWith('SYS_') || type.startsWith('CHEAT_') || type.startsWith('UI_') || type.startsWith('DEV_')) {
+            const isUndoCommand = Object.values(UNDO_COMMANDS).includes(type as typeof UNDO_COMMANDS[keyof typeof UNDO_COMMANDS]);
+
+            if (!isUndoCommand && workingState.sys.undo.pendingRequest) {
+                const { undo } = workingState.sys;
+                workingState = {
+                    ...workingState,
+                    sys: {
+                        ...workingState.sys,
+                        undo: {
+                            ...undo,
+                            pendingRequest: undefined,
+                        },
+                    },
+                };
+                didCancelPending = true;
+            }
+            // 最正确方案：由具体游戏提供白名单。
+            // 不提供时保持兼容（对所有非系统命令快照），但这会导致 UI 高频动作也可能进入快照。
+            if (!isCommandAllowlisted(type, normalizedAllowlist, { fallbackToAllowAll: true })) {
+                if (didCancelPending) {
+                    return { state: workingState };
+                }
                 return;
             }
 
-            // 最正确方案：由具体游戏提供白名单。
-            // 不提供时保持兼容（对所有非系统命令快照），但这会导致 UI 高频动作也可能进入快照。
-            if (snapshotCommandAllowlist) {
-                const allow = snapshotCommandAllowlist instanceof Set
-                    ? snapshotCommandAllowlist
-                    : new Set<string>(snapshotCommandAllowlist);
-
-                if (!allow.has(type)) {
-                    return;
-                }
-            }
-
-            const beforeCount = state.sys.undo.snapshots.length;
-            const newState = saveSnapshot(state, maxSnapshots);
+            const beforeCount = workingState.sys.undo.snapshots.length;
+            const newState = saveSnapshot(workingState, maxSnapshots);
             if (IS_SERVER) {
                 console.log(`[UndoServer] snapshot-saved command=${type} before=${beforeCount} after=${newState.sys.undo.snapshots.length}`);
             }
@@ -132,6 +149,8 @@ function saveSnapshot<TCore>(
     maxSnapshots: number
 ): MatchState<TCore> {
     const snapshots = [...state.sys.undo.snapshots];
+    const actionLog = state.sys.actionLog ?? { entries: [], maxEntries: 0 };
+    const actionLogMaxEntries = actionLog.maxEntries ?? 0;
     
     // 保存当前状态的深拷贝（排除已有快照，避免嵌套导致指数级膨胀）
     // 同时限制日志数量，避免快照过大
@@ -146,6 +165,13 @@ function saveSnapshot<TCore>(
             log: {
                 ...state.sys.log,
                 entries: state.sys.log.entries.slice(-5), // 快照中只保留最近 5 条日志
+            },
+            actionLog: {
+                ...actionLog,
+                maxEntries: actionLogMaxEntries,
+                entries: actionLogMaxEntries > 0
+                    ? actionLog.entries.slice(-actionLogMaxEntries)
+                    : [],
             },
         },
     };
@@ -248,6 +274,11 @@ function handleApproveUndo<TCore>(
     if (!undo.pendingRequest) {
         logUndoServer('approve-rejected', { reason: 'no-pending', approverId });
         return { halt: true, error: '没有待处理的撤销请求' };
+    }
+
+    if (undo.pendingRequest.approvals.includes(approverId)) {
+        logUndoServer('approve-rejected', { reason: 'already-approved', approverId });
+        return { halt: true, error: '已批准过该撤销请求' };
     }
 
     // 添加批准

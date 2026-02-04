@@ -86,7 +86,18 @@ export type BarbarianDiceFaceId = (typeof BARBARIAN_DICE_FACE_IDS)[keyof typeof 
 
 export const DICETHRONE_COMMANDS = {
     PAY_TO_REMOVE_KNOCKDOWN: 'PAY_TO_REMOVE_KNOCKDOWN',
+    SELECT_CHARACTER: 'SELECT_CHARACTER',
+    HOST_START_GAME: 'HOST_START_GAME',
 } as const;
 
 export type DiceThroneCommandType = (typeof DICETHRONE_COMMANDS)[keyof typeof DICETHRONE_COMMANDS];
 export type PayToRemoveKnockdownCommandType = typeof DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN;
+
+// ============================================================================
+// 卡牌图集 ID
+// ============================================================================
+
+export const DICETHRONE_CARD_ATLAS_IDS = {
+    MONK: 'dicethrone:monk-cards',
+    BARBARIAN: 'dicethrone:barbarian-cards',
+} as const;

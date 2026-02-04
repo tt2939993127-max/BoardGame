@@ -8,7 +8,7 @@ interface ApprovalBarProps {
 }
 
 export const ApprovalBar = ({ rate, total, className }: ApprovalBarProps) => {
-    const isLowCount = total < 5; // Relaxed from 10 to 5 for better feedback
+    const isLowCount = total < 5; // 评价数阈值从 10 放宽到 5，提升反馈敏感度
     const barWidth = `${rate}%`;
 
     return (

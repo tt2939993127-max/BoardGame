@@ -15,7 +15,7 @@ import type {
 } from '../../../core/ui';
 
 // ============================================================================
-// PhaseIndicatorSkeleton
+// 阶段指示器骨架
 // ============================================================================
 
 /**
@@ -24,7 +24,7 @@ import type {
 export interface PhaseIndicatorSkeletonProps {
     /** 阶段列表 */
     phases: PhaseInfo[];
-    /** 当前阶段 ID */
+    /** 当前阶段编号 */
     currentPhaseId: string;
     /** 布局方向 */
     orientation?: 'vertical' | 'horizontal';
@@ -35,7 +35,7 @@ export interface PhaseIndicatorSkeletonProps {
 }
 
 // ============================================================================
-// PlayerPanelSkeleton
+// 玩家面板骨架
 // ============================================================================
 
 /**
@@ -57,7 +57,7 @@ export interface PlayerPanelSkeletonProps {
 }
 
 // ============================================================================
-// HandAreaSkeleton
+// 手牌区骨架
 // ============================================================================
 
 /**
@@ -86,7 +86,7 @@ export interface HandAreaSkeletonProps<TCard = unknown> extends HandAreaConfig<T
 }
 
 // ============================================================================
-// ResourceTraySkeleton
+// 资源托盘骨架
 // ============================================================================
 
 /**
@@ -98,14 +98,14 @@ export interface ResourceTraySkeletonProps<TItem = unknown> extends ResourceTray
     className?: string;
     /** 布局方式 */
     layout?: 'row' | 'column' | 'grid';
-    /** 网格列数（layout='grid' 时有效） */
+    /** 网格列数（布局为网格时有效） */
     gridColumns?: number;
     /** 动画配置 */
     animationConfig?: AnimationConfig;
 }
 
 // ============================================================================
-// SpotlightSkeleton
+// 聚焦骨架
 // ============================================================================
 
 /**
@@ -117,7 +117,7 @@ export interface SpotlightSkeletonProps {
     isVisible: boolean;
     /** 关闭回调 */
     onClose: () => void;
-    /** 自动关闭延迟 (ms)，不传则手动关闭 */
+    /** 自动关闭延迟（毫秒），不传则手动关闭 */
     autoCloseDelay?: number;
     /** 标题 */
     title?: ReactNode;
@@ -139,7 +139,7 @@ export interface SpotlightSkeletonProps {
     showCloseButton?: boolean;
     /** 关闭按钮渲染函数 */
     renderCloseButton?: (onClose: () => void) => ReactNode;
-    /** 确认按钮延迟显示时间 (ms)，设置后会在 description 下方显示确认按钮 */
+    /** 确认按钮延迟显示时间（毫秒），设置后会在 description 下方显示确认按钮 */
     confirmButtonDelay?: number;
     /** 确认按钮渲染函数 */
     renderConfirmButton?: (onClose: () => void) => ReactNode;

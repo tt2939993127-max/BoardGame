@@ -19,7 +19,9 @@ export const DealCardCheat: React.FC<DealCardCheatProps> = ({ players, onDealCar
     const deckLength = targetPlayer?.deck?.length ?? 0;
 
     const targetAtlasIndex = Number(deckIndex);
-    const cardAtIndex = targetPlayer?.deck?.find(card => card.atlasIndex === targetAtlasIndex);
+    const cardAtIndex = targetPlayer?.deck?.find(
+        card => card.previewRef?.type === 'atlas' && card.previewRef.index === targetAtlasIndex
+    );
 
     if (!import.meta.env.DEV) return null;
 

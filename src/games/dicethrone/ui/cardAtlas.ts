@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import { getLocalizedAssetPath } from '../../../core';
-import { ASSETS } from './assets';
 
 // --- 卡牌图集裁切配置（按行/列真实起点/尺寸）---
 export type CardAtlasConfig = {
@@ -13,8 +12,6 @@ export type CardAtlasConfig = {
     colStarts: number[];
     colWidths: number[];
 };
-
-const CARD_ATLAS_JSON = `${ASSETS.CARDS_ATLAS}.atlas.json`;
 
 const isNumberArray = (value: unknown): value is number[] => (
     Array.isArray(value) && value.every((item) => typeof item === 'number')
@@ -33,9 +30,10 @@ const isCardAtlasConfig = (value: unknown): value is CardAtlasConfig => {
         && isNumberArray(data.colWidths);
 };
 
-export const loadCardAtlasConfig = async (locale?: string): Promise<CardAtlasConfig> => {
-    const basePath = getLocalizedAssetPath(CARD_ATLAS_JSON);
-    const localizedPath = locale ? getLocalizedAssetPath(CARD_ATLAS_JSON, locale) : basePath;
+export const loadCardAtlasConfig = async (imageBase: string, locale?: string): Promise<CardAtlasConfig> => {
+    const atlasJsonPath = `${imageBase}.atlas.json`;
+    const basePath = getLocalizedAssetPath(atlasJsonPath);
+    const localizedPath = locale ? getLocalizedAssetPath(atlasJsonPath, locale) : basePath;
     const candidates = localizedPath === basePath ? [basePath] : [localizedPath, basePath];
 
     for (const url of candidates) {
@@ -49,7 +47,7 @@ export const loadCardAtlasConfig = async (locale?: string): Promise<CardAtlasCon
         }
     }
 
-    throw new Error(`未找到卡牌图集配置: ${CARD_ATLAS_JSON}`);
+    throw new Error(`未找到卡牌图集配置: ${atlasJsonPath}`);
 };
 
 export const getCardAtlasStyle = (index: number, atlas: CardAtlasConfig) => {

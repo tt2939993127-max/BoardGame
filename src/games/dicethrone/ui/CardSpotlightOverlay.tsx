@@ -8,10 +8,8 @@
  */
 
 import React from 'react';
-import { buildLocalizedImageSet } from '../../../core';
-import { ASSETS } from './assets';
-import type { CardAtlasConfig } from './cardAtlas';
-import { getCardAtlasStyle } from './cardAtlas';
+import { CardPreview } from '../../../components/common/media/CardPreview';
+import type { CardPreviewRef } from '../../../systems/CardSystem';
 import type { DieFace } from '../types';
 import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
@@ -22,8 +20,8 @@ export interface CardSpotlightItem {
     id: string;
     /** 该卡牌打出的时间戳（用于关联额外骰子） */
     timestamp: number;
-    /** 卡牌图集索引 */
-    atlasIndex: number;
+    /** 卡牌预览引用 */
+    previewRef?: CardPreviewRef;
     /** 打出卡牌的玩家 ID */
     playerId: string;
     /** 打出卡牌的玩家名称 */
@@ -42,8 +40,6 @@ export interface CardSpotlightItem {
 interface CardSpotlightOverlayProps {
     /** 特写队列 */
     queue: CardSpotlightItem[];
-    /** 卡牌图集配置 */
-    atlas: CardAtlasConfig | null;
     /** 语言 */
     locale?: string;
     /** 当前项关闭回调（从队列中移除） */
@@ -56,7 +52,6 @@ interface CardSpotlightOverlayProps {
 
 export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
     queue,
-    atlas,
     locale,
     onClose,
     opponentHeaderRef,
@@ -64,7 +59,6 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
 }) => {
     const currentItem = queue[0];
     const currentItemId = currentItem?.id;
-    const cardFrontImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARDS_ATLAS, locale), [locale]);
 
     // NOTE: eslint (react-hooks/refs) forbids reading refs during render.
     // We compute the fly-in start position in a layout effect and only render once it's ready for the current item.
@@ -90,11 +84,9 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
         setStartPosForId(currentItemId);
     }, [currentItemId, opponentHeaderRef]);
 
-    if (!currentItem || !atlas || startPosForId !== currentItemId) {
+    if (!currentItem || startPosForId !== currentItemId) {
         return null;
     }
-
-    const atlasStyle = getCardAtlasStyle(currentItem.atlasIndex, atlas);
     const hasBonusDice = !!currentItem.bonusDice && currentItem.bonusDice.length > 0;
 
 
@@ -114,14 +106,11 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
         >
             <div className={hasBonusDice ? 'flex items-center gap-[1.5vw]' : undefined}>
                 {/* 卡牌（左） */}
-                <div
+                <CardPreview
+                    previewRef={currentItem.previewRef}
+                    locale={locale}
                     className="w-[16vw] aspect-[0.61] rounded-[0.6vw] shadow-2xl border-2 border-amber-500/60"
-                    style={{
-                        backgroundImage: cardFrontImage,
-                        backgroundRepeat: 'no-repeat',
-                        ...atlasStyle,
-                        boxShadow: '0 0 1.5vw 0.3vw rgba(251, 191, 36, 0.4)',
-                    }}
+                    style={{ boxShadow: '0 0 1.5vw 0.3vw rgba(251, 191, 36, 0.4)' }}
                 />
 
                 {/* 额外骰子（右）- 支持多颗骰子横向排列 */}
