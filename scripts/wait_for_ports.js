@@ -1,7 +1,16 @@
+import 'dotenv/config';
 import net from 'node:net';
 
 const args = process.argv.slice(2);
-const ports = args.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+const defaultPorts = [18000, 18001];
+const envPorts = [
+    process.env.GAME_SERVER_PORT,
+    process.env.API_SERVER_PORT,
+].map((value) => Number(value)).filter((value) => Number.isFinite(value));
+const portsFromArgs = args.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+const ports = portsFromArgs.length > 0
+    ? portsFromArgs
+    : Array.from(new Set([...envPorts, ...defaultPorts]));
 
 const host = process.env.WAIT_PORT_HOST || '127.0.0.1';
 const timeoutMs = Number(process.env.WAIT_PORT_TIMEOUT || 60000);

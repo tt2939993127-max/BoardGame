@@ -8,56 +8,14 @@ import type {
     DiceThroneEvent,
     TurnPhase,
 } from './types';
-import { getDieFace, getTokenStackLimit } from './rules';
+import { getDieFace, getTokenStackLimit, getFaceCounts, getActiveDice } from './rules';
 import { diceSystem } from '../../../systems/DiceSystem';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
 import { findHeroCard } from '../heroes';
 import { initHeroState, createCharacterDice } from './characters';
-
-// ============================================================================
-// Choice Effect 处理器注册表
-// ============================================================================
-
-/**
- * Choice Effect 处理器上下文
- */
-export interface ChoiceEffectContext {
-    state: DiceThroneCore;
-    playerId: string;
-    customId: string;
-    sourceAbilityId?: string;
-}
-
-/**
- * Choice Effect 处理器函数类型
- * 返回修改后的 state（或 undefined 表示不处理）
- */
-export type ChoiceEffectHandler = (context: ChoiceEffectContext) => DiceThroneCore | undefined;
-
-/**
- * Choice Effect 处理器注册表
- * 新增选择效果只需注册处理器，无需修改 handleChoiceResolved
- */
-const choiceEffectHandlers: Map<string, ChoiceEffectHandler> = new Map();
-
-/**
- * 注册 Choice Effect 处理器
- */
-export function registerChoiceEffectHandler(customId: string, handler: ChoiceEffectHandler): void {
-    if (choiceEffectHandlers.has(customId)) {
-        console.warn(`[DiceThrone] ChoiceEffect "${customId}" 已存在，将被覆盖`);
-    }
-    choiceEffectHandlers.set(customId, handler);
-}
-
-/**
- * 获取 Choice Effect 处理器
- */
-export function getChoiceEffectHandler(customId: string): ChoiceEffectHandler | undefined {
-    return choiceEffectHandlers.get(customId);
-}
+import { getChoiceEffectHandler, registerChoiceEffectHandler } from './choiceEffects';
 
 // ============================================================================
 // 辅助函数
@@ -288,15 +246,19 @@ const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'DAMAGE_D
     if (target) {
         let remainingDamage = actualDamage;
 
-        // 消耗护盾抵消伤害
+        // 消耗护盾抵消伤害（忽略 preventStatus 护盾）
         if (target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
-            // 按添加顺序消耗护盾
-            const shield = target.damageShields[0];
-            const preventedAmount = Math.min(shield.value, remainingDamage);
-            remainingDamage -= preventedAmount;
+            const statusShields = target.damageShields.filter(shield => shield.preventStatus);
+            const damageShields = target.damageShields.filter(shield => !shield.preventStatus);
+            if (damageShields.length > 0) {
+                // 按添加顺序消耗护盾
+                const shield = damageShields[0];
+                const preventedAmount = Math.min(shield.value, remainingDamage);
+                remainingDamage -= preventedAmount;
 
-            // 清空所有护盾（下次受伤后清空的设计）
-            target.damageShields = [];
+                // 清空所有“伤害护盾”，保留 preventStatus 护盾
+                target.damageShields = statusShields;
+            }
         }
 
         // 剩余伤害扣血
@@ -358,6 +320,23 @@ const handleStatusApplied: EventHandler<Extract<DiceThroneEvent, { type: 'STATUS
 
     const target = newState.players[targetId];
     if (target) {
+        const isDebuff = newState.tokenDefinitions
+            ?.find(def => def.id === statusId)
+            ?.category === 'debuff';
+        const shouldPrevent = Boolean(
+            isDebuff !== false
+            && newState.pendingAttack
+            && newState.pendingAttack.defenderId === targetId
+            && target.damageShields?.some(shield => shield.preventStatus)
+        );
+        if (shouldPrevent && target.damageShields) {
+            const index = target.damageShields.findIndex(shield => shield.preventStatus);
+            if (index >= 0) {
+                target.damageShields.splice(index, 1);
+                return newState;
+            }
+        }
+
         target.statusEffects[statusId] = newTotal;
     }
 
@@ -674,12 +653,16 @@ const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type: 'ATTA
     const newState = cloneState(state);
     const { attackerId, defenderId, sourceAbilityId, isDefendable, isUltimate } = event.payload;
 
+    // 快照攻击方骰面计数（防御阶段会重置骰子，postDamage 连击判定需要原始骰面）
+    const attackFaceCounts = getFaceCounts(getActiveDice(newState));
+
     newState.pendingAttack = {
         attackerId,
         defenderId,
         isDefendable,
         sourceAbilityId,
         isUltimate,
+        attackDiceFaceCounts: attackFaceCounts,
         // 额外骰子现在在 resolveAttack 中自动投掷，不再需要设置 extraRoll
     };
 
@@ -694,10 +677,16 @@ const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type: 'ATTAC
     event
 ) => {
     const newState = cloneState(state);
-    const { sourceAbilityId, defenseAbilityId } = event.payload;
+    const { sourceAbilityId, defenseAbilityId, defenderId } = event.payload;
 
     // 记录激活的技能ID
     newState.activatingAbilityId = sourceAbilityId || defenseAbilityId;
+
+    // 攻击结算后清除“防状态”护盾（只作用于本次攻击）
+    const defender = newState.players[defenderId];
+    if (defender?.damageShields?.length) {
+        defender.damageShields = defender.damageShields.filter(shield => !shield.preventStatus);
+    }
 
     // 清除待处理攻击
     newState.pendingAttack = null;
@@ -814,7 +803,7 @@ const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { type: '
     event
 ) => {
     const newState = cloneState(state);
-    const { targetId, value, sourceId } = event.payload;
+    const { targetId, value, sourceId, preventStatus } = event.payload;
 
     const target = newState.players[targetId];
     if (target) {
@@ -823,7 +812,7 @@ const handleDamageShieldGranted: EventHandler<Extract<DiceThroneEvent, { type: '
             target.damageShields = [];
         }
         // 添加新护盾
-        target.damageShields.push({ value, sourceId });
+        target.damageShields.push({ value, sourceId, preventStatus });
     }
 
     return newState;
@@ -1033,18 +1022,18 @@ const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABIL
         // 2) 更新技能等级
         player.abilityLevels[oldAbilityId] = newLevel;
 
-        // 3) 移除升级卡
-        const upgradeCardIndex = player.hand.findIndex(c => c.id === cardId);
-        if (upgradeCardIndex !== -1) {
-            const [card] = player.hand.splice(upgradeCardIndex, 1);
+        // 3) 记录升级卡信息（用于差价计算）
+        // 注意：卡牌可能已被 CARD_PLAYED 事件从手牌移到弃牌堆
+        if (!player.upgradeCardByAbilityId) {
+            player.upgradeCardByAbilityId = {};
+        }
+        // 优先从手牌查找（兼容旧路径），否则从弃牌堆查找
+        const cardInHand = player.hand.findIndex(c => c.id === cardId);
+        if (cardInHand !== -1) {
+            const [card] = player.hand.splice(cardInHand, 1);
             player.discard.push(card);
-            // 确保对象存在（向后兼容旧状态）
-            if (!player.upgradeCardByAbilityId) {
-                player.upgradeCardByAbilityId = {};
-            }
             player.upgradeCardByAbilityId[oldAbilityId] = { cardId: card.id, cpCost: card.cpCost };
 
-            // 触发特写系统
             // 触发特写系统（动态查找）
             const resolvedPreviewRef = findHeroCard(card.id)?.previewRef
                 ?? card.previewRef;
@@ -1054,6 +1043,12 @@ const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type: 'ABIL
                 previewRef: resolvedPreviewRef,
                 timestamp: event.timestamp,
             };
+        } else {
+            // 卡牌已被 CARD_PLAYED 移到弃牌堆，从弃牌堆查找记录 cpCost
+            const cardInDiscard = player.discard.find(c => c.id === cardId);
+            if (cardInDiscard) {
+                player.upgradeCardByAbilityId[oldAbilityId] = { cardId: cardInDiscard.id, cpCost: cardInDiscard.cpCost };
+            }
         }
     }
 

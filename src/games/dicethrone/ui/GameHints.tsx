@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Trash2 } from 'lucide-react';
 import type { PendingInteraction, TurnPhase } from '../domain/types';
 
 export interface GameHintsProps {
@@ -17,26 +18,26 @@ export interface GameHintsProps {
     isDiscardMode: boolean;
     /** 必须弃牌数量 */
     mustDiscardCount: number;
-    
+
     /** 是否为骰子交互 */
     isDiceInteraction: boolean;
     /** 是否为交互所有者 */
     isInteractionOwner: boolean;
     /** 待处理交互 */
     pendingInteraction?: PendingInteraction;
-    
+
     /** 是否在等待对手 */
     isWaitingOpponent: boolean;
     /** 对手名称 */
     opponentName: string;
-    
+
     /** 是否为当前响应者 */
     isResponder: boolean;
     /** 响应窗口偏移类名 */
     thinkingOffsetClass?: string;
     /** 响应跳过回调 */
     onResponsePass: () => void;
-    
+
     /** 当前阶段 */
     currentPhase: TurnPhase;
 }
@@ -46,12 +47,12 @@ export interface GameHintsProps {
  */
 const DiscardHint: React.FC<{ mustDiscardCount: number }> = ({ mustDiscardCount }) => {
     const { t } = useTranslation('game-dicethrone');
-    
+
     return (
         <div className="absolute bottom-[14vw] left-1/2 -translate-x-1/2 z-[150] pointer-events-none animate-pulse">
             <div className="px-[2vw] py-[0.8vw] rounded-xl bg-gradient-to-r from-red-900/90 to-orange-900/90 border-2 border-red-500/60 shadow-[0_0_2vw_rgba(239,68,68,0.4)] backdrop-blur-sm">
                 <div className="flex items-center gap-[1vw]">
-                    <span className="text-[1.5vw]">🗑️</span>
+                    <Trash2 className="w-[1.5vw] h-[1.5vw] text-red-200" />
                     <div className="flex flex-col">
                         <span className="text-red-200 text-[1vw] font-black tracking-wider">
                             {t('discard.mustDiscard')}
@@ -71,7 +72,7 @@ const DiscardHint: React.FC<{ mustDiscardCount: number }> = ({ mustDiscardCount 
  */
 const DiceInteractionHint: React.FC<{ pendingInteraction: PendingInteraction }> = ({ pendingInteraction }) => {
     const { t } = useTranslation('game-dicethrone');
-    
+
     return (
         <div className="absolute top-[6vw] left-1/2 -translate-x-1/2 z-[150] pointer-events-none animate-pulse">
             <div className="bg-amber-600/90 backdrop-blur-sm rounded-xl px-[2vw] py-[0.6vw] border border-amber-400/60 shadow-lg text-center">
@@ -140,12 +141,12 @@ const OpponentThinkingHint: React.FC<{ opponentName: string }> = ({ opponentName
 /**
  * 响应窗口：当前玩家可响应
  */
-const ResponseWindowHint: React.FC<{ 
-    onResponsePass: () => void; 
+const ResponseWindowHint: React.FC<{
+    onResponsePass: () => void;
     offsetClass?: string;
 }> = ({ onResponsePass, offsetClass = 'bottom-[12vw]' }) => {
     const { t } = useTranslation('game-dicethrone');
-    
+
     return (
         <div className={`absolute ${offsetClass} left-1/2 -translate-x-1/2 z-[120]`}>
             <div className="flex items-center gap-[1vw] px-[1.4vw] py-[0.6vw] rounded-full bg-black/80 border border-purple-500/60 shadow-lg backdrop-blur-sm">
@@ -184,20 +185,20 @@ export const GameHints: React.FC<GameHintsProps> = ({
             {isDiscardMode && (
                 <DiscardHint mustDiscardCount={mustDiscardCount} />
             )}
-            
+
             {/* 骰子交互提示（画面顶部中央） */}
             {isDiceInteraction && isInteractionOwner && pendingInteraction && (
                 <DiceInteractionHint pendingInteraction={pendingInteraction} />
             )}
-            
+
             {/* 对手思考中提示（画面正中央，无背景，缓慢闪烁） */}
             {isWaitingOpponent && (
                 <OpponentThinkingHint opponentName={opponentName} />
             )}
-            
+
             {/* 响应窗口：当前玩家可响应 */}
             {isResponder && (
-                <ResponseWindowHint 
+                <ResponseWindowHint
                     onResponsePass={onResponsePass}
                     offsetClass={thinkingOffsetClass}
                 />

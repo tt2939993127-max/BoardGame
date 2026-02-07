@@ -11,7 +11,7 @@ import { RESOURCE_IDS } from '../domain/resources';
 import { STATUS_IDS, TOKEN_IDS, DICETHRONE_COMMANDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
 import { getAvailableAbilityIds } from '../domain/rules';
-import { MONK_CARDS } from '../monk/cards';
+import { MONK_CARDS } from '../heroes/monk/cards';
 import type { AbilityCard } from '../types';
 import type { AbilityEffect } from '../../../systems/presets/combat';
 import type { CardPreviewRef } from '../../../systems/CardSystem';
@@ -445,7 +445,11 @@ const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThroneExpect
 // 测试用例（参照规则并对照实现）
 // ============================================================================
 
-const initialDeckSize = MONK_CARDS.length;
+// getMonkStartingDeck 中升级卡 1 份，非升级卡 2 份
+const initialDeckSize = MONK_CARDS.reduce(
+    (sum, card) => sum + (card.type === 'upgrade' ? 1 : 2),
+    0
+);
 const expectedHandSize = 4;
 const expectedDeckAfterDraw4 = initialDeckSize - expectedHandSize;
 const expectedIncomeCp = Math.min(INITIAL_CP + 1, CP_MAX);
@@ -619,10 +623,16 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
     {
         name: '升级差价：II -> III 仅支付 CP 差价',
         commands: [
-            // 把升级卡抽到手里（fixedRandom 不洗牌，按 MONK_CARDS 顺序依次抽取）
+            // 把升级卡抽到手里（fixedRandom 不洗牌，非升级卡×2 + 升级卡×1 顺序）
+            // 初始手牌(0-3): enlightenment×2, inner-peace×2
+            // 后续抽牌: deep-thought×2, buddha-light×2, palm-strike×2, meditation-3, meditation-2
+            cmd('DRAW_CARD', '0'), // deep-thought
+            cmd('DRAW_CARD', '0'), // deep-thought
+            cmd('DRAW_CARD', '0'), // buddha-light
+            cmd('DRAW_CARD', '0'), // buddha-light
+            cmd('DRAW_CARD', '0'), // palm-strike
             cmd('DRAW_CARD', '0'), // palm-strike
             cmd('DRAW_CARD', '0'), // meditation-3
-            cmd('DRAW_CARD', '0'), // play-six
             cmd('DRAW_CARD', '0'), // meditation-2
 
             // 进入主阶段（先手首回合跳过收入）
@@ -1104,7 +1114,7 @@ describe('王权骰铸流程测试', () => {
             // 小顺: 1,3,4,6 → fist,palm,taiji,lotus
             const diceValues = [1, 3, 4, 6, 2, 1, 1, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -1142,7 +1152,7 @@ describe('王权骰铸流程测试', () => {
             // 大顺: [1,2,3,4,5] → 5个连续点数
             const diceValues = [1, 2, 3, 4, 5, 1, 1, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -1179,7 +1189,7 @@ describe('王权骰铸流程测试', () => {
         it('花开见佛命中后太极满值', () => {
             // 4个 lotus: 6,6,6,6 → 4个 lotus
             const random = createQueuedRandom([6, 6, 6, 6, 1, 1, 1, 1, 1]);
-            
+
             // 使用无响应卡牌的 setup
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
@@ -1190,7 +1200,7 @@ describe('王权骰铸流程测试', () => {
                 assertFn: assertState,
                 silent: true,
             });
-            
+
             const result = runner.run({
                 name: '花开见佛命中后太极满值',
                 commands: [
@@ -1270,6 +1280,7 @@ describe('王权骰铸流程测试', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: '佛光普照多状态',
+                setup: createSetupWithHand(['card-buddha-light', 'card-enlightenment'], { cp: 2 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
                     // buddha-light 需要 3 CP，初始只有 2 CP，先卖卡获取 CP
@@ -1296,6 +1307,7 @@ describe('王权骰铸流程测试', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: '深思获得5太极',
+                setup: createSetupWithHand(['card-deep-thought', 'card-enlightenment'], { cp: 2 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
                     // deep-thought 需要 3 CP，初始只有 2 CP，先卖卡获取 CP
@@ -1308,7 +1320,7 @@ describe('王权骰铸流程测试', () => {
                         '0': {
                             cp: 0, // 3 - 3 = 0
                             tokens: { taiji: 5 },
-                            handSize: expectedHandSize - 1 - 1, // -1卖 -1打出 = 2
+                            handSize: 0, // 2张手牌 -1卖 -1打出 = 0
                             discardSize: 2, // 卖的卡 + 打出的卡
                         },
                     },
@@ -1321,10 +1333,8 @@ describe('王权骰铸流程测试', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: '掌击给对手倒地',
+                setup: createSetupWithHand(['card-palm-strike']),
                 commands: [
-                    // 初始手牌: enlightenment, inner-peace, deep-thought, buddha-light
-                    // palm-strike 在 index 4，需要抽1张才能拿到
-                    cmd('DRAW_CARD', '0'), // 抽 palm-strike
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-palm-strike' }),
                 ],
@@ -1364,22 +1374,53 @@ describe('王权骰铸流程测试', () => {
         });
     });
 
+    describe('自选移除状态交互', () => {
+        it('remove-status-self 应生成仅限自身的状态选择交互', () => {
+            const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
+            const ctx: EffectContext = {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'test-remove-status-self',
+                state: core,
+                damageDealt: 0,
+            };
+            const effects: AbilityEffect[] = [
+                {
+                    description: '移除自身状态',
+                    timing: 'immediate',
+                    action: { type: 'custom', target: 'self', customActionId: 'remove-status-self' },
+                },
+            ];
+
+            const events = resolveEffectsToEvents(effects, 'immediate', ctx, { random: fixedRandom });
+            const event = events.find(e => e.type === 'INTERACTION_REQUESTED') as any;
+            expect(event).toBeDefined();
+            expect(event.payload?.interaction?.type).toBe('selectStatus');
+            expect(event.payload?.interaction?.targetPlayerIds).toEqual(['0']);
+        });
+    });
+
     describe('技能升级', () => {
-        // 初始手牌(index 0-3): enlightenment, inner-peace, deep-thought, buddha-light
-        // meditation-2 在 index 7，需要抽4张
-        // thrust-punch-2 在 index 13，需要抽10张
-        // mahayana-2 在 index 12，需要抽9张
-        
+        // 牌库顺序（getMonkStartingDeck: 非升级卡×2, 升级卡×1）
+        // 初始手牌(0-3): enlightenment×2, inner-peace×2
+        // 后续抽牌: deep-thought×2(4-5), buddha-light×2(6-7), palm-strike×2(8-9),
+        //   meditation-3(10), meditation-2(11), zen-fist-2(12), storm-assault-2(13),
+        //   combo-punch-2(14), lotus-bloom-2(15), mahayana-2(16), thrust-punch-2(17)
+
         it('升级清修到 II 级', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: '升级清修 II',
                 commands: [
-                    // 抽到 meditation-2 (index 7)
-                    cmd('DRAW_CARD', '0'), // palm-strike (4)
-                    cmd('DRAW_CARD', '0'), // meditation-3 (5)
-                    cmd('DRAW_CARD', '0'), // play-six (6)
-                    cmd('DRAW_CARD', '0'), // meditation-2 (7)
+                    // 抽到 meditation-2 (需要抽 8 张: deep-thought×2, buddha-light×2, palm-strike×2, meditation-3, meditation-2)
+                    cmd('DRAW_CARD', '0'), // deep-thought
+                    cmd('DRAW_CARD', '0'), // deep-thought
+                    cmd('DRAW_CARD', '0'), // buddha-light
+                    cmd('DRAW_CARD', '0'), // buddha-light
+                    cmd('DRAW_CARD', '0'), // palm-strike
+                    cmd('DRAW_CARD', '0'), // palm-strike
+                    cmd('DRAW_CARD', '0'), // meditation-3
+                    cmd('DRAW_CARD', '0'), // meditation-2
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
@@ -1402,17 +1443,21 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '升级拳法 II',
                 commands: [
-                    // 抽到 thrust-punch-2 (index 13)
-                    cmd('DRAW_CARD', '0'), // 4: palm-strike
-                    cmd('DRAW_CARD', '0'), // 5: meditation-3
-                    cmd('DRAW_CARD', '0'), // 6: play-six
-                    cmd('DRAW_CARD', '0'), // 7: meditation-2
-                    cmd('DRAW_CARD', '0'), // 8: zen-fist-2
-                    cmd('DRAW_CARD', '0'), // 9: storm-assault-2
-                    cmd('DRAW_CARD', '0'), // 10: combo-punch-2
-                    cmd('DRAW_CARD', '0'), // 11: lotus-bloom-2
-                    cmd('DRAW_CARD', '0'), // 12: mahayana-2
-                    cmd('DRAW_CARD', '0'), // 13: thrust-punch-2
+                    // 抽到 thrust-punch-2 (需要抽 14 张)
+                    cmd('DRAW_CARD', '0'), // deep-thought
+                    cmd('DRAW_CARD', '0'), // deep-thought
+                    cmd('DRAW_CARD', '0'), // buddha-light
+                    cmd('DRAW_CARD', '0'), // buddha-light
+                    cmd('DRAW_CARD', '0'), // palm-strike
+                    cmd('DRAW_CARD', '0'), // palm-strike
+                    cmd('DRAW_CARD', '0'), // meditation-3
+                    cmd('DRAW_CARD', '0'), // meditation-2
+                    cmd('DRAW_CARD', '0'), // zen-fist-2
+                    cmd('DRAW_CARD', '0'), // storm-assault-2
+                    cmd('DRAW_CARD', '0'), // combo-punch-2
+                    cmd('DRAW_CARD', '0'), // lotus-bloom-2
+                    cmd('DRAW_CARD', '0'), // mahayana-2
+                    cmd('DRAW_CARD', '0'), // thrust-punch-2
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-thrust-punch-2', targetAbilityId: 'fist-technique' }),
                 ],
@@ -1434,16 +1479,20 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '升级和谐 II',
                 commands: [
-                    // 抽到 mahayana-2 (index 12)
-                    cmd('DRAW_CARD', '0'), // 4: palm-strike
-                    cmd('DRAW_CARD', '0'), // 5: meditation-3
-                    cmd('DRAW_CARD', '0'), // 6: play-six
-                    cmd('DRAW_CARD', '0'), // 7: meditation-2
-                    cmd('DRAW_CARD', '0'), // 8: zen-fist-2
-                    cmd('DRAW_CARD', '0'), // 9: storm-assault-2
-                    cmd('DRAW_CARD', '0'), // 10: combo-punch-2
-                    cmd('DRAW_CARD', '0'), // 11: lotus-bloom-2
-                    cmd('DRAW_CARD', '0'), // 12: mahayana-2
+                    // 抽到 mahayana-2 (需要抽 13 张)
+                    cmd('DRAW_CARD', '0'), // deep-thought
+                    cmd('DRAW_CARD', '0'), // deep-thought
+                    cmd('DRAW_CARD', '0'), // buddha-light
+                    cmd('DRAW_CARD', '0'), // buddha-light
+                    cmd('DRAW_CARD', '0'), // palm-strike
+                    cmd('DRAW_CARD', '0'), // palm-strike
+                    cmd('DRAW_CARD', '0'), // meditation-3
+                    cmd('DRAW_CARD', '0'), // meditation-2
+                    cmd('DRAW_CARD', '0'), // zen-fist-2
+                    cmd('DRAW_CARD', '0'), // storm-assault-2
+                    cmd('DRAW_CARD', '0'), // combo-punch-2
+                    cmd('DRAW_CARD', '0'), // lotus-bloom-2
+                    cmd('DRAW_CARD', '0'), // mahayana-2
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-mahayana-2', targetAbilityId: 'harmony' }),
                 ],
@@ -1465,7 +1514,7 @@ describe('王权骰铸流程测试', () => {
             // 骰子序列: 3个拳(1,1,2) + 2个其他 + 防御骰子
             const diceValues = [1, 1, 2, 3, 4, 1, 1, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -1517,7 +1566,7 @@ describe('王权骰铸流程测试', () => {
             // 小顺: 1,3,4,6 → fist,palm,taiji,lotus
             const diceValues = [1, 3, 4, 6, 2, 1, 1, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -1749,6 +1798,7 @@ describe('王权骰铸流程测试', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: 'CP不足时无法打出卡牌',
+                setup: createSetupWithHand(['card-buddha-light'], { cp: INITIAL_CP }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     // buddha-light 需要 3 CP，初始只有 2 CP
@@ -1769,12 +1819,8 @@ describe('王权骰铸流程测试', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: '升级卡在投掷阶段无法使用',
+                setup: createSetupWithHand(['card-meditation-2']),
                 commands: [
-                    // 抽到 meditation-2 (index 7)
-                    cmd('DRAW_CARD', '0'), // palm-strike (4)
-                    cmd('DRAW_CARD', '0'), // meditation-3 (5)
-                    cmd('DRAW_CARD', '0'), // play-six (6)
-                    cmd('DRAW_CARD', '0'), // meditation-2 (7)
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -1782,7 +1828,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 8, error: 'wrongPhaseForUpgrade' },
+                    errorAtStep: { step: 4, error: 'wrongPhaseForUpgrade' },
                     turnPhase: 'offensiveRoll',
                 },
             });
@@ -1793,16 +1839,14 @@ describe('王权骰铸流程测试', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: '升级卡跳级使用',
+                setup: createSetupWithHand(['card-meditation-3']),
                 commands: [
-                    // 抽到 meditation-3 (index 5)
-                    cmd('DRAW_CARD', '0'), // palm-strike (4)
-                    cmd('DRAW_CARD', '0'), // meditation-3 (5)
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     // 尝试直接跳到 III 级（当前是 I 级）
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-3', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 4, error: 'upgradeCardSkipLevel' },
+                    errorAtStep: { step: 2, error: 'upgradeCardSkipLevel' },
                     turnPhase: 'main1',
                     players: {
                         '0': { abilityLevels: { meditation: 1 } }, // 等级未变
@@ -1816,17 +1860,14 @@ describe('王权骰铸流程测试', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
                 name: '投掷阶段卡在主要阶段无法使用',
+                setup: createSetupWithHand(['card-play-six']),
                 commands: [
-                    // 抽到 play-six (index 6)，它是 roll 时机的卡
-                    cmd('DRAW_CARD', '0'), // palm-strike (4)
-                    cmd('DRAW_CARD', '0'), // meditation-3 (5)
-                    cmd('DRAW_CARD', '0'), // play-six (6) - roll 卡
                     cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     // 在主要阶段尝试使用 roll 卡
                     cmd('PLAY_CARD', '0', { cardId: 'card-play-six' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 5, error: 'wrongPhaseForRoll' },
+                    errorAtStep: { step: 2, error: 'wrongPhaseForRoll' },
                     turnPhase: 'main1',
                 },
             });
@@ -1852,7 +1893,7 @@ describe('王权骰铸流程测试', () => {
             // 奖励骰(3颗): 2,3,4 → 总伤害 9
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -1895,7 +1936,7 @@ describe('王权骰铸流程测试', () => {
             // 重掷第0颗得到6 → 6+3+4=13
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 6, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -1938,7 +1979,7 @@ describe('王权骰铸流程测试', () => {
             // 奖励骰(3颗): 2,3,4 → 总伤害 9
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -1978,7 +2019,7 @@ describe('王权骰铸流程测试', () => {
             // 奖励骰(3颗): 2,3,4 → 总伤害 9
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2019,7 +2060,7 @@ describe('王权骰铸流程测试', () => {
             // 奖励骰(3颗): 2,3,4 → 总伤害 9
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2058,7 +2099,7 @@ describe('王权骰铸流程测试', () => {
         it('超过重掷次数限制', () => {
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 6, 6, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2114,7 +2155,7 @@ describe('王权骰铸流程测试', () => {
             // 奖励骰(3颗): 2,3,4 → 总伤害 9
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2160,7 +2201,7 @@ describe('王权骰铸流程测试', () => {
             // 重掷第0颗得到6 → 6+3+4=13 >= 12 → 触发倒地
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 6, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2196,7 +2237,7 @@ describe('王权骰铸流程测试', () => {
                     pendingBonusDiceSettlement: null,
                     players: {
                         '0': { tokens: { taiji: 1 } }, // 消耗了1个太极重掷
-                        '1': { 
+                        '1': {
                             hp: 37, // 50 - 13 = 37
                             statusEffects: { knockdown: 1 }, // >= 12 触发倒地
                         },
@@ -2212,7 +2253,7 @@ describe('王权骰铸流程测试', () => {
             // 奖励骰(3颗): 2,3,4 → 总伤害 9 < 12 → 不触发倒地
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 2, 3, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2252,7 +2293,7 @@ describe('王权骰铸流程测试', () => {
                     turnPhase: 'main2',
                     pendingBonusDiceSettlement: null,
                     players: {
-                        '1': { 
+                        '1': {
                             hp: 41, // 50 - 9 = 41
                             statusEffects: { knockdown: 0 }, // < 12 不触发倒地
                         },
@@ -2268,7 +2309,7 @@ describe('王权骰铸流程测试', () => {
             // 奖励骰(3颗): 4,4,4 → 总伤害 12 >= 12 → 触发倒地
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 4, 4, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2308,7 +2349,7 @@ describe('王权骰铸流程测试', () => {
                     turnPhase: 'main2',
                     pendingBonusDiceSettlement: null,
                     players: {
-                        '1': { 
+                        '1': {
                             hp: 38, // 50 - 12 = 38
                             statusEffects: { knockdown: 1 }, // >= 12 触发倒地
                         },
@@ -2326,7 +2367,7 @@ describe('王权骰铸流程测试', () => {
             // 重掷第1颗得到6 → 6,6,1 = 13 >= 12
             const diceValues = [3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 6, 1, 1];
             const random = createQueuedRandom(diceValues);
-            
+
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
@@ -2363,7 +2404,7 @@ describe('王权骰铸流程测试', () => {
                     pendingBonusDiceSettlement: null,
                     players: {
                         '0': { tokens: { taiji: 0 } }, // 消耗了2个太极重掷
-                        '1': { 
+                        '1': {
                             hp: 37, // 50 - 13 = 37
                             statusEffects: { knockdown: 1 }, // >= 12 触发倒地
                         },

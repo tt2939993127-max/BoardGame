@@ -19,6 +19,7 @@ export interface ActionHookExecutionInput {
   context: Record<string, unknown>;
   state: UGCGameState | null;
   sdk: UGCViewSdk | null;
+  onCommandResult?: (result: { success: boolean; error?: string }) => void;
 }
 
 export interface ActionHookExecutionResult {
@@ -87,6 +88,7 @@ export async function executeActionHook({
   context,
   state,
   sdk,
+  onCommandResult,
 }: ActionHookExecutionInput): Promise<ActionHookExecutionResult> {
   const hookCode = action.hookCode?.trim();
   if (!hookCode) {
@@ -109,11 +111,18 @@ export async function executeActionHook({
       componentId: context.componentId,
       componentType: context.componentType,
     };
+    if (Array.isArray(context.selectedCardIds)) {
+      basePayload.selectedCardIds = context.selectedCardIds;
+    }
     const finalPayload = {
       ...basePayload,
       ...(command.payload || {}),
     };
-    return sdk.sendCommand(commandType as Parameters<UGCViewSdk['sendCommand']>[0], finalPayload);
+    return sdk.sendCommand(
+      commandType as Parameters<UGCViewSdk['sendCommand']>[0],
+      finalPayload,
+      onCommandResult
+    );
   };
 
   const payload = {

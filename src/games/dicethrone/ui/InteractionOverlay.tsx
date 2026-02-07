@@ -6,7 +6,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PendingInteraction, HeroState } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
-import { SelectableEffectsContainer, type StatusIconAtlasConfig } from './statusEffects';
+import { SelectableEffectsContainer, type StatusAtlases } from './statusEffects';
 import { GameModal } from './components/GameModal';
 import { GameButton } from './components/GameButton';
 
@@ -26,7 +26,7 @@ export interface InteractionOverlayProps {
     /** 取消交互 */
     onCancel: () => void;
     /** 状态图标图集 */
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
     /** 语言 */
     locale?: string;
 }

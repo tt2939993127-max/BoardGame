@@ -67,6 +67,13 @@
       "statusTokens": "状态效果与标记显示在这里。闪避/太极/净化可在合适时机消耗；击倒可在进攻前花费 2CP 移除。",
       "advance": "推进阶段用右侧“下一阶段”按钮；先进入掷骰阶段，再进行投掷。",
       "resolveAttack": "选择进攻技能后，点击“结算攻击”进入伤害结算并可能触发防御阶段。",
+      "taijiResponse": "你获得了 1 个太极。请在响应窗口中消耗它来减少伤害。",
+      "evasiveResponse": "你获得了 1 个闪避。请使用它尝试完全闪避伤害。",
+      "purifySetup": "我们已为你施加击倒，并给予 1 个净化标记。",
+      "purifyUse": "使用净化移除击倒。",
+      "innerPeace": "你获得了“静心！”。打出它获得 2 气。",
+      "playSix": "你获得了“玩得六啊！”。在进攻掷骰阶段使用它将一颗骰子改为 6。",
+      "meditation2": "你获得了“冒想 II”。将它拖到“冒想”技能槽上完成升级。",
       "defenseRoll": "进入防御掷骰阶段后，防御方可掷 1 次骰并选择防御技能。",
       "defenseEnd": "防御完成后由防御方点击“结束防御”，结算伤害并进入下一阶段。",
       "finish": "以上就是双人模式基础流程。尝试发动技能、出牌并击败对手吧！"
@@ -80,6 +87,18 @@
         "若不移除，必须跳过该阶段并移除此标记"
       ],
       "clickToRemove": "点击花费 2CP 移除"
+    },
+    "burn": {
+      "name": "燃烧",
+      "description": [
+        "受此效果影响的玩家必须在其维持阶段受到2点不可防御伤害。"
+      ]
+    },
+    "stun": {
+      "name": "眩晕",
+      "description": [
+        "受影响的玩家跳过其下一个主要的掷骰阶段和主要的行动阶段。在该阶段结束时移除此标记。"
+      ]
     }
   },
   "confirmRemoveKnockdown": {
@@ -110,6 +129,12 @@
       "description": [
         "任意时点可花费1个净化，移除自己1个负面效果标记"
       ]
+    },
+    "fire_mastery": {
+      "name": "火焰精通",
+      "description": [
+        "拥有此种标记的玩家必须在他的每个维持阶段进行“冷却”（即移除1个火焰精通标记）。"
+      ]
     }
   },
   "purify": {
@@ -132,11 +157,13 @@
   },
   "hero": {
     "monk": "僧侣",
-    "barbarian": "狂战士"
+    "barbarian": "狂战士",
+    "pyromancer": "烈火术士"
   },
   "characters": {
     "monk": "僧侣",
-    "barbarian": "狂战士"
+    "barbarian": "狂战士",
+    "pyromancer": "烈火术士"
   },
   "selection": {
     "title": "选择你的英雄",
@@ -430,6 +457,83 @@
         "gainPurify": "获得1个净化标记"
       }
     },
+    "fireball": {
+      "name": "火球",
+      "description": "造成4/6/8伤害，获得1火焰精通",
+      "effects": {
+        "damage4": "造成4点伤害",
+        "damage6": "造成6点伤害",
+        "damage8": "造成8点伤害",
+        "gainFM1": "获得1层火焰精通"
+      }
+    },
+    "soul-burn": {
+      "name": "灵魂燃烧",
+      "description": "获得2x[火魂]层火焰精通，并对所有对手造成1x[火魂]点伤害",
+      "effects": {
+        "main": "获得等同于“火魂”骰面数量两倍的火焰精通，并对所有对手造成等量(1x火魂)的不可防御伤害。"
+      }
+    },
+    "fiery-combo": {
+      "name": "火热连击",
+      "description": "获得2层火焰精通，造成5伤害，每有1层火焰精通+1伤害。",
+      "effects": {
+        "gainFM2": "获得2层火焰精通",
+        "main": "造成5点基础伤害。若拥有火焰精通，每层火焰精通额外造成1点伤害。"
+      }
+    },
+    "meteor": {
+      "name": "陨石",
+      "description": "造成眩晕，获得2个火焰精通。然后每有1个火焰精通造成1不可防御伤害。另外对所有对手造成2伤害。",
+      "effects": {
+        "inflictStun": "造成眩晕",
+        "gainFM2": "获得2火焰精通",
+        "unblockable": "每拥有1个火焰精通造成1点不可防御伤害",
+        "collateral": "另外对所有对手造成2点伤害"
+      }
+    },
+    "pyro-blast": {
+      "name": "高温爆破",
+      "description": "造成6伤害并掷骰1颗：[火]+3伤害，[熔岩]施加燃烧，[火魂]+2精通，[陨石]施加击倒。",
+      "effects": {
+        "damage6": "造成6点伤害",
+        "bonusRoll": "投掷1颗骰子：\n- 火：额外造成3点伤害\n- 熔岩：造成燃烧\n- 火魂：获得2火焰精通\n- 陨石：造成击倒"
+      }
+    },
+    "burn-down": {
+      "name": "烧毁",
+      "description": "获得1火焰精通。激活烧毁：移除最多4个火焰精通，每移除1个造成3点不可防御伤害。",
+      "effects": {
+        "gainFM1": "获得1火焰精通",
+        "main": "激活烧毁：移除最多4火焰精通。每移除1个造成3点不可防御伤害"
+      }
+    },
+    "ignite": {
+      "name": "点燃",
+      "description": "获得2层火焰精通，然后造成4伤害，每一层火焰精通伤害+2。",
+      "effects": {
+        "gainFM2": "获得2层火焰精通",
+        "main": "造成4点基础伤害。若拥有火焰精通，每层火焰精通额外造成2点伤害。"
+      }
+    },
+    "magma-armor": {
+      "name": "熔岩护甲",
+      "description": "防御阶段：1x[火]造成1伤害，1x[火魂]获得1精通",
+      "effects": {
+        "main": "防御技能：每掷出1个“火”，对攻击者反向造成1点不可防御伤害。每掷出1个“火魂”，获得1层火焰精通。"
+      }
+    },
+    "ultimate-inferno": {
+      "name": "炼狱灼烧",
+      "description": "造成击倒和燃烧，获得3火焰精通，造成12点伤害。另外其他所有对手造成2点伤害。",
+      "effects": {
+        "inflictKnockdown": "施加1个击倒标记",
+        "inflictBurn": "施加1个燃烧标记",
+        "gainFM3": "获得3层火焰精通",
+        "damage12": "造成12点伤害",
+        "collateral": "对所有对手造成2点附带伤害"
+      }
+    },
     "harmony": {
       "name": "天人合一",
       "description": "顺应天地，攻守兼备",
@@ -492,10 +596,10 @@
     },
     "taiji-combo-2": {
       "name": "太极连环掌 II",
-      "description": "造戒5伤害并投掷2骰，根据骰面触发效果",
+      "description": "造成5伤害并投掷2骰，根据骰面触发效果",
       "effects": {
         "rollDie": "投掷2骰",
-        "damage5": "造戒5点伤害"
+        "damage5": "造成5点伤害"
       }
     },
     "thunder-strike": {
@@ -525,9 +629,9 @@
     },
     "calm-water-2": {
       "name": "心如止水 II",
-      "description": "大顺子触发：造戒9伤害，获得3气+闪避",
+      "description": "大顺子触发：造成9伤害，获得3气+闪避",
       "effects": {
-        "damage9": "造戒9点伤害",
+        "damage9": "造成9点伤害",
         "gainTaiji3": "然后获得3个太极标记",
         "gainEvasive": "获得1个闪避标记"
       }
@@ -568,7 +672,7 @@
       }
     },
     "powerful-strike": {
-      "name": "强力一击",
+      "name": "神力重击",
       "description": "小顺子触发：造成9点伤害",
       "effects": {
         "damage9": "造成9点伤害"
@@ -717,6 +821,122 @@
       "effects": {
         "inflictConcussion": "施加1个脑震荡标记",
         "damage2Unblockable": "造成2点不可防御伤害"
+      }
+    },
+    "fireball-2": {
+      "name": "火球 II",
+      "description": "造成4/6/8伤害，获得2火焰精通"
+    },
+    "fireball-2-3": {
+      "effects": {
+        "damage4": "造成4点伤害"
+      }
+    },
+    "fireball-2-4": {
+      "effects": {
+        "damage6": "造成6点伤害"
+      }
+    },
+    "fireball-2-5": {
+      "effects": {
+        "damage8": "造成8点伤害"
+      }
+    },
+    "soul-burn-2": {
+      "name": "燃烧之灵 II",
+      "description": "2x[火魂]: 施加1燃烧。3x[火魂]: 上限+1，造成2x[火魂]不可防御伤害。",
+      "effects": {
+        "inflictBurn": "施加1个燃烧标记"
+      }
+    },
+    "soul-burn-3": {
+      "effects": {
+        "increaseLimit": "火焰精通堆叠上限增加1",
+        "main": "获得等同于“火魂”骰面数量两倍的火焰精通，并对所有对手造成等量(1x火魂)的不可防御伤害。"
+      }
+    },
+    "soul-burn-4": {
+      "name": "燃烧之灵 (4x火魂)",
+      "effects": {
+        "main": "火焰精通的堆叠上限提升1。然后获得5火焰精通。",
+        "knockdown": "施加1个击倒标记"
+      }
+    },
+    "fiery-combo-2": {
+      "name": "炽热波纹 II",
+      "description": "小顺子: 获得2精通，造成5+X伤害。2火+2熔岩: 获得2精通，施加燃烧，造成6伤害。",
+      "effects": {
+        "gainFM2": "获得2层火焰精通",
+        "main": "造成5点基础伤害。若拥有火焰精通，每层火焰精通额外造成1点伤害。"
+      }
+    },
+    "incinerate": {
+      "effects": {
+        "gainFM2": "获得2层火焰精通",
+        "inflictBurn": "施加1个燃烧标记",
+        "damage6": "造成6点伤害"
+      }
+    },
+    "meteor-2": {
+      "name": "流星火雨 II",
+      "description": "3x[陨石]: 击倒，燃烧，眩晕。4x[陨石]: 获得2精通，眩晕，X不可防御伤害，3附带伤害。",
+      "effects": {
+        "gainFM2": "获得2火焰精通",
+        "inflictStun": "施加1个眩晕标记",
+        "unblockable": "每拥有1个火焰精通造成1点不可防御伤害",
+        "collateral": "对所有对手造成3点附带伤害"
+      }
+    },
+    "meteor-shower": {
+      "effects": {
+        "inflictKnockdown": "施加1个击倒标记",
+        "inflictBurn": "施加1个燃烧标记",
+        "inflictStun": "施加1个眩晕标记"
+      }
+    },
+    "pyro-blast-2": {
+      "name": "炎爆术 II",
+      "description": "造成6伤害并掷2骰：[火]+3伤害，[熔岩]燃烧，[火魂]+2精通，[陨石]击倒。",
+      "effects": {
+        "damage6": "造成6点伤害",
+        "bonusRoll": "投掷2颗骰子：\n- 火：额外造成3点伤害\n- 熔岩：造成燃烧\n- 火魂：获得2火焰精通\n- 陨石：造成击倒"
+      }
+    },
+    "pyro-blast-3": {
+      "name": "炎爆术 III",
+      "description": "造成6伤害并掷2骰（可重掷1个）：[火]+3伤害，[熔岩]燃烧，[火魂]+2精通，[陨石]击倒。",
+      "effects": {
+        "bonusRoll": "投掷2颗骰子（可选重掷1个）：\n- 火：额外造成3点伤害\n- 熔岩：造成燃烧\n- 火魂：获得2火焰精通\n- 陨石：造成击倒"
+      }
+    },
+    "burn-down-2": {
+      "name": "燃烧殆尽 II",
+      "description": "获得1精通。激活烧毁：每移除1精通造成3不可防御伤害。",
+      "effects": {
+        "main": "激活烧毁：移除任意数量火焰精通。每移除1个造成3点不可防御伤害"
+      }
+    },
+    "ignite-2": {
+      "name": "引燃 II",
+      "description": "获得2精通，施加燃烧，造成5+2x精通伤害。",
+      "effects": {
+        "gainFM2": "获得2层火焰精通",
+        "inflictBurn": "施加1个燃烧标记",
+        "main": "造成5点基础伤害。若拥有火焰精通，每层火焰精通额外造成2点伤害。"
+      }
+    },
+    "magma-armor-2": {
+      "name": "熔火铠甲 II",
+      "description": "防御：1x[火]造成1不可防御伤害，1x[火魂]获得1精通",
+      "effects": {
+        "main": "防御技能 (5骰)：每掷出1个“火”，获得1火焰精通并造成1伤害。如果有火+火魂，施加燃烧。"
+      }
+    },
+    "magma-armor-3": {
+      "name": "熔火铠甲 III",
+      "description": "防御：1x[火]造成2不可防御伤害，1x[火魂]获得1精通",
+      "effects": {
+        "main": "防御技能 (5骰)：每掷出1个“火”获得1精通并造成1伤害。每掷出1个“火魂”获得1精通并造成1伤害。如果有火+火魂，施加燃烧。"
       }
     }
   },
@@ -872,6 +1092,70 @@
     "card-transfer-status": {
       "name": "乾坤大挪移！",
       "description": "将1名玩家身上的1个状态效果转移至另1名玩家。"
+    },
+    "card-flame-barrier": {
+      "name": "火焰护盾",
+      "description": "立即获得2层火焰精通。"
+    },
+    "card-turning-up-the-heat": {
+      "name": "急剧升温！",
+      "description": "获得1火焰精通。然后你可以花费任意数量的CP，每花费1CP获得1火焰精通。"
+    },
+    "card-infernal-embrace": {
+      "name": "炼狱拥怀！",
+      "description": "投掷1骰：\n陨石: 获得火焰精通至上限\n否则: 抽取1张牌"
+    },
+    "card-fan-the-flames": {
+      "name": "火焰张天！",
+      "description": "你的火焰精通堆叠上限+1。获得2火焰精通。"
+    },
+    "card-red-hot": {
+      "name": "红热！",
+      "description": "本回合中，每拥有1个火焰精通，你的伤害+1。"
+    },
+    "card-get-fired-up": {
+      "name": "火之高兴！",
+      "description": "投掷1骰：\n火：伤害+3\n熔岩：施加燃烧\n火魂：获得2火焰精通\n陨石：施加击倒"
+    },
+    "card-magma-armor-2": {
+      "name": "熔火铠甲 II",
+      "description": "升级熔岩护甲至 II 级。"
+    },
+    "card-magma-armor-3": {
+      "name": "熔火铠甲 III",
+      "description": "升级熔岩护甲至 III 级。"
+    },
+    "card-fireball-2": {
+      "name": "火球术 II",
+      "description": "升级火球至 II 级。"
+    },
+    "card-burning-soul-2": {
+      "name": "燃烧之灵 II",
+      "description": "升级灵魂燃烧至 II 级。包含4x火魂的超级变体。"
+    },
+    "card-hot-streak-2": {
+      "name": "炽热波纹 II",
+      "description": "升级火热连击至 II 级。"
+    },
+    "card-meteor-2": {
+      "name": "流星火雨 II",
+      "description": "升级陨石至 II 级。"
+    },
+    "card-pyro-blast-2": {
+      "name": "炎爆术 II",
+      "description": "升级高温爆破至 II 级。"
+    },
+    "card-pyro-blast-3": {
+      "name": "炎爆术 III",
+      "description": "升级高温爆破至 III 级。"
+    },
+    "card-burn-down-2": {
+      "name": "燃烧殆尽 II",
+      "description": "升级烧毁至 II 级。"
+    },
+    "card-ignite-2": {
+      "name": "引燃 II",
+      "description": "升级点燃至 II 级。"
     }
   },
   "cardSpotlight": {

@@ -64,9 +64,16 @@
       "abilities": "Highlighted abilities are available to use. Pick one to begin attack resolution.",
       "hand": "Your hand lives here. In Main phases you can play action cards or upgrades, or sell cards for CP.",
       "discard": "This is the discard pile. Drag a card here to sell it for +1 CP.",
-      "statusTokens": "Status effects and tokens live here. Spend Evasive/Taiji/Purify at the right time; pay 2 CP before offense to remove Stun.",
+      "statusTokens": "Status effects and tokens live here. Spend Evasive/Taiji/Purify at the right time; pay 2 CP before offense to remove Knockdown.",
       "advance": "Use the “Next Phase” button to enter the roll phase before you start rolling.",
       "resolveAttack": "After choosing an offensive ability, click “Resolve Attack” to apply damage and open defense if needed.",
+      "taijiResponse": "You now have 1 Taiji. Use it to reduce incoming damage.",
+      "evasiveResponse": "You now have 1 Evasive. Use it to attempt a full evade.",
+      "purifySetup": "We applied Knockdown and granted you 1 Purify token.",
+      "purifyUse": "Use Purify to remove Knockdown.",
+      "innerPeace": "You received Inner Peace. Play it to gain 2 Chi.",
+      "playSix": "You received Play Six. Use it during offensive roll to set a die to 6.",
+      "meditation2": "You received Meditation II. Drag it onto Meditation to upgrade.",
       "defenseRoll": "In the defense roll phase, the defender rolls once and can select a defensive ability.",
       "defenseEnd": "When defense is complete, the defender clicks “End Defense” to finish damage resolution and move on.",
       "finish": "That’s the 1v1 core flow. Try activating abilities, playing cards, and defeating your opponent!"
@@ -80,6 +87,31 @@
         "If not removed, you must skip the phase and remove this token"
       ],
       "clickToRemove": "Click to spend 2 CP to remove"
+    },
+    "burn": {
+      "name": "Burn",
+      "description": [
+        "During Upkeep, the affected player takes 2 undefendable damage."
+      ]
+    },
+    "stun": {
+      "name": "Stun",
+      "description": [
+        "The affected player skips their next offensive roll phase and main phase.",
+        "Remove this token at the end of that phase."
+      ]
+    },
+    "concussion": {
+      "name": "Concussion",
+      "description": [
+        "At the start of your Income phase, skip that phase and remove this token."
+      ]
+    },
+    "daze": {
+      "name": "Daze",
+      "description": [
+        "After your attack ends, gain an extra attack and remove this token."
+      ]
     }
   },
   "confirmRemoveKnockdown": {
@@ -110,6 +142,12 @@
       "description": [
         "At any time, spend 1 Purify to remove 1 negative status token"
       ]
+    },
+    "fire_mastery": {
+      "name": "Fire Mastery",
+      "description": [
+        "During Upkeep, remove 1 Fire Mastery token (cooldown)."
+      ]
     }
   },
   "purify": {
@@ -131,7 +169,14 @@
     "shieldLabel": "Shield: {{value}}"
   },
   "hero": {
-    "monk": "Monk"
+    "monk": "Monk",
+    "barbarian": "Barbarian",
+    "pyromancer": "Pyromancer"
+  },
+  "characters": {
+    "monk": "Monk",
+    "barbarian": "Barbarian",
+    "pyromancer": "Pyromancer"
   },
   "imageAlt": {
     "deck": "Deck",

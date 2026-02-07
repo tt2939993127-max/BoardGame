@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { HeroState, TurnPhase } from '../types';
 import type { TokenDef } from '../../../systems/TokenSystem';
 import { PhaseIndicator } from './PhaseIndicator';
-import { StatusEffectsContainer, TokensContainer, type StatusIconAtlasConfig } from './statusEffects';
+import { StatusEffectsContainer, TokensContainer, type StatusAtlases } from './statusEffects';
 import { PlayerStats } from './PlayerStats';
 import { DrawDeck } from './DrawDeck';
 import { STATUS_IDS } from '../domain/ids';
@@ -30,7 +30,7 @@ export const LeftSidebar = ({
     currentPhase: TurnPhase;
     viewPlayer: HeroState;
     locale?: string;
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
     selfBuffRef?: RefObject<HTMLDivElement | null>;
     selfHpRef?: RefObject<HTMLDivElement | null>;
     hitStopActive?: boolean;

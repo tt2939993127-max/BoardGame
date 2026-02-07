@@ -25,6 +25,15 @@ interface ModalStackContextValue {
     closeTop: () => void;
     replaceTop: (entry: Omit<ModalEntry, 'id'> & { id?: string }) => string;
     closeAll: (options?: { skipOnClose?: boolean }) => void;
+    /**
+     * 基于「命名空间前缀」关闭弹窗。
+     *
+     * 用途：路由切换时清理某个模块遗留的弹窗（例如大厅 HUD 打开的好友聊天），
+     * 避免「进入大厅自动销毁旧房间」时，全局弹窗残留在新页面。
+     *
+     * 规则：以 `${namespace}_` 作为前缀匹配。namespace 必须是稳定短串（如 `hud`/`game`）。
+     */
+    closeByNamespace: (namespace: string, options?: { skipOnClose?: boolean }) => void;
 }
 
 const ModalStackContext = createContext<ModalStackContextValue | null>(null);
@@ -103,9 +112,20 @@ export const ModalStackProvider = ({ children }: { children: ReactNode }) => {
         setStack([]);
     }, [enqueueOnClose, logModalAction]);
 
+    const closeByNamespace = useCallback((namespace: string, options?: { skipOnClose?: boolean }) => {
+        const prefix = `${namespace}_`;
+        const targets = stackRef.current.filter((item) => item.id.startsWith(prefix));
+        if (targets.length === 0) return;
+        logModalAction('closeByNamespace', { id: prefix }, stackRef.current.length - targets.length);
+        if (!options?.skipOnClose) {
+            enqueueOnClose(targets.map((item) => item.onClose));
+        }
+        setStack((prev) => prev.filter((item) => !item.id.startsWith(prefix)));
+    }, [enqueueOnClose, logModalAction]);
+
     const value = useMemo(
-        () => ({ stack, openModal, closeModal, closeTop, replaceTop, closeAll }),
-        [stack, openModal, closeModal, closeTop, replaceTop, closeAll]
+        () => ({ stack, openModal, closeModal, closeTop, replaceTop, closeAll, closeByNamespace }),
+        [stack, openModal, closeModal, closeTop, replaceTop, closeAll, closeByNamespace]
     );
 
     return <ModalStackContext.Provider value={value}>{children}</ModalStackContext.Provider>;

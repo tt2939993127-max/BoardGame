@@ -1,6 +1,7 @@
 import type { CardPreviewRef } from '../../../systems/CardSystem';
-import { MONK_CARDS } from '../monk/cards';
-import { BARBARIAN_CARDS } from '../barbarian/cards';
+import { MONK_CARDS } from '../heroes/monk/cards';
+import { BARBARIAN_CARDS } from '../heroes/barbarian/cards';
+import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
 
 /**
  * 所有英雄的卡牌定义
@@ -14,6 +15,7 @@ function initializeCardsMap() {
     const allCards = [
         ...MONK_CARDS,
         ...BARBARIAN_CARDS,
+        ...PYROMANCER_CARDS,
     ];
 
     for (const card of allCards) {

@@ -509,7 +509,7 @@ export const HandArea = ({
 
                         return (
                             <motion.div
-                                key={`${card.id}-${returnVersion}`}
+                                key={`${card.id}-${i}-${returnVersion}`}
                                 data-card-id={card.id}
                                 drag={canDrag}
                                 dragElastic={0.1}

@@ -632,6 +632,7 @@ interface LobbyMatch {
     matchID: string;
     gameName: string;
     players: Array<{ id: number; name?: string; isConnected?: boolean }>;
+    totalSeats?: number;
     createdAt?: number;
     updatedAt?: number;
     roomName?: string;
@@ -681,7 +682,8 @@ const buildLobbyMatch = (
     gameName: SupportedGame, // 强制传入游戏名，确保准确性
     metadata: { gameName?: string; players?: Record<string, PlayerMetadata>; createdAt?: number; updatedAt?: number; setupData?: unknown },
     roomName?: string,
-    setupDataFromState?: { ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string }
+    setupDataFromState?: { ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string },
+    totalSeats?: number
 ): LobbyMatch => {
     const playersObj = metadata.players || {};
     const playersArray = Object.entries(playersObj).map(([id, data]) => ({
@@ -689,6 +691,7 @@ const buildLobbyMatch = (
         name: data?.name,
         isConnected: data?.isConnected,
     }));
+    const normalizedTotalSeats = typeof totalSeats === 'number' && totalSeats > 0 ? totalSeats : undefined;
     const setupDataFromMeta = (metadata.setupData as { ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string } | undefined) || undefined;
     const ownerKey = setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey;
     const ownerType = setupDataFromMeta?.ownerType ?? setupDataFromState?.ownerType;
@@ -698,6 +701,7 @@ const buildLobbyMatch = (
         matchID,
         gameName, // 使用传入的 gameName，而非 metadata.gameName（可能不准确）
         players: playersArray,
+        totalSeats: normalizedTotalSeats,
         createdAt: metadata.createdAt,
         updatedAt: metadata.updatedAt,
         roomName,
@@ -723,9 +727,9 @@ const fetchLobbyMatch = async (matchID: string): Promise<LobbyMatch | null> => {
                 console.error(`[LobbyIO] 房间 ${matchID} 游戏名无效: ${match.metadata.gameName}`);
                 return null;
             }
-            return buildLobbyMatch(matchID, fallbackGameName, match.metadata, roomName, setupData);
+            return buildLobbyMatch(matchID, fallbackGameName, match.metadata, roomName, setupData, match.state?.ctx?.numPlayers);
         }
-        return buildLobbyMatch(matchID, gameName, match.metadata, roomName, setupData);
+        return buildLobbyMatch(matchID, gameName, match.metadata, roomName, setupData, match.state?.ctx?.numPlayers);
     } catch (error) {
         console.error(`[LobbyIO] 获取房间 ${matchID} 失败:`, error);
         return null;
@@ -744,7 +748,7 @@ const fetchMatchesByGame = async (gameName: SupportedGame): Promise<LobbyMatch[]
             // 从游戏状态 G.__setupData 中读取房间名与 owner 信息
             const setupData = match.state?.G?.__setupData as { roomName?: string; ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string } | undefined;
             const roomName = setupData?.roomName;
-            results.push(buildLobbyMatch(matchID, gameName, match.metadata, roomName, setupData));
+            results.push(buildLobbyMatch(matchID, gameName, match.metadata, roomName, setupData, match.state?.ctx?.numPlayers));
         }
         return results;
     } catch (error) {

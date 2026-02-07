@@ -24,14 +24,15 @@ import { useEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
 import type { DamageDealtEvent, HeroState } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
-import type { StatusIconAtlasConfig } from '../ui/statusEffects';
-import { STATUS_EFFECT_META, TOKEN_META, getStatusEffectIconNode } from '../ui/statusEffects';
+import type { StatusAtlases } from '../ui/statusEffects';
+import { getStatusEffectIconNode } from '../ui/statusEffects';
+import { STATUS_EFFECT_META, TOKEN_META } from '../domain/statusEffects';
 import { getElementCenter } from '../../../components/common/animations/FlyingEffect';
-import { 
-    getSlashPresetByDamage, 
+import {
+    getSlashPresetByDamage,
     getHitStopPresetByDamage,
     type SlashConfig,
-    type HitStopConfig 
+    type HitStopConfig
 } from '../../../components/common/animations';
 import { RESOURCE_IDS } from '../domain/resources';
 
@@ -59,11 +60,13 @@ export interface AnimationEffectsConfig {
     getEffectStartPos: (targetId?: string) => { x: number; y: number };
     /** 推送飞行效果的函数 */
     pushFlyingEffect: (effect: {
-        type: 'damage' | 'buff';
+        type: 'damage' | 'buff' | 'heal';
         content: string | React.ReactNode;
         startPos: { x: number; y: number };
         endPos: { x: number; y: number };
         color?: string;
+        /** 效果强度（伤害/治疗量），影响尾迹粒子密度 */
+        intensity?: number;
     }) => void;
     /** 触发对手震动效果的函数（可选） */
     triggerOpponentShake?: () => void;
@@ -76,7 +79,7 @@ export interface AnimationEffectsConfig {
     /** 当前语言 */
     locale?: string;
     /** 状态图标图集配置 */
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
     /** 伤害事件流条目（用于以事件驱动伤害动画，避免重复触发） */
     damageStreamEntry?: EventStreamEntry;
 }
@@ -133,6 +136,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
             pushFlyingEffect({
                 type: 'damage',
                 content: `-${damage}`,
+                intensity: damage,
                 startPos: getEffectStartPos(opponentId),
                 endPos: getElementCenter(refs.opponentHp.current),
             });
@@ -146,6 +150,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
             pushFlyingEffect({
                 type: 'damage',
                 content: `-${damage}`,
+                intensity: damage,
                 startPos: getEffectStartPos(currentPlayerId),
                 endPos: getElementCenter(refs.selfHp.current),
             });
@@ -167,32 +172,45 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
     ]);
 
     /**
-     * 监听对手 HP 变化（伤害动画）
+     * 监听对手 HP 变化（伤害/治疗动画）
      */
     useEffect(() => {
         if (!opponent) return;
-        
+
         const currentHealth = opponent.resources?.[RESOURCE_IDS.HP] ?? 0;
         const prevHealth = prevOpponentHealthRef.current;
-        
+
         // 检测 HP 下降（受到伤害）
         if (!damageStreamEntry && prevHealth !== undefined && currentHealth < prevHealth) {
             const damage = prevHealth - currentHealth;
             pushFlyingEffect({
                 type: 'damage',
                 content: `-${damage}`,
+                intensity: damage,
                 startPos: getEffectStartPos(opponentId),
                 endPos: getElementCenter(refs.opponentHp.current),
             });
-            
+
             // 触发震动效果
             triggerOpponentShake?.();
-            
+
             // 触发打击感效果（斜切 + 钝帧）
             triggerSlash?.(getSlashPresetByDamage(damage));
             triggerHitStop?.(getHitStopPresetByDamage(damage));
         }
-        
+
+        // 检测 HP 上升（治疗）
+        if (prevHealth !== undefined && currentHealth > prevHealth) {
+            const heal = currentHealth - prevHealth;
+            pushFlyingEffect({
+                type: 'heal',
+                content: `+${heal}`,
+                intensity: heal,
+                startPos: getEffectStartPos(opponentId),
+                endPos: getElementCenter(refs.opponentHp.current),
+            });
+        }
+
         prevOpponentHealthRef.current = currentHealth;
     }, [
         opponent?.resources,
@@ -208,27 +226,40 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
     ]);
 
     /**
-     * 监听玩家 HP 变化（伤害动画）
+     * 监听玩家 HP 变化（伤害/治疗动画）
      */
     useEffect(() => {
         if (!player?.resources) return;
         const currentHealth = player.resources[RESOURCE_IDS.HP] ?? 0;
         const prevHealth = prevPlayerHealthRef.current;
-        
+
         // 检测 HP 下降（受到伤害）
         if (!damageStreamEntry && prevHealth !== undefined && currentHealth < prevHealth) {
             const damage = prevHealth - currentHealth;
             pushFlyingEffect({
                 type: 'damage',
                 content: `-${damage}`,
+                intensity: damage,
                 startPos: getEffectStartPos(currentPlayerId),
                 endPos: getElementCenter(refs.selfHp.current),
             });
-            
+
             // 触发自己受击效果
             triggerSelfImpact?.(damage);
         }
-        
+
+        // 检测 HP 上升（治疗）
+        if (prevHealth !== undefined && currentHealth > prevHealth) {
+            const heal = currentHealth - prevHealth;
+            pushFlyingEffect({
+                type: 'heal',
+                content: `+${heal}`,
+                intensity: heal,
+                startPos: getEffectStartPos(currentPlayerId),
+                endPos: getElementCenter(refs.selfHp.current),
+            });
+        }
+
         prevPlayerHealthRef.current = currentHealth;
     }, [
         player.resources,
@@ -241,24 +272,24 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
     ]);
 
     /**
-     * 监听对手状态效果变化（增益/减益动画）
+     * 监听对手状态效果变化（增益/减益/移除动画）
      */
     useEffect(() => {
         if (!opponent) return;
-        
+
         const prevStatus = prevOpponentStatusRef.current;
-        
-        // 检查每个状态效果的层数变化
-        Object.entries(opponent.statusEffects || {}).forEach(([effectId, stacks]) => {
+        const currentStatus = opponent.statusEffects || {};
+
+        // 检查每个状态效果的层数变化（增加）
+        Object.entries(currentStatus).forEach(([effectId, stacks]) => {
             const prevStacks = prevStatus[effectId] ?? 0;
-            
-            // 检测状态增加
+
             if (stacks > prevStacks) {
-                const info = STATUS_EFFECT_META[effectId] || { 
-                    icon: '✨', 
-                    color: 'from-slate-500 to-slate-600' 
+                const info = STATUS_EFFECT_META[effectId] || {
+                    icon: '✨',
+                    color: 'from-slate-500 to-slate-600'
                 };
-                
+
                 pushFlyingEffect({
                     type: 'buff',
                     content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
@@ -268,27 +299,46 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 });
             }
         });
-        
-        prevOpponentStatusRef.current = { ...opponent.statusEffects };
+
+        // 检查状态效果移除（层数减少或消失）
+        Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
+            const currentStacks = currentStatus[effectId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = STATUS_EFFECT_META[effectId] || {
+                    icon: '✨',
+                    color: 'from-slate-500 to-slate-600'
+                };
+                // 状态移除：从状态栏飞出并消散（使用 damage 类型的红色样式表示移除）
+                pushFlyingEffect({
+                    type: 'buff',
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.opponentBuff.current),
+                    endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
+                });
+            }
+        });
+
+        prevOpponentStatusRef.current = { ...currentStatus };
     }, [opponent?.statusEffects, opponent, pushFlyingEffect, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff]);
 
     /**
-     * 监听玩家状态效果变化（增益/减益动画）
+     * 监听玩家状态效果变化（增益/减益/移除动画）
      */
     useEffect(() => {
         const prevStatus = prevPlayerStatusRef.current;
-        
-        // 检查每个状态效果的层数变化
-        Object.entries(player.statusEffects || {}).forEach(([effectId, stacks]) => {
+        const currentStatus = player.statusEffects || {};
+
+        // 检查每个状态效果的层数变化（增加）
+        Object.entries(currentStatus).forEach(([effectId, stacks]) => {
             const prevStacks = prevStatus[effectId] ?? 0;
-            
-            // 检测状态增加
+
             if (stacks > prevStacks) {
-                const info = STATUS_EFFECT_META[effectId] || { 
-                    icon: '✨', 
-                    color: 'from-slate-500 to-slate-600' 
+                const info = STATUS_EFFECT_META[effectId] || {
+                    icon: '✨',
+                    color: 'from-slate-500 to-slate-600'
                 };
-                
+
                 pushFlyingEffect({
                     type: 'buff',
                     content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
@@ -298,19 +348,39 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 });
             }
         });
-        
-        prevPlayerStatusRef.current = { ...player.statusEffects };
+
+        // 检查状态效果移除（层数减少或消失）
+        Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
+            const currentStacks = currentStatus[effectId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = STATUS_EFFECT_META[effectId] || {
+                    icon: '✨',
+                    color: 'from-slate-500 to-slate-600'
+                };
+                pushFlyingEffect({
+                    type: 'buff',
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.selfBuff.current),
+                    endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
+                });
+            }
+        });
+
+        prevPlayerStatusRef.current = { ...currentStatus };
     }, [player.statusEffects, pushFlyingEffect, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff]);
 
     /**
-     * 监听对手 Token 变化（增益动画）
+     * 监听对手 Token 变化（获得/消耗动画）
      */
     useEffect(() => {
         if (!opponent) return;
 
         const prevTokens = prevOpponentTokensRef.current;
+        const currentTokens = opponent.tokens || {};
 
-        Object.entries(opponent.tokens || {}).forEach(([tokenId, stacks]) => {
+        // Token 获得
+        Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
             const prevStacks = prevTokens[tokenId] ?? 0;
             if (stacks > prevStacks) {
                 const info = TOKEN_META[tokenId] || {
@@ -328,16 +398,36 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
             }
         });
 
-        prevOpponentTokensRef.current = { ...opponent.tokens };
+        // Token 消耗
+        Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
+            const currentStacks = currentTokens[tokenId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = TOKEN_META[tokenId] || {
+                    icon: '✨',
+                    color: 'from-slate-500 to-slate-600'
+                };
+                pushFlyingEffect({
+                    type: 'buff',
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.opponentBuff.current),
+                    endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
+                });
+            }
+        });
+
+        prevOpponentTokensRef.current = { ...currentTokens };
     }, [opponent?.tokens, opponent, pushFlyingEffect, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff]);
 
     /**
-     * 监听玩家 Token 变化（增益动画）
+     * 监听玩家 Token 变化（获得/消耗动画）
      */
     useEffect(() => {
         const prevTokens = prevPlayerTokensRef.current;
+        const currentTokens = player.tokens || {};
 
-        Object.entries(player.tokens || {}).forEach(([tokenId, stacks]) => {
+        // Token 获得
+        Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
             const prevStacks = prevTokens[tokenId] ?? 0;
             if (stacks > prevStacks) {
                 const info = TOKEN_META[tokenId] || {
@@ -355,6 +445,24 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
             }
         });
 
-        prevPlayerTokensRef.current = { ...player.tokens };
+        // Token 消耗
+        Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
+            const currentStacks = currentTokens[tokenId] ?? 0;
+            if (prevStacks > 0 && currentStacks < prevStacks) {
+                const info = TOKEN_META[tokenId] || {
+                    icon: '✨',
+                    color: 'from-slate-500 to-slate-600'
+                };
+                pushFlyingEffect({
+                    type: 'buff',
+                    content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
+                    color: 'from-slate-400 to-slate-600',
+                    startPos: getElementCenter(refs.selfBuff.current),
+                    endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
+                });
+            }
+        });
+
+        prevPlayerTokensRef.current = { ...currentTokens };
     }, [player.tokens, pushFlyingEffect, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff]);
 }

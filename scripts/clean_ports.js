@@ -1,10 +1,16 @@
+import 'dotenv/config';
 import { execSync } from 'node:child_process';
 
 const defaultPorts = [5173, 18000, 18001];
 const envPorts = process.env.CLEAN_PORTS
     ? process.env.CLEAN_PORTS.split(',').map((value) => Number(value.trim()))
     : [];
-const ports = Array.from(new Set([...envPorts, ...defaultPorts])).filter((port) => Number.isFinite(port));
+const configPorts = [
+    process.env.VITE_DEV_PORT,
+    process.env.GAME_SERVER_PORT,
+    process.env.API_SERVER_PORT,
+].map((value) => Number(value));
+const ports = Array.from(new Set([...envPorts, ...configPorts, ...defaultPorts])).filter((port) => Number.isFinite(port));
 
 function killPids(pids, label) {
     for (const pid of pids) {

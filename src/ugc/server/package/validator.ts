@@ -55,6 +55,8 @@ export interface PackageManifest {
     files: string[];
     /** 资产列表 */
     assets?: string[];
+    /** 命令类型枚举（可选） */
+    commandTypes?: string[];
 }
 
 // ============================================================================
@@ -66,9 +68,6 @@ const VIEW_REQUIRED_FILES = ['index.html', 'main.js'];
 
 /** 规则包必需文件 */
 const RULES_REQUIRED_FILES = ['domain.js'];
-
-/** 完整包必需文件 */
-const FULL_REQUIRED_FILES = [...VIEW_REQUIRED_FILES, ...RULES_REQUIRED_FILES];
 
 /** 禁止的文件模式 */
 const FORBIDDEN_PATTERNS = [
@@ -199,6 +198,17 @@ export class PackageValidator {
             // 验证文件列表
             if (!manifest.files || !Array.isArray(manifest.files)) {
                 errors.push('manifest.json 缺少 files 数组');
+            }
+
+            if (manifest.commandTypes !== undefined) {
+                if (!Array.isArray(manifest.commandTypes)) {
+                    errors.push('manifest.json commandTypes 必须是字符串数组');
+                } else {
+                    const invalid = manifest.commandTypes.some((item) => typeof item !== 'string' || !item.trim());
+                    if (invalid) {
+                        errors.push('manifest.json commandTypes 必须是非空字符串数组');
+                    }
+                }
             }
 
             return {

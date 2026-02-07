@@ -8,6 +8,7 @@ import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 const selectionTitlePattern = /选择你的英雄|Choose your hero/i;
 const monkNamePattern = /僧侣|Monk/i;
 const barbarianNamePattern = /狂战士|Barbarian/i;
+const pyromancerNamePattern = /炎术士|Pyromancer/i;
 const startButtonPattern = /开始游戏|Press Start|等待全员就绪|Waiting/i;
 const readyButtonPattern = /准备|Ready/i;
 const closePreviewPattern = /关闭预览|Close Preview/i;
@@ -112,46 +113,62 @@ const joinGuest = async (page: Page): Promise<{ guestContext: BrowserContext; gu
 test.describe('角色选择系统', () => {
     test('应该显示角色选择界面', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 验证角色选择界面是否显示
         await expect(page.getByText(selectionTitlePattern)).toBeVisible();
-        
-        // 验证角色列表是否显示
+
+        // 验证角色列表是否显示（包括 Pyromancer）
         await expect(page.locator('[data-char-id="monk"]')).toBeVisible();
         await expect(page.locator('[data-char-id="barbarian"]')).toBeVisible();
+        await expect(page.locator('[data-char-id="pyromancer"]')).toBeVisible();
+    });
+
+    test('应该能够选择 Pyromancer 角色', async ({ page }) => {
+        await prepareHostSelection(page);
+
+        // 点击选择炎术士
+        await page.click('[data-char-id="pyromancer"]');
+        await page.waitForTimeout(500);
+
+        // 验证角色被选中（应该有高亮边框）
+        const pyromancerCard = page.locator('[data-char-id="pyromancer"]');
+        await expect(pyromancerCard).toHaveClass(/border-amber-400/);
+
+        // 验证当前玩家标记已显示
+        await expect(pyromancerCard).toContainText(/P1/i);
     });
 
     test('应该能够选择角色', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 点击选择僧侣
         await page.click('[data-char-id="monk"]');
         await page.waitForTimeout(500);
-        
+
         // 验证角色被选中（应该有高亮边框）
         const monkCard = page.locator('[data-char-id="monk"]');
         await expect(monkCard).toHaveClass(/border-amber-400/);
-        
+
         // 验证当前玩家标记已显示
         await expect(monkCard).toContainText(/P1/i);
     });
 
     test('应该能够切换角色', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 先选择僧侣
         await page.click('[data-char-id="monk"]');
         await page.waitForTimeout(500);
         await expect(page.locator('[data-char-id="monk"]')).toHaveClass(/border-amber-400/);
-        
+
         // 切换到野蛮人
         await page.click('[data-char-id="barbarian"]');
         await page.waitForTimeout(500);
-        
+
         // 验证野蛮人被选中，僧侣取消选中
         await expect(page.locator('[data-char-id="barbarian"]')).toHaveClass(/border-amber-400/);
         await expect(page.locator('[data-char-id="monk"]')).not.toHaveClass(/border-amber-400/);
-        
+
         // 验证玩家标记移动到新角色
         await expect(page.locator('[data-char-id="barbarian"]')).toContainText(/P1/i);
         await expect(page.locator('[data-char-id="monk"]')).not.toContainText(/P1/i);
@@ -175,40 +192,40 @@ test.describe('角色选择系统', () => {
 
     test('应该显示角色预览', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 选择僧侣
         await page.click('[data-char-id="monk"]');
         await page.waitForTimeout(1000);
-        
+
         // 验证预览区域显示玩家面板和提示板
         const playerBoard = page.getByAltText(playerBoardAltPattern);
         const tipBoard = page.getByAltText(tipBoardAltPattern);
-        
+
         await expect(playerBoard).toBeVisible();
         await expect(tipBoard).toBeVisible();
     });
 
     test('应该能够放大预览角色面板', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 选择僧侣
         await page.click('[data-char-id="monk"]');
         await page.waitForTimeout(1000);
-        
+
         // 点击玩家面板放大
         await page.getByAltText(playerBoardAltPattern).click();
         await page.waitForTimeout(500);
-        
+
         // 验证放大预览弹窗显示
         const closeButton = page.getByRole('button', { name: closePreviewPattern }).first();
         const overlay = page.locator('.fixed.inset-0.z-\\[9999\\]');
         await expect(closeButton).toBeVisible();
         await expect(overlay).toBeVisible();
-        
+
         // 关闭预览
         await overlay.click({ position: { x: 5, y: 5 } });
         await page.waitForTimeout(500);
-        
+
         // 验证预览弹窗关闭
         await expect(overlay).not.toBeVisible();
     });
@@ -241,7 +258,7 @@ test.describe('角色选择系统', () => {
 
     test('应该正确显示角色名称（i18n）', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 验证中文角色名称显示
         await expect(page.getByText(monkNamePattern).first()).toBeVisible();
         await expect(page.getByText(barbarianNamePattern).first()).toBeVisible();
@@ -249,18 +266,18 @@ test.describe('角色选择系统', () => {
 
     test('未选择角色时应该显示"未选择"', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 验证未选择状态显示
         await expect(page.getByText(notSelectedPattern)).toHaveCount(2);
     });
 
     test('应该显示背景动画效果', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 验证背景层存在
         const background = page.locator('.bg-\\[\\#0F0F23\\]').first();
         await expect(background).toBeVisible();
-        
+
         // 验证动画效果存在
         const animatedBg = page.locator('.animate-pulse');
         await expect(animatedBg).toBeVisible();
@@ -268,7 +285,7 @@ test.describe('角色选择系统', () => {
 
     test('角色卡片应该有 hover 效果', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 悬停在僧侣卡片上
         const monkCard = page.locator('[data-char-id="monk"]');
         await monkCard.hover();
@@ -283,7 +300,7 @@ test.describe('角色选择系统', () => {
             // 使用 Tab 键导航
             await page.keyboard.press('Tab');
             await page.waitForTimeout(200);
-            
+
             // 验证焦点移动（通过检查元素是否可见）
             const monkCard = page.locator('[data-char-id="monk"]');
             await expect(monkCard).toBeVisible();
@@ -328,7 +345,7 @@ test.describe('角色选择错误处理', () => {
     test('网络错误时应该有提示', async ({ page }) => {
         // 模拟网络离线
         await page.context().setOffline(true);
-        
+
         // 尝试创建房间
         let navigationError: Error | null = null;
         try {
@@ -348,12 +365,12 @@ test.describe('角色选择错误处理', () => {
 
     test('快速点击不应该导致重复选择', async ({ page }) => {
         await prepareHostSelection(page);
-        
+
         // 快速点击多次
         const monkCard = page.locator('[data-char-id="monk"]');
         await monkCard.click({ clickCount: 3 });
         await page.waitForTimeout(500);
-        
+
         // 验证只选择了一次
         await expect(monkCard).toHaveClass(/border-amber-400/);
     });
@@ -365,10 +382,10 @@ test.describe('角色选择性能', () => {
 
         await prepareHostSelection(page);
         await page.waitForSelector('[data-char-id="monk"]');
-        
+
         const endTime = Date.now();
         const renderTime = endTime - startTime;
-        
+
         // 验证渲染时间在合理范围内（< 8秒，含在线房间创建）
         expect(renderTime).toBeLessThan(8000);
     });
@@ -377,17 +394,17 @@ test.describe('角色选择性能', () => {
         await prepareHostSelection(page);
 
         const startTime = Date.now();
-        
+
         // 快速切换角色
         await page.click('[data-char-id="monk"]');
         await page.waitForTimeout(100);
         await page.click('[data-char-id="barbarian"]');
         await page.waitForTimeout(100);
         await page.click('[data-char-id="monk"]');
-        
+
         const endTime = Date.now();
         const switchTime = endTime - startTime;
-        
+
         // 验证切换时间在合理范围内（< 1秒）
         expect(switchTime).toBeLessThan(1000);
     });

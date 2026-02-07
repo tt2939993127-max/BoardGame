@@ -5,12 +5,27 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
 
 const dismissViteOverlay = async (page: Page) => {
     await page.evaluate(() => {
         const overlay = document.querySelector('vite-error-overlay');
         if (overlay) overlay.remove();
     });
+};
+
+const DRAFT_STORAGE_KEY = 'ugc-builder-state';
+const DRAFT_FIXTURE = JSON.parse(
+    fs.readFileSync(new URL('../docs/ugc/doudizhu-preview.ugc.json', import.meta.url), 'utf-8')
+);
+
+const seedDraftState = async (page: Page) => {
+    await page.evaluate(([key, payload]) => {
+        localStorage.setItem(key, JSON.stringify(payload));
+    }, [DRAFT_STORAGE_KEY, DRAFT_FIXTURE]);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await dismissViteOverlay(page);
 };
 
 const gotoUGC = async (page: Page) => {
@@ -336,10 +351,12 @@ test.describe('UGC Builder', () => {
 
             await page.getByRole('button', { name: '草稿' }).click();
             await expect(page.getByText('可加载草稿')).toBeVisible();
-            await page.getByRole('button', { name: '打开' }).first().click();
+            const projectModal = page.getByRole('heading', { name: '云端草稿' }).locator('..').locator('..');
+            await projectModal.getByRole('button', { name: '打开' }).first().click();
+            await expect(page.getByRole('heading', { name: '云端草稿' })).toBeHidden({ timeout: 15000 });
 
             const nameInput = page.locator('input[placeholder*="游戏名称"]');
-            await expect(nameInput).toHaveValue('已加载游戏');
+            await expect.poll(async () => nameInput.inputValue()).toBe('已加载游戏');
 
             const stored = await page.evaluate(() => localStorage.getItem('ugc-builder-state'));
             expect(stored).toBeTruthy();
@@ -431,55 +448,64 @@ test.describe('UGC Builder', () => {
             await expect(page.getByRole('heading', { name: '数据管理' })).toBeHidden();
 
             await page.getByText('预览').click();
-            await expect(page.locator('iframe[title="UGC Runtime Preview"]')).toBeVisible();
+            await expect(page.getByRole('button', { name: '查看背面' })).toBeVisible();
         });
 
-        test('规则代码可在预览运行时执行', async ({ page }) => {
+        test('草稿预览运行态应正常渲染', async ({ page }, testInfo) => {
             await gotoUGC(page);
-
-            await page.getByText('生成规则').click();
-            await expect(page.getByRole('heading', { name: 'AI 规则生成' })).toBeVisible();
-
-            const domainCode = `const domain = {
-  gameId: 'ugc-preview-demo',
-  setup(playerIds, random) {
-    const players = Object.fromEntries(playerIds.map(id => [id, {
-      resources: {},
-      handCount: 0,
-      deckCount: 0,
-      discardCount: 0,
-      statusEffects: {},
-    }]));
-    return {
-      phase: 'play',
-      activePlayerId: playerIds[0] || 'player-1',
-      turnNumber: 1,
-      players,
-      publicZones: {},
-    };
-  },
-  validate() {
-    return { valid: true };
-  },
-  execute() {
-    return [];
-  },
-  reduce(state) {
-    return state;
-  },
-  isGameOver() {
-    return undefined;
-  },
-};`;
-
-            await pasteText(page, 'textarea[placeholder="粘贴 AI 生成的规则代码"]', domainCode);
-            await page.getByRole('heading', { name: 'AI 规则生成' }).locator('..').locator('button').click();
-            await expect(page.getByRole('heading', { name: 'AI 规则生成' })).toBeHidden();
+            await seedDraftState(page);
 
             await page.getByText('预览').click();
-            const iframe = page.frameLocator('iframe[title="UGC Runtime Preview"]');
-            await expect(iframe.locator('text=UGC_VIEW_ERROR')).toHaveCount(0);
-            await expect(iframe.locator('text=等待运行时数据…')).toHaveCount(0);
+            await expect(page.locator('[data-hand-area="root"]').first()).toBeVisible({ timeout: 15000 });
+
+            const screenshotPath = path.resolve('screenshots', 'ugc-builder-preview.png');
+            fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+        });
+    });
+
+    test.describe('试玩沙盒', () => {
+        test('打开试玩应进入沙盒并加载运行态', async ({ page }) => {
+            await gotoUGC(page);
+            await seedDraftState(page);
+
+            await page.getByRole('button', { name: '打开试玩' }).click();
+            await expect(page).toHaveURL(/\/dev\/ugc\/sandbox/);
+            await expect(page.getByText('UGC 试玩/沙盒')).toBeVisible();
+            await expect(page.getByRole('button', { name: '返回 Builder' })).toBeVisible();
+
+            const iframe = page.frameLocator('iframe[title="UGC Remote Host ugc-builder-sandbox"]');
+            await expect(iframe.locator('[data-hand-area="root"]').first()).toBeVisible({ timeout: 15000 });
+        });
+
+        test('点击卡牌应标记选中状态', async ({ page }) => {
+            await gotoUGC(page);
+            await seedDraftState(page);
+
+            await page.getByRole('button', { name: '打开试玩' }).click();
+            const iframe = page.frameLocator('iframe[title="UGC Remote Host ugc-builder-sandbox"]');
+            const card = iframe.locator('[data-card-id="c1"]').first();
+            await expect(card).toBeVisible({ timeout: 15000 });
+
+            await card.click();
+            await expect(card).toHaveAttribute('data-is-selected', 'true');
+        });
+
+        test('点击选中后出牌按钮应触发命令提示', async ({ page }) => {
+            await gotoUGC(page);
+            await seedDraftState(page);
+
+            await page.getByRole('button', { name: '打开试玩' }).click();
+            const iframe = page.frameLocator('iframe[title="UGC Remote Host ugc-builder-sandbox"]');
+            const card = iframe.locator('[data-card-id="c1"]').first();
+            await expect(card).toBeVisible({ timeout: 15000 });
+            await card.click();
+            await expect(card).toHaveAttribute('data-is-selected', 'true');
+            const actionButton = iframe.getByRole('button', { name: '出牌' }).first();
+            await expect(actionButton).toBeVisible({ timeout: 15000 });
+
+            await actionButton.click();
+            await expect(iframe.getByText(/命令已发送|命令执行成功|命令执行失败/)).toBeVisible({ timeout: 5000 });
         });
     });
 

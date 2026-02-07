@@ -1,5 +1,6 @@
 import { type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AlertTriangle } from 'lucide-react';
 import type { HeroState } from '../types';
 import { RESOURCE_IDS } from '../domain/resources';
 import { ShakeContainer } from '../../../components/common/animations/ShakeContainer';
@@ -9,7 +10,7 @@ import {
     type HitStopConfig,
     type SlashConfig,
 } from '../../../components/common/animations';
-import { StatusEffectsContainer, TokensContainer, type StatusIconAtlasConfig } from './statusEffects';
+import { StatusEffectsContainer, TokensContainer, type StatusAtlases } from './statusEffects';
 import { getPortraitStyle } from './assets';
 
 type ViewMode = 'self' | 'opponent';
@@ -45,18 +46,20 @@ export const OpponentHeader = ({
     headerError?: string | null;
     opponentBuffRef?: RefObject<HTMLDivElement | null>;
     opponentHpRef?: RefObject<HTMLDivElement | null>;
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
     locale?: string;
     /** 对手悬浮窗容器引用（用于卡牌特写动画起点） */
     containerRef?: RefObject<HTMLDivElement | null>;
 }) => {
     const { t } = useTranslation('game-dicethrone');
+    const heroLabel = t(`hero.${opponent.characterId}`, { defaultValue: opponent.characterId });
 
     return (
         <div ref={containerRef} className="absolute top-3 left-0 right-0 z-50 flex flex-col items-center gap-1 pointer-events-none">
             {headerError && (
-                <div className="px-[1.5vw] py-[0.5vw] bg-red-600/90 text-white font-bold text-[0.9vw] rounded-full shadow-2xl border border-red-400/50 backdrop-blur-md animate-in slide-in-from-top-4 pointer-events-auto">
-                    ⚠️ {headerError}
+                <div className="px-[1.5vw] py-[0.5vw] bg-red-600/90 text-white font-bold text-[0.9vw] rounded-full shadow-2xl border border-red-400/50 backdrop-blur-md animate-in slide-in-from-top-4 pointer-events-auto flex items-center gap-[0.4vw]">
+                    <AlertTriangle className="w-[1.1vw] h-[1.1vw]" />
+                    <span>{headerError}</span>
                 </div>
             )}
             <div className="flex justify-center items-center gap-[1vw] pointer-events-auto">
@@ -94,7 +97,7 @@ export const OpponentHeader = ({
                                     <span className={`font-black text-[0.9vw] tracking-wider truncate max-w-[10vw] ${viewMode === 'opponent' ? 'text-amber-400' : 'text-slate-100'}`}>
                                         {opponentName}
                                     </span>
-                                    <span className="px-[0.3vw] py-[0.1vw] bg-amber-500/10 text-amber-500 text-[0.55vw] font-bold uppercase tracking-widest rounded border border-amber-500/20 shadow-sm">{t('hero.monk')}</span>
+                                    <span className="px-[0.3vw] py-[0.1vw] bg-amber-500/10 text-amber-500 text-[0.55vw] font-bold uppercase tracking-widest rounded border border-amber-500/20 shadow-sm">{heroLabel}</span>
 
                                     <div ref={opponentHpRef} className="flex items-center gap-[0.4vw] ml-[0.2vw]">
                                         <div className="flex items-center gap-[0.2vw]">

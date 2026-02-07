@@ -1,0 +1,176 @@
+import React, { useRef, useState, useEffect, useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import type { CardInstance } from '../domain/types';
+import { CardPreview } from '../../../components/common/media/CardPreview';
+import { User, Swords } from 'lucide-react';
+import { getCardDef as lookupCardDef, getMinionDef as lookupMinionDef } from '../data/cards';
+
+// ============================================================================
+// Layout Constants
+// ============================================================================
+const CARD_WIDTH_VW = 8.5; // Reduced from 10 to fit better and look less overwhelming
+const CARD_ASPECT_RATIO = 0.714;
+const HOVER_Y_LIFT_VW = 3;
+const SELECTED_Y_LIFT_VW = 5;
+
+type Props = {
+    hand: CardInstance[];
+    selectedCardUid: string | null;
+    onCardSelect: (card: CardInstance) => void;
+    isDiscardMode?: boolean;
+    discardSelection?: Set<string>;
+    disableInteraction?: boolean;
+};
+
+const HandCard: React.FC<{
+    card: CardInstance;
+    index: number;
+    total: number;
+    isSelected: boolean;
+    isDiscardSelected: boolean;
+    isDiscardMode: boolean;
+    disableInteraction: boolean;
+    onSelect: () => void;
+}> = ({ card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, onSelect }) => {
+    const [isHovered, setIsHovered] = useState(false);
+
+    // Lookup Data
+    const def = lookupCardDef(card.defId);
+    const isMinion = card.type === 'minion';
+    const minionDef = isMinion ? lookupMinionDef(card.defId) : null;
+
+    // "Paper Chaos" - Tiny random rotation
+    const rotationSeed = useMemo(() => {
+        const sum = card.uid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        return (sum % 4) - 2; // -2 to 2 degrees
+    }, [card.uid]);
+
+    // Dynamic Spacing: 
+    // Standard gap: 0.8vw
+    // If crowded (> 7 cards), start overlapping
+    // Max overlap at 10 cards
+    const spacingVw = total <= 7 ? 0.8 : -1 * ((total - 7) * 0.8);
+
+    const zIndex = isSelected || isDiscardSelected ? 100 : (isHovered ? 50 : index);
+
+    return (
+        <motion.div
+            layout
+            layoutId={card.uid}
+            className={`
+                relative flex-shrink-0 origin-bottom 
+                ${disableInteraction ? '' : 'cursor-pointer pointer-events-auto'}
+            `}
+            style={{
+                width: `${CARD_WIDTH_VW}vw`,
+                aspectRatio: `${CARD_ASPECT_RATIO}`,
+                marginLeft: index === 0 ? 0 : `${spacingVw}vw`,
+                zIndex
+            }}
+            initial={{ y: 200, opacity: 0, scale: 0.8 }}
+            animate={{
+                y: isSelected ? `-${SELECTED_Y_LIFT_VW}vw` : (isHovered ? `-${HOVER_Y_LIFT_VW}vw` : '0'),
+                scale: isHovered || isSelected ? 1.15 : 1,
+                rotate: isHovered || isSelected ? 0 : rotationSeed,
+                opacity: 1
+            }}
+            exit={{ y: 200, opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+            transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+            onHoverStart={() => !disableInteraction && setIsHovered(true)}
+            onHoverEnd={() => setIsHovered(false)}
+            onClick={() => !disableInteraction && onSelect()}
+        >
+            {/* Card Container */}
+            <div className={`
+                w-full h-full relative rounded-md shadow-md transition-all duration-200
+                ${isSelected ? 'ring-4 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)]' : 'shadow-black/30'}
+                ${isDiscardSelected ? 'ring-4 ring-red-500 shadow-red-500/50 grayscale' : ''}
+                ${!isSelected && !isDiscardSelected ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white/50 hover:shadow-xl') : ''}
+            `}>
+
+                {/* 1. Real Asset Preview */}
+                <div className="w-full h-full rounded-md overflow-hidden bg-[#f3f0e8] border border-slate-400/50 shadow-inner relative">
+                    <CardPreview
+                        previewRef={def?.previewRef}
+                        className="w-full h-full object-cover"
+                        title={`${def?.name || 'Card'}\n${isMinion ? minionDef?.abilityText : (def as any)?.effectText}`}
+                    />
+
+                    {/* 2. Fallback UI - ONLY shown if NO previewRef (Strict check) */}
+                    {!def?.previewRef && (
+                        <div className="absolute inset-0 p-[0.4vw] flex flex-col pointer-events-none z-20">
+                            {/* Header */}
+                            <div className="flex justify-between items-start mb-1 h-[20%]">
+                                <div className={`px-1 py-0.5 rounded-sm text-[0.5vw] font-black uppercase tracking-wider shadow-sm border border-black/10 transform -rotate-1 
+                                    ${isMinion ? 'bg-blue-100/90 text-blue-900' : 'bg-red-100/90 text-red-900'}`}>
+                                    {isMinion ? 'MINION' : 'ACTION'}
+                                </div>
+                                {isMinion && (
+                                    <div className="w-[1.4vw] h-[1.4vw] rounded-full bg-yellow-400 text-black font-black flex items-center justify-center text-[0.8vw] shadow-md border border-white transform rotate-3">
+                                        {minionDef?.power}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Center Icon */}
+                            <div className="flex-1 flex items-center justify-center opacity-10 rotate-12">
+                                {isMinion ? <User size={'3vw'} color="#333" strokeWidth={3} /> : <Swords size={'3vw'} color="#333" strokeWidth={3} />}
+                            </div>
+
+                            {/* Footer Text */}
+                            <div className="mt-auto bg-white/95 rounded p-[0.4vw] border border-slate-300 shadow-sm rotate-1 relative">
+                                <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-yellow-200/50 -rotate-2"></div>
+                                <div className="text-[0.55vw] font-black text-slate-800 truncate uppercase tracking-tight">{def?.name}</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Discard Overlay Badge */}
+                {isDiscardSelected && (
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px] flex items-center justify-center rounded-md z-30">
+                        <div className="bg-red-600 text-white font-black text-sm rotate-12 border-2 border-white px-2 py-0.5 shadow-lg rounded-sm uppercase tracking-widest">
+                            Discard
+                        </div>
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    );
+};
+
+export const HandArea: React.FC<Props> = ({
+    hand,
+    selectedCardUid,
+    onCardSelect,
+    isDiscardMode = false,
+    discardSelection,
+    disableInteraction = false,
+}) => {
+    // Basic mount animation
+    const [isLoaded, setIsLoaded] = useState(false);
+    useEffect(() => { setIsLoaded(true); }, []);
+    if (!isLoaded) return null;
+
+    return (
+        <div className="absolute bottom-4 left-0 right-0 h-[20vh] flex flex-col justify-end items-center pointer-events-none z-40">
+            <div className="flex items-end justify-center px-4 max-w-[90vw] perspective-[1000px]">
+                <AnimatePresence>
+                    {hand.map((card, i) => (
+                        <HandCard
+                            key={card.uid}
+                            card={card}
+                            index={i}
+                            total={hand.length}
+                            isSelected={selectedCardUid === card.uid}
+                            isDiscardSelected={!!discardSelection?.has(card.uid)}
+                            isDiscardMode={isDiscardMode}
+                            disableInteraction={disableInteraction}
+                            onSelect={() => onCardSelect(card)}
+                        />
+                    ))}
+                </AnimatePresence>
+            </div>
+        </div>
+    );
+};

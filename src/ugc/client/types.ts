@@ -40,6 +40,14 @@ export interface UgcAssetManifestEntry {
 }
 
 export interface UgcPackageManifest {
+    entryPoints?: {
+        rules?: string;
+        view?: string;
+        tutorial?: string;
+    };
     metadata?: Record<string, unknown>;
     assets?: Record<string, UgcAssetManifestEntry>;
+    files?: string[];
+    packageType?: string;
+    commandTypes?: string[];
 }

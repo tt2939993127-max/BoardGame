@@ -5,7 +5,7 @@ import { GameButton } from './components/GameButton';
 import type { PendingDamage, HeroState, TokenResponsePhase } from '../domain/types';
 import type { TokenDef } from '../../../systems/TokenSystem';
 import clsx from 'clsx';
-import { type StatusIconAtlasConfig, TOKEN_META, getStatusEffectIconNode } from './statusEffects';
+import { type StatusAtlases, TOKEN_META, getStatusEffectIconNode } from './statusEffects';
 
 interface TokenResponseModalProps {
     /** 待处理的伤害 */
@@ -25,7 +25,7 @@ interface TokenResponseModalProps {
     /** 最近一次闪避投骰结果（用于展示） */
     lastEvasionRoll?: { value: number; success: boolean };
     /** 状态图标图集 */
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
 }
 
 /**

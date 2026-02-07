@@ -4,14 +4,15 @@
  */
 import { describe, it, expect } from 'vitest';
 import { DICETHRONE_AUDIO_CONFIG } from '../audio.config';
-import { MONK_ABILITIES } from '../monk/abilities';
+import { MONK_ABILITIES } from '../heroes/monk/abilities';
+import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
 import type { AudioEvent } from '../../../lib/audio/types';
 import { getOptimizedAudioUrl } from '../../../core/AssetLoader';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const CP_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
-const CP_SPEND_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
+const CP_GAIN_KEY = 'fantasy.magic_sword_recharge_01';
+const CP_SPEND_KEY = 'fantasy.dark_sword_recharge';
 const CARD_PLAY_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
 const DAMAGE_LIGHT_KEY = 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst';
 const DAMAGE_HEAVY_KEY = 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst';
@@ -120,6 +121,18 @@ describe('DiceThrone 音效配置属性测试', () => {
         });
     });
 
+    describe('属性 2.1：状态/Token 音效键存在性', () => {
+        it('所有 TokenDef.sfxKey 应在 registry 中存在', () => {
+            const tokenSfxKeys = ALL_TOKEN_DEFINITIONS
+                .map(def => def.sfxKey)
+                .filter((key): key is string => Boolean(key));
+
+            for (const sfxKey of tokenSfxKeys) {
+                expect(registryMap.has(sfxKey)).toBe(true);
+            }
+        });
+    });
+
     describe('属性 3：配置完整性', () => {
         it('所有使用到的 registry key 都必须存在并有资源文件', () => {
             const keys = new Set<string>();
@@ -138,6 +151,11 @@ describe('DiceThrone 音效配置属性测试', () => {
             for (const ability of MONK_ABILITIES) {
                 if (ability.sfxKey) {
                     keys.add(ability.sfxKey);
+                }
+            }
+            for (const token of ALL_TOKEN_DEFINITIONS) {
+                if (token.sfxKey) {
+                    keys.add(token.sfxKey);
                 }
             }
 

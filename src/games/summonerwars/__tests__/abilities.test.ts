@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SummonerWarsDomain } from '../domain';
+import { SummonerWarsDomain, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit } from '../domain/types';
 import type { RandomFn } from '../../../engine/types';
 import { 
@@ -18,6 +18,7 @@ import {
 import type { AbilityContext } from '../domain/abilityResolver';
 import { abilityRegistry } from '../domain/abilities';
 import { BOARD_ROWS, BOARD_COLS } from '../domain/helpers';
+import { createInitializedCore } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -35,7 +36,7 @@ function createTestRandom(): RandomFn {
 
 /** 创建测试用的游戏状态 */
 function createTestState(): SummonerWarsCore {
-  return SummonerWarsDomain.setup(['0', '1'], createTestRandom());
+  return createInitializedCore(['0', '1'], createTestRandom());
 }
 
 /** 查找单位位置 */
@@ -444,7 +445,7 @@ describe('技能触发', () => {
   it('亡灵弓箭手 - 灵魂转移：3格内单位被消灭时可替换位置', () => {
     const soulTransferAbility = abilityRegistry.get('soul_transfer');
     expect(soulTransferAbility).toBeDefined();
-    expect(soulTransferAbility!.trigger).toBe('onUnitDestroyed');
+    expect(soulTransferAbility!.trigger).toBe('onKill');
     expect(soulTransferAbility!.condition).toBeDefined();
     expect(soulTransferAbility!.condition!.type).toBe('isInRange');
   });
@@ -473,7 +474,8 @@ describe('效果解析', () => {
     
     expect(events.length).toBe(1);
     expect(events[0].type).toBe('sw:unit_damaged');
-    expect(events[0].payload.damage).toBe(2);
+    const damagePayload = events[0].payload as { damage: number };
+    expect(damagePayload.damage).toBe(2);
   });
 
   it('充能效果应该生成正确的事件', () => {
@@ -494,7 +496,33 @@ describe('效果解析', () => {
     
     expect(events.length).toBe(1);
     expect(events[0].type).toBe('sw:unit_charged');
-    expect(events[0].payload.delta).toBe(3);
+    const chargePayload = events[0].payload as { delta: number };
+    expect(chargePayload.delta).toBe(3);
+  });
+
+  it('感染：召唤弃牌事件应携带 sourceUnitId 且使用 victim 位置', () => {
+    const state = createTestState();
+    const summonerPos = findUnitPosition(state, u => u.owner === '0' && u.card.unitClass === 'summoner')!;
+    const summoner = getUnitAt(state, summonerPos)!;
+    const victimPos: CellCoord = { row: 3, col: 3 };
+
+    const ctx: AbilityContext = {
+      state,
+      sourceUnit: summoner,
+      sourcePosition: summonerPos,
+      ownerId: '0',
+      victimPosition: victimPos,
+      timestamp: Date.now(),
+    };
+
+    const effect = { type: 'summonFromDiscard' as const, cardType: 'plagueZombie' as const, position: 'victim' as const };
+    const events = resolveEffect(effect, ctx, 'infection');
+
+    expect(events.length).toBe(1);
+    expect(events[0].type).toBe(SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED);
+    const summonPayload = events[0].payload as { position: CellCoord; sourceUnitId?: string };
+    expect(summonPayload.position).toEqual(victimPos);
+    expect(summonPayload.sourceUnitId).toBe(summoner.cardId);
   });
 });
 
@@ -612,11 +640,11 @@ describe('回合结束技能触发', () => {
     const events = triggerAllUnitsAbilities('onTurnEnd', state, '0');
     
     // 应该生成充能减少事件
-    const chargeEvents = events.filter((e: { type: string }) => e.type === 'sw:unit_charged');
+    const chargeEvents = events.filter((e) => e.type === 'sw:unit_charged');
     expect(chargeEvents.length).toBeGreaterThan(0);
     
     // 检查充能减少值
-    const chargeEvent = chargeEvents.find((e: { payload: { delta: number } }) => e.payload.delta === -2);
+    const chargeEvent = chargeEvents.find((e) => (e.payload as { delta: number }).delta === -2);
     expect(chargeEvent).toBeDefined();
   });
 
@@ -654,7 +682,7 @@ describe('回合结束技能触发', () => {
     const events = triggerAllUnitsAbilities('onTurnEnd', state, '0');
     
     // 不应该生成充能减少事件（条件不满足）
-    const chargeEvents = events.filter((e: { type: string }) => e.type === 'sw:unit_charged');
+    const chargeEvents = events.filter((e) => e.type === 'sw:unit_charged');
     expect(chargeEvents.length).toBe(0);
   });
 });

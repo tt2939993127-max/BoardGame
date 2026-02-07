@@ -20,7 +20,7 @@ import { TokenResponseModal } from './TokenResponseModal';
 import { PurifyModal } from './PurifyModal';
 import { InteractionOverlay } from './InteractionOverlay';
 import { EndgameOverlay } from '../../../components/game/EndgameOverlay';
-import type { StatusIconAtlasConfig } from './statusEffects';
+import type { StatusAtlases } from './statusEffects';
 import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponsePhase, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import type { CardSpotlightItem } from './CardSpotlightOverlay';
@@ -112,7 +112,7 @@ export interface BoardOverlaysProps {
     onRematchVote: () => void;
 
     // 其他
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
     locale: string;
     moves: Record<string, unknown>;
     currentPhase: TurnPhase;

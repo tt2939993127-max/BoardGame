@@ -126,6 +126,9 @@ export function resolveTargetPosition(
   if (ref === 'victimPosition') {
     return ctx.victimPosition;
   }
+  if (ref === 'victim') {
+    return ctx.victimPosition;
+  }
   if (ref === 'self') {
     return ctx.sourcePosition;
   }
@@ -540,6 +543,7 @@ export function resolveEffect(
             cardType: effect.cardType,
             position,
             sourceAbilityId: abilityId,
+            sourceUnitId: ctx.sourceUnit.cardId,
           },
           timestamp,
         });
@@ -548,15 +552,132 @@ export function resolveEffect(
     }
 
     case 'custom': {
+      if (effect.actionId === 'soul_transfer_request') {
+        // 灵魂转移请求：由 UI 确认后执行
+        events.push({
+          type: SW_EVENTS.SOUL_TRANSFER_REQUESTED,
+          payload: {
+            sourceUnitId: ctx.sourceUnit.cardId,
+            sourcePosition: ctx.sourcePosition,
+            victimPosition: ctx.victimPosition,
+            ownerId: ctx.ownerId,
+          },
+          timestamp,
+        });
+      } else if (effect.actionId === 'mind_capture_check') {
+        // 心灵捕获检查：由攻击流程在 execute.ts 中处理
+        events.push({
+          type: SW_EVENTS.MIND_CAPTURE_REQUESTED,
+          payload: {
+            sourceUnitId: ctx.sourceUnit.cardId,
+            sourcePosition: ctx.sourcePosition,
+            targetPosition: ctx.targetPosition,
+            ownerId: ctx.ownerId,
+          },
+          timestamp,
+        });
+      } else {
+        events.push({
+          type: SW_EVENTS.ABILITY_TRIGGERED,
+          payload: {
+            abilityId: effect.actionId,
+            params: effect.params,
+            sourceUnitId: ctx.sourceUnit.cardId,
+          },
+          timestamp,
+        });
+      }
+      break;
+    }
+
+    case 'pushPull': {
+      const targets = resolveTargetUnits(effect.target, ctx);
+      for (const target of targets) {
+        // 检查目标是否有稳固（stable）技能
+        const targetAbilities = target.card.abilities ?? [];
+        if (targetAbilities.includes('stable')) {
+          // 稳固免疫推拉，不生成事件
+          continue;
+        }
+        const eventType = effect.direction === 'pull' ? SW_EVENTS.UNIT_PULLED : SW_EVENTS.UNIT_PUSHED;
+        events.push({
+          type: eventType,
+          payload: {
+            targetPosition: target.position,
+            targetUnitId: target.cardId,
+            distance: effect.distance,
+            direction: effect.direction,
+            sourcePosition: ctx.sourcePosition,
+            sourceAbilityId: abilityId,
+          },
+          timestamp,
+        });
+      }
+      break;
+    }
+
+    case 'extraMove': {
+      // 移动增强效果：在移动验证时由 helpers 检查，此处仅记录触发
       events.push({
         type: SW_EVENTS.ABILITY_TRIGGERED,
         payload: {
-          abilityId: effect.actionId,
-          params: effect.params,
+          abilityId,
+          effectType: 'extraMove',
+          value: effect.value,
+          canPassThrough: effect.canPassThrough,
           sourceUnitId: ctx.sourceUnit.cardId,
         },
         timestamp,
       });
+      break;
+    }
+
+    case 'takeControl': {
+      const targets = resolveTargetUnits(effect.target, ctx);
+      for (const target of targets) {
+        events.push({
+          type: SW_EVENTS.CONTROL_TRANSFERRED,
+          payload: {
+            targetPosition: target.position,
+            targetUnitId: target.cardId,
+            newOwner: ctx.ownerId,
+            duration: effect.duration ?? 'permanent',
+            sourceAbilityId: abilityId,
+          },
+          timestamp,
+        });
+      }
+      break;
+    }
+
+    case 'reduceDamage': {
+      events.push({
+        type: SW_EVENTS.DAMAGE_REDUCED,
+        payload: {
+          sourceUnitId: ctx.sourceUnit.cardId,
+          sourcePosition: ctx.sourcePosition,
+          value: effect.value,
+          condition: effect.condition,
+          sourceAbilityId: abilityId,
+        },
+        timestamp,
+      });
+      break;
+    }
+
+    case 'grantExtraAttack': {
+      const targets = resolveTargetUnits(effect.target, ctx);
+      for (const target of targets) {
+        events.push({
+          type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
+          payload: {
+            targetPosition: target.position,
+            targetUnitId: target.cardId,
+            sourceAbilityId: abilityId,
+          },
+          timestamp,
+        });
+      }
       break;
     }
   }
@@ -668,10 +789,32 @@ export function triggerAllUnitsAbilities(
  */
 export function calculateEffectiveStrength(
   unit: UnitInstance,
-  state: SummonerWarsCore
+  state: SummonerWarsCore,
+  targetUnit?: UnitInstance
 ): number {
   let strength = unit.card.strength;
   const abilities = getUnitAbilities(unit);
+
+  // 附加事件卡加成（如狱火铸剑 +2）
+  if (unit.attachedCards) {
+    for (const attached of unit.attachedCards) {
+      const baseId = attached.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+      if (baseId === 'necro-hellfire-blade') {
+        strength += 2;
+      }
+    }
+  }
+
+  // 催眠引诱加成：召唤师攻击被催眠的目标时+1战力
+  if (targetUnit && unit.card.unitClass === 'summoner') {
+    const player = state.players[unit.owner];
+    for (const ev of player.activeEvents) {
+      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+      if (baseId === 'trickster-hypnotic-lure' && ev.targetUnitId === targetUnit.cardId) {
+        strength += 1;
+      }
+    }
+  }
 
   for (const ability of abilities) {
     if (ability.trigger === 'onDamageCalculation' || ability.trigger === 'passive') {
@@ -696,7 +839,7 @@ export function calculateEffectiveStrength(
             : evaluateExpression(effect.value, ctx);
           
           // 力量强化最多+5
-          if (ability.id === 'power_boost') {
+          if (ability.id === 'power_boost' || ability.id === 'power_up') {
             strength += Math.min(value, 5);
           } else {
             strength += value;
@@ -706,5 +849,132 @@ export function calculateEffectiveStrength(
     }
   }
 
+  // 成群结队（围攻）加成：任一玩家主动事件区有 goblin-swarm 时，
+  // 友方单位攻击时每有一个其它友方单位和目标相邻，+1战力
+  if (targetUnit) {
+    const player = state.players[unit.owner];
+    const hasSwarm = player.activeEvents.some(ev => {
+      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+      return baseId === 'goblin-swarm';
+    });
+    if (hasSwarm) {
+      // 计算与目标相邻的其它友方单位数量
+      const targetPos = targetUnit.position;
+      const dirs = [
+        { row: -1, col: 0 }, { row: 1, col: 0 },
+        { row: 0, col: -1 }, { row: 0, col: 1 },
+      ];
+      let adjacentAllies = 0;
+      for (const d of dirs) {
+        const adjPos = { row: targetPos.row + d.row, col: targetPos.col + d.col };
+        if (adjPos.row < 0 || adjPos.row >= state.board.length) continue;
+        if (adjPos.col < 0 || adjPos.col >= (state.board[0]?.length ?? 0)) continue;
+        const adjUnit = state.board[adjPos.row]?.[adjPos.col]?.unit;
+        if (adjUnit && adjUnit.owner === unit.owner && adjUnit.cardId !== unit.cardId) {
+          adjacentAllies++;
+        }
+      }
+      strength += adjacentAllies;
+    }
+  }
+
+  // 冲锋加成：野兽骑手冲锋3+格时+1战力（通过 boosts 标记）
+  if ((unit.card.abilities ?? []).includes('charge') && unit.boosts > 0) {
+    strength += unit.boosts;
+  }
+
+  // 城塞精锐：2格内每有一个友方城塞单位+1战力
+  if ((unit.card.abilities ?? []).includes('fortress_elite')) {
+    for (let row = 0; row < BOARD_ROWS; row++) {
+      for (let col = 0; col < BOARD_COLS; col++) {
+        const other = state.board[row]?.[col]?.unit;
+        if (other && other.owner === unit.owner && other.cardId !== unit.cardId
+          && other.card.id.includes('fortress')
+          && manhattanDistance(unit.position, { row, col }) <= 2) {
+          strength += 1;
+        }
+      }
+    }
+  }
+
+  // 辉光射击：每2点魔力+1战力
+  if ((unit.card.abilities ?? []).includes('radiant_shot')) {
+    const playerMagic = state.players[unit.owner]?.magic ?? 0;
+    strength += Math.floor(playerMagic / 2);
+  }
+
+  // 冰霜飞弹：相邻每有一个友方建筑+1战力
+  if ((unit.card.abilities ?? []).includes('frost_bolt')) {
+    const dirs = [
+      { row: -1, col: 0 }, { row: 1, col: 0 },
+      { row: 0, col: -1 }, { row: 0, col: 1 },
+    ];
+    for (const d of dirs) {
+      const adjPos = { row: unit.position.row + d.row, col: unit.position.col + d.col };
+      if (adjPos.row < 0 || adjPos.row >= BOARD_ROWS || adjPos.col < 0 || adjPos.col >= BOARD_COLS) continue;
+      const adjCell = state.board[adjPos.row]?.[adjPos.col];
+      // 友方建筑 或 友方活体结构单位（寒冰魔像）
+      if (adjCell?.structure && adjCell.structure.owner === unit.owner) {
+        strength += 1;
+      } else if (adjCell?.unit && adjCell.unit.owner === unit.owner
+        && (adjCell.unit.card.abilities ?? []).includes('mobile_structure')) {
+        strength += 1;
+      }
+    }
+  }
+
+  // 高阶冰霜飞弹：2格内每有一个友方建筑+1战力
+  if ((unit.card.abilities ?? []).includes('greater_frost_bolt')) {
+    for (let row = 0; row < BOARD_ROWS; row++) {
+      for (let col = 0; col < BOARD_COLS; col++) {
+        const dist = manhattanDistance(unit.position, { row, col });
+        if (dist === 0 || dist > 2) continue;
+        const cell = state.board[row]?.[col];
+        if (cell?.structure && cell.structure.owner === unit.owner) {
+          strength += 1;
+        } else if (cell?.unit && cell.unit.owner === unit.owner
+          && (cell.unit.card.abilities ?? []).includes('mobile_structure')) {
+          strength += 1;
+        }
+      }
+    }
+  }
+
   return Math.max(0, strength);
+}
+
+/**
+ * 检查单位是否有附加的狱火铸剑（诅咒效果）
+ */
+export function hasHellfireBlade(unit: UnitInstance): boolean {
+  if (!unit.attachedCards) return false;
+  return unit.attachedCards.some(c => {
+    const baseId = c.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+    return baseId === 'necro-hellfire-blade';
+  });
+}
+
+/**
+ * 计算单位的有效生命值（考虑 life_up 等技能加成）
+ */
+export function getEffectiveLife(unit: UnitInstance): number {
+  let life = unit.card.life;
+  const abilities = getUnitAbilities(unit);
+
+  for (const ability of abilities) {
+    if (ability.trigger === 'passive') {
+      for (const effect of ability.effects) {
+        if (effect.type === 'modifyLife') {
+          const value = typeof effect.value === 'number'
+            ? effect.value
+            : (unit.boosts ?? 0); // 充能值
+          // 生命强化最多+5
+          life += Math.min(value, 5);
+        }
+      }
+    }
+  }
+
+  // 力量颂歌临时赋予的 power_up 不影响生命
+  return life;
 }

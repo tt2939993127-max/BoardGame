@@ -59,6 +59,23 @@ const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
             },
         };
     },
+    setStatus: (core, playerId, statusId, amount) => {
+        const player = core.players[playerId];
+        if (!player) return core;
+        return {
+            ...core,
+            players: {
+                ...core.players,
+                [playerId]: {
+                    ...player,
+                    statusEffects: {
+                        ...player.statusEffects,
+                        [statusId]: amount,
+                    },
+                },
+            },
+        };
+    },
     setPhase: (core, phase) => {
         return {
             ...core,
@@ -196,13 +213,12 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             const isLocalMode = mode === 'local';
 
             if (isTutorialMode) {
-                // 玩家 0（教学玩家）默认选择僧侣
+                // 教学模式：双方默认选择僧侣（用于统一教程流程）
                 if (!core.selectedCharacters['0'] || core.selectedCharacters['0'] === 'unselected') {
                     core.selectedCharacters['0'] = 'monk';
                 }
-                // 玩家 1（AI 对手）默认选择野蛮人
                 if (!core.selectedCharacters['1'] || core.selectedCharacters['1'] === 'unselected') {
-                    core.selectedCharacters['1'] = 'barbarian';
+                    core.selectedCharacters['1'] = 'monk';
                 }
             }
 
@@ -261,8 +277,32 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
         // ========== offensiveRoll 阶段退出：攻击前处理 ==========
         if (from === 'offensiveRoll') {
-            console.log(`[DiceThrone][onPhaseExit] offensiveRoll exit, pendingAttack=${JSON.stringify(core.pendingAttack)}`);
             if (core.pendingAttack) {
+                // ========== 致盲判定：攻击方有致盲时投掷1骰 ==========
+                const attacker = core.players[core.pendingAttack.attackerId];
+                const blindedStacks = attacker?.statusEffects[STATUS_IDS.BLINDED] ?? 0;
+                if (blindedStacks > 0 && random) {
+                    const blindedValue = random.d(6);
+                    const blindedFace = getDieFace(blindedValue);
+                    events.push({
+                        type: 'BONUS_DIE_ROLLED',
+                        payload: { value: blindedValue, face: blindedFace, playerId: core.pendingAttack.attackerId, targetPlayerId: core.pendingAttack.attackerId, effectKey: 'bonusDie.effect.blinded' },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as any);
+                    // 移除致盲状态
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: { targetId: core.pendingAttack.attackerId, statusId: STATUS_IDS.BLINDED, stacks: blindedStacks },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as any);
+                    // 1-2：攻击失败，跳过攻击直接进入 main2
+                    if (blindedValue <= 2) {
+                        return { events, overrideNextPhase: 'main2' };
+                    }
+                }
+
                 // 处理进攻方的 preDefense 效果
                 const preDefenseEvents = resolveOffensivePreDefenseEffects(core);
                 events.push(...preDefenseEvents);
@@ -279,12 +319,10 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
                 if (core.pendingAttack.isDefendable) {
                     // 攻击可防御，切换到防御阶段
-                    console.log(`[DiceThrone][onPhaseExit] offensiveRoll -> defensiveRoll (isDefendable=true)`);
                     return { events, overrideNextPhase: 'defensiveRoll' };
                 }
 
                 // 攻击不可防御，直接结算
-                console.log(`[DiceThrone][onPhaseExit] offensiveRoll -> main2 (isDefendable=false, resolving attack)`);
                 const attackEvents = resolveAttack(coreAfterPreDefense, random, { includePreDefense: false });
                 events.push(...attackEvents);
 
@@ -299,7 +337,6 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 return { events, overrideNextPhase: 'main2' };
             }
             // 无 pendingAttack，直接进入 main2
-            console.log(`[DiceThrone][onPhaseExit] offensiveRoll -> main2 (no pendingAttack)`);
             return { events, overrideNextPhase: 'main2' };
         }
 
@@ -309,7 +346,6 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             if (core.pendingAttack) {
                 // 如果伤害已通过 Token 响应结算，只执行 postDamage 效果
                 if (core.pendingAttack.damageResolved) {
-                    console.log(`[DiceThrone][onPhaseExit] defensiveRoll -> main2 (damageResolved=true, executing postDamage effects)`);
                     // 执行 postDamage 效果（如击倒）并生成 ATTACK_RESOLVED 事件
                     const postDamageEvents = resolvePostDamageEffects(core, random);
                     events.push(...postDamageEvents);
@@ -379,7 +415,6 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
             // 只有在没有其他阻塞条件时才自动继续
             if (!hasActivePrompt && !hasActiveResponseWindow && !hasPendingInteraction && !hasPendingDamage && !hasPendingBonusDice) {
-                console.log(`[DiceThrone][onAutoContinueCheck] autoContinue=true phase=${core.turnPhase} sysPhase=${state.sys.phase} activePlayerId=${core.activePlayerId} events=${events.map(e => e.type).join(',')}`);
                 return {
                     autoContinue: true,
                     playerId: core.activePlayerId,
@@ -423,6 +458,31 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
             if (events.length > 0) {
                 return events;
+            }
+        }
+
+        // ========== 进入 offensiveRoll 阶段：检查缠绕状态 ==========
+        if (to === 'offensiveRoll') {
+            const player = core.players[core.activePlayerId];
+            const entangleStacks = player?.statusEffects[STATUS_IDS.ENTANGLE] ?? 0;
+            if (entangleStacks > 0) {
+                // 缠绕：减少1次掷骰机会（3 -> 2）
+                const currentLimit = core.rollLimit ?? 3;
+                const newLimit = Math.max(0, currentLimit - 1);
+                const delta = newLimit - currentLimit;
+                events.push({
+                    type: 'ROLL_LIMIT_CHANGED',
+                    payload: { playerId: core.activePlayerId, delta, newLimit },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as any);
+                // 移除缠绕状态（一次性）
+                events.push({
+                    type: 'STATUS_REMOVED',
+                    payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.ENTANGLE, stacks: entangleStacks },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as any);
             }
         }
 
@@ -633,6 +693,7 @@ const COMMAND_TYPES = [
     CHEAT_COMMANDS.SET_PHASE,
     CHEAT_COMMANDS.SET_DICE,
     CHEAT_COMMANDS.SET_TOKEN,
+    CHEAT_COMMANDS.SET_STATUS,
     CHEAT_COMMANDS.DEAL_CARD_BY_INDEX,
     CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX,
     CHEAT_COMMANDS.SET_STATE,

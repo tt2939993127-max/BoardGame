@@ -7,9 +7,9 @@
  * - debuff 类型：击倒（被动触发）
  */
 
-import type { TokenDef, TokenState } from '../../../systems/TokenSystem';
-import { TOKEN_IDS, STATUS_IDS } from '../domain/ids';
-import { RESOURCE_IDS } from '../domain/resources';
+import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
+import { TOKEN_IDS, STATUS_IDS } from '../../domain/ids';
+import { RESOURCE_IDS } from '../../domain/resources';
 
 const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
 const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
@@ -32,6 +32,7 @@ export const MONK_TOKENS: TokenDef[] = [
         icon: '☯',
         colorTheme: 'from-purple-500 to-indigo-500',
         description: tokenText(TOKEN_IDS.TAIJI, 'description') as unknown as string[],
+        sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.light.heavenly_flame',
         stackLimit: 5,
         category: 'consumable',
         activeUse: {
@@ -54,6 +55,7 @@ export const MONK_TOKENS: TokenDef[] = [
         icon: '💨',
         colorTheme: 'from-cyan-500 to-blue-500',
         description: tokenText(TOKEN_IDS.EVASIVE, 'description') as unknown as string[],
+        sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.ice.glacial_shield',
         stackLimit: 3,
         category: 'consumable',
         activeUse: {
@@ -76,6 +78,7 @@ export const MONK_TOKENS: TokenDef[] = [
         icon: '✨',
         colorTheme: 'from-emerald-400 to-green-500',
         description: tokenText(TOKEN_IDS.PURIFY, 'description') as unknown as string[],
+        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_holy_water',
         stackLimit: 3,
         category: 'consumable',
         activeUse: {
@@ -99,6 +102,7 @@ export const MONK_TOKENS: TokenDef[] = [
         icon: '💫',
         colorTheme: 'from-red-600 to-orange-500',
         description: statusText(STATUS_IDS.KNOCKDOWN, 'description') as unknown as string[],
+        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_explosion',
         stackLimit: 1,
         category: 'debuff',
         passiveTrigger: {

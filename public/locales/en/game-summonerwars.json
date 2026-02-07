@@ -4,9 +4,63 @@
   "description": "Summoner Wars is a fast-paced, tactical 2-player game. Players take on the role of Summoners, leading their faction to conquer the war-torn world of Itharia through the power of mysterious Summoning Stones.",
   "players": "2 Players",
   
+  "factionSelection": {
+    "title": "Choose Your Faction",
+    "subtitle": "Each summoner commands a unique army and tactics",
+    "notSelected": "Not Selected",
+    "ready": "Ready",
+    "waiting": "Waiting for others...",
+    "start": "Start Game",
+    "waitAll": "Waiting for all players"
+  },
+  
+  "factions": {
+    "necromancer": "Fallen Kingdom",
+    "trickster": "Trickster Clan",
+    "paladin": "Vanguard",
+    "goblin": "Cave Goblins",
+    "frost": "Frost Dwarves",
+    "barbaric": "Barbarian Horde"
+  },
+  
+  "actions": {
+    "closePreview": "Close Preview"
+  },
+  
   "tutorial": {
     "title": "Summoner Wars Tutorial",
-    "welcome": "Welcome to Summoner Wars! In this game, you will play as a powerful Summoner, commanding your army to conquer the battlefield."
+    "welcome": "Welcome to Summoner Wars! In this game, you will play as a powerful Summoner, commanding your army to conquer the battlefield.",
+    "steps": {
+      "setup": "Preparing the tutorial match. Both sides will use the Fallen Kingdom (Necromancer) faction...",
+      "welcome": "Welcome to Summoner Wars!\n\nYou will play as the Necromancer \"Ret-Talus\", commanding an undead army to defeat the opposing Summoner.\n\nDestroy the enemy Summoner to win!",
+      "boardOverview": "This is the battlefield — an 8×6 grid. Your units are at the bottom, your opponent's at the top.\n\nYour Summoner, starting units, and gate are already placed on the board.",
+      "summonerIntro": "Your Summoner \"Ret-Talus\" is your most important unit.\n\nHe has 12 Life, 2 Strength, and is a ranged attacker (range 3).\n\nHe also has a unique ability \"Revive Undead\" — we'll learn how to use it shortly.",
+      "magicIntro": "This is your Magic bar. Magic is used to summon units, build structures, and cast event cards.\n\nThe first player starts with 2 Magic, the second with 3.",
+      "phaseIntro": "Each turn has 6 phases in order:\n\n1. Summon → 2. Move → 3. Build → 4. Attack → 5. Magic → 6. Draw\n\nYou are currently in the Summon phase.",
+      "handIntro": "This is your hand area. You can summon units, build structures, or cast event cards from your hand.\n\nThere's no hand limit. You draw up to 5 cards at the end of each turn.",
+      "summonExplain": "During the Summon phase, you can summon any number of units from your hand.\n\nSummon rules:\n• Pay the magic cost shown on the unit card\n• Place the unit on an empty space adjacent to a gate you control\n\nNow, select a unit card from your hand and click an empty space next to your gate.",
+      "summonAction": "Select a unit card from your hand, then click a highlighted space next to your gate to summon it.\n\nTip: Click a unit card in your hand to select it, then click a highlighted space to place it.",
+      "abilityExplain": "Great! Now let's learn about Summoner abilities.\n\nYour Summoner \"Ret-Talus\" has the \"Revive Undead\" ability:\nOnce per turn during the Summon phase, deal 2 damage to this unit to take an Undead unit from your discard pile and place it adjacent to this unit.\n\nThis powerful ability keeps your undead army coming back!",
+      "abilityAction": "Now use the \"Revive Undead\" ability!\n\nClick your Summoner to activate the ability, then select an Undead unit from your discard pile and place it adjacent to your Summoner.\n\nNote: This ability deals 2 damage to your Summoner.",
+      "endSummon": "Summoning complete! Click \"End Phase\" to move to the Move phase.",
+      "moveExplain": "Now it's the Move phase.\n\nMovement rules:\n• Move up to 3 different units\n• Each unit moves up to 2 spaces\n• Only horizontal or vertical — no diagonal movement\n• Cannot move through other cards\n• Structures cannot move",
+      "moveAction": "Select a unit and move it.\n\nClick your unit to select it, then click a highlighted target space to move.",
+      "endMove": "Movement done! You can move more units (up to 3 total), or click \"End Phase\" to enter the Build phase.",
+      "buildExplain": "Now it's the Build phase.\n\nYou can build gates or structures from your hand:\n• Pay the build cost\n• Place adjacent to your Summoner or in your back 3 rows\n\nGates are important — you can only summon units next to gates!",
+      "buildAction": "If you have a Portal (gate) in hand, you can build it.\n\nOr click \"End Phase\" to skip building.",
+      "attackExplain": "Now it's the Attack phase!\n\nAttack rules:\n• Attack with up to 3 different units\n• Melee units (⚔️) attack adjacent targets\n• Ranged units (🏹) attack targets up to 3 spaces in a straight line\n• Roll dice equal to Strength; matching attack type faces deal damage\n\nWarning: If you don't attack any enemy unit this phase, your Summoner takes 1 penalty damage!",
+      "attackAction": "Select one of your units, then click an enemy unit to attack.\n\nTip: Click your attacking unit first, then click an enemy target in range.",
+      "attackResult": "Attack complete! Dice results determine the number of hits.\n\nEach matching attack type face = 1 damage.\nWhen a unit's damage equals its Life, it's destroyed.\n\nDestroying an enemy unit also grants 1 Magic!",
+      "endAttack": "You can attack with more units (up to 3 total), or click \"End Phase\" to enter the Magic phase.",
+      "magicExplain": "Now it's the Magic phase.\n\nYou can discard any number of cards from your hand. Each discarded card gives you 1 Magic.\n\nMagic is the resource for summoning and casting — manage it wisely!",
+      "magicAction": "Select cards to discard for Magic, or click \"End Phase\" to skip.\n\nTip: Click cards in your hand during the Magic phase to select/deselect them for discard.",
+      "drawExplain": "Now it's the Draw phase.\n\nIf you have fewer than 5 cards, you automatically draw up to 5.\n\nNote: If your draw pile is empty, you don't reshuffle the discard pile — you simply can't draw!",
+      "endDraw": "Drawing complete! Click \"End Phase\" to end your turn and pass to your opponent.",
+      "opponentTurn": "It's now your opponent's turn. Watch their actions...\n\nThey go through the same 6 phases.",
+      "inactionPenalty": "Did you notice? The opponent didn't attack any of your units during their Attack phase, so their Summoner took 1 penalty damage.\n\nThis is the \"Inaction Penalty\" — it encourages aggressive play!",
+      "victoryCondition": "The victory condition is simple:\n\nDestroy the enemy Summoner to win!\n\nYour Summoner is your most important unit. Protect yours while finding ways to defeat theirs.",
+      "finish": "Congratulations on completing the Summoner Wars tutorial!\n\nYou've learned:\n• The 6-phase turn structure\n• Basic summoning, movement, and combat\n• The Summoner ability \"Revive Undead\"\n• Magic management and card draw\n• The Inaction Penalty rule\n\nNow go challenge a real opponent!"
+    }
   },
   
   "phase": {

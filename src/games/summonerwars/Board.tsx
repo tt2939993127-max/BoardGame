@@ -10,14 +10,13 @@
  * - 底部中央：提示横幅
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { BoardProps } from 'boardgame.io/react';
 import type { MatchState } from '../../engine/types';
 import type { SummonerWarsCore } from './domain';
-import { SW_COMMANDS, SW_EVENTS } from './domain';
-import { FLOW_COMMANDS } from '../../engine';
-import { getEvents } from '../../engine/systems/LogSystem';
+import { SW_COMMANDS } from './domain';
 import { GameDebugPanel } from '../../components/GameDebugPanel';
+import { SummonerWarsDebugConfig } from './debug-config';
 import { EndgameOverlay } from '../../components/game/EndgameOverlay';
 import { UndoProvider } from '../../contexts/UndoContext';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
@@ -27,107 +26,72 @@ import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
 import { saveSummonerWarsLayout } from '../../api/layout';
 import type { BoardLayoutConfig, GridConfig } from '../../core/ui/board-layout.types';
-import { cellToNormalizedBounds } from '../../core/ui/board-hit-test';
-import { initSpriteAtlases, getSpriteAtlasSource, getSpriteAtlasStyle, getFrameAspectRatio } from './ui/cardAtlas';
+import { initSpriteAtlases, resolveCardAtlasId } from './ui/cardAtlas';
 import { EnergyBar } from './ui/EnergyBar';
 import { DeckPile } from './ui/DeckPile';
 import { MapContainer } from './ui/MapContainer';
 import { PhaseTracker } from './ui/PhaseTracker';
-import { ActionBanner } from './ui/ActionBanner';
 import { GameButton } from './ui/GameButton';
 import { HandArea } from './ui/HandArea';
 import { MagnifyOverlay } from '../../components/common/overlays/MagnifyOverlay';
 import { DiceResultOverlay } from './ui/DiceResultOverlay';
 import { DestroyEffectsLayer, useDestroyEffects } from './ui/DestroyEffect';
-import type { Card, BoardUnit, BoardStructure, CellCoord } from './domain/types';
-import type { DiceFace } from './config/dice';
-import { getValidSummonPositions, getValidBuildPositions, getValidMoveTargets, getValidAttackTargets } from './domain/helpers';
+import { BoardEffectsLayer, useBoardEffects, useScreenShake } from './ui/BoardEffects';
+import type { Card, BoardUnit, BoardStructure, CellCoord, UnitCard, PlayerId } from './domain/types';
+import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
+import { DiscardPileOverlay } from './ui/DiscardPileOverlay';
+import { getPlayerUnits } from './domain/helpers';
+import { FactionSelection } from './ui/FactionSelectionAdapter';
+import type { FactionId } from './domain/types';
 import { BOARD_ROWS, BOARD_COLS } from './config/board';
+// 提取的子模块
+import { CardSprite } from './ui/CardSprite';
+import { getUnitSpriteConfig, getStructureSpriteConfig, getEventSpriteConfig } from './ui/spriteHelpers';
+import { useGameEvents } from './ui/useGameEvents';
+import { useCellInteraction } from './ui/useCellInteraction';
+import { StatusBanners } from './ui/StatusBanners';
+import { BoardGrid, getCellPosition } from './ui/BoardGrid';
 
 type Props = BoardProps<MatchState<SummonerWarsCore>>;
 
-// 默认网格配置（与 config/board.ts 保持一致）
+/** 默认网格配置 */
 const DEFAULT_GRID_CONFIG: GridConfig = {
   rows: BOARD_ROWS,
   cols: BOARD_COLS,
-  bounds: {
-    x: 0.038,
-    y: 0.135,
-    width: 0.924,
-    height: 0.73,
-  },
+  bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
-
-/** 卡牌精灵图组件 */
-const CardSprite: React.FC<{
-  atlasId: string;
-  frameIndex: number;
-  className?: string;
-  style?: React.CSSProperties;
-}> = ({ atlasId, frameIndex, className = '', style }) => {
-  const source = getSpriteAtlasSource(atlasId);
-  if (!source) {
-    return <div className={`bg-slate-700 ${className}`} style={style} />;
-  }
-  const atlasStyle = getSpriteAtlasStyle(frameIndex, source.config);
-  const aspectRatio = getFrameAspectRatio(frameIndex, source.config);
-  return (
-    <div
-      className={className}
-      style={{
-        aspectRatio: `${aspectRatio}`,
-        backgroundImage: `url(${source.image})`,
-        backgroundRepeat: 'no-repeat',
-        ...atlasStyle,
-        ...style,
-      }}
-    />
-  );
-};
-
-/** 获取卡牌精灵图配置 */
-function getUnitSpriteConfig(unit: BoardUnit): { atlasId: string; frameIndex: number } {
-  const card = unit.card;
-  const spriteIndex = card.spriteIndex ?? 0;
-  const spriteAtlas = card.spriteAtlas ?? 'cards';
-  const atlasId = spriteAtlas === 'hero' ? 'sw:necromancer:hero' : 'sw:necromancer:cards';
-  return { atlasId, frameIndex: spriteIndex };
-}
-
-/** 获取建筑精灵图配置 */
-function getStructureSpriteConfig(structure: BoardStructure): { atlasId: string; frameIndex: number } {
-  const card = structure.card;
-  const spriteIndex = card.spriteIndex ?? 1;
-  const spriteAtlas = card.spriteAtlas ?? 'hero';
-  const atlasId = spriteAtlas === 'hero' ? 'sw:necromancer:hero' : 'sw:necromancer:cards';
-  return { atlasId, frameIndex: spriteIndex };
-}
-
-/** 计算格子位置 */
-function getCellPosition(row: number, col: number, grid: GridConfig) {
-  const cellBounds = cellToNormalizedBounds({ row, col }, grid);
-  return {
-    left: cellBounds.x * 100,
-    top: cellBounds.y * 100,
-    width: cellBounds.width * 100,
-    height: cellBounds.height * 100,
-  };
-}
 
 export const SummonerWarsBoard: React.FC<Props> = ({
-  ctx,
-  G,
-  moves,
-  events,
-  playerID,
-  reset,
-  matchData,
-  isMultiplayer,
+  ctx, G, moves, events, playerID, reset, matchData, isMultiplayer,
 }) => {
   const isGameOver = ctx.gameover;
   const gameMode = useGameMode();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
+
+  // 阵营选择状态
+  const rootPid = (playerID || '0') as PlayerId;
+  const isInFactionSelection = !G.core.hostStarted;
+
+  // 玩家名称映射
+  const playerNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const pid of ['0', '1']) {
+      names[pid] = matchData?.find(p => String(p.id) === pid)?.name ?? (pid === '0' ? '玩家1' : '玩家2');
+    }
+    return names;
+  }, [matchData]);
+
+  // 阵营选择回调
+  const handleSelectFaction = useCallback((factionId: FactionId) => {
+    moves[SW_COMMANDS.SELECT_FACTION]?.({ factionId });
+  }, [moves]);
+  const handlePlayerReady = useCallback(() => {
+    moves[SW_COMMANDS.PLAYER_READY]?.({});
+  }, [moves]);
+  const handleHostStart = useCallback(() => {
+    moves[SW_COMMANDS.HOST_START_GAME]?.({});
+  }, [moves]);
 
   // 教学系统集成
   useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
@@ -137,9 +101,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const { state: rematchState, vote: handleRematchVote } = useRematch();
 
   // 初始化精灵图
-  useEffect(() => {
-    initSpriteAtlases();
-  }, []);
+  useEffect(() => { initSpriteAtlases(); }, []);
 
   // 布局编辑器状态
   const [isEditingLayout, setIsEditingLayout] = useState(false);
@@ -147,366 +109,240 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   const fetchLayoutConfig = useCallback(async () => {
     try {
-      const response = await fetch(`/game-data/summonerwars.layout.json?ts=${Date.now()}`, {
-        cache: 'no-store',
-      });
-      if (!response.ok) {
-        return null;
-      }
+      const response = await fetch(`/game-data/summonerwars.layout.json?ts=${Date.now()}`, { cache: 'no-store' });
+      if (!response.ok) return null;
       const data = await response.json();
-      if (!data || typeof data !== 'object') {
-        return null;
-      }
+      if (!data || typeof data !== 'object') return null;
       return data as BoardLayoutConfig;
-    } catch (error) {
-      return null;
-    }
+    } catch { return null; }
   }, []);
 
   const handleExitLayoutEditor = useCallback(async () => {
     setIsEditingLayout(false);
     const data = await fetchLayoutConfig();
-    if (data) {
-      setLayoutConfig(data);
-    }
+    if (data) setLayoutConfig(data);
   }, [fetchLayoutConfig]);
 
   useEffect(() => {
     let cancelled = false;
     const loadLayout = async () => {
       const data = await fetchLayoutConfig();
-      if (!cancelled && data) {
-        setLayoutConfig(data);
-      }
+      if (!cancelled && data) setLayoutConfig(data);
     };
     loadLayout();
     return () => { cancelled = true; };
   }, [fetchLayoutConfig]);
 
-  // 当前网格配置
-  const currentGrid = useMemo<GridConfig>(() => (
-    layoutConfig?.grid ?? DEFAULT_GRID_CONFIG
-  ), [layoutConfig]);
+  const currentGrid = useMemo<GridConfig>(() => layoutConfig?.grid ?? DEFAULT_GRID_CONFIG, [layoutConfig]);
 
   // 游戏状态
   const core = G.core;
   const currentPhase = core.phase;
   const activePlayerId = core.currentPlayer ?? ctx.currentPlayer;
-  const isMyTurn = isLocalMatch
-    || (playerID !== null && playerID !== undefined && activePlayerId === playerID);
-  // 本地模式下，视角固定为玩家0（底部）
+  const isMyTurn = isLocalMatch || (playerID !== null && playerID !== undefined && activePlayerId === playerID);
   const myPlayerId = isLocalMatch ? '0' : (playerID === '1' ? '1' : '0');
   const opponentPlayerId = myPlayerId === '0' ? '1' : '0';
   const shouldFlipView = !isLocalMatch && !isSpectator && myPlayerId === '1';
   const toViewCoord = useCallback((coord: CellCoord): CellCoord => (
-    shouldFlipView
-      ? { row: BOARD_ROWS - 1 - coord.row, col: BOARD_COLS - 1 - coord.col }
-      : coord
+    shouldFlipView ? { row: BOARD_ROWS - 1 - coord.row, col: BOARD_COLS - 1 - coord.col } : coord
   ), [shouldFlipView]);
   const fromViewCoord = useCallback((coord: CellCoord): CellCoord => (
-    shouldFlipView
-      ? { row: BOARD_ROWS - 1 - coord.row, col: BOARD_COLS - 1 - coord.col }
-      : coord
+    shouldFlipView ? { row: BOARD_ROWS - 1 - coord.row, col: BOARD_COLS - 1 - coord.col } : coord
   ), [shouldFlipView]);
+
   const myMagic = core.players[myPlayerId]?.magic ?? 0;
   const opponentMagic = core.players[opponentPlayerId]?.magic ?? 0;
   const myDeckCount = core.players[myPlayerId]?.deck?.length ?? 0;
   const myDiscardCount = core.players[myPlayerId]?.discard?.length ?? 0;
-
-  // 手牌：直接使用实际数据
+  const myDiscard = core.players[myPlayerId]?.discard ?? [];
   const myHand = core.players[myPlayerId]?.hand ?? [];
+  const myActiveEvents = core.players[myPlayerId]?.activeEvents ?? [];
+  const opponentActiveEvents = core.players[opponentPlayerId]?.activeEvents ?? [];
 
-  // 召唤相关状态
-  const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
-  const [selectedCardsForDiscard, setSelectedCardsForDiscard] = useState<string[]>([]);
-  
   // 卡牌放大预览状态
   const [magnifiedCard, setMagnifiedCard] = useState<{ atlasId: string; frameIndex: number } | null>(null);
-  
-  // 骰子结果状态
-  const [diceResult, setDiceResult] = useState<{
-    results: DiceFace[];
-    attackType: 'melee' | 'ranged';
-    hits: number;
-  } | null>(null);
-  
-  // 摧毁效果状态
+  const [showDiscardOverlay, setShowDiscardOverlay] = useState(false);
+
+  // 摧毁效果
   const { effects: destroyEffects, pushEffect: pushDestroyEffect, removeEffect: removeDestroyEffect } = useDestroyEffects();
-  
-  // 追踪已处理的事件数量
-  const processedEventCount = useRef(0);
-  
-  // 监听攻击事件和摧毁事件
-  useEffect(() => {
-    const events = getEvents(G);
-    const newEvents = events.slice(processedEventCount.current);
-    processedEventCount.current = events.length;
-    
-    for (const event of newEvents) {
-      // 攻击事件 - 显示骰子结果
-      if (event.type === SW_EVENTS.UNIT_ATTACKED) {
-        const payload = event.payload as {
-          attackType: 'melee' | 'ranged';
-          diceResults: DiceFace[];
-          hits: number;
-        };
-        setDiceResult({
-          results: payload.diceResults,
-          attackType: payload.attackType,
-          hits: payload.hits,
-        });
-      }
-      
-      // 单位摧毁事件 - 显示摧毁动画
-      if (event.type === SW_EVENTS.UNIT_DESTROYED) {
-        const payload = event.payload as {
-          position: { row: number; col: number };
-          cardName: string;
-        };
-        pushDestroyEffect({
-          position: payload.position,
-          cardName: payload.cardName,
-          type: 'unit',
-        });
-      }
-      
-      // 建筑摧毁事件 - 显示摧毁动画
-      if (event.type === SW_EVENTS.STRUCTURE_DESTROYED) {
-        const payload = event.payload as {
-          position: { row: number; col: number };
-          cardName: string;
-        };
-        pushDestroyEffect({
-          position: payload.position,
-          cardName: payload.cardName,
-          type: 'structure',
-        });
-      }
-    }
-  }, [G, pushDestroyEffect]);
-  
-  // 关闭骰子结果浮层
+  // 棋盘特效
+  const { effects: boardEffects, pushEffect: pushBoardEffect, removeEffect: removeBoardEffect } = useBoardEffects();
+  // 全屏震动
+  const { shakeStyle, triggerShake } = useScreenShake();
+
+  // 攻击动画状态
+  const [attackAnimState, setAttackAnimState] = useState<{
+    attacker: CellCoord; target: CellCoord; hits: number;
+  } | null>(null);
+  const [hitStopTarget, setHitStopTarget] = useState<CellCoord | null>(null);
+
+  // 事件流消费 Hook
+  const {
+    diceResult, deathGhosts,
+    abilityMode, setAbilityMode,
+    soulTransferMode, setSoulTransferMode,
+    mindCaptureMode, setMindCaptureMode,
+    afterAttackAbilityMode, setAfterAttackAbilityMode,
+    pendingAttackRef, handleCloseDiceResult: rawCloseDiceResult,
+    clearPendingAttack, flushPendingDestroys,
+  } = useGameEvents({
+    G, core, myPlayerId,
+    pushDestroyEffect: (data) => pushDestroyEffect(data),
+    pushBoardEffect: (data) => pushBoardEffect(data as Parameters<typeof pushBoardEffect>[0]),
+    triggerShake: (intensity, type) => triggerShake(intensity as 'normal' | 'strong', type as 'impact' | 'hit'),
+  });
+
+  // 格子交互 Hook
+  const interaction = useCellInteraction({
+    core, moves: moves as Record<string, (payload?: unknown) => void>,
+    currentPhase, isMyTurn, isGameOver: !!isGameOver,
+    myPlayerId, activePlayerId, myHand, fromViewCoord,
+    abilityMode, setAbilityMode, soulTransferMode,
+    mindCaptureMode, setMindCaptureMode,
+    afterAttackAbilityMode, setAfterAttackAbilityMode,
+  });
+
+  // 关闭骰子结果 → 播放攻击动画
   const handleCloseDiceResult = useCallback(() => {
-    setDiceResult(null);
-  }, []);
-  
+    const pending = rawCloseDiceResult();
+    if (!pending) return;
+
+    if (pending.attackType === 'ranged') {
+      // 远程攻击：骰子结束后稍作延迟再播放特效
+      clearPendingAttack();
+      const attackSnapshot = { ...pending };
+      window.setTimeout(() => {
+        const hitIntensity = attackSnapshot.hits >= 3 ? 'strong' : 'normal';
+        pushBoardEffect({ type: 'shockwave', position: attackSnapshot.target, sourcePosition: attackSnapshot.attacker, intensity: hitIntensity });
+        for (const dmg of attackSnapshot.damages) {
+          pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
+        }
+        if (attackSnapshot.hits >= 3) triggerShake('normal', 'hit');
+        flushPendingDestroys();
+      }, 180);
+    } else {
+      // 近战攻击：启动卡牌本体碰撞动画
+      setAttackAnimState({ attacker: pending.attacker, target: pending.target, hits: pending.hits });
+    }
+  }, [rawCloseDiceResult, clearPendingAttack, pushBoardEffect, triggerShake, flushPendingDestroys]);
+
+  // 卡牌碰撞动画完成回调
+  const handleAttackAnimComplete = useCallback(() => {
+    const pending = pendingAttackRef.current;
+    if (!pending) { setAttackAnimState(null); return; }
+    clearPendingAttack();
+
+    const hitIntensity = pending.hits >= 3 ? 'strong' : 'normal';
+    if (pending.hits > 0) {
+      setHitStopTarget(pending.target);
+      setTimeout(() => setHitStopTarget(null), 200);
+    }
+    pushBoardEffect({ type: 'shockwave', position: pending.target, sourcePosition: pending.attacker, intensity: hitIntensity });
+    for (const dmg of pending.damages) {
+      pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
+    }
+    if (pending.hits >= 3) triggerShake('normal', 'hit');
+    flushPendingDestroys();
+    setAttackAnimState(null);
+  }, [pendingAttackRef, clearPendingAttack, pushBoardEffect, pushDestroyEffect, triggerShake, flushPendingDestroys]);
+
+  // 卡牌放大
   const handleMagnifyCard = useCallback((card: Card) => {
     const spriteIndex = 'spriteIndex' in card ? card.spriteIndex : undefined;
     const spriteAtlas = 'spriteAtlas' in card ? card.spriteAtlas : undefined;
     if (spriteIndex === undefined) return;
-    const atlasId = spriteAtlas === 'hero' ? 'sw:necromancer:hero' : 'sw:necromancer:cards';
+    const atlasType = (spriteAtlas ?? 'cards') as 'hero' | 'cards';
+    const atlasId = resolveCardAtlasId(card as { id: string; faction?: string }, atlasType);
     setMagnifiedCard({ atlasId, frameIndex: spriteIndex });
   }, []);
-  
   const handleMagnifyBoardUnit = useCallback((unit: BoardUnit) => {
-    const spriteConfig = getUnitSpriteConfig(unit);
-    setMagnifiedCard(spriteConfig);
+    setMagnifiedCard(getUnitSpriteConfig(unit));
   }, []);
-  
   const handleMagnifyBoardStructure = useCallback((structure: BoardStructure) => {
-    const spriteConfig = getStructureSpriteConfig(structure);
-    setMagnifiedCard(spriteConfig);
-  }, []);
-  
-  const handleCloseMagnify = useCallback(() => {
-    setMagnifiedCard(null);
-  }, []);
-  
-  // 获取选中的手牌
-  const selectedHandCard = useMemo(() => {
-    if (!selectedHandCardId) return null;
-    return myHand.find(c => c.id === selectedHandCardId) ?? null;
-  }, [selectedHandCardId, myHand]);
-  
-  // 获取可召唤位置
-  const validSummonPositions = useMemo(() => {
-    if (currentPhase !== 'summon' || !isMyTurn || !selectedHandCard) {
-      return [];
-    }
-    if (selectedHandCard.cardType !== 'unit') {
-      return [];
-    }
-    const positions = getValidSummonPositions(core, myPlayerId as '0' | '1');
-    return positions;
-  }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
-  
-  // 获取可建造位置
-  const validBuildPositions = useMemo(() => {
-    if (currentPhase !== 'build' || !isMyTurn || !selectedHandCard) return [];
-    if (selectedHandCard.cardType !== 'structure') return [];
-    return getValidBuildPositions(core, myPlayerId as '0' | '1');
-  }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
-  
-  // 获取可移动位置
-  const validMovePositions = useMemo(() => {
-    if (currentPhase !== 'move' || !isMyTurn || !core.selectedUnit) return [];
-    return getValidMoveTargets(core, core.selectedUnit);
-  }, [core, currentPhase, isMyTurn]);
-  
-  // 获取可攻击位置
-  const validAttackPositions = useMemo(() => {
-    if (currentPhase !== 'attack' || !isMyTurn || !core.selectedUnit) return [];
-    return getValidAttackTargets(core, core.selectedUnit);
-  }, [core, currentPhase, isMyTurn]);
-
-  // 点击格子
-  const handleCellClick = useCallback((row: number, col: number) => {
-    const { row: gameRow, col: gameCol } = fromViewCoord({ row, col });
-    // 召唤阶段：如果选中了手牌且是有效召唤位置，执行召唤
-    if (currentPhase === 'summon' && selectedHandCardId) {
-      const isValidPosition = validSummonPositions.some(
-        p => p.row === gameRow && p.col === gameCol
-      );
-      if (isValidPosition) {
-        moves[SW_COMMANDS.SUMMON_UNIT]?.({
-          cardId: selectedHandCardId,
-          position: { row: gameRow, col: gameCol },
-        });
-        setSelectedHandCardId(null);
-        return;
-      }
-      // 点击无效位置，取消选中
-      setSelectedHandCardId(null);
-      return;
-    }
-    
-    // 建造阶段：如果选中了建筑卡且是有效建造位置，执行建造
-    if (currentPhase === 'build' && selectedHandCardId) {
-      const isValidPosition = validBuildPositions.some(
-        p => p.row === gameRow && p.col === gameCol
-      );
-      if (isValidPosition) {
-        moves[SW_COMMANDS.BUILD_STRUCTURE]?.({
-          cardId: selectedHandCardId,
-          position: { row: gameRow, col: gameCol },
-        });
-        setSelectedHandCardId(null);
-        return;
-      }
-      // 点击无效位置，取消选中
-      setSelectedHandCardId(null);
-      return;
-    }
-    
-    // 移动阶段
-    if (currentPhase === 'move') {
-      if (core.selectedUnit) {
-        // 已选中单位，尝试移动
-        const isValidMove = validMovePositions.some(
-          p => p.row === gameRow && p.col === gameCol
-        );
-        if (isValidMove) {
-          moves[SW_COMMANDS.MOVE_UNIT]?.({
-            from: core.selectedUnit,
-            to: { row: gameRow, col: gameCol },
-          });
-        } else {
-          // 点击其他位置，尝试选择新单位或取消选择
-          const clickedUnit = core.board[gameRow]?.[gameCol]?.unit;
-          if (clickedUnit && clickedUnit.owner === myPlayerId) {
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
-          } else {
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } }); // 取消选择
-          }
-        }
-      } else {
-        // 未选中单位，尝试选择
-        moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
-      }
-      return;
-    }
-    
-    // 攻击阶段
-    if (currentPhase === 'attack') {
-      if (core.selectedUnit) {
-        // 已选中单位，尝试攻击
-        const isValidAttack = validAttackPositions.some(
-          p => p.row === gameRow && p.col === gameCol
-        );
-        if (isValidAttack) {
-          moves[SW_COMMANDS.DECLARE_ATTACK]?.({
-            attacker: core.selectedUnit,
-            target: { row: gameRow, col: gameCol },
-          });
-        } else {
-          // 点击其他位置，尝试选择新单位或取消选择
-          const clickedUnit = core.board[gameRow]?.[gameCol]?.unit;
-          if (clickedUnit && clickedUnit.owner === myPlayerId) {
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
-          } else {
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } });
-          }
-        }
-      } else {
-        // 未选中单位，尝试选择
-        moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
-      }
-      return;
-    }
-    
-    // 其他阶段：普通选择
-    moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
-  }, [core, moves, currentPhase, selectedHandCardId, validSummonPositions, validBuildPositions, validMovePositions, validAttackPositions, myPlayerId, fromViewCoord]);
-
-  // 手牌点击（魔力阶段弃牌多选）
-  const handleCardClick = useCallback((cardId: string) => {
-    if (currentPhase === 'magic' && isMyTurn) {
-      // 魔力阶段：切换选中状态用于弃牌
-      setSelectedCardsForDiscard(prev => 
-        prev.includes(cardId) 
-          ? prev.filter(id => id !== cardId)
-          : [...prev, cardId]
-      );
-    }
-  }, [currentPhase, isMyTurn]);
-
-  // 手牌选中（召唤/建造阶段单选）
-  const handleCardSelect = useCallback((cardId: string | null) => {
-    setSelectedHandCardId(cardId);
+    setMagnifiedCard(getStructureSpriteConfig(structure));
   }, []);
 
-  // 确认弃牌换魔力
-  const handleConfirmDiscard = useCallback(() => {
-    if (selectedCardsForDiscard.length > 0) {
-      moves[SW_COMMANDS.DISCARD_FOR_MAGIC]?.({
-        cardIds: selectedCardsForDiscard,
-      });
-      setSelectedCardsForDiscard([]);
-    }
-  }, [moves, selectedCardsForDiscard]);
+  // StatusBanners 回调
+  const handleCancelAbility = useCallback(() => setAbilityMode(null), [setAbilityMode]);
+  const handleCancelBloodSummon = useCallback(() => interaction.setBloodSummonMode(null), [interaction]);
+  const handleContinueBloodSummon = useCallback(() => {
+    interaction.setBloodSummonMode({
+      step: 'selectTarget',
+      cardId: interaction.bloodSummonMode?.cardId,
+      completedCount: interaction.bloodSummonMode?.completedCount,
+    });
+  }, [interaction]);
+  const handleCancelAnnihilate = useCallback(() => interaction.setAnnihilateMode(null), [interaction]);
+  const handleConfirmAnnihilateTargets = useCallback(() => {
+    if (!interaction.annihilateMode) return;
+    interaction.setAnnihilateMode({
+      ...interaction.annihilateMode,
+      step: 'selectDamageTarget',
+      currentTargetIndex: 0,
+      damageTargets: [],
+    });
+  }, [interaction]);
+  const handleConfirmSoulTransfer = useCallback(() => {
+    if (!soulTransferMode) return;
+    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+      abilityId: 'soul_transfer',
+      sourceUnitId: soulTransferMode.sourceUnitId,
+      targetPosition: soulTransferMode.victimPosition,
+    });
+    setSoulTransferMode(null);
+  }, [soulTransferMode, moves, setSoulTransferMode]);
+  const handleSkipSoulTransfer = useCallback(() => setSoulTransferMode(null), [setSoulTransferMode]);
+  const handleSkipFuneralPyre = useCallback(() => {
+    if (!interaction.funeralPyreMode) return;
+    moves[SW_COMMANDS.FUNERAL_PYRE_HEAL]?.({
+      cardId: interaction.funeralPyreMode.cardId,
+      skip: true,
+    });
+    interaction.setFuneralPyreMode(null);
+  }, [interaction, moves]);
 
-  // 结束阶段（使用 FlowSystem 的 ADVANCE_PHASE）
-  const handleEndPhase = useCallback(() => {
-    moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({});
-  }, [moves]);
+  // 欺心巫族事件卡回调
+  const handleConfirmMindControl = useCallback(() => interaction.handleConfirmMindControl(), [interaction]);
+  const handleCancelMindControl = useCallback(() => interaction.setMindControlMode(null), [interaction]);
+  const handleConfirmStun = useCallback((direction: 'push' | 'pull', distance: number) => {
+    interaction.handleConfirmStun(direction, distance);
+  }, [interaction]);
+  const handleCancelStun = useCallback(() => interaction.setStunMode(null), [interaction]);
+  const handleCancelHypnoticLure = useCallback(() => interaction.setHypnoticLureMode(null), [interaction]);
 
-  const handleSaveLayout = useCallback(async (config: BoardLayoutConfig) => (
-    saveSummonerWarsLayout(config)
-  ), []);
+  // 心灵捕获 + 攻击后技能回调
+  const handleConfirmMindCapture = useCallback((choice: 'control' | 'damage') => {
+    interaction.handleConfirmMindCapture(choice);
+  }, [interaction]);
+  const handleCancelAfterAttackAbility = useCallback(() => setAfterAttackAbilityMode(null), [setAfterAttackAbilityMode]);
+  const handleConfirmTelekinesis = useCallback((direction: 'push' | 'pull') => {
+    interaction.handleConfirmTelekinesis(direction);
+  }, [interaction]);
+  const handleCancelTelekinesis = useCallback(() => interaction.setTelekinesisTargetMode(null), [interaction]);
+
+  const handleSaveLayout = useCallback(async (config: BoardLayoutConfig) => saveSummonerWarsLayout(config), []);
 
   return (
-    <UndoProvider
-      value={{
-        G,
-        ctx,
-        moves,
-        playerID,
-        isGameOver: !!isGameOver,
-        isLocalMode: isLocalMatch,
-      }}
-    >
-      {/* 全屏容器 */}
+    <UndoProvider value={{ G, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
+      {/* 阵营选择阶段 */}
+      {isInFactionSelection ? (
+        <FactionSelection
+          isOpen={true}
+          currentPlayerId={rootPid}
+          hostPlayerId={G.core.hostPlayerId}
+          selectedFactions={G.core.selectedFactions}
+          readyPlayers={G.core.readyPlayers ?? {}}
+          playerNames={playerNames as Record<PlayerId, string>}
+          onSelect={handleSelectFaction}
+          onReady={handlePlayerReady}
+          onStart={handleHostStart}
+        />
+      ) : (
       <div className="h-[100dvh] w-full bg-neutral-900 overflow-hidden relative flex flex-col">
-        {/* 布局编辑器模式 */}
         {isEditingLayout ? (
           <div className="flex-1 overflow-auto p-4">
             <div className="mb-2 flex items-center gap-2">
-              <button
-                onClick={handleExitLayoutEditor}
-                className="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600"
-              >
-                ← 返回游戏
-              </button>
+              <button onClick={handleExitLayoutEditor} className="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600">← 返回游戏</button>
             </div>
             <BoardLayoutEditor
               initialConfig={layoutConfig ?? undefined}
@@ -517,12 +353,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
             />
           </div>
         ) : (
-          /* 游戏模式 */
           <div className="flex-1 relative overflow-hidden">
-            {/* 地图层（仅地图可拖拽/缩放） */}
-            <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer">
-              <MapContainer 
-                className="w-full h-full flex items-center justify-center px-[10vw]" 
+            {/* 地图层 */}
+            <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
+              <MapContainer
+                className="w-full h-full flex items-center justify-center px-[10vw]"
                 initialScale={1}
                 dragBoundsPaddingRatioY={0.3}
                 containerTestId="sw-map-container"
@@ -531,227 +366,77 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               >
                 <div className="relative inline-block">
                   <div className="relative">
-                    <OptimizedImage 
+                    <OptimizedImage
                       src="summonerwars/common/map.png"
-                      alt="" 
+                      alt=""
                       className="block w-auto h-auto max-w-none pointer-events-none select-none"
                       draggable={false}
                     />
-                    
-                    {/* 网格层 */}
-                    <div className="absolute inset-0">
-                      {Array.from({ length: currentGrid.rows }).map((_, row) =>
-                        Array.from({ length: currentGrid.cols }).map((_, col) => {
-                          const viewCoord = { row, col };
-                          const gameCoord = fromViewCoord(viewCoord);
-                          const pos = getCellPosition(viewCoord.row, viewCoord.col, currentGrid);
-                          const cellKey = `${gameCoord.row}-${gameCoord.col}`;
-                          const isSelected = core.selectedUnit?.row === gameCoord.row && core.selectedUnit?.col === gameCoord.col;
-                          const isValidSummon = selectedHandCardId && validSummonPositions.some(
-                            p => p.row === gameCoord.row && p.col === gameCoord.col
-                          );
-                          const isValidBuild = selectedHandCardId && validBuildPositions.some(
-                            p => p.row === gameCoord.row && p.col === gameCoord.col
-                          );
-                          const isValidMove = validMovePositions.some(
-                            p => p.row === gameCoord.row && p.col === gameCoord.col
-                          );
-                          const isValidAttack = validAttackPositions.some(
-                            p => p.row === gameCoord.row && p.col === gameCoord.col
-                          );
-                          
-                          // 确定格子样式
-                          let cellStyle = 'border-white/20 hover:border-amber-400/80 hover:bg-amber-400/10';
-                          if (isSelected) {
-                            cellStyle = 'border-amber-400 bg-amber-400/20 border-2';
-                          } else if (isValidSummon) {
-                            cellStyle = 'border-green-400 bg-green-400/30 border-2';
-                          } else if (isValidBuild) {
-                            cellStyle = 'border-purple-400 bg-purple-400/30 border-2'; // 紫色表示可建造
-                          } else if (isValidMove) {
-                            cellStyle = 'border-blue-400 bg-blue-400/25 border-2';
-                          } else if (isValidAttack) {
-                            cellStyle = 'border-red-400 bg-red-400/30 border-2';
-                          }
-                          
-                          return (
-                            <div
-                              key={cellKey}
-                              onClick={() => handleCellClick(viewCoord.row, viewCoord.col)}
-                              data-testid={`sw-cell-${gameCoord.row}-${gameCoord.col}`}
-                              data-row={gameCoord.row}
-                              data-col={gameCoord.col}
-                              data-selected={isSelected ? 'true' : 'false'}
-                              data-valid-summon={isValidSummon ? 'true' : 'false'}
-                              data-valid-build={isValidBuild ? 'true' : 'false'}
-                              data-valid-move={isValidMove ? 'true' : 'false'}
-                              data-valid-attack={isValidAttack ? 'true' : 'false'}
-                              className={`
-                                absolute bg-transparent border transition-colors cursor-pointer
-                                ${cellStyle}
-                              `}
-                              style={{
-                                left: `${pos.left}%`,
-                                top: `${pos.top}%`,
-                                width: `${pos.width}%`,
-                                height: `${pos.height}%`,
-                              }}
-                            />
-                          );
-                        })
-                      )}
-                    </div>
-
-                    {/* 卡牌层 - 从实际游戏状态渲染 */}
-                    <div className="absolute inset-0">
-                      {Array.from({ length: BOARD_ROWS }).map((_, row) =>
-                        Array.from({ length: BOARD_COLS }).map((_, col) => {
-                          const cell = core.board[row]?.[col];
-                          if (!cell) return null;
-                          
-                          const viewCoord = toViewCoord({ row, col });
-                          const pos = getCellPosition(viewCoord.row, viewCoord.col, currentGrid);
-                          const cellKey = `card-${row}-${col}`;
-                          
-                          // 渲染单位
-                          if (cell.unit) {
-                            const spriteConfig = getUnitSpriteConfig(cell.unit);
-                            const isMyUnit = cell.unit.owner === myPlayerId;
-                            const damage = cell.unit.damage;
-                            const life = cell.unit.card.life;
-                            const unit = cell.unit;
-                            
-                            return (
-                              <div
-                                key={cellKey}
-                                className="absolute flex items-center justify-center cursor-pointer"
-                                data-testid={`sw-unit-${row}-${col}`}
-                                data-owner={unit.owner}
-                                data-unit-class={unit.card.unitClass}
-                                data-unit-name={unit.card.name}
-                                data-unit-life={unit.card.life}
-                                data-unit-damage={unit.damage}
-                                style={{
-                                  left: `${pos.left}%`,
-                                  top: `${pos.top}%`,
-                                  width: `${pos.width}%`,
-                                  height: `${pos.height}%`,
-                                }}
-                                onClick={() => handleCellClick(viewCoord.row, viewCoord.col)}
-                              >
-                                <div className="relative w-[85%] group">
-                                  <CardSprite
-                                    atlasId={spriteConfig.atlasId}
-                                    frameIndex={spriteConfig.frameIndex}
-                                    className={`rounded shadow-lg ${!isMyUnit ? 'rotate-180' : ''}`}
-                                  />
-                                  {/* 伤害指示器 */}
-                                  {damage > 0 && (
-                                    <div className="absolute -top-[0.2vw] -right-[0.2vw] w-[1.2vw] h-[1.2vw] rounded-full bg-red-600 border border-red-400 flex items-center justify-center text-[0.7vw] text-white font-bold shadow">
-                                      {life - damage}
-                                    </div>
-                                  )}
-                                  {/* 放大镜按钮 */}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleMagnifyBoardUnit(unit); }}
-                                    className="absolute top-[0.2vw] left-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-20"
-                                  >
-                                    <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          }
-                          
-                          // 渲染建筑
-                          if (cell.structure) {
-                            const spriteConfig = getStructureSpriteConfig(cell.structure);
-                            const isMyStructure = cell.structure.owner === myPlayerId;
-                            const damage = cell.structure.damage;
-                            const life = cell.structure.card.life;
-                            const structure = cell.structure;
-                            
-                            return (
-                              <div
-                                key={cellKey}
-                                className="absolute flex items-center justify-center cursor-pointer"
-                                data-testid={`sw-structure-${row}-${col}`}
-                                data-owner={structure.owner}
-                                data-structure-name={structure.card.name}
-                                data-structure-life={structure.card.life}
-                                data-structure-damage={structure.damage}
-                                data-structure-gate={structure.card.isGate ? 'true' : 'false'}
-                                style={{
-                                  left: `${pos.left}%`,
-                                  top: `${pos.top}%`,
-                                  width: `${pos.width}%`,
-                                  height: `${pos.height}%`,
-                                }}
-                                onClick={() => handleCellClick(viewCoord.row, viewCoord.col)}
-                              >
-                                <div className="relative w-[85%] group">
-                                  <CardSprite
-                                    atlasId={spriteConfig.atlasId}
-                                    frameIndex={spriteConfig.frameIndex}
-                                    className={`rounded shadow-lg ${!isMyStructure ? 'rotate-180' : ''}`}
-                                  />
-                                  {/* 生命指示器 */}
-                                  <div className={`absolute -top-[0.2vw] -right-[0.2vw] w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.7vw] text-white font-bold shadow ${damage > 0 ? 'bg-red-600 border-red-400' : 'bg-slate-600 border-slate-400'} border`}>
-                                    {life - damage}
-                                  </div>
-                                  {/* 放大镜按钮 */}
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleMagnifyBoardStructure(structure); }}
-                                    className="absolute top-[0.2vw] left-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-20"
-                                  >
-                                    <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          }
-                          
-                          return null;
-                        })
-                      )}
-                    </div>
-                    
+                    {/* 网格 + 卡牌层 */}
+                    <BoardGrid
+                      core={core}
+                      currentGrid={currentGrid}
+                      myPlayerId={myPlayerId}
+                      shouldFlipView={shouldFlipView}
+                      selectedHandCardId={interaction.selectedHandCardId}
+                      validSummonPositions={interaction.validSummonPositions}
+                      validBuildPositions={interaction.validBuildPositions}
+                      validMovePositions={interaction.validMovePositions}
+                      validAttackPositions={interaction.validAttackPositions}
+                      validEventTargets={interaction.validEventTargets}
+                      validAbilityPositions={interaction.validAbilityPositions}
+                      validAbilityUnits={interaction.validAbilityUnits}
+                      actionableUnitPositions={interaction.actionableUnitPositions}
+                      bloodSummonHighlights={interaction.bloodSummonHighlights}
+                      annihilateHighlights={interaction.annihilateHighlights}
+                      annihilateMode={interaction.annihilateMode}
+                      abilityMode={abilityMode}
+                      mindControlHighlights={interaction.mindControlHighlights}
+                      mindControlSelectedTargets={interaction.mindControlMode?.selectedTargets ?? []}
+                      stunHighlights={interaction.stunHighlights}
+                      hypnoticLureHighlights={interaction.hypnoticLureHighlights}
+                      afterAttackAbilityHighlights={interaction.afterAttackAbilityHighlights}
+                      attackAnimState={attackAnimState}
+                      hitStopTarget={hitStopTarget}
+                      deathGhosts={deathGhosts}
+                      pendingAttackRef={pendingAttackRef}
+                      onCellClick={interaction.handleCellClick}
+                      onAttackAnimComplete={handleAttackAnimComplete}
+                      onMagnifyUnit={handleMagnifyBoardUnit}
+                      onMagnifyStructure={handleMagnifyBoardStructure}
+                    />
                     {/* 摧毁效果层 */}
                     <DestroyEffectsLayer
                       effects={destroyEffects}
-                      getCellPosition={(row, col) => getCellPosition(row, col, currentGrid)}
+                      getCellPosition={(row, col) => {
+                        const vc = toViewCoord({ row, col });
+                        return getCellPosition(vc.row, vc.col, currentGrid);
+                      }}
                       onEffectComplete={removeDestroyEffect}
+                    />
+                    {/* 棋盘特效层 */}
+                    <BoardEffectsLayer
+                      effects={boardEffects}
+                      getCellPosition={(row, col) => {
+                        const vc = toViewCoord({ row, col });
+                        return getCellPosition(vc.row, vc.col, currentGrid);
+                      }}
+                      onEffectComplete={removeBoardEffect}
                     />
                   </div>
                 </div>
               </MapContainer>
             </div>
 
-            {/* UI 层（左右黑边 + UI 覆盖） */}
+            {/* UI 层 */}
             <div className="absolute inset-0 z-20 pointer-events-none">
               {/* 左侧黑边渐变 */}
-              <div
-                className="absolute inset-y-0 left-0"
-                style={{
-                  width: '10vw',
-                  background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))',
-                }}
-              />
+              <div className="absolute inset-y-0 left-0" style={{ width: '10vw', background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
               {/* 右侧黑边渐变 */}
-              <div
-                className="absolute inset-y-0 right-0"
-                style={{
-                  width: '10vw',
-                  background: 'linear-gradient(to left, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))',
-                }}
-              />
+              <div className="absolute inset-y-0 right-0" style={{ width: '10vw', background: 'linear-gradient(to left, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
 
               {/* 右上：对手名+魔力条 */}
-              <div className="absolute top-3 right-3 pointer-events-auto" data-testid="sw-opponent-bar">
+              <div className="absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2" data-testid="sw-opponent-bar">
                 <div className="flex items-center gap-3 bg-black/30 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-600/20">
                   <span className="text-sm text-white font-medium text-opacity-100">
                     {matchData?.[playerID === '1' ? 0 : 1]?.name ?? '对手'}
@@ -760,50 +445,79 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* 左下区域：玩家名+魔力条（上）+ 抽牌堆（下） - 与右下角对齐 */}
-              <div className="absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-[3.75rem]" data-testid="sw-player-bar">
-                {/* 玩家名+魔力条 - 放在上面 */}
+              {/* 右侧：对手持续效果 */}
+              {opponentActiveEvents.length > 0 && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 z-20 pointer-events-auto flex flex-row-reverse items-center gap-2"
+                  style={{ marginTop: '-8rem' }} data-testid="sw-opponent-active-events">
+                  <span className="text-[0.8vw] text-amber-300/80 font-bold tracking-wider writing-mode-vertical" style={{ writingMode: 'vertical-rl' }}>对方持续效果</span>
+                  <div className="flex flex-col gap-1">
+                    {opponentActiveEvents.map((ev) => {
+                      const sprite = getEventSpriteConfig(ev);
+                      return (
+                        <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
+                          <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[7vw] rounded shadow-md border border-amber-500/40" />
+                          <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/30 transition-colors" />
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-[0.7vw] text-amber-200 text-center py-[0.1vw] rounded-b truncate px-[0.2vw]">{ev.name}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 左侧：己方持续效果 */}
+              {myActiveEvents.length > 0 && (
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 z-20 pointer-events-auto flex flex-row items-center gap-2" data-testid="sw-my-active-events">
+                  <span className="text-[0.8vw] text-amber-300/80 font-bold tracking-wider writing-mode-vertical" style={{ writingMode: 'vertical-rl' }}>持续效果</span>
+                  <div className="flex flex-col gap-1">
+                    {myActiveEvents.map((ev) => {
+                      const sprite = getEventSpriteConfig(ev);
+                      return (
+                        <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
+                          <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[7vw] rounded shadow-md border border-amber-500/40" />
+                          <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/30 transition-colors" />
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-[0.7vw] text-amber-200 text-center py-[0.1vw] rounded-b truncate px-[0.2vw]">{ev.name}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 左下区域：玩家名+魔力条 + 抽牌堆 */}
+              <div className="absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-[3.75rem]" data-testid="sw-player-bar" data-tutorial-id="sw-player-bar">
                 <div className="flex items-center gap-3 bg-black/30 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-600/20">
                   <span className="text-sm text-white font-medium text-opacity-100">
                     {matchData?.[playerID === '1' ? 1 : 0]?.name ?? '玩家'}
                   </span>
                   <EnergyBar current={myMagic} testId="sw-energy-player" />
                 </div>
-                {/* 抽牌堆 - 放在下面，与右下角弃牌堆对齐 */}
-                <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
+                <div data-tutorial-id="sw-deck-draw">
+                  <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
+                </div>
               </div>
 
-              {/* 右下区域：结束阶段按钮（上）+ 弃牌堆（下） */}
+              {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
               <div className="absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3" data-testid="sw-phase-controls">
-                {/* 结束阶段按钮 - 放在上面 */}
                 <div className="flex gap-2">
-                  {/* 魔力阶段显示确认弃牌按钮 */}
-                  {currentPhase === 'magic' && isMyTurn && selectedCardsForDiscard.length > 0 && (
-                    <GameButton
-                      onClick={handleConfirmDiscard}
-                      variant="secondary"
-                      size="sm"
-                      data-testid="sw-confirm-discard"
-                    >
-                      弃牌 +{selectedCardsForDiscard.length}
+                  {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
+                    <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
+                      弃牌 +{interaction.selectedCardsForDiscard.length}
                     </GameButton>
                   )}
-                  <GameButton
-                    onClick={handleEndPhase}
-                    disabled={!isMyTurn}
-                    variant="primary"
-                    size="md"
-                    data-testid="sw-end-phase"
-                  >
+                  <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn} variant="primary" size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
                     结束阶段
                   </GameButton>
                 </div>
-                {/* 弃牌堆 - 放在下面 */}
-                <DeckPile type="discard" count={myDiscardCount} position="right" testId="sw-deck-discard" />
+                <DeckPile
+                  type="discard" count={myDiscardCount} position="right"
+                  topCard={myDiscard[myDiscard.length - 1] ?? null}
+                  onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+                />
               </div>
-              
-              {/* 右侧：阶段指示器（垂直居中） */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-auto" data-testid="sw-phase-tracker">
+
+              {/* 右侧：阶段指示器 */}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-auto" data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
                 <PhaseTracker
                   currentPhase={currentPhase}
                   turnNumber={core.turnNumber}
@@ -816,88 +530,184 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
               {/* 顶部中央：提示横幅 */}
               <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto z-30">
-                <ActionBanner phase={currentPhase} isMyTurn={isMyTurn} />
+                <StatusBanners
+                  currentPhase={currentPhase}
+                  isMyTurn={isMyTurn}
+                  abilityMode={abilityMode}
+                  bloodSummonMode={interaction.bloodSummonMode}
+                  annihilateMode={interaction.annihilateMode}
+                  soulTransferMode={soulTransferMode}
+                  funeralPyreMode={interaction.funeralPyreMode}
+                  mindControlMode={interaction.mindControlMode}
+                  stunMode={interaction.stunMode}
+                  hypnoticLureMode={interaction.hypnoticLureMode}
+                  mindCaptureMode={mindCaptureMode}
+                  afterAttackAbilityMode={afterAttackAbilityMode}
+                  telekinesisTargetMode={interaction.telekinesisTargetMode}
+                  onCancelAbility={handleCancelAbility}
+                  onCancelBloodSummon={handleCancelBloodSummon}
+                  onContinueBloodSummon={handleContinueBloodSummon}
+                  onCancelAnnihilate={handleCancelAnnihilate}
+                  onConfirmAnnihilateTargets={handleConfirmAnnihilateTargets}
+                  onConfirmSoulTransfer={handleConfirmSoulTransfer}
+                  onSkipSoulTransfer={handleSkipSoulTransfer}
+                  onSkipFuneralPyre={handleSkipFuneralPyre}
+                  onConfirmMindControl={handleConfirmMindControl}
+                  onCancelMindControl={handleCancelMindControl}
+                  onConfirmStun={handleConfirmStun}
+                  onCancelStun={handleCancelStun}
+                  onCancelHypnoticLure={handleCancelHypnoticLure}
+                  onConfirmMindCapture={handleConfirmMindCapture}
+                  onCancelAfterAttackAbility={handleCancelAfterAttackAbility}
+                  onConfirmTelekinesis={handleConfirmTelekinesis}
+                  onCancelTelekinesis={handleCancelTelekinesis}
+                />
               </div>
 
-              {/* 底部：手牌区 - 贴底显示 */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30">
+              {/* 底部：手牌区 */}
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
                 <HandArea
                   cards={myHand}
                   phase={currentPhase}
                   isMyTurn={isMyTurn}
                   currentMagic={myMagic}
-                  selectedCardId={selectedHandCardId}
-                  selectedCardIds={selectedCardsForDiscard}
-                  onCardClick={handleCardClick}
-                  onCardSelect={handleCardSelect}
+                  selectedCardId={interaction.selectedHandCardId}
+                  selectedCardIds={interaction.selectedCardsForDiscard}
+                  onCardClick={interaction.handleCardClick}
+                  onCardSelect={interaction.handleCardSelect}
+                  onPlayEvent={interaction.handlePlayEvent}
                   onMagnifyCard={handleMagnifyCard}
+                  bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                 />
               </div>
             </div>
+
+            {/* 技能卡牌选择器 */}
+            {abilityMode && abilityMode.step === 'selectCard' && (
+              <CardSelectorOverlay
+                title={
+                  abilityMode.abilityId === 'revive_undead' ? '复活死灵：选择弃牌堆中的亡灵单位' :
+                    abilityMode.abilityId === 'infection' ? '感染：选择弃牌堆中的疫病体' : '选择卡牌'
+                }
+                cards={core.players[myPlayerId]?.discard.filter(c => {
+                  if (abilityMode.abilityId === 'revive_undead') {
+                    return c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国');
+                  }
+                  if (abilityMode.abilityId === 'infection') {
+                    return c.cardType === 'unit' && (c.id.includes('plague-zombie') || c.name.includes('疫病体'));
+                  }
+                  return true;
+                }) ?? []}
+                onSelect={(card) => {
+                  if (abilityMode.abilityId === 'infection' && abilityMode.targetPosition) {
+                    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+                      abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
+                      targetCardId: card.id, targetPosition: abilityMode.targetPosition,
+                    });
+                    setAbilityMode(null);
+                  } else {
+                    setAbilityMode(abilityMode ? { ...abilityMode, step: 'selectPosition', selectedCardId: card.id } : null);
+                  }
+                }}
+                onCancel={() => setAbilityMode(null)}
+              />
+            )}
+
+            {/* 单位操作面板（主动技能按钮） */}
+            {!abilityMode && !interaction.bloodSummonMode && !interaction.eventTargetMode && core.selectedUnit && isMyTurn && (() => {
+              const unit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
+              if (!unit || unit.owner !== myPlayerId) return null;
+              const abilities = unit.card.abilities ?? [];
+              const buttons: React.ReactNode[] = [];
+
+              if (abilities.includes('revive_undead') && currentPhase === 'summon') {
+                const hasUndeadInDiscard = core.players[myPlayerId]?.discard.some(c =>
+                  c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国')
+                );
+                if (hasUndeadInDiscard) {
+                  buttons.push(
+                    <GameButton key="revive_undead" onClick={() => setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: unit.cardId })} variant="primary" size="md">
+                      🗡️ 复活死灵 (受到2点伤害)
+                    </GameButton>
+                  );
+                }
+              }
+              if (abilities.includes('fire_sacrifice_summon') && currentPhase === 'summon') {
+                const hasOtherUnits = getPlayerUnits(core, myPlayerId as '0' | '1').some(u => u.cardId !== unit.cardId);
+                if (hasOtherUnits) {
+                  buttons.push(
+                    <GameButton key="fire_sacrifice_summon" onClick={() => setAbilityMode({ abilityId: 'fire_sacrifice_summon', step: 'selectUnit', sourceUnitId: unit.cardId })} variant="secondary" size="md">
+                      🔥 火祀召唤 (消灭友方单位并移动)
+                    </GameButton>
+                  );
+                }
+              }
+              if (abilities.includes('life_drain') && currentPhase === 'attack') {
+                const nearbyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
+                  .filter(u => {
+                    if (u.cardId === unit.cardId) return false;
+                    const dist = Math.abs(u.position.row - core.selectedUnit!.row) + Math.abs(u.position.col - core.selectedUnit!.col);
+                    return dist <= 2;
+                  });
+                if (nearbyUnits.length > 0) {
+                  buttons.push(
+                    <GameButton key="life_drain" onClick={() => setAbilityMode({ abilityId: 'life_drain', step: 'selectUnit', sourceUnitId: unit.cardId })} variant="secondary" size="md">
+                      💀 吸取生命 (消灭友方，战力翻倍)
+                    </GameButton>
+                  );
+                }
+              }
+              if (buttons.length === 0) return null;
+              return <div className="absolute bottom-[220px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex gap-2">{buttons}</div>;
+            })()}
+
+            {/* 卡牌放大预览 */}
+            <MagnifyOverlay isOpen={!!magnifiedCard} onClose={() => setMagnifiedCard(null)} containerClassName="max-h-[85vh] max-w-[90vw]" closeLabel="关闭预览">
+              {magnifiedCard && <CardSprite atlasId={magnifiedCard.atlasId} frameIndex={magnifiedCard.frameIndex} className="h-[75vh] w-auto rounded-xl shadow-2xl" />}
+            </MagnifyOverlay>
+
+            {/* 弃牌堆查看浮层 */}
+            {showDiscardOverlay && (
+              <DiscardPileOverlay cards={myDiscard} onClose={() => setShowDiscardOverlay(false)} onMagnify={handleMagnifyCard} />
+            )}
+
+            {/* 骰子结果浮层 */}
+            <DiceResultOverlay
+              results={diceResult?.results ?? null}
+              attackType={diceResult?.attackType ?? null}
+              hits={diceResult?.hits ?? 0}
+              isOpponentAttack={diceResult?.isOpponentAttack ?? false}
+              onClose={handleCloseDiceResult}
+            />
+
+            {/* 结束页面遮罩 */}
+            <EndgameOverlay
+              isGameOver={!!isGameOver}
+              result={isGameOver}
+              playerID={playerID}
+              reset={isSpectator ? undefined : reset}
+              isMultiplayer={isSpectator ? false : isMultiplayer}
+              totalPlayers={matchData?.length}
+              rematchState={rematchState}
+              onVote={isSpectator ? undefined : handleRematchVote}
+            />
+
+            {/* 调试面板 */}
+            {!isSpectator && (
+              <GameDebugPanel G={G} ctx={ctx} moves={moves} events={events} playerID={playerID} autoSwitch={!isMultiplayer}>
+                <SummonerWarsDebugConfig G={G} ctx={ctx} moves={moves} />
+                <button
+                  onClick={() => { if (isEditingLayout) { void handleExitLayoutEditor(); return; } setIsEditingLayout(true); }}
+                  className="px-2 py-1 text-xs bg-cyan-600 text-white rounded hover:bg-cyan-500"
+                >
+                  {isEditingLayout ? '退出编辑' : '编辑布局'}
+                </button>
+              </GameDebugPanel>
+            )}
           </div>
         )}
-
-        {/* 卡牌放大预览 */}
-        <MagnifyOverlay
-          isOpen={!!magnifiedCard}
-          onClose={handleCloseMagnify}
-          containerClassName="max-h-[85vh] max-w-[90vw]"
-          closeLabel="关闭预览"
-        >
-          {magnifiedCard && (
-            <CardSprite
-              atlasId={magnifiedCard.atlasId}
-              frameIndex={magnifiedCard.frameIndex}
-              className="h-[75vh] w-auto rounded-xl shadow-2xl"
-            />
-          )}
-        </MagnifyOverlay>
-
-        {/* 骰子结果浮层 */}
-        <DiceResultOverlay
-          results={diceResult?.results ?? null}
-          attackType={diceResult?.attackType ?? null}
-          hits={diceResult?.hits ?? 0}
-          onClose={handleCloseDiceResult}
-        />
-
-        {/* 结束页面遮罩 */}
-        <EndgameOverlay
-          isGameOver={!!isGameOver}
-          result={isGameOver}
-          playerID={playerID}
-          reset={isSpectator ? undefined : reset}
-          isMultiplayer={isSpectator ? false : isMultiplayer}
-          totalPlayers={matchData?.length}
-          rematchState={rematchState}
-          onVote={isSpectator ? undefined : handleRematchVote}
-        />
-
-        {/* 调试面板 */}
-        {!isSpectator && (
-          <GameDebugPanel
-            G={G}
-            ctx={ctx}
-            moves={moves}
-            events={events}
-            playerID={playerID}
-            autoSwitch={!isMultiplayer}
-          >
-            <button
-              onClick={() => {
-                if (isEditingLayout) {
-                  void handleExitLayoutEditor();
-                  return;
-                }
-                setIsEditingLayout(true);
-              }}
-              className="px-2 py-1 text-xs bg-cyan-600 text-white rounded hover:bg-cyan-500"
-            >
-              {isEditingLayout ? '退出编辑' : '编辑布局'}
-            </button>
-          </GameDebugPanel>
-        )}
       </div>
+      )}
     </UndoProvider>
   );
 };

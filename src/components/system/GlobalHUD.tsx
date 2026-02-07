@@ -12,10 +12,12 @@ import { useLocation } from 'react-router-dom';
 import { AboutModal } from './AboutModal';
 import { FeedbackModal } from './FeedbackModal';
 
+const HUD_MODAL_NS = 'hud';
+
 export const GlobalHUD = () => {
     const { t } = useTranslation('game');
     const { unreadTotal, requests } = useSocial();
-    const { openModal, closeModal } = useModalStack();
+    const { openModal, closeModal, closeByNamespace } = useModalStack();
     const { user } = useAuth();
     const location = useLocation();
     const toast = useToast();
@@ -80,6 +82,13 @@ export const GlobalHUD = () => {
         document.addEventListener('fullscreenchange', handleFullscreenChange);
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }, [isGamePage]);
+
+    // 从游戏页返回大厅/主页时，清理 HUD 自己打开的弹窗，避免遗留。
+    useEffect(() => {
+        if (isGamePage) return;
+        closeByNamespace(HUD_MODAL_NS);
+        setSocialModalId(null);
+    }, [closeByNamespace, isGamePage]);
 
     if (isGamePage) return null;
 
@@ -150,7 +159,7 @@ export const GlobalHUD = () => {
                     return;
                 }
                 const id = openModal({
-                    id: 'hud_social',
+                    id: `${HUD_MODAL_NS}_social`,
                     closeOnBackdrop: true,
                     closeOnEsc: true,
                     onClose: () => setSocialModalId(null),

@@ -11,8 +11,8 @@ import { SW_EVENTS, PHASE_ORDER } from './types';
 import { getSummoner, HAND_SIZE } from './helpers';
 import { triggerAllUnitsAbilities } from './abilityResolver';
 
-/** 阶段顺序映射 */
-const PHASE_INDEX: Record<GamePhase, number> = {
+/** 游戏进行阶段顺序映射（不含 factionSelect） */
+const PHASE_INDEX: Record<string, number> = {
   summon: 0,
   move: 1,
   build: 2,
@@ -116,8 +116,14 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
       });
       
       // 弃置当前玩家的所有主动事件
+      // 殉葬火堆有充能时不自动弃置，等待玩家选择治疗目标（由 UI 触发 FUNERAL_PYRE_HEAL 命令）
       const currentPlayer = core.players[playerId];
       for (const activeEvent of currentPlayer.activeEvents) {
+        const baseId = activeEvent.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+        if (baseId === 'necro-funeral-pyre' && (activeEvent.charges ?? 0) > 0) {
+          // 有充能的殉葬火堆：不自动弃置，由 UI 处理
+          continue;
+        }
         events.push({
           type: SW_EVENTS.ACTIVE_EVENT_DISCARDED,
           payload: { playerId, cardId: activeEvent.id },

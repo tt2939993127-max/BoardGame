@@ -188,6 +188,8 @@ export interface EffectAction {
     newAbilityLevel?: number;
     // grantDamageShield 相关
     shieldValue?: number;
+    /** 是否用于防止本次攻击的状态效果（grantDamageShield） */
+    preventStatus?: boolean;
     // damage 相关
     unblockable?: boolean;
     // 其他可选参数
@@ -247,6 +249,8 @@ export interface TokenDef {
     colorTheme: string;
     /** 描述文本（供 UI 展示） */
     description: string[];
+    /** 状态/Token 施加时的音效 key（可选） */
+    sfxKey?: string;
     /** 最大堆叠数（0 = 无限） */
     stackLimit: number;
     

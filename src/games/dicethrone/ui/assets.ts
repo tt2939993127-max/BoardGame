@@ -7,20 +7,29 @@ const getCharacterAssetBase = (charId: string = 'monk') => (
     `dicethrone/images/${charId}`
 );
 
-const withLegacyPng = (path: string, charId: string) => (
+/**
+ * 所有英雄统一使用简明的文件名标准
+ */
+const getAssetFileName = (filename: string) => filename;
+
+/**
+ * 扩展名处理：仅 barbarian 依然保留原生的 .png 格式（因为其暂未进行优化转换）
+ */
+const withExtension = (path: string, charId: string) => (
     charId === 'barbarian' ? `${path}.png` : path
 );
 
 export const ASSETS = {
-    PLAYER_BOARD: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-player-board`, charId),
-    TIP_BOARD: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-tip-board`, charId),
-    CARDS_ATLAS: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-ability-cards`, charId),
-    ABILITY_CARDS_BASE: (charId: string = 'monk') => withLegacyPng(`${getCharacterAssetBase(charId)}/${charId}-base-ability-cards`, charId),
-    DICE_SPRITE: (charId: string = 'monk') => `${getCharacterAssetBase(charId)}/dice-sprite`,
-    EFFECT_ICONS: (charId: string = 'monk') => `${getCharacterAssetBase(charId)}/status-icons-atlas`,
+    PLAYER_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/player-board`, charId),
+    TIP_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/tip`, charId),
+    CARDS_ATLAS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/ability-cards`, charId),
+    DICE_SPRITE: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/dice`, charId),
+    EFFECT_ICONS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/status-icons-atlas`, charId),
     CARD_BG: 'dicethrone/images/Common/card-background',
     AVATAR: 'dicethrone/images/Common/character-portraits',
 };
+
+// ... 后续绘图逻辑（DICE_ATLAS, PORTRAIT_ATLAS 等）保持不变 ...
 
 const DICE_ATLAS: {
     cols: number;
@@ -78,20 +87,20 @@ const PORTRAIT_BG_SIZE = {
 };
 
 const CHARACTER_PORTRAIT_INDEX: Record<string, number> = {
-    barbarian: 13,
-    moon_elf: 1,
-    pyromancer: 2,
-    monk: 3,
-    shadow_thief: 4,
-    paladin: 5,
-    ninja: 6,
-    treant: 7,
-    vampire_lord: 8,
-    cursed_pirate: 9,
-    gunslinger: 10,
-    samurai: 11,
-    tactician: 12,
     huntress: 0,
+    gunslinger: 1,
+    treant: 2,
+    monk: 3,
+    moon_elf: 4,
+    paladin: 5,
+    pyromancer: 6,
+    vampire_lord: 7,
+    cursed_pirate: 8,
+    shadow_thief: 9,
+    ninja: 10,
+    samurai: 11,
+    barbarian: 12,
+    tactician: 13,
     seraph: 14,
 };
 

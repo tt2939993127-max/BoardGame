@@ -7,12 +7,24 @@
 import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, PlayerId, CellCoord } from '../domain/types';
+import type { RandomFn } from '../../../engine/types';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import { BOARD_ROWS, BOARD_COLS, getSummoner } from '../domain/helpers';
+import { createInitializedCore } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
 // ============================================================================
+
+/** 创建测试用随机数生成器 */
+function createTestRandom(randomValue = 0.5): RandomFn {
+  return {
+    shuffle: <T>(arr: T[]) => arr,
+    random: () => randomValue,
+    d: (max: number) => Math.ceil(max * randomValue) || 1,
+    range: (min: number, max: number) => Math.floor(min + (max - min) * randomValue),
+  };
+}
 
 /** 打印棋盘状态 */
 function printBoard(core: SummonerWarsCore) {
@@ -47,6 +59,7 @@ function executeCommand(
 ): SummonerWarsCore {
   const sys = createInitialSystemState(['0', '1'], []);
   const state = { core, sys };
+  const random = createTestRandom();
   
   // 验证命令
   const validation = SummonerWarsDomain.validate(state, { type, playerId, payload });
@@ -55,7 +68,7 @@ function executeCommand(
   }
   
   // 执行命令
-  const events = SummonerWarsDomain.execute(state, { type, playerId, payload, timestamp: Date.now() });
+  const events = SummonerWarsDomain.execute(state, { type, playerId, payload, timestamp: Date.now() }, random);
   
   // 应用事件
   let newCore = core;
@@ -111,8 +124,8 @@ function findAllUnits(core: SummonerWarsCore, playerId: PlayerId): CellCoord[] {
 }
 
 /** 检查游戏是否结束 */
-function checkGameOver(core: SummonerWarsCore): { winner: PlayerId } | undefined {
-  return SummonerWarsDomain.isGameOver(core);
+function checkGameOver(core: SummonerWarsCore) {
+  return SummonerWarsDomain.isGameOver?.(core);
 }
 
 // ============================================================================
@@ -121,10 +134,7 @@ function checkGameOver(core: SummonerWarsCore): { winner: PlayerId } | undefined
 
 describe('召唤师战争 - 完整游戏流程', () => {
   it('游戏能正常初始化', () => {
-    const core = SummonerWarsDomain.setup(['0', '1'], {
-      shuffle: <T>(arr: T[]) => arr,
-      random: () => 0.5,
-    });
+    const core = createInitializedCore(['0', '1'], createTestRandom());
     
     expect(core.phase).toBe('summon');
     expect(core.currentPlayer).toBe('0');
@@ -142,10 +152,7 @@ describe('召唤师战争 - 完整游戏流程', () => {
   });
 
   it('完整游戏流程 - 直到一方召唤师死亡', () => {
-    let core = SummonerWarsDomain.setup(['0', '1'], {
-      shuffle: <T>(arr: T[]) => arr,
-      random: () => 0.5,
-    });
+    let core = createInitializedCore(['0', '1'], createTestRandom());
     
     console.log('\n========== 游戏开始 ==========');
     printBoard(core);
@@ -279,10 +286,7 @@ describe('召唤师战争 - 完整游戏流程', () => {
   });
 
   it('直接击杀召唤师 - 验证游戏结束判定', () => {
-    let core = SummonerWarsDomain.setup(['0', '1'], {
-      shuffle: <T>(arr: T[]) => arr,
-      random: () => 0.5,
-    });
+    let core = createInitializedCore(['0', '1'], createTestRandom());
     
     // 手动设置场景：将玩家0召唤师移动到玩家1召唤师旁边
     // 并将玩家1召唤师设置为只剩1点生命
@@ -326,10 +330,7 @@ describe('召唤师战争 - 完整游戏流程', () => {
   });
 
   it('强制击杀 - 设置足够伤害确保击杀', () => {
-    let core = SummonerWarsDomain.setup(['0', '1'], {
-      shuffle: <T>(arr: T[]) => arr,
-      random: () => 1, // 最大随机值，确保最大伤害
-    });
+    let core = createInitializedCore(['0', '1'], createTestRandom(1));
     
     // 将玩家0召唤师移动到玩家1召唤师旁边
     const summoner0 = core.board[7][3].unit!;

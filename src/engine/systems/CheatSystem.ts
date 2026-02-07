@@ -29,6 +29,8 @@ export const CHEAT_COMMANDS = {
     SET_DICE: 'SYS_CHEAT_SET_DICE',
     /** 设置 Token 数量 */
     SET_TOKEN: 'SYS_CHEAT_SET_TOKEN',
+    /** 设置状态效果数量 */
+    SET_STATUS: 'SYS_CHEAT_SET_STATUS',
     /** 直接设置整个游戏状态（调试用） */
     SET_STATE: 'SYS_CHEAT_SET_STATE',
 } as const;
@@ -63,6 +65,12 @@ export interface SetTokenPayload {
     amount: number;
 }
 
+export interface SetStatusPayload {
+    playerId: PlayerId;
+    statusId: string;
+    amount: number;
+}
+
 export interface SetStatePayload<TCore> {
     state: TCore;
 }
@@ -94,6 +102,8 @@ export interface CheatResourceModifier<TCore> {
     setDice?: (core: TCore, values: number[]) => TCore;
     /** 设置 Token 数量（可选） */
     setToken?: (core: TCore, playerId: PlayerId, tokenId: string, amount: number) => TCore;
+    /** 设置状态效果数量（可选） */
+    setStatus?: (core: TCore, playerId: PlayerId, statusId: string, amount: number) => TCore;
     /** 根据索引发牌（可选） */
     dealCardByIndex?: (core: TCore, playerId: PlayerId, deckIndex: number) => TCore;
     /** 根据图集索引发牌（可选） */
@@ -185,6 +195,21 @@ export function createCheatSystem<TCore>(
                     state.core,
                     payload.playerId,
                     payload.tokenId,
+                    payload.amount
+                );
+                return {
+                    halt: true,
+                    state: { ...state, core: newCore },
+                };
+            }
+
+            // 处理设置状态效果命令
+            if (command.type === CHEAT_COMMANDS.SET_STATUS && modifier.setStatus) {
+                const payload = command.payload as SetStatusPayload;
+                const newCore = modifier.setStatus(
+                    state.core,
+                    payload.playerId,
+                    payload.statusId,
                     payload.amount
                 );
                 return {

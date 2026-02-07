@@ -84,6 +84,7 @@ interface RoomPlayer {
 interface Room {
     matchID: string;
     players: RoomPlayer[];
+    totalSeats?: number;
     gameName?: string;
     roomName?: string;
     ownerKey?: string;
@@ -181,6 +182,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 const roomList: Room[] = matches.map(m => ({
                     matchID: m.matchID,
                     players: m.players,
+                    totalSeats: m.totalSeats,
                     gameName: m.gameName,
                     roomName: m.roomName,
                     ownerKey: m.ownerKey,
@@ -431,16 +433,16 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         try {
             const matchInfo = await lobbyClient.getMatch(roomGameName, matchID);
-            const player0 = matchInfo.players.find(p => p.id === 0);
-            const player1 = matchInfo.players.find(p => p.id === 1);
+            const openSeat = [...matchInfo.players]
+                .sort((a, b) => a.id - b.id)
+                .find(p => !p.name);
 
             // 新加入逻辑：找一个空位（以服务器最新数据为准）
-            if (!player0?.name) targetPlayerID = '0';
-            else if (!player1?.name) targetPlayerID = '1';
-            else {
+            if (!openSeat) {
                 toast.warning({ kind: 'i18n', key: 'error.roomFull', ns: 'lobby' });
                 return;
             }
+            targetPlayerID = String(openSeat.id);
         } catch (error) {
             console.error('获取房间状态失败:', error);
             toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
@@ -508,8 +510,27 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             if (room?.gameName) gameName = room.gameName;
         }
 
-        const result = await exitMatch(gameName, matchID, myPlayerID, myCredentials, isHost);
+        let result = await exitMatch(gameName, matchID, myPlayerID, myCredentials, isHost);
         console.log('[LobbyModal] 执行完成', { result });
+
+        // 403 forbidden 时尝试 claim-seat 刷新凭证后重试（凭证可能因其他会话被覆盖）
+        if (!result.success && result.error === 'forbidden' && isHost) {
+            console.log('[LobbyModal] 403 forbidden，尝试 claim-seat 刷新凭证');
+            let claimResult: { success: boolean; credentials?: string };
+            if (user?.id && token) {
+                claimResult = await claimSeat(gameName, matchID, myPlayerID, { token, playerName: user.username });
+            } else {
+                const guestId = getGuestId();
+                const guestName = getGuestName();
+                claimResult = await claimSeat(gameName, matchID, myPlayerID, { guestId, playerName: guestName });
+            }
+            if (claimResult.success && claimResult.credentials) {
+                console.log('[LobbyModal] claim-seat 成功，重试销毁');
+                result = await exitMatch(gameName, matchID, myPlayerID, claimResult.credentials, isHost);
+                console.log('[LobbyModal] 重试结果', { result });
+            }
+        }
+
         if (!result.success) {
             const errorKey = result.error === 'forbidden'
                 ? 'error.destroyForbidden'
@@ -591,10 +612,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         const ownerKey = getOwnerKey();
         return rooms.map(room => {
-            const p0 = room.players[0]?.name;
-            const p1 = room.players[1]?.name;
-            const playerCount = (p0 ? 1 : 0) + (p1 ? 1 : 0);
-            const isFull = playerCount >= 2;
+            const totalSeats = Math.max(room.totalSeats ?? 0, room.players.length);
+            const playerCount = room.players.filter(p => p.name).length;
+            const isFull = totalSeats > 0 ? playerCount >= totalSeats : true;
 
             const parsed = credsMap.get(room.matchID);
             let myPlayerID: string | null = null;
@@ -612,8 +632,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
             return {
                 ...room,
-                p0, p1,
                 isFull,
+                playerCount,
+                totalSeats,
                 isMyRoom,
                 isOwnerRoom,
                 canReconnect,
@@ -910,24 +931,40 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                                 )}
                                             >
                                                 <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-parchment-base-text text-sm">
-                                                            {room.roomName || t('rooms.matchTitle', { id: room.matchID.slice(0, 4) })}
-                                                        </span>
-                                                        {room.isLocked && (
-                                                            <svg className="w-3.5 h-3.5 text-parchment-light-text opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                                            </svg>
-                                                        )}
-                                                        {room.isMyRoom && (
-                                                            <span className="text-[8px] bg-parchment-card-border text-parchment-card-bg px-1.5 py-0.5 rounded uppercase font-bold">
-                                                                {t('rooms.mine')}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-[10px] text-parchment-light-text mt-0.5">
-                                                        {room.p0 || t('rooms.emptySlot')} vs {room.p1 || t('rooms.emptySlot')}
-                                                    </div>
+                                                    {(() => {
+                                                        const totalSeats = Math.max(room.totalSeats ?? 0, room.players.length);
+                                                        const seatLabels = Array.from({ length: totalSeats }, (_, index) => {
+                                                            const seatPlayer = room.players.find(player => player.id === index);
+                                                            return seatPlayer?.name || t('rooms.emptySlot');
+                                                        });
+                                                        const baseTitle = room.roomName || t('rooms.matchTitle', { id: room.matchID.slice(0, 4) });
+                                                        const titleWithCount = totalSeats > 0
+                                                            ? `${baseTitle} (${room.playerCount}/${totalSeats})`
+                                                            : baseTitle;
+
+                                                        return (
+                                                            <>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-bold text-parchment-base-text text-sm">
+                                                                        {titleWithCount}
+                                                                    </span>
+                                                                    {room.isLocked && (
+                                                                        <svg className="w-3.5 h-3.5 text-parchment-light-text opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                                        </svg>
+                                                                    )}
+                                                                    {room.isMyRoom && (
+                                                                        <span className="text-[8px] bg-parchment-card-border text-parchment-card-bg px-1.5 py-0.5 rounded uppercase font-bold">
+                                                                            {t('rooms.mine')}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-[10px] text-parchment-light-text mt-0.5">
+                                                                    {seatLabels.join(' vs ')}
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
 
                                                 <div className="flex gap-2">

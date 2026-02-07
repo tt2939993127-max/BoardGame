@@ -8,81 +8,41 @@
 ## 快速开始
 
 ```bash
-# 运行所有 Vitest 测试（游戏 + API）
-npm test
-
-# 运行游戏测试
-npm run test:game
-
-# 运行井字棋测试
-npm run test:tictactoe
-
-# 运行王权骰铸测试
-npm run test:dicethrone
-
-# 运行 API 测试
-npm run test:api
-
-# Watch 模式（开发时推荐）
-npm run test:watch
-
-# 运行 E2E 测试（Playwright）
-npm run test:e2e
+npm test                      # 所有 Vitest 测试
+npm run test:game             # 游戏测试
+npm run test:tictactoe        # 井字棋测试
+npm run test:dicethrone       # 王权骰铸测试
+npm run test:api              # API 测试
+npm run test:watch            # Watch 模式
+npm run test:e2e              # E2E 测试（Playwright）
 ```
 
-## 跑测试的范围策略（建议）
+## 测试范围策略
 
-本项目目前没有内建“自动计算受影响测试（affected tests）”的脚本（例如按依赖图/按 git diff 自动挑选要跑的用例）。
+项目无自动计算受影响测试脚本，建议按影响范围选择：
 
-建议采用“按影响范围选择测试”的工作流：
+- **日常开发**：只跑直接相关的 Vitest 测试
+- **提交前/合并前**（跨模块、影响引擎/系统/公共组件）：跑全量测试
 
-- 日常开发（改动明确且范围小）：优先只跑**直接相关**的 Vitest 测试（按路径/文件名过滤），提高迭代速度。
-- 提交前 / 合并前（改动较大、跨模块、或影响引擎/系统/公共组件）：必须补充并跑更大范围的测试，必要时跑全量。
-
-### 1) 只跑与你改动相关的 Vitest 测试
-
-Vitest 支持通过“过滤字符串/路径”来只运行匹配的测试文件（最稳定、最可控）。示例：
+### 过滤运行 Vitest 测试
 
 ```bash
-# 只跑文件名/路径匹配 audio.config 的测试
-npm test -- audio.config
-
-# 只跑某个目录下的测试（举例：UGC Builder）
-npm test -- src/ugc/builder
-
-# 只跑某个游戏的测试目录（举例：tictactoe）
-npm test -- src/games/tictactoe/__tests__
+npm test -- audio.config                        # 匹配文件名/路径
+npm test -- src/ugc/builder                     # 匹配目录
+npm test -- src/games/tictactoe/__tests__       # 游戏测试目录
+npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 ```
 
-如果你在写/调试单个测试文件，也可以直接指定文件：
+### 何时跑全量
 
-```bash
-npm test -- src/games/tictactoe/__tests__/flow.test.ts
-```
-
-### 2) 什么时候应该扩大到全量
-
-建议满足任一条件就扩大范围：
-
-- 修改了 `src/engine/`、`src/systems/`、`src/core/`、`src/components/game/framework/` 等“跨游戏复用层”。
-- 修改涉及多人联机流程、状态同步、Undo/Rematch/Prompt 等系统性行为。
-- 改动涉及公共类型/协议（容易出现编译通过但运行期回归）。
-
-可选执行：
-
-```bash
-# 全量 vitest
-npm test
-
-# e2e（需要覆盖真实用户流程时）
-npm run test:e2e
-```
+满足任一条件就扩大范围：
+- 修改 `src/engine/`、`src/systems/`、`src/core/`、`src/components/game/framework/`
+- 涉及多人联机、状态同步、Undo/Rematch/Prompt 等系统性行为
+- 涉及公共类型/协议
 
 ## API 测试（NestJS）
 
-### 使用 Docker / 本地 MongoDB
-
-当你已经启动 MongoDB（例如 Docker）时，可以设置 `MONGO_URI` 让测试复用现有数据库，**避免下载内存 MongoDB 二进制**。注意必须使用独立测试库，避免误清理开发数据：
+可设置 `MONGO_URI` 复用 Docker MongoDB，避免下载内存 MongoDB 二进制：
 
 ```bash
 # PowerShell
@@ -90,37 +50,33 @@ $env:MONGO_URI="mongodb://localhost:27017/boardgame_test"
 npm run test:api
 ```
 
-> 说明：若未设置 `MONGO_URI`，测试会使用 `mongodb-memory-server` 自动下载并启动临时 MongoDB。
+> 未设置时使用 `mongodb-memory-server` 自动启动临时 MongoDB。
 
 ## E2E 测试（Playwright）
 
-端到端测试使用 Playwright，测试文件位于 `e2e/` 目录。
+测试文件位于 `e2e/` 目录。
 
-**硬性要求**：端到端测试必须覆盖完整用户流程（从入口到完成），尤其是教程类流程必须覆盖“进入 → 关键步骤 → 结束/返回”的全链路。
+**硬性要求（更新）**：E2E 必须覆盖“交互面”而不只是“完整流程”。
 
-### 本地模式 vs 在线对局（重要）
+- **交互覆盖**：对用户可见且可操作的关键交互点，逐一验证：
+  - 能否触达（入口/按钮/快捷入口/菜单/路由）
+  - 能否操作（点击/输入/拖拽/切换 Tab/确认取消/关闭弹窗）
+  - 操作后的 UI 反馈（状态变化、禁用态、提示文案、Loading、错误提示）
+  - 数据/状态副作用（如加入房间、发送消息、发起重赛投票、退出房间）
+- **流程覆盖**：对“从入口到结束/返回”的主路径至少保留 1 条 happy path 作为回归基线。
 
-**结论：本项目的大多数游戏不支持“本地同屏”模式**。例如 DiceThrone 只能走在线房间流程，`/play/<gameId>/local` 仅用于快速渲染或调试，不代表真实多人流程。
+> 解释：完整流程只能证明“最常见路径可用”，无法覆盖大量分支与 UI 入口（例如 Modal 打开/关闭、Tab 切换、列表筛选、异常提示等）。E2E 的价值是覆盖“真实用户会点到的交互面”。
 
-请按以下原则编写/选择 E2E：
+### 本地模式 vs 在线对局
 
-1. **在线对局优先**
-   - 真实多人流程必须使用 **host/guest 两个浏览器上下文**。
-   - 典型流程：创建房间 → 拿到 matchId → guest `?join=true` 加入 → 双方交互。
+**大多数游戏不支持本地同屏**。`/play/<gameId>/local` 仅用于调试，不代表真实多人流程。
 
-2. **冒烟测试用途**
-   - 冒烟测试只验证“页面能加载 + 关键元素出现”。
-   - 若游戏**不支持本地同屏**，冒烟测试也应走在线房间，但只做最小断言。
-   - 若游戏支持本地同屏，可继续使用 `/play/<gameId>/local` 进行快速渲染验证。
-
-3. **不要误用本地路由**
-   - `/play/<gameId>/local` 仅用于调试或静态渲染检查，**不能替代多人在线流程**。
-   - 任何需要“准备/开始/同步”的逻辑，必须走在线对局。
-
-```bash
-# 运行 E2E 测试
-npm run test:e2e
-```
+| 场景 | 做法 |
+|------|------|
+| 真实多人流程 | 使用 host/guest 两个浏览器上下文：创建房间 → guest `?join=true` 加入 → 覆盖关键交互点（不强制打完整对局） |
+| 交互回归 | 按“交互覆盖清单”逐条验证（按钮/弹窗/Tab/关键面板）；必要时可拆成多个短测试用例 |
+| 冒烟测试 | 验证页面加载 + 关键元素出现；不支持本地同屏的游戏也走在线房间 |
+| 调试/静态渲染 | 可用 `/play/<gameId>/local`，但不能替代多人流程 |
 
 ### 编写 E2E 测试
 
@@ -133,11 +89,29 @@ test('Homepage Check', async ({ page }) => {
 });
 ```
 
-### 关键功能覆盖
+### 所有游戏 E2E 覆盖范围（通用规范）
 
-- **社交系统 (`e2e/social.test.ts`)**: 覆盖 Global HUD (右下角悬浮球) 入口点击、模态框打开、标签页切换及好友列表渲染。
-- **导航栏 (`e2e/navbar.test.ts`)**: 覆盖顶部导航、登录状态及游戏分类切换。
-- **游戏教程流程 (`e2e/tictactoe-tutorial.e2e.ts`)**: 覆盖井字棋教程完整流程（进入 → 玩家落子 → AI 回合 → 完成）。
+**目标：覆盖“完整流程 + 特殊交互面”，适用于所有游戏。**
+
+覆盖范围（类别级）：
+
+1. **完整流程基线（Happy Path）**
+   - 入口 → 创建房间 → 阵营选择 → 开始对局 → 回合推进 → 结束/结算
+
+2. **核心交互面（可见且可操作）**
+   - 关键 UI 面板（阶段、手牌、地图、行动按钮）
+   - 地图缩放/拖拽、阶段推进、弃牌与资源变化
+
+3. **特殊交互面（多步骤/弹窗/选择模式）**
+   - 攻击后技能选择（如控制/伤害、推拉方向、额外攻击目标）
+   - 事件卡多目标/多步骤选择（选择目标 → 方向/距离 → 确认）
+   - 弃牌堆选择/从弃牌堆召唤/跟随位置确认
+
+4. **负面与边界**
+   - 非当前玩家操作被拒绝
+   - 阶段自动跳过边界（有可用操作时不应跳过）
+
+> 具体用例明细以各游戏对应的 `e2e/<gameId>*.e2e.ts` 为准，文档只定义覆盖范围与原则，避免膨胀为超长清单。
 
 ### Mock API 响应
 
@@ -149,89 +123,42 @@ test.beforeEach(async ({ page }) => {
 });
 ```
 
+### 关键功能覆盖
+
+- `e2e/social.test.ts` - Global HUD 入口、模态框、标签页、好友列表
+- `e2e/navbar.test.ts` - 顶部导航、登录状态、游戏分类
+- `e2e/tictactoe-tutorial.e2e.ts` - 井字棋教程完整流程
+
 ## 目录结构
 
 ```
 /
 ├── e2e/                          # Playwright E2E 测试
-│   ├── navbar.test.ts           # 导航栏测试
-│   └── social.test.ts           # 社交功能测试
-│   └── tictactoe-tutorial.e2e.ts # 井字棋教程流程测试
-├── apps/
-│   └── api/
-│       └── test/                 # API 集成测试
-│           ├── vitest.setup.ts  # Vitest 启动配置
-│           ├── auth.e2e-spec.ts # 认证 API 测试
-│           └── social.e2e-spec.ts # 社交 API 测试
-├── src/
-│   ├── engine/
-│   │   └── testing/
-│   │       └── index.ts         # GameTestRunner 通用测试运行器
-│   └── games/
-│       ├── tictactoe/
-│       │   └── __tests__/
-│       │       └── flow.test.ts # 井字棋流程测试
-│       └── dicethrone/
-│           └── __tests__/
-│               └── flow.test.ts # 王权骰铸流程测试
-└── vitest.config.ts              # Vitest 全局配置
+├── apps/api/test/                # API 集成测试
+├── src/engine/testing/           # GameTestRunner
+└── src/games/<gameId>/__tests__/ # 游戏领域测试
 ```
-
-测试文件放在游戏目录的 `__tests__` 文件夹下，便于：
-- 游戏自包含
-- UGC 作者可为自己的游戏编写测试
-- 导入路径简短
 
 ## 测试覆盖要求
 
-测试应全面覆盖以下场景（根据具体项目选择适用项）。**集成测试（命令级，仅使用命令序列验证）必须覆盖所有情况**：
+**集成测试必须覆盖所有情况**：
 
-### 1. 基础流程
-- 初始状态验证
-- 状态流转逻辑
-- 正常结束条件
-
-### 2. 核心机制
-- 所有功能/能力的触发条件
-- 所有功能/能力的实际效果（**与描述/文档一致**）
-- 状态的变更与持久化
-- 资源的获取与消耗
-
-### 3. 数据驱动效果
-- **每个数据驱动的效果必须与其描述完全一致**
-- 测试操作后的实际状态变化
-- 测试副作用的正确性
-
-### 4. 升级/进阶系统（如有）
-- 正常逐级升级
-- **跳级升级的拒绝**
-- 费用计算（包括差价逻辑）
-- 已达最高级时的处理
-
-### 5. 错误处理
-- 非法操作的拒绝与错误码返回
-- 前置条件不满足时的拒绝
-- 错误状态下的操作拒绝
-- **错误提示信息的正确性**（用于 i18n 显示）
-
-### 6. 边界条件
-- 数值上限/下限
-- 特殊触发条件
-- 并发/竞态场景（如适用）
-
-### 7. 端到端流程覆盖（强制）
-- 端到端测试必须覆盖“入口 → 关键交互 → 完成/退出”的完整链路
-- 教程类流程必须验证 AI 回合与自动推进步骤
+| 类别 | 覆盖点 |
+|------|--------|
+| 基础流程 | 初始状态、状态流转、正常结束 |
+| 核心机制 | 触发条件、实际效果（与描述一致）、状态变更、资源获取/消耗 |
+| 数据驱动 | 效果与描述完全一致、状态变化、副作用正确性 |
+| 升级系统 | 逐级升级、跳级拒绝、费用计算、最高级处理 |
+| 错误处理 | 非法操作拒绝、前置条件拒绝、错误码正确性 |
+| 边界条件 | 数值上下限、特殊触发、并发/竞态 |
+| E2E | 入口 → 关键交互 → 完成/退出；教程需验证 AI 回合 |
 
 ### 测试命名规范
 
-测试名称应清晰表达测试意图：
-- 正向测试：描述预期行为，如 `"成功创建用户"`, `"正常流程完成"`
-- 错误测试：在名称中标注预期的错误码，如 `"无权限操作 - unauthorized"`, `"参数缺失 - missingParams"`
+- 正向测试：描述预期行为（`"成功创建用户"`）
+- 错误测试：标注错误码（`"无权限操作 - unauthorized"`）
 
-错误测试在名称中标注错误码，便于追踪和维护。
-
-## 编写测试
+## 编写 GameTestRunner 测试
 
 ### 1. 定义断言类型
 
@@ -239,7 +166,6 @@ test.beforeEach(async ({ page }) => {
 interface MyGameExpectation extends StateExpectation {
     winner?: string;
     score?: number;
-    // ... 游戏特定字段
 }
 ```
 
@@ -248,11 +174,9 @@ interface MyGameExpectation extends StateExpectation {
 ```typescript
 function assertMyGame(state: MyGameCore, expect: MyGameExpectation): string[] {
     const errors: string[] = [];
-    
     if (expect.winner !== undefined && state.winner !== expect.winner) {
         errors.push(`获胜者不匹配: 预期 ${expect.winner}, 实际 ${state.winner}`);
     }
-    
     return errors;
 }
 ```
@@ -267,18 +191,12 @@ const testCases: TestCase<MyGameExpectation>[] = [
             { type: 'MOVE', playerId: '0', payload: { ... } },
             { type: 'ATTACK', playerId: '1', payload: { ... } },
         ],
-        expect: {
-            winner: '0',
-        },
+        expect: { winner: '0' },
     },
     {
         name: '错误测试 - 非法操作',
-        commands: [
-            { type: 'INVALID_MOVE', playerId: '0', payload: {} },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: 'invalidMove' },
-        },
+        commands: [{ type: 'INVALID_MOVE', playerId: '0', payload: {} }],
+        expect: { errorAtStep: { step: 1, error: 'invalidMove' } },
     },
 ];
 ```
@@ -289,8 +207,7 @@ const testCases: TestCase<MyGameExpectation>[] = [
 const runner = new GameTestRunner({
     domain: MyGameDomain,
     playerIds: ['0', '1'],
-    // 如果 Domain.setup 需要 RandomFn，可传入 setup
-    setup: (playerIds, random) => MyGameDomain.setup(playerIds, random),
+    setup: (playerIds, random) => MyGameDomain.setup(playerIds, random), // 可选
     assertFn: assertMyGame,
     visualizeFn: (state) => console.log(state), // 可选
 });
@@ -306,10 +223,10 @@ runner.runAll(testCases);
 |--------|------|------|
 | `domain` | `DomainCore` | 游戏领域内核 |
 | `playerIds` | `string[]` | 玩家列表 |
-| `setup` | `(playerIds, random) => state` | 可选，自定义初始化（用于需要 RandomFn 的 setup） |
-| `assertFn` | `(state, expect) => string[]` | 断言函数，返回错误列表 |
+| `setup` | `(playerIds, random) => state` | 可选，自定义初始化 |
+| `assertFn` | `(state, expect) => string[]` | 断言函数 |
 | `visualizeFn` | `(state) => void` | 可选，状态可视化 |
-| `random` | `RandomFn` | 可选，自定义随机数生成器 |
+| `random` | `RandomFn` | 可选，自定义随机数 |
 | `silent` | `boolean` | 可选，静默模式 |
 
 ### TestCase
@@ -319,19 +236,20 @@ runner.runAll(testCases);
 | `name` | `string` | 测试名称 |
 | `commands` | `Command[]` | 命令序列 |
 | `expect` | `StateExpectation` | 预期结果 |
-| `skip` | `boolean` | 可选，跳过此测试 |
+| `skip` | `boolean` | 可选，跳过 |
 
 ### StateExpectation
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `errorAtStep` | `{ step, error }` | 预期某步出现的错误 |
+| `errorAtStep` | `{ step, error }` | 预期错误 |
 
 ## 构建排除
 
-测试文件不应打包到生产环境，在 vite.config.ts 中配置：
+测试文件不打包到生产环境：
 
 ```typescript
+// vite.config.ts
 build: {
   rollupOptions: {
     external: [/__tests__/]

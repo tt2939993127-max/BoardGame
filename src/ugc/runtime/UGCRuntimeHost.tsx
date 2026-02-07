@@ -48,7 +48,7 @@ export function UGCRuntimeHost({
     });
     const playerAreas = visibleComponents.filter(comp => comp.type === 'player-area');
     if (playerAreas.length === 0) return [];
-    return Array.from({ length: playerAreas.length + 1 }, (_, index) => `player-${index + 1}`);
+    return Array.from({ length: playerAreas.length }, (_, index) => `player-${index + 1}`);
   }, [config.layout, config.layoutGroups]);
 
   const normalizedPlayerIds = useMemo(() => {

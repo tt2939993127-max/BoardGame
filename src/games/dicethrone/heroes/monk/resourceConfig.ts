@@ -5,12 +5,12 @@
  * 通用 RESOURCE_IDS 从 domain/resources.ts 导入。
  */
 
-import type { ResourceDefinition } from '../../../systems/ResourceSystem/types';
-import { INITIAL_HEALTH, INITIAL_CP, CP_MAX } from '../domain/types';
-import { RESOURCE_IDS } from '../domain/resources';
+import type { ResourceDefinition } from '../../../../systems/ResourceSystem/types';
+import { INITIAL_HEALTH, INITIAL_CP, CP_MAX } from '../../domain/types';
+import { RESOURCE_IDS } from '../../domain/resources';
 
 // 重新导出以保持向后兼容
-export { RESOURCE_IDS } from '../domain/resources';
+export { RESOURCE_IDS } from '../../domain/resources';
 
 /**
  * CP（战斗点数）定义

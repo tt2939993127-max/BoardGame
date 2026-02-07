@@ -72,7 +72,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
         // 非房主需要选好角色且点击准备
         return hasSelected && readyPlayers[pid];
     });
-    
+
     // 当前玩家是否已选角色
     const myChar = selectedCharacters[currentPlayerId];
     const hasSelectedChar = myChar && myChar !== 'unselected';
@@ -99,14 +99,14 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
 
     // 仅显示目前已实现的英雄
     const availableCharacters = useMemo(() => {
-        return DICETHRONE_CHARACTER_CATALOG.filter(char => ['monk', 'barbarian'].includes(char.id));
+        return DICETHRONE_CHARACTER_CATALOG.filter(char => ['monk', 'barbarian', 'pyromancer'].includes(char.id));
     }, []);
 
     // 预览的角色 ID：当前玩家已选的，或默认第一个
     const previewCharId = useMemo(() => {
         const mySelection = selectedCharacters[currentPlayerId];
         if (mySelection && mySelection !== 'unselected') return mySelection;
-        return availableCharacters[0]?.id || 'monk'; 
+        return availableCharacters[0]?.id || 'monk';
     }, [selectedCharacters, currentPlayerId, availableCharacters]);
 
     // 放大预览状态
@@ -154,8 +154,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                 data-char-id={char.id}
                                 className={clsx(
                                     "relative aspect-[3/4] rounded-[0.4vw] border-2 transition-all duration-300 overflow-hidden cursor-pointer group",
-                                    isSelectedByMe ? "border-amber-400 shadow-[0_0_1.5vw_rgba(251,191,36,0.4)] z-20 scale-[1.02]" : 
-                                    "border-white/10 hover:border-white/30 hover:scale-[1.02]"
+                                    isSelectedByMe ? "border-amber-400 shadow-[0_0_1.5vw_rgba(251,191,36,0.4)] z-20 scale-[1.02]" :
+                                        "border-white/10 hover:border-white/30 hover:scale-[1.02]"
                                 )}
                                 onClick={() => onSelect(char.id as SelectableCharacterId)}
                             >
@@ -163,10 +163,10 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                     "absolute inset-0 z-0 transition-all duration-500",
                                     isSelectedByMe ? "grayscale-0 scale-110" : "grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 group-hover:scale-105"
                                 )}
-                                     style={getPortraitStyle(char.id, locale)} />
-                                
+                                    style={getPortraitStyle(char.id, locale)} />
+
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
-                                
+
                                 <div className="absolute bottom-[0.5vw] left-[0.5vw] right-[0.5vw]">
                                     <div className="text-[0.7vw] font-black truncate uppercase tracking-tight text-white/90">
                                         {t(char.nameKey)}
@@ -176,7 +176,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                 {/* 玩家占用标签 */}
                                 <div className="absolute top-[0.3vw] right-[0.3vw] flex -space-x-[0.3vw]">
                                     {playerIds.filter(pid => selectedCharacters[pid] === char.id).map(pid => (
-                                        <motion.div 
+                                        <motion.div
                                             key={pid}
                                             layoutId={`occupied-${pid}`}
                                             className="w-[1.2vw] h-[1.2vw] rounded-full border border-white/80 flex items-center justify-center text-[0.5vw] font-black shadow-lg"
@@ -208,7 +208,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                         >
                             <div className="flex items-center justify-center gap-[1vw] h-full">
                                 {/* 玩家面板：点击放大 */}
-                                <div 
+                                <div
                                     className="relative h-[85%] w-auto shadow-2xl rounded-[0.6vw] overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
                                     onClick={() => setMagnifyImage(ASSETS.PLAYER_BOARD(previewCharId as CharacterId))}
                                 >
@@ -221,7 +221,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                 </div>
 
                                 {/* 提示板：点击放大 */}
-                                <div 
+                                <div
                                     className="relative h-[85%] w-auto rounded-[0.6vw] overflow-hidden shadow-2xl cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
                                     onClick={() => setMagnifyImage(ASSETS.TIP_BOARD(previewCharId as CharacterId))}
                                 >
@@ -248,8 +248,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                             const colors = PLAYER_COLORS[pid] || PLAYER_COLORS['0'];
 
                             return (
-                                <motion.div 
-                                    key={pid} 
+                                <motion.div
+                                    key={pid}
                                     className={clsx(
                                         "flex items-center gap-[0.8vw] px-[1.5vw] py-[0.6vw] rounded-full transition-all duration-300",
                                         isMe ? "bg-white/15 ring-2 ring-amber-400/50" : "bg-white/8"
@@ -259,9 +259,9 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                     transition={{ delay: Number(pid) * 0.08 }}
                                 >
                                     {/* 玩家标签 */}
-                                    <div 
+                                    <div
                                         className="w-[2.5vw] h-[2.5vw] rounded-full flex items-center justify-center text-[1vw] font-black"
-                                        style={{ 
+                                        style={{
                                             backgroundColor: colors.bg,
                                             color: colors.text,
                                             boxShadow: `0 0 15px ${colors.glow}`
@@ -286,7 +286,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
 
                                     {/* 准备状态指示：只有点击准备后才显示绿色勾 */}
                                     {readyPlayers[pid] && (
-                                        <motion.div 
+                                        <motion.div
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
                                             className="w-[1.2vw] h-[1.2vw] rounded-full bg-emerald-500 flex items-center justify-center text-white"
@@ -310,7 +310,7 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                             {t('selection.ready', '准备')}
                         </motion.button>
                     )}
-                    
+
                     {/* 已准备状态：非房主玩家准备后等待 */}
                     {!isHost && readyPlayers[currentPlayerId] && (
                         <div className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] border-2 bg-white/5 text-emerald-400 border-emerald-400/50">
@@ -332,8 +332,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                             onClick={onStart}
                             className={clsx(
                                 "px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2",
-                                everyoneReady 
-                                    ? "bg-amber-500 text-black border-amber-400 hover:bg-amber-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(245,158,11,0.5)]" 
+                                everyoneReady
+                                    ? "bg-amber-500 text-black border-amber-400 hover:bg-amber-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(245,158,11,0.5)]"
                                     : "bg-white/5 text-white/30 border-white/10 cursor-not-allowed"
                             )}
                         >

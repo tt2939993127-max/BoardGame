@@ -60,6 +60,7 @@ export class UGCHostBridge {
     private validator: UGCMessageValidator;
     private messageHandler: (event: MessageEvent) => void;
     private isReady: boolean = false;
+    private viewOrigin?: string;
 
     constructor(config: HostBridgeConfig) {
         this.config = config;
@@ -134,6 +135,7 @@ export class UGCHostBridge {
 
         switch (message.type) {
             case 'VIEW_READY':
+                this.viewOrigin = event.origin;
                 await this.handleViewReady();
                 break;
             case 'COMMAND':
@@ -227,8 +229,9 @@ export class UGCHostBridge {
         const targetWindow = this.config.iframe.contentWindow;
         if (!targetWindow) return;
 
-        // 使用 '*' 或具体的 origin
-        targetWindow.postMessage(message, '*');
+        const allowedOrigin = this.config.allowedOrigins?.[0];
+        const targetOrigin = this.viewOrigin ?? allowedOrigin ?? '*';
+        targetWindow.postMessage(message, targetOrigin);
     }
 
     /** 生成消息 ID */

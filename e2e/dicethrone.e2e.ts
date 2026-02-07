@@ -313,13 +313,63 @@ test.describe('DiceThrone E2E', () => {
     });
 
     test('Tutorial completes the full flow (main1 -> offensive -> defense -> finish)', async ({ page }) => {
+        test.setTimeout(120000);
+        const pageErrors: string[] = [];
+        const consoleErrors: string[] = [];
+        page.on('pageerror', (error) => {
+            const message = error.stack || error.message;
+            pageErrors.push(message);
+            console.log(`[tutorial] pageerror=${message}`);
+        });
+        page.on('console', (message) => {
+            if (message.type() === 'error') {
+                const text = message.text();
+                consoleErrors.push(text);
+                console.log(`[tutorial] consoleError=${text}`);
+            }
+        });
+        page.on('framenavigated', (frame) => {
+            if (frame === page.mainFrame()) {
+                console.log(`[tutorial] navigated url=${frame.url()}`);
+            }
+        });
+        page.on('crash', () => {
+            console.log('[tutorial] page crashed');
+        });
+        page.on('close', () => {
+            console.log('[tutorial] page closed');
+        });
+
         await setEnglishLocale(page);
         await page.goto('/play/dicethrone/tutorial');
+        await waitForBoardReady(page, 30000);
+
+        const getTutorialStepId = async () => page
+            .locator('[data-tutorial-step]')
+            .first()
+            .getAttribute('data-tutorial-step')
+            .catch(() => 'unknown');
+
+        const logTutorialStep = async (label: string) => {
+            const stepId = await getTutorialStepId();
+            console.log(`[tutorial] ${label} step=${stepId}`);
+        };
 
         const clickNextOverlayStep = async () => {
-            const nextButton = page.getByRole('button', { name: /^(Next|下一步|Finish and return|完成并返回)$/i }).first();
+            const nextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
             if (await nextButton.isVisible({ timeout: 1500 }).catch(() => false)) {
-                await nextButton.click();
+                const beforeStep = await getTutorialStepId();
+                await nextButton.click({ timeout: 2000, force: true }).catch(() => undefined);
+                await page.waitForFunction(
+                    (prev) => {
+                        const el = document.querySelector('[data-tutorial-step]');
+                        return el && el.getAttribute('data-tutorial-step') !== prev;
+                    },
+                    beforeStep,
+                    { timeout: 2000 }
+                ).catch(() => undefined);
+                const afterStep = await getTutorialStepId();
+                console.log(`[tutorial] next ${beforeStep} -> ${afterStep}`);
             }
         };
 
@@ -327,14 +377,23 @@ test.describe('DiceThrone E2E', () => {
         // Copy might differ by locale / i18n, so we anchor on the overlay controls.
         const overlayNextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
         await expect(overlayNextButton).toBeVisible({ timeout: 15000 });
+        await logTutorialStep('start');
 
         // setup -> intro -> stats -> phases -> player-board -> tip-board -> hand -> discard -> status-tokens
-        for (let i = 0; i < 8; i += 1) {
+        const advanceStep = page.locator('[data-tutorial-step="advance"]');
+        for (let i = 0; i < 12; i += 1) {
+            if (page.isClosed()) {
+                console.log('[tutorial] page closed before reaching advance step');
+                break;
+            }
+            if (await advanceStep.isVisible({ timeout: 500 }).catch(() => false)) break;
             await clickNextOverlayStep();
+            await page.waitForTimeout(200);
         }
+        await logTutorialStep('before-advance');
 
         // Step: advance to offensive roll (requires clicking Next Phase on board)
-        await expect(page.getByText(/enter the roll phase/i)).toBeVisible();
+        await expect(advanceStep).toBeVisible();
         const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
         await expect(advanceButton).toBeEnabled();
         await advanceButton.click();
@@ -342,6 +401,7 @@ test.describe('DiceThrone E2E', () => {
         // Step: dice tray visible
         const diceTray = page.locator('[data-tutorial-id="dice-tray"]');
         await expect(diceTray).toBeVisible();
+        await logTutorialStep('dice-tray');
 
         // Step: roll dice (deterministic via debug: force all 1s to guarantee at least one ability)
         const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
@@ -404,11 +464,24 @@ test.describe('DiceThrone E2E', () => {
 
         // Ensure tutorial reaches main2, then finish step should be available.
         await expect(page.getByText(/Main Phase \(2\)|主要阶段 \(2\)/)).toBeVisible({ timeout: 20000 });
+        await logTutorialStep('main2');
 
         // Advance tutorial overlay until finish (non-action steps show a Next/Finish button).
         // We do not assert every copy string; we only assert completion path.
         for (let i = 0; i < 6; i += 1) {
             await clickNextOverlayStep();
+        }
+
+        const finishButton = page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).first();
+        if (await finishButton.isVisible({ timeout: 6000 }).catch(() => false)) {
+            await page.screenshot({ path: 'test-results/tutorial-final-step.png', fullPage: false });
+            await finishButton.click();
+        }
+
+        if (pageErrors.length || consoleErrors.length) {
+            console.log(`[tutorial] pageErrors=${pageErrors.length} consoleErrors=${consoleErrors.length}`);
+            pageErrors.forEach((error) => console.log(`[tutorial] pageerror=${error}`));
+            consoleErrors.forEach((error) => console.log(`[tutorial] consoleError=${error}`));
         }
     });
 

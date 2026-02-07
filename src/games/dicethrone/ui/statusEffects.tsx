@@ -4,20 +4,28 @@ import { useTranslation } from 'react-i18next';
 import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
-import { ASSETS } from './assets';
-import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 
-const STATUS_ICON_ATLAS_JSON = 'dicethrone/images/monk/status-icons-atlas.json';
+import { STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../domain/ids';
+
+
+
+// Hardcoded paths for now, could be dynamic or from ASSETS
+const STATUS_ATLAS_PATHS: Record<string, string> = {
+    [DICETHRONE_STATUS_ATLAS_IDS.MONK]: 'dicethrone/images/monk/status-icons-atlas.json',
+    [DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN]: 'dicethrone/images/barbarian/status-icons-atlas.json',
+    [DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER]: 'dicethrone/images/pyromancer/status-icons-atlas.json',
+};
 
 type StatusIconAtlasFrame = { x: number; y: number; w: number; h: number };
 export type StatusIconAtlasConfig = {
     imageW: number;
     imageH: number;
     frames: Record<string, StatusIconAtlasFrame>;
+    imagePath?: string;
 };
 
 type StatusIconAtlasResponse = {
-    meta: { size: { w: number; h: number } };
+    meta: { image: string; size: { w: number; h: number } };
     frames: Record<string, { frame: StatusIconAtlasFrame }>;
 };
 
@@ -38,47 +46,42 @@ const isStatusIconAtlasResponse = (value: unknown): value is StatusIconAtlasResp
     });
 };
 
-export const loadStatusIconAtlasConfig = async (): Promise<StatusIconAtlasConfig> => {
-    const url = getLocalizedAssetPath(STATUS_ICON_ATLAS_JSON);
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`状态图标图集加载失败: ${STATUS_ICON_ATLAS_JSON}`);
-    }
-    const data: unknown = await response.json();
-    if (!isStatusIconAtlasResponse(data)) {
-        throw new Error(`状态图标图集格式不正确: ${STATUS_ICON_ATLAS_JSON}`);
-    }
-    const frames = Object.fromEntries(
-        Object.entries(data.frames).map(([key, entry]) => [key, entry.frame])
-    );
-    return { imageW: data.meta.size.w, imageH: data.meta.size.h, frames };
+// Map of Atlas ID -> Config
+export type StatusAtlases = Record<string, StatusIconAtlasConfig>;
+
+export const loadStatusAtlases = async (): Promise<StatusAtlases> => {
+    const promises = Object.entries(STATUS_ATLAS_PATHS).map(async ([id, path]) => {
+        try {
+            const url = getLocalizedAssetPath(path);
+            const response = await fetch(url);
+            if (!response.ok) return null;
+            const data: unknown = await response.json();
+            if (!isStatusIconAtlasResponse(data)) return null;
+
+            const baseDir = path.substring(0, path.lastIndexOf('/') + 1);
+            const imagePath = `${baseDir}${data.meta.image}`;
+
+            const frames = Object.fromEntries(
+                Object.entries(data.frames).map(([key, entry]) => [key, entry.frame])
+            );
+            return { id, config: { imageW: data.meta.size.w, imageH: data.meta.size.h, frames, imagePath } };
+        } catch (e) {
+            console.warn(`Failed to load status atlas: ${id}`, e);
+            return null;
+        }
+    });
+
+    const results = await Promise.all(promises);
+    return results.reduce((acc, curr) => {
+        if (curr) acc[curr.id] = curr.config;
+        return acc;
+    }, {} as StatusAtlases);
 };
 
-export type StatusEffectMeta = {
-    color?: string;
-    icon?: string;
-    frameId?: string;
-};
+import { STATUS_EFFECT_META, TOKEN_META, type StatusEffectMeta } from '../domain/statusEffects';
 
-/** 被动状态效果元数据（如击倒） */
-export const STATUS_EFFECT_META: Record<string, StatusEffectMeta> = {
-    [STATUS_IDS.KNOCKDOWN]: {
-        frameId: STATUS_IDS.KNOCKDOWN,
-    },
-};
-
-/** Token 元数据（太极、闪避、净化） */
-export const TOKEN_META: Record<string, StatusEffectMeta> = {
-    [TOKEN_IDS.TAIJI]: {
-        frameId: 'tai-chi',
-    },
-    [TOKEN_IDS.EVASIVE]: {
-        frameId: 'dodge',
-    },
-    [TOKEN_IDS.PURIFY]: {
-        frameId: TOKEN_IDS.PURIFY,
-    },
-};
+// Re-export for consumers that import from ui/statusEffects
+export { STATUS_EFFECT_META, TOKEN_META, type StatusEffectMeta };
 
 const getStatusIconFrameStyle = (atlas: StatusIconAtlasConfig, frame: StatusIconAtlasFrame) => {
     const xPos = atlas.imageW === frame.w ? 0 : (frame.x / (atlas.imageW - frame.w)) * 100;
@@ -95,22 +98,40 @@ export const getStatusEffectIconNode = (
     meta: StatusEffectMeta,
     locale: string | undefined,
     size: 'tiny' | 'small' | 'normal' | 'fly' | 'choice',
-    atlas?: StatusIconAtlasConfig | null
+    atlas?: StatusAtlases | null
 ) => {
-    const frame = meta.frameId ? atlas?.frames[meta.frameId] : undefined;
-    if (!frame || !atlas) {
+    let frame: StatusIconAtlasFrame | undefined;
+    let targetAtlas: StatusIconAtlasConfig | undefined;
+
+    if (meta.atlasId && atlas?.[meta.atlasId]) {
+        targetAtlas = atlas[meta.atlasId];
+        frame = meta.frameId ? targetAtlas.frames[meta.frameId] : undefined;
+    } else if (atlas && meta.frameId) {
+        // Fallback: Search in all atlases
+        for (const config of Object.values(atlas)) {
+            if (config.frames[meta.frameId]) {
+                targetAtlas = config;
+                frame = config.frames[meta.frameId];
+                // For debug:
+                // console.log(`Found ${meta.frameId} in ${id}`);
+                break;
+            }
+        }
+    }
+
+    if (!frame || !targetAtlas) {
         return <span className="drop-shadow-md">{meta.icon ?? '❓'}</span>;
     }
     const sizeClass = size === 'choice' ? 'w-full h-full' : 'w-full h-full';
-    const frameStyle = getStatusIconFrameStyle(atlas, frame);
+    const frameStyle = getStatusIconFrameStyle(targetAtlas, frame);
 
     return (
         <span
             className={`block ${sizeClass} drop-shadow-md`}
             style={{
-                // 注意：ASSETS.EFFECT_ICONS 是一个根据角色返回路径的函数，必须调用后再传入 AssetLoader。
-                // 否则 buildLocalizedImageSet 会收到非字符串，返回空 background-image，导致图标不显示。
-                backgroundImage: buildLocalizedImageSet(ASSETS.EFFECT_ICONS(), locale),
+                backgroundImage: targetAtlas.imagePath
+                    ? buildLocalizedImageSet(targetAtlas.imagePath, locale)
+                    : undefined,
                 backgroundSize: frameStyle.backgroundSize,
                 backgroundPosition: frameStyle.backgroundPosition,
                 backgroundRepeat: 'no-repeat',
@@ -132,13 +153,23 @@ export const StatusEffectBadge = ({
     stacks: number;
     size?: 'normal' | 'small' | 'tiny';
     locale?: string;
-    atlas?: StatusIconAtlasConfig | null;
+    atlas?: StatusAtlases | null;
     onClick?: () => void;
     clickable?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const meta = STATUS_EFFECT_META[effectId] || { icon: '❓', color: 'from-gray-500 to-gray-600' };
-    const hasSprite = Boolean(meta.frameId && atlas?.frames[meta.frameId]);
+
+    // Check if sprite exists in the resolved atlas
+    let hasSprite = false;
+    if (atlas && meta.frameId) {
+        if (meta.atlasId && atlas[meta.atlasId]) {
+            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
+        } else {
+            // Fallback check
+            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
+        }
+    }
     const description = resolveI18nList(
         t(`statusEffects.${effectId}.description`, { returnObjects: true, defaultValue: [] })
     );
@@ -210,7 +241,7 @@ export const StatusEffectsContainer = ({
     size?: 'normal' | 'small' | 'tiny';
     className?: string;
     locale?: string;
-    atlas?: StatusIconAtlasConfig | null;
+    atlas?: StatusAtlases | null;
     /** 点击状态效果的回调 */
     onEffectClick?: (effectId: string) => void;
     /** 可点击的状态效果 ID 列表 */
@@ -220,7 +251,7 @@ export const StatusEffectsContainer = ({
     if (activeEffects.length === 0) return null;
 
     return (
-        <div 
+        <div
             className={`flex flex-wrap gap-[0.3vw] ${className}`}
             style={getContainerStyle(maxPerRow, size)}
         >
@@ -257,13 +288,21 @@ export const TokenBadge = ({
     amount: number;
     size?: 'normal' | 'small' | 'tiny';
     locale?: string;
-    atlas?: StatusIconAtlasConfig | null;
+    atlas?: StatusAtlases | null;
     onClick?: () => void;
     clickable?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const meta = TOKEN_META[tokenId] || { icon: '❓', color: 'from-gray-500 to-gray-600' };
-    const hasSprite = Boolean(meta.frameId && atlas?.frames[meta.frameId]);
+
+    let hasSprite = false;
+    if (atlas && meta.frameId) {
+        if (meta.atlasId && atlas[meta.atlasId]) {
+            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
+        } else {
+            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
+        }
+    }
     const description = resolveI18nList(
         t(`tokens.${tokenId}.description`, { returnObjects: true, defaultValue: [] })
     );
@@ -329,7 +368,7 @@ export const TokensContainer = ({
     size?: 'normal' | 'small' | 'tiny';
     className?: string;
     locale?: string;
-    atlas?: StatusIconAtlasConfig | null;
+    atlas?: StatusAtlases | null;
     /** 点击 Token 的回调 */
     onTokenClick?: (tokenId: string) => void;
     /** 可点击的 Token ID 列表 */
@@ -339,7 +378,7 @@ export const TokensContainer = ({
     if (activeTokens.length === 0) return null;
 
     return (
-        <div 
+        <div
             className={`flex flex-wrap gap-[0.3vw] ${className}`}
             style={getContainerStyle(maxPerRow, size)}
         >
@@ -384,11 +423,19 @@ export const SelectableStatusBadge = ({
     onSelect?: () => void;
     size?: 'normal' | 'small';
     locale?: string;
-    atlas?: StatusIconAtlasConfig | null;
+    atlas?: StatusAtlases | null;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const meta = STATUS_EFFECT_META[effectId] || TOKEN_META[effectId] || { icon: '❓', color: 'from-gray-500 to-gray-600' };
-    const hasSprite = Boolean(meta.frameId && atlas?.frames[meta.frameId]);
+
+    let hasSprite = false;
+    if (atlas && meta.frameId) {
+        if (meta.atlasId && atlas[meta.atlasId]) {
+            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
+        } else {
+            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
+        }
+    }
     const description = resolveI18nList(
         t(`statusEffects.${effectId}.description`, { returnObjects: true, defaultValue: [] })
     );
@@ -405,9 +452,8 @@ export const SelectableStatusBadge = ({
 
     return (
         <div
-            className={`relative group ${
-                clickable ? 'cursor-pointer' : ''
-            }`}
+            className={`relative group ${clickable ? 'cursor-pointer' : ''
+                }`}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
             onClick={() => clickable && onSelect?.()}
@@ -468,12 +514,12 @@ export const SelectableEffectsContainer = ({
     size?: 'normal' | 'small';
     className?: string;
     locale?: string;
-    atlas?: StatusIconAtlasConfig | null;
+    atlas?: StatusAtlases | null;
 }) => {
     const activeEffects = Object.entries(effects).filter(([, stacks]) => stacks > 0);
     const activeTokens = tokens ? Object.entries(tokens).filter(([, amount]) => amount > 0) : [];
     const allItems = [...activeEffects, ...activeTokens];
-    
+
     if (allItems.length === 0) return null;
 
     return (

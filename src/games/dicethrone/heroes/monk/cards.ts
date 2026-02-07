@@ -4,9 +4,18 @@
 
 import type { AbilityCard } from '../../types';
 import { DICE_FACE_IDS, TOKEN_IDS, STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
-import { COMMON_CARDS } from '../../domain/commonCards';
+import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import type { RandomFn } from '../../../../engine/types';
 import type { AbilityEffect, AbilityDef, EffectTiming, EffectCondition } from '../../../../systems/presets/combat';
+import {
+    MONK_SFX_PUNCH_1,
+    MONK_SFX_PUNCH_2,
+    MONK_SFX_PUNCH_3,
+    MONK_SFX_KICK_1,
+    MONK_SFX_KICK_2,
+    MONK_SFX_THUNDER,
+    MONK_SFX_ZEN,
+} from './abilities';
 
 // 文本辅助
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
@@ -63,6 +72,7 @@ const FIST_TECHNIQUE_2: AbilityDef = {
     name: abilityText('fist-technique-2', 'name'),
     type: 'offensive',
     description: abilityText('fist-technique-2', 'description'),
+    sfxKey: MONK_SFX_PUNCH_1,
     variants: [
         { id: 'fist-technique-2-3', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3 } }, effects: [damage(7, abilityEffectText('fist-technique-2-3', 'damage7'))], priority: 1 },
         { id: 'fist-technique-2-4', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 4 } }, effects: [damage(8, abilityEffectText('fist-technique-2-4', 'damage8'))], priority: 2 },
@@ -75,6 +85,7 @@ const FIST_TECHNIQUE_3: AbilityDef = {
     name: abilityText('fist-technique-3', 'name'),
     type: 'offensive',
     description: abilityText('fist-technique-3', 'description'),
+    sfxKey: MONK_SFX_PUNCH_1,
     variants: [
         { id: 'fist-technique-3-3', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3 } }, effects: [damage(7, abilityEffectText('fist-technique-3-3', 'damage7'))], priority: 1 },
         { id: 'fist-technique-3-4', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 4 } }, effects: [damage(8, abilityEffectText('fist-technique-3-4', 'damage8')), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('fist-technique-3-4', 'inflictStun'))], priority: 2 },
@@ -112,6 +123,7 @@ const LOTUS_PALM_2: AbilityDef = {
     type: 'offensive',
     description: abilityText('lotus-palm-2', 'description'),
     tags: ['unblockable'],
+    sfxKey: MONK_SFX_KICK_2,
     variants: [
         { id: 'lotus-palm-2-3', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 3 } }, effects: [damage(2, abilityEffectText('lotus-palm-2-3', 'damage2')), grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('lotus-palm-2-3', 'gainEvasive'), { timing: 'postDamage', condition: { type: 'onHit' } }), grantToken(TOKEN_IDS.TAIJI, 2, abilityEffectText('lotus-palm-2-3', 'gainTaiji2'), { timing: 'postDamage', condition: { type: 'onHit' } })], priority: 0 },
         { id: 'lotus-palm-2-4', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 4 } }, effects: [damage(6, abilityEffectText('lotus-palm-2-4', 'damage6')), { description: abilityEffectText('lotus-palm-2-4', 'taijiCapUp'), action: { type: 'custom', target: 'self', customActionId: 'lotus-palm-taiji-cap-up-and-fill' }, timing: 'postDamage', condition: { type: 'onHit' } }], priority: 1 },
@@ -124,6 +136,7 @@ const TAIJI_COMBO_2: AbilityDef = {
     name: abilityText('taiji-combo-2', 'name'),
     type: 'offensive',
     description: abilityText('taiji-combo-2', 'description'),
+    sfxKey: MONK_SFX_KICK_1,
     trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3, [DICE_FACE_IDS.PALM]: 1 } },
     effects: [
         { description: abilityEffectText('taiji-combo-2', 'rollDie'), action: { type: 'rollDie', target: 'self', diceCount: 2, conditionalEffects: [{ face: DICE_FACE_IDS.FIST, bonusDamage: 2 }, { face: DICE_FACE_IDS.PALM, bonusDamage: 3 }, { face: DICE_FACE_IDS.TAIJI, grantToken: { tokenId: TOKEN_IDS.TAIJI, value: 2 } }, { face: DICE_FACE_IDS.LOTUS, triggerChoice: { titleKey: 'choices.evasiveOrPurifyToken', options: [{ tokenId: TOKEN_IDS.EVASIVE, value: 1 }, { tokenId: TOKEN_IDS.PURIFY, value: 1 }] } }] }, timing: 'withDamage' },
@@ -136,6 +149,7 @@ const THUNDER_STRIKE_2: AbilityDef = {
     name: abilityText('thunder-strike-2', 'name'),
     type: 'offensive',
     description: abilityText('thunder-strike-2', 'description'),
+    sfxKey: MONK_SFX_THUNDER,
     trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.PALM]: 3 } },
     effects: [
         { description: abilityEffectText('thunder-strike-2', 'roll3Damage'), action: { type: 'custom', target: 'opponent', customActionId: 'thunder-strike-2-roll-damage' }, timing: 'withDamage' },
@@ -148,6 +162,7 @@ const CALM_WATER_2: AbilityDef = {
     name: abilityText('calm-water-2', 'name'),
     type: 'offensive',
     description: abilityText('calm-water-2', 'description'),
+    sfxKey: MONK_SFX_PUNCH_3,
     variants: [
         { id: 'calm-water-2-way-of-monk', trigger: { type: 'allSymbolsPresent', symbols: [DICE_FACE_IDS.FIST, DICE_FACE_IDS.PALM, DICE_FACE_IDS.TAIJI, DICE_FACE_IDS.LOTUS] }, effects: [grantToken(TOKEN_IDS.EVASIVE, 2, abilityEffectText('calm-water-2-way-of-monk', 'gainEvasive2')), damage(3, abilityEffectText('calm-water-2-way-of-monk', 'damage3'))], priority: 0, tags: ['unblockable'] },
         { id: 'calm-water-2-large-straight', trigger: { type: 'largeStraight' }, effects: [damage(7, abilityEffectText('calm-water-2', 'damage7')), grantToken(TOKEN_IDS.TAIJI, 3, abilityEffectText('calm-water-2', 'gainTaiji3'), { timing: 'postDamage', condition: { type: 'onHit' } }), grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('calm-water-2', 'gainEvasive'), { timing: 'postDamage', condition: { type: 'onHit' } }), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('calm-water-2', 'inflictKnockdown'), { timing: 'postDamage', condition: { type: 'onHit' } })], priority: 1 },
@@ -159,6 +174,7 @@ const HARMONY_2: AbilityDef = {
     name: abilityText('harmony-2', 'name'),
     type: 'offensive',
     description: abilityText('harmony-2', 'description'),
+    sfxKey: MONK_SFX_PUNCH_2,
     trigger: { type: 'smallStraight' },
     effects: [damage(6, abilityEffectText('harmony-2', 'damage6')), grantToken(TOKEN_IDS.TAIJI, 3, abilityEffectText('harmony-2', 'gainTaiji3'), { timing: 'postDamage', condition: { type: 'onHit' } })],
 };
@@ -168,6 +184,7 @@ const ZEN_FORGET_2: AbilityDef = {
     name: abilityText('zen-forget-2', 'name'),
     type: 'offensive',
     description: abilityText('zen-forget-2', 'description'),
+    sfxKey: MONK_SFX_ZEN,
     variants: [
         { id: 'zen-forget-2-zen-combat', trigger: { type: 'allSymbolsPresent', symbols: [DICE_FACE_IDS.FIST, DICE_FACE_IDS.PALM, DICE_FACE_IDS.TAIJI] }, effects: [damage(6, abilityEffectText('zen-forget-2-zen-combat', 'damage6')), grantToken(TOKEN_IDS.TAIJI, 2, abilityEffectText('zen-forget-2-zen-combat', 'gainTaiji2'), { timing: 'postDamage', condition: { type: 'onHit' } })], priority: 0 },
         { id: 'zen-forget-2-3', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.TAIJI]: 3 } }, effects: [grantToken(TOKEN_IDS.TAIJI, 6, abilityEffectText('zen-forget-2', 'gainTaiji6')), grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('zen-forget-2', 'gainEvasive')), grantToken(TOKEN_IDS.PURIFY, 1, abilityEffectText('zen-forget-2', 'gainPurify'))], priority: 1 },
@@ -198,8 +215,8 @@ export const MONK_CARDS: AbilityCard[] = [
     { id: 'card-thrust-punch-3', name: cardText('card-thrust-punch-3', 'name'), type: 'upgrade', cpCost: 2, timing: 'main', description: cardText('card-thrust-punch-3', 'description'), previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 13 }, effects: [replaceAbility('fist-technique', FIST_TECHNIQUE_3, 3, '升级拳法至 III 级')] },
     { id: 'card-contemplation-2', name: cardText('card-contemplation-2', 'name'), type: 'upgrade', cpCost: 2, timing: 'main', description: cardText('card-contemplation-2', 'description'), previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 14 }, effects: [replaceAbility('zen-forget', ZEN_FORGET_2, 2, '升级禅忘至 II 级')] },
 
-    // 注入通用卡牌
-    ...COMMON_CARDS,
+    // 注入通用卡牌（带图集预览引用）
+    ...injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.MONK),
 ];
 
 export const getMonkStartingDeck = (random: RandomFn): AbilityCard[] => {

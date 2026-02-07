@@ -8,6 +8,9 @@
 import type { ReactNode } from 'react';
 import type {
     PhaseInfo,
+    ActionBarAction,
+    ActionBarConfig,
+    PhaseHudConfig,
     PlayerPanelData,
     HandAreaConfig,
     ResourceTrayConfig,
@@ -35,6 +38,26 @@ export interface PhaseIndicatorSkeletonProps {
 }
 
 // ============================================================================
+// 阶段 HUD 骨架
+// ============================================================================
+
+/**
+ * 阶段 HUD 骨架 Props
+ */
+export interface PhaseHudSkeletonProps extends PhaseHudConfig {
+    /** 布局方向 */
+    orientation?: 'vertical' | 'horizontal';
+    /** 容器样式 */
+    className?: string;
+    /** 阶段项渲染函数 */
+    renderPhaseItem?: (phase: PhaseInfo, isActive: boolean, index: number) => ReactNode;
+    /** 状态文本渲染函数 */
+    renderStatus?: (statusText?: string) => ReactNode;
+    /** 当前玩家信息渲染函数 */
+    renderCurrentPlayer?: (label?: string) => ReactNode;
+}
+
+// ============================================================================
 // 玩家面板骨架
 // ============================================================================
 
@@ -54,6 +77,22 @@ export interface PlayerPanelSkeletonProps {
     renderStatusEffect?: (effectId: string, stacks: number) => ReactNode;
     /** 玩家信息渲染函数（头像、名称等） */
     renderPlayerInfo?: (player: PlayerPanelData) => ReactNode;
+}
+
+// ============================================================================
+// 操作栏骨架
+// ============================================================================
+
+/**
+ * 操作栏骨架 Props
+ */
+export interface ActionBarSkeletonProps extends ActionBarConfig {
+    /** 容器样式 */
+    className?: string;
+    /** 动作渲染函数 */
+    renderAction?: (action: ActionBarAction, onClick: () => void, index: number) => ReactNode;
+    /** 动作点击回调 */
+    onAction?: (action: ActionBarAction) => void;
 }
 
 // ============================================================================

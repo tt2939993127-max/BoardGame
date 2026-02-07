@@ -34,21 +34,30 @@ ensure_compose_file() {
 
 # 检查 .env 文件
 ensure_env_file() {
-  if [ ! -f ".env" ]; then
-    log "创建 .env 文件"
-    local jwt_secret
-    if command -v openssl &>/dev/null; then
-      jwt_secret=$(openssl rand -hex 32)
-    else
-      jwt_secret=$(date +%s | sha256sum | awk '{print $1}')
-    fi
-    cat > .env << EOF
+  if [ -f ".env" ]; then
+    return
+  fi
+
+  # 优先使用 .env.server 脚本生成
+  if [ -f ".env.server" ]; then
+    log "检测到 .env.server，执行生成 .env"
+    bash .env.server "$(pwd)"
+    return
+  fi
+
+  # 兜底：自动生成最小 .env
+  log "未找到 .env 和 .env.server，自动生成最小 .env"
+  local jwt_secret
+  if command -v openssl &>/dev/null; then
+    jwt_secret=$(openssl rand -hex 32)
+  else
+    jwt_secret=$(date +%s | sha256sum | awk '{print $1}')
+  fi
+  cat > .env << EOF
 JWT_SECRET=${jwt_secret}
-MONGO_URI=mongodb://mongodb:27017/boardgame
 WEB_ORIGINS=http://localhost
 EOF
-    log ".env 已创建（请修改 WEB_ORIGINS 为实际域名）"
-  fi
+  log ".env 已创建（请修改 WEB_ORIGINS 为实际域名）"
 }
 
 # 部署/更新

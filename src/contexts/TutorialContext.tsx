@@ -62,14 +62,26 @@ const shouldAutoAdvance = (step: TutorialStepSnapshot): boolean => {
 const hasAiActions = (step: TutorialStepSnapshot): boolean =>
     Array.isArray(step.aiActions) && step.aiActions.length > 0;
 
+const normalizeTutorialState = (nextTutorial: TutorialState): TutorialState => {
+    const steps = Array.isArray(nextTutorial.steps) ? nextTutorial.steps : [];
+    const derivedStep = nextTutorial.step ?? steps[nextTutorial.stepIndex] ?? null;
+    return {
+        ...nextTutorial,
+        steps,
+        step: derivedStep,
+    };
+};
+
 export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [tutorial, setTutorial] = useState<TutorialState>({ ...DEFAULT_TUTORIAL_STATE });
+    const [isControllerReady, setIsControllerReady] = useState(false);
     const controllerRef = useRef<TutorialController | null>(null);
     const pendingStartRef = useRef<TutorialManifest | null>(null);
     const executedAiStepsRef = useRef<Set<string>>(new Set());
 
     const bindMoves = useCallback((moves: Record<string, unknown>) => {
         controllerRef.current = buildTutorialController(moves);
+        setIsControllerReady(true);
         if (pendingStartRef.current) {
             controllerRef.current.start(pendingStartRef.current);
             pendingStartRef.current = null;
@@ -77,8 +89,9 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }, []);
 
     const syncTutorialState = useCallback((nextTutorial: TutorialState) => {
-        setTutorial(nextTutorial);
-        if (!nextTutorial.active) {
+        const normalized = normalizeTutorialState(nextTutorial);
+        setTutorial(normalized);
+        if (!normalized.active) {
             executedAiStepsRef.current = new Set();
         }
     }, []);
@@ -105,6 +118,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     useEffect(() => {
         if (!tutorial.active || !tutorial.step || !hasAiActions(tutorial.step)) return;
+        if (!isControllerReady) return;
 
         const stepId = tutorial.step.id;
         if (executedAiStepsRef.current.has(stepId)) return;
@@ -134,10 +148,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (moveTimer !== undefined) window.clearTimeout(moveTimer);
             if (advanceTimer !== undefined) window.clearTimeout(advanceTimer);
         };
-    }, [tutorial]);
+    }, [tutorial, isControllerReady]);
 
     const value = useMemo<TutorialContextType>(() => {
-        const currentStep = tutorial.step ?? null;
+        const currentStep = tutorial.step ?? tutorial.steps[tutorial.stepIndex] ?? null;
         return {
             tutorial,
             currentStep,
@@ -172,7 +186,7 @@ export const useTutorialBridge = (tutorial: TutorialState, moves: Record<string,
     const lastSyncSignatureRef = useRef<string | null>(null);
     useEffect(() => {
         if (!context) return;
-        const signature = `${tutorial.active}-${tutorial.stepIndex}-${tutorial.step?.id ?? ''}-${tutorial.steps?.length ?? 0}`;
+        const signature = `${tutorial.active}-${tutorial.stepIndex}-${tutorial.step?.id ?? ''}-${tutorial.steps?.length ?? 0}-${tutorial.aiActions?.length ?? 0}`;
         if (lastSyncSignatureRef.current === signature) return;
         lastSyncSignatureRef.current = signature;
         context.syncTutorialState(tutorial);

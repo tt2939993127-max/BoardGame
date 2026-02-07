@@ -8,6 +8,7 @@ import type { ActionLogEntry, Command, GameEvent, MatchState } from '../../engin
 import {
     createActionLogSystem,
     createCheatSystem,
+    createEventStreamSystem,
     createFlowSystem,
     createGameAdapter,
     createLogSystem,
@@ -37,6 +38,8 @@ const ACTION_ALLOWLIST = [
     SW_COMMANDS.DISCARD_FOR_MAGIC,
     SW_COMMANDS.END_PHASE,
     SW_COMMANDS.PLAY_EVENT,
+    SW_COMMANDS.BLOOD_SUMMON_STEP,
+    SW_COMMANDS.ACTIVATE_ABILITY,
 ] as const;
 
 function formatSummonerWarsActionEntry({
@@ -96,8 +99,20 @@ function formatSummonerWarsActionEntry({
                 segments: [{ type: 'text', text: phaseLabel }],
             };
         }
-        default:
+        default: {
+            if (command.type === SW_COMMANDS.ACTIVATE_ABILITY) {
+                const payload = command.payload as { abilityId: string; targetCardId?: string; targetUnitId?: string; targetPosition?: { row: number; col: number } };
+                const targetInfo = payload.targetCardId ? `选择卡牌` : payload.targetUnitId ? `选择单位` : payload.targetPosition ? `选择位置` : '';
+                return {
+                    id: `${command.type}-${command.playerId}-${timestamp}`,
+                    timestamp,
+                    actorId,
+                    kind: command.type,
+                    segments: [{ type: 'text', text: `发动技能：${payload.abilityId} ${targetInfo}` }],
+                };
+            }
             return null;
+        }
     }
 }
 
@@ -154,11 +169,34 @@ const summonerWarsCheatModifier: CheatResourceModifier<SummonerWarsCore> = {
             },
         };
     },
+    dealCardByAtlasIndex: (core, playerId, atlasIndex) => {
+        const normalizedId = normalizePlayerId(playerId);
+        if (!normalizedId) return core;
+        const player = core.players[normalizedId];
+        if (!player) return core;
+        // 在牌库中查找匹配精灵图索引的卡牌
+        const cardIndex = player.deck.findIndex(c => c.spriteIndex === atlasIndex);
+        if (cardIndex === -1) return core;
+        const newDeck = [...player.deck];
+        const [card] = newDeck.splice(cardIndex, 1);
+        return {
+            ...core,
+            players: {
+                ...core.players,
+                [normalizedId]: {
+                    ...player,
+                    deck: newDeck,
+                    hand: [...player.hand, card],
+                },
+            },
+        };
+    },
 };
 
 // 创建系统集合（包含 FlowSystem）
 const systems = [
     createFlowSystem<SummonerWarsCore>({ hooks: summonerWarsFlowHooks }),
+    createEventStreamSystem(),
     createLogSystem(),
     createActionLogSystem({
         commandAllowlist: ACTION_ALLOWLIST,
@@ -181,6 +219,9 @@ export const SummonerWars = createGameAdapter({
     minPlayers: 2,
     maxPlayers: 2,
     commandTypes: [
+        SW_COMMANDS.SELECT_FACTION,
+        SW_COMMANDS.PLAYER_READY,
+        SW_COMMANDS.HOST_START_GAME,
         SW_COMMANDS.SUMMON_UNIT,
         SW_COMMANDS.SELECT_UNIT,
         SW_COMMANDS.MOVE_UNIT,
@@ -190,6 +231,8 @@ export const SummonerWars = createGameAdapter({
         SW_COMMANDS.DISCARD_FOR_MAGIC,
         SW_COMMANDS.END_PHASE,
         SW_COMMANDS.PLAY_EVENT,
+        SW_COMMANDS.BLOOD_SUMMON_STEP,
+        SW_COMMANDS.ACTIVATE_ABILITY,
         FLOW_COMMANDS.ADVANCE_PHASE,
         UNDO_COMMANDS.REQUEST_UNDO,
         UNDO_COMMANDS.APPROVE_UNDO,

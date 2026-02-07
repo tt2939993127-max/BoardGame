@@ -479,13 +479,6 @@ export const GameHUD = ({
                 )}
 
                 <AudioControlSection isDark={true} />
-
-                <div className="grid grid-cols-1 gap-2 mt-4">
-                    <button onClick={() => setShowFeedback(true)} className="flex flex-col items-center justify-center p-2 rounded bg-white/5 hover:bg-white/10 border border-white/5 transition-colors">
-                        <MessageSquareWarning size={16} />
-                        <span className="text-[10px] mt-1">{t('hud.actions.feedback')}</span>
-                    </button>
-                </div>
             </div>
         )
     });
@@ -677,6 +670,13 @@ export const GameHUD = ({
             },
         });
     }
+
+    items.push({
+        id: 'feedback',
+        icon: <MessageSquareWarning size={20} />,
+        label: t('hud.actions.feedback'),
+        onClick: () => setShowFeedback(true),
+    });
 
     items.push(exitAction);
 

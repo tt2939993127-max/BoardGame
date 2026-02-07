@@ -9,6 +9,10 @@ import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '.
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
 const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
 
+const BARBARIAN_SFX_LIGHT = 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst';
+const BARBARIAN_SFX_HEAVY = 'combat.general.fight_fury_vol_2.punch_heavy.fghtimpt_punch_heavy_04_krst';
+const BARBARIAN_SFX_ULTIMATE = 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst';
+
 // 辅助函数
 const damage = (value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
     description,
@@ -31,9 +35,9 @@ const inflictStatus = (statusId: string, value: number, description: string, opt
     condition: opts?.condition,
 });
 
-const removeStatus = (target: 'self' | 'opponent', description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
+const removeStatus = (description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
     description,
-    action: { type: 'removeStatus', target, statusId: 'choice' }, // 让玩家选择移除哪一个
+    action: { type: 'custom', target: 'self', customActionId: 'remove-status-self' },
     timing: opts?.timing,
     condition: opts?.condition,
 });
@@ -48,6 +52,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('slap', 'name'),
         type: 'offensive',
         description: abilityText('slap', 'description'),
+        sfxKey: BARBARIAN_SFX_LIGHT,
         variants: [
             { id: 'slap-3', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 3 } }, effects: [damage(4, abilityEffectText('slap-3', 'damage4'))], priority: 1 },
             { id: 'slap-4', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 4 } }, effects: [damage(6, abilityEffectText('slap-4', 'damage6'))], priority: 2 },
@@ -59,6 +64,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('all-out-strike', 'name'),
         type: 'offensive',
         description: abilityText('all-out-strike', 'description'),
+        sfxKey: BARBARIAN_SFX_LIGHT,
         trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 2, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
         effects: [damage(4, abilityEffectText('all-out-strike', 'damage4Def'))],
         tags: ['unblockable'],
@@ -68,6 +74,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('powerful-strike', 'name'),
         type: 'offensive',
         description: abilityText('powerful-strike', 'description'),
+        sfxKey: BARBARIAN_SFX_HEAVY,
         trigger: { type: 'smallStraight' },
         effects: [damage(9, abilityEffectText('powerful-strike', 'damage9'))],
     },
@@ -76,7 +83,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('violent-assault', 'name'),
         type: 'offensive',
         description: abilityText('violent-assault', 'description'),
-        sfxKey: 'combat.general.fight_fury_vol_2.punch_heavy.fghtimpt_punch_heavy_04_krst',
+        sfxKey: BARBARIAN_SFX_HEAVY,
         trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 4 } },
         effects: [inflictStatus(STATUS_IDS.STUN, 1, abilityEffectText('violent-assault', 'inflictStun')), damage(5, abilityEffectText('violent-assault', 'damage5Def'))],
         tags: ['unblockable'],
@@ -86,6 +93,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('steadfast', 'name'),
         type: 'offensive',
         description: abilityText('steadfast', 'description'),
+        sfxKey: BARBARIAN_SFX_LIGHT,
         variants: [
             { id: 'steadfast-3', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 3 } }, effects: [heal(4, abilityEffectText('steadfast-3', 'heal4'))], priority: 1 },
             { id: 'steadfast-4', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 4 } }, effects: [heal(5, abilityEffectText('steadfast-4', 'heal5'))], priority: 2 },
@@ -97,6 +105,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         name: abilityText('suppress', 'name'),
         type: 'offensive',
         description: abilityText('suppress', 'description'),
+        sfxKey: BARBARIAN_SFX_LIGHT,
         trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 2, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
         effects: [
             {
@@ -112,7 +121,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('reckless-strike', 'description'),
         tags: ['ultimate'],
-        sfxKey: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst',
+        sfxKey: BARBARIAN_SFX_ULTIMATE,
         trigger: { type: 'largeStraight' },
         effects: [damage(15, abilityEffectText('reckless-strike', 'damage15')), { description: abilityEffectText('reckless-strike', 'selfDamage4'), action: { type: 'damage', target: 'self', value: 4 }, timing: 'postDamage', condition: { type: 'onHit' } }],
     },
@@ -135,6 +144,7 @@ export const SLAP_2: AbilityDef = {
     name: abilityText('slap-2', 'name'),
     type: 'offensive',
     description: abilityText('slap-2', 'description'),
+    sfxKey: BARBARIAN_SFX_LIGHT,
     variants: [
         { id: 'slap-2-3', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 3 } }, effects: [damage(5, abilityEffectText('slap-2-3', 'damage5'))], priority: 1 },
         {
@@ -159,6 +169,7 @@ export const ALL_OUT_STRIKE_2: AbilityDef = {
     name: abilityText('all-out-strike-2', 'name'),
     type: 'offensive',
     description: abilityText('all-out-strike-2', 'description'),
+    sfxKey: BARBARIAN_SFX_LIGHT,
     trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 2, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
     effects: [damage(5, abilityEffectText('all-out-strike-2', 'damage5Def'))],
     tags: ['unblockable'],
@@ -169,6 +180,7 @@ export const POWERFUL_STRIKE_2: AbilityDef = {
     name: abilityText('powerful-strike-2', 'name'),
     type: 'offensive',
     description: abilityText('powerful-strike-2', 'description'),
+    sfxKey: BARBARIAN_SFX_HEAVY,
     trigger: { type: 'smallStraight' },
     effects: [damage(8, abilityEffectText('powerful-strike-2', 'damage8Def'))],
     tags: ['unblockable'],
@@ -179,6 +191,7 @@ export const VIOLENT_ASSAULT_2: AbilityDef = {
     name: abilityText('violent-assault-2', 'name'),
     type: 'offensive',
     description: abilityText('violent-assault-2', 'description'),
+    sfxKey: BARBARIAN_SFX_HEAVY,
     variants: [
         {
             id: 'violent-assault-2-crush',
@@ -202,10 +215,11 @@ export const STEADFAST_2: AbilityDef = {
     name: abilityText('steadfast-2', 'name'),
     type: 'offensive',
     description: abilityText('steadfast-2', 'description'),
+    sfxKey: BARBARIAN_SFX_LIGHT,
     variants: [
-        { id: 'steadfast-2-3', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 3 } }, effects: [heal(5, abilityEffectText('steadfast-2-3', 'heal5')), removeStatus('self', abilityEffectText('steadfast-2', 'removeStatus'))], priority: 1 },
-        { id: 'steadfast-2-4', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 4 } }, effects: [heal(6, abilityEffectText('steadfast-2-4', 'heal6')), removeStatus('self', abilityEffectText('steadfast-2', 'removeStatus'))], priority: 2 },
-        { id: 'steadfast-2-5', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 5 } }, effects: [heal(7, abilityEffectText('steadfast-2-5', 'heal7')), removeStatus('self', abilityEffectText('steadfast-2', 'removeStatus'))], priority: 3 },
+        { id: 'steadfast-2-3', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 3 } }, effects: [heal(5, abilityEffectText('steadfast-2-3', 'heal5')), removeStatus(abilityEffectText('steadfast-2', 'removeStatus'))], priority: 1 },
+        { id: 'steadfast-2-4', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 4 } }, effects: [heal(6, abilityEffectText('steadfast-2-4', 'heal6')), removeStatus(abilityEffectText('steadfast-2', 'removeStatus'))], priority: 2 },
+        { id: 'steadfast-2-5', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.HEART]: 5 } }, effects: [heal(7, abilityEffectText('steadfast-2-5', 'heal7')), removeStatus(abilityEffectText('steadfast-2', 'removeStatus'))], priority: 3 },
     ],
 };
 
@@ -214,6 +228,7 @@ export const SUPPRESS_2: AbilityDef = {
     name: abilityText('suppress-2', 'name'),
     type: 'offensive',
     description: abilityText('suppress-2', 'description'),
+    sfxKey: BARBARIAN_SFX_LIGHT,
     variants: [
         {
             id: 'suppress-2-battle-cry',
@@ -243,6 +258,7 @@ export const RECKLESS_STRIKE_2: AbilityDef = {
     type: 'offensive',
     description: abilityText('reckless-strike-2', 'description'),
     tags: ['ultimate'],
+    sfxKey: BARBARIAN_SFX_ULTIMATE,
     trigger: { type: 'largeStraight' },
     effects: [damage(20, abilityEffectText('reckless-strike-2', 'damage20')), { description: abilityEffectText('reckless-strike-2', 'selfDamage5'), action: { type: 'damage', target: 'self', value: 5 }, timing: 'postDamage', condition: { type: 'onHit' } }],
 };
@@ -265,6 +281,7 @@ export const SLAP_3: AbilityDef = {
     name: abilityText('slap-3', 'name'),
     type: 'offensive',
     description: abilityText('slap-3', 'description'),
+    sfxKey: BARBARIAN_SFX_LIGHT,
     variants: [
         { id: 'slap-3-3', trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 3 } }, effects: [damage(6, abilityEffectText('slap-3-3', 'damage6'))], priority: 1 },
         {
@@ -289,6 +306,7 @@ export const ALL_OUT_STRIKE_3: AbilityDef = {
     name: abilityText('all-out-strike-3', 'name'),
     type: 'offensive',
     description: abilityText('all-out-strike-3', 'description'),
+    sfxKey: BARBARIAN_SFX_LIGHT,
     trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 2, [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 2 } },
     effects: [damage(6, abilityEffectText('all-out-strike-3', 'damage6Def'))],
     tags: ['unblockable'],

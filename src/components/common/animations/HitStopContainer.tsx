@@ -53,20 +53,20 @@ export const HitStopContainer: React.FC<HitStopContainerProps> = ({
       // 触发闪白
       setIsFlashing(true);
       
-      // 触发缩放 + 滤镜
+      // 触发缩放 + 滤镜 + 边框发光
       controls.start({
         scale,
-        filter: enhanceContrast ? 'contrast(1.4) saturate(1.6)' : 'none',
+        filter: enhanceContrast ? 'contrast(1.5) saturate(1.8) brightness(1.15)' : 'none',
         transition: { duration: 0.02 },
       });
 
       // 钝帧期间暂停
       const freezeTimer = setTimeout(() => {
-        // 恢复正常
+        // 恢复正常（稍慢的恢复让效果更可感知）
         controls.start({
           scale: 1,
           filter: 'none',
-          transition: { duration: 0.1, ease: 'easeOut' },
+          transition: { duration: 0.15, ease: 'easeOut' },
         });
         setIsFlashing(false);
       }, duration);
@@ -82,13 +82,13 @@ export const HitStopContainer: React.FC<HitStopContainerProps> = ({
       animate={controls}
     >
       {children}
-      {/* 闪白叠加层 */}
+      {/* 闪白叠加层 — 使用 screen 混合模式确保在深色背景上也可见 */}
       {isFlashing && (
         <div
           className="absolute inset-0 pointer-events-none rounded-inherit"
           style={{
             backgroundColor: `rgba(255, 255, 255, ${flashIntensity})`,
-            mixBlendMode: 'overlay',
+            mixBlendMode: 'screen',
           }}
         />
       )}
@@ -118,35 +118,35 @@ export const useHitStop = (defaultDuration = 80) => {
 
 /** 预设配置 */
 export const HIT_STOP_PRESETS = {
-  /** 轻击 - 快速微妙 */
+  /** 轻击 - 短暂但可感知 */
   light: {
-    duration: 120,
-    scale: 1.04,
-    flashIntensity: 0.4,
+    duration: 150,
+    scale: 1.06,
+    flashIntensity: 0.5,
     enhanceContrast: true,
   } as HitStopConfig,
   
   /** 普通击中 */
   normal: {
-    duration: 140,
-    scale: 1.05,
-    flashIntensity: 0.55,
+    duration: 200,
+    scale: 1.08,
+    flashIntensity: 0.65,
     enhanceContrast: true,
   } as HitStopConfig,
   
   /** 重击 - 明显冻结 */
   heavy: {
-    duration: 180,
-    scale: 1.07,
-    flashIntensity: 0.7,
+    duration: 260,
+    scale: 1.1,
+    flashIntensity: 0.8,
     enhanceContrast: true,
   } as HitStopConfig,
   
   /** 暴击 - 最大冲击 */
   critical: {
-    duration: 220,
-    scale: 1.1,
-    flashIntensity: 0.85,
+    duration: 320,
+    scale: 1.14,
+    flashIntensity: 0.95,
     enhanceContrast: true,
   } as HitStopConfig,
 } as const;

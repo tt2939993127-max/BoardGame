@@ -6,11 +6,12 @@
   "scripts": {
     "predev": "node scripts/clean_ports.js && node scripts/generate_game_manifests.js && docker compose up -d mongodb",
     "dev": "concurrently \"npm:dev:game\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
+    "predev:un": "node scripts/clean_ports.js && node scripts/generate_game_manifests.js && docker compose up -d mongodb",
     "dev:un": "concurrently \"vite-node server.ts\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
     "db:start": "docker compose up -d mongodb",
     "db:stop": "docker compose stop mongodb",
     "dev:frontend": "vite",
-    "dev:frontend:wait": "node scripts/wait_for_ports.js 18000 18001 && vite",
+    "dev:frontend:wait": "node scripts/wait_for_ports.js && vite",
     "dev:api": "tsx --tsconfig apps/api/tsconfig.json apps/api/src/main.ts",
     "dev:game": "nodemon",
     "prebuild": "node scripts/generate_game_manifests.js",

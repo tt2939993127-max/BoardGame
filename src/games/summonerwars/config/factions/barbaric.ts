@@ -271,8 +271,8 @@ export const STRUCTURE_CARDS_BARBARIC: StructureCard[] = [
     isGate: true,
     isStartingGate: true,
     deckSymbols: [],
-    spriteIndex: 1,
-    spriteAtlas: 'hero',
+    spriteIndex: 0,  // Portal.png 帧0（10HP城门）
+    spriteAtlas: 'portal',
   },
   {
     id: 'barbaric-portal',
@@ -282,8 +282,8 @@ export const STRUCTURE_CARDS_BARBARIC: StructureCard[] = [
     life: 5,
     isGate: true,
     deckSymbols: [],
-    spriteIndex: 1,
-    spriteAtlas: 'hero',
+    spriteIndex: 1,  // Portal.png 帧1（5HP传送门）
+    spriteAtlas: 'portal',
   },
 ];
 

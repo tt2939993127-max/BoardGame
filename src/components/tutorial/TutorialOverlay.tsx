@@ -12,11 +12,9 @@ export const TutorialOverlay: React.FC = () => {
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const lastStepIdRef = useRef<string | null>(null);
     const hasAutoScrolledRef = useRef(false);
-    const lastLogKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!isActive || !currentStep) return;
-        const stepId = currentStep.id ?? 'unknown';
         // 日志已移除：TutorialOverlay 步骤变化过于频繁
     }, [currentStep, isActive]);
 
@@ -172,18 +170,21 @@ export const TutorialOverlay: React.FC = () => {
         maskPath += ` M${left - p} ${top - p} v${(bottom - top) + p * 2} h${(right - left) + p * 2} v-${(bottom - top) + p * 2} z`;
     }
 
-    const maskOpacity = currentStep.showMask ? 0.6 : 0;
+    const maskOpacity = currentStep.showMask && targetRect ? 0.6 : 0;
 
     return (
-        <div className="fixed inset-0 z-[9999] pointer-events-none">
-            {/* 遮罩层 - 仅在遮罩开关为真时阻止点击 */}
+        <div
+            className="fixed inset-0 z-[9999] pointer-events-none"
+            data-tutorial-step={currentStep.id ?? 'unknown'}
+        >
+            {/* 遮罩层 - 仅在遮罩开关为真且目标存在时阻止点击 */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300">
                 <path
                     d={maskPath}
                     fill={`rgba(0, 0, 0, ${maskOpacity})`}
                     // 当遮罩透明时，允许所有点击穿透
                     // 当遮罩可见时，仍需要允许在“孔洞”区域点击
-                    style={{ pointerEvents: currentStep.showMask ? 'auto' : 'none' }}
+                    style={{ pointerEvents: currentStep.showMask && targetRect ? 'auto' : 'none' }}
                     fillRule="evenodd"
                 />
             </svg>

@@ -22,18 +22,21 @@ import type { CellCoord } from './types';
 export type AbilityTrigger =
   | 'onSummon'           // 召唤时（火祀召唤）
   | 'beforeAttack'       // 攻击前（吸取生命）
-  | 'afterAttack'        // 攻击后（诅咒）
+  | 'afterAttack'        // 攻击后（读心传念、念力、高阶念力）
   | 'onDamageDealt'      // 造成伤害后
-  | 'onKill'             // 消灭敌方单位后（感染、灵魂转移）
+  | 'onKill'             // 消灭敌方单位后（感染、灵魂转移、心灵捕获）
   | 'onDeath'            // 被消灭时（献祭）
   | 'onUnitDestroyed'    // 任意单位被消灭时（血腥狂怒）
   | 'onTurnStart'        // 回合开始时
   | 'onTurnEnd'          // 回合结束时（血腥狂怒充能衰减）
-  | 'onPhaseStart'       // 阶段开始时
+  | 'onPhaseStart'       // 阶段开始时（幻化）
   | 'onPhaseEnd'         // 阶段结束时
   | 'activated'          // 主动激活（复活死灵）
   | 'passive'            // 被动效果（暴怒）
-  | 'onDamageCalculation'; // 伤害计算时（暴怒加成）
+  | 'onDamageCalculation' // 伤害计算时（暴怒加成）
+  | 'onMove'             // 移动时（飞行、迅捷等移动增强）
+  | 'onAdjacentEnemyAttack' // 相邻敌方攻击时（迷魂减伤）
+  | 'onAdjacentEnemyLeave'; // 相邻敌方离开时（缠斗）
 
 // ============================================================================
 // 技能效果类型
@@ -82,6 +85,16 @@ export type AbilityEffect =
   // 攻击修改
   | { type: 'setUnblockable' }
   | { type: 'doubleStrength'; target: TargetRef }
+  // 推拉（欺心巫族核心机制）
+  | { type: 'pushPull'; target: TargetRef; distance: number; direction: 'push' | 'pull' | 'choice' }
+  // 移动增强
+  | { type: 'extraMove'; target: TargetRef; value: number; canPassThrough?: 'units' | 'structures' | 'all' }
+  // 控制权转移（心灵捕获）
+  | { type: 'takeControl'; target: TargetRef; duration?: 'permanent' | 'untilEndOfTurn' }
+  // 减伤
+  | { type: 'reduceDamage'; target: TargetRef; value: number; condition?: 'onSpecialDice' }
+  // 额外攻击（读心传念）
+  | { type: 'grantExtraAttack'; target: TargetRef }
   // 自定义
   | { type: 'custom'; actionId: string; params?: Record<string, unknown> };
 
@@ -359,15 +372,36 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   {
     id: 'soul_transfer',
     name: '灵魂转移',
-    description: '在本单位3个区格以内的一个单位在你的回合中被消灭之后，你可使用本单位替换被消灭的单位。',
-    trigger: 'onUnitDestroyed',
+    description: '当本单位消灭3个区格以内的一个单位后，你可使用本单位替换被消灭的单位。',
+    trigger: 'onKill',
     condition: { type: 'isInRange', target: 'victim', range: 3 },
     effects: [
-      { type: 'moveUnit', target: 'self', to: 'victimPosition' },
+      // 改为请求事件，由 UI 确认后执行
+      { type: 'custom', actionId: 'soul_transfer_request' },
     ],
-    requiresTargetSelection: false, // 可选触发
+    requiresTargetSelection: false, // 可选触发，UI 确认
   },
 ];
 
 // 注册所有技能
 abilityRegistry.registerAll(NECROMANCER_ABILITIES);
+
+// 注册欺心巫族技能
+import { TRICKSTER_ABILITIES } from './abilities-trickster';
+abilityRegistry.registerAll(TRICKSTER_ABILITIES);
+
+// 注册洞穴地精技能
+import { GOBLIN_ABILITIES } from './abilities-goblin';
+abilityRegistry.registerAll(GOBLIN_ABILITIES);
+
+// 注册先锋军团技能
+import { PALADIN_ABILITIES } from './abilities-paladin';
+abilityRegistry.registerAll(PALADIN_ABILITIES);
+
+// 注册极地矮人技能
+import { FROST_ABILITIES } from './abilities-frost';
+abilityRegistry.registerAll(FROST_ABILITIES);
+
+// 注册炽原精灵技能
+import { BARBARIC_ABILITIES } from './abilities-barbaric';
+abilityRegistry.registerAll(BARBARIC_ABILITIES);

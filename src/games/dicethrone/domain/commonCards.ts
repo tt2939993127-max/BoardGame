@@ -1,7 +1,44 @@
 import type { AbilityCard } from '../types';
-import { STATUS_IDS } from './ids';
+import type { CardPreviewRef } from '../../../systems/CardSystem';
 
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
+
+/**
+ * 通用卡在英雄图集中的固定位置（所有英雄图集布局一致）
+ * 专属卡占 index 0-14，通用卡从 index 15 开始
+ */
+const COMMON_ATLAS_INDEX: Record<string, number> = {
+    'card-play-six': 15,
+    'card-just-this': 16,
+    'card-give-hand': 17,
+    'card-i-can-again': 18,
+    'card-me-too': 19,
+    'card-surprise': 20,
+    'card-worthy-of-me': 21,
+    'card-unexpected': 22,
+    'card-next-time': 23,
+    'card-boss-generous': 24,
+    'card-flick': 25,
+    'card-bye-bye': 26,
+    'card-double': 27,
+    'card-super-double': 28,
+    'card-get-away': 29,
+    'card-one-throw-fortune': 30,
+    'card-what-status': 31,
+    'card-transfer-status': 32,
+};
+
+/**
+ * 为通用卡注入 previewRef（指向指定英雄的图集）
+ * 在各英雄 cards.ts 中 spread COMMON_CARDS 时调用
+ */
+export const injectCommonCardPreviewRefs = (cards: AbilityCard[], atlasId: string): AbilityCard[] =>
+    cards.map(card => {
+        const index = COMMON_ATLAS_INDEX[card.id];
+        if (index === undefined) return card;
+        const previewRef: CardPreviewRef = { type: 'atlas', atlasId, index };
+        return { ...card, previewRef };
+    });
 
 /**
  * Dice Throne 所有英雄共用的通用卡牌定义
@@ -64,7 +101,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         timing: 'roll',
         description: cardText('card-surprise', 'description'),
         playCondition: { requireDiceExists: true, requireHasRolled: true },
-        effects: [{ description: '改变任意1颗骰子的数值', action: { type: 'custom', target: 'self', customActionId: 'modify-die-any' }, timing: 'immediate' }],
+        effects: [{ description: '改变任意1颗骰子的数值', action: { type: 'custom', target: 'select', customActionId: 'modify-die-any-1' }, timing: 'immediate' }],
     },
     {
         id: 'card-worthy-of-me',
@@ -84,7 +121,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         timing: 'roll',
         description: cardText('card-unexpected', 'description'),
         playCondition: { requireDiceExists: true, requireHasRolled: true, requireMinDiceCount: 2 },
-        effects: [{ description: '改变任意2颗骰子的数值', action: { type: 'custom', target: 'self', customActionId: 'modify-die-any-2' }, timing: 'immediate' }],
+        effects: [{ description: '改变任意2颗骰子的数值', action: { type: 'custom', target: 'select', customActionId: 'modify-die-any-2' }, timing: 'immediate' }],
     },
     {
         id: 'card-next-time',
@@ -112,7 +149,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         timing: 'instant',
         description: cardText('card-flick', 'description'),
         playCondition: { requireDiceExists: true, requireHasRolled: true },
-        effects: [{ description: '增加或减少1骰子数值', action: { type: 'custom', target: 'self', customActionId: 'modify-die-plus-minus-1' }, timing: 'immediate' }],
+        effects: [{ description: '增加或减少1骰子数值', action: { type: 'custom', target: 'select', customActionId: 'modify-die-adjust-1' }, timing: 'immediate' }],
     },
     {
         id: 'card-bye-bye',
@@ -121,7 +158,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'instant',
         description: cardText('card-bye-bye', 'description'),
-        effects: [{ description: '移除1状态效果', action: { type: 'removeStatus', target: 'self', statusId: 'any' }, timing: 'immediate' }],
+        effects: [{ description: '移除1状态效果', action: { type: 'custom', target: 'self', customActionId: 'remove-status-1' }, timing: 'immediate' }],
     },
     {
         id: 'card-double',
@@ -148,7 +185,7 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-get-away', 'description'),
-        effects: [{ description: '移出1名玩家身上1个状态', action: { type: 'removeStatus', target: 'opponent', statusId: 'any' }, timing: 'immediate' }],
+        effects: [{ description: '移出1名玩家身上1个状态', action: { type: 'custom', target: 'select', customActionId: 'remove-status-1' }, timing: 'immediate' }],
     },
     {
         id: 'card-one-throw-fortune',

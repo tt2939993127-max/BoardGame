@@ -1,79 +1,109 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { buildLocalizedImageSet } from '../../../core';
-import { ASSETS } from './assets';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import type { CardPreviewRef } from '../../../systems/CardSystem';
-import { MONK_CARDS } from '../monk/cards';
+import type { AbilityCard } from '../types';
+// 导入所有英雄的卡牌定义
+import { MONK_CARDS } from '../heroes/monk/cards';
+import { BARBARIAN_CARDS } from '../heroes/barbarian/cards';
+import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
 
+// 角色 ID 到卡牌定义的映射
+const HERO_CARDS_MAP: Record<string, AbilityCard[]> = {
+    monk: MONK_CARDS,
+    barbarian: BARBARIAN_CARDS,
+    pyromancer: PYROMANCER_CARDS,
+};
+
+// 技能槽位置定义（百分比坐标，基于玩家面板）
+// 方案 A：仅用于定位选框，不再用于精灵图裁切
 const INITIAL_SLOTS = [
-    { id: 'fist', index: 0, x: 0.1, y: 1.5, w: 20.8, h: 38.5 },
-    { id: 'chi', index: 1, x: 22.2, y: 1.4, w: 21.3, h: 39.4 },
-    { id: 'sky', index: 2, x: 54.7, y: 1.4, w: 21.7, h: 39.6 },
-    { id: 'lotus', index: 3, x: 77.0, y: 1.3, w: 21.5, h: 39.5 },
-    { id: 'combo', index: 4, x: 0.1, y: 42.3, w: 20.9, h: 39.3 },
-    { id: 'lightning', index: 5, x: 22.1, y: 42.4, w: 21.8, h: 38.7 },
-    { id: 'calm', index: 6, x: 54.5, y: 42.0, w: 21.9, h: 40.2 },
-    { id: 'meditate', index: 7, x: 77.3, y: 42.0, w: 21.7, h: 39.9 },
-    { id: 'ultimate', index: 8, x: 0.1, y: 83.5, w: 55.0, h: 15.6 },
+    { id: 'fist', x: 0.1, y: 1.5, w: 20.8, h: 38.5 },
+    { id: 'chi', x: 22.2, y: 1.4, w: 21.3, h: 39.4 },
+    { id: 'sky', x: 54.7, y: 1.4, w: 21.7, h: 39.6 },
+    { id: 'lotus', x: 77.0, y: 1.3, w: 21.5, h: 39.5 },
+    { id: 'combo', x: 0.1, y: 42.3, w: 20.9, h: 39.3 },
+    { id: 'lightning', x: 22.1, y: 42.4, w: 21.8, h: 38.7 },
+    { id: 'calm', x: 54.5, y: 42.0, w: 21.9, h: 40.2 },
+    { id: 'meditate', x: 77.3, y: 42.0, w: 21.7, h: 39.9 },
+    { id: 'ultimate', x: 0.1, y: 83.5, w: 55.0, h: 15.6 },
 ];
 
 const ABILITY_SLOT_MAP: Record<string, { labelKey: string; ids: string[] }> = {
-    // 拳术：基础(3/4/5拳)、II级(2-3/2-4/2-5拳)、III级(3-3/3-4/3-5拳)
-    fist: { labelKey: 'abilitySlots.fist', ids: [
-        'fist-technique-5', 'fist-technique-4', 'fist-technique-3',
-        'fist-technique-2-5', 'fist-technique-2-4', 'fist-technique-2-3',
-        'fist-technique-3-5', 'fist-technique-3-4', 'fist-technique-3-3',
-    ] },
-    // 物我两忘：基础、II级（包含变体）
-    chi: { labelKey: 'abilitySlots.chi', ids: ['zen-forget', 'zen-forget-2', 'zen-forget-2-zen-combat', 'zen-forget-2-3'] },
-    // 天人合一：基础、II级
-    sky: { labelKey: 'abilitySlots.sky', ids: ['harmony', 'harmony-2'] },
-    // 莲花掌：基础、II级(4/5/3莲花)
-    lotus: { labelKey: 'abilitySlots.lotus', ids: [
-        'lotus-palm',
-        'lotus-palm-2-5', 'lotus-palm-2-4', 'lotus-palm-2-3',
-    ] },
-    // 太极连环掌：基础、II级
-    combo: { labelKey: 'abilitySlots.combo', ids: ['taiji-combo', 'taiji-combo-2'] },
-    // 雷霆万钧：基础、II级
-    lightning: { labelKey: 'abilitySlots.lightning', ids: ['thunder-strike', 'thunder-strike-2'] },
-    // 心如止水：基础、II级
-    calm: { labelKey: 'abilitySlots.calm', ids: ['calm-water', 'calm-water-2'] },
-    // 冒想：基础、II级、III级
-    meditate: { labelKey: 'abilitySlots.meditate', ids: ['meditation', 'meditation-2', 'meditation-3'] },
-    // 终极技能：超越（需要5莲花）
-    ultimate: { labelKey: 'abilitySlots.ultimate', ids: ['transcendence'] },
+    // 基础技能 ID（跨英雄）
+    fist: { labelKey: 'abilitySlots.fist', ids: ['fist-technique', 'fireball', 'slap'] },
+    chi: { labelKey: 'abilitySlots.chi', ids: ['zen-forget', 'soul-burn', 'all-out-strike'] },
+    sky: { labelKey: 'abilitySlots.sky', ids: ['harmony', 'fiery-combo', 'powerful-strike'] },
+    lotus: { labelKey: 'abilitySlots.lotus', ids: ['lotus-palm', 'meteor', 'violent-assault'] },
+    combo: { labelKey: 'abilitySlots.combo', ids: ['taiji-combo', 'pyro-blast', 'steadfast'] },
+    lightning: { labelKey: 'abilitySlots.lightning', ids: ['thunder-strike', 'burn-down', 'suppress'] },
+    calm: { labelKey: 'abilitySlots.calm', ids: ['calm-water', 'ignite', 'reckless-strike'] },
+    meditate: { labelKey: 'abilitySlots.meditate', ids: ['meditation', 'magma-armor', 'thick-skin'] },
+    ultimate: { labelKey: 'abilitySlots.ultimate', ids: ['transcendence', 'ultimate-inferno'] },
 };
 
 export const getAbilitySlotId = (abilityId: string) => {
     for (const slotId of Object.keys(ABILITY_SLOT_MAP)) {
         const mapping = ABILITY_SLOT_MAP[slotId];
-        if (mapping.ids.includes(abilityId)) return slotId;
+        if (mapping.ids.some(baseId => abilityId === baseId || abilityId.startsWith(`${baseId}-`))) {
+            return slotId;
+        }
     }
     return null;
 };
 
-// 技能槽到基础技能 ID 的映射（用于获取等级）
-const SLOT_TO_ABILITY_ID: Record<string, string> = {
-    fist: 'fist-technique',
-    chi: 'zen-forget',
-    sky: 'harmony',
-    lotus: 'lotus-palm',
-    combo: 'taiji-combo',
-    lightning: 'thunder-strike',
-    calm: 'calm-water',
-    meditate: 'meditation',
+// 技能槽到基础技能 ID 的映射（按角色分类）
+const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
+    monk: {
+        fist: 'fist-technique',
+        chi: 'zen-forget',
+        sky: 'harmony',
+        lotus: 'lotus-palm',
+        combo: 'taiji-combo',
+        lightning: 'thunder-strike',
+        calm: 'calm-water',
+        meditate: 'meditation',
+    },
+    pyromancer: {
+        fist: 'fireball',
+        chi: 'soul-burn',
+        sky: 'fiery-combo',
+        lotus: 'meteor',
+        combo: 'pyro-blast',
+        lightning: 'burn-down',
+        calm: 'ignite',
+        meditate: 'magma-armor',
+    },
+    barbarian: {
+        fist: 'slap',
+        chi: 'all-out-strike',
+        sky: 'powerful-strike',
+        lotus: 'violent-assault',
+        combo: 'steadfast',
+        lightning: 'suppress',
+        calm: 'reckless-strike',
+        meditate: 'thick-skin',
+    },
+};
+
+// 获取槽位对应的基础技能 ID
+const getSlotAbilityId = (characterId: string, slotId: string): string | undefined => {
+    return HERO_SLOT_TO_ABILITY[characterId]?.[slotId];
 };
 
 /**
  * 从卡牌定义中动态查找升级卡的预览引用
+ * @param characterId 角色 ID
  * @param abilityId 目标技能 ID
  * @param level 升级后的等级
  * @returns 对应升级卡的预览引用，未找到返回 undefined
  */
-const getUpgradeCardPreviewRef = (abilityId: string, level: number): CardPreviewRef | undefined => {
-    for (const card of MONK_CARDS) {
+const getUpgradeCardPreviewRef = (characterId: string, abilityId: string, level: number): CardPreviewRef | undefined => {
+    // 根据角色 ID 获取对应的卡牌定义
+    const heroCards = HERO_CARDS_MAP[characterId];
+    if (!heroCards) return undefined;
+
+    for (const card of heroCards) {
         if (card.type !== 'upgrade' || !card.effects) continue;
         for (const effect of card.effects) {
             const action = effect.action;
@@ -99,7 +129,7 @@ export const AbilityOverlays = ({
     selectedAbilityId,
     activatingAbilityId,
     abilityLevels,
-    characterId = 'monk',
+    characterId = 'monk', // 用于查找对应角色的升级卡定义
     locale,
 }: {
     isEditing: boolean;
@@ -115,15 +145,44 @@ export const AbilityOverlays = ({
     locale?: string;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const [slots, setSlots] = React.useState(INITIAL_SLOTS);
+
+    // 布局持久化：从 localStorage 加载已保存的槽位布局
+    const STORAGE_KEY = `dt-layout-${characterId}`;
+    const [slots, setSlots] = React.useState(() => {
+        try {
+            const saved = window.localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved) as typeof INITIAL_SLOTS;
+                // 校验数据完整性：数量和 id 必须与 INITIAL_SLOTS 一致
+                if (
+                    Array.isArray(parsed) &&
+                    parsed.length === INITIAL_SLOTS.length &&
+                    INITIAL_SLOTS.every(init => parsed.some(p => p.id === init.id))
+                ) {
+                    return parsed;
+                }
+            }
+        } catch { /* 解析失败则使用默认值 */ }
+        return INITIAL_SLOTS;
+    });
     const [editingId, setEditingId] = React.useState<string | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const dragInfo = React.useRef<{ id: string, type: 'move' | 'resize', startX: number, startY: number, startVal: { x: number; y: number; w: number; h: number } } | null>(null);
 
+    // 编辑模式下自动保存布局到 localStorage
+    React.useEffect(() => {
+        if (!isEditing) return;
+        try {
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(slots));
+        } catch { /* 写入失败静默忽略 */ }
+    }, [isEditing, slots, STORAGE_KEY]);
+
     const resolveAbilityId = (slotId: string) => {
         const mapping = ABILITY_SLOT_MAP[slotId];
         if (!mapping) return null;
-        return mapping.ids.find(id => availableAbilityIds.includes(id)) ?? null;
+        return availableAbilityIds.find(id =>
+            mapping.ids.some(baseId => id === baseId || id.startsWith(`${baseId}-`))
+        ) ?? null;
     };
 
     const handleMouseDown = (e: React.MouseEvent, id: string, type: 'move' | 'resize') => {
@@ -166,15 +225,12 @@ export const AbilityOverlays = ({
             data-tutorial-id="ability-slots"
         >
             {slots.map((slot) => {
-                const col = slot.index % 3;
-                const row = Math.floor(slot.index / 3);
-                const bgX = col * 50;
-                const bgY = row * 50;
+                // 方案 A：不再需要计算精灵图位置（col, row, bgX, bgY），玩家面板已包含基础技能
                 const isResolved = resolveAbilityId(slot.id);
-                const baseAbilityId = SLOT_TO_ABILITY_ID[slot.id];
+                const baseAbilityId = getSlotAbilityId(characterId, slot.id);
                 const level = baseAbilityId ? (abilityLevels?.[baseAbilityId] ?? 1) : 1;
                 const upgradePreviewRef = baseAbilityId && level > 1
-                    ? getUpgradeCardPreviewRef(baseAbilityId, level)
+                    ? getUpgradeCardPreviewRef(characterId, baseAbilityId, level)
                     : undefined;
                 const mapping = ABILITY_SLOT_MAP[slot.id];
                 const slotLabel = mapping ? t(mapping.labelKey) : slot.id;
@@ -205,31 +261,18 @@ export const AbilityOverlays = ({
                             }
                         }}
                     >
-                        {!isUltimate && (
-                            <>
-                                {/* 基础技能槽图片 */}
-                                <div
-                                    className="w-full h-full rounded-lg pointer-events-none"
-                                    style={{
-                                        backgroundImage: buildLocalizedImageSet(ASSETS.ABILITY_CARDS_BASE(characterId), locale),
-                                        backgroundSize: '300% 300%',
-                                        backgroundPosition: `${bgX}% ${bgY}%`,
-                                        opacity: isEditing ? 0.7 : 1
-                                    }}
+                        {/* 方案 A：不渲染基础精灵图，玩家面板本身已包含基础技能图案 */}
+                        {/* 升级卡叠加层（保持卡牌原始比例，居中覆盖） */}
+                        {!isUltimate && upgradePreviewRef && (
+                            <div
+                                className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                            >
+                                <CardPreview
+                                    previewRef={upgradePreviewRef}
+                                    locale={locale}
+                                    className="h-full aspect-[0.61] rounded-lg"
                                 />
-                                {/* 升级卡叠加层（保持卡牌原始比例，居中覆盖） */}
-                                {upgradePreviewRef && (
-                                    <div
-                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                                    >
-                                        <CardPreview
-                                            previewRef={upgradePreviewRef}
-                                            locale={locale}
-                                            className="h-full aspect-[0.61] rounded-lg"
-                                        />
-                                    </div>
-                                )}
-                            </>
+                            </div>
                         )}
                         {shouldHighlight && (
                             <div className="absolute inset-0 rounded-lg border-[2.5px] border-rose-400 shadow-[0_0_20px_rgba(251,113,133,0.8),0_0_40px_rgba(251,113,133,0.4)] pointer-events-none z-10 animate-pulse" />
@@ -240,9 +283,16 @@ export const AbilityOverlays = ({
                             </div>
                         )}
                         {isEditing && (
-                            <div className="absolute -top-3 left-0 bg-black/80 text-[8px] text-white px-1 rounded whitespace-nowrap pointer-events-none">
-                                {slotLabel} {slot.x.toFixed(1)}% {slot.y.toFixed(1)}%
-                            </div>
+                            <>
+                                <div className="absolute -top-3 left-0 bg-black/80 text-[8px] text-white px-1 rounded whitespace-nowrap pointer-events-none">
+                                    {slotLabel} {slot.x.toFixed(1)}% {slot.y.toFixed(1)}% ({slot.w.toFixed(1)}×{slot.h.toFixed(1)})
+                                </div>
+                                {/* 右下角 resize 手柄 */}
+                                <div
+                                    onMouseDown={(e) => handleMouseDown(e, slot.id, 'resize')}
+                                    className="absolute -right-1 -bottom-1 w-3 h-3 bg-amber-400 border border-amber-600 rounded-sm cursor-nwse-resize pointer-events-auto z-50"
+                                />
+                            </>
                         )}
                     </div>
                 );

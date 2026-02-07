@@ -9,6 +9,9 @@
 export type {
     GameBoardProps,
     PhaseInfo,
+    ActionBarAction,
+    ActionBarConfig,
+    PhaseHudConfig,
     PlayerPanelData,
     HandAreaConfig,
     HandAreaFilterContext,

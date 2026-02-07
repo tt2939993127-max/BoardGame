@@ -12,6 +12,7 @@ import {
     BOARD_COLS,
     getValidSummonPositions,
 } from '../domain/helpers';
+import { createInitializedCore } from './test-helpers';
 
 // ============================================================================
 // 召唤师战争专用断言
@@ -167,7 +168,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '召唤 - 在城门相邻位置召唤单位',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 打印手牌详情
             console.log('[召唤测试] 玩家0手牌:', core.players['0'].hand.map(c => `${c.name}(${c.id})`));
             console.log('[召唤测试] 玩家0魔力:', core.players['0'].magic);
@@ -191,26 +192,34 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '召唤 - 执行召唤命令放置单位',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
-            // 找到一张费用为2的单位卡（亡灵战士）
-            const unitCard = core.players['0'].hand.find(c => c.cardType === 'unit' && (c as UnitCard).cost <= 2);
-            console.log('[召唤执行测试] 找到单位卡:', unitCard?.name, unitCard?.id);
-            console.log('[召唤执行测试] 玩家0魔力:', core.players['0'].magic);
+            const core = createInitializedCore(playerIds, random);
+            // 注入一张已知 ID 的费用为2的单位卡到手牌
+            const testCard: UnitCard = {
+                id: 'test-summon-unit',
+                cardType: 'unit',
+                name: '测试召唤单位',
+                unitClass: 'common',
+                faction: '堕落王国',
+                strength: 2,
+                life: 4,
+                cost: 2,
+                attackType: 'melee',
+                attackRange: 1,
+                deckSymbols: [],
+            };
+            core.players['0'].hand.push(testCard);
             // 获取可召唤位置
             const validPositions = getValidSummonPositions(core, '0');
             console.log('[召唤执行测试] 可召唤位置:', validPositions);
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
         },
-        // 使用固定的卡牌ID和位置（基于测试输出）
-        // 手牌第4张是亡灵战士，ID 格式为 necro-undead-warrior-0-0-3
-        // 城门在 (5, 3)，相邻空格是 (6, 3) 和 (5, 4)
         commands: [
             { 
                 type: SW_COMMANDS.SUMMON_UNIT, 
                 playerId: '0', 
                 payload: { 
-                    cardId: 'necro-undead-warrior-0-0-3', 
+                    cardId: 'test-summon-unit', 
                     position: { row: 6, col: 3 } 
                 } 
             },
@@ -333,7 +342,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '攻击 - 近战攻击相邻敌人',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 将玩家0召唤师移动到玩家1召唤师旁边
             const unit0 = core.board[7][3].unit!;
             core.board[7][3].unit = undefined;
@@ -369,7 +378,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '攻击错误 - 近战攻击非相邻目标',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'attack';
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
@@ -388,7 +397,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '攻击错误 - 攻击自己的单位',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'attack';
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
@@ -424,7 +433,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '胜负判定 - 玩家1召唤师被摧毁，玩家0获胜',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 将玩家1召唤师设置为只剩1点生命
             const summoner1 = core.board[0][2].unit!;
             summoner1.damage = summoner1.card.life - 1;
@@ -453,7 +462,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '事件卡 - 施放0费事件卡',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 添加一张0费事件卡到手牌（血契召唤，召唤阶段可用）
             const eventCard = {
                 id: 'test-event-0',
@@ -484,7 +493,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '事件卡错误 - 阶段不匹配',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 添加一张移动阶段事件卡
             const eventCard = {
                 id: 'test-event-move',
@@ -514,7 +523,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '事件卡 - 主动事件放入主动区',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 添加一张主动事件卡
             const eventCard = {
                 id: 'test-active-event',
@@ -548,7 +557,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '召唤错误 - 非召唤阶段',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'move'; // 设置为移动阶段
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
@@ -567,8 +576,23 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '召唤错误 - 魔力不足',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.players['0'].magic = 0; // 设置魔力为0
+            // 注入一张已知 ID 的单位卡
+            const testCard: UnitCard = {
+                id: 'test-expensive-unit',
+                cardType: 'unit',
+                name: '测试单位',
+                unitClass: 'common',
+                faction: '堕落王国',
+                strength: 2,
+                life: 4,
+                cost: 2,
+                attackType: 'melee',
+                attackRange: 1,
+                deckSymbols: [],
+            };
+            core.players['0'].hand.push(testCard);
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
         },
@@ -576,7 +600,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
             {
                 type: SW_COMMANDS.SUMMON_UNIT,
                 playerId: '0',
-                payload: { cardId: 'necro-undead-warrior-0-0-3', position: { row: 6, col: 3 } },
+                payload: { cardId: 'test-expensive-unit', position: { row: 6, col: 3 } },
             },
         ],
         expect: {
@@ -585,11 +609,31 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     },
     {
         name: '召唤错误 - 无效的召唤位置',
+        setup: (playerIds, random) => {
+            const core = createInitializedCore(playerIds, random);
+            // 注入一张已知 ID 的单位卡
+            const testCard: UnitCard = {
+                id: 'test-bad-pos-unit',
+                cardType: 'unit',
+                name: '测试单位',
+                unitClass: 'common',
+                faction: '堕落王国',
+                strength: 1,
+                life: 1,
+                cost: 0,
+                attackType: 'melee',
+                attackRange: 1,
+                deckSymbols: [],
+            };
+            core.players['0'].hand.push(testCard);
+            const sys = createInitialSystemState(playerIds, []);
+            return { core, sys };
+        },
         commands: [
             {
                 type: SW_COMMANDS.SUMMON_UNIT,
                 playerId: '0',
-                payload: { cardId: 'necro-undead-warrior-0-0-3', position: { row: 0, col: 0 } }, // 远离城门
+                payload: { cardId: 'test-bad-pos-unit', position: { row: 0, col: 0 } }, // 远离城门
             },
         ],
         expect: {
@@ -614,7 +658,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '建造错误 - 非建造阶段',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 添加一张城墙卡
             const wallCard = {
                 id: 'test-wall',
@@ -643,7 +687,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '建造错误 - 魔力不足',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'build';
             core.players['0'].magic = 0;
             const wallCard = {
@@ -673,7 +717,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '建造错误 - 无效的建筑卡牌',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'build';
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
@@ -694,7 +738,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '移动错误 - 移动次数已用完',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'move';
             core.players['0'].moveCount = 3; // 已用完3次移动
             const sys = createInitialSystemState(playerIds, []);
@@ -714,7 +758,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '移动错误 - 单位本回合已移动',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'move';
             // 标记召唤师已移动
             const summoner = core.board[7][3].unit!;
@@ -736,7 +780,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '移动错误 - 移动敌方单位',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'move';
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
@@ -757,7 +801,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '攻击错误 - 攻击次数已用完',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 将玩家0召唤师移动到玩家1召唤师旁边
             const unit0 = core.board[7][3].unit!;
             core.board[7][3].unit = undefined;
@@ -781,7 +825,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '攻击错误 - 单位本回合已攻击',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             // 将玩家0召唤师移动到玩家1召唤师旁边
             const unit0 = core.board[7][3].unit!;
             core.board[7][3].unit = undefined;
@@ -804,7 +848,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '攻击错误 - 使用敌方单位攻击',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.phase = 'attack';
             const sys = createInitialSystemState(playerIds, []);
             return { core, sys };
@@ -825,7 +869,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
     {
         name: '事件卡错误 - 魔力不足',
         setup: (playerIds, random) => {
-            const core = SummonerWarsDomain.setup(playerIds, random);
+            const core = createInitializedCore(playerIds, random);
             core.players['0'].magic = 0;
             const eventCard = {
                 id: 'test-expensive-event',
@@ -861,6 +905,12 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
 const runner = new GameTestRunner({
     domain: SummonerWarsDomain,
     playerIds: ['0', '1'],
+    // 使用已完成阵营选择的初始状态（双方亡灵法师）
+    setup: (playerIds, random) => {
+        const core = createInitializedCore(playerIds, random);
+        const sys = createInitialSystemState(playerIds, []);
+        return { sys, core };
+    },
     assertFn: (state, expectation: SummonerWarsExpectation) =>
         assertSummonerWars(state.core as SummonerWarsCore, expectation),
     visualizeFn: (state) => printBoard(state.core as SummonerWarsCore),

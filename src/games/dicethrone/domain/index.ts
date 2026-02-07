@@ -13,10 +13,14 @@ import { reduce } from './reducer';
 import { playerView } from './view';
 import { registerDiceThroneConditions } from '../conditions';
 import { ALL_TOKEN_DEFINITIONS } from './characters';
-import { monkDiceDefinition } from '../monk/diceConfig';
-import { monkResourceDefinitions } from '../monk/resourceConfig';
-import { barbarianDiceDefinition } from '../barbarian/diceConfig';
-import { barbarianResourceDefinitions } from '../barbarian/resourceConfig';
+import { monkDiceDefinition } from '../heroes/monk/diceConfig';
+import { monkResourceDefinitions } from '../heroes/monk/resourceConfig';
+import { barbarianDiceDefinition } from '../heroes/barbarian/diceConfig';
+import { barbarianResourceDefinitions } from '../heroes/barbarian/resourceConfig';
+import { pyromancerDiceDefinition } from '../heroes/pyromancer/diceConfig';
+import { pyromancerResourceDefinitions } from '../heroes/pyromancer/resourceConfig';
+import { moonElfDiceDefinition } from '../heroes/moon_elf/diceConfig';
+import { moonElfResourceDefinitions } from '../heroes/moon_elf/resourceConfig';
 
 // 注册 DiceThrone 游戏特定条件（骰子组合、顺子等）
 registerDiceThroneConditions();
@@ -24,8 +28,12 @@ registerDiceThroneConditions();
 // 注册 角色 骰子与资源定义
 diceSystem.registerDefinition(monkDiceDefinition);
 diceSystem.registerDefinition(barbarianDiceDefinition);
+diceSystem.registerDefinition(pyromancerDiceDefinition);
+diceSystem.registerDefinition(moonElfDiceDefinition);
 monkResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 barbarianResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
+pyromancerResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
+moonElfResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 
 // ============================================================================
 // 领域内核定义
@@ -95,18 +103,18 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
 
         const playerIds = Object.keys(state.players);
         const defeated = playerIds.filter(id => (state.players[id]?.resources[RESOURCE_IDS.HP] ?? 0) <= 0);
-        
+
         if (defeated.length === 0) return undefined;
-        
+
         if (defeated.length === playerIds.length) {
             return { draw: true };
         }
-        
+
         if (defeated.length === 1) {
             const winner = playerIds.find(id => id !== defeated[0]);
             if (winner) return { winner };
         }
-        
+
         return { draw: true };
     },
 };

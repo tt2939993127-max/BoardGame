@@ -14,7 +14,7 @@ import { GameTestRunner, type StateExpectation } from '../../../engine/testing';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import type { EngineSystem } from '../../../engine/systems/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
-import { MONK_CARDS } from '../monk/cards';
+import { MONK_CARDS } from '../heroes/monk/cards';
 
 // ============================================================================
 // 固定随机数（保证回放确定性）

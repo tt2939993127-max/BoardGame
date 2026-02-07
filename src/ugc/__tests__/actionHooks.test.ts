@@ -91,6 +91,33 @@ describe('executeActionHook', () => {
     );
   });
 
+  it('选中卡牌应随命令派发', async () => {
+    const sendCommand = vi.fn().mockReturnValue('cmd-1');
+    const sdk = { sendCommand } as unknown as Parameters<typeof executeActionHook>[0]['sdk'];
+    const context = {
+      componentId: 'comp-1',
+      componentType: 'hand-zone',
+      selectedCardIds: ['card-1', 'card-2'],
+    };
+    const result = await executeActionHook({
+      action: {
+        ...baseAction,
+        hookCode: '(payload) => ({ type: "PLAY_CARD" })',
+      },
+      context,
+      state: null,
+      sdk,
+    });
+
+    expect(result.success).toBe(true);
+    expect(sendCommand).toHaveBeenCalledWith(
+      'PLAY_CARD',
+      expect.objectContaining({
+        selectedCardIds: ['card-1', 'card-2'],
+      })
+    );
+  });
+
   it('返回命令数组应依次派发', async () => {
     const sendCommand = vi.fn()
       .mockReturnValueOnce('cmd-1')

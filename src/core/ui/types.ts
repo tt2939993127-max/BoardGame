@@ -37,6 +37,60 @@ export interface PhaseInfo {
 }
 
 // ============================================================================
+// 操作栏（通用按钮区）
+// ============================================================================
+
+/**
+ * 操作栏按钮定义
+ */
+export interface ActionBarAction {
+    /** 动作唯一标识 */
+    id: string;
+    /** 按钮文案 */
+    label: string;
+    /** 作用范围（可用于当前玩家可见规则） */
+    scope?: 'current-player' | 'all';
+    /** 辅助说明 */
+    description?: string;
+    /** 是否禁用 */
+    disabled?: boolean;
+    /** 样式语义 */
+    variant?: 'primary' | 'secondary' | 'ghost';
+}
+
+/**
+ * 操作栏配置
+ */
+export interface ActionBarConfig {
+    /** 动作列表 */
+    actions: ActionBarAction[];
+    /** 布局方向 */
+    layout?: 'row' | 'column';
+    /** 对齐方式 */
+    align?: 'start' | 'center' | 'end' | 'space-between';
+    /** 间距（像素） */
+    gap?: number;
+}
+
+// ============================================================================
+// 阶段提示 HUD
+// ============================================================================
+
+/**
+ * 阶段 HUD 配置
+ */
+export interface PhaseHudConfig {
+    /** 阶段列表 */
+    phases: PhaseInfo[];
+    /** 当前阶段（可由运行态覆盖） */
+    currentPhaseId?: string;
+    /** 状态描述（如“等待操作”） */
+    statusText?: string;
+    /** 当前玩家显示文案 */
+    currentPlayerLabel?: string;
+}
+
+// ============================================================================
 // 玩家面板
 // ============================================================================
 
@@ -83,6 +137,14 @@ export interface HandAreaFilterContext {
 }
 
 /**
+ * 手牌交互模式
+ * - drag: 仅拖拽
+ * - click: 仅点击选中
+ * - both: 点击 + 拖拽
+ */
+export type HandAreaInteractionMode = 'drag' | 'click' | 'both';
+
+/**
  * 手牌区配置
  * @template TCard 卡牌类型
  */
@@ -95,14 +157,24 @@ export interface HandAreaConfig<TCard = unknown> {
     canDrag?: boolean;
     /** 是否可选中（点击选中/取消选中） */
     canSelect?: boolean;
+    /** 手牌交互模式（优先于 canDrag/canSelect） */
+    interactionMode?: HandAreaInteractionMode;
     /** 已选中的卡牌ID列表 */
     selectedCardIds?: string[];
     /** 选中状态变化回调 */
     onSelectChange?: (cardId: string, selected: boolean) => void;
-    /** 打出卡牌回调 */
+    /** 打出卡牌回调（拖拽打出或点击打出） */
     onPlayCard?: (cardId: string) => void;
     /** 售卖/弃置卡牌回调 */
     onSellCard?: (cardId: string) => void;
+    /**
+     * 点击卡牌回调（通用点击，由游戏层决定行为）
+     * 与 onPlayCard/onSelectChange 互补：
+     * - onPlayCard: 拖拽打出
+     * - onSelectChange: 选中/取消选中
+     * - onCardClick: 游戏层自定义点击逻辑（如召唤师战争的阶段感知点击）
+     */
+    onCardClick?: (cardId: string) => void;
     /** 卡牌渲染函数 */
     renderCard: (card: TCard, index: number, isSelected: boolean) => ReactNode;
     /** 

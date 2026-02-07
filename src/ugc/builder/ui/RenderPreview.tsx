@@ -7,9 +7,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import * as Babel from '@babel/standalone';
-import { HandAreaSkeleton } from '../../../components/game/framework';
+import { ActionBarSkeleton, HandAreaSkeleton, PhaseHudSkeleton } from '../../../components/game/framework';
 import { getVisibleActions } from '../../runtime/actionHooks';
 import { resolvePlayerContext } from '../utils/resolvePlayerContext';
+import type { UGCGameState } from '../../sdk/types';
 
 interface RenderPreviewProps {
   renderCode: string;
@@ -202,7 +203,13 @@ interface PreviewCanvasProps {
   layoutGroups?: Array<{ id: string; name: string; hidden: boolean }>;
   schemaDefaults?: Record<string, string>;
   className?: string;
+  interactive?: boolean;
+  currentPlayerId?: string | null;
+  playerIds?: string[];
+  runtimeState?: UGCGameState | null;
   onAction?: (action: ZoneAction, context: Record<string, unknown>) => void;
+  onPlayCard?: (cardId: string, context: Record<string, unknown>) => void;
+  onSellCard?: (cardId: string, context: Record<string, unknown>) => void;
 }
 
 interface ComponentOutput {
@@ -222,6 +229,12 @@ interface ZoneAction {
   hookCode?: string;
 }
 
+interface ActionBarRuntimeAction extends ZoneAction {
+  description?: string;
+  disabled?: boolean;
+  variant?: 'primary' | 'secondary' | 'ghost';
+}
+
 export function PreviewCanvas({
   components,
   renderComponents,
@@ -229,17 +242,41 @@ export function PreviewCanvas({
   layoutGroups = [],
   schemaDefaults,
   className = '',
+  interactive = false,
+  currentPlayerId,
+  playerIds,
+  runtimeState,
   onAction,
+  onPlayCard,
+  onSellCard,
 }: PreviewCanvasProps) {
   const [showBack, setShowBack] = useState(false);
+  const [selectedCardIdsByComponent, setSelectedCardIdsByComponent] = useState<Record<string, string[]>>({});
+
+  const handleSelectChange = useCallback((componentId: string, cardId: string, selected: boolean) => {
+    setSelectedCardIdsByComponent(prev => {
+      const current = prev[componentId] ?? [];
+      const next = selected
+        ? Array.from(new Set([...current, cardId]))
+        : current.filter(id => id !== cardId);
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [componentId]: next,
+      };
+    });
+  }, []);
 
   const previewInstances = useMemo(() => {
     const map: Record<string, Record<string, unknown>[]> = {};
+    const limit = interactive ? null : 10;
     Object.entries(instances).forEach(([schemaId, items]) => {
-      map[schemaId] = items.slice(0, 10);
+      map[schemaId] = limit ? items.slice(0, limit) : items.slice();
     });
     return map;
-  }, [instances]);
+  }, [instances, interactive]);
   
   // 过滤隐藏分组的组件
   const hiddenGroupIds = new Set(layoutGroups.filter(g => g.hidden).map(g => g.id));
@@ -249,14 +286,19 @@ export function PreviewCanvas({
   });
 
   const derivedPlayerCount = useMemo(() => {
+    if (Array.isArray(playerIds) && playerIds.length > 0) return playerIds.length;
     const playerAreas = visibleComponents.filter(comp => comp.type === 'player-area');
-    return playerAreas.length > 0 ? playerAreas.length + 1 : 0;
-  }, [visibleComponents]);
+    return playerAreas.length;
+  }, [playerIds, visibleComponents]);
 
   const derivedPlayerIds = useMemo(() => {
+    const normalizedPlayerIds = Array.isArray(playerIds)
+      ? playerIds.map(id => String(id)).filter(Boolean)
+      : [];
+    if (normalizedPlayerIds.length > 0) return normalizedPlayerIds;
     if (!derivedPlayerCount) return [];
     return Array.from({ length: derivedPlayerCount }, (_, index) => `player-${index + 1}`);
-  }, [derivedPlayerCount]);
+  }, [playerIds, derivedPlayerCount]);
 
   const outputsByType = useMemo(() => {
     const outputMap: Record<string, ComponentOutput[]> = {};
@@ -392,6 +434,161 @@ export function PreviewCanvas({
           );
         }
 
+        if (comp.type === 'action-bar') {
+          const rawActions = Array.isArray(comp.data.actions)
+            ? (comp.data.actions as ActionBarRuntimeAction[])
+            : [];
+          const allowActionHooks = comp.data.allowActionHooks !== false;
+          const visibleActions = getVisibleActions({
+            actions: rawActions,
+            allowActionHooks,
+            isCurrentPlayer: true,
+          });
+          const layout = (comp.data.layout === 'column' ? 'column' : 'row') as 'row' | 'column';
+          const align = (comp.data.align || 'center') as 'start' | 'center' | 'end' | 'space-between';
+          const gap = typeof comp.data.gap === 'number' ? comp.data.gap : 8;
+          const selectionSourceId = typeof comp.data.selectionSourceId === 'string'
+            ? comp.data.selectionSourceId
+            : undefined;
+          const selectedCardIds = selectionSourceId
+            ? (selectedCardIdsByComponent[selectionSourceId] ?? [])
+            : [];
+          const actionContext: Record<string, unknown> = {
+            componentId: comp.id,
+            componentType: comp.type,
+            currentPlayerId: currentPlayerId ?? null,
+            playerIds: derivedPlayerIds,
+            selectionSourceId: selectionSourceId ?? null,
+            selectedCardIds,
+          };
+
+          return (
+            <div key={comp.id} style={style} className="relative border border-slate-600/50 rounded bg-slate-900/40 p-2">
+              {visibleActions.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-slate-500 text-xs">
+                  {String(comp.data.name || '操作栏')} (无动作)
+                </div>
+              ) : (
+                <ActionBarSkeleton
+                  actions={visibleActions}
+                  layout={layout}
+                  align={align}
+                  gap={gap}
+                  renderAction={(action, onClick) => {
+                    const variant = action.variant || 'secondary';
+                    const disabled = Boolean(action.disabled);
+                    const baseClass = 'px-3 py-1 rounded text-xs transition-colors';
+                    const variantClass = variant === 'primary'
+                      ? 'bg-amber-600/80 hover:bg-amber-500 text-white'
+                      : variant === 'ghost'
+                        ? 'bg-transparent border border-slate-500 text-slate-200 hover:border-amber-400'
+                        : 'bg-slate-700 hover:bg-slate-600 text-slate-100';
+                    return (
+                      <button
+                        type="button"
+                        onClick={onClick}
+                        disabled={disabled}
+                        className={`${baseClass} ${variantClass} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      >
+                        {action.label || '动作'}
+                      </button>
+                    );
+                  }}
+                  onAction={(action) => onAction?.(action, actionContext)}
+                />
+              )}
+            </div>
+          );
+        }
+
+        if (comp.type === 'phase-hud') {
+          const phases = Array.isArray(comp.data.phases)
+            ? (comp.data.phases as Array<{ id: string; label: string }>)
+            : [];
+          if (phases.length === 0) {
+            return (
+              <div key={comp.id} style={style} className="border border-slate-600/50 rounded bg-slate-900/40 p-2">
+                <span className="text-slate-400 text-xs">{String(comp.data.name || '阶段提示')} (无阶段)</span>
+              </div>
+            );
+          }
+
+          const useRuntimeState = comp.data.useRuntimeState !== false;
+          const runtimePhaseId = useRuntimeState && typeof runtimeState?.phase === 'string'
+            ? runtimeState.phase
+            : undefined;
+          const currentPhaseId = runtimePhaseId
+            || (typeof comp.data.currentPhaseId === 'string'
+              ? comp.data.currentPhaseId
+              : phases[0]?.id);
+          const statusText = typeof comp.data.statusText === 'string' ? comp.data.statusText : undefined;
+          const runtimePlayerId = useRuntimeState && runtimeState?.activePlayerId
+            ? String(runtimeState.activePlayerId)
+            : undefined;
+          const playerSchemaId = typeof comp.data.bindSchema === 'string'
+            ? comp.data.bindSchema
+            : undefined;
+          const playerIdField = typeof comp.data.playerIdField === 'string' ? comp.data.playerIdField : 'id';
+          const playerNameField = typeof comp.data.playerNameField === 'string' ? comp.data.playerNameField : 'name';
+          const playerLabelPrefix = typeof comp.data.playerLabelPrefix === 'string' ? comp.data.playerLabelPrefix : '当前玩家: ';
+          const resolvePlayerName = (schemaId?: string) => {
+            if (!runtimePlayerId) return undefined;
+            const items = schemaId ? previewInstances[schemaId] : undefined;
+            if (items && items.length > 0) {
+              const matched = items.find(item => String((item as Record<string, unknown>)[playerIdField] ?? '') === runtimePlayerId);
+              if (matched) {
+                const record = matched as Record<string, unknown>;
+                const explicit = record[playerNameField];
+                if (typeof explicit === 'string' && explicit.trim()) return explicit;
+                const fallback = record.name || record.displayName || record.label;
+                if (typeof fallback === 'string' && fallback.trim()) return fallback;
+              }
+            }
+            return undefined;
+          };
+          let resolvedPlayerName = resolvePlayerName(playerSchemaId);
+          if (!resolvedPlayerName && !playerSchemaId) {
+            for (const [schemaId] of Object.entries(previewInstances)) {
+              resolvedPlayerName = resolvePlayerName(schemaId);
+              if (resolvedPlayerName) break;
+            }
+          }
+          const runtimePlayerLabel = runtimePlayerId
+            ? `${playerLabelPrefix}${resolvedPlayerName || runtimePlayerId}`
+            : undefined;
+          const currentPlayerLabel = runtimePlayerLabel
+            || (typeof comp.data.currentPlayerLabel === 'string'
+              ? comp.data.currentPlayerLabel
+              : undefined);
+          const orientation = (comp.data.orientation === 'vertical' ? 'vertical' : 'horizontal') as 'vertical' | 'horizontal';
+
+          return (
+            <div key={comp.id} style={style} className="border border-slate-600/50 rounded bg-slate-900/40 p-2">
+              <PhaseHudSkeleton
+                phases={phases}
+                currentPhaseId={currentPhaseId}
+                statusText={statusText}
+                currentPlayerLabel={currentPlayerLabel}
+                orientation={orientation}
+                renderPhaseItem={(phase, isActive) => (
+                  <div
+                    className={`px-2 py-0.5 rounded text-[10px] ${isActive ? 'bg-amber-500/80 text-white' : 'bg-slate-700 text-slate-200'}`}
+                  >
+                    {phase.label}
+                  </div>
+                )}
+                renderStatus={(text) => text ? (
+                  <div className="text-[10px] text-slate-300">{text}</div>
+                ) : null}
+                renderCurrentPlayer={(label) => label ? (
+                  <div className="text-[10px] text-amber-200">{label}</div>
+                ) : null}
+                className="flex flex-col gap-2"
+              />
+            </div>
+          );
+        }
+
         // 区域组件（hand-zone, play-zone 等）- 使用通用框架 HandAreaSkeleton
         if (['hand-zone', 'play-zone', 'deck-zone', 'discard-zone'].includes(comp.type)) {
           // 区域组件使用 bindSchema，渲染组件使用 targetSchema
@@ -400,6 +597,10 @@ export function PreviewCanvas({
           const selectEffectCode = comp.data.selectEffectCode as string | undefined;
           const sortCode = comp.data.sortCode as string | undefined;
           const filterCode = comp.data.filterCode as string | undefined;
+          const rawInteractionMode = comp.data.interactionMode as 'drag' | 'click' | 'both' | undefined;
+          const interactionMode = rawInteractionMode === 'drag' || rawInteractionMode === 'click' || rawInteractionMode === 'both'
+            ? rawInteractionMode
+            : 'click';
           const bindEntity = comp.data.bindEntity as string | undefined;
           const zoneField = comp.data.zoneField as string | undefined;
           const zoneValue = typeof comp.data.zoneValue === 'string' ? comp.data.zoneValue : undefined;
@@ -446,6 +647,9 @@ export function PreviewCanvas({
             const explicitPlayerIds = Array.isArray(comp.data.playerIds)
               ? (comp.data.playerIds as string[])
               : undefined;
+            const runtimePlayerIds = Array.isArray(playerIds)
+              ? playerIds.map(id => String(id)).filter(Boolean)
+              : [];
             const derivedPlayerIdsFromData = bindEntity
               ? Array.from(new Set(
                 items
@@ -457,14 +661,19 @@ export function PreviewCanvas({
                   .filter((value): value is string => Boolean(value))
               ))
               : [];
-            const resolvedPlayerIds = (explicitPlayerIds && explicitPlayerIds.length > 0)
-              ? explicitPlayerIds
-              : derivedPlayerIdsFromData;
+            const resolvedPlayerIds = runtimePlayerIds.length > 0
+              ? runtimePlayerIds
+              : (explicitPlayerIds && explicitPlayerIds.length > 0)
+                ? explicitPlayerIds
+                : (derivedPlayerIds.length > 0 ? derivedPlayerIds : derivedPlayerIdsFromData);
+            const resolvedCurrentPlayerId = typeof currentPlayerId === 'string' && currentPlayerId.trim()
+              ? currentPlayerId
+              : (comp.data.currentPlayerId as string | undefined);
             const playerContext = resolvePlayerContext({
               items,
               playerRef: targetPlayerRef,
               index: targetPlayerIndex,
-              currentPlayerId: comp.data.currentPlayerId as string | undefined,
+              currentPlayerId: resolvedCurrentPlayerId,
               playerIds: resolvedPlayerIds.length > 0 ? resolvedPlayerIds : undefined,
               idField: bindEntity,
             });
@@ -525,20 +734,30 @@ export function PreviewCanvas({
             allowActionHooks,
             isCurrentPlayer,
           });
+          const selectedCardIds = selectedCardIdsByComponent[comp.id] ?? [];
           const actionContext: Record<string, unknown> = {
             componentId: comp.id,
             componentType: comp.type,
             currentPlayerId: filterContext?.currentPlayerId ?? null,
             resolvedPlayerId: filterContext?.resolvedPlayerId ?? null,
             resolvedPlayerIndex: filterContext?.resolvedPlayerIndex ?? -1,
+            selectedCardIds,
           };
+          const canInteract = interactive && isCurrentPlayer;
+          const canSelect = canInteract && (interactionMode === 'click' || interactionMode === 'both');
+          const canDrag = canInteract && (interactionMode === 'drag' || interactionMode === 'both');
 
           return (
             <div key={comp.id} style={style} className="relative border border-slate-600/50 rounded bg-slate-800/30 overflow-hidden">
               <HandAreaSkeleton
                 cards={resolvedItems}
-                canDrag={false}
-                canSelect={false}
+                canDrag={canDrag}
+                canSelect={canSelect}
+                interactionMode={interactionMode}
+                selectedCardIds={selectedCardIds}
+                onSelectChange={(cardId, selected) => handleSelectChange(comp.id, cardId, selected)}
+                onPlayCard={onPlayCard ? cardId => onPlayCard(cardId, actionContext) : undefined}
+                onSellCard={onSellCard ? cardId => onSellCard(cardId, actionContext) : undefined}
                 layoutCode={layoutCode}
                 selectEffectCode={selectEffectCode}
                 sortCode={sortCode}
@@ -574,7 +793,7 @@ export function PreviewCanvas({
                   );
                 }}
               />
-              {comp.type === 'hand-zone' && visibleActions.length > 0 && (
+              {onAction && comp.type === 'hand-zone' && visibleActions.length > 0 && (
                 <div className="absolute bottom-2 right-2 flex flex-wrap gap-1">
                   {visibleActions.map(action => (
                     <button
@@ -597,7 +816,14 @@ export function PreviewCanvas({
           // 组件上下文只包含通用字段 + 组件配置 + 绑定的Schema实例数据
           const bindSchemaId = (comp.data.bindSchema || comp.data.targetSchema) as string | undefined;
           const boundData = bindSchemaId ? (previewInstances[bindSchemaId] || []) : [];
-          
+          const resolvedCurrentPlayerId = typeof currentPlayerId === 'string' && currentPlayerId.trim()
+            ? currentPlayerId
+            : (comp.data.currentPlayerId as string | undefined);
+          const resolvedPlayerIds = Array.isArray(playerIds) && playerIds.length > 0
+            ? playerIds.map(id => String(id)).filter(Boolean)
+            : (Array.isArray(comp.data.playerIds)
+              ? (comp.data.playerIds as string[])
+              : (derivedPlayerIds.length > 0 ? derivedPlayerIds : undefined));
           const playerContext = comp.type === 'player-area'
             ? resolvePlayerContext({
               items: boundData,
@@ -616,10 +842,8 @@ export function PreviewCanvas({
                 ? comp.data.playerRefIndex
                 : Number(comp.data.playerRefIndex ?? 0),
               playerRefId: comp.data.playerRefId as string | undefined,
-              currentPlayerId: comp.data.currentPlayerId as string | undefined,
-              playerIds: Array.isArray(comp.data.playerIds)
-                ? (comp.data.playerIds as string[])
-                : (derivedPlayerIds.length > 0 ? derivedPlayerIds : undefined),
+              currentPlayerId: resolvedCurrentPlayerId,
+              playerIds: resolvedPlayerIds,
               idField: comp.data.playerIdField as string | undefined,
             })
             : null;

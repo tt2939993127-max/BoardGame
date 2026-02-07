@@ -11,6 +11,14 @@ import { TOKEN_IDS, STATUS_IDS, DICE_FACE_IDS } from '../../domain/ids';
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
 const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
 
+export const MONK_SFX_PUNCH_1 = 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_punch_swoosh_1';
+export const MONK_SFX_PUNCH_2 = 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_punch_swoosh_2';
+export const MONK_SFX_PUNCH_3 = 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_punch_swoosh_3';
+export const MONK_SFX_KICK_1 = 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_kick_swoosh_1';
+export const MONK_SFX_KICK_2 = 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_kick_swoosh_2';
+export const MONK_SFX_THUNDER = 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst';
+export const MONK_SFX_ZEN = 'magic.general.simple_magic_sound_fx_pack_vol.light.heavenly_flame';
+
 // 辅助函数：创建伤害效果
 const damage = (value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
     description,
@@ -37,6 +45,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('fist-technique', 'name'),
         type: 'offensive',
         description: abilityText('fist-technique', 'description'),
+        sfxKey: MONK_SFX_PUNCH_1,
         variants: [
             {
                 id: 'fist-technique-3',
@@ -63,6 +72,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('zen-forget', 'name'),
         type: 'offensive',
         description: abilityText('zen-forget', 'description'),
+        sfxKey: MONK_SFX_ZEN,
         trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.TAIJI]: 3 } },
         effects: [
             grantToken(TOKEN_IDS.TAIJI, 5, abilityEffectText('zen-forget', 'gainTaiji5')),
@@ -87,6 +97,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('harmony', 'name'),
         type: 'offensive',
         description: abilityText('harmony', 'description'),
+        sfxKey: MONK_SFX_PUNCH_2,
         trigger: { type: 'smallStraight' },
         effects: [
             // 伤害效果：默认 withDamage 时机
@@ -103,6 +114,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('lotus-palm', 'name'),
         type: 'offensive',
         description: abilityText('lotus-palm', 'description'),
+        sfxKey: MONK_SFX_KICK_2,
         trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.LOTUS]: 4 } },
         effects: [
             // 你可以花费2个太极标记令此次攻击不可防御（在进入防御阶段前选择）
@@ -126,7 +138,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('taiji-combo', 'name'),
         type: 'offensive',
         description: abilityText('taiji-combo', 'description'),
-        sfxKey: 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_kick_swoosh_1',
+        sfxKey: MONK_SFX_KICK_1,
         trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3, [DICE_FACE_IDS.PALM]: 1 } },
         effects: [
             // 投掷骰子效果：先投掷，根据结果累加 bonusDamage
@@ -163,7 +175,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('thunder-strike', 'name'),
         type: 'offensive',
         description: abilityText('thunder-strike', 'description'),
-        sfxKey: 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst',
+        sfxKey: MONK_SFX_THUNDER,
         trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.PALM]: 3 } },
         effects: [
             {
@@ -179,6 +191,7 @@ export const MONK_ABILITIES: AbilityDef[] = [
         name: abilityText('calm-water', 'name'),
         type: 'offensive',
         description: abilityText('calm-water', 'description'),
+        sfxKey: MONK_SFX_PUNCH_3,
         trigger: { type: 'largeStraight' },
         effects: [
             damage(7, abilityEffectText('calm-water', 'damage7')),

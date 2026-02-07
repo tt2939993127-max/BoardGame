@@ -8,10 +8,13 @@ import type { TokenDef } from '../../../systems/TokenSystem';
 import type { AbilityCard, HeroState, SelectableCharacterId, Die, DieFace } from './types';
 import { MONK_ABILITIES, MONK_TOKENS, MONK_INITIAL_TOKENS, getMonkStartingDeck } from '../heroes/monk';
 import { BARBARIAN_ABILITIES, BARBARIAN_TOKENS, BARBARIAN_INITIAL_TOKENS, getBarbarianStartingDeck } from '../heroes/barbarian';
+import { PYROMANCER_ABILITIES, PYROMANCER_TOKENS, PYROMANCER_INITIAL_TOKENS, getPyromancerStartingDeck } from '../heroes/pyromancer';
+import { MOON_ELF_ABILITIES, MOON_ELF_TOKENS, MOON_ELF_INITIAL_TOKENS, getMoonElfStartingDeck } from '../heroes/moon_elf';
 import { diceSystem } from '../../../systems/DiceSystem';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS } from './ids';
+
 
 export interface CharacterData {
     id: SelectableCharacterId;
@@ -62,9 +65,45 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
         },
     },
     barbarian: BARBARIAN_DATA,
-    pyromancer: { ...BARBARIAN_DATA, id: 'pyromancer' },
+    pyromancer: {
+        id: 'pyromancer',
+        abilities: PYROMANCER_ABILITIES,
+        tokens: PYROMANCER_TOKENS,
+        initialTokens: PYROMANCER_INITIAL_TOKENS,
+        diceDefinitionId: 'pyromancer-dice',
+        getStartingDeck: getPyromancerStartingDeck,
+        initialAbilityLevels: {
+            'fireball': 1,
+            'soul-burn': 1,
+            'fiery-combo': 1,
+            'meteor': 1,
+            'pyro-blast': 1,
+            'burn-down': 1,
+            'ignite': 1,
+            'magma-armor': 1,
+            'ultimate-inferno': 1,
+        },
+    },
     shadow_thief: { ...BARBARIAN_DATA, id: 'shadow_thief' },
-    moon_elf: { ...BARBARIAN_DATA, id: 'moon_elf' },
+    moon_elf: {
+        id: 'moon_elf',
+        abilities: MOON_ELF_ABILITIES,
+        tokens: MOON_ELF_TOKENS,
+        initialTokens: MOON_ELF_INITIAL_TOKENS,
+        diceDefinitionId: 'moon_elf-dice',
+        getStartingDeck: getMoonElfStartingDeck,
+        initialAbilityLevels: {
+            'longbow': 1,
+            'covert-fire': 1,
+            'covering-fire': 1,
+            'exploding-arrow': 1,
+            'entangling-shot': 1,
+            'eclipse': 1,
+            'blinding-shot': 1,
+            'lunar-eclipse': 1,
+            'elusive-step': 1,
+        },
+    },
     paladin: { ...BARBARIAN_DATA, id: 'paladin' },
     ninja: { ...BARBARIAN_DATA, id: 'ninja' },
     treant: { ...BARBARIAN_DATA, id: 'treant' },

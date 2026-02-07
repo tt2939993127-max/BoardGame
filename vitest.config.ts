@@ -18,6 +18,7 @@ export default defineConfig({
             'src/lib/**/__tests__/**/*.test.ts',
             'src/games/**/__tests__/**/*.test.ts',
             'src/engine/**/__tests__/**/*.test.ts',
+            'src/systems/**/__tests__/**/*.test.ts',
             'src/server/**/__tests__/**/*.test.ts',
             'src/ugc/**/__tests__/**/*.test.ts',
             'apps/api/test/**/*.test.ts',

@@ -1,11 +1,6 @@
-import React from 'react';
+import manifest from './manifest';
+import { ManifestGameThumbnail } from '../../components/lobby/thumbnails';
 
-const SmashUpThumbnail: React.FC = () => {
-    return (
-        <div className="w-full h-full bg-gradient-to-br from-amber-700 via-orange-600 to-rose-700 flex items-center justify-center">
-            <div className="text-5xl">💥</div>
-        </div>
-    );
-};
-
-export default SmashUpThumbnail;
+export default function Thumbnail() {
+    return <ManifestGameThumbnail manifest={manifest} />;
+}

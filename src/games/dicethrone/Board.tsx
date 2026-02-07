@@ -4,7 +4,7 @@ import type { BoardProps } from 'boardgame.io/react';
 import { HAND_LIMIT, type TokenResponsePhase } from './domain/types';
 import type { MatchState } from '../../engine/types';
 import { RESOURCE_IDS } from './domain/resources';
-import { STATUS_IDS, TOKEN_IDS, DICETHRONE_CARD_ATLAS_IDS } from './domain/ids';
+import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
@@ -28,10 +28,12 @@ import { getLocalizedAssetPath } from '../../core';
 import { useToast } from '../../contexts/ToastContext';
 import { UndoProvider } from '../../contexts/UndoContext';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
-import { loadStatusIconAtlasConfig, type StatusIconAtlasConfig } from './ui/statusEffects';
+import { loadStatusAtlases, type StatusAtlases } from './ui/statusEffects';
 import { getAbilitySlotId } from './ui/AbilityOverlays';
 import { HandArea } from './ui/HandArea';
 import { loadCardAtlasConfig } from './ui/cardAtlas';
+import { TUTORIAL_COMMANDS } from '../../engine/systems/TutorialSystem';
+import DiceThroneTutorial from './tutorial';
 import { DiceThroneCharacterSelection } from './ui/CharacterSelectionAdapter';
 import { OpponentHeader } from './ui/OpponentHeader';
 import { LeftSidebar } from './ui/LeftSidebar';
@@ -39,7 +41,6 @@ import { CenterBoard } from './ui/CenterBoard';
 import { RightSidebar } from './ui/RightSidebar';
 import { BoardOverlays } from './ui/BoardOverlays';
 import { GameHints } from './ui/GameHints';
-import { ASSETS } from './ui/assets';
 import { registerCardAtlasSource } from '../../components/common/media/CardPreview';
 import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
@@ -180,7 +181,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     ) as DiceThroneMoveMap;
     const { t, i18n } = useTranslation('game-dicethrone');
     useTutorialBridge(rawG.sys.tutorial, moves as Record<string, unknown>);
-    const { isActive: isTutorialActive, currentStep: tutorialStep, nextStep: nextTutorialStep } = useTutorial();
+    const { isActive: isTutorialActive, currentStep: tutorialStep, nextStep: nextTutorialStep, startTutorial } = useTutorial();
     const toast = useToast();
     const locale = i18n.resolvedLanguage ?? i18n.language;
     const shouldAutoSkipSelection = React.useMemo(() => {
@@ -192,6 +193,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         }
     }, []);
     const autoSkipStageRef = React.useRef<'idle' | 'selected' | 'completed'>('idle');
+    const tutorialStartRequestedRef = React.useRef(false);
 
     const isGameOver = ctx.gameover;
     const rootPid = playerID || '0';
@@ -206,6 +208,25 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
     // 重赛系统（socket）
     const { state: rematchState, vote: handleRematchVote, registerReset } = useRematch();
+
+    React.useEffect(() => {
+        if (gameMode?.mode !== 'tutorial') return;
+        if (rawG.sys.tutorial?.active) {
+            tutorialStartRequestedRef.current = true;
+            return;
+        }
+        if (tutorialStartRequestedRef.current) return;
+        tutorialStartRequestedRef.current = true;
+
+        const startMove = (moves as Record<string, unknown>)[TUTORIAL_COMMANDS.START] as
+            | ((payload: { manifest: typeof DiceThroneTutorial }) => void)
+            | undefined;
+        if (startMove) {
+            startMove({ manifest: DiceThroneTutorial });
+            return;
+        }
+        startTutorial(DiceThroneTutorial);
+    }, [gameMode?.mode, rawG.sys.tutorial?.active, startTutorial, moves]);
 
     // 注册 reset 回调（当双方都投票后由 socket 触发）
     React.useEffect(() => {
@@ -354,7 +375,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
     // Atlas 配置（保持独立，用于资源加载）
     const [_cardAtlasRevision, setCardAtlasRevision] = React.useState(0);
-    const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusIconAtlasConfig | null>(null);
+    const [statusIconAtlas, setStatusIconAtlas] = React.useState<StatusAtlases | null>(null);
 
     // 使用 useCardSpotlight Hook 管理卡牌和额外骰子特写
     const {
@@ -479,7 +500,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     // 注：只有当自己是活跃玩家时才执行（避免双方都发送 pass）
     React.useEffect(() => {
         if (isResponderOffline && isActivePlayer && currentResponderId && currentResponderId !== rootPid) {
-            console.log('[DiceThrone] 检测到响应者离线，自动跳过:', currentResponderId);
             // 延迟一小段时间确保 UI 状态同步
             const timer = setTimeout(() => {
                 engineMoves.responsePass(currentResponderId);
@@ -487,6 +507,16 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             return () => clearTimeout(timer);
         }
     }, [isResponderOffline, isActivePlayer, currentResponderId, rootPid, engineMoves]);
+
+    // 教学模式：若响应窗口轮到“非本地玩家”，自动跳过，避免卡在对手思考中
+    React.useEffect(() => {
+        if (gameMode?.mode !== 'tutorial') return;
+        if (!isResponseWindowOpen || !currentResponderId || currentResponderId === rootPid) return;
+        const timer = setTimeout(() => {
+            engineMoves.responsePass(currentResponderId);
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [gameMode?.mode, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
 
     // 自己的手牌永远显示
     const handOwner = player;
@@ -556,27 +586,40 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const statusInteraction = React.useMemo(() => {
         if (!pendingInteraction || !isStatusInteraction) return pendingInteraction;
 
+        let interaction = pendingInteraction;
+        if (pendingInteraction.type === 'selectStatus' && pendingInteraction.transferConfig && localInteraction.selectedStatus) {
+            interaction = {
+                ...pendingInteraction,
+                type: 'selectTargetStatus',
+                transferConfig: {
+                    ...pendingInteraction.transferConfig,
+                    sourcePlayerId: localInteraction.selectedStatus.playerId,
+                    statusId: localInteraction.selectedStatus.statusId,
+                },
+            };
+        }
+
         const selected = (() => {
-            if (pendingInteraction.type === 'selectPlayer') {
+            if (interaction.type === 'selectPlayer') {
                 return localInteraction.selectedPlayer
                     ? [localInteraction.selectedPlayer]
-                    : (pendingInteraction.selected ?? []);
+                    : (interaction.selected ?? []);
             }
-            if (pendingInteraction.type === 'selectTargetStatus' && pendingInteraction.transferConfig?.statusId) {
+            if (interaction.type === 'selectTargetStatus' && interaction.transferConfig?.statusId) {
                 return localInteraction.selectedPlayer
                     ? [localInteraction.selectedPlayer]
-                    : (pendingInteraction.selected ?? []);
+                    : (interaction.selected ?? []);
             }
-            if (pendingInteraction.type === 'selectStatus' || pendingInteraction.type === 'selectTargetStatus') {
+            if (interaction.type === 'selectStatus' || interaction.type === 'selectTargetStatus') {
                 return localInteraction.selectedStatus
                     ? [localInteraction.selectedStatus.statusId]
-                    : (pendingInteraction.selected ?? []);
+                    : (interaction.selected ?? []);
             }
-            return pendingInteraction.selected ?? [];
+            return interaction.selected ?? [];
         })();
 
         return {
-            ...pendingInteraction,
+            ...interaction,
             selected,
         };
     }, [
@@ -587,9 +630,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     ]);
 
     const handleStatusInteractionConfirm = () => {
-        if (!pendingInteraction) return;
+        const activeInteraction = statusInteraction ?? pendingInteraction;
+        if (!activeInteraction) return;
 
-        if (pendingInteraction.type === 'selectStatus') {
+        if (activeInteraction.type === 'selectStatus') {
             // 移除单个状态
             if (localInteraction.selectedStatus) {
                 engineMoves.removeStatus(
@@ -597,26 +641,25 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     localInteraction.selectedStatus.statusId
                 );
             }
-        } else if (pendingInteraction.type === 'selectPlayer') {
+        } else if (activeInteraction.type === 'selectPlayer') {
             // 移除玩家所有状态
             if (localInteraction.selectedPlayer) {
                 engineMoves.removeStatus(localInteraction.selectedPlayer);
             }
-        } else if (pendingInteraction.type === 'selectTargetStatus') {
+        } else if (activeInteraction.type === 'selectTargetStatus') {
             // 转移状态
-            const transferConfig = pendingInteraction.transferConfig;
+            const transferConfig = activeInteraction.transferConfig;
             if (transferConfig?.sourcePlayerId && transferConfig?.statusId && localInteraction.selectedPlayer) {
                 engineMoves.transferStatus(
                     transferConfig.sourcePlayerId,
                     localInteraction.selectedPlayer,
                     transferConfig.statusId
                 );
-            } else if (localInteraction.selectedStatus) {
-                // 第一阶段：选择要转移的状态
-                // TODO: 这里需要更新 pendingInteraction.transferConfig
+            } else {
+                return;
             }
         }
-        engineMoves.confirmInteraction(pendingInteraction.id);
+        engineMoves.confirmInteraction(activeInteraction.id);
     };
 
     const getAbilityStartPos = React.useCallback((abilityId?: string) => {
@@ -640,14 +683,26 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         [access.lastEffectSourceByPlayerId, G.activatingAbilityId, G.pendingAttack?.sourceAbilityId, getAbilityStartPos]
     );
 
+    // 提取对局中所有英雄 ID（稳定引用，避免 G.players 引用变化导致重复加载）
+    const heroCharIds = React.useMemo(() => {
+        const ids: string[] = [];
+        for (const pid of Object.keys(G.players)) {
+            const charId = G.players[pid]?.characterId;
+            if (charId && charId !== 'unselected' && !ids.includes(charId)) ids.push(charId);
+        }
+        return ids.sort().join(',');
+    }, [G.players]);
+
+    // 动态加载对局中所有英雄的卡牌图集
     React.useEffect(() => {
+        if (!heroCharIds) return;
         let isActive = true;
-        const loadAtlas = async (atlasId: string, imageBase: string, imageOverride?: string) => {
+        const loadAtlas = async (atlasId: string, imageBase: string) => {
             try {
                 const config = await loadCardAtlasConfig(imageBase, locale);
                 if (!isActive) return;
                 registerCardAtlasSource(atlasId, {
-                    image: imageOverride ?? imageBase,
+                    image: imageBase,
                     config,
                 });
                 setCardAtlasRevision(prev => prev + 1);
@@ -656,19 +711,21 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             }
         };
 
-        const monkAtlasBase = ASSETS.CARDS_ATLAS('monk');
-        const barbarianAtlasBase = ASSETS.CARDS_ATLAS('barbarian');
-        void loadAtlas(DICETHRONE_CARD_ATLAS_IDS.MONK, monkAtlasBase);
-        void loadAtlas(DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, barbarianAtlasBase, `${barbarianAtlasBase}.png`);
+        for (const charId of heroCharIds.split(',')) {
+            const atlasId = `dicethrone:${charId}-cards`;
+            // imageBase 始终不带扩展名，用于 loadCardAtlasConfig 和 buildLocalizedImageSet
+            const imageBase = `dicethrone/images/${charId}/ability-cards`;
+            void loadAtlas(atlasId, imageBase);
+        }
 
         return () => {
             isActive = false;
         };
-    }, [locale]);
+    }, [locale, heroCharIds]);
 
     React.useEffect(() => {
         let isActive = true;
-        loadStatusIconAtlasConfig()
+        loadStatusAtlases()
             .then((config) => {
                 if (isActive) setStatusIconAtlas(config);
             })
@@ -812,7 +869,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                 </div>
             );
         }
-        
+
         return (
             <UndoProvider value={{ G: rawG, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
                 <div className="relative w-full h-dvh bg-[#0a0a0c] overflow-hidden font-sans select-none">

@@ -8,11 +8,12 @@
  * - 放大镜按钮预览卡牌
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Card, UnitCard, EventCard, StructureCard, GamePhase } from '../domain/types';
 import { CardSprite } from './CardSprite';
 import { useToast } from '../../../contexts/ToastContext';
+import { resolveCardAtlasId } from './cardAtlas';
 
 /** 放大镜图标 */
 const MagnifyIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
@@ -30,7 +31,10 @@ interface HandAreaProps {
   selectedCardIds?: string[];
   onCardClick?: (cardId: string) => void;
   onCardSelect?: (cardId: string | null) => void;
+  onPlayEvent?: (cardId: string) => void;
   onMagnifyCard?: (card: Card) => void;
+  /** 血契召唤步骤2：选择手牌模式（绕过魔力检查） */
+  bloodSummonSelectingCard?: boolean;
   className?: string;
 }
 
@@ -47,9 +51,13 @@ function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number 
   
   if (spriteIndex === undefined) return null;
   
-  const atlasId = spriteAtlas === 'hero' 
-    ? 'sw:necromancer:hero' 
-    : 'sw:necromancer:cards';
+  // 传送门使用全局共用图集
+  if (spriteAtlas === 'portal') {
+    return { atlasId: 'sw:portal', frameIndex: spriteIndex };
+  }
+  
+  const atlasType = (spriteAtlas ?? 'cards') as 'hero' | 'cards';
+  const atlasId = resolveCardAtlasId(card as { id: string; faction?: string }, atlasType);
   
   return { atlasId, frameIndex: spriteIndex };
 }
@@ -165,10 +173,31 @@ export const HandArea: React.FC<HandAreaProps> = ({
   selectedCardIds = [],
   onCardClick,
   onCardSelect,
+  onPlayEvent,
   onMagnifyCard,
+  bloodSummonSelectingCard = false,
   className = '',
 }) => {
   const showToast = useToast();
+  
+  // 追踪新增卡牌（用于发牌动画）
+  const prevCardIdsRef = useRef<string[]>([]);
+  const [newCardIds, setNewCardIds] = useState<Set<string>>(new Set());
+  
+  useEffect(() => {
+    const currentIds = cards.map(c => c.id);
+    const prevIds = prevCardIdsRef.current;
+    const added = currentIds.filter(id => !prevIds.includes(id));
+    
+    if (added.length > 0) {
+      setNewCardIds(new Set(added));
+      // 动画完成后清除标记
+      const timer = setTimeout(() => setNewCardIds(new Set()), 400);
+      prevCardIdsRef.current = currentIds;
+      return () => clearTimeout(timer);
+    }
+    prevCardIdsRef.current = currentIds;
+  }, [cards]);
   
   const canPlayCard = useCallback((card: Card): boolean => {
     if (!isMyTurn) return false;
@@ -191,6 +220,16 @@ export const HandArea: React.FC<HandAreaProps> = ({
     const cost = getCardCost(card);
     const canAfford = cost <= currentMagic;
     
+    // 血契召唤选卡模式：点击费用≤2的单位卡直接选中（免费放置，不检查魔力）
+    if (bloodSummonSelectingCard) {
+      if (card.cardType === 'unit' && cost <= 2) {
+        onCardSelect?.(cardId);
+      } else {
+        showToast.warning('血契召唤只能选择费用≤2的单位卡');
+      }
+      return;
+    }
+    
     // 检查是否可以支付费用
     if (!canAfford) {
       showToast.warning(`魔力不足！需要 ${cost} 魔力，当前只有 ${currentMagic} 魔力`);
@@ -200,6 +239,22 @@ export const HandArea: React.FC<HandAreaProps> = ({
     if (phase === 'magic' && isMyTurn) {
       onCardClick?.(cardId);
       return;
+    }
+    
+    // 事件卡：在对应阶段直接打出
+    if (card.cardType === 'event' && isMyTurn) {
+      const event = card as EventCard;
+      if (event.playPhase === phase || event.playPhase === 'any') {
+        onPlayEvent?.(cardId);
+        return;
+      } else {
+        const phaseNames: Record<string, string> = {
+          summon: '召唤阶段', move: '移动阶段', build: '建造阶段',
+          attack: '攻击阶段', magic: '魔力阶段', draw: '抽牌阶段',
+        };
+        showToast.warning(`该事件只能在${phaseNames[event.playPhase] ?? event.playPhase}施放`);
+        return;
+      }
     }
     
     if ((phase === 'summon' || phase === 'build') && isMyTurn) {
@@ -227,7 +282,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
     
     onCardClick?.(cardId);
-  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, canPlayCard, showToast]);
+  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, showToast]);
   
   if (cards.length === 0) {
     return null;
@@ -244,19 +299,28 @@ export const HandArea: React.FC<HandAreaProps> = ({
             const canAfford = getCardCost(card) <= currentMagic;
             const canPlay = canPlayCard(card);
             const isSelected = selectedCardId === card.id || selectedCardIds.includes(card.id);
+            const isNew = newCardIds.has(card.id);
             
             return (
-              <HandCard
+              <motion.div
                 key={card.id}
-                card={card}
-                index={index}
-                totalCards={cards.length}
-                isSelected={isSelected}
-                canAfford={canAfford}
-                canPlay={canPlay}
-                onClick={() => handleCardClick(card.id)}
-                onMagnify={() => onMagnifyCard?.(card)}
-              />
+                layout
+                initial={isNew ? { x: -200, y: 50, opacity: 0, scale: 0.7 } : false}
+                animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                exit={{ x: 200, y: -30, opacity: 0, scale: 0.7 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              >
+                <HandCard
+                  card={card}
+                  index={index}
+                  totalCards={cards.length}
+                  isSelected={isSelected}
+                  canAfford={canAfford}
+                  canPlay={canPlay}
+                  onClick={() => handleCardClick(card.id)}
+                  onMagnify={() => onMagnifyCard?.(card)}
+                />
+              </motion.div>
             );
           })}
         </AnimatePresence>

@@ -2,6 +2,7 @@
  * 召唤师战争 - 领域类型定义
  */
 
+
 // ============================================================================
 // 基础类型
 // ============================================================================
@@ -32,7 +33,8 @@ export type CardType = 'unit' | 'event' | 'structure';
 // ============================================================================
 
 /** 游戏阶段（按规则顺序） */
-export type GamePhase = 
+export type GamePhase =
+  | 'factionSelect' // 0. 阵营选择阶段
   | 'summon'   // 1. 召唤阶段
   | 'move'     // 2. 移动阶段
   | 'build'    // 3. 建造阶段
@@ -40,8 +42,16 @@ export type GamePhase =
   | 'magic'    // 5. 魔力阶段
   | 'draw';    // 6. 抽牌阶段
 
-/** 阶段顺序 */
+/** 游戏进行阶段顺序（不含选阵营） */
 export const PHASE_ORDER: GamePhase[] = ['summon', 'move', 'build', 'attack', 'magic', 'draw'];
+
+/** 阵营 ID */
+export type FactionId = 'necromancer' | 'trickster' | 'paladin' | 'goblin' | 'frost' | 'barbaric';
+
+/**
+ * 阵营目录的唯一权威来源：config/factions/index.ts 的 FACTION_CATALOG
+ * 此处不再重复定义，避免数据不一致
+ */
 
 // ============================================================================
 // 卡牌定义
@@ -63,7 +73,7 @@ export interface UnitCard {
   abilityText?: string;  // 能力描述文本
   deckSymbols: string[]; // 牌组符号
   spriteIndex?: number;  // 精灵图索引
-  spriteAtlas?: 'hero' | 'cards'; // 精灵图集类型
+  spriteAtlas?: 'hero' | 'cards' | 'portal'; // 精灵图集类型
 }
 
 /** 事件类型 */
@@ -79,9 +89,11 @@ export interface EventCard {
   playPhase: GamePhase | 'any';
   effect: string;        // 效果描述
   isActive?: boolean;    // 是否为主动事件
+  charges?: number;      // 充能计数（殉葬火堆等主动事件使用）
+  targetUnitId?: string; // 目标单位 ID（催眠引诱等需要追踪目标的主动事件）
   deckSymbols: string[];
   spriteIndex?: number;  // 精灵图索引
-  spriteAtlas?: 'hero' | 'cards';
+  spriteAtlas?: 'hero' | 'cards' | 'portal';
 }
 
 /** 建筑卡牌 */
@@ -95,7 +107,7 @@ export interface StructureCard {
   isStartingGate?: boolean; // 是否为起始城门（10生命）
   deckSymbols: string[];
   spriteIndex?: number;  // 精灵图索引
-  spriteAtlas?: 'hero' | 'cards';
+  spriteAtlas?: 'hero' | 'cards' | 'portal';
 }
 
 /** 卡牌联合类型 */
@@ -115,6 +127,7 @@ export interface BoardUnit {
   boosts: number;        // 增益标记数
   hasMoved: boolean;     // 本回合是否已移动
   hasAttacked: boolean;  // 本回合是否已攻击
+  attachedCards?: EventCard[]; // 附加的事件卡（如狱火铸剑）
 }
 
 /** 战场上的建筑 */
@@ -154,6 +167,12 @@ export interface PlayerState {
 // 核心游戏状态
 // ============================================================================
 
+/** 阵营选择阶段的游戏阶段 */
+export type SetupPhase = 'factionSelect';
+
+/** 完整游戏阶段（含选阵营） */
+export type FullGamePhase = SetupPhase | GamePhase;
+
 /** 召唤师战争核心状态 */
 export interface SummonerWarsCore {
   /** 战场网格（6行8列） */
@@ -173,6 +192,14 @@ export interface SummonerWarsCore {
     attacker: CellCoord;
     validTargets: CellCoord[];
   };
+  /** 阵营选择状态（选阵营阶段使用，未选时为 'unselected'） */
+  selectedFactions: Record<PlayerId, FactionId | 'unselected'>;
+  /** 玩家准备状态 */
+  readyPlayers: Record<PlayerId, boolean>;
+  /** 房主玩家 ID */
+  hostPlayerId: PlayerId;
+  /** 房主是否已点击开始 */
+  hostStarted: boolean;
 }
 
 // ============================================================================
@@ -181,6 +208,10 @@ export interface SummonerWarsCore {
 
 /** 命令类型常量 */
 export const SW_COMMANDS = {
+  // 阵营选择阶段
+  SELECT_FACTION: 'sw:select_faction',
+  PLAYER_READY: 'sw:player_ready',
+  HOST_START_GAME: 'sw:host_start_game',
   // 召唤阶段
   SUMMON_UNIT: 'sw:summon_unit',
   // 移动阶段
@@ -196,6 +227,9 @@ export const SW_COMMANDS = {
   // 通用
   END_PHASE: 'sw:end_phase',
   PLAY_EVENT: 'sw:play_event',
+  BLOOD_SUMMON_STEP: 'sw:blood_summon_step',
+  ACTIVATE_ABILITY: 'sw:activate_ability',
+  FUNERAL_PYRE_HEAL: 'sw:funeral_pyre_heal',
 } as const;
 
 /** 召唤单位命令 */
@@ -254,6 +288,33 @@ export interface PlayEventCommand {
   type: typeof SW_COMMANDS.PLAY_EVENT;
   cardId: string;
   targets?: CellCoord[];
+  damageTargets?: (CellCoord | null)[];
+}
+
+/** 血契召唤步骤命令 */
+export interface BloodSummonStepCommand {
+  type: typeof SW_COMMANDS.BLOOD_SUMMON_STEP;
+  targetUnitPosition: CellCoord; // 友方单位（承受伤害）
+  summonCardId: string;          // 手牌中费用≤2的单位
+  summonPosition: CellCoord;     // 放置位置（目标相邻空格）
+}
+
+/** 激活技能命令 */
+export interface ActivateAbilityCommand {
+  type: typeof SW_COMMANDS.ACTIVATE_ABILITY;
+  abilityId: string;
+  sourceUnitId: string;
+  targetCardId?: string;    // 从弃牌堆选中的卡牌 ID
+  targetPosition?: CellCoord; // 目标位置
+  targetUnitId?: string;    // 目标单位 ID
+}
+
+/** 殉葬火堆治疗命令 */
+export interface FuneralPyreHealCommand {
+  type: typeof SW_COMMANDS.FUNERAL_PYRE_HEAL;
+  cardId: string;
+  targetPosition?: CellCoord;
+  skip?: boolean;
 }
 
 /** 所有命令联合类型 */
@@ -266,7 +327,10 @@ export type SWCommand =
   | ConfirmAttackCommand
   | DiscardForMagicCommand
   | EndPhaseCommand
-  | PlayEventCommand;
+  | PlayEventCommand
+  | BloodSummonStepCommand
+  | ActivateAbilityCommand
+  | FuneralPyreHealCommand;
 
 // ============================================================================
 // 事件类型
@@ -274,6 +338,11 @@ export type SWCommand =
 
 /** 事件类型常量 */
 export const SW_EVENTS = {
+  // 阵营选择事件
+  FACTION_SELECTED: 'sw:faction_selected',
+  PLAYER_READY: 'sw:player_ready',
+  HOST_STARTED: 'sw:host_started',
+  GAME_INITIALIZED: 'sw:game_initialized',
   // 单位事件
   UNIT_SUMMONED: 'sw:unit_summoned',
   UNIT_MOVED: 'sw:unit_moved',
@@ -284,7 +353,9 @@ export const SW_EVENTS = {
   UNIT_CHARGED: 'sw:unit_charged',
   // 建筑事件
   STRUCTURE_BUILT: 'sw:structure_built',
+  STRUCTURE_DAMAGED: 'sw:structure_damaged',
   STRUCTURE_DESTROYED: 'sw:structure_destroyed',
+  STRUCTURE_HEALED: 'sw:structure_healed',
   // 资源事件
   MAGIC_CHANGED: 'sw:magic_changed',
   // 卡牌事件
@@ -300,6 +371,27 @@ export const SW_EVENTS = {
   ABILITY_TRIGGERED: 'sw:ability_triggered',
   STRENGTH_MODIFIED: 'sw:strength_modified',
   SUMMON_FROM_DISCARD_REQUESTED: 'sw:summon_from_discard_requested',
+  SOUL_TRANSFER_REQUESTED: 'sw:soul_transfer_requested',
+  FUNERAL_PYRE_CHARGED: 'sw:funeral_pyre_charged',
+  EVENT_ATTACHED: 'sw:event_attached',
+  // 推拉事件（欺心巫族核心机制）
+  UNIT_PUSHED: 'sw:unit_pushed',
+  UNIT_PULLED: 'sw:unit_pulled',
+  // 控制权转移（心灵捕获）
+  MIND_CAPTURE_REQUESTED: 'sw:mind_capture_requested',
+  CONTROL_TRANSFERRED: 'sw:control_transferred',
+  // 额外攻击（读心传念）
+  EXTRA_ATTACK_GRANTED: 'sw:extra_attack_granted',
+  // 迷魂减伤
+  DAMAGE_REDUCED: 'sw:damage_reduced',
+  // 催眠引诱标记
+  HYPNOTIC_LURE_MARKED: 'sw:hypnotic_lure_marked',
+  // 位置交换（神出鬼没）
+  UNITS_SWAPPED: 'sw:units_swapped',
+  // 抓附跟随请求（抓附手）
+  GRAB_FOLLOW_REQUESTED: 'sw:grab_follow_requested',
+  // 卡牌回收（从弃牌堆拿回手牌）
+  CARD_RETRIEVED: 'sw:card_retrieved',
 } as const;
 
 // ============================================================================
@@ -308,3 +400,15 @@ export const SW_EVENTS = {
 
 /** 单位实例（包含位置信息） */
 export type UnitInstance = BoardUnit;
+
+// ============================================================================
+// 阵营选择
+// ============================================================================
+
+/** 阵营选择事件 */
+export const SW_SELECTION_EVENTS = {
+  FACTION_SELECTED: 'sw:faction_selected',
+  PLAYER_READY: 'sw:player_ready',
+  HOST_STARTED: 'sw:host_started',
+  SELECTION_COMPLETE: 'sw:selection_complete',
+} as const;

@@ -96,4 +96,14 @@
     .underline-center {
         @apply absolute bottom-0 left-1/2 w-0 h-[1.5px] bg-current transition-all duration-300 group-hover:w-full group-hover:left-0 pointer-events-none;
     }
+
+    .ugc-preview-container,
+    .ugc-preview-container .bgio-client,
+    .ugc-preview-container .bgio-client > * {
+        @apply w-full h-full;
+    }
+
+    .ugc-preview-container .bgio-client {
+        @apply flex;
+    }
 }

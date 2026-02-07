@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
+import type { ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Client } from 'boardgame.io/react';
@@ -8,16 +9,19 @@ import { useDebug } from '../contexts/DebugContext';
 import { TutorialOverlay } from '../components/tutorial/TutorialOverlay';
 import { useTutorial } from '../contexts/TutorialContext';
 import { RematchProvider } from '../contexts/RematchContext';
-import { useMatchStatus, destroyMatch, leaveMatch, rejoinMatch, persistMatchCredentials } from '../hooks/match/useMatchStatus';
+import { useMatchStatus, destroyMatch, leaveMatch, rejoinMatch, persistMatchCredentials, clearMatchCredentials, clearOwnerActiveMatch } from '../hooks/match/useMatchStatus';
 import { getOrCreateGuestId } from '../hooks/match/ownerIdentity';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { useModalStack } from '../contexts/ModalStackContext';
 import { useToast } from '../contexts/ToastContext';
 import { SocketIO } from 'boardgame.io/multiplayer';
 import { GAME_SERVER_URL } from '../config/server';
+import { getGameById } from '../config/games.config';
 import { GameHUD } from '../components/game/GameHUD';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { SEO } from '../components/common/SEO';
+import { createUgcClientGame } from '../ugc/client/game';
+import { createUgcRemoteHostBoard } from '../ugc/client/board';
 
 
 export const MatchRoom = () => {
@@ -25,10 +29,16 @@ export const MatchRoom = () => {
     const { gameId, matchId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { startTutorial, closeTutorial, isActive } = useTutorial();
+    const { startTutorial, closeTutorial, isActive, currentStep } = useTutorial();
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
+
+    const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const isUgcGame = Boolean(gameConfig?.isUgc);
+    const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
+
+    type GameClientComponent = ComponentType<{ playerID?: string | null; matchID?: string; credentials?: string }>;
 
     const GameClient = useMemo(() => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
@@ -43,6 +53,53 @@ export const MatchRoom = () => {
             multiplayer: SocketIO({ server: GAME_SERVER_URL }),
         });
     }, [gameId]);
+
+    const [ugcGameClient, setUgcGameClient] = useState<GameClientComponent | null>(null);
+    const [ugcLoading, setUgcLoading] = useState(false);
+    const [ugcError, setUgcError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!gameId || !isUgcGame || isTutorialRoute) {
+            setUgcGameClient(null);
+            setUgcLoading(false);
+            setUgcError(null);
+            return;
+        }
+
+        let cancelled = false;
+        setUgcLoading(true);
+        setUgcError(null);
+
+        createUgcClientGame(gameId)
+            .then(({ game, config }) => {
+                if (cancelled) return;
+                const board = createUgcRemoteHostBoard({
+                    packageId: gameId,
+                    viewUrl: config.viewUrl,
+                });
+                const client = Client({
+                    game,
+                    board,
+                    debug: false,
+                    multiplayer: SocketIO({ server: GAME_SERVER_URL }),
+                });
+                setUgcGameClient(() => client as GameClientComponent);
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                const message = error instanceof Error ? error.message : 'UGC 运行态加载失败';
+                setUgcError(message);
+                setUgcGameClient(null);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setUgcLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [gameId, isUgcGame, isTutorialRoute]);
 
     const TutorialClient = useMemo(() => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
@@ -60,10 +117,12 @@ export const MatchRoom = () => {
     const [destroyModalId, setDestroyModalId] = useState<string | null>(null);
     const [shouldShowMatchError, setShouldShowMatchError] = useState(false);
     const tutorialStartedRef = useRef(false);
+    const lastTutorialStepIdRef = useRef<string | null>(null);
     const tutorialModalIdRef = useRef<string | null>(null);
     const errorToastRef = useRef<{ key: string; timestamp: number } | null>(null);
 
-    const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
+    const resolvedGameClient = isUgcGame ? ugcGameClient : GameClient;
+    const ResolvedGameClient = resolvedGameClient ?? null;
 
     useEffect(() => {
         if (!gameId) return;
@@ -157,16 +216,15 @@ export const MatchRoom = () => {
         const tryJoin = async () => {
             try {
                 const matchInfo = await lobbyClient.getMatch(gameId, matchId);
-                const player0 = matchInfo.players.find(p => p.id === 0);
-                const player1 = matchInfo.players.find(p => p.id === 1);
+                const openSeat = [...matchInfo.players]
+                    .sort((a, b) => a.id - b.id)
+                    .find(p => !p.name);
                 // 找一个空位
-                let targetPlayerID = '';
-                if (!player1?.name) targetPlayerID = '1';
-                else if (!player0?.name) targetPlayerID = '0';
-                else {
+                if (!openSeat) {
                     setIsAutoJoining(false);
                     return;
                 }
+                const targetPlayerID = String(openSeat.id);
                 const { success } = await rejoinMatch(gameId, matchId, targetPlayerID, playerName);
                 if (success) {
                     window.location.href = `/play/${gameId}/match/${matchId}?playerID=${targetPlayerID}`;
@@ -307,6 +365,13 @@ export const MatchRoom = () => {
 
     useEffect(() => {
         if (!isTutorialRoute) return;
+        if (currentStep?.id) {
+            lastTutorialStepIdRef.current = currentStep.id;
+        }
+    }, [currentStep?.id, isTutorialRoute]);
+
+    useEffect(() => {
+        if (!isTutorialRoute) return;
         if (!tutorialStartedRef.current) return;
 
         // 教程模式下，部分游戏会在初始化/重置时短暂触发 tutorial.active=false。
@@ -314,8 +379,8 @@ export const MatchRoom = () => {
         if (!isActive) {
             const timer = window.setTimeout(() => {
                 if (!tutorialStartedRef.current) return;
-                // 二次确认仍未激活，才认为教程结束并返回。
-                if (!isActive) {
+                // 二次确认仍未激活，且已进入完成步骤时才认为教程结束并返回。
+                if (!isActive && lastTutorialStepIdRef.current === 'finish') {
                     // 返回上一个路由（通常是带游戏参数的首页，会自动打开详情弹窗）
                     navigate(-1);
                 }
@@ -333,6 +398,18 @@ export const MatchRoom = () => {
     }, [closeTutorial, isActive]);
 
     useEffect(() => {
+        // 关键约束：教程提示层只允许在 /tutorial 路由出现。
+        // 否则如果某个联机对局状态中残留了 sys.tutorial.active=true（例如历史教程状态被持久化），
+        // 就会在联机模式下误弹出教程提示。
+        if (!isTutorialRoute) {
+            if (tutorialModalIdRef.current) {
+                closeModal(tutorialModalIdRef.current);
+                tutorialModalIdRef.current = null;
+            }
+            // 联机/非教程路由下，不主动 closeTutorial()，避免在用户确实处于教程流程但路由切换瞬间被误关。
+            return;
+        }
+
         if (isActive && !tutorialModalIdRef.current) {
             tutorialModalIdRef.current = openModal({
                 closeOnBackdrop: false,
@@ -351,12 +428,15 @@ export const MatchRoom = () => {
             closeModal(tutorialModalIdRef.current);
             tutorialModalIdRef.current = null;
         }
-    }, [closeModal, closeTutorial, isActive, openModal]);
+    }, [closeModal, closeTutorial, isActive, isTutorialRoute, openModal]);
 
-    const clearMatchCredentials = () => {
-        if (matchId) {
-            localStorage.removeItem(`match_creds_${matchId}`);
-        }
+    // 清理房间本地状态必须走 hooks 的统一入口：
+    // - 触发同标签页事件（Home/大厅弹窗依赖）
+    // - 同步清理 owner_active_match，避免“房间已销毁但主页仍显示活跃对局悬浮条”
+    const clearMatchLocalState = () => {
+        if (!matchId) return;
+        clearMatchCredentials(matchId);
+        clearOwnerActiveMatch(matchId);
     };
 
     const navigateBackToLobby = () => {
@@ -406,7 +486,7 @@ export const MatchRoom = () => {
             return;
         }
 
-        clearMatchCredentials();
+        clearMatchLocalState();
         navigateBackToLobby();
     };
 
@@ -577,14 +657,22 @@ export const MatchRoom = () => {
                         )}
                     </GameModeProvider>
                 ) : (
-                    GameClient ? (
+                    isUgcGame && ugcLoading ? (
+                        <div className="w-full h-full flex items-center justify-center text-white/60">
+                            UGC 运行态加载中…
+                        </div>
+                    ) : isUgcGame && ugcError ? (
+                        <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
+                            {`UGC 运行态加载失败: ${ugcError}`}
+                        </div>
+                    ) : ResolvedGameClient ? (
                         <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
                             <RematchProvider
                                 matchId={matchId}
                                 playerId={effectivePlayerID ?? undefined}
                                 isMultiplayer={true}
                             >
-                                <GameClient
+                                <ResolvedGameClient
                                     key={`${matchId}-${isSpectatorRoute ? 'spectate' : (effectivePlayerID ?? 'player')}`}
                                     playerID={isSpectatorRoute ? undefined : (effectivePlayerID ?? undefined)}
                                     matchID={matchId}

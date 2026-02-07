@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
-import { MONK_CARDS } from '../monk/cards';
-import { MONK_ABILITIES } from '../monk/abilities';
+import { MONK_CARDS } from '../heroes/monk/cards';
+import { MONK_ABILITIES } from '../heroes/monk/abilities';
 import type { AbilityCard } from '../domain/types';
 
 const getReplaceAction = (card: AbilityCard) => (

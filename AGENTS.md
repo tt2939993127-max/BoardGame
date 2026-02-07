@@ -83,7 +83,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **日志不需要开关，调试完后将移除（强制）**
 - **日志格式**：新增/临时日志尽量是“可直接复制”的纯文本，不要直接打印对象（避免控制台折叠与难复制）；推荐用 key=value 形式把关键字段展开，例如：`[模块] 事件=xxx userId=... matchId=... step=... costMs=...`。
 - **新增功能必须补充测试（强制）**：新增任何功能、技能、卡牌、效果或 API 端点时，必须同步补充对应的测试用例。测试应覆盖正常流程和异常场景，确保效果与描述一致。补充测试后必须自行运行测试确保通过。详见 `docs/automated-testing.md`。
+- **单文件行数限制（强制）**：单个源码文件（`.ts`/`.tsx`/`.js`/`.jsx`）**不得超过 1000 行**。超过时必须拆分为独立模块或子文件，按职责划分（如按英雄、按功能类型）。拆分后确保导入导出关系清晰，避免循环依赖。
+- **素材数据录入规范（强制）**：当根据图片素材（如卡牌图集、技能面板、单位属性图）对代码中的业务数据（数值、效果、触发条件等）进行**提取、覆盖或修正**时：
+  1. **全口径核对**：表格必须包含该素材中展示的**被操作组件的所有核心业务属性及执行顺序**。
+  2. **逻辑序列化**：如果图片中描述了"先 A 然后 B"的逻辑，表格必须以 **1. 2. 3.** 的形式枚举完整的逻辑链路。
+  3. **关键限定词显式核对**：如"然后"、"另外"、"所有对手"、"不可阻挡"等限定词需明确标注，并说明代码如何实现该语义。
+  4. **输出格式**：使用 Markdown 表格，列包含 `组件ID`、`属性/逻辑序列（视觉解读）`、`代码状态`、`操作/原因`。此表格在对话回复中输出，作为 AI 与用户之间的"全量核对契约"。
 - **框架复用优先（强制）**：
+
   - **禁止为特定游戏实现无法复用的系统**。所有UI组件、逻辑Hook、动画系统必须先实现为通用骨架/框架（放在 `/core/` 或 `/components/game/framework/`），游戏层通过配置/回调注入差异。
   - **复用架构三层模型**：
     1. `/core/ui/` - 类型契约层（接口定义）
@@ -204,6 +211,31 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **颜色/阴影替代**：若需高亮变化，优先采用“叠层 + opacity”而非直接动画颜色/阴影。
 - **Hover 颜色复用**：按钮 hover 颜色变化优先使用通用 `HoverOverlayLabel`（叠层 + opacity）模式，减少重复实现。
 
+### 动效技术选型规范（强制）
+
+> **核心原则**：根据动效本质选择正确的技术，而非统一用一种方案硬做所有效果。
+
+| 动效类型 | 正确技术 | 判断标准 | 典型场景 |
+|----------|----------|----------|----------|
+| **粒子系统** | tsParticles (`@tsparticles/react`) | 大量同质元素的随机/物理运动；手写循环生成 **>8 个** `<motion.div>` 做随机散射/衰减时，说明该用粒子库 | 爆炸碎片、火花飞溅、烟尘扩散、胜利彩带、召唤碎片 |
+| **形状动画** | framer-motion | 确定性形状变换（缩放/位移/旋转/裁切/透明度）；每次触发 1-3 个 DOM 节点 | 气浪冲击波、斜切线、红闪脉冲、伤害数字飞出、UI 过渡 |
+| **UI 状态过渡** | framer-motion / CSS transition | 组件进出场、hover/press 反馈、布局动画 | 手牌展开、横幅切换、按钮反馈、阶段指示脉冲 |
+| **精确设计动效** | Lottie（未接入，需美术资源） | 设计师在 AE 中制作的复杂动画，需要逐帧精确控制 | 暂无，未来可用于技能释放特写 |
+| **高密度渲染** | PixiJS（未接入，按需评估） | 同屏 >50 个动画元素、需要 WebGL 加速 | 暂无，未来棋盘特效密度极高时考虑 |
+
+**粒子系统使用规范**：
+- **通用粒子组件**放在 `src/components/common/animations/`，游戏层通过 props/配置注入差异
+- **动态加载**：tsParticles 必须 `import()` 懒加载，避免首屏体积膨胀和 SSR 问题
+- **生命周期**：粒子效果必须有明确的 `duration`/`life` 配置，禁止无限循环粒子（VictoryParticles 等全屏庆祝除外）
+- **性能预算**：单次爆发粒子数建议 ≤50，持续性粒子 ≤30；移动端可通过 `reducedMotion` 降级为简化版
+- **配置外置**：粒子参数（颜色/数量/速度/重力）以配置对象形式定义，方便游戏层覆盖
+- **现有组件**：`VictoryParticles`（胜利彩带）；待新增：`BurstParticles`（爆炸碎片，用于摧毁/召唤）
+
+**判断边界（快速自检）**：
+1. 你在写 `Array.from({ length: N })` 生成随机角度/距离/大小的 `<motion.div>` 吗？→ 用 tsParticles
+2. 你在做一个有方向性的形状变换（锥形/线条/脉冲）吗？→ 用 framer-motion
+3. 你在做 UI 组件的进出场/状态切换吗？→ 用 framer-motion 或 CSS transition
+
 ### 文档索引与使用时机（强制）
 
 | 场景 / 行为 | 必须阅读的文档 | 关注重点 |
@@ -221,6 +253,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | **状态同步/存储调优** (16MB 限制) | `docs/mongodb-16mb-fix.md` | 状态裁剪策略、Log 限制、Undo 快照优化 |
 | **复杂任务规划** (多文件/长流程) | `.agent/skills/planning-with-files/SKILL.md` | 必须维护 `task_plan.md`，定期转存 `findings.md` |
 | **UI/UX 设计** (配色/组件/动效) | `.agent/skills/ui-ux-pro-max/SKILL.md` | 使用 `python3 ... search.py` 生成设计系统与样式 |
+| **大规模 UI 改动** (新页面/重做布局/新游戏UI) | 先 Skill `--design-system`，再 `design-system/` | 见 §UI/UX 规范 → §0. 大规模 UI 改动前置流程 |
 | **游戏内 UI 交互** (按钮/面板/指示器) | `design-system/game-ui/MASTER.md` | 交互原则、反馈规范、动画时长、状态清晰 |
 | **游戏 UI 风格选择** | `design-system/styles/` | arcade-3d（街机立体）、tactical-clean（战术简洁）、classic-parchment（经典羊皮纸） |
 
@@ -251,6 +284,11 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **Move payload 必须包装**：UI 调用 move 时必须传 payload 对象，结构与 domain types 保持一致（如 `toggleDieLock({ dieId })`），禁止传裸值。
 - **常量使用**：UI 触发系统命令必须使用 `UNDO_COMMANDS.*` 等常量，禁止硬编码字符串。
 - **重置清理**：需要 `reset()` 的系统必须保证状态在重开后回到初始值。
+- **特效/动画事件消费必须使用 EventStreamSystem（强制）**：
+  - UI 层消费事件驱动特效/动画/音效时，**必须**使用 `getEventStreamEntries(G)`（`EventStreamSystem`），**禁止**使用 `getEvents(G)`（`LogSystem`）。
+  - **原因**：`LogSystem` 是持久化全量日志，刷新后完整恢复；`EventStreamSystem` 是实时消费通道，每条 entry 带稳定自增 `id`，撤销时会清空（避免重播）。用 LogSystem + `useRef(0)` 做消费指针，刷新后指针归零会导致历史事件全部重演。
+  - **正确模式**：用 `lastSeenEventId = useRef(-1)` 追踪已消费的 `entry.id`；首次挂载时将指针推进到末尾（跳过历史）；后续只处理 `entry.id > lastSeenEventId` 的新事件。
+  - **参考实现**：`src/games/summonerwars/Board.tsx` 的事件消费 effect、`src/lib/audio/useGameAudio.ts` 的音效去重。
 
 ### 重赛系统说明 
 - **多人模式**：重赛投票通过 **socket.io 房间层**实现（`RematchContext` + `matchSocket.ts`），**不走 boardgame.io move**，以绕过 `ctx.gameover` 后禁止 move 的限制。
@@ -298,6 +336,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | 构建工具 | Vite 7 | 快速热更新 |
 | 样式方案 | Tailwind CSS 4 | 原子化 CSS |
 | 动画/动效 | framer-motion | motion/AnimatePresence + 通用动效组件 |
+| 粒子特效 | tsParticles (`@tsparticles/react` + `@tsparticles/slim`) | 爆炸碎片/烟尘/彩带等粒子效果，动态加载避免 SSR；选型规范见"动效技术选型规范" |
 | 国际化 | i18next + react-i18next | 多语言与懒加载词条 |
 | 音频 | howler | 统一音效/音乐管理 |
 | 实时通信 | socket.io / socket.io-client | 大厅与对局实时同步 |
@@ -308,6 +347,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | 基础设施 | Docker / Docker Compose | 本地与部署一致化 |
 
 > 说明：`three` / `@react-three/fiber` / `@react-three/drei` 已安装但当前未接入代码，避免在未确认需求前启用。
+> 说明：`tsParticles` 相关包（`@tsparticles/react`、`@tsparticles/slim`、`@tsparticles/plugin-emitters`、`@tsparticles/engine`）已接入，用于游戏内粒子特效。注意 `react` / `react-dom` 必须通过 `overrides` 锁定单一版本，避免 tsParticles 内部依赖拉出第二份 React 导致 `Invalid hook call`。
 
 ### TypeScript 类型规范（强制）
 
@@ -332,18 +372,15 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   2. **用户决策**：展示生成的图片，让用户选择偏好的风格。
   3. **规范落地**：基于选定风格定义颜色变量与组件样式。
 
-### 2. 验证测试 (除非存在browser_subagent工具否则不强制执行)
-- **一键流程（无需查代码）**：
-  1. **确认服务就绪**：前端/游戏服务已启动并可访问。
-  2. **直接访问目标路由**：用 `` 打开当前任务要求的页面（默认首页或需求明确的路由）。
-  3. **自动化测试**：用同屏模式完成关键流程录制与验证。
-  4. **手动验证**：通过 Debug Panel 切换 Player ID（0/1/Spectator）走通核心回合。
-  5. **控制台审计**：确保无 React Runtime 错误或 Hooks 顺序警告。
-- **本地同屏入口清单（固定测试链接）**：
-  - 路由规则：`/play/:gameId/local`
-  - 可用 gameId：`tictactoe`（井字棋）、`dicethrone`（王权骰铸）
-  - 示例：`http://127.0.0.1:5173/play/dicethrone/local`
-- **失败处理（强制）**：网页导航失败时，**禁止重试**，必须立即调用 `read_terminal` 获取服务器日志或浏览器控制台日志。
+### 2. 验证测试（Playwright 优先）
+- **详细规范**：阅读 `docs/automated-testing.md`（命令、目录结构、覆盖要求、编写规范）。
+- **测试工具**：Playwright E2E（首选）、Vitest（领域/API）、GameTestRunner（命令序列）。
+- **常用命令**：`npm run test:e2e`（E2E）、`npm test -- <路径>`（Vitest）。
+- **失败处理**：查看 Playwright 报告（`npx playwright show-report`）和截图/视频。
+
+**E2E 覆盖要求（强制）**：端到端测试必须覆盖“关键交互面”，而不只是跑通一条完整流程。
+- 交互面示例：按钮/菜单/Tab/Modal 打开关闭/表单校验与错误提示/列表操作/关键面板交互。
+- 主流程：保留 1 条 happy path 作为回归基线，但不能替代交互覆盖。
 
 ---
 
@@ -652,7 +689,20 @@ event.audioCategory = { group: 'ui', sub: 'click' };
 ---
 
 ## 🎨 UI/UX 规范 (General Paradigm)
-  
+
+### 0. 大规模 UI 改动前置流程（强制）
+> **当任务涉及大规模 UI 改动**（新增页面/重做布局/全局风格调整/新游戏 UI 搭建）时，必须按以下顺序执行：
+>
+> 1. **先读 Skill**：执行 `.windsurf/skills/ui-ux-pro-max/SKILL.md` 中的 `--design-system` 流程，获取通用设计建议（配色/字体/风格/反模式）。
+> 2. **再读项目自定义设计系统**：
+>    - `design-system/game-ui/MASTER.md` — 游戏 UI 交互通用原则
+>    - `design-system/styles/<风格>.md` — 对应视觉风格规范
+>    - `design-system/games/<gameId>.md` — 游戏专属覆盖配置（若存在）
+> 3. **冲突时以项目自定义设计系统为准**：Skill 提供的是通用建议，项目 `design-system/` 是权威来源；两者冲突时，以后者为准。
+>
+> **判定"大规模 UI 改动"**：涉及 ≥3 个组件文件的样式变更、新增整页/整区域布局、全局配色/字体/间距调整、新游戏 Board 搭建。
+> **小改动**（单按钮样式/单组件微调）无需走此流程，但仍需遵守 `design-system/` 中的约束。
+
 ### 1. 核心审美准则 (Visual Excellence)
 - **深度感 (Depth)**：通过渐变、阴影、毛玻璃构建视觉层级，但需按场景分级使用：
   - **重点区域**（游戏结算、核心面板）：可使用毛玻璃 + 软阴影增强层级感

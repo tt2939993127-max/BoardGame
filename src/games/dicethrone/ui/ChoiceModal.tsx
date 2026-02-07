@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { GameModal } from './components/GameModal';
 import { GameButton } from './components/GameButton';
 import { STATUS_EFFECT_META, TOKEN_META, getStatusEffectIconNode } from './statusEffects';
-import type { StatusIconAtlasConfig } from './statusEffects';
+import type { StatusAtlases } from './statusEffects';
 
 export const ChoiceModal = ({
     choice,
@@ -21,7 +21,7 @@ export const ChoiceModal = ({
     canResolve: boolean;
     onResolve: (optionId: string) => void;
     locale?: string;
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
 }) => {
     const { t } = useTranslation('game-dicethrone');
 

@@ -9,7 +9,10 @@ const entry: GameManifestEntry = {
     category: 'strategy',
     playersKey: 'games.smashup.players',
     icon: '🎲',
+    thumbnailPath: 'smashup/thumbnails/smashup',
     playerOptions: [2, 3, 4],
+    /** 最佳游玩人数：3 人 */
+    bestPlayers: [3],
     tags: ['card_driven'],
     allowLocalMode: false,
 };

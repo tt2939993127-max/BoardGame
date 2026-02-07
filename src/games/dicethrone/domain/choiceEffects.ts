@@ -1,0 +1,44 @@
+/**
+ * DiceThrone Choice Effect 处理器注册表
+ */
+
+import type { DiceThroneCore } from './types';
+
+/**
+ * Choice Effect 处理器上下文
+ */
+export interface ChoiceEffectContext {
+    state: DiceThroneCore;
+    playerId: string;
+    customId: string;
+    sourceAbilityId?: string;
+}
+
+/**
+ * Choice Effect 处理器函数类型
+ * 返回修改后的 state（或 undefined 表示不处理）
+ */
+export type ChoiceEffectHandler = (context: ChoiceEffectContext) => DiceThroneCore | undefined;
+
+/**
+ * Choice Effect 处理器注册表
+ * 新增选择效果只需注册处理器，无需修改 reducer
+ */
+const choiceEffectHandlers: Map<string, ChoiceEffectHandler> = new Map();
+
+/**
+ * 注册 Choice Effect 处理器
+ */
+export function registerChoiceEffectHandler(customId: string, handler: ChoiceEffectHandler): void {
+    if (choiceEffectHandlers.has(customId)) {
+        console.warn(`[DiceThrone] ChoiceEffect "${customId}" 已存在，将被覆盖`);
+    }
+    choiceEffectHandlers.set(customId, handler);
+}
+
+/**
+ * 获取 Choice Effect 处理器
+ */
+export function getChoiceEffectHandler(customId: string): ChoiceEffectHandler | undefined {
+    return choiceEffectHandlers.get(customId);
+}

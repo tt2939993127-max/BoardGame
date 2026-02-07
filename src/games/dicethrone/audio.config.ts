@@ -6,7 +6,13 @@ import type { AudioEvent, AudioRuntimeContext, GameAudioConfig } from '../../lib
 import { pickRandomSoundKey } from '../../lib/audio/audioUtils';
 import { findPlayerAbility } from './domain/abilityLookup';
 import type { DiceThroneCore, TurnPhase } from './domain/types';
-import { MONK_CARDS } from './monk/cards';
+import { findHeroCard } from './heroes';
+
+const resolveTokenSfx = (state: DiceThroneCore, tokenId?: string): string | null => {
+    if (!tokenId) return null;
+    const def = state.tokenDefinitions?.find(token => token.id === tokenId);
+    return def?.sfxKey ?? null;
+};
 
 export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
     bgm: [
@@ -46,8 +52,8 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         if (event.type === 'CP_CHANGED') {
             const delta = (event as AudioEvent & { payload?: { delta?: number } }).payload?.delta ?? 0;
             return delta >= 0
-                ? 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a'
-                : 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
+                ? 'fantasy.magic_sword_recharge_01'
+                : 'fantasy.dark_sword_recharge';
         }
 
         if (event.type === 'CARD_PLAYED') {
@@ -126,8 +132,18 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             }
         }
 
-        if (type === 'HEAL_APPLIED') {
-            return 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.healed_a';
+        if (type === 'STATUS_APPLIED') {
+            const statusId = (event as AudioEvent & { payload?: { statusId?: string } }).payload?.statusId;
+            const statusSfx = resolveTokenSfx(G, statusId);
+            if (statusSfx) return statusSfx;
+            return 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
+        }
+
+        if (type === 'TOKEN_GRANTED') {
+            const tokenId = (event as AudioEvent & { payload?: { tokenId?: string } }).payload?.tokenId;
+            const tokenSfx = resolveTokenSfx(G, tokenId);
+            if (tokenSfx) return tokenSfx;
+            return 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a';
         }
 
         if (type.startsWith('STATUS_')) {
@@ -187,9 +203,6 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
                 }
                 return 'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1';
             }
-            if (type.includes('RESOLVED')) {
-                return 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst';
-            }
             if (type.includes('PRE_DEFENSE')) {
                 return 'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_small_1';
             }
@@ -248,5 +261,5 @@ const findCardById = (state: DiceThroneCore, cardId?: string) => {
             ?? player.discard.find(c => c.id === cardId);
         if (card) return card;
     }
-    return MONK_CARDS.find(card => card.id === cardId);
+    return findHeroCard(cardId);
 };

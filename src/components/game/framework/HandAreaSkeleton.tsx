@@ -45,10 +45,12 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     maxCards,
     canDrag = true,
     canSelect = false,
+    interactionMode,
     selectedCardIds = [],
     onSelectChange,
     onPlayCard,
     onSellCard,
+    onCardClick,
     renderCard,
     layoutCode,
     selectEffectCode,
@@ -63,6 +65,18 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     onPlayHintChange,
     onSellHintChange,
 }: HandAreaSkeletonProps<TCard>) {
+    const resolvedInteractionMode =
+        interactionMode === 'drag' || interactionMode === 'click' || interactionMode === 'both'
+            ? interactionMode
+            : undefined;
+    const allowDrag = resolvedInteractionMode
+        ? canDrag && (resolvedInteractionMode === 'drag' || resolvedInteractionMode === 'both')
+        : canDrag;
+    const allowSelect = resolvedInteractionMode
+        ? canSelect && (resolvedInteractionMode === 'click' || resolvedInteractionMode === 'both')
+        : canSelect;
+    const allowCardClick = !resolvedInteractionMode || resolvedInteractionMode !== 'drag';
+
     // 拖拽状态
     const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
     const [dragOffset, setDragOffset] = useState<DragOffset>({ x: 0, y: 0 });
@@ -95,7 +109,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     // 处理拖拽开始
     const handlePointerDown = useCallback(
         (cardId: string, e: React.PointerEvent) => {
-            if (!canDrag) return;
+            if (!allowDrag) return;
             e.preventDefault();
             e.currentTarget.setPointerCapture(e.pointerId);
 
@@ -105,7 +119,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
             setDragOffset({ x: 0, y: 0 });
             onDragStateChange?.(true, cardId);
         },
-        [canDrag, onDragStateChange]
+        [allowDrag, onDragStateChange]
     );
 
     // 处理拖拽移动
@@ -178,6 +192,19 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
         onSellHintChange?.(false);
     }, [onDragStateChange, onPlayHintChange, onSellHintChange]);
 
+    useEffect(() => {
+        if (allowDrag) return;
+        if (!isDraggingRef.current && !draggingCardId && dragOffset.x === 0 && dragOffset.y === 0) {
+            return;
+        }
+        isDraggingRef.current = false;
+        setDraggingCardId(null);
+        setDragOffset({ x: 0, y: 0 });
+        onDragStateChange?.(false, null);
+        onPlayHintChange?.(false);
+        onSellHintChange?.(false);
+    }, [allowDrag, dragOffset.x, dragOffset.y, draggingCardId, onDragStateChange, onPlayHintChange, onSellHintChange]);
+
     // 发牌动画状态追踪（简化版）
     const [visibleCardIds, setVisibleCardIds] = useState<Set<string>>(new Set());
     const prevCardIdsRef = useRef<string[]>([]);
@@ -217,11 +244,18 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     // 处理卡牌点击（选中/取消选中）
     const handleCardClick = useCallback(
         (cardId: string) => {
-            if (!canSelect || isDraggingRef.current) return;
+            if (isDraggingRef.current || !allowCardClick) return;
+            // 优先使用通用点击回调（游戏层自定义逻辑）
+            if (onCardClick) {
+                onCardClick(cardId);
+                return;
+            }
+            // 回退到选中/取消选中逻辑
+            if (!allowSelect) return;
             const isCurrentlySelected = selectedCardIds.includes(cardId);
             onSelectChange?.(cardId, !isCurrentlySelected);
         },
-        [canSelect, selectedCardIds, onSelectChange]
+        [allowCardClick, allowSelect, selectedCardIds, onSelectChange, onCardClick]
     );
 
     // 解析并执行排序代码
@@ -308,7 +342,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
         (index: number, isSelected: boolean, isDragging: boolean) => {
             const baseStyle: React.CSSProperties = {
                 touchAction: 'none',
-                cursor: canDrag ? 'grab' : canSelect ? 'pointer' : 'default',
+                cursor: allowDrag ? 'grab' : allowSelect ? 'pointer' : 'default',
                 transition: isDragging ? 'none' : 'transform 0.2s ease-out',
             };
 
@@ -332,7 +366,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
 
             return baseStyle;
         },
-        [getLayoutStyle, getSelectStyle, dragOffset, canDrag, canSelect, processedCards.length]
+        [getLayoutStyle, getSelectStyle, dragOffset, allowDrag, allowSelect, processedCards.length]
     );
 
     return (
@@ -360,14 +394,15 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
                         data-is-dragging={isDragging}
                         data-is-visible={isVisible}
                         data-is-selected={isSelected}
+                        draggable={false}
                         style={{
                             ...getCardPositionStyle(index, isSelected, isDragging),
                             opacity: isVisible ? 1 : 0,
                         }}
-                        onPointerDown={(e) => handlePointerDown(cardId, e)}
-                        onPointerMove={handlePointerMove}
-                        onPointerUp={handlePointerUp}
-                        onPointerCancel={handlePointerCancel}
+                        onPointerDown={allowDrag ? (e) => handlePointerDown(cardId, e) : undefined}
+                        onPointerMove={allowDrag ? handlePointerMove : undefined}
+                        onPointerUp={allowDrag ? handlePointerUp : undefined}
+                        onPointerCancel={allowDrag ? handlePointerCancel : undefined}
                         onClick={() => handleCardClick(cardId)}
                     >
                         {renderCard(card, index, isSelected)}

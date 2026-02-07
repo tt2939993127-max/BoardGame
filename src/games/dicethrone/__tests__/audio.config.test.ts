@@ -4,11 +4,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { DICETHRONE_AUDIO_CONFIG } from '../audio.config';
-import { MONK_ABILITIES } from '../monk/abilities';
+import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
+import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
+import { MONK_ABILITIES } from '../heroes/monk/abilities';
 import type { AudioEvent } from '../../../lib/audio/types';
 
-const CP_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
-const CP_SPEND_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
+const CP_GAIN_KEY = 'fantasy.magic_sword_recharge_01';
+const CP_SPEND_KEY = 'fantasy.dark_sword_recharge';
 
 const ABILITY_SFX_KEYS = {
     transcendence: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst',
@@ -60,21 +62,21 @@ describe('DiceThrone 音效配置', () => {
             expect(taijiCombo?.sfxKey).toBe(ABILITY_SFX_KEYS.taijiCombo);
         });
 
-        it('没有 sfxKey 的技能不播放技能音效', () => {
+        it('防御技能不播放音效', () => {
             const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
             if (!resolver) {
                 throw new Error('eventSoundResolver 未定义');
             }
 
-            // 测试没有 sfxKey 的技能（如 fist-technique）
-            const fistTechnique = MONK_ABILITIES.find(a => a.id === 'fist-technique');
-            expect(fistTechnique).toBeDefined();
-            expect(fistTechnique?.sfxKey).toBeUndefined();
+            // 测试防御技能（不播放音效）
+            const meditation = MONK_ABILITIES.find(a => a.id === 'meditation');
+            expect(meditation).toBeDefined();
+            expect(meditation?.sfxKey).toBeUndefined();
 
             // 模拟技能激活事件
             const event: AudioEvent = {
                 type: 'ABILITY_ACTIVATED',
-                payload: { playerId: 'player1', abilityId: 'fist-technique' },
+                payload: { playerId: 'player1', abilityId: 'meditation', isDefense: true },
             };
 
             // 创建模拟的游戏状态
@@ -83,7 +85,7 @@ describe('DiceThrone 音效配置', () => {
                     players: {
                         player1: {
                             heroId: 'monk',
-                            abilities: [{ id: 'fist-technique', name: '拳法', type: 'offensive' }],
+                            abilities: MONK_ABILITIES,
                         },
                     },
                 },
@@ -93,6 +95,40 @@ describe('DiceThrone 音效配置', () => {
 
             const result = resolver(event, mockContext);
             expect(result).toBeNull();
+        });
+    });
+
+    describe('状态/Token 音效映射', () => {
+        it('状态施加应按 statusId 使用专属音效', () => {
+            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
+            if (!resolver) {
+                throw new Error('eventSoundResolver 未定义');
+            }
+
+            const statusDef = ALL_TOKEN_DEFINITIONS.find(def => def.id === STATUS_IDS.BURN);
+            expect(statusDef).toBeDefined();
+            const event: AudioEvent = {
+                type: 'STATUS_APPLIED',
+                payload: { statusId: STATUS_IDS.BURN },
+            };
+            const result = resolver(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} } as any);
+            expect(result).toBe(statusDef?.sfxKey);
+        });
+
+        it('Token 授予应按 tokenId 使用专属音效', () => {
+            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
+            if (!resolver) {
+                throw new Error('eventSoundResolver 未定义');
+            }
+
+            const tokenDef = ALL_TOKEN_DEFINITIONS.find(def => def.id === TOKEN_IDS.TAIJI);
+            expect(tokenDef).toBeDefined();
+            const event: AudioEvent = {
+                type: 'TOKEN_GRANTED',
+                payload: { tokenId: TOKEN_IDS.TAIJI },
+            };
+            const result = resolver(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} } as any);
+            expect(result).toBe(tokenDef?.sfxKey);
         });
     });
 });

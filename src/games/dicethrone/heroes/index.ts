@@ -1,7 +1,13 @@
 import { MONK_CARDS, getMonkStartingDeck } from './monk/cards';
 import { MONK_ABILITIES } from './monk/abilities';
+import { PYROMANCER_CARDS, getPyromancerStartingDeck } from './pyromancer/cards';
+import { PYROMANCER_ABILITIES } from './pyromancer/abilities';
 import { BARBARIAN_CARDS, getBarbarianStartingDeck } from './barbarian/cards';
 import { BARBARIAN_ABILITIES } from './barbarian/abilities';
+import { MOON_ELF_CARDS, getMoonElfStartingDeck } from './moon_elf/cards';
+import { MOON_ELF_ABILITIES } from './moon_elf/abilities';
+import { SHADOW_THIEF_CARDS, getShadowThiefStartingDeck } from './shadow_thief/cards';
+import { SHADOW_THIEF_ABILITIES } from './shadow_thief/abilities';
 import type { AbilityCard } from '../types';
 import type { AbilityDef } from '../../../systems/presets/combat';
 import type { RandomFn } from '../../../engine/types';
@@ -22,6 +28,21 @@ export const HEROES_DATA: Record<string, HeroData> = {
         cards: BARBARIAN_CARDS,
         abilities: BARBARIAN_ABILITIES,
         getStartingDeck: getBarbarianStartingDeck,
+    },
+    pyromancer: {
+        cards: PYROMANCER_CARDS,
+        abilities: PYROMANCER_ABILITIES,
+        getStartingDeck: getPyromancerStartingDeck,
+    },
+    moon_elf: {
+        cards: MOON_ELF_CARDS,
+        abilities: MOON_ELF_ABILITIES,
+        getStartingDeck: getMoonElfStartingDeck,
+    },
+    shadow_thief: {
+        cards: SHADOW_THIEF_CARDS,
+        abilities: SHADOW_THIEF_ABILITIES,
+        getStartingDeck: getShadowThiefStartingDeck,
     },
 };
 

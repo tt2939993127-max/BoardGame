@@ -15,7 +15,8 @@
 ## 入口地址
 
 - **开发**：`http://localhost:5173`
-- **Docker 一键部署**：`http://localhost:18080`
+- **镜像部署**：`http://<服务器IP>`（端口 80）
+- **Git 部署**：`http://<服务器IP>:3000`
 - **Pages 预览域名**：`https://<project>.pages.dev`
 
 ## 镜像部署（推荐生产环境）
@@ -35,15 +36,26 @@
 
 ### 首次部署
 
+服务器上只需两个文件，**不需要拉取代码**：
+
 ```bash
 # 1. 下载生产配置文件
 curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/docker-compose.prod.yml -o docker-compose.yml
 
-# 2. 创建 .env 文件
+# 2. 创建 .env（两种方式任选其一）
+
+# 方式 A：从本地 scp .env.server 到服务器后执行
+#   scp .env.server user@server:/home/admin/BoardGame/
+bash .env.server
+
+# 方式 B：手动创建（只需密钥和域名，其余由 compose 覆盖）
 cat > .env << 'EOF'
-JWT_SECRET=$(openssl rand -hex 32)
-MONGO_URI=mongodb://mongodb:27017/boardgame
+JWT_SECRET=你的密钥
 WEB_ORIGINS=https://your-domain.com
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=xxx@qq.com
+SMTP_PASS=xxx
 EOF
 
 # 3. 拉取镜像并启动
@@ -240,20 +252,29 @@ Cloudflare 控制台 → 你的域名 → **SSL/TLS** → **概述** → **配�
 
 ### 4. 服务器 .env 配置
 
+服务器 `.env` 只需密钥和域名，数据库/Redis/端口由 `docker-compose.prod.yml` 的 `environment` 自动覆盖：
+
 ```bash
 # /home/admin/BoardGame/.env
 JWT_SECRET=你的密钥
-MONGO_URI=mongodb://mongodb:27017/boardgame
-REDIS_HOST=redis
-REDIS_PORT=6379
 WEB_ORIGINS=https://easyboardgame.top,https://api.easyboardgame.top,https://boardgame-xxx.pages.dev
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=xxx@qq.com
+SMTP_PASS=xxx
+
+# 以下由 docker-compose.prod.yml 自动覆盖，无需配置：
+# MONGO_URI, REDIS_HOST, REDIS_PORT, GAME_SERVER_PORT, API_SERVER_PORT
 ```
 
 > **WEB_ORIGINS** 必须包含所有可能访问后端的域名，否则会出现 CORS 错误。
+>
+> 提示：可用 `.env.server` 脚本一键生成，避免手动编写。
 
-## 服务器 Nginx 配置（必须）
+## 服务器 Nginx 配置（仅 Pages 分离部署需要）
 
-Cloudflare Pages 前端 + 服务器后端的架构需要 Nginx 做反向代理：
+> **同域部署不需要 Nginx**：web 容器已经在端口 80 提供服务。
+> 仅当前端部署在 Cloudflare Pages、后端在服务器时，才需要 Nginx 做 api 子域名反向代理。
 
 ### 安装 Nginx
 
@@ -274,8 +295,15 @@ sudo yum install -y nginx --disableexcludes=all
 
 ### 配置反向代理
 
+> **端口说明**：
+> - 镜像部署（`docker-compose.prod.yml`）：web 容器监听 **端口 80**
+> - Git 部署（`docker-compose.yml`）：web 容器映射到 **端口 3000**
+>
+> 以下示例以镜像部署为准（端口 80），若使用 Git 部署请将 `proxy_pass` 端口改为 3000。
+
 ```bash
-# API 服务代理（api.easyboardgame.top -> game-server:18000）
+# API 服务代理（api.easyboardgame.top -> web 容器）
+# 请求经 web 容器（NestJS 单体）内部反代到 game-server
 sudo tee /etc/nginx/conf.d/api.conf << 'EOF'
 server {
     listen 80;
@@ -284,7 +312,7 @@ server {
     client_max_body_size 10M;
 
     location / {
-        proxy_pass http://127.0.0.1:18000;
+        proxy_pass http://127.0.0.1:80;  # web 容器端口
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -298,26 +326,13 @@ server {
 }
 EOF
 
-# 主站代理（可选，如果不用 Pages 而用服务器托管前端）
-sudo tee /etc/nginx/conf.d/web.conf << 'EOF'
-server {
-    listen 80;
-    server_name easyboardgame.top;  # 改成你的域名
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-EOF
-
 # 启动 Nginx
 sudo nginx -t && sudo systemctl enable --now nginx
 ```
+
+> **注意**：Nginx 和 web 容器都监听 80 端口时会冲突。
+> Pages 分离部署时，需将 `docker-compose.prod.yml` 中 web 的端口映射改为 `"3000:80"`，
+> 然后 Nginx `proxy_pass` 指向 `http://127.0.0.1:3000`。
 
 ### Cloudflare SSL 设置
 
@@ -339,7 +354,8 @@ sudo nginx -t && sudo systemctl enable --now nginx
 
 - **生产/容器（NestJS 单体）**：
   - 入口：`apps/api/src/main.ts`（静态托管 + 反向代理）
-  - 编排：`docker-compose.yml`（`web` 服务）
+  - 镜像部署：`docker-compose.prod.yml`（服务器不需要源码）
+  - Git 部署：`docker-compose.yml`（需要源码本地构建）
   - 对外仅暴露 `web`（单体），`game-server` 仅容器网络内通信
 
 ## 资源 /assets 与对象存储映射（官方）
@@ -364,10 +380,10 @@ sudo nginx -t && sudo systemctl enable --now nginx
 
 ## 关键配置
 
-- **端口**：前端开发 `5173`；游戏服务 `18000`；API 单体 `80`（容器内）；MongoDB `27017`
-- **CORS/Origin 白名单**：`WEB_ORIGINS`（Docker 默认 `http://localhost:18080`）
-- **前端 API 指向**：`VITE_BACKEND_URL`（仅 Pages/前端构建时配置）
-- **环境变量示例**：`.env.example`
+- **端口**：前端开发 `5173`；游戏服务 `18000`（容器内部）；API 单体 `80`（镜像部署）/ `3000`（Git 部署）；MongoDB `27017`
+- **CORS/Origin 白名单**：`WEB_ORIGINS`（生产环境必填实际域名）
+- **前端 API 指向**：`VITE_BACKEND_URL`（仅 Pages 分离部署时配置）
+- **环境变量模板**：`.env.example`（开发）、`.env.server`（生产，已 gitignore）
 
 ### 环境自动区分
 
@@ -382,25 +398,28 @@ sudo nginx -t && sudo systemctl enable --now nginx
 
 ### .env 配置说明
 
-`.env` 保持本地开发默认值：
+| 文件 | 用途 | 入 Git | 包含密钥 |
+|------|------|--------|----------|
+| `.env` | 当前机器实际配置 | ✘ | ✔ |
+| `.env.example` | 开发环境模板 | ✔ | ✘ |
+| `.env.server` | 生产 .env 生成脚本 | ✘ | ✔ |
+
+**本地开发** `.env` 参考 `.env.example`：
 
 ```bash
+# 端口
+VITE_DEV_PORT=5173
+GAME_SERVER_PORT=18000
+API_SERVER_PORT=18001
+
 # 数据库（本地开发用 localhost，Docker 自动覆盖为 mongodb）
 MONGO_URI=mongodb://localhost:27017/boardgame
 
-# Redis（本地开发注释掉用内存缓存，Docker 自动覆盖）
-# REDIS_HOST=localhost
-# REDIS_PORT=6379
-
 # JWT 密钥（生产环境必须修改）
 JWT_SECRET=your-secret-key
-
-# 邮件服务（可选）
-SMTP_HOST=smtp.qq.com
-SMTP_PORT=465
-SMTP_USER=xxx@qq.com
-SMTP_PASS=授权码
 ```
+
+**服务器** `.env` 由 `.env.server` 脚本生成（只含密钥和域名，其余由 compose 覆盖）。
 
 ## 单体代理说明
 

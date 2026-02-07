@@ -277,8 +277,8 @@ export const STRUCTURE_CARDS_GOBLIN: StructureCard[] = [
     isGate: true,
     isStartingGate: true,
     deckSymbols: [],
-    spriteIndex: 1,
-    spriteAtlas: 'hero',
+    spriteIndex: 0,  // Portal.png 帧0（10HP城门）
+    spriteAtlas: 'portal',
   },
   // 传送门（5生命，0费用）
   {
@@ -289,8 +289,8 @@ export const STRUCTURE_CARDS_GOBLIN: StructureCard[] = [
     life: 5,
     isGate: true,
     deckSymbols: [],
-    spriteIndex: 1,
-    spriteAtlas: 'hero',
+    spriteIndex: 1,  // Portal.png 帧1（5HP传送门）
+    spriteAtlas: 'portal',
   },
 ];
 

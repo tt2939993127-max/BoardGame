@@ -414,6 +414,20 @@ export function execute(
                 };
                 events.push(cpEvent);
                 
+                // 生成 CARD_PLAYED 事件，将卡牌从手牌移到弃牌堆
+                // cpCost 设为 0，因为 CP 已由上方的 CP_CHANGED 事件扣除
+                const cardPlayedEvent: CardPlayedEvent = {
+                    type: 'CARD_PLAYED',
+                    payload: {
+                        playerId: actingPlayerId,
+                        cardId: card.id,
+                        cpCost: 0,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                };
+                events.push(cardPlayedEvent);
+                
                 // 执行升级卡效果（replaceAbility）
                 const opponentId = Object.keys(state.players).find(id => id !== actingPlayerId) || actingPlayerId;
                 const effectCtx: EffectContext = {
@@ -511,6 +525,20 @@ export function execute(
                     timestamp,
                 };
                 events.push(cpEvent);
+                
+                // 生成 CARD_PLAYED 事件，将卡牌从手牌移到弃牌堆
+                // cpCost 设为 0，因为 CP 已由上方的 CP_CHANGED 事件扣除
+                const upgradeCardPlayedEvent: CardPlayedEvent = {
+                    type: 'CARD_PLAYED',
+                    payload: {
+                        playerId: state.activePlayerId,
+                        cardId: card.id,
+                        cpCost: 0,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                };
+                events.push(upgradeCardPlayedEvent);
                 
                 // 通过效果系统执行升级卡效果（包含 replaceAbility）
                 if (!card.effects || card.effects.length === 0) {

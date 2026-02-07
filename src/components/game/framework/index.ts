@@ -7,8 +7,10 @@
 
 // 骨架组件
 export { PhaseIndicatorSkeleton } from './PhaseIndicatorSkeleton';
+export { PhaseHudSkeleton } from './PhaseHudSkeleton';
 export { PlayerPanelSkeleton } from './PlayerPanelSkeleton';
 export { HandAreaSkeleton } from './HandAreaSkeleton';
+export { ActionBarSkeleton } from './ActionBarSkeleton';
 export { ResourceTraySkeleton } from './ResourceTraySkeleton';
 export { SpotlightSkeleton } from './SpotlightSkeleton';
 export { CharacterSelectionSkeleton } from './CharacterSelectionSkeleton';
@@ -59,8 +61,10 @@ export type {
 // 类型导出
 export type {
     PhaseIndicatorSkeletonProps,
+    PhaseHudSkeletonProps,
     PlayerPanelSkeletonProps,
     HandAreaSkeletonProps,
+    ActionBarSkeletonProps,
     ResourceTraySkeletonProps,
     SpotlightSkeletonProps,
 } from './types';

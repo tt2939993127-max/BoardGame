@@ -6,17 +6,18 @@
  */
 
 import { useState, useCallback, useMemo, useRef, useEffect, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Save, Play, Upload, X, Download,
   ChevronDown, ChevronRight, 
   Square, Database, Layers,
-  Plus, Trash2, Copy, Sparkles, Edit3, GripVertical
+  Plus, Trash2, Copy, Sparkles, Edit3, GripVertical, Gamepad2
 } from 'lucide-react';
 
 import { BaseEntitySchema, extendSchema, field, type SchemaDefinition, type FieldDefinition, type TagDefinition } from '../schema/types';
 import { DataTable } from '../ui/DataTable';
 import { SceneCanvas, type SceneComponent } from '../ui/SceneCanvas';
-import { UGCRuntimeHost } from '../../runtime';
+import { PreviewCanvas } from '../ui/RenderPreview';
 import { PromptGenerator, type GameContext, useRenderPrompt } from '../ai';
 import { buildRequirementsText } from '../utils/requirements';
 import { generateUnifiedPrompt, TECH_STACK, OUTPUT_RULES } from '../ai/promptUtils';
@@ -263,7 +264,42 @@ const BASE_UI_COMPONENTS: { category: string; items: UIComponentDef[] }[] = [
   {
     category: 'UI 元素',
     items: [
-      { id: 'action-bar', name: '操作栏', type: 'action-bar', width: 300, height: 60 },
+      {
+        id: 'action-bar',
+        name: '操作栏',
+        type: 'action-bar',
+        width: 360,
+        height: 70,
+        defaultData: {
+          name: '操作栏',
+          layout: 'row',
+          align: 'center',
+          gap: 8,
+          actions: [
+            { id: 'action-primary', label: '主要操作', scope: 'current-player', variant: 'primary' },
+            { id: 'action-secondary', label: '次要操作', scope: 'current-player', variant: 'secondary' },
+          ],
+        },
+      },
+      {
+        id: 'phase-hud',
+        name: '阶段提示',
+        type: 'phase-hud',
+        width: 260,
+        height: 80,
+        defaultData: {
+          name: '阶段提示',
+          orientation: 'horizontal',
+          phases: [
+            { id: 'ready', label: '准备' },
+            { id: 'action', label: '行动' },
+            { id: 'resolve', label: '结算' },
+          ],
+          currentPhaseId: 'action',
+          statusText: '等待操作',
+          currentPlayerLabel: '当前玩家: 玩家1',
+        },
+      },
       { id: 'message-log', name: '消息日志', type: 'message-log', width: 250, height: 200 },
       { id: 'dice-area', name: '骰子区', type: 'dice-area', width: 200, height: 100 },
       { id: 'token-area', name: '标记区', type: 'token-area', width: 150, height: 80 },
@@ -752,9 +788,10 @@ function UnifiedBuilderInner() {
     layoutGroups: state.layoutGroups,
     schemaDefaults,
   }), [state.layout, state.renderComponents, state.instances, state.layoutGroups, schemaDefaults]);
-  
+
   // 预览模式状态
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const navigate = useNavigate();
 
   const bgmEntries = useMemo(() => {
     return state.layout
@@ -1068,9 +1105,12 @@ function UnifiedBuilderInner() {
   // ========== UI 布局操作 ==========
   const handleDragStart = useCallback((comp: UIComponentDef, e: DragEvent) => {
     const baseData = { name: comp.name, bindSchema: comp.bindSchema };
-    const data = comp.type === 'player-area'
-      ? { ...baseData, playerRef: 'current' }
+    const withDefaults = comp.defaultData
+      ? { ...baseData, ...comp.defaultData }
       : baseData;
+    const data = comp.type === 'player-area'
+      ? { ...withDefaults, playerRef: 'current' }
+      : withDefaults;
     e.dataTransfer.setData('application/json', JSON.stringify({
       type: comp.type,
       width: comp.width,
@@ -1457,6 +1497,15 @@ function UnifiedBuilderInner() {
     }
   }, [activeProjectId, buildSaveData, createBuilderProject, persistLocalSave, token, updateBuilderProject, state.name, state.description, toast]);
 
+  const handleOpenSandbox = useCallback(() => {
+    const saveData = buildSaveData();
+    persistLocalSave(saveData);
+    if (!String(saveData.rulesCode || '').trim()) {
+      toast.warning('规则代码为空，试玩页将无法启动');
+    }
+    navigate('/dev/ugc/sandbox');
+  }, [buildSaveData, navigate, persistLocalSave, toast]);
+
   const handleExport = useCallback(() => {
     const saveData = buildSaveData();
     const blob = new Blob([JSON.stringify(saveData, null, 2)], { type: 'application/json' });
@@ -1591,6 +1640,12 @@ function UnifiedBuilderInner() {
             className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${isPreviewMode ? 'bg-green-600 hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-500'}`}
           >
             <Play className="w-4 h-4" /> {isPreviewMode ? '退出预览' : '预览'}
+          </button>
+          <button
+            onClick={handleOpenSandbox}
+            className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-sm"
+          >
+            <Gamepad2 className="w-4 h-4" /> 打开试玩
           </button>
         </div>
       </header>
@@ -1826,13 +1881,16 @@ function UnifiedBuilderInner() {
         {/* 中间：UI 画布 */}
         <div className="flex-1 flex flex-col">
           {isPreviewMode ? (
-            <UGCRuntimeHost
-              mode="iframe"
-              config={previewConfig}
-              rulesCode={String(state.rulesCode || '')}
-              iframeSrc="/dev/ugc/runtime-view"
-              className="flex-1"
-            />
+            <div className="flex-1 p-2">
+              <PreviewCanvas
+                components={previewConfig.layout}
+                renderComponents={previewConfig.renderComponents}
+                instances={previewConfig.instances}
+                layoutGroups={previewConfig.layoutGroups}
+                schemaDefaults={previewConfig.schemaDefaults}
+                className="h-full"
+              />
+            </div>
           ) : (
             <SceneCanvas
               components={state.layout}
@@ -2038,6 +2096,299 @@ function UnifiedBuilderInner() {
                       </div>
                     </div>
                   )}
+
+                  {comp.type === 'action-bar' && (() => {
+                    const actions = Array.isArray(comp.data.actions)
+                      ? (comp.data.actions as Array<{ id: string; label?: string; scope?: string; variant?: string; disabled?: boolean; requirement?: string; hookCode?: string }>)
+                      : [];
+                    return (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-amber-500">操作栏</h3>
+                        <p className="text-slate-500 text-[10px]">通用动作按钮区（非游戏特化）</p>
+                        <div className="space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <label className="text-slate-400">启用动作钩子</label>
+                            <input
+                              type="checkbox"
+                              checked={comp.data.allowActionHooks !== false}
+                              onChange={e => updateCompData('allowActionHooks', e.target.checked)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-400">布局方向</label>
+                            <select
+                              value={String(comp.data.layout || 'row')}
+                              onChange={e => updateCompData('layout', e.target.value)}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            >
+                              <option value="row">水平</option>
+                              <option value="column">垂直</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-slate-400">对齐方式</label>
+                            <select
+                              value={String(comp.data.align || 'center')}
+                              onChange={e => updateCompData('align', e.target.value)}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            >
+                              <option value="start">靠左</option>
+                              <option value="center">居中</option>
+                              <option value="end">靠右</option>
+                              <option value="space-between">两端对齐</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-slate-400">间距</label>
+                            <input
+                              type="number"
+                              value={String(comp.data.gap ?? 8)}
+                              onChange={e => updateCompData('gap', Number(e.target.value || 0))}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-400">动作列表</span>
+                            <button
+                              onClick={() => updateCompData('actions', [
+                                ...actions,
+                                {
+                                  id: `action-${Date.now()}`,
+                                  label: '动作',
+                                  scope: 'current-player',
+                                  variant: 'secondary',
+                                  disabled: false,
+                                  requirement: '',
+                                  hookCode: '',
+                                },
+                              ])}
+                              className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-[10px]"
+                            >
+                              + 添加动作
+                            </button>
+                          </div>
+                          {actions.length === 0 ? (
+                            <div className="text-[10px] text-slate-500">暂无动作，可按需添加。</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {actions.map((action, index) => (
+                                <div key={action.id} className="border border-slate-700 rounded p-2 bg-slate-900/40 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-slate-400">动作 {index + 1}</span>
+                                    <button
+                                      onClick={() => updateCompData('actions', actions.filter(a => a.id !== action.id))}
+                                      className="text-[10px] text-red-400 hover:text-red-300"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={action.label || ''}
+                                    onChange={e => {
+                                      const next = actions.map(item => item.id === action.id ? { ...item, label: e.target.value } : item);
+                                      updateCompData('actions', next);
+                                    }}
+                                    placeholder="按钮文案"
+                                    className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200"
+                                  />
+                                  <select
+                                    value={String(action.scope || 'current-player')}
+                                    onChange={e => {
+                                      const next = actions.map(item => item.id === action.id ? { ...item, scope: e.target.value } : item);
+                                      updateCompData('actions', next);
+                                    }}
+                                    className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200"
+                                  >
+                                    <option value="current-player">仅当前玩家可见</option>
+                                    <option value="all">所有玩家可见</option>
+                                  </select>
+                                  <select
+                                    value={String(action.variant || 'secondary')}
+                                    onChange={e => {
+                                      const next = actions.map(item => item.id === action.id ? { ...item, variant: e.target.value } : item);
+                                      updateCompData('actions', next);
+                                    }}
+                                    className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200"
+                                  >
+                                    <option value="primary">主按钮</option>
+                                    <option value="secondary">次按钮</option>
+                                    <option value="ghost">幽灵</option>
+                                  </select>
+                                  <label className="flex items-center gap-2 text-[10px] text-slate-400">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(action.disabled)}
+                                      onChange={e => {
+                                        const next = actions.map(item => item.id === action.id ? { ...item, disabled: e.target.checked } : item);
+                                        updateCompData('actions', next);
+                                      }}
+                                    />
+                                    禁用
+                                  </label>
+                                  <textarea
+                                    value={action.requirement || ''}
+                                    onChange={e => {
+                                      const next = actions.map(item => item.id === action.id ? { ...item, requirement: e.target.value } : item);
+                                      updateCompData('actions', next);
+                                    }}
+                                    placeholder="动作需求描述（可选）"
+                                    className="w-full h-16 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200 resize-none"
+                                  />
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-slate-400">动作钩子代码</span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(buildActionHookPrompt({
+                                            requirement: String(action.requirement || ''),
+                                            componentType: comp.type,
+                                          }));
+                                        }}
+                                        className="text-[10px] text-purple-400 hover:text-purple-300"
+                                      >
+                                        复制提示词
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const next = actions.map(item => item.id === action.id ? { ...item, hookCode: '' } : item);
+                                          updateCompData('actions', next);
+                                        }}
+                                        disabled={!action.hookCode}
+                                        className="text-[10px] text-slate-400 hover:text-slate-200 disabled:opacity-40"
+                                      >
+                                        清空
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <textarea
+                                    value={action.hookCode || ''}
+                                    readOnly
+                                    onPaste={e => {
+                                      e.preventDefault();
+                                      const text = e.clipboardData.getData('text');
+                                      if (text.trim()) {
+                                        const next = actions.map(item => item.id === action.id ? { ...item, hookCode: text } : item);
+                                        updateCompData('actions', next);
+                                      }
+                                    }}
+                                    placeholder="粘贴 AI 生成的动作钩子代码"
+                                    className="w-full h-20 px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200 resize-none"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {comp.type === 'phase-hud' && (() => {
+                    const phases = Array.isArray(comp.data.phases)
+                      ? (comp.data.phases as Array<{ id: string; label: string }>)
+                      : [];
+                    return (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-medium text-amber-500">阶段提示</h3>
+                        <p className="text-slate-500 text-[10px]">通用阶段/回合提示</p>
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <label className="text-slate-400">布局方向</label>
+                            <select
+                              value={String(comp.data.orientation || 'horizontal')}
+                              onChange={e => updateCompData('orientation', e.target.value)}
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            >
+                              <option value="horizontal">水平</option>
+                              <option value="vertical">垂直</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-slate-400">当前阶段 ID</label>
+                            <input
+                              type="text"
+                              value={String(comp.data.currentPhaseId || '')}
+                              onChange={e => updateCompData('currentPhaseId', e.target.value)}
+                              placeholder="action"
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-400">状态文案</label>
+                            <input
+                              type="text"
+                              value={String(comp.data.statusText || '')}
+                              onChange={e => updateCompData('statusText', e.target.value)}
+                              placeholder="等待操作"
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-400">当前玩家文案</label>
+                            <input
+                              type="text"
+                              value={String(comp.data.currentPlayerLabel || '')}
+                              onChange={e => updateCompData('currentPlayerLabel', e.target.value)}
+                              placeholder="当前玩家: 玩家1"
+                              className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-400">阶段列表</span>
+                            <button
+                              onClick={() => updateCompData('phases', [
+                                ...phases,
+                                { id: `phase-${Date.now()}`, label: '新阶段' },
+                              ])}
+                              className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-[10px]"
+                            >
+                              + 添加阶段
+                            </button>
+                          </div>
+                          {phases.length === 0 ? (
+                            <div className="text-[10px] text-slate-500">暂无阶段。</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {phases.map((phase, index) => (
+                                <div key={phase.id} className="border border-slate-700 rounded p-2 bg-slate-900/40 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-slate-400">阶段 {index + 1}</span>
+                                    <button
+                                      onClick={() => updateCompData('phases', phases.filter(p => p.id !== phase.id))}
+                                      className="text-[10px] text-red-400 hover:text-red-300"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={phase.id}
+                                    onChange={e => {
+                                      const next = phases.map(item => item.id === phase.id ? { ...item, id: e.target.value } : item);
+                                      updateCompData('phases', next);
+                                    }}
+                                    placeholder="阶段 ID"
+                                    className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={phase.label}
+                                    onChange={e => {
+                                      const next = phases.map(item => item.id === phase.id ? { ...item, label: e.target.value } : item);
+                                      updateCompData('phases', next);
+                                    }}
+                                    placeholder="阶段名称"
+                                    className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* 数据绑定（render-component 使用专属 targetSchema，避免重复） */}
                   {comp.type !== 'render-component' && (

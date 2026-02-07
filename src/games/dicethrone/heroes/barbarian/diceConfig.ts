@@ -2,8 +2,8 @@
  * Barbarian 狂战士骰子定义
  */
 
-import type { DiceDefinition } from '../../../systems/DiceSystem/types';
-import { BARBARIAN_DICE_FACE_IDS } from '../domain/ids';
+import type { DiceDefinition } from '../../../../systems/DiceSystem/types';
+import { BARBARIAN_DICE_FACE_IDS } from '../../domain/ids';
 
 /**
  * Barbarian 骰子符号常量

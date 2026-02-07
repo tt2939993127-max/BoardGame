@@ -103,25 +103,25 @@
   - 回合结束移除2点充能
   - 实现：`flowHooks.onPhaseExit` 在抽牌阶段结束时触发 `onTurnEnd` 技能
 
-### 部分完成（需要 UI 交互）
-- [ ] 6.1 召唤师 - `revive_undead`（复活死灵）
+### 已完成（领域 + UI + 测试）
+- [x] 6.1 召唤师 - `revive_undead`（复活死灵）✅
   - 每回合一次，召唤阶段，对自己造成2点伤害，从弃牌堆拿取亡灵单位放置到相邻位置
-  - 状态：技能定义完成，需要 UI 选择弃牌堆卡牌
-- [ ] 6.2 伊路特-巴尔 - `fire_sacrifice_summon`（火祀召唤）
+  - 实现：ACTIVATE_ABILITY 命令 + CardSelectorOverlay UI + 位置选择
+- [x] 6.2 伊路特-巴尔 - `fire_sacrifice_summon`（火祀召唤）✅
   - 召唤时必须消灭一个友方单位，替换被消灭单位的位置
-  - 状态：技能定义完成，需要 UI 选择友方单位
-- [ ] 6.3 德拉戈斯 - `life_drain`（吸取生命）
+  - 实现：ACTIVATE_ABILITY 命令 + abilityMode UI 选择友方单位
+- [x] 6.3 德拉戈斯 - `life_drain`（吸取生命）✅
   - 攻击前可消灭2格内友方单位，本次攻击战力翻倍
-  - 状态：技能定义完成，需要 UI 选择友方单位
-- [ ] 6.5 亡灵战士 - `blood_rage`（血腥狂怒充能）
+  - 实现：ACTIVATE_ABILITY 命令 + abilityMode UI 选择友方单位
+- [x] 6.5 亡灵战士 - `blood_rage`（血腥狂怒充能）✅
   - 回合中有单位被消灭时充能
-  - 状态：技能定义完成，`onUnitDestroyed` 触发已集成到攻击流程
-- [ ] 6.7 亡灵疫病体 - `soulless`（无魂）
+  - 实现：`onUnitDestroyed` 触发 + UNIT_CHARGED 事件 + UI 充能动画
+- [x] 6.7 亡灵疫病体 - `soulless`（无魂）✅
   - 消灭敌方单位时不获得魔力
-  - 状态：技能定义完成，需要在伤害结算时检查标记
-- [ ] 6.7 亡灵疫病体 - `infection`（感染）
+  - 实现：DECLARE_ATTACK 中 skipMagicReward 标记
+- [x] 6.7 亡灵疫病体 - `infection`（感染）✅
   - 消灭单位后可用弃牌堆的疫病体替换被消灭单位
-  - 状态：技能定义完成，需要 UI 选择弃牌堆卡牌
-- [ ] 6.8 亡灵弓箭手 - `soul_transfer`（灵魂转移）
+  - 实现：SUMMON_FROM_DISCARD_REQUESTED 事件 + CardSelectorOverlay UI
+- [x] 6.8 亡灵弓箭手 - `soul_transfer`（灵魂转移）✅
   - 3格内单位在你回合被消灭后，可用本单位替换被消灭单位的位置
-  - 状态：技能定义完成，`onUnitDestroyed` 触发已集成到攻击流程
+  - 实现：SOUL_TRANSFER_REQUESTED 事件 + 确认/跳过 UI

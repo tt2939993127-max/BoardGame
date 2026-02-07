@@ -24,7 +24,7 @@ export type TurnPhase =
     | 'main2'
     | 'discard';
 
-export type DieFace = 'fist' | 'palm' | 'taiji' | 'lotus' | 'sword' | 'heart' | 'strength';
+export type DieFace = 'fist' | 'palm' | 'taiji' | 'lotus' | 'sword' | 'heart' | 'strength' | 'fire' | 'fiery_soul' | 'magma' | 'meteor' | 'bow' | 'foot' | 'moon' | 'dagger' | 'bag' | 'card' | 'shadow';
 
 // ============================================================================
 // 角色编目
@@ -148,6 +148,8 @@ export interface PendingAttack {
     damageResolved?: boolean;
     /** Token 响应后的最终伤害值（用于 postDamage 效果的 onHit 条件判断） */
     resolvedDamage?: number;
+    /** 攻击方骰面计数快照（用于 postDamage 阶段的连击判定，因为防御阶段会重置骰子） */
+    attackDiceFaceCounts?: Record<string, number>;
 }
 
 // ============================================================================
@@ -209,6 +211,8 @@ export interface DamageShield {
     value: number;
     /** 来源（卡牌/技能 ID，用于 UI/日志） */
     sourceId: string;
+    /** 是否用于防止本次攻击的状态效果 */
+    preventStatus?: boolean;
 }
 
 // ============================================================================
@@ -801,6 +805,8 @@ export interface DamageShieldGrantedEvent extends GameEvent<'DAMAGE_SHIELD_GRANT
         targetId: PlayerId;
         value: number;
         sourceId: string;
+        /** 是否用于防止本次攻击的状态效果 */
+        preventStatus?: boolean;
     };
 }
 

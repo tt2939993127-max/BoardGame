@@ -84,7 +84,8 @@ src/components/
 │   │   ├── PulseGlow.tsx
 │   │   ├── ShakeContainer.tsx
 │   │   ├── SlashEffect.tsx
-│   │   └── variants.ts
+│   │   ├── variants.ts
+│   │   └── VictoryParticles.tsx
 │   ├── feedback/
 │   │   └── ToastItem.tsx
 │   ├── i18n/

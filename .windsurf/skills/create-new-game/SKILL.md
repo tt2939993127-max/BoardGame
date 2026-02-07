@@ -46,9 +46,22 @@ description: "为本项目创建新游戏（Boardgame.io + 引擎适配器 + 领
   3. 创建 `game.ts/Board.tsx/tutorial.ts/thumbnail.tsx` 的最小占位导出，禁止业务逻辑。
   4. 在 `rule/` 创建规则文档占位（至少包含标题）。
   5. 在 `__tests__/` 创建占位测试文件（仅保证测试框架可运行）。
+  6. **创建资源目录占位（强制）**：
+     - 创建 `public/assets/<gameId>/` 目录结构：
+       ```
+       public/assets/<gameId>/
+       ├── thumbnails/          # 缩略图目录（必须）
+       │   └── .gitkeep         # 占位文件
+       ├── images/              # 图片资源目录
+       │   └── .gitkeep
+       └── README.md            # 资源说明文档
+       ```
+     - `manifest.ts` 中预留 `thumbnailPath: '<gameId>/thumbnails/cover'`（待用户提供图片后压缩）。
+     - `thumbnail.tsx` 使用 `ManifestGameThumbnail` 组件，确保缩略图路径生效。
 - **验收**：
   - 目录齐全、可被清单生成脚本发现（但不启用）。
   - 占位文件可编译通过（不引入业务逻辑）。
+  - 资源目录结构已创建，`thumbnailPath` 已配置。
 
 ### 阶段 2：规则分析 → 工具/系统缺口补齐
 - **目标**：从规则文档抽取“系统需求清单”，不足先补齐框架层。
@@ -160,3 +173,16 @@ description: "为本项目创建新游戏（Boardgame.io + 引擎适配器 + 领
 - 框架层组件：`src/components/game/framework/`
 - 引擎系统：`src/engine/systems/`
 - 新游戏起步参考：`src/games/summonerwars/`
+
+## 缩略图配置模板（thumbnail.tsx）
+```tsx
+import manifest from './manifest';
+import { ManifestGameThumbnail } from '../../components/lobby/thumbnails';
+
+export default function Thumbnail() {
+    return <ManifestGameThumbnail manifest={manifest} />;
+}
+```
+- **manifest.ts** 中配置 `thumbnailPath: '<gameId>/thumbnails/cover'`（不含扩展名、不含 `compressed/`）。
+- 用户提供图片后，运行 `npm run compress:images -- public/assets/<gameId>/thumbnails` 压缩。
+- 压缩后自动生成 `compressed/cover.avif` 和 `compressed/cover.webp`，前端自动使用优化格式。

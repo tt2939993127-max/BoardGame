@@ -3,11 +3,11 @@
  * 基于原版 Dice Throne 狂战士卡组
  */
 
-import type { AbilityCard } from '../types';
-import type { RandomFn } from '../../../engine/types';
-import type { AbilityEffect, EffectTiming, EffectCondition, AbilityDef } from '../../../systems/presets/combat';
-import { STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
-import { COMMON_CARDS } from '../domain/commonCards';
+import type { AbilityCard } from '../../types';
+import type { RandomFn } from '../../../../engine/types';
+import type { AbilityEffect, EffectTiming, EffectCondition, AbilityDef } from '../../../../systems/presets/combat';
+import { STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
+import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import {
     SLAP_2, SLAP_3,
     ALL_OUT_STRIKE_2, ALL_OUT_STRIKE_3,
@@ -150,6 +150,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-thick-skin-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 5 },
         effects: [
             replaceAbility('thick-skin', THICK_SKIN_2, 2, '升级厚皮至 II 级'),
         ],
@@ -163,6 +164,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-slap-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 14 },
         effects: [replaceAbility('slap', SLAP_2, 2, '升级拍击至 II 级')],
     },
     {
@@ -172,6 +174,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-slap-3', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 13 },
         effects: [replaceAbility('slap', SLAP_3, 3, '升级拍击至 III 级')],
     },
 
@@ -182,6 +185,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-all-out-strike-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 12 },
         effects: [replaceAbility('all-out-strike', ALL_OUT_STRIKE_2, 2, '升级全力一击至 II 级')],
     },
     {
@@ -191,6 +195,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-all-out-strike-3', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 11 },
         effects: [replaceAbility('all-out-strike', ALL_OUT_STRIKE_3, 3, '升级全力一击至 III 级')],
     },
 
@@ -201,6 +206,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-powerful-strike-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 10 },
         effects: [replaceAbility('powerful-strike', POWERFUL_STRIKE_2, 2, '升级强力一击至 II 级')],
     },
 
@@ -211,6 +217,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-reckless-strike-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 6 },
         effects: [
             replaceAbility('reckless-strike', RECKLESS_STRIKE_2, 2, '升级鲁莽一击至 II 级'),
         ],
@@ -223,6 +230,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-suppress-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 7 },
         effects: [
             replaceAbility('suppress', SUPPRESS_2, 2, '升级压制至 II 级'),
         ],
@@ -235,6 +243,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-steadfast-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 8 },
         effects: [
             replaceAbility('steadfast', STEADFAST_2, 2, '升级坚韧不拔至 II 级'),
         ],
@@ -247,15 +256,16 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-violent-assault-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 9 },
         effects: [
             replaceAbility('violent-assault', VIOLENT_ASSAULT_2, 2, '升级暴力猛击至 II 级'),
         ],
     },
 
     // ============================================
-    // 通用卡牌 (Common Cards) - 注入
+    // 通用卡牌 (Common Cards) - 注入（带图集预览引用）
     // ============================================
-    ...COMMON_CARDS,
+    ...injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.BARBARIAN),
 ];
 
 export const getBarbarianStartingDeck = (random: RandomFn): AbilityCard[] => {

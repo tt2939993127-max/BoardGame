@@ -133,7 +133,7 @@ export const COMMON_UNITS: UnitCard[] = [
     cost: 2,
     attackType: 'melee',
     attackRange: 1,
-    abilities: ['blood_rage', 'power_boost'],
+    abilities: ['blood_rage', 'power_boost', 'blood_rage_decay'],
     abilityText: '血腥狂怒：每当一个单位在你的回合中被消灭时，将本单位充能。在你的回合结束时，从本单位上移除2点充能。\n力量强化：本单位每有1点充能，则获得战力+1，至多为+5。',
     deckSymbols: [DECK_SYMBOLS.MOON], // 🌙 (图片确认)
     spriteIndex: SPRITE_INDEX.COMMON_UNDEAD_WARRIOR,
@@ -257,8 +257,8 @@ export const STRUCTURE_CARDS: StructureCard[] = [
     isGate: true,
     isStartingGate: true,
     deckSymbols: [], // 起始建筑，无需符号
-    spriteIndex: 1,  // hero.png 索引（与传送门共用图）
-    spriteAtlas: 'hero',
+    spriteIndex: 0,  // Portal.png 帧0（10HP城门）
+    spriteAtlas: 'portal',
   },
   // 传送门（5生命，0费用）
   {
@@ -269,8 +269,8 @@ export const STRUCTURE_CARDS: StructureCard[] = [
     life: 5,
     isGate: true,
     deckSymbols: [], // 传送门通常无需符号（或与召唤师符号匹配）
-    spriteIndex: 1,  // hero.png 索引
-    spriteAtlas: 'hero',
+    spriteIndex: 1,  // Portal.png 帧1（5HP传送门）
+    spriteAtlas: 'portal',
   },
 ];
 

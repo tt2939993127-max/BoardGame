@@ -49,12 +49,12 @@ export const DiceThroneCharacterSelection: React.FC<DiceThroneCharacterSelection
         id: char.id,
         nameKey: char.nameKey,
         // 仅显示目前已实现的英雄
-        selectable: ['monk', 'barbarian'].includes(char.id),
+        selectable: ['monk', 'barbarian', 'pyromancer', 'moon_elf', 'shadow_thief'].includes(char.id),
     }));
 
     // 资源配置
     const assets: CharacterAssets = {
-        getPortraitStyle: (characterId: string, locale: string) => 
+        getPortraitStyle: (characterId: string, locale: string) =>
             getPortraitStyle(characterId as CharacterId, locale),
         getPreviewAssets: (characterId: string) => ({
             playerBoard: ASSETS.PLAYER_BOARD(characterId as CharacterId),
@@ -71,7 +71,7 @@ export const DiceThroneCharacterSelection: React.FC<DiceThroneCharacterSelection
 
     // 回调函数
     const callbacks: CharacterSelectionCallbacks = {
-        onSelect: props.onSelect,
+        onSelect: (id) => props.onSelect(id as SelectableCharacterId),
         onReady: props.onReady,
         onStart: props.onStart,
     };

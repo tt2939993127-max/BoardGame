@@ -46,6 +46,7 @@ export interface LobbyMatch {
         name?: string;
         isConnected?: boolean;
     }>;
+    totalSeats?: number;
     createdAt?: number;
     updatedAt?: number;
     roomName?: string;

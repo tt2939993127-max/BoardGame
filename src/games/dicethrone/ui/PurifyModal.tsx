@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { GameModal } from './components/GameModal';
 import { GameButton } from './components/GameButton';
 import type { HeroState } from '../domain/types';
-import { SelectableStatusBadge, type StatusIconAtlasConfig } from './statusEffects';
+import { SelectableStatusBadge, type StatusAtlases } from './statusEffects';
 
 interface PurifyModalProps {
     /** 可被净化移除的负面状态 ID 列表（由外部派生，支持扩展） */
@@ -17,7 +17,7 @@ interface PurifyModalProps {
     /** 语言 */
     locale?: string;
     /** 状态图标图集配置 */
-    statusIconAtlas?: StatusIconAtlasConfig | null;
+    statusIconAtlas?: StatusAtlases | null;
 }
 
 /**

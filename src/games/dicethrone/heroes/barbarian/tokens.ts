@@ -8,8 +8,8 @@
  * 注意：狂战士没有 consumable 类型的 Token（不像僧侣有太极、闪避、净化）
  */
 
-import type { TokenDef, TokenState } from '../../../systems/TokenSystem';
-import { STATUS_IDS } from '../domain/ids';
+import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
+import { STATUS_IDS } from '../../domain/ids';
 
 const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
 
@@ -33,6 +33,7 @@ export const BARBARIAN_TOKENS: TokenDef[] = [
         icon: '💫',
         colorTheme: 'from-red-600 to-orange-500',
         description: statusText(STATUS_IDS.CONCUSSION, 'description') as unknown as string[],
+        sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.offensive_spells.offensive_spells_shockwave_slam_001',
         stackLimit: 1,
         category: 'debuff',
         passiveTrigger: {
@@ -53,6 +54,7 @@ export const BARBARIAN_TOKENS: TokenDef[] = [
         icon: '😵',
         colorTheme: 'from-yellow-600 to-amber-500',
         description: statusText(STATUS_IDS.DAZE, 'description') as unknown as string[],
+        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_lightning',
         stackLimit: 1,
         category: 'debuff',
         passiveTrigger: {

@@ -78,8 +78,7 @@ export const Home = () => {
         const unsubscribe = subscribeGameRegistry(() => {
             setRegistryVersion((version) => version + 1);
         });
-        // 暂时禁用 UGC 自动加载（开发环境下后端服务可能未启动）
-        // void refreshUgcGames();
+        void refreshUgcGames();
         return () => {
             unsubscribe();
         };

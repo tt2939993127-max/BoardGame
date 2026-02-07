@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { MONK_ABILITIES } from '../monk/abilities';
+import { MONK_ABILITIES } from '../heroes/monk/abilities';
 
 describe('Monk abilities 定义校验', () => {
     it('基础技能 ID 不重复且包含必要字段', () => {

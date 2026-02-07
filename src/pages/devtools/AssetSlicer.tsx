@@ -381,8 +381,6 @@ export const AssetSlicer = () => {
         };
 
         window.addEventListener('mouseup', handleGlobalEnd);
-        // window.addEventListener('mouseleave', handleGlobalEnd); // MouseLeave window 也可以视为结束，视需求而定
-
         return () => {
             window.removeEventListener('mouseup', handleGlobalEnd);
         };
@@ -552,20 +550,21 @@ export const AssetSlicer = () => {
         
         // 左键逻辑 - 必须在图片上才能开始框选
         if (e.button === 0 && !isAltPressed && isHoveringImage) {
-            e.preventDefault(); // 阻止默认行为（如文本选择、图片拖拽）
+            e.preventDefault();
             
-            // 开始框选
+            // 框选开始时重置锚点为中心，避免旧锚点导致框瞬移
+            updateAnchorPoint({ x: 0.5, y: 0.5 });
+            
             isDrawingRef.current = true;
             drawStartRef.current = { x: e.clientX, y: e.clientY };
             setIsDrawing(true);
 
-            // 记录开始拖拽时的宽高比，用于锁定比例模式
             if (isSizeLocked && cropSize.height > 0) {
                 dragAspectRatio.current = cropSize.width / cropSize.height;
             } else {
                 dragAspectRatio.current = 1;
             }
-            return; // 框选时不执行后续逻辑
+            return;
         }
         
         // 如果不是上述任何情况，阻止默认行为（防止意外拖拽）
@@ -612,9 +611,31 @@ export const AssetSlicer = () => {
                 const screenH = h * transform.scale;
                 cursorRef.current.style.width = `${screenW}px`;
                 cursorRef.current.style.height = `${screenH}px`;
-                // 框覆盖从起点到鼠标的区域，使用 >= 避免 dx=dy=0 时跳到右下角
-                cursorRef.current.style.left = `${dx >= 0 ? startX : startX - screenW}px`;
-                cursorRef.current.style.top = `${dy >= 0 ? startY : startY - screenH}px`;
+
+                // 框选定位：鼠标拖拽方向的边紧贴鼠标位置，
+                // 约束导致的多余尺寸向起点反方向延伸
+                const actualScreenDx = Math.abs(dx);
+                const actualScreenDy = Math.abs(dy);
+                const overflowX = Math.max(0, screenW - actualScreenDx);
+                const overflowY = Math.max(0, screenH - actualScreenDy);
+
+                let boxLeft: number;
+                let boxTop: number;
+
+                if (dx >= 0) {
+                    boxLeft = startX - overflowX;
+                } else {
+                    boxLeft = e.clientX;
+                }
+
+                if (dy >= 0) {
+                    boxTop = startY - overflowY;
+                } else {
+                    boxTop = e.clientY;
+                }
+
+                cursorRef.current.style.left = `${boxLeft}px`;
+                cursorRef.current.style.top = `${boxTop}px`;
             }
         } else {
             updateCursorStyle();
@@ -632,12 +653,10 @@ export const AssetSlicer = () => {
             const startY = drawStartRef.current.y;
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
-            const dragDist = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+            const dragDist = Math.sqrt(dx * dx + dy * dy);
 
-            // 阈值调大预防误触 (原 10 -> 30)
             if (dragDist > 30) {
                 if (isQuickSlice && imageRef.current) {
-                    // 快裁模式：直接提取
                     const img = imageRef.current;
                     const rect = img.getBoundingClientRect();
                     const screenCenterX = (e.clientX + startX) / 2;
@@ -650,8 +669,18 @@ export const AssetSlicer = () => {
                     performExtraction(imgCenterX, imgCenterY, cropSize.width, cropSize.height);
                 }
                 
-                // 拖拽结束后，始终重置锚点为中心，避免瞬移
-                updateAnchorPoint({ x: 0.5, y: 0.5 });
+                // 计算框选结束时框的实际位置，设置锚点让框保持不动
+                const screenW = cropSize.width * transform.scale;
+                const screenH = cropSize.height * transform.scale;
+                const overflowX = Math.max(0, screenW - Math.abs(dx));
+                const overflowY = Math.max(0, screenH - Math.abs(dy));
+                const boxLeft = dx >= 0 ? startX - overflowX : e.clientX;
+                const boxTop = dy >= 0 ? startY - overflowY : e.clientY;
+
+                // 鼠标在框中的相对位置作为锚点，这样切换回跟随模式时框不跳
+                const anchorX = Math.max(0, Math.min(1, (e.clientX - boxLeft) / screenW));
+                const anchorY = Math.max(0, Math.min(1, (e.clientY - boxTop) / screenH));
+                updateAnchorPoint({ x: anchorX, y: anchorY });
             } else {
                 handleExtractClick(e);
             }
@@ -905,7 +934,7 @@ export const AssetSlicer = () => {
                     </div>
                 )}
 
-                {sourceImage && isHoveringImage && !isAltPressed && !isPanning && (
+                {sourceImage && (isHoveringImage || isDrawing) && !isAltPressed && !isPanning && (
                     <div
                         ref={cursorRef}
                         className={cn(

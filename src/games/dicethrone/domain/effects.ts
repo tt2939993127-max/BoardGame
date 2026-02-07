@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DiceThrone 效果解析器
  * 将 AbilityEffect 转换为 DiceThroneEvent（事件驱动）
  */
@@ -11,7 +11,7 @@ import type { AbilityEffect, EffectTiming, EffectResolutionContext } from '../..
 import { combatAbilityManager } from './combatAbility';
 import { getActiveDice, getFaceCounts, getDieFace, getTokenStackLimit } from './rules';
 import { RESOURCE_IDS } from './resources';
-import { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS } from './ids';
+import { STATUS_IDS, TOKEN_IDS } from './ids';
 import type {
     DiceThroneCore,
     DiceThroneEvent,
@@ -20,14 +20,12 @@ import type {
     StatusAppliedEvent,
     StatusRemovedEvent,
     TokenGrantedEvent,
-    TokenLimitChangedEvent,
+    TokenConsumedEvent,
     ChoiceRequestedEvent,
     BonusDieRolledEvent,
     AbilityReplacedEvent,
     DamageShieldGrantedEvent,
-    InteractionRequestedEvent,
-    RollLimitChangedEvent,
-    PendingInteraction,
+    DamagePreventedEvent,
 } from './types';
 import { buildDrawEvents } from './deckEvents';
 import {
@@ -172,7 +170,56 @@ function resolveEffectAction(
 
     switch (action.type) {
         case 'damage': {
-            const totalValue = (action.value ?? 0) + (bonusDamage ?? 0);
+            let totalValue = (action.value ?? 0) + (bonusDamage ?? 0);
+
+            // 锁定 (Targeted) 状态：受到的伤害 +2，然后移除锁定
+            const targetPlayer = state.players[targetId];
+            const targetedStacks = targetPlayer?.statusEffects[STATUS_IDS.TARGETED] ?? 0;
+            if (targetedStacks > 0 && totalValue > 0) {
+                totalValue += 2;
+                // 移除锁定状态（一次性），事件在伤害事件之前
+                events.push({
+                    type: 'STATUS_REMOVED',
+                    payload: { targetId, statusId: STATUS_IDS.TARGETED, stacks: targetedStacks },
+                    sourceCommandType: 'ABILITY_EFFECT',
+                    timestamp,
+                } as StatusRemovedEvent);
+            }
+
+            // check SNEAK
+            const sneakStacks = targetPlayer?.tokens[TOKEN_IDS.SNEAK] ?? 0;
+            if (sneakStacks > 0 && totalValue > 0) {
+                // Prevent damage
+                const originalDamage = totalValue;
+                totalValue = 0;
+
+                // Remove SNEAK Token
+                events.push({
+                    type: 'TOKEN_CONSUMED',
+                    payload: {
+                        playerId: targetId,
+                        tokenId: TOKEN_IDS.SNEAK,
+                        amount: 1,
+                        newTotal: sneakStacks - 1
+                    },
+                    sourceCommandType: 'ABILITY_EFFECT',
+                    timestamp,
+                } as TokenConsumedEvent);
+
+                // Log Prevention
+                events.push({
+                    type: 'DAMAGE_PREVENTED',
+                    payload: {
+                        targetId,
+                        originalDamage,
+                        preventedAmount: originalDamage,
+                        shieldSourceId: TOKEN_IDS.SNEAK,
+                    },
+                    sourceCommandType: 'ABILITY_EFFECT',
+                    timestamp
+                } as DamagePreventedEvent);
+            }
+
             if (totalValue <= 0) break;
 
             // 检查是否需要打开 Token 响应窗口
@@ -441,6 +488,7 @@ function resolveEffectAction(
             // 授予伤害护盾（下次受伤时消耗）
             const shieldValue = action.shieldValue ?? action.value ?? 0;
             if (shieldValue <= 0) break;
+            const preventStatus = action.preventStatus === true;
 
             const shieldEvent: DamageShieldGrantedEvent = {
                 type: 'DAMAGE_SHIELD_GRANTED',
@@ -448,6 +496,7 @@ function resolveEffectAction(
                     targetId,
                     value: shieldValue,
                     sourceId: sourceAbilityId,
+                    preventStatus,
                 },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
@@ -462,584 +511,8 @@ function resolveEffectAction(
 }
 
 // ============================================================================
-// Custom Action 处理器实现
+// 条件效果处理
 // ============================================================================
-
-/** 冥想：根据太极骰面数量获得太极 Token */
-function handleMeditationTaiji({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const faceCounts = getFaceCounts(getActiveDice(state));
-    const amountToAdd = faceCounts[DICE_FACE_IDS.TAIJI];
-    const target = state.players[targetId];
-    const currentAmount = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
-    const maxStacks = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
-    const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
-    return [{
-        type: 'TOKEN_GRANTED',
-        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as TokenGrantedEvent];
-}
-
-/** 清修 III：获得太极，若太极≥2则选择闪避或净化 */
-function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const faceCounts = getFaceCounts(getActiveDice(state));
-    const amountToAdd = faceCounts[DICE_FACE_IDS.TAIJI];
-    const target = state.players[targetId];
-    const currentAmount = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
-    const maxStacks = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
-    const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
-    const events: DiceThroneEvent[] = [{
-        type: 'TOKEN_GRANTED',
-        payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as TokenGrantedEvent];
-
-    if (faceCounts[DICE_FACE_IDS.TAIJI] >= 2) {
-        events.push({
-            type: 'CHOICE_REQUESTED',
-            payload: {
-                playerId: targetId,
-                sourceAbilityId,
-                titleKey: 'choices.evasiveOrPurifyToken',
-                options: [
-                    { tokenId: TOKEN_IDS.EVASIVE, value: 1 },
-                    { tokenId: TOKEN_IDS.PURIFY, value: 1 },
-                ],
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as ChoiceRequestedEvent);
-    }
-
-    return events;
-}
-
-/** 冥想：根据拳骰面数量造成伤害 */
-function handleMeditationDamage({ ctx, targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const faceCounts = getFaceCounts(getActiveDice(state));
-    const amount = faceCounts[DICE_FACE_IDS.FIST];
-    const target = state.players[targetId];
-    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-    const actualDamage = target ? Math.min(amount, targetHp) : 0;
-    ctx.damageDealt += actualDamage;
-    return [{
-        type: 'DAMAGE_DEALT',
-        payload: { targetId, amount, actualDamage, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as DamageDealtEvent];
-}
-
-/** 一掷千金：投掷1骰子，获得½数值的CP（向上取整） */
-function handleOneThrowFortuneCp({ targetId, sourceAbilityId: _sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-    const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
-    const cpGain = Math.ceil(dieValue / 2);
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: { value: dieValue, face, playerId: targetId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.gainCp', effectParams: { cp: cpGain } },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
-
-    events.push({
-        type: 'CP_CHANGED',
-        payload: { playerId: targetId, delta: cpGain, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + cpGain },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    });
-    return events;
-}
-
-/** 顿悟：投掷1骰，莲花→获得2气+闪避+净化；否则抽1牌 */
-function handleEnlightenmentRoll({ targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-    const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
-    const isLotus = face === DICE_FACE_IDS.LOTUS;
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: { value: dieValue, face, playerId: targetId, targetPlayerId: targetId, effectKey: isLotus ? 'bonusDie.effect.enlightenmentLotus' : 'bonusDie.effect.enlightenmentOther' },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
-    if (isLotus) {
-        const target = state.players[targetId];
-        const taijiMax = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
-        const taijiCurrent = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: 2, newTotal: Math.min(taijiCurrent + 2, taijiMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-        const evasiveMax = getTokenStackLimit(state, targetId, TOKEN_IDS.EVASIVE);
-        const evasiveCurrent = target?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.EVASIVE, amount: 1, newTotal: Math.min(evasiveCurrent + 1, evasiveMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-        const purifyMax = getTokenStackLimit(state, targetId, TOKEN_IDS.PURIFY);
-        const purifyCurrent = target?.tokens[TOKEN_IDS.PURIFY] ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.PURIFY, amount: 1, newTotal: Math.min(purifyCurrent + 1, purifyMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-    } else {
-        events.push(...buildDrawEvents(state, targetId, 1, random, 'ABILITY_EFFECT', timestamp));
-    }
-    return events;
-}
-
-/** 莲花掌：可花费2太极令此次攻击不可防御 */
-function handleLotusPalmUnblockableChoice({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const taijiCount = state.players[targetId]?.tokens?.[TOKEN_IDS.TAIJI] ?? 0;
-    if (taijiCount < 2) return [];
-    return [{
-        type: 'CHOICE_REQUESTED',
-        payload: {
-            playerId: targetId,
-            sourceAbilityId,
-            titleKey: 'choices.lotusPalmUnblockable.title',
-            options: [
-                { tokenId: TOKEN_IDS.TAIJI, value: -2, customId: 'lotus-palm-unblockable-pay', labelKey: 'choices.lotusPalmUnblockable.pay2' },
-                { value: 0, customId: 'lotus-palm-unblockable-skip', labelKey: 'choices.lotusPalmUnblockable.skip' },
-            ],
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as ChoiceRequestedEvent];
-}
-
-/** 莲花掌：太极上限+1，并立即补满太极 */
-function handleLotusPalmTaijiCapUpAndFill({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const player = state.players[targetId];
-    if (!player) return [];
-    const currentLimitRaw = player.tokenStackLimits?.[TOKEN_IDS.TAIJI];
-    const currentLimit = typeof currentLimitRaw === 'number' ? (currentLimitRaw === 0 ? Infinity : currentLimitRaw) : getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
-    if (currentLimit === Infinity) return [];
-    const events: DiceThroneEvent[] = [];
-    const newLimit = currentLimit + 1;
-    events.push({ type: 'TOKEN_LIMIT_CHANGED', payload: { playerId: targetId, tokenId: TOKEN_IDS.TAIJI, delta: 1, newLimit, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenLimitChangedEvent);
-    const currentAmount = player.tokens?.[TOKEN_IDS.TAIJI] ?? 0;
-    const newTotal = Math.min(newLimit, Math.max(0, newLimit));
-    const amountToAdd = Math.max(0, newTotal - currentAmount);
-    if (amountToAdd > 0) {
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: amountToAdd, newTotal, sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-    }
-    return events;
-}
-
-type ThunderStrikeBonusConfig = {
-    diceCount: number;
-    rerollCostTokenId: string;
-    rerollCostAmount: number;
-    maxRerollCount?: number;
-    dieEffectKey: string;
-    rerollEffectKey: string;
-    threshold?: number;
-    thresholdEffect?: 'knockdown';
-};
-
-const createThunderStrikeRollDamageEvents = (
-    { targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext,
-    config: ThunderStrikeBonusConfig
-): DiceThroneEvent[] => {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-    const dice: import('./types').BonusDieInfo[] = [];
-
-    // 投掷奖励骰
-    for (let i = 0; i < config.diceCount; i++) {
-        const value = random.d(6);
-        const face = getDieFace(value);
-        dice.push({ index: i, value, face });
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: {
-                value,
-                face,
-                playerId: attackerId,
-                targetPlayerId: targetId,
-                effectKey: config.dieEffectKey,
-                effectParams: { value, index: i },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + i,
-        } as BonusDieRolledEvent);
-    }
-
-    const attacker = state.players[attackerId];
-    const hasToken = (attacker?.tokens?.[config.rerollCostTokenId] ?? 0) >= config.rerollCostAmount;
-
-    if (hasToken) {
-        const settlement: import('./types').PendingBonusDiceSettlement = {
-            id: `${sourceAbilityId}-${timestamp}`,
-            sourceAbilityId,
-            attackerId,
-            targetId,
-            dice,
-            rerollCostTokenId: config.rerollCostTokenId,
-            rerollCostAmount: config.rerollCostAmount,
-            rerollCount: 0,
-            maxRerollCount: config.maxRerollCount,
-            rerollEffectKey: config.rerollEffectKey,
-            threshold: config.threshold,
-            thresholdEffect: config.thresholdEffect,
-            readyToSettle: false,
-        };
-        events.push({
-            type: 'BONUS_DICE_REROLL_REQUESTED',
-            payload: { settlement },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as import('./types').BonusDiceRerollRequestedEvent);
-    } else {
-        const totalDamage = dice.reduce((sum, d) => sum + d.value, 0);
-        const target = state.players[targetId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(totalDamage, targetHp) : 0;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: totalDamage, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as DamageDealtEvent);
-        if (config.threshold !== undefined && totalDamage >= config.threshold && config.thresholdEffect === 'knockdown') {
-            const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
-            const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
-            const maxStacks = def?.stackLimit || 99;
-            const newTotal = Math.min(currentStacks + 1, maxStacks);
-            events.push({
-                type: 'STATUS_APPLIED',
-                payload: { targetId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-            } as StatusAppliedEvent);
-        }
-    }
-
-    return events;
-};
-
-/**
- * 雷霆万钧: 投掷3骰，造成总和伤害，可花费2太极重掷其中1颗
- */
-function handleThunderStrikeRollDamage(context: CustomActionContext): DiceThroneEvent[] {
-    return createThunderStrikeRollDamageEvents(context, {
-        diceCount: 3,
-        rerollCostTokenId: TOKEN_IDS.TAIJI,
-        rerollCostAmount: 2,
-        maxRerollCount: 1,
-        dieEffectKey: 'bonusDie.effect.thunderStrikeDie',
-        rerollEffectKey: 'bonusDie.effect.thunderStrikeReroll',
-    });
-}
-
-/**
- * 雷霆一击 II / 风暴突袭 II: 投掷3骰，造成总和伤害，>=12施加倒地
- * 实现延后结算：投掷完成后存储到 pendingBonusDiceSettlement，等待重掷交互完成后再结算伤害
- */
-function handleThunderStrike2RollDamage(context: CustomActionContext): DiceThroneEvent[] {
-    return createThunderStrikeRollDamageEvents(context, {
-        diceCount: 3,
-        rerollCostTokenId: TOKEN_IDS.TAIJI,
-        rerollCostAmount: 1,
-        dieEffectKey: 'bonusDie.effect.thunderStrike2Die',
-        rerollEffectKey: 'bonusDie.effect.thunderStrike2Reroll',
-        threshold: 12,
-        thresholdEffect: 'knockdown',
-    });
-}
-
-/** 获得2CP */
-function handleGrantCp2({ targetId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    return [{
-        type: 'CP_CHANGED',
-        payload: { playerId: targetId, delta: 2, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + 2 },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    }];
-}
-
-/** 额外投掷次数 */
-function handleGrantExtraRoll({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const newLimit = state.rollLimit + 1;
-    return [{
-        type: 'ROLL_LIMIT_CHANGED',
-        payload: { playerId: targetId, delta: 1, newLimit, sourceCardId: sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as RollLimitChangedEvent];
-}
-
-/** 将1颗骰子改至6 */
-function handleModifyDieTo6({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'modifyDie',
-        titleKey: 'interaction.selectDieToModify',
-        selectCount: 1,
-        selected: [],
-        dieModifyConfig: { mode: 'set', targetValue: 6 },
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 将1颗骰子改为另1颗的值 */
-function handleModifyDieCopy({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'modifyDie',
-        titleKey: 'interaction.selectDieToCopy',
-        selectCount: 2,
-        selected: [],
-        dieModifyConfig: { mode: 'copy' },
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 改变任意1颗骰子的数值 */
-function handleModifyDieAny1({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'modifyDie',
-        titleKey: 'interaction.selectDieToChange',
-        selectCount: 1,
-        selected: [],
-        dieModifyConfig: { mode: 'any' },
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 改变任意2颗骰子的数值 */
-function handleModifyDieAny2({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'modifyDie',
-        titleKey: 'interaction.selectDiceToChange',
-        selectCount: 2,
-        selected: [],
-        dieModifyConfig: { mode: 'any' },
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 增/减1颗骰子数值1点 */
-function handleModifyDieAdjust1({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'modifyDie',
-        titleKey: 'interaction.selectDieToAdjust',
-        selectCount: 1,
-        selected: [],
-        dieModifyConfig: { mode: 'adjust', adjustRange: { min: -1, max: 1 } },
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 强制对手重掷1颗骰子 */
-function handleRerollOpponentDie1({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'selectDie',
-        titleKey: 'interaction.selectOpponentDieToReroll',
-        selectCount: 1,
-        selected: [],
-        targetOpponentDice: true,
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 重掷至多2颗骰子 */
-function handleRerollDie2({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'selectDie',
-        titleKey: 'interaction.selectDiceToReroll',
-        selectCount: 2,
-        selected: [],
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 重掷至多5颗骰子（我又行了！/ 就这？） */
-function handleRerollDie5({ attackerId, sourceAbilityId, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'selectDie',
-        titleKey: 'interaction.selectDiceToReroll',
-        selectCount: 5,
-        selected: [],
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 移除1名玩家1个状态效果 */
-function handleRemoveStatus1({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'selectStatus',
-        titleKey: 'interaction.selectStatusToRemove',
-        selectCount: 1,
-        selected: [],
-        targetPlayerIds: Object.keys(state.players),
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 移除1名玩家所有状态效果 */
-function handleRemoveAllStatus({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'selectPlayer',
-        titleKey: 'interaction.selectPlayerToRemoveAllStatus',
-        selectCount: 1,
-        selected: [],
-        targetPlayerIds: Object.keys(state.players),
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-/** 转移1个状态效果到另一玩家 */
-function handleTransferStatus({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const interaction: PendingInteraction = {
-        id: `${sourceAbilityId}-${timestamp}`,
-        playerId: attackerId,
-        sourceCardId: sourceAbilityId,
-        type: 'selectStatus',
-        titleKey: 'interaction.selectStatusToTransfer',
-        selectCount: 1,
-        selected: [],
-        targetPlayerIds: Object.keys(state.players),
-        transferConfig: {},
-    };
-    return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
-}
-
-// ============================================================================
-// 注册所有 Custom Action 处理器
-// 每个处理器都必须提供元数据（categories 必填）
-// ============================================================================
-
-// --- 防御技能相关 ---
-registerCustomActionHandler('meditation-taiji', handleMeditationTaiji, {
-    categories: ['resource'],
-});
-registerCustomActionHandler('meditation-damage', handleMeditationDamage, {
-    categories: ['other'],
-});
-registerCustomActionHandler('meditation-2-taiji', handleMeditationTaiji, {
-    categories: ['resource'],
-});
-registerCustomActionHandler('meditation-2-damage', handleMeditationDamage, {
-    categories: ['other'],
-});
-registerCustomActionHandler('meditation-3-taiji', handleMeditation3Taiji, {
-    categories: ['resource', 'choice'],
-});
-registerCustomActionHandler('meditation-3-damage', handleMeditationDamage, {
-    categories: ['other'],
-});
-
-// --- 技能效果相关 ---
-registerCustomActionHandler('one-throw-fortune-cp', handleOneThrowFortuneCp, {
-    categories: ['resource', 'dice'],
-});
-registerCustomActionHandler('enlightenment-roll', handleEnlightenmentRoll, {
-    categories: ['resource', 'dice'],
-});
-registerCustomActionHandler('lotus-palm-unblockable-choice', handleLotusPalmUnblockableChoice, {
-    categories: ['choice'],
-});
-registerCustomActionHandler('lotus-palm-taiji-cap-up-and-fill', handleLotusPalmTaijiCapUpAndFill, {
-    categories: ['resource'],
-});
-registerCustomActionHandler('thunder-strike-roll-damage', handleThunderStrikeRollDamage, {
-    categories: ['dice', 'other'],
-});
-registerCustomActionHandler('thunder-strike-2-roll-damage', handleThunderStrike2RollDamage, {
-    categories: ['dice', 'other'],
-});
-
-// --- 资源相关 ---
-registerCustomActionHandler('grant-cp-2', handleGrantCp2, {
-    categories: ['resource'],
-});
-
-// --- 骰子相关：增加投掷次数 ---
-registerCustomActionHandler('grant-extra-roll-defense', handleGrantExtraRoll, {
-    categories: ['dice'],
-    phases: ['defensiveRoll'],
-});
-registerCustomActionHandler('grant-extra-roll-offense', handleGrantExtraRoll, {
-    categories: ['dice'],
-    phases: ['offensiveRoll'],
-});
-
-// --- 骰子相关：修改骰子数值 ---
-registerCustomActionHandler('modify-die-to-6', handleModifyDieTo6, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('modify-die-copy', handleModifyDieCopy, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('modify-die-any-1', handleModifyDieAny1, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('modify-die-any-2', handleModifyDieAny2, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('modify-die-adjust-1', handleModifyDieAdjust1, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-
-// --- 骰子相关：重掷骰子 ---
-registerCustomActionHandler('reroll-opponent-die-1', handleRerollOpponentDie1, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('reroll-die-2', handleRerollDie2, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('reroll-die-5', handleRerollDie5, {
-    categories: ['dice'],
-    requiresInteraction: true,
-});
-
-// --- 状态效果相关 ---
-registerCustomActionHandler('remove-status-1', handleRemoveStatus1, {
-    categories: ['status'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('remove-all-status', handleRemoveAllStatus, {
-    categories: ['status'],
-    requiresInteraction: true,
-});
-registerCustomActionHandler('transfer-status', handleTransferStatus, {
-    categories: ['status'],
-    requiresInteraction: true,
-});
 
 /**
  * 处理 rollDie 的条件效果
@@ -1130,7 +603,7 @@ function resolveConditionalEffect(
 }
 
 /**
- * 解析指定时机的所有效果，生成事件
+ * 解析指定时切的所有效果，生成事件
  */
 export function resolveEffectsToEvents(
     effects: AbilityEffect[],
@@ -1191,306 +664,11 @@ export function resolveEffectsToEvents(
 }
 
 // ============================================================================
-// 野蛮人 (Barbarian) Custom Action 处理器
+// 初始化 Custom Action 处理器
+// 处理器实现已拆分到 customActions/ 目录
 // ============================================================================
 
-// 注意：野蛮人骰子映射为 1-3=sword, 4-5=heart, 6=strength（见 diceConfig.ts）
+import { initializeCustomActions } from './customActions';
 
-/**
- * 压制 (Suppress)：投掷3骰，按剑骰面数造成伤害
- */
-function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-
-    // 投掷3个骰子
-    let swordCount = 0;
-    for (let i = 0; i < 3; i++) {
-        const value = random.d(6);
-        const face = getDieFace(value);
-        // 野蛮人骰子：1-3 = sword
-        if (value <= 3) {
-            swordCount++;
-        }
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: {
-                value,
-                face,
-                playerId: attackerId,
-                targetPlayerId: targetId,
-                effectKey: 'bonusDie.effect.barbarianSuppress',
-                effectParams: { value, index: i },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + i,
-        } as BonusDieRolledEvent);
-    }
-
-    // 造成剑骰面数量的伤害
-    if (swordCount > 0) {
-        const target = state.players[targetId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(swordCount, targetHp) : 0;
-        ctx.damageDealt += actualDamage;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: swordCount, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as DamageDealtEvent);
-    }
-
-    return events;
-}
-
-/**
- * 压制 II (Suppress II)：投掷3骰，按剑骰面数造成伤害（与基础版相同）
- */
-function handleBarbarianSuppress2Roll(context: CustomActionContext): DiceThroneEvent[] {
-    // 压制 II 的力量变体与基础版机制相同
-    return handleBarbarianSuppressRoll(context);
-}
-
-/**
- * 厚皮 (Thick Skin)：根据心骰面数治疗
- * 防御阶段投掷骰子后，每个心骰面治疗1点
- */
-function handleBarbarianThickSkin({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const events: DiceThroneEvent[] = [];
-
-    // 统计心骰面数量（野蛮人骰子：4-5 = heart）
-    const activeDice = getActiveDice(state);
-    let heartCount = 0;
-    for (const die of activeDice) {
-        if (die.value === 4 || die.value === 5) {
-            heartCount++;
-        }
-    }
-
-    if (heartCount > 0) {
-        events.push({
-            type: 'HEAL_APPLIED',
-            payload: { targetId, amount: heartCount, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as HealAppliedEvent);
-    }
-
-    return events;
-}
-
-/**
- * 厚皮 II (Thick Skin II)：根据心骰面数治疗 + 防止1个状态效果
- * 防御阶段投掷骰子后，每个心骰面治疗1点，并防止1个即将受到的状态效果
- */
-function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
-    const events: DiceThroneEvent[] = [];
-
-    // 统计心骰面数量
-    const activeDice = getActiveDice(state);
-    let heartCount = 0;
-    for (const die of activeDice) {
-        if (die.value === 4 || die.value === 5) {
-            heartCount++;
-        }
-    }
-
-    if (heartCount > 0) {
-        events.push({
-            type: 'HEAL_APPLIED',
-            payload: { targetId, amount: heartCount, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as HealAppliedEvent);
-    }
-
-    // 授予伤害护盾（用于防止状态效果）
-    // 注意：这里使用 grantDamageShield 的变体来实现"防止状态效果"
-    // 实际实现中可能需要专用的 statusShield 机制，这里暂用护盾模拟
-    events.push({
-        type: 'DAMAGE_SHIELD_GRANTED',
-        payload: { targetId, value: 1, sourceId: sourceAbilityId, preventStatus: true },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as DamageShieldGrantedEvent);
-
-    return events;
-}
-
-/**
- * 精力充沛！(Energetic)：投掷1骰
- * - 星(6) → 治疗2 + 对对手施加脑震荡
- * - 其他 → 抽1牌
- */
-function handleEnergeticRoll({ targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-
-    const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
-    const isStrength = dieValue === 6; // 野蛮人骰子：6 = strength (星)
-
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: {
-            value: dieValue,
-            face,
-            playerId: attackerId,
-            targetPlayerId: targetId,
-            effectKey: isStrength ? 'bonusDie.effect.energeticStrength' : 'bonusDie.effect.energeticOther',
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
-
-    if (isStrength) {
-        // 治疗2点
-        events.push({
-            type: 'HEAL_APPLIED',
-            payload: { targetId: attackerId, amount: 2, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as HealAppliedEvent);
-
-        // 对对手施加脑震荡
-        const opponentId = attackerId === '0' ? '1' : '0';
-        const opponent = state.players[opponentId];
-        const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
-        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
-        const maxStacks = def?.stackLimit || 1;
-        const newTotal = Math.min(currentStacks + 1, maxStacks);
-
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as StatusAppliedEvent);
-    } else {
-        // 抽1牌
-        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp));
-    }
-
-    return events;
-}
-
-/**
- * 大吉大利！(Lucky)：投掷3骰，治疗 1 + 2×心骰面数
- */
-function handleLuckyRollHeal({ attackerId, sourceAbilityId, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-
-    let heartCount = 0;
-    for (let i = 0; i < 3; i++) {
-        const value = random.d(6);
-        const face = getDieFace(value);
-        // 野蛮人骰子：4-5 = heart
-        if (value === 4 || value === 5) {
-            heartCount++;
-        }
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: {
-                value,
-                face,
-                playerId: attackerId,
-                targetPlayerId: attackerId,
-                effectKey: 'bonusDie.effect.luckyRoll',
-                effectParams: { value, index: i },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + i,
-        } as BonusDieRolledEvent);
-    }
-
-    // 治疗 1 + 2×心骰面数
-    const healAmount = 1 + 2 * heartCount;
-    events.push({
-        type: 'HEAL_APPLIED',
-        payload: { targetId: attackerId, amount: healAmount, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as HealAppliedEvent);
-
-    return events;
-}
-
-/**
- * 再来点儿！(More Please)：投掷5骰
- * - 增加 1×剑骰面数 伤害到当前攻击
- * - 施加脑震荡
- */
-function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-
-    let swordCount = 0;
-    for (let i = 0; i < 5; i++) {
-        const value = random.d(6);
-        const face = getDieFace(value);
-        // 野蛮人骰子：1-3 = sword
-        if (value <= 3) {
-            swordCount++;
-        }
-        events.push({
-            type: 'BONUS_DIE_ROLLED',
-            payload: {
-                value,
-                face,
-                playerId: attackerId,
-                targetPlayerId: targetId,
-                effectKey: 'bonusDie.effect.morePleaseRoll',
-                effectParams: { value, index: i },
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + i,
-        } as BonusDieRolledEvent);
-    }
-
-    // 增加伤害到当前攻击（累加到上下文）
-    if (swordCount > 0) {
-        ctx.accumulatedBonusDamage = (ctx.accumulatedBonusDamage ?? 0) + swordCount;
-    }
-
-    // 对对手施加脑震荡
-    const opponentId = attackerId === '0' ? '1' : '0';
-    const opponent = state.players[opponentId];
-    const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
-    const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
-    const maxStacks = def?.stackLimit || 1;
-    const newTotal = Math.min(currentStacks + 1, maxStacks);
-
-    events.push({
-        type: 'STATUS_APPLIED',
-        payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as StatusAppliedEvent);
-
-    return events;
-}
-
-// --- 野蛮人 Custom Action 注册 ---
-registerCustomActionHandler('barbarian-suppress-roll', handleBarbarianSuppressRoll, {
-    categories: ['dice', 'other'],
-});
-registerCustomActionHandler('barbarian-suppress-2-roll', handleBarbarianSuppress2Roll, {
-    categories: ['dice', 'other'],
-});
-registerCustomActionHandler('barbarian-thick-skin', handleBarbarianThickSkin, {
-    categories: ['other'],
-});
-registerCustomActionHandler('barbarian-thick-skin-2', handleBarbarianThickSkin2, {
-    categories: ['other'],
-});
-registerCustomActionHandler('energetic-roll', handleEnergeticRoll, {
-    categories: ['dice', 'resource'],
-});
-registerCustomActionHandler('lucky-roll-heal', handleLuckyRollHeal, {
-    categories: ['dice', 'resource'],
-});
-registerCustomActionHandler('more-please-roll-damage', handleMorePleaseRollDamage, {
-    categories: ['dice', 'other'],
-});
+// 在模块加载时自动初始化所有处理器
+initializeCustomActions();

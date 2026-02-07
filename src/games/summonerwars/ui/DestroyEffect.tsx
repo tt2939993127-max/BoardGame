@@ -2,10 +2,12 @@
  * 召唤师战争 - 单位/建筑摧毁动画
  * 
  * 当单位或建筑被摧毁时显示爆炸消散效果
+ * 粒子散射使用 BurstParticles（tsParticles），形状动画保留 framer-motion
  */
 
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BurstParticles } from '../../../components/common/animations/BurstParticles';
 
 export interface DestroyEffectData {
   id: string;
@@ -21,6 +23,12 @@ interface DestroyEffectProps {
   onComplete: (id: string) => void;
 }
 
+/** 摧毁粒子颜色 */
+const DESTROY_COLORS = {
+  unit: ['#fb923c', '#f87171', '#fbbf24', '#fff'],
+  structure: ['#a78bfa', '#c084fc', '#e9d5ff', '#fff'],
+};
+
 /** 单个摧毁效果 */
 const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
   effect,
@@ -29,16 +37,6 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
 }) => {
   const pos = getCellPosition(effect.position.row, effect.position.col);
   const isStructure = effect.type === 'structure';
-  
-  // 粒子数量
-  const particleCount = isStructure ? 12 : 8;
-  const particles = Array.from({ length: particleCount }, (_, i) => ({
-    id: i,
-    angle: (360 / particleCount) * i + Math.random() * 30 - 15,
-    distance: 2 + Math.random() * 2, // vw
-    size: 0.3 + Math.random() * 0.4, // vw
-    delay: Math.random() * 0.1,
-  }));
   
   return (
     <motion.div
@@ -74,53 +72,38 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
           }}
         />
       </motion.div>
+
+      {/* 冲击波 */}
+      <motion.div
+        className="absolute left-1/2 top-1/2 rounded-full"
+        style={{
+          width: '32%',
+          height: '32%',
+          marginLeft: '-16%',
+          marginTop: '-16%',
+          border: isStructure ? '2px solid rgba(168, 85, 247, 0.7)' : '2px solid rgba(248, 113, 113, 0.7)',
+          boxShadow: isStructure
+            ? '0 0 1.6vw 0.4vw rgba(168, 85, 247, 0.35)'
+            : '0 0 1.6vw 0.4vw rgba(248, 113, 113, 0.35)',
+        }}
+        initial={{ scale: 0.2, opacity: 0.8 }}
+        animate={{ scale: [0.2, 2.4], opacity: [0.8, 0] }}
+        transition={{ duration: 0.55, ease: 'easeOut' }}
+      />
       
-      {/* 爆炸粒子 */}
-      {particles.map((particle) => {
-        const radians = (particle.angle * Math.PI) / 180;
-        const endX = Math.cos(radians) * particle.distance;
-        const endY = Math.sin(radians) * particle.distance;
-        
-        return (
-          <motion.div
-            key={particle.id}
-            className="absolute"
-            style={{
-              left: '50%',
-              top: '50%',
-              width: `${particle.size}vw`,
-              height: `${particle.size}vw`,
-              marginLeft: `-${particle.size / 2}vw`,
-              marginTop: `-${particle.size / 2}vw`,
-            }}
-            initial={{ x: 0, y: 0, scale: 1, opacity: 1 }}
-            animate={{
-              x: `${endX}vw`,
-              y: `${endY}vw`,
-              scale: [1, 1.2, 0],
-              opacity: [1, 0.8, 0],
-            }}
-            transition={{
-              duration: 0.5,
-              delay: particle.delay,
-              ease: 'easeOut',
-            }}
-          >
-            <div 
-              className={`w-full h-full rounded-full ${
-                isStructure 
-                  ? 'bg-purple-300' 
-                  : 'bg-orange-300'
-              }`}
-              style={{
-                boxShadow: isStructure
-                  ? '0 0 0.5vw 0.2vw rgba(168, 85, 247, 0.6)'
-                  : '0 0 0.5vw 0.2vw rgba(251, 146, 60, 0.6)',
-              }}
-            />
-          </motion.div>
-        );
-      })}
+      {/* 爆炸粒子 — tsParticles */}
+      <BurstParticles
+        active
+        preset={isStructure ? 'explosionStrong' : 'explosion'}
+        color={DESTROY_COLORS[effect.type]}
+      />
+
+      {/* 烟尘 — tsParticles */}
+      <BurstParticles
+        active
+        preset="smoke"
+        color={isStructure ? ['rgba(167,139,250,0.35)'] : ['rgba(248,113,113,0.35)']}
+      />
       
       {/* 摧毁文字提示 */}
       <motion.div

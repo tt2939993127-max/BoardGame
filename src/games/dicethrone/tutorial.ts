@@ -1,4 +1,6 @@
 import type { TutorialManifest, TutorialEventMatcher } from '../../engine/types';
+import { CHEAT_COMMANDS } from '../../engine';
+import { TOKEN_IDS, STATUS_IDS } from './domain/ids';
 
 const MATCH_PHASE_OFFENSIVE: TutorialEventMatcher = {
     type: 'SYS_PHASE_CHANGED',
@@ -34,6 +36,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             ],
             advanceOnEvents: [
                 { type: 'HOST_STARTED' },
+                { type: 'SYS_PHASE_CHANGED', match: { to: 'upkeep' } },
                 { type: 'SYS_PHASE_CHANGED', match: { to: 'income' } },
                 { type: 'SYS_PHASE_CHANGED', match: { to: 'main1' } },
             ],
@@ -140,6 +143,106 @@ export const DiceThroneTutorial: TutorialManifest = {
             position: 'left',
             requireAction: true,
             advanceOnEvents: [MATCH_PHASE_DEFENSE, MATCH_PHASE_MAIN2],
+        },
+        {
+            id: 'taiji-response',
+            content: 'game-dicethrone:tutorial.steps.taijiResponse',
+            highlightTarget: 'status-tokens',
+            position: 'right',
+            requireAction: true,
+            showMask: true,
+            aiActions: [
+                { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.TAIJI, amount: 1 } },
+                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'defensiveRoll' } },
+            ],
+            advanceOnEvents: [
+                { type: 'TOKEN_USED', match: { playerId: '0', tokenId: TOKEN_IDS.TAIJI } },
+            ],
+        },
+        {
+            id: 'evasive-response',
+            content: 'game-dicethrone:tutorial.steps.evasiveResponse',
+            highlightTarget: 'status-tokens',
+            position: 'right',
+            requireAction: true,
+            showMask: true,
+            aiActions: [
+                { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.EVASIVE, amount: 1 } },
+                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'defensiveRoll' } },
+            ],
+            advanceOnEvents: [
+                { type: 'TOKEN_USED', match: { playerId: '0', tokenId: TOKEN_IDS.EVASIVE } },
+            ],
+        },
+        {
+            id: 'purify-setup',
+            content: 'game-dicethrone:tutorial.steps.purifySetup',
+            highlightTarget: 'status-tokens',
+            position: 'right',
+            requireAction: false,
+            showMask: true,
+            aiActions: [
+                { commandType: CHEAT_COMMANDS.SET_STATUS, payload: { playerId: '0', statusId: STATUS_IDS.KNOCKDOWN, amount: 1 } },
+                { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.PURIFY, amount: 1 } },
+            ],
+            advanceOnEvents: [
+                { type: 'AI_CONSUMED', match: { stepId: 'purify-setup' } },
+            ],
+        },
+        {
+            id: 'purify-use',
+            content: 'game-dicethrone:tutorial.steps.purifyUse',
+            highlightTarget: 'status-tokens',
+            position: 'right',
+            requireAction: true,
+            showMask: true,
+            advanceOnEvents: [
+                { type: 'TOKEN_USED', match: { playerId: '0', tokenId: TOKEN_IDS.PURIFY } },
+                { type: 'STATUS_REMOVED', match: { targetId: '0', statusId: STATUS_IDS.KNOCKDOWN } },
+            ],
+        },
+        {
+            id: 'inner-peace',
+            content: 'game-dicethrone:tutorial.steps.innerPeace',
+            highlightTarget: 'hand-area',
+            position: 'top',
+            requireAction: true,
+            aiActions: [
+                { commandType: CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX, payload: { playerId: '0', atlasIndex: 1 } },
+                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'main1' } },
+            ],
+            advanceOnEvents: [
+                { type: 'CARD_PLAYED', match: { playerId: '0', cardId: 'card-inner-peace' } },
+            ],
+        },
+        {
+            id: 'play-six',
+            content: 'game-dicethrone:tutorial.steps.playSix',
+            highlightTarget: 'hand-area',
+            position: 'top',
+            requireAction: true,
+            aiActions: [
+                { commandType: CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX, payload: { playerId: '0', atlasIndex: 0 } },
+                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'offensiveRoll' } },
+                { commandType: CHEAT_COMMANDS.SET_DICE, payload: { diceValues: [1, 1, 1, 1, 1] } },
+            ],
+            advanceOnEvents: [
+                { type: 'DIE_MODIFIED' },
+            ],
+        },
+        {
+            id: 'meditation-2',
+            content: 'game-dicethrone:tutorial.steps.meditation2',
+            highlightTarget: 'hand-area',
+            position: 'top',
+            requireAction: true,
+            aiActions: [
+                { commandType: CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX, payload: { playerId: '0', atlasIndex: 6 } },
+                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'main1' } },
+            ],
+            advanceOnEvents: [
+                { type: 'ABILITY_REPLACED', match: { playerId: '0', oldAbilityId: 'meditation' } },
+            ],
         },
         {
             id: 'defense-roll',

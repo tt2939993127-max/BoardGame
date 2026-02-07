@@ -1,0 +1,548 @@
+/**
+ * 召唤师战争 - 状态归约器
+ * 
+ * 将事件应用到游戏状态
+ */
+
+import type { GameEvent } from '../../../engine/types';
+import { FLOW_EVENTS } from '../../../engine';
+import type {
+  SummonerWarsCore,
+  PlayerId,
+  GamePhase,
+  UnitCard,
+  EventCard,
+  StructureCard,
+  CellCoord,
+  BoardCell,
+  FactionId,
+} from './types';
+import { SW_EVENTS, SW_SELECTION_EVENTS } from './types';
+import { BOARD_ROWS, BOARD_COLS, HAND_SIZE, clampMagic } from './helpers';
+import { getEffectiveLife } from './abilityResolver';
+import {
+  drawFromTop,
+  removeFromHand,
+  removeFromDiscard,
+  discardFromHand,
+} from '../../../systems/CardSystem';
+import { createDeckByFactionId } from '../config/factions';
+
+// ============================================================================
+// 状态归约
+// ============================================================================
+
+/**
+ * 应用事件到状态
+ */
+export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerWarsCore {
+  const payload = event.payload as Record<string, unknown>;
+  
+  switch (event.type) {
+    case 'sw:unit_selected': {
+      return { ...core, selectedUnit: payload.position as CellCoord };
+    }
+
+    case SW_EVENTS.UNIT_SUMMONED: {
+      const { playerId, cardId, position, card, fromDiscard } = payload as {
+        playerId: PlayerId; cardId: string; position: CellCoord; card: UnitCard; fromDiscard?: boolean;
+      };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      newBoard[position.row][position.col].unit = {
+        cardId, card, owner: playerId, position, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
+      };
+      const player = core.players[playerId];
+      if (fromDiscard) {
+        const { discard: newDiscard } = removeFromDiscard(player.discard, cardId);
+        return { ...core, board: newBoard, players: { ...core.players, [playerId]: { ...player, discard: newDiscard } } };
+      } else {
+        const { hand: newHand } = removeFromHand(player.hand, cardId);
+        return { ...core, board: newBoard, players: { ...core.players, [playerId]: { ...player, hand: newHand } } };
+      }
+    }
+
+    case SW_EVENTS.STRUCTURE_BUILT: {
+      const { playerId, cardId, position, card } = payload as {
+        playerId: PlayerId; cardId: string; position: CellCoord; card: StructureCard;
+      };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      newBoard[position.row][position.col].structure = {
+        cardId, card, owner: playerId, position, damage: 0,
+      };
+      const player = core.players[playerId];
+      const { hand: newHand } = removeFromHand(player.hand, cardId);
+      return { ...core, board: newBoard, players: { ...core.players, [playerId]: { ...player, hand: newHand } } };
+    }
+
+    case SW_EVENTS.CARD_DRAWN: {
+      const { playerId, count } = payload as { playerId: PlayerId; count: number };
+      const player = core.players[playerId];
+      const { drawn, remaining } = drawFromTop(player.deck, count);
+      return {
+        ...core,
+        players: { ...core.players, [playerId]: { ...player, hand: [...player.hand, ...drawn], deck: remaining } },
+      };
+    }
+
+    case SW_EVENTS.CARD_DISCARDED: {
+      const { playerId, cardId } = payload as { playerId: PlayerId; cardId: string };
+      const player = core.players[playerId];
+      const result = discardFromHand(player.hand, player.discard, cardId);
+      if (!result.found) return core;
+      return {
+        ...core,
+        players: { ...core.players, [playerId]: { ...player, hand: result.from, discard: result.to } },
+      };
+    }
+
+    case SW_EVENTS.EVENT_PLAYED: {
+      const { playerId, cardId, card, isActive, isAttachment } = payload as {
+        playerId: PlayerId; cardId: string; card: EventCard; isActive: boolean; isAttachment?: boolean;
+      };
+      const player = core.players[playerId];
+      const { hand: newHand } = removeFromHand(player.hand, cardId);
+      if (isAttachment) {
+        return { ...core, players: { ...core.players, [playerId]: { ...player, hand: newHand } } };
+      } else if (isActive) {
+        return { ...core, players: { ...core.players, [playerId]: { ...player, hand: newHand, activeEvents: [...player.activeEvents, card] } } };
+      } else {
+        return { ...core, players: { ...core.players, [playerId]: { ...player, hand: newHand, discard: [...player.discard, card] } } };
+      }
+    }
+
+    case SW_EVENTS.ACTIVE_EVENT_DISCARDED: {
+      const { playerId, cardId } = payload as { playerId: PlayerId; cardId: string };
+      const player = core.players[playerId];
+      const card = player.activeEvents.find(c => c.id === cardId);
+      if (!card) return core;
+      return {
+        ...core,
+        players: {
+          ...core.players,
+          [playerId]: {
+            ...player,
+            activeEvents: player.activeEvents.filter(c => c.id !== cardId),
+            discard: [...player.discard, card],
+          },
+        },
+      };
+    }
+
+    case SW_EVENTS.UNIT_MOVED: {
+      const { from, to } = payload as { from: CellCoord; to: CellCoord };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const unit = newBoard[from.row][from.col].unit;
+      if (unit) {
+        newBoard[from.row][from.col].unit = undefined;
+        newBoard[to.row][to.col].unit = { ...unit, position: to, hasMoved: true };
+      }
+      const pid = unit?.owner as PlayerId;
+      return {
+        ...core, board: newBoard, selectedUnit: undefined,
+        players: { ...core.players, [pid]: { ...core.players[pid], moveCount: core.players[pid].moveCount + 1 } },
+      };
+    }
+
+    case SW_EVENTS.UNIT_ATTACKED: {
+      const { attacker } = payload as { attacker: CellCoord };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const unit = newBoard[attacker.row][attacker.col].unit;
+      if (unit) {
+        newBoard[attacker.row][attacker.col].unit = { ...unit, hasAttacked: true };
+      }
+      const pid = unit?.owner as PlayerId;
+      return {
+        ...core, board: newBoard,
+        players: {
+          ...core.players,
+          [pid]: { ...core.players[pid], attackCount: core.players[pid].attackCount + 1, hasAttackedEnemy: true },
+        },
+      };
+    }
+
+    case SW_EVENTS.UNIT_DAMAGED: {
+      const { position, damage, skipMagicReward } = payload as { position: CellCoord; damage: number; skipMagicReward?: boolean };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const cell = newBoard[position.row][position.col];
+      
+      if (cell.unit) {
+        const newDamage = cell.unit.damage + damage;
+        const life = getEffectiveLife(cell.unit);
+        if (newDamage >= life) {
+          const destroyedOwner = cell.unit.owner;
+          const attackingPlayer = destroyedOwner === '0' ? '1' : '0';
+          const destroyedCard = cell.unit.card;
+          const ownerPlayer = core.players[destroyedOwner as PlayerId];
+          cell.unit = undefined;
+          const magicDelta = skipMagicReward ? 0 : 1;
+          return {
+            ...core, board: newBoard,
+            players: {
+              ...core.players,
+              [destroyedOwner]: { ...ownerPlayer, discard: [...ownerPlayer.discard, destroyedCard] },
+              [attackingPlayer]: {
+                ...core.players[attackingPlayer as PlayerId],
+                magic: clampMagic(core.players[attackingPlayer as PlayerId].magic + magicDelta),
+              },
+            },
+          };
+        } else {
+          cell.unit = { ...cell.unit, damage: newDamage };
+        }
+      } else if (cell.structure) {
+        const newDamage = cell.structure.damage + damage;
+        const life = cell.structure.card.life;
+        if (newDamage >= life) {
+          const destroyedOwner = cell.structure.owner;
+          const attackingPlayer = destroyedOwner === '0' ? '1' : '0';
+          const destroyedCard = cell.structure.card;
+          const ownerPlayer = core.players[destroyedOwner as PlayerId];
+          cell.structure = undefined;
+          return {
+            ...core, board: newBoard,
+            players: {
+              ...core.players,
+              [destroyedOwner]: { ...ownerPlayer, discard: [...ownerPlayer.discard, destroyedCard] },
+              [attackingPlayer]: {
+                ...core.players[attackingPlayer as PlayerId],
+                magic: clampMagic(core.players[attackingPlayer as PlayerId].magic + 1),
+              },
+            },
+          };
+        } else {
+          cell.structure = { ...cell.structure, damage: newDamage };
+        }
+      }
+      return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.MAGIC_CHANGED: {
+      const { playerId, delta } = payload as { playerId: PlayerId; delta: number };
+      return {
+        ...core,
+        players: {
+          ...core.players,
+          [playerId]: { ...core.players[playerId], magic: clampMagic(core.players[playerId].magic + delta) },
+        },
+      };
+    }
+
+    case SW_EVENTS.PHASE_CHANGED:
+    case FLOW_EVENTS.PHASE_CHANGED: {
+      const { to } = payload as { to: GamePhase };
+      return { ...core, phase: to, selectedUnit: undefined, attackTargetMode: undefined };
+    }
+
+    case SW_EVENTS.TURN_CHANGED: {
+      const { to } = payload as { to: PlayerId };
+      const newBoard = core.board.map(row => row.map(cell => {
+        const newCell = { ...cell };
+        if (newCell.unit) {
+          newCell.unit = { ...newCell.unit, hasMoved: false, hasAttacked: false };
+        }
+        return newCell;
+      }));
+      return {
+        ...core, board: newBoard, currentPlayer: to, phase: 'summon',
+        turnNumber: core.turnNumber + (to === '0' ? 1 : 0),
+        players: {
+          ...core.players,
+          [to]: { ...core.players[to], moveCount: 0, attackCount: 0, hasAttackedEnemy: false },
+        },
+      };
+    }
+
+    // ========== 技能系统事件 ==========
+
+    case SW_EVENTS.UNIT_DESTROYED: {
+      const { position, owner: destroyedOwner, reason } = payload as {
+        position: CellCoord; cardId: string; cardName: string; owner: PlayerId; reason?: string;
+      };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const cell = newBoard[position.row]?.[position.col];
+      if (cell?.unit) {
+        const destroyedCard = cell.unit.card;
+        const actualOwner = destroyedOwner ?? cell.unit.owner;
+        const ownerPlayer = core.players[actualOwner as PlayerId];
+
+        // 不屈不挠检查：友方士兵被消灭时返回手牌（非自毁原因）
+        const hasRelentless = ownerPlayer.activeEvents.some(ev => {
+          const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+          return baseId === 'goblin-relentless';
+        });
+        const isCommon = destroyedCard.unitClass === 'common';
+        const isSelfDestruct = reason === 'feed_beast' || reason === 'feed_beast_self' || reason === 'magic_addiction';
+
+        cell.unit = undefined;
+
+        if (hasRelentless && isCommon && !isSelfDestruct) {
+          // 返回手牌而非弃牌堆
+          return {
+            ...core, board: newBoard,
+            players: { ...core.players, [actualOwner]: { ...ownerPlayer, hand: [...ownerPlayer.hand, destroyedCard] } },
+          };
+        }
+
+        return {
+          ...core, board: newBoard,
+          players: { ...core.players, [actualOwner]: { ...ownerPlayer, discard: [...ownerPlayer.discard, destroyedCard] } },
+        };
+      }
+      return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.UNIT_HEALED: {
+      const { position, amount } = payload as { position: CellCoord; amount: number };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const cell = newBoard[position.row][position.col];
+      if (cell.unit) {
+        cell.unit = { ...cell.unit, damage: Math.max(0, cell.unit.damage - amount) };
+      }
+      return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.STRUCTURE_HEALED: {
+      const { position: shPos, amount: shAmount } = payload as { position: CellCoord; amount: number };
+      const shBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const shCell = shBoard[shPos.row]?.[shPos.col];
+      if (shCell?.structure) {
+        shCell.structure = { ...shCell.structure, damage: Math.max(0, shCell.structure.damage - shAmount) };
+      }
+      return { ...core, board: shBoard };
+    }
+
+    case SW_EVENTS.UNIT_CHARGED: {
+      const { position, delta, newValue } = payload as { position: CellCoord; delta: number; newValue?: number };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const cell = newBoard[position.row][position.col];
+      if (cell.unit) {
+        const currentBoosts = cell.unit.boosts ?? 0;
+        const finalValue = newValue !== undefined ? newValue : Math.max(0, currentBoosts + delta);
+        cell.unit = { ...cell.unit, boosts: finalValue };
+      }
+      return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.CARD_RETRIEVED: {
+      // 从弃牌堆拿回手牌
+      const { playerId: crPlayerId, cardId: crCardId } = payload as { playerId: PlayerId; cardId: string };
+      const crPlayer = core.players[crPlayerId];
+      const crCard = crPlayer.discard.find(c => c.id === crCardId);
+      if (!crCard) return core;
+      const { discard: crNewDiscard } = removeFromDiscard(crPlayer.discard, crCardId);
+      return {
+        ...core,
+        players: {
+          ...core.players,
+          [crPlayerId]: { ...crPlayer, hand: [...crPlayer.hand, crCard], discard: crNewDiscard },
+        },
+      };
+    }
+
+    case SW_EVENTS.ABILITY_TRIGGERED:
+    case SW_EVENTS.STRENGTH_MODIFIED:
+    case SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED:
+    case SW_EVENTS.SOUL_TRANSFER_REQUESTED:
+    case SW_EVENTS.MIND_CAPTURE_REQUESTED:
+    case SW_EVENTS.EXTRA_ATTACK_GRANTED:
+    case SW_EVENTS.DAMAGE_REDUCED:
+    case SW_EVENTS.GRAB_FOLLOW_REQUESTED: {
+      // 通知事件，不修改状态（由 UI 消费）
+      return core;
+    }
+
+    case SW_EVENTS.HYPNOTIC_LURE_MARKED: {
+      // 催眠引诱：在主动事件区的催眠引诱卡上标记目标单位 ID
+      const { playerId: lurePlayerId, cardId: lureCardId, targetUnitId } = payload as {
+        playerId: PlayerId; cardId: string; targetUnitId: string;
+      };
+      const lurePlayer = core.players[lurePlayerId];
+      const newActiveEvents = lurePlayer.activeEvents.map(ev =>
+        ev.id === lureCardId ? { ...ev, targetUnitId } : ev
+      );
+      return {
+        ...core,
+        players: { ...core.players, [lurePlayerId]: { ...lurePlayer, activeEvents: newActiveEvents } },
+      };
+    }
+
+    case SW_EVENTS.UNITS_SWAPPED: {
+      // 位置交换（神出鬼没）
+      const { positionA, positionB } = payload as {
+        positionA: CellCoord; positionB: CellCoord;
+      };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const unitA = newBoard[positionA.row]?.[positionA.col]?.unit;
+      const unitB = newBoard[positionB.row]?.[positionB.col]?.unit;
+      if (unitA && unitB) {
+        newBoard[positionA.row][positionA.col].unit = { ...unitB, position: positionA };
+        newBoard[positionB.row][positionB.col].unit = { ...unitA, position: positionB };
+      }
+      return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.UNIT_PUSHED:
+    case SW_EVENTS.UNIT_PULLED: {
+      // 推拉：移动目标单位或建筑到新位置
+      const { targetPosition, newPosition, isStructure: isStructurePush } = payload as {
+        targetPosition: CellCoord;
+        newPosition?: CellCoord;
+        isStructure?: boolean;
+      };
+      // newPosition 由 execute 层计算后附加到 payload
+      // 如果没有 newPosition，说明推拉被阻挡，不移动
+      if (!newPosition) return core;
+
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const sourceCell = newBoard[targetPosition.row]?.[targetPosition.col];
+      const destCell = newBoard[newPosition.row]?.[newPosition.col];
+
+      if (isStructurePush && sourceCell?.structure && destCell && !destCell.structure && !destCell.unit) {
+        // 建筑推拉
+        destCell.structure = { ...sourceCell.structure, position: newPosition };
+        sourceCell.structure = undefined;
+      } else if (sourceCell?.unit && destCell && !destCell.unit) {
+        destCell.unit = { ...sourceCell.unit, position: newPosition };
+        sourceCell.unit = undefined;
+      }
+      return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.CONTROL_TRANSFERRED: {
+      // 控制权转移：改变单位的 owner
+      const { targetPosition, newOwner } = payload as {
+        targetPosition: CellCoord;
+        newOwner: PlayerId;
+      };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const cell = newBoard[targetPosition.row]?.[targetPosition.col];
+      if (cell?.unit) {
+        cell.unit = { ...cell.unit, owner: newOwner };
+      }
+      return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.FUNERAL_PYRE_CHARGED: {
+      const { playerId: fpPlayerId, cardId: fpCardId } = payload as { playerId: PlayerId; cardId: string };
+      const fpPlayer = core.players[fpPlayerId];
+      const newActiveEvents = fpPlayer.activeEvents.map(ev =>
+        ev.id === fpCardId ? { ...ev, charges: (ev.charges ?? 0) + 1 } : ev
+      );
+      return {
+        ...core,
+        players: { ...core.players, [fpPlayerId]: { ...fpPlayer, activeEvents: newActiveEvents } },
+      };
+    }
+
+    case SW_EVENTS.EVENT_ATTACHED: {
+      const { card: attachedCard, targetPosition } = payload as {
+        playerId: PlayerId; cardId: string; card: EventCard; targetPosition: CellCoord;
+      };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const targetCell = newBoard[targetPosition.row]?.[targetPosition.col];
+      if (targetCell?.unit) {
+        targetCell.unit = {
+          ...targetCell.unit,
+          attachedCards: [...(targetCell.unit.attachedCards ?? []), attachedCard],
+        };
+      }
+      return { ...core, board: newBoard };
+    }
+
+    // ========== 阵营选择事件 ==========
+
+    case SW_SELECTION_EVENTS.FACTION_SELECTED: {
+      const { playerId: pid, factionId } = payload as { playerId: PlayerId; factionId: FactionId };
+      return { ...core, selectedFactions: { ...core.selectedFactions, [pid]: factionId } };
+    }
+
+    case SW_SELECTION_EVENTS.PLAYER_READY: {
+      const { playerId: pid } = payload as { playerId: PlayerId };
+      return { ...core, readyPlayers: { ...core.readyPlayers, [pid]: true } };
+    }
+
+    case SW_SELECTION_EVENTS.HOST_STARTED: {
+      return { ...core, hostStarted: true };
+    }
+
+    case SW_SELECTION_EVENTS.SELECTION_COMPLETE: {
+      // 选角完成后初始化棋盘和牌组
+      // 洗牌由 execute 层使用确定性随机完成，reduce 只做状态写入
+      const { factions, shuffledDecks } = payload as {
+        factions: Record<PlayerId, FactionId>;
+        shuffledDecks: Record<PlayerId, (UnitCard | EventCard | StructureCard)[]>;
+      };
+      return initializeBoardFromFactions(core, factions, shuffledDecks);
+    }
+
+    default:
+      return core;
+  }
+}
+
+// ============================================================================
+// 棋盘初始化（选角完成后）
+// ============================================================================
+
+function initializeBoardFromFactions(
+  core: SummonerWarsCore,
+  factions: Record<PlayerId, FactionId>,
+  shuffledDecks: Record<PlayerId, (UnitCard | EventCard | StructureCard)[]>
+): SummonerWarsCore {
+  const newBoard: BoardCell[][] = Array.from({ length: BOARD_ROWS }, () =>
+    Array.from({ length: BOARD_COLS }, () => ({}))
+  );
+  const newPlayers = { ...core.players };
+
+  for (const pid of ['0', '1'] as PlayerId[]) {
+    const factionId = factions[pid];
+    if (!factionId || factionId === 'unselected') continue;
+    
+    const deckData = createDeckByFactionId(factionId as FactionId);
+    const isBottom = pid === '0';
+    const player = { ...newPlayers[pid] };
+    
+    const toArrayCoord = (pos: { row: number; col: number }) => {
+      if (isBottom) {
+        return { row: BOARD_ROWS - 1 - pos.row, col: pos.col };
+      } else {
+        return { row: pos.row, col: BOARD_COLS - 1 - pos.col };
+      }
+    };
+    
+    // 召唤师
+    const summonerCard: UnitCard = { ...deckData.summoner, id: `${deckData.summoner.id}-${pid}` };
+    player.summonerId = summonerCard.id;
+    const summonerPos = toArrayCoord(deckData.summonerPosition);
+    newBoard[summonerPos.row][summonerPos.col].unit = {
+      cardId: summonerCard.id, card: summonerCard, owner: pid,
+      position: summonerPos, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
+    };
+    
+    // 起始城门
+    const gateCard: StructureCard = { ...deckData.startingGate, id: `${deckData.startingGate.id}-${pid}` };
+    const gatePos = toArrayCoord(deckData.startingGatePosition);
+    newBoard[gatePos.row][gatePos.col].structure = {
+      cardId: gateCard.id, card: gateCard, owner: pid, position: gatePos, damage: 0,
+    };
+    
+    // 起始单位
+    for (const startUnit of deckData.startingUnits) {
+      const unitCard: UnitCard = { ...startUnit.unit, id: `${startUnit.unit.id}-${pid}` };
+      const unitPos = toArrayCoord(startUnit.position);
+      newBoard[unitPos.row][unitPos.col].unit = {
+        cardId: unitCard.id, card: unitCard, owner: pid,
+        position: unitPos, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
+      };
+    }
+    
+    // 使用 execute 层预洗好的牌序（确定性随机）
+    const shuffled = shuffledDecks[pid] ?? [];
+    player.hand = shuffled.slice(0, HAND_SIZE);
+    player.deck = shuffled.slice(HAND_SIZE);
+    
+    newPlayers[pid] = player;
+  }
+
+  return { ...core, board: newBoard, players: newPlayers };
+}
