@@ -5,6 +5,10 @@
 import { createDefaultSystems, createGameAdapter, createFlowSystem } from '../../engine';
 import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type SmashUpEvent } from './domain';
 import { smashUpFlowHooks } from './domain/index';
+import { initAllAbilities } from './abilities';
+
+// 注册所有派系能力
+initAllAbilities();
 
 const systems = [
     createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),

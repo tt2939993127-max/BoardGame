@@ -9,3 +9,4 @@ export * from './SlashEffect';
 export * from './ImpactContainer';
 export * from './VictoryParticles';
 export * from './BurstParticles';
+export * from './ShockwaveProjectile';

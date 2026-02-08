@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { FeedbackSeverity, FeedbackStatus, FeedbackType } from './feedback.schema';
 
 export class CreateFeedbackDto {
@@ -38,4 +38,24 @@ export class QueryFeedbackDto {
     @IsOptional()
     @IsEnum(FeedbackStatus)
     status?: FeedbackStatus;
+
+    @IsOptional()
+    @IsEnum(FeedbackType)
+    type?: FeedbackType;
+}
+
+export class FeedbackFilterDto {
+    @IsOptional()
+    @IsEnum(FeedbackStatus)
+    status?: FeedbackStatus;
+
+    @IsOptional()
+    @IsEnum(FeedbackType)
+    type?: FeedbackType;
+}
+
+export class BulkFeedbackIdsDto {
+    @IsArray()
+    @IsString({ each: true })
+    ids: string[] = [];
 }

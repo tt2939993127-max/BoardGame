@@ -8,6 +8,8 @@ import { MOON_ELF_CARDS, getMoonElfStartingDeck } from './moon_elf/cards';
 import { MOON_ELF_ABILITIES } from './moon_elf/abilities';
 import { SHADOW_THIEF_CARDS, getShadowThiefStartingDeck } from './shadow_thief/cards';
 import { SHADOW_THIEF_ABILITIES } from './shadow_thief/abilities';
+import { PALADIN_CARDS, getPaladinStartingDeck } from './paladin/cards';
+import { PALADIN_ABILITIES } from './paladin/abilities';
 import type { AbilityCard } from '../types';
 import type { AbilityDef } from '../../../systems/presets/combat';
 import type { RandomFn } from '../../../engine/types';
@@ -43,6 +45,11 @@ export const HEROES_DATA: Record<string, HeroData> = {
         cards: SHADOW_THIEF_CARDS,
         abilities: SHADOW_THIEF_ABILITIES,
         getStartingDeck: getShadowThiefStartingDeck,
+    },
+    paladin: {
+        cards: PALADIN_CARDS,
+        abilities: PALADIN_ABILITIES,
+        getStartingDeck: getPaladinStartingDeck,
     },
 };
 

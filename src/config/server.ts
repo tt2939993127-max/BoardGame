@@ -37,6 +37,15 @@ export const ADMIN_API_URL = normalizeUrl(
     import.meta.env.VITE_ADMIN_API_URL || FALLBACK_ADMIN_API_URL
 );
 
+// 反馈 API 地址
+const FALLBACK_FEEDBACK_API_URL = import.meta.env.DEV
+    ? '/feedback'
+    : (BACKEND_URL ? `${BACKEND_URL}/feedback` : '/feedback');
+
+export const FEEDBACK_API_URL = normalizeUrl(
+    import.meta.env.VITE_FEEDBACK_API_URL || FALLBACK_FEEDBACK_API_URL
+);
+
 // UGC API 地址
 const FALLBACK_UGC_API_URL = import.meta.env.DEV
     ? '/ugc'

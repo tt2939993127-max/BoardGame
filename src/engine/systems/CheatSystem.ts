@@ -25,6 +25,8 @@ export const CHEAT_COMMANDS = {
     DEAL_CARD_BY_ATLAS_INDEX: 'SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX',
     /** 根据索引发牌（从牌库指定位置发牌到手牌） */
     DEAL_CARD_BY_INDEX: 'SYS_CHEAT_DEAL_CARD_BY_INDEX',
+    /** 根据图集索引将牌库卡牌移入弃牌堆 */
+    DEAL_CARD_TO_DISCARD: 'SYS_CHEAT_DEAL_CARD_TO_DISCARD',
     /** 设置骰子面 */
     SET_DICE: 'SYS_CHEAT_SET_DICE',
     /** 设置 Token 数量 */
@@ -33,6 +35,8 @@ export const CHEAT_COMMANDS = {
     SET_STATUS: 'SYS_CHEAT_SET_STATUS',
     /** 直接设置整个游戏状态（调试用） */
     SET_STATE: 'SYS_CHEAT_SET_STATE',
+    /** 合并部分字段到游戏状态（教程注入 pendingDamage 等场景） */
+    MERGE_STATE: 'SYS_CHEAT_MERGE_STATE',
 } as const;
 
 // ============================================================================
@@ -75,6 +79,11 @@ export interface SetStatePayload<TCore> {
     state: TCore;
 }
 
+export interface MergeStatePayload {
+    /** 要合并到 core 的部分字段 */
+    fields: Record<string, unknown>;
+}
+
 export interface DealCardByIndexPayload {
     playerId: PlayerId;
     /** 牌库索引（0=牌库顶，从前往后） */
@@ -82,6 +91,12 @@ export interface DealCardByIndexPayload {
 }
 
 export interface DealCardByAtlasIndexPayload {
+    playerId: PlayerId;
+    /** 图集索引 */
+    atlasIndex: number;
+}
+
+export interface DealCardToDiscardPayload {
     playerId: PlayerId;
     /** 图集索引 */
     atlasIndex: number;
@@ -108,6 +123,8 @@ export interface CheatResourceModifier<TCore> {
     dealCardByIndex?: (core: TCore, playerId: PlayerId, deckIndex: number) => TCore;
     /** 根据图集索引发牌（可选） */
     dealCardByAtlasIndex?: (core: TCore, playerId: PlayerId, atlasIndex: number) => TCore;
+    /** 根据图集索引将牌库卡牌移入弃牌堆（可选） */
+    dealCardToDiscard?: (core: TCore, playerId: PlayerId, atlasIndex: number) => TCore;
 }
 
 // ============================================================================
@@ -246,12 +263,38 @@ export function createCheatSystem<TCore>(
                 };
             }
 
+            // 处理根据图集索引将卡牌移入弃牌堆命令
+            if (command.type === CHEAT_COMMANDS.DEAL_CARD_TO_DISCARD && modifier.dealCardToDiscard) {
+                const payload = command.payload as DealCardToDiscardPayload;
+                const newCore = modifier.dealCardToDiscard(
+                    state.core,
+                    payload.playerId,
+                    payload.atlasIndex
+                );
+                return {
+                    halt: true,
+                    state: { ...state, core: newCore },
+                };
+            }
+
             // 处理直接设置状态命令
             if (command.type === CHEAT_COMMANDS.SET_STATE) {
                 const payload = command.payload as SetStatePayload<TCore>;
                 return {
                     halt: true,
                     state: { ...state, core: payload.state },
+                };
+            }
+
+            // 处理合并部分字段到状态命令（教程注入 pendingDamage 等场景）
+            if (command.type === CHEAT_COMMANDS.MERGE_STATE) {
+                const payload = command.payload as MergeStatePayload;
+                return {
+                    halt: true,
+                    state: {
+                        ...state,
+                        core: { ...state.core, ...payload.fields } as TCore,
+                    },
                 };
             }
         },

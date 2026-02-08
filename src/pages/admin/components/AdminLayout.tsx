@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
-import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning } from 'lucide-react';
+import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning, DoorOpen } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { motion } from 'framer-motion';
 
@@ -12,6 +12,7 @@ export default function AdminLayout() {
         { icon: LayoutDashboard, label: '概览', path: '/admin' },
         { icon: Users, label: '用户管理', path: '/admin/users' },
         { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
+        { icon: DoorOpen, label: '房间管理', path: '/admin/rooms' },
         { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
     ];
 
@@ -21,10 +22,10 @@ export default function AdminLayout() {
     };
 
     return (
-        <div className="min-h-screen bg-zinc-50 flex font-sans text-zinc-900">
+        <div className="h-screen w-full bg-zinc-50 flex font-sans text-zinc-900 overflow-hidden">
             {/* 侧边栏 */}
             <aside className="w-72 bg-zinc-950 text-zinc-400 flex-shrink-0 flex flex-col shadow-xl z-20">
-                <div className="p-6">
+                <div className="p-6 flex-shrink-0">
                     <div className="flex items-center gap-3 px-2">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                             <span className="text-white font-bold text-lg">A</span>
@@ -36,7 +37,7 @@ export default function AdminLayout() {
                     </div>
                 </div>
 
-                <div className="flex-1 px-4 py-4 space-y-1">
+                <div className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
                     <div className="px-4 pb-2">
                         <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Menu</p>
                     </div>
@@ -101,22 +102,8 @@ export default function AdminLayout() {
             </aside>
 
             {/* 主内容区 */}
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                <header className="h-20 flex items-center px-8 justify-between z-10">
-                    <div>
-                        <h2 className="text-2xl font-bold text-zinc-800 tracking-tight">
-                            {navItems.find(i => isActive(i.path))?.label || 'Dashboard'}
-                        </h2>
-                        <p className="text-sm text-zinc-500">今日概况与数据统计</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        {/* 预留顶部操作区 */}
-                    </div>
-                </header>
-
-                <div className="flex-1 overflow-auto px-8 pb-8">
-                    <Outlet />
-                </div>
+            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-zinc-50">
+                <Outlet />
             </main>
         </div>
     );

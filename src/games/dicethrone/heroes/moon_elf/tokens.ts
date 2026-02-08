@@ -53,6 +53,7 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
     /**
      * 致盲 (Blinded) - Does not stack
      * 效果：攻击掷骰阶段结算时，掷骰1颗。1-2：攻击无效。
+     * 执行逻辑：game.ts onPhaseExit offensiveRoll 中实现
      */
     {
         id: STATUS_IDS.BLINDED,
@@ -62,13 +63,17 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
         description: statusText(STATUS_IDS.BLINDED, 'description') as unknown as string[],
         stackLimit: 1,
         category: 'debuff',
-        // Logic will be handled by complex triggers in engine
-        // TODO: Implement Blinded logic hook
+        passiveTrigger: {
+            timing: 'onPhaseEnter',
+            removable: true,
+            actions: [{ type: 'custom', customActionId: 'blinded-attack-check', target: 'self' }],
+        },
     },
 
     /**
      * 缠绕 (Entangle) - Does not stack
      * 效果：下次攻击掷骰少一次 (3 -> 2)。
+     * 执行逻辑：game.ts onPhaseEnter offensiveRoll 中实现
      */
     {
         id: STATUS_IDS.ENTANGLE,
@@ -78,13 +83,17 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
         description: statusText(STATUS_IDS.ENTANGLE, 'description') as unknown as string[],
         stackLimit: 1,
         category: 'debuff',
-        // Logic handled by roll limit modifier
-        // TODO: Implement Entangle logic hook
+        passiveTrigger: {
+            timing: 'onPhaseEnter',
+            removable: true,
+            actions: [{ type: 'modifyStat', target: 'self', value: -1 }],
+        },
     },
 
     /**
      * 锁定 (Targeted) - Does not stack
      * 效果：受到的伤害 +2。
+     * 执行逻辑：effects.ts resolveEffectAction damage case 中实现
      */
     {
         id: STATUS_IDS.TARGETED,
@@ -94,8 +103,11 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
         description: statusText(STATUS_IDS.TARGETED, 'description') as unknown as string[],
         stackLimit: 1,
         category: 'debuff',
-        // Logic handled by damage modifier
-        // TODO: Implement Targeted logic hook
+        passiveTrigger: {
+            timing: 'onDamageReceived',
+            removable: true,
+            actions: [{ type: 'modifyStat', target: 'self', value: 2 }],
+        },
     },
 ];
 

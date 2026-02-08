@@ -99,6 +99,12 @@
       "description": [
         "受影响的玩家跳过其下一个主要的掷骰阶段和主要的行动阶段。在该阶段结束时移除此标记。"
       ]
+    },
+    "poison": {
+      "name": "中毒",
+      "description": [
+        "回合开始时受到等同层数的伤害，然后移除1层"
+      ]
     }
   },
   "confirmRemoveKnockdown": {
@@ -135,6 +141,18 @@
       "description": [
         "拥有此种标记的玩家必须在他的每个维持阶段进行“冷却”（即移除1个火焰精通标记）。"
       ]
+    },
+    "sneak": {
+      "name": "潜行",
+      "description": [
+        "拥有此标记时，若受到伤害，移除此标记并免除该伤害"
+      ]
+    },
+    "sneak_attack": {
+      "name": "伏击",
+      "description": [
+        "攻击结算时，投掷1个骰子并将结果加到伤害中"
+      ]
     }
   },
   "purify": {
@@ -158,12 +176,18 @@
   "hero": {
     "monk": "僧侣",
     "barbarian": "狂战士",
-    "pyromancer": "烈火术士"
+    "pyromancer": "烈火术士",
+    "shadow_thief": "暗影刺客",
+    "moon_elf": "月精灵",
+    "paladin": "圣骑士"
   },
   "characters": {
     "monk": "僧侣",
     "barbarian": "狂战士",
-    "pyromancer": "烈火术士"
+    "pyromancer": "烈火术士",
+    "shadow_thief": "暗影刺客",
+    "moon_elf": "月精灵",
+    "paladin": "圣骑士"
   },
   "selection": {
     "title": "选择你的英雄",
@@ -237,7 +261,11 @@
       "lotus": "莲花",
       "sword": "剑",
       "heart": "心",
-      "strength": "星"
+      "strength": "星",
+      "dagger": "匕首",
+      "bag": "背包",
+      "card": "卡牌",
+      "shadow": "暗影"
     }
   },
   "bonusDie": {
@@ -383,7 +411,16 @@
     "lightning": "雷霆万钧",
     "calm": "心如止水",
     "meditate": "冒想",
-    "ultimate": "超越！"
+    "ultimate": "超越！",
+    "dagger": "匕首打击",
+    "pickpocket": "抢夺",
+    "steal": "偷窃",
+    "kidney": "肾击",
+    "shadowDance": "暗影之舞",
+    "cornucopia": "聚宝盆",
+    "shadowShank": "暗影穿刺",
+    "shadowDefense": "暗影守护",
+    "fearlessRiposte": "恐惧反击"
   },
   "abilities": {
     "fist-technique": {
@@ -938,6 +975,101 @@
       "effects": {
         "main": "防御技能 (5骰)：每掷出1个“火”获得1精通并造成1伤害。每掷出1个“火魂”获得1精通并造成1伤害。如果有火+火魂，施加燃烧。"
       }
+    },
+    "dagger-strike": {
+      "name": "匕首打击",
+      "description": "基础匕首攻击，根据匕首面数量造成不同伤害",
+      "effects": {
+        "damage4": "造成4点伤害",
+        "damage6": "造成6点伤害",
+        "damage8": "造成8点伤害"
+      }
+    },
+    "pickpocket": {
+      "name": "抢夺",
+      "description": "小顺子触发：获得3CP，造成一半CP的伤害"
+    },
+    "steal": {
+      "name": "偷窃",
+      "description": "根据背包面数量获得CP，若有暗影面则从对手偷取"
+    },
+    "kidney-shot": {
+      "name": "肾击",
+      "description": "大顺子触发：获得4CP，造成等同CP的伤害"
+    },
+    "shadow-dance": {
+      "name": "暗影之舞",
+      "description": "3暗影触发：投掷1骰造成一半伤害，获得潜行和伏击",
+      "effects": {
+        "gainSneak": "获得1个潜行标记",
+        "gainSneakAttack": "获得1个伏击标记"
+      }
+    },
+    "cornucopia": {
+      "name": "聚宝盆",
+      "description": "2卡牌触发：抽1张牌，若有暗影面则丢弃对手1张牌"
+    },
+    "shadow-shank": {
+      "name": "暗影穿刺",
+      "description": "终极技能！5暗影触发：获得3CP，造成CP+5伤害，移除负面效果，获得潜行",
+      "effects": {
+        "gainCp3": "获得3CP",
+        "gainSneak": "获得1个潜行标记"
+      }
+    },
+    "shadow-defense": {
+      "name": "暗影守护",
+      "description": "防御阶段：根据骰面结果进行防御结算"
+    },
+    "dagger-strike-2": {
+      "name": "匕首打击 II",
+      "description": "升级匕首攻击：额外获得1CP，每有卡牌面抽1牌"
+    },
+    "pickpocket-2": {
+      "name": "抢夺 II",
+      "description": "小顺子触发：获得4CP，造成一半CP的伤害（向上取整）",
+      "effects": {
+        "gainCp4": "获得4CP"
+      }
+    },
+    "kidney-shot-2": {
+      "name": "肾击 II",
+      "description": "大顺子触发：获得4CP，造成等同CP的伤害",
+      "effects": {
+        "gainCp4": "获得4CP"
+      }
+    },
+    "shadow-assault": {
+      "name": "暗影突袭",
+      "description": "2匕首+2暗影触发：造成一半CP伤害，施加中毒"
+    },
+    "piercing-attack": {
+      "name": "穿刺攻击",
+      "description": "匕首+背包+卡牌+暗影各1触发：获得1CP、伏击、抽1牌、施加中毒"
+    },
+    "shadow-dance-2": {
+      "name": "暗影之舞 II",
+      "description": "3暗影触发：投掷1骰造成一半真实伤害"
+    },
+    "steal-2": {
+      "name": "偷窃 II",
+      "description": "升级偷窃：获得更多CP，若有暗影面则从对手偷取"
+    },
+    "cornucopia-2": {
+      "name": "聚宝盆 II",
+      "description": "2卡牌触发：每有卡牌面抽1，有暗影面弃1，有背包面得1CP"
+    },
+    "shadow-defense-2": {
+      "name": "暗影守护 II",
+      "description": "防御阶段（5骰）：升级版防御结算"
+    },
+    "fearless-riposte": {
+      "name": "恐惧反击",
+      "description": "防御阶段（5骰）：造成匕首数伤害，若有匕首+暗影则造成毒液"
+    },
+    "fearless-riposte-2": {
+      "name": "后发制人 II",
+      "description": "替代防御升级（5骰）：攻守兼备的防御风格"
     }
   },
   "cards": {
@@ -1156,6 +1288,62 @@
     "card-ignite-2": {
       "name": "引燃 II",
       "description": "升级点燃至 II 级。"
+    },
+    "upgrade-pickpocket-2": {
+      "name": "抢夺 II",
+      "description": "升级抢夺至 II 级。"
+    },
+    "upgrade-kidney-shot-2": {
+      "name": "肾击 II",
+      "description": "升级肾击至 II 级。"
+    },
+    "upgrade-shadow-assault": {
+      "name": "暗影突袭",
+      "description": "将暗影之舞升级为暗影突袭。"
+    },
+    "upgrade-piercing-attack": {
+      "name": "穿刺攻击",
+      "description": "将偷窃升级为穿刺攻击。"
+    },
+    "action-into-the-shadows": {
+      "name": "遁入暗影！",
+      "description": "获得1个暗影标记。"
+    },
+    "action-one-with-shadows": {
+      "name": "与影同行！",
+      "description": "投掷1骰：若为暗影，获得伏击+2CP；否则抽1张牌。"
+    },
+    "upgrade-fearless-riposte-2": {
+      "name": "后发制人 II",
+      "description": "将恐惧反击升级为后发制人 II。"
+    },
+    "upgrade-shadow-defense-2": {
+      "name": "暗影守护 II",
+      "description": "将暗影守护升级为暗影守护 II。"
+    },
+    "action-poison-tip": {
+      "name": "淬毒！",
+      "description": "对对手施加中毒。"
+    },
+    "action-card-trick": {
+      "name": "卡牌戏法！",
+      "description": "对手弃1牌。抽1牌（若有潜行则抽2牌）。"
+    },
+    "upgrade-dagger-strike-2": {
+      "name": "匕首打击 II",
+      "description": "升级匕首打击至 II 级。"
+    },
+    "upgrade-shadow-dance-2": {
+      "name": "暗影之舞 II",
+      "description": "升级暗影之舞至 II 级。"
+    },
+    "upgrade-steal-2": {
+      "name": "偷窃 II",
+      "description": "升级偷窃至 II 级。"
+    },
+    "upgrade-cornucopia-2": {
+      "name": "聚宝盆 II",
+      "description": "升级聚宝盆至 II 级。"
     }
   },
   "cardSpotlight": {

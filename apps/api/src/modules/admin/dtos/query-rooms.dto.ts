@@ -5,4 +5,8 @@ export class QueryRoomsDto extends PaginationQueryDto {
     @IsOptional()
     @IsString()
     gameName?: string;
+
+    @IsOptional()
+    @IsString()
+    search?: string;
 }

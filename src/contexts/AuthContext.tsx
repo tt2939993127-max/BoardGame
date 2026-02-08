@@ -20,6 +20,8 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<void>;
     register: (username: string, email: string, code: string, password: string) => Promise<void>;
     sendRegisterCode: (email: string) => Promise<void>;
+    sendResetCode: (email: string) => Promise<void>;
+    resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
     logout: () => void;
     sendEmailCode: (email: string) => Promise<void>;
     verifyEmail: (email: string, code: string) => Promise<void>;
@@ -29,6 +31,31 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const parseErrorMessage = async (response: Response, fallback: string) => {
+    let text = '';
+    try {
+        text = await response.text();
+    } catch {
+        return fallback;
+    }
+
+    if (!text) {
+        return fallback;
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+        return fallback;
+    }
+
+    try {
+        const data = JSON.parse(text) as { error?: string; message?: string };
+        return data.error || data.message || fallback;
+    } catch {
+        return fallback;
+    }
+};
 
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -96,8 +123,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '发送验证码失败');
+            const message = await parseErrorMessage(response, '发送验证码失败');
+            throw new Error(message);
+        }
+    }, []);
+
+    const sendResetCode = useCallback(async (email: string) => {
+        const response = await fetch(`${AUTH_API_URL}/send-reset-code`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
+            body: JSON.stringify({ email }),
+        });
+
+        if (!response.ok) {
+            const message = await parseErrorMessage(response, '发送验证码失败');
+            throw new Error(message);
         }
     }, []);
 
@@ -109,8 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '注册失败');
+            const message = await parseErrorMessage(response, '注册失败');
+            throw new Error(message);
         }
 
         const data = await response.json();
@@ -119,6 +159,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         localStorage.setItem('auth_token', data.token);
         localStorage.setItem('auth_user', JSON.stringify(data.user));
+    }, []);
+
+    const resetPassword = useCallback(async (email: string, code: string, newPassword: string) => {
+        const response = await fetch(`${AUTH_API_URL}/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept-Language': i18n.language },
+            body: JSON.stringify({ email, code, newPassword }),
+        });
+
+        if (!response.ok) {
+            const message = await parseErrorMessage(response, '重置密码失败');
+            throw new Error(message);
+        }
     }, []);
 
     const logout = useCallback(() => {
@@ -154,8 +207,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '发送验证码失败');
+            const message = await parseErrorMessage(response, '发送验证码失败');
+            throw new Error(message);
         }
     }, [token]);
 
@@ -173,8 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '验证失败');
+            const message = await parseErrorMessage(response, '验证失败');
+            throw new Error(message);
         }
 
         const data = await response.json();
@@ -197,8 +250,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '修改密码失败');
+            const message = await parseErrorMessage(response, '修改密码失败');
+            throw new Error(message);
         }
     }, [token]);
 
@@ -218,8 +271,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '头像更新失败');
+            const message = await parseErrorMessage(response, '头像更新失败');
+            throw new Error(message);
         }
 
         const data = await response.json();
@@ -235,6 +288,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         sendRegisterCode,
+        sendResetCode,
+        resetPassword,
         logout,
         sendEmailCode,
         verifyEmail,
@@ -247,6 +302,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         sendRegisterCode,
+        sendResetCode,
+        resetPassword,
         logout,
         sendEmailCode,
         verifyEmail,

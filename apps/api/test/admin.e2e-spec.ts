@@ -281,6 +281,93 @@ describe('Admin Module (e2e)', () => {
             .expect(400);
     });
 
+    it('对局/房间/用户删除与批量删除', async () => {
+        const { adminToken, userId, adminId } = await seedUsers();
+
+        const matchA = await matchRecordModel.create({
+            matchID: 'match-bulk-a',
+            gameName: 'tictactoe',
+            players: [
+                { id: '0', name: 'player-a', result: 'win' },
+                { id: '1', name: 'player-b', result: 'loss' },
+            ],
+            winnerID: '0',
+            endedAt: new Date(),
+        });
+        const matchB = await matchRecordModel.create({
+            matchID: 'match-bulk-b',
+            gameName: 'tictactoe',
+            players: [
+                { id: '0', name: 'player-a', result: 'win' },
+                { id: '1', name: 'player-b', result: 'loss' },
+            ],
+            winnerID: '0',
+            endedAt: new Date(),
+        });
+
+        await request(app.getHttpServer())
+            .delete(`/admin/matches/${matchA.matchID}`)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(await matchRecordModel.findOne({ matchID: matchA.matchID })).toBeNull();
+
+        await request(app.getHttpServer())
+            .post('/admin/matches/bulk-delete')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ ids: [matchB.matchID, 'missing'] })
+            .expect(200);
+
+        expect(await matchRecordModel.findOne({ matchID: matchB.matchID })).toBeNull();
+
+        const roomA = await roomMatchModel.create({
+            matchID: 'room-bulk-a',
+            gameName: 'tictactoe',
+            metadata: { setupData: { roomName: '批量房间 A' } },
+            state: { G: { __setupData: { roomName: '批量房间 A' } } },
+        });
+        const roomB = await roomMatchModel.create({
+            matchID: 'room-bulk-b',
+            gameName: 'tictactoe',
+            metadata: { setupData: { roomName: '批量房间 B' } },
+            state: { G: { __setupData: { roomName: '批量房间 B' } } },
+        });
+        const roomC = await roomMatchModel.create({
+            matchID: 'room-bulk-c',
+            gameName: 'dicethrone',
+            metadata: { setupData: { roomName: '批量房间 C' } },
+            state: { G: { __setupData: { roomName: '批量房间 C' } } },
+        });
+
+        await request(app.getHttpServer())
+            .post('/admin/rooms/bulk-delete')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ ids: [roomA.matchID, roomB.matchID] })
+            .expect(200);
+
+        expect(await roomMatchModel.findOne({ matchID: roomA.matchID })).toBeNull();
+        expect(await roomMatchModel.findOne({ matchID: roomB.matchID })).toBeNull();
+
+        await request(app.getHttpServer())
+            .post('/admin/rooms/bulk-delete-by-filter')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ gameName: 'dicethrone' })
+            .expect(200);
+
+        expect(await roomMatchModel.findOne({ matchID: roomC.matchID })).toBeNull();
+
+        const bulkUserRes = await request(app.getHttpServer())
+            .post('/admin/users/bulk-delete')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ ids: [userId, adminId, 'invalid-id'] })
+            .expect(200);
+
+        expect(bulkUserRes.body.deleted).toBe(1);
+        expect(bulkUserRes.body.skipped?.length).toBe(2);
+        expect(await userModel.findById(userId)).toBeNull();
+        expect(await userModel.findById(adminId)).not.toBeNull();
+    });
+
     it('删除用户 - 级联清理', async () => {
         const { adminToken, adminId, userId } = await seedUsers();
         const otherId = new Types.ObjectId();

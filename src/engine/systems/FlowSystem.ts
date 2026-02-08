@@ -92,6 +92,8 @@ export interface FlowHooks<TCore = unknown> {
         from: string;
         to: string;
         command: Command;
+        /** onPhaseExit 产生的事件（尚未 reduce 进 core） */
+        exitEvents?: GameEvent[];
     }): PlayerId;
 
     /**
@@ -199,7 +201,7 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             console.log(`[FlowSystem][beforeCommand] phase updated from=${from} to=${to}`);
 
             // 生成系统事件（用于 UI/日志）
-            const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command }) ?? command.playerId;
+            const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command, exitEvents }) ?? command.playerId;
             const phaseChanged: PhaseChangedEvent = {
                 type: FLOW_EVENTS.PHASE_CHANGED,
                 payload: { from, to, activePlayerId },
@@ -281,7 +283,7 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             console.log(`[FlowSystem][afterEvents] phase updated from=${from} to=${to}`);
 
             // 生成系统事件
-            const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command: syntheticCommand }) ?? playerId;
+            const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command: syntheticCommand, exitEvents }) ?? playerId;
             const phaseChanged: PhaseChangedEvent = {
                 type: FLOW_EVENTS.PHASE_CHANGED,
                 payload: { from, to, activePlayerId },

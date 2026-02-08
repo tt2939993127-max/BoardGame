@@ -26,7 +26,9 @@ import type {
     AbilityReplacedEvent,
     DamageShieldGrantedEvent,
     DamagePreventedEvent,
+    CpChangedEvent,
 } from './types';
+import { CP_MAX } from './types';
 import { buildDrawEvents } from './deckEvents';
 import {
     shouldOpenTokenResponse,
@@ -64,6 +66,8 @@ export interface CustomActionContext {
     state: DiceThroneCore;
     timestamp: number;
     random?: RandomFn;
+    /** 触发此 Custom Action 的原始 EffectAction 配置（包含 params 等额外参数） */
+    action: EffectAction;
 }
 
 /**
@@ -434,6 +438,7 @@ function resolveEffectAction(
                     state,
                     timestamp,
                     random,
+                    action,
                 };
                 const handledEvents = handler(handlerCtx);
                 if (sfxKey) {
@@ -580,6 +585,38 @@ function resolveConditionalEffect(
             sfxKey,
         };
         events.push(tokenEvent);
+    }
+
+    if (typeof effect.heal === 'number' && effect.heal > 0) {
+        const event: HealAppliedEvent = {
+            type: 'HEAL_APPLIED',
+            payload: {
+                targetId,
+                amount: effect.heal,
+                sourceAbilityId,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+            sfxKey,
+        };
+        events.push(event);
+    }
+
+    if (typeof effect.cp === 'number' && effect.cp !== 0) {
+        const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
+        const newValue = Math.max(0, Math.min(currentCp + effect.cp, CP_MAX));
+        const event: CpChangedEvent = {
+            type: 'CP_CHANGED',
+            payload: {
+                playerId: targetId,
+                delta: effect.cp,
+                newValue,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+            sfxKey,
+        };
+        events.push(event);
     }
 
     // 处理 triggerChoice

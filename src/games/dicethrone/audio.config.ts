@@ -65,18 +65,21 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         }
 
         if (event.type === 'ABILITY_ACTIVATED') {
-            const payload = (event as AudioEvent & { payload?: { playerId?: string; abilityId?: string; isDefense?: boolean } }).payload;
-            if (!payload?.playerId || !payload?.abilityId) return undefined;
-            const match = findPlayerAbility(G, payload.playerId, payload.abilityId);
-            const explicitKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
-            if (payload.isDefense) return null;
-            return explicitKey ?? null;
+            return null;
         }
 
         if (event.type === 'DAMAGE_DEALT') {
-            const payload = (event as AudioEvent & { payload?: { actualDamage?: number; targetId?: string } }).payload;
+            const payload = (event as AudioEvent & { payload?: { actualDamage?: number; targetId?: string; sourceAbilityId?: string } }).payload;
             const damage = payload?.actualDamage ?? 0;
             if (damage <= 0) return null;
+            const sourceAbilityId = payload?.sourceAbilityId;
+            if (sourceAbilityId) {
+                const match = findAbilityById(G, sourceAbilityId);
+                const abilitySfx = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
+                if (abilitySfx && match?.ability?.type === 'offensive') {
+                    return abilitySfx;
+                }
+            }
             if (payload?.targetId && meta?.currentPlayerId && payload.targetId !== meta.currentPlayerId) {
                 return damage >= 8
                     ? 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst'
@@ -262,4 +265,14 @@ const findCardById = (state: DiceThroneCore, cardId?: string) => {
         if (card) return card;
     }
     return findHeroCard(cardId);
+};
+
+const findAbilityById = (state: DiceThroneCore, abilityId?: string) => {
+    if (!abilityId) return null;
+    const players = state.players ?? {};
+    for (const playerId of Object.keys(players)) {
+        const match = findPlayerAbility(state, playerId, abilityId);
+        if (match) return match;
+    }
+    return null;
 };

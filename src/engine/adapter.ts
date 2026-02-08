@@ -199,9 +199,21 @@ export function createGameAdapter<
             // 解析实际行动者 playerId。
             // - local/tutorial：hotseat 模式下由当前回合玩家行动（忽略 boardgame.io 的 playerID，避免永远是 P0）。
             // - online：要求显式 playerID。
-            const resolvedPlayerId = isLocalLikeMode
+            // - tutorial aiAction 可通过 payload.__tutorialPlayerId 强制指定执行者（用于阵营选择等需要多玩家操作的场景）。
+            let resolvedPlayerId = isLocalLikeMode
                 ? (coreCurrentPlayer ?? ctx.currentPlayer)
                 : playerID;
+
+            // 教程模式下支持 aiAction 指定 playerId
+            if (isLocalLikeMode && payload && typeof payload === 'object' && '__tutorialPlayerId' in (payload as Record<string, unknown>)) {
+                const overrideId = (payload as Record<string, unknown>).__tutorialPlayerId;
+                if (typeof overrideId === 'string') {
+                    resolvedPlayerId = overrideId;
+                    // 从 payload 中移除内部字段，避免传递给领域层
+                    const { __tutorialPlayerId: _, ...cleanPayload } = payload as Record<string, unknown>;
+                    payload = cleanPayload;
+                }
+            }
 
             const normalizedPlayerId = resolvedPlayerId !== null && resolvedPlayerId !== undefined
                 ? String(resolvedPlayerId)
@@ -216,8 +228,6 @@ export function createGameAdapter<
                 timestamp: Date.now(),
                 skipValidation: shouldSkipValidation,
             };
-
-            // 日志已移除：教程系统已稳定
 
             // 撤销调试日志只在 DEV 下输出，避免正常开发被刷屏。
             if (isUndoCommand && import.meta.env.DEV) {
@@ -318,12 +328,8 @@ export function createGameAdapter<
                 return;
             }
 
-            // 日志已移除：教程系统已稳定
-
             // 直接修改 G（Boardgame.io 使用 Immer）
             Object.assign(G, result.state);
-
-            // 日志已移除：教程系统已稳定
         };
     };
 

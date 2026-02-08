@@ -25,7 +25,7 @@ import {
 } from '../../engine';
 import { DiceThroneDomain } from './domain';
 import { DICETHRONE_COMMANDS, STATUS_IDS } from './domain/ids';
-import type { AbilityCard, DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, StatusRemovedEvent } from './domain/types';
+import type { AbilityCard, DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, StatusRemovedEvent, AbilityActivatedEvent, ExtraAttackTriggeredEvent } from './domain/types';
 import { createDiceThroneEventSystem } from './domain/systems';
 import { canAdvancePhase, getNextPhase, getNextPlayerId } from './domain/rules';
 import { resolveAttack, resolveOffensivePreDefenseEffects, resolvePostDamageEffects } from './domain/attack';
@@ -174,6 +174,52 @@ const applyEvents = (core: DiceThroneCore, events: DiceThroneEvent[]): DiceThron
 
 const now = () => Date.now();
 
+/**
+ * 检查攻击方是否有晕眩（daze），如果有则生成额外攻击事件
+ * 晕眩规则：攻击结算后，移除晕眩，对手获得一次额外攻击机会
+ * @returns 额外攻击事件数组 + 是否触发了额外攻击
+ */
+function checkDazeExtraAttack(
+    core: DiceThroneCore,
+    events: GameEvent[],
+    commandType: string,
+    timestamp: number
+): { dazeEvents: GameEvent[]; triggered: boolean } {
+    // 从已生成的事件中找到 ATTACK_RESOLVED，获取攻击方信息
+    const attackResolved = events.find(e => e.type === 'ATTACK_RESOLVED') as
+        Extract<DiceThroneEvent, { type: 'ATTACK_RESOLVED' }> | undefined;
+    if (!attackResolved) return { dazeEvents: [], triggered: false };
+
+    const { attackerId, defenderId } = attackResolved.payload;
+    const attacker = core.players[attackerId];
+    const dazeStacks = attacker?.statusEffects[STATUS_IDS.DAZE] ?? 0;
+    if (dazeStacks <= 0) return { dazeEvents: [], triggered: false };
+
+    const dazeEvents: GameEvent[] = [];
+
+    // 移除晕眩状态
+    dazeEvents.push({
+        type: 'STATUS_REMOVED',
+        payload: { targetId: attackerId, statusId: STATUS_IDS.DAZE, stacks: dazeStacks },
+        sourceCommandType: commandType,
+        timestamp,
+    } as StatusRemovedEvent);
+
+    // 触发额外攻击：对手（defenderId）获得一次进攻机会
+    dazeEvents.push({
+        type: 'EXTRA_ATTACK_TRIGGERED',
+        payload: {
+            attackerId: defenderId,
+            targetId: attackerId,
+            sourceStatusId: STATUS_IDS.DAZE,
+        },
+        sourceCommandType: commandType,
+        timestamp,
+    } as ExtraAttackTriggeredEvent);
+
+    return { dazeEvents, triggered: true };
+}
+
 // DiceThrone FlowHooks 实现（符合 openspec/changes/add-flow-system/design.md Decision 3）
 // sys.phase 是阶段的单一权威来源，所有阶段副作用通过 FlowHooks 实现
 const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
@@ -186,11 +232,27 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
 
     getNextPhase: ({ state }) => getNextPhase(state.core),
 
-    getActivePlayerId: ({ state, from }) => {
+    getActivePlayerId: ({ state, from, to, exitEvents }) => {
         // 特殊处理：discard 阶段退出后切换回合，此时需要返回下一位玩家
         // 因为 TURN_CHANGED 事件还未被 reduce
         if (from === 'discard') {
             return getNextPlayerId(state.core);
+        }
+        // 额外攻击触发：检查 exitEvents 中是否有 EXTRA_ATTACK_TRIGGERED
+        // 注意：exitEvents 尚未 reduce 进 core，所以需要直接检查事件
+        const extraAttackEvent = exitEvents?.find(e => e.type === 'EXTRA_ATTACK_TRIGGERED') as
+            ExtraAttackTriggeredEvent | undefined;
+        if (extraAttackEvent) {
+            return extraAttackEvent.payload.attackerId;
+        }
+        // 额外攻击进行中（已 reduce 进 core 的情况，如从 offensiveRoll 进入 main2）
+        if (state.core.extraAttackInProgress) {
+            // 额外攻击结束（进入 main2）：恢复原回合活跃玩家
+            if (to === 'main2') {
+                return state.core.extraAttackInProgress.originalActivePlayerId;
+            }
+            // 额外攻击进行中：活跃玩家是额外攻击方
+            return state.core.extraAttackInProgress.attackerId;
         }
         return state.core.activePlayerId;
     },
@@ -333,6 +395,15 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return { events, halt: true };
                 }
 
+                // 检查晕眩（daze）额外攻击
+                const { dazeEvents: dazeEventsOff, triggered: dazeTriggeredOff } = checkDazeExtraAttack(
+                    core, events, command.type, timestamp
+                );
+                if (dazeTriggeredOff) {
+                    events.push(...dazeEventsOff);
+                    return { events, overrideNextPhase: 'offensiveRoll' };
+                }
+
                 // 无待处理内容，直接进入 main2
                 return { events, overrideNextPhase: 'main2' };
             }
@@ -349,6 +420,16 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     // 执行 postDamage 效果（如击倒）并生成 ATTACK_RESOLVED 事件
                     const postDamageEvents = resolvePostDamageEffects(core, random);
                     events.push(...postDamageEvents);
+
+                    // 检查晕眩（daze）额外攻击
+                    const { dazeEvents: dazeEventsPost, triggered: dazeTriggeredPost } = checkDazeExtraAttack(
+                        core, events, command.type, timestamp
+                    );
+                    if (dazeTriggeredPost) {
+                        events.push(...dazeEventsPost);
+                        return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
                     return { events, overrideNextPhase: 'main2' };
                 }
                 
@@ -361,6 +442,15 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 const hasBonusDiceReroll = attackEvents.some((event) => event.type === 'BONUS_DICE_REROLL_REQUESTED');
                 if (hasAttackChoice || hasTokenResponse || hasBonusDiceReroll) {
                     return { events, halt: true };
+                }
+
+                // 检查晕眩（daze）额外攻击
+                const { dazeEvents: dazeEventsDef, triggered: dazeTriggeredDef } = checkDazeExtraAttack(
+                    core, events, command.type, timestamp
+                );
+                if (dazeTriggeredDef) {
+                    events.push(...dazeEventsDef);
+                    return { events, overrideNextPhase: 'offensiveRoll' };
                 }
             }
             // 显式指定下一阶段为 main2（无论是否有 pendingAttack）
@@ -425,10 +515,81 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         return undefined;
     },
 
-    onPhaseEnter: ({ state, to, command, random }): GameEvent[] | void => {
+    onPhaseEnter: ({ state, from, to, command, random }): GameEvent[] | void => {
         const core = state.core;
         const events: GameEvent[] = [];
         const timestamp = now();
+
+        // ========== 进入 upkeep 阶段：结算维持阶段触发的状态效果 ==========
+        // 规则 §3.1：结算所有在"维持阶段"触发的状态效果或被动能力
+        // 注意：从 discard 进入 upkeep 时，TURN_CHANGED 事件尚未 reduce，
+        // core.activePlayerId 仍是上一个玩家。需要通过 from 判断并获取正确的活跃玩家。
+        // 从 setup 进入 upkeep 是游戏初始化转换，此时 HERO_INITIALIZED 尚未 reduce，
+        // 玩家状态不完整且不可能有状态效果，跳过结算。
+        if (to === 'upkeep' && from !== 'setup') {
+            // 从 discard 过来意味着换人了，活跃玩家是下一位
+            const activeId = from === 'discard'
+                ? getNextPlayerId(core)
+                : core.activePlayerId;
+            const player = core.players[activeId];
+            if (player?.statusEffects) {
+                // 1. 燃烧 (burn) — 每层造成 1 点伤害，然后移除 1 层
+                const burnStacks = player.statusEffects[STATUS_IDS.BURN] ?? 0;
+                if (burnStacks > 0) {
+                    const burnDamage = burnStacks; // 每层 1 点
+                    const currentHp = player.resources[RESOURCE_IDS.HP] ?? 0;
+                    const actualDamage = Math.min(burnDamage, currentHp);
+                    events.push({
+                        type: 'DAMAGE_DEALT',
+                        payload: {
+                            targetId: activeId,
+                            amount: burnDamage,
+                            actualDamage,
+                            sourceAbilityId: 'upkeep-burn',
+                            type: 'undefendable',
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                    // 移除 1 层燃烧
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: { targetId: activeId, statusId: STATUS_IDS.BURN, stacks: 1 },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                }
+
+                // 2. 中毒 (poison) — 每层造成 1 点伤害，然后移除 1 层
+                const poisonStacks = player.statusEffects[STATUS_IDS.POISON] ?? 0;
+                if (poisonStacks > 0) {
+                    const poisonDamage = poisonStacks; // 每层 1 点
+                    const currentHp = player.resources[RESOURCE_IDS.HP] ?? 0;
+                    // 需要考虑 burn 已经造成的伤害
+                    const hpAfterBurn = currentHp - (burnStacks > 0 ? Math.min(burnStacks, currentHp) : 0);
+                    const actualDamage = Math.min(poisonDamage, Math.max(0, hpAfterBurn));
+                    events.push({
+                        type: 'DAMAGE_DEALT',
+                        payload: {
+                            targetId: activeId,
+                            amount: poisonDamage,
+                            actualDamage,
+                            sourceAbilityId: 'upkeep-poison',
+                            type: 'undefendable',
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                    // 移除 1 层中毒
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: { targetId: activeId, statusId: STATUS_IDS.POISON, stacks: 1 },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                }
+            }
+        }
 
         // ========== 状态修复：检测并修复缺失手牌的玩家 ==========
         // 原因：旧版本的游戏状态可能在 HERO_INITIALIZED 事件添加前保存
@@ -461,9 +622,52 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             }
         }
 
-        // ========== 进入 offensiveRoll 阶段：检查缠绕状态 ==========
+        // ========== 进入 defensiveRoll 阶段：自动选择唯一防御技能 ==========
+        // 规则 §3.6 步骤 2：如果有多个防御技能，必须在掷骰前选择
+        // 如果只有 1 个防御技能，自动选择并设置 rollDiceCount
+        if (to === 'defensiveRoll' && core.pendingAttack) {
+            const defenderId = core.pendingAttack.defenderId;
+            const defender = core.players[defenderId];
+            if (defender) {
+                const defensiveAbilities = defender.abilities.filter(a => a.type === 'defensive');
+                if (defensiveAbilities.length === 1) {
+                    // 唯一防御技能，自动选择
+                    const ability = defensiveAbilities[0];
+                    const abilityId = ability.id;
+                    const autoAbilityEvent: AbilityActivatedEvent = {
+                        type: 'ABILITY_ACTIVATED',
+                        payload: {
+                            abilityId,
+                            playerId: defenderId,
+                            isDefense: true,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    };
+                    events.push(autoAbilityEvent);
+                }
+                // 多个防御技能：等待玩家 SELECT_ABILITY 命令
+            }
+        }
+
+        // ========== 进入 offensiveRoll 阶段：检查眩晕和缠绕状态 ==========
         if (to === 'offensiveRoll') {
             const player = core.players[core.activePlayerId];
+
+            // 眩晕 (stun) — 跳过进攻掷骰阶段并移除
+            const stunStacks = player?.statusEffects[STATUS_IDS.STUN] ?? 0;
+            if (stunStacks > 0) {
+                events.push({
+                    type: 'STATUS_REMOVED',
+                    payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.STUN, stacks: stunStacks },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+                // 返回事件但不阻止阶段推进（FlowSystem 会继续到下一阶段）
+                return events;
+            }
+
+            // 缠绕 (entangle) — 减少掷骰次数
             const entangleStacks = player?.statusEffects[STATUS_IDS.ENTANGLE] ?? 0;
             if (entangleStacks > 0) {
                 // 缠绕：减少1次掷骰机会（3 -> 2）
@@ -486,10 +690,23 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             }
         }
 
-        // ========== 进入 income 阶段：+1 CP 和抽牌 ==========
+        // ========== 进入 income 阶段：脑震荡检查 + CP 和抽牌 ==========
         if (to === 'income') {
             const player = core.players[core.activePlayerId];
             if (player) {
+                // 脑震荡 (concussion) — 跳过收入阶段并移除
+                const concussionStacks = player.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
+                if (concussionStacks > 0) {
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: { targetId: core.activePlayerId, statusId: STATUS_IDS.CONCUSSION, stacks: concussionStacks },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                    // 跳过收入（不获得 CP 和抽牌）
+                    return events;
+                }
+
                 // CP +1（使用 ResourceSystem 处理上限）
                 const cpResult = resourceSystem.modify(
                     player.resources,
@@ -697,6 +914,7 @@ const COMMAND_TYPES = [
     CHEAT_COMMANDS.DEAL_CARD_BY_INDEX,
     CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX,
     CHEAT_COMMANDS.SET_STATE,
+    CHEAT_COMMANDS.MERGE_STATE,
 ];
 
 // 使用适配器创建 Boardgame.io Game

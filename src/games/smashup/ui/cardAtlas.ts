@@ -13,6 +13,12 @@ export type CardAtlasConfig = {
     colWidths: number[];
 };
 
+/** 均匀网格图集的默认配置（行列数），用于在 JSON 不存在时自动生成 */
+export type UniformAtlasDefault = {
+    rows: number;
+    cols: number;
+};
+
 const isNumberArray = (value: unknown): value is number[] => (
     Array.isArray(value) && value.every((item) => typeof item === 'number')
 );
@@ -31,12 +37,55 @@ const isCardAtlasConfig = (value: unknown): value is CardAtlasConfig => {
 };
 
 /**
+ * 根据图片尺寸和行列数生成均匀网格配置
+ */
+export const generateUniformAtlasConfig = (
+    imageW: number,
+    imageH: number,
+    rows: number,
+    cols: number
+): CardAtlasConfig => {
+    const cellW = imageW / cols;
+    const cellH = imageH / rows;
+    const rowStarts: number[] = [];
+    const rowHeights: number[] = [];
+    const colStarts: number[] = [];
+    const colWidths: number[] = [];
+    for (let i = 0; i < rows; i++) {
+        rowStarts.push(i * cellH);
+        rowHeights.push(cellH);
+    }
+    for (let i = 0; i < cols; i++) {
+        colStarts.push(i * cellW);
+        colWidths.push(cellW);
+    }
+    return { imageW, imageH, rows, cols, rowStarts, rowHeights, colStarts, colWidths };
+};
+
+/**
+ * 获取图片尺寸
+ */
+const getImageSize = (src: string): Promise<{ width: number; height: number }> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = reject;
+        img.src = src;
+    });
+};
+
+/**
  * 加载卡牌图集配置
  * 图集配置文件 (.atlas.json) 存放在 compressed/ 目录下
  * @param imageBase 图片基础路径（不含扩展名），如 'smashup/base/base1'
  * @param locale 可选的语言代码，用于加载本地化版本
+ * @param defaultGrid 可选的默认网格配置，当 JSON 不存在时使用
  */
-export const loadCardAtlasConfig = async (imageBase: string, locale?: string): Promise<CardAtlasConfig> => {
+export const loadCardAtlasConfig = async (
+    imageBase: string,
+    locale?: string,
+    defaultGrid?: UniformAtlasDefault
+): Promise<CardAtlasConfig> => {
     // 从 imageBase 提取文件名和目录路径，构建 compressed/ 下的配置文件路径
     const fileName = imageBase.split('/').pop() ?? imageBase;
     const dirPath = imageBase.substring(0, imageBase.length - fileName.length);
@@ -55,6 +104,26 @@ export const loadCardAtlasConfig = async (imageBase: string, locale?: string): P
             if (isCardAtlasConfig(data)) return data;
         } catch {
             // 忽略单个路径错误，继续尝试下一候选
+        }
+    }
+
+    // JSON 不存在，尝试使用默认网格配置
+    if (defaultGrid) {
+        try {
+            // 尝试加载压缩版图片获取尺寸（优先 webp）
+            const compressedPath = `${dirPath}compressed/${fileName}.webp`;
+            const imgUrl = getLocalizedAssetPath(compressedPath, locale);
+            const { width, height } = await getImageSize(imgUrl);
+            return generateUniformAtlasConfig(width, height, defaultGrid.rows, defaultGrid.cols);
+        } catch {
+            // 压缩版加载失败，尝试原始 PNG
+            try {
+                const pngPath = getLocalizedAssetPath(`${imageBase}.png`, locale);
+                const { width, height } = await getImageSize(pngPath);
+                return generateUniformAtlasConfig(width, height, defaultGrid.rows, defaultGrid.cols);
+            } catch {
+                // 图片也加载失败，抛出错误
+            }
         }
     }
 

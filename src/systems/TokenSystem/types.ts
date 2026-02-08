@@ -154,6 +154,8 @@ export interface ChoiceOption {
 export interface RollDieConditionalEffect {
     face: string;
     bonusDamage?: number;
+    heal?: number;
+    cp?: number;
     grantStatus?: { statusId: string; value: number };
     grantToken?: { tokenId: string; value: number };
     triggerChoice?: {

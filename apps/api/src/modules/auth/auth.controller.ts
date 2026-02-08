@@ -3,9 +3,9 @@ import type { CookieOptions, Request, Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
-import { generateCode, sendVerificationEmailWithCode } from '../../../../../src/server/email';
+import { generateCode, sendPasswordResetEmailWithCode, sendVerificationEmailWithCode } from '../../../../../src/server/email';
 import { AuthService } from './auth.service';
-import { ChangePasswordDto, LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, VerifyEmailDto, UpdateAvatarDto } from './dtos/auth.dto';
+import { ChangePasswordDto, LoginDto, RegisterDto, SendEmailCodeDto, SendRegisterCodeDto, SendResetCodeDto, ResetPasswordDto, VerifyEmailDto, UpdateAvatarDto } from './dtos/auth.dto';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
 const REFRESH_COOKIE_PATH = '/auth';
@@ -44,6 +44,43 @@ export class AuthController {
         return res.json({ message: result.message });
     }
 
+    @Post('send-reset-code')
+    async sendResetCode(@Body() body: SendResetCodeDto, @Req() req: Request, @Res() res: Response) {
+        const { t, locale } = createRequestI18n(req);
+        const email = body.email?.trim();
+
+        if (!email) {
+            return this.sendError(res, 400, t('auth.error.missingEmail'));
+        }
+
+        const emailRegex = /^\S+@\S+\.\S+$/;
+        if (!emailRegex.test(email)) {
+            return this.sendError(res, 400, t('auth.error.invalidEmail'));
+        }
+
+        const clientIp = this.resolveClientIp(req);
+        const sendStatus = await this.authService.getResetSendStatus(email, clientIp);
+        if (sendStatus) {
+            return this.sendError(res, 429, t('auth.error.resetSendTooFrequent', { seconds: sendStatus.retryAfterSeconds }));
+        }
+
+        const existingUser = await this.authService.findByEmail(email);
+        if (!existingUser) {
+            await this.authService.markResetSend(email, clientIp);
+            return this.sendError(res, 404, t('auth.error.emailNotRegistered'));
+        }
+
+        const code = generateCode();
+        const result = await sendPasswordResetEmailWithCode(email, code, locale);
+        if (!result.success) {
+            return this.sendError(res, 500, result.message);
+        }
+
+        await this.authService.storeResetCode(email, code);
+        await this.authService.markResetSend(email, clientIp);
+        return res.json({ message: t('auth.success.resetCodeSent') });
+    }
+
     @Post('register')
     async register(@Body() body: RegisterDto, @Req() req: Request, @Res() res: Response) {
         const { t } = createRequestI18n(req);
@@ -67,9 +104,12 @@ export class AuthController {
         }
 
         // 验证邮箱验证码
-        const isCodeValid = await this.authService.verifyEmailCode(email, code);
-        if (!isCodeValid) {
-            return this.sendError(res, 400, t('auth.error.invalidEmailCode'));
+        const emailCodeStatus = await this.authService.verifyEmailCode(email, code);
+        if (emailCodeStatus !== 'ok') {
+            const messageKey = emailCodeStatus === 'missing'
+                ? 'auth.error.emailCodeExpired'
+                : 'auth.error.emailCodeMismatch';
+            return this.sendError(res, 400, t(messageKey));
         }
 
         // username 不再要求唯一（仅昵称）；邮箱仍为唯一标识。
@@ -95,6 +135,55 @@ export class AuthController {
             },
             token,
         });
+    }
+
+    @Post('reset-password')
+    async resetPassword(@Body() body: ResetPasswordDto, @Req() req: Request, @Res() res: Response) {
+        const { t } = createRequestI18n(req);
+        const email = body.email?.trim();
+        const code = body.code?.trim();
+        const newPassword = body.newPassword ?? '';
+
+        if (!email || !code || !newPassword) {
+            return this.sendError(res, 400, t('auth.error.missingResetFields'));
+        }
+
+        const emailRegex = /^\S+@\S+\.\S+$/;
+        if (!emailRegex.test(email)) {
+            return this.sendError(res, 400, t('auth.error.invalidEmail'));
+        }
+
+        if (newPassword.length < 4) {
+            return this.sendError(res, 400, t('auth.error.passwordLength'));
+        }
+
+        const attemptStatus = await this.authService.getResetAttemptStatus(email);
+        if (attemptStatus) {
+            return this.sendError(res, 429, t('auth.error.resetLocked', { seconds: attemptStatus.retryAfterSeconds }));
+        }
+
+        const resetCodeStatus = await this.authService.verifyResetCode(email, code);
+        if (resetCodeStatus !== 'ok') {
+            const failure = await this.authService.recordResetAttempt(email);
+            if (failure.locked) {
+                return this.sendError(res, 429, t('auth.error.resetLocked', { seconds: failure.retryAfterSeconds ?? 0 }));
+            }
+            const messageKey = resetCodeStatus === 'missing'
+                ? 'auth.error.resetCodeExpired'
+                : 'auth.error.resetCodeMismatch';
+            return this.sendError(res, 400, t(messageKey));
+        }
+
+        const user = await this.authService.findByEmail(email);
+        if (!user) {
+            return this.sendError(res, 400, t('auth.error.invalidResetCode'));
+        }
+
+        await this.authService.updatePassword(user._id.toString(), newPassword);
+        await this.authService.clearResetAttempts(email);
+        await this.authService.revokeRefreshTokensForUser(user._id.toString());
+
+        return res.json({ message: t('auth.success.passwordReset') });
     }
 
     @Post('login')
@@ -239,9 +328,12 @@ export class AuthController {
             return this.sendError(res, 400, t('auth.error.missingEmailCode'));
         }
 
-        const isValid = await this.authService.verifyEmailCode(email, code);
-        if (!isValid) {
-            return this.sendError(res, 400, t('auth.error.invalidEmailCode'));
+        const emailCodeStatus = await this.authService.verifyEmailCode(email, code);
+        if (emailCodeStatus !== 'ok') {
+            const messageKey = emailCodeStatus === 'missing'
+                ? 'auth.error.emailCodeExpired'
+                : 'auth.error.emailCodeMismatch';
+            return this.sendError(res, 400, t(messageKey));
         }
 
         const user = await this.authService.updateEmail(currentUser.userId, email);

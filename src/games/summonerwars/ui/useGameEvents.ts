@@ -85,7 +85,7 @@ interface UseGameEventsParams {
   core: SummonerWarsCore;
   myPlayerId: string;
   pushDestroyEffect: (data: Omit<DestroyEffectData, 'id'>) => void;
-  pushBoardEffect: (data: { type: string; position: CellCoord; sourcePosition?: CellCoord; intensity?: string; damageAmount?: number }) => void;
+  pushBoardEffect: (data: { type: string; position: CellCoord; sourcePosition?: CellCoord; intensity?: string; damageAmount?: number; attackType?: 'melee' | 'ranged' }) => void;
   triggerShake: (intensity: string, type: string) => void;
 }
 
@@ -121,6 +121,17 @@ export function useGameEvents({
   // 待延迟播放的摧毁效果
   const pendingDestroyRef = useRef<DestroyEffectData[]>([]);
 
+  // 事件流诊断日志控制
+  const eventStreamLogRef = useRef(0);
+  const eventBatchLogRef = useRef(0);
+  const pendingDestroyLogRef = useRef(0);
+  const EVENT_STREAM_WARN = 180;
+  const EVENT_STREAM_STEP = 10;
+  const EVENT_BATCH_WARN = 20;
+  const EVENT_BATCH_STEP = 10;
+  const PENDING_DESTROY_WARN = 6;
+  const PENDING_DESTROY_STEP = 4;
+
   // 追踪已处理的事件流 ID
   const lastSeenEventId = useRef<number>(-1);
   const isFirstMount = useRef(true);
@@ -128,6 +139,11 @@ export function useGameEvents({
   // 监听事件流
   useEffect(() => {
     const entries = getEventStreamEntries(G);
+
+    if (entries.length >= EVENT_STREAM_WARN && entries.length >= eventStreamLogRef.current + EVENT_STREAM_STEP) {
+      eventStreamLogRef.current = entries.length;
+      console.warn(`[SW-EVENT] event=stream_backlog size=${entries.length} max=${EVENT_STREAM_WARN}`);
+    }
 
     // 首次挂载：将指针推进到当前事件末尾，不回放历史特效
     if (isFirstMount.current) {
@@ -143,6 +159,10 @@ export function useGameEvents({
       : entries.filter(e => e.id > lastSeenEventId.current);
 
     if (newEntries.length === 0) return;
+    if (newEntries.length >= EVENT_BATCH_WARN && newEntries.length >= eventBatchLogRef.current + EVENT_BATCH_STEP) {
+      eventBatchLogRef.current = newEntries.length;
+      console.warn(`[SW-EVENT] event=batch size=${newEntries.length}`);
+    }
     lastSeenEventId.current = newEntries[newEntries.length - 1].id;
 
     for (const entry of newEntries) {
@@ -164,6 +184,10 @@ export function useGameEvents({
         };
         const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
         const isOpponentAttack = attackerUnit ? attackerUnit.owner !== myPlayerId : false;
+
+        if (pendingAttackRef.current) {
+          console.warn('[SW-EVENT] event=attack_overlap note=pending_attack_exists');
+        }
 
         pendingAttackRef.current = {
           attacker: p.attacker, target: p.target,
@@ -298,6 +322,11 @@ export function useGameEvents({
 
     if (shouldDelay) {
       pendingDestroyRef.current.push(destroyEffect);
+      if (pendingDestroyRef.current.length >= PENDING_DESTROY_WARN
+        && pendingDestroyRef.current.length >= pendingDestroyLogRef.current + PENDING_DESTROY_STEP) {
+        pendingDestroyLogRef.current = pendingDestroyRef.current.length;
+        console.warn(`[SW-EVENT] event=pending_destroy_backlog size=${pendingDestroyRef.current.length}`);
+      }
       if (cardId) {
         const discardedCard = core.players[owner]?.discard.find(c => c.id === cardId);
         if (discardedCard && (discardedCard.cardType === 'unit' || discardedCard.cardType === 'structure')) {
@@ -334,6 +363,7 @@ export function useGameEvents({
         pushDestroyEffect({ position: effect.position, cardName: effect.cardName, type: effect.type });
       }
       pendingDestroyRef.current = [];
+      pendingDestroyLogRef.current = 0;
       setDeathGhosts([]);
     }
   }, [pushDestroyEffect]);

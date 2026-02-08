@@ -5,7 +5,7 @@
  * 粒子散射使用 BurstParticles（tsParticles），形状动画保留 framer-motion
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BurstParticles } from '../../../components/common/animations/BurstParticles';
 
@@ -151,18 +151,35 @@ export const DestroyEffectsLayer: React.FC<{
 /** Hook：管理摧毁效果状态 */
 export const useDestroyEffects = () => {
   const [effects, setEffects] = useState<DestroyEffectData[]>([]);
+  const backlogLogRef = useRef(0);
+  const LOG_THRESHOLD = 12;
+  const LOG_STEP = 6;
 
   const pushEffect = useCallback((effect: Omit<DestroyEffectData, 'id'>) => {
     const id = `destroy-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    setEffects((prev) => [...prev, { ...effect, id }]);
+    setEffects((prev) => {
+      const next = [...prev, { ...effect, id }];
+      if (next.length >= LOG_THRESHOLD && next.length >= backlogLogRef.current + LOG_STEP) {
+        backlogLogRef.current = next.length;
+        console.warn(`[SW-FX] event=destroy_effects_backlog size=${next.length}`);
+      }
+      return next;
+    });
   }, []);
 
   const removeEffect = useCallback((id: string) => {
-    setEffects((prev) => prev.filter((e) => e.id !== id));
+    setEffects((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      if (next.length < backlogLogRef.current) {
+        backlogLogRef.current = next.length;
+      }
+      return next;
+    });
   }, []);
 
   const clearAll = useCallback(() => {
     setEffects([]);
+    backlogLogRef.current = 0;
   }, []);
 
   return { effects, pushEffect, removeEffect, clearAll };

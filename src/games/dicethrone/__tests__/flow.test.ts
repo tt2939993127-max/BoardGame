@@ -10,7 +10,7 @@ import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types'
 import { RESOURCE_IDS } from '../domain/resources';
 import { STATUS_IDS, TOKEN_IDS, DICETHRONE_COMMANDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
-import { getAvailableAbilityIds } from '../domain/rules';
+import { getAvailableAbilityIds, getDefensiveAbilityIds } from '../domain/rules';
 import { MONK_CARDS } from '../heroes/monk/cards';
 import type { AbilityCard } from '../types';
 import type { AbilityEffect } from '../../../systems/presets/combat';
@@ -424,9 +424,15 @@ function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpectation):
         const rollerId = state.turnPhase === 'defensiveRoll' && state.pendingAttack
             ? state.pendingAttack.defenderId
             : state.activePlayerId;
-        const availableAbilityIds = isRollPhase
-            ? getAvailableAbilityIds(state, rollerId)
-            : [];
+        // 防御阶段掷骰前（未选择防御技能）：列出所有防御技能（不检查骰面）
+        const isPreRollDefenseSelection = state.turnPhase === 'defensiveRoll'
+            && state.pendingAttack
+            && !state.pendingAttack.defenseAbilityId;
+        const availableAbilityIds = isPreRollDefenseSelection
+            ? getDefensiveAbilityIds(state, rollerId)
+            : isRollPhase
+                ? getAvailableAbilityIds(state, rollerId)
+                : [];
         for (const id of expect.availableAbilityIdsIncludes) {
             if (!availableAbilityIds.includes(id)) {
                 errors.push(`可用技能缺失: ${id}`);
@@ -706,6 +712,44 @@ function createInitializedState(playerIds: PlayerId[], random: RandomFn): MatchS
     return applySetupCommands({ sys, core }, playerIds, random);
 }
 
+function createInitializedStateWithCharacters(
+    playerIds: PlayerId[],
+    random: RandomFn,
+    characters: Record<PlayerId, string>
+): MatchState<DiceThroneCore> {
+    const pipelineConfig = {
+        domain: DiceThroneDomain,
+        systems: testSystems,
+    };
+
+    let state: MatchState<DiceThroneCore> = {
+        core: DiceThroneDomain.setup(playerIds, random),
+        sys: createInitialSystemState(playerIds, testSystems, undefined),
+    };
+
+    const commands: CommandInput[] = [
+        cmd('SELECT_CHARACTER', '0', { characterId: characters['0'] ?? 'monk' }),
+        cmd('SELECT_CHARACTER', '1', { characterId: characters['1'] ?? 'monk' }),
+        cmd('PLAYER_READY', '1'),
+        cmd('HOST_START_GAME', '0'),
+    ];
+
+    for (const input of commands) {
+        const command = {
+            type: input.type,
+            playerId: input.playerId,
+            payload: input.payload,
+            timestamp: Date.now(),
+        } as DiceThroneCommand;
+        const result = executePipeline(pipelineConfig, state, command, random, playerIds);
+        if (result.success) {
+            state = result.state as MatchState<DiceThroneCore>;
+        }
+    }
+
+    return state;
+}
+
 const createRunner = (random: RandomFn, silent = true) => new GameTestRunner({
     domain: DiceThroneDomain,
     systems: testSystems,
@@ -874,6 +918,78 @@ describe('王权骰铸流程测试', () => {
                 },
             });
             expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('火法师防御阶段掷骰数量为5', () => {
+            const result = runner.run({
+                name: '火法师防御阶段掷骰数量为5',
+                setup: (playerIds, random) => createInitializedStateWithCharacters(playerIds, random, {
+                    '0': 'monk',
+                    '1': 'pyromancer',
+                }),
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
+                    cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: fistAttackAbilityId }),
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    roll: { count: 0, limit: 1, diceCount: 5, confirmed: false },
+                    pendingAttack: {
+                        attackerId: '0',
+                        defenderId: '1',
+                        isDefendable: true,
+                        sourceAbilityId: fistAttackAbilityId,
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.pendingAttack?.defenseAbilityId).toBe('magma-armor');
+        });
+
+        it('掷骰阶段使用当前玩家骰子定义（玩家0）', () => {
+            const result = runner.run({
+                name: '掷骰阶段骰子定义-玩家0',
+                setup: (playerIds, random) => createInitializedStateWithCharacters(playerIds, random, {
+                    '0': 'monk',
+                    '1': 'pyromancer',
+                }),
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
+                    cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
+                ],
+            });
+            expect(result.assertionErrors).toEqual([]);
+            const diceDefs = new Set(result.finalState.core.dice.map(die => die.definitionId));
+            expect(diceDefs.size).toBe(1);
+            expect(diceDefs.has('monk-dice')).toBe(true);
+        });
+
+        it('掷骰阶段使用当前玩家骰子定义（玩家1）', () => {
+            const result = runner.run({
+                name: '掷骰阶段骰子定义-玩家1',
+                setup: (playerIds, random) => createInitializedStateWithCharacters(playerIds, random, {
+                    '0': 'monk',
+                    '1': 'pyromancer',
+                }),
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
+                    cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
+                    cmd('ADVANCE_PHASE', '0'), // main2 -> discard
+                    cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (player1)
+                    cmd('ADVANCE_PHASE', '1'), // upkeep -> income
+                    cmd('ADVANCE_PHASE', '1'), // income -> main1
+                    cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll
+                ],
+            });
+            expect(result.assertionErrors).toEqual([]);
+            const diceDefs = new Set(result.finalState.core.dice.map(die => die.definitionId));
+            expect(diceDefs.size).toBe(1);
+            expect(diceDefs.has('pyromancer-dice')).toBe(true);
         });
 
         it('击倒：CP 不足时无法移除', () => {
@@ -1666,10 +1782,9 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
-                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
+                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll（自动选择唯一防御技能 meditation）
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }), // 选择清修防御技能
                     // 防御方结束防御阶段，触发结算
                     cmd('ADVANCE_PHASE', '1'),
                 ],

@@ -29,6 +29,7 @@ import {
   getValidBuildPositions,
   hasEnoughMagic,
   manhattanDistance,
+  getSummoner,
 } from './helpers';
 import { getPhaseDisplayName } from './execute';
 
@@ -80,13 +81,36 @@ export function validateCommand(
     case SW_COMMANDS.SUMMON_UNIT: {
       const cardId = payload.cardId as string;
       const position = payload.position as CellCoord;
-      if (core.phase !== 'summon') return { valid: false, error: '当前不是召唤阶段' };
       const player = core.players[playerId];
+      // 重燃希望：允许在任意阶段召唤
+      const hasRekindleHope = player.activeEvents.some(ev => {
+        const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+        return baseId === 'paladin-rekindle-hope';
+      });
+      if (core.phase !== 'summon' && !hasRekindleHope) return { valid: false, error: '当前不是召唤阶段' };
       const card = player.hand.find(c => c.id === cardId);
       if (!card || card.cardType !== 'unit') return { valid: false, error: '无效的单位卡牌' };
       const unitCard = card as UnitCard;
       if (!hasEnoughMagic(core, playerId, unitCard.cost)) return { valid: false, error: '魔力不足' };
-      const validPositions = getValidSummonPositions(core, playerId);
+      // 重燃希望：额外允许召唤到召唤师相邻位置
+      let validPositions = getValidSummonPositions(core, playerId);
+      if (hasRekindleHope) {
+        const summoner = getSummoner(core, playerId);
+        if (summoner) {
+          const dirs = [
+            { row: -1, col: 0 }, { row: 1, col: 0 },
+            { row: 0, col: -1 }, { row: 0, col: 1 },
+          ];
+          for (const d of dirs) {
+            const adjPos = { row: summoner.position.row + d.row, col: summoner.position.col + d.col };
+            if (adjPos.row >= 0 && adjPos.row < BOARD_ROWS && adjPos.col >= 0 && adjPos.col < BOARD_COLS
+              && isCellEmpty(core, adjPos)
+              && !validPositions.some(p => p.row === adjPos.row && p.col === adjPos.col)) {
+              validPositions = [...validPositions, adjPos];
+            }
+          }
+        }
+      }
       if (!validPositions.some(p => p.row === position.row && p.col === position.col)) {
         return { valid: false, error: '无效的召唤位置（必须在城门相邻的空格）' };
       }
@@ -133,6 +157,19 @@ export function validateCommand(
       const hasFerocity = (attacker.card.abilities ?? []).includes('ferocity');
       if (core.players[playerId].attackCount >= MAX_ATTACKS_PER_TURN && !hasFerocity) {
         return { valid: false, error: '本回合攻击次数已用完' };
+      }
+      // 治疗模式允许攻击友方单位（圣殿牧师）
+      if (attacker.healingMode) {
+        const healTarget = getUnitAt(core, targetPos);
+        if (!healTarget || healTarget.owner !== playerId) {
+          return { valid: false, error: '治疗模式只能攻击友方单位' };
+        }
+        if (healTarget.card.unitClass !== 'common' && healTarget.card.unitClass !== 'champion') {
+          return { valid: false, error: '治疗目标必须是士兵或英雄' };
+        }
+        const healDist = manhattanDistance(attackerPos, targetPos);
+        if (healDist !== 1) return { valid: false, error: '治疗目标必须相邻' };
+        return { valid: true };
       }
       if (!canAttackEnhanced(core, attackerPos, targetPos)) return { valid: false, error: '无法攻击该目标' };
 
@@ -443,6 +480,30 @@ function validateActivateAbility(
         if (names.has(unitCard.name)) return { valid: false, error: '不能弃除多张同名单位' };
         names.add(unitCard.name);
       }
+      return { valid: true };
+    }
+
+    case 'healing': {
+      if (core.phase !== 'attack') return { valid: false, error: '治疗只能在攻击阶段使用' };
+      // 检查手牌中是否有可弃除的卡牌
+      const healDiscardId = payload.targetCardId as string | undefined;
+      if (!healDiscardId) return { valid: false, error: '必须选择要弃除的手牌' };
+      const healPlayer = core.players[playerId];
+      const healCard = healPlayer.hand.find(c => c.id === healDiscardId);
+      if (!healCard) return { valid: false, error: '手牌中没有该卡牌' };
+      // 检查目标是否为友方士兵或英雄（冠军）
+      const healTargetPos = payload.targetPosition as CellCoord | undefined;
+      if (!healTargetPos) return { valid: false, error: '必须选择攻击目标' };
+      const healTarget = getUnitAt(core, healTargetPos);
+      if (!healTarget || healTarget.owner !== playerId) return { valid: false, error: '目标必须是友方单位' };
+      if (healTarget.card.unitClass !== 'common' && healTarget.card.unitClass !== 'champion') {
+        return { valid: false, error: '目标必须是士兵或英雄' };
+      }
+      return { valid: true };
+    }
+
+    case 'judgment': {
+      // 裁决是 afterAttack 被动触发，不需要主动验证
       return { valid: true };
     }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchChatMessage } from '../../services/matchSocket';
-import { getLatestIncomingMessage, isSelfChatMessage } from '../game/GameHUD';
+import { getLatestIncomingMessage, isSelfChatMessage, trimChatMessages } from '../game/GameHUD';
 
 const buildMessage = (override: Partial<MatchChatMessage> = {}): MatchChatMessage => ({
     id: 'msg-1',
@@ -43,5 +43,25 @@ describe('GameHUD chat preview helpers', () => {
         ];
         const latest = getLatestIncomingMessage(messages, '1', '玩家1');
         expect(latest).toBeNull();
+    });
+
+    it('trimChatMessages 超过上限时保留最新消息', () => {
+        const messages = [
+            buildMessage({ id: 'msg-1' }),
+            buildMessage({ id: 'msg-2' }),
+            buildMessage({ id: 'msg-3' }),
+            buildMessage({ id: 'msg-4' }),
+        ];
+        const trimmed = trimChatMessages(messages, 3);
+        expect(trimmed.map((msg) => msg.id)).toEqual(['msg-2', 'msg-3', 'msg-4']);
+    });
+
+    it('trimChatMessages 未超过上限时保持原数组', () => {
+        const messages = [
+            buildMessage({ id: 'msg-1' }),
+            buildMessage({ id: 'msg-2' }),
+        ];
+        const trimmed = trimChatMessages(messages, 3);
+        expect(trimmed).toEqual(messages);
     });
 });

@@ -128,6 +128,8 @@ export interface BoardUnit {
   hasMoved: boolean;     // 本回合是否已移动
   hasAttacked: boolean;  // 本回合是否已攻击
   attachedCards?: EventCard[]; // 附加的事件卡（如狱火铸剑）
+  healingMode?: boolean; // 治疗模式（圣殿牧师：本次攻击转为治疗）
+  wasAttackedThisTurn?: boolean; // 本回合是否已被攻击（庇护判定用）
 }
 
 /** 战场上的建筑 */
@@ -392,6 +394,8 @@ export const SW_EVENTS = {
   GRAB_FOLLOW_REQUESTED: 'sw:grab_follow_requested',
   // 卡牌回收（从弃牌堆拿回手牌）
   CARD_RETRIEVED: 'sw:card_retrieved',
+  // 治疗模式标记（圣殿牧师）
+  HEALING_MODE_SET: 'sw:healing_mode_set',
 } as const;
 
 // ============================================================================

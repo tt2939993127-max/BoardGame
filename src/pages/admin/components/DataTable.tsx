@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export interface Column<T> {
-    header: string;
+    header: ReactNode;
     accessorKey?: keyof T;
     cell?: (item: T) => ReactNode;
     width?: string;
@@ -33,9 +33,9 @@ export default function DataTable<T extends { id: string | number }>({
 }: DataTableProps<T>) {
     return (
         <div className={cn("bg-white rounded-2xl border border-zinc-100 shadow-xl shadow-zinc-200/50 flex flex-col overflow-hidden", className)}>
-            <div className="overflow-x-auto">
+            <div className="flex-1 overflow-auto relative">
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-zinc-50 border-b border-zinc-100">
+                    <thead className="bg-zinc-50 border-b border-zinc-100 sticky top-0 z-10 shadow-sm">
                         <tr>
                             {columns.map((col, idx) => (
                                 <th

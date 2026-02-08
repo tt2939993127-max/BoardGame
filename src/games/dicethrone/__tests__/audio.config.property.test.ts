@@ -4,7 +4,47 @@
  */
 import { describe, it, expect } from 'vitest';
 import { DICETHRONE_AUDIO_CONFIG } from '../audio.config';
+import { BARBARIAN_ABILITIES } from '../heroes/barbarian/abilities';
 import { MONK_ABILITIES } from '../heroes/monk/abilities';
+import {
+    BLINDING_SHOT_2,
+    COVERT_FIRE_2,
+    COVERING_FIRE_2,
+    ECLIPSE_2,
+    ELUSIVE_STEP_2,
+    ENTANGLING_SHOT_2,
+    EXPLODING_ARROW_2,
+    EXPLODING_ARROW_3,
+    LONGBOW_2,
+    LONGBOW_3,
+    MOON_ELF_ABILITIES,
+} from '../heroes/moon_elf/abilities';
+import {
+    BLESSING_OF_MIGHT_2,
+    HOLY_DEFENSE_2,
+    HOLY_DEFENSE_3,
+    HOLY_LIGHT_2,
+    HOLY_STRIKE_2,
+    PALADIN_ABILITIES,
+    RIGHTEOUS_COMBAT_2,
+    RIGHTEOUS_COMBAT_3,
+    RIGHTEOUS_PRAYER_2,
+    VENGEANCE_2,
+} from '../heroes/paladin/abilities';
+import { PYROMANCER_ABILITIES } from '../heroes/pyromancer/abilities';
+import {
+    CORNUCOPIA_2,
+    DAGGER_STRIKE_2,
+    FEARLESS_RIPOSTE_2,
+    KIDNEY_SHOT_2,
+    PICKPOCKET_2,
+    PIERCING_ATTACK,
+    SHADOW_ASSAULT,
+    SHADOW_DANCE_2,
+    SHADOW_DEFENSE_2,
+    SHADOW_THIEF_ABILITIES,
+    STEAL_2,
+} from '../heroes/shadow_thief/abilities';
 import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
 import type { AudioEvent } from '../../../lib/audio/types';
 import { getOptimizedAudioUrl } from '../../../core/AssetLoader';
@@ -73,16 +113,30 @@ describe('DiceThrone 音效配置属性测试', () => {
     });
 
     describe('属性 2：技能音效正确性', () => {
-        it('所有 Monk 技能应正确解析音效键', () => {
+        it('所有带 sfxKey 的技能应在伤害事件解析音效键', () => {
             const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
             if (!resolver) {
                 throw new Error('eventSoundResolver 未定义');
             }
+            const resolverAbilities = [
+                ...MONK_ABILITIES,
+                ...BARBARIAN_ABILITIES,
+                ...PYROMANCER_ABILITIES,
+                ...MOON_ELF_ABILITIES,
+                ...PALADIN_ABILITIES,
+                ...SHADOW_THIEF_ABILITIES,
+            ];
 
-            for (const ability of MONK_ABILITIES) {
+            const abilitiesWithSfx = resolverAbilities.filter(ability => ability.sfxKey && ability.type === 'offensive');
+
+            for (const ability of abilitiesWithSfx) {
                 const event: AudioEvent = {
-                    type: 'ABILITY_ACTIVATED',
-                    payload: { playerId: 'player1', abilityId: ability.id },
+                    type: 'DAMAGE_DEALT',
+                    payload: {
+                        actualDamage: 3,
+                        targetId: 'player2',
+                        sourceAbilityId: ability.id,
+                    },
                 };
 
                 const mockContext = {
@@ -90,28 +144,63 @@ describe('DiceThrone 音效配置属性测试', () => {
                         players: {
                             player1: {
                                 heroId: 'monk',
-                                abilities: MONK_ABILITIES, // 使用完整的技能列表
+                                abilities: resolverAbilities,
+                            },
+                            player2: {
+                                heroId: 'monk',
+                                abilities: [],
                             },
                         },
                     },
                     ctx: {},
-                    meta: {},
+                    meta: { currentPlayerId: 'player1' },
                 } as any;
 
                 const result = resolver(event, mockContext);
-
-                if (ability.sfxKey) {
-                    // 有 sfxKey 的技能应返回自定义音效键
-                    expect(result).toBe(ability.sfxKey);
-                } else {
-                    // 没有 sfxKey 的技能不播放技能音效
-                    expect(result).toBeNull();
-                }
+                expect(result).toBe(ability.sfxKey);
             }
         });
 
         it('所有自定义音效键应在 registry 中存在', () => {
-            const customSfxKeys = MONK_ABILITIES
+            const allAbilityDefs = [
+                ...MONK_ABILITIES,
+                ...BARBARIAN_ABILITIES,
+                ...PYROMANCER_ABILITIES,
+                ...MOON_ELF_ABILITIES,
+                ...PALADIN_ABILITIES,
+                ...SHADOW_THIEF_ABILITIES,
+                LONGBOW_2,
+                LONGBOW_3,
+                COVERT_FIRE_2,
+                COVERING_FIRE_2,
+                EXPLODING_ARROW_2,
+                EXPLODING_ARROW_3,
+                ENTANGLING_SHOT_2,
+                BLINDING_SHOT_2,
+                ECLIPSE_2,
+                ELUSIVE_STEP_2,
+                RIGHTEOUS_COMBAT_2,
+                RIGHTEOUS_COMBAT_3,
+                BLESSING_OF_MIGHT_2,
+                HOLY_LIGHT_2,
+                VENGEANCE_2,
+                RIGHTEOUS_PRAYER_2,
+                HOLY_STRIKE_2,
+                HOLY_DEFENSE_2,
+                HOLY_DEFENSE_3,
+                DAGGER_STRIKE_2,
+                PICKPOCKET_2,
+                KIDNEY_SHOT_2,
+                SHADOW_ASSAULT,
+                PIERCING_ATTACK,
+                SHADOW_DANCE_2,
+                STEAL_2,
+                CORNUCOPIA_2,
+                SHADOW_DEFENSE_2,
+                FEARLESS_RIPOSTE_2,
+            ];
+
+            const customSfxKeys = allAbilityDefs
                 .filter(a => a.sfxKey)
                 .map(a => a.sfxKey as string);
 

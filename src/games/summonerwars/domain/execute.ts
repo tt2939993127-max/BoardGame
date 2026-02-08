@@ -234,6 +234,41 @@ export function executeCommand(
       const attacker = payload.attacker as CellCoord;
       const target = payload.target as CellCoord;
       const attackerUnit = getUnitAt(core, attacker);
+
+      // 治疗模式独立路径：绕过 canAttackEnhanced（它会拒绝友方目标）
+      if (attackerUnit?.healingMode) {
+        const healTargetCell = core.board[target.row]?.[target.col];
+        const healTargetUnit = healTargetCell?.unit;
+        if (healTargetUnit && healTargetUnit.owner === attackerUnit.owner) {
+          const healStrength = calculateEffectiveStrength(attackerUnit, core, healTargetUnit);
+          const healAttackType = getAttackType(core, attacker, target);
+          const healDiceResults = rollDice(healStrength, () => random.random());
+
+          events.push({
+            type: SW_EVENTS.UNIT_ATTACKED,
+            payload: {
+              attacker, target,
+              attackerId: attackerUnit.cardId,
+              attackType: healAttackType, diceCount: healStrength,
+              baseStrength: attackerUnit.card.strength,
+              diceResults: healDiceResults, hits: 0,
+            },
+            timestamp,
+          });
+
+          // 计算治疗量：melee 面数量
+          const healAmount = healDiceResults.filter(r => r === 'melee').length;
+          if (healAmount > 0) {
+            events.push({
+              type: SW_EVENTS.UNIT_HEALED,
+              payload: { position: target, amount: healAmount, sourceAbilityId: 'healing' },
+              timestamp,
+            });
+          }
+          break;
+        }
+      }
+
       if (attackerUnit && canAttackEnhanced(core, attacker, target)) {
         const targetCell = core.board[target.row]?.[target.col];
         const effectiveStrength = calculateEffectiveStrength(attackerUnit, core, targetCell?.unit ?? undefined);
@@ -261,6 +296,42 @@ export function executeCommand(
                 },
                 timestamp,
               });
+            }
+          }
+        }
+
+        // 神圣护盾：科琳3格内友方城塞单位被攻击时，投2骰减伤
+        if (targetCell?.unit && targetCell.unit.card.id.includes('fortress')) {
+          const targetOwner = targetCell.unit.owner;
+          // 查找目标方拥有 divine_shield 的单位（科琳）
+          for (let row = 0; row < BOARD_ROWS; row++) {
+            for (let col = 0; col < BOARD_COLS; col++) {
+              const shieldUnit = core.board[row]?.[col]?.unit;
+              if (shieldUnit && shieldUnit.owner === targetOwner
+                && (shieldUnit.card.abilities ?? []).includes('divine_shield')
+                && manhattanDistance({ row, col }, target) <= 3) {
+                // 投掷2个骰子，计算 melee（❤️）数量
+                const shieldDice = rollDice(2, () => random.random());
+                const shieldMelee = shieldDice.filter(r => r === 'melee').length;
+                if (shieldMelee > 0) {
+                  const reduction = Math.min(shieldMelee, hits - 1); // 战力最少为1
+                  if (reduction > 0) {
+                    hits = hits - reduction;
+                    events.push({
+                      type: SW_EVENTS.DAMAGE_REDUCED,
+                      payload: {
+                        sourceUnitId: shieldUnit.cardId,
+                        sourcePosition: { row, col },
+                        value: reduction,
+                        condition: 'divine_shield',
+                        sourceAbilityId: 'divine_shield',
+                        shieldDice,
+                      },
+                      timestamp,
+                    });
+                  }
+                }
+              }
             }
           }
         }
@@ -305,6 +376,35 @@ export function executeCommand(
         }
 
         if (hits > 0) {
+          // 圣灵庇护：召唤师3格内友方士兵首次被攻击时伤害上限1
+          if (targetCell?.unit && !targetCell.unit.wasAttackedThisTurn) {
+            const targetOwner = targetCell.unit.owner;
+            const targetPlayer = core.players[targetOwner];
+            const hasHolyProtection = targetPlayer.activeEvents.some(ev => {
+              const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+              return baseId === 'paladin-holy-protection';
+            });
+            if (hasHolyProtection && targetCell.unit.card.unitClass === 'common') {
+              // 检查目标是否在召唤师3格内
+              const summoner = getSummoner(core, targetOwner);
+              if (summoner && manhattanDistance(summoner.position, target) <= 3) {
+                if (hits > 1) {
+                  events.push({
+                    type: SW_EVENTS.DAMAGE_REDUCED,
+                    payload: {
+                      sourceAbilityId: 'holy_protection',
+                      value: hits - 1,
+                      condition: 'first_attack_protection',
+                    },
+                    timestamp,
+                  });
+                  hits = 1;
+                }
+              }
+            }
+          }
+
+          // 伤害逻辑（治疗模式已在前面独立路径处理，此处一定是正常攻击）
           const attackerHasSoulless = attackerAbilities.includes('soulless');
           events.push({
             type: SW_EVENTS.UNIT_DAMAGED,
@@ -382,6 +482,7 @@ export function executeCommand(
           ownerId: playerId,
           targetUnit: targetCell?.unit,
           targetPosition: target,
+          diceResults,
           timestamp,
         };
         const afterAttackEvents = triggerAbilities('afterAttack', afterAttackCtx);
@@ -722,7 +823,12 @@ export function executeCommand(
           case 'paladin-holy-judgment': {
             // 圣洁审判（传奇/ACTIVE）：放置2点充能，友方士兵+1战力
             // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
-            // 充能和战力加成在 calculateEffectiveStrength 和回合开始时检查
+            // 设置初始充能为2
+            events.push({
+              type: SW_EVENTS.FUNERAL_PYRE_CHARGED,
+              payload: { playerId, eventCardId: cardId, charges: 2 },
+              timestamp,
+            });
             break;
           }
 
@@ -1539,6 +1645,27 @@ function executeActivateAbility(
           timestamp,
         });
       }
+      break;
+    }
+
+    case 'healing': {
+      // 治疗：弃除手牌，标记本单位为治疗模式
+      const healDiscardId = payload.targetCardId as string | undefined;
+      if (!healDiscardId) break;
+      const healPlayer = core.players[playerId];
+      if (!healPlayer.hand.some(c => c.id === healDiscardId)) break;
+      // 弃除卡牌
+      events.push({
+        type: SW_EVENTS.CARD_DISCARDED,
+        payload: { playerId, cardId: healDiscardId },
+        timestamp,
+      });
+      // 标记治疗模式
+      events.push({
+        type: SW_EVENTS.HEALING_MODE_SET,
+        payload: { position: sourcePosition, unitId: sourceUnit.cardId },
+        timestamp,
+      });
       break;
     }
 

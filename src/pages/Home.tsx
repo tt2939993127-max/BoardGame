@@ -89,6 +89,10 @@ export const Home = () => {
             navigate('/dev/slicer');
             return;
         }
+        if (id === 'fxpreview') {
+            navigate('/dev/fx');
+            return;
+        }
         if (id === 'ugcbuilder') {
             navigate('/dev/ugc');
             return;

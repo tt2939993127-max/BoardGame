@@ -14,11 +14,18 @@ const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 14;
 const REFRESH_TOKEN_PREFIX = 'refresh:token:';
 const REFRESH_TOKEN_USER_PREFIX = 'refresh:user:';
 const EMAIL_CODE_TTL_SECONDS = 5 * 60;
+const RESET_CODE_TTL_SECONDS = 5 * 60;
+const RESET_SEND_INTERVAL_SECONDS = 60;
+const RESET_ATTEMPT_WINDOW_SECONDS = 10 * 60;
+const RESET_MAX_ATTEMPTS = 5;
 const LOGIN_FAIL_WINDOW_SECONDS = 10 * 60;
 const LOGIN_FAIL_MAX_COUNT = 5;
 const LOGIN_LOCK_SECONDS = 30 * 60;
 const LOGIN_FAIL_PREFIX = 'login:fail:';
 const LOGIN_LOCK_PREFIX = 'login:lock:';
+const RESET_CODE_PREFIX = 'reset:code:';
+const RESET_SEND_PREFIX = 'reset:send:';
+const RESET_ATTEMPT_PREFIX = 'reset:attempt:';
 
 type RefreshTokenRecord = {
     userId: string;
@@ -33,6 +40,13 @@ type LoginFailRecord = {
     firstFailedAt: number;
 };
 
+type ResetAttemptRecord = {
+    count: number;
+    firstFailedAt: number;
+};
+
+type CodeVerifyResult = 'ok' | 'missing' | 'mismatch';
+
 export type RefreshTokenRotationResult =
     | { status: 'ok'; userId: string; token: string; expiresAt: number }
     | { status: 'reuse'; userId: string }
@@ -45,22 +59,33 @@ export class AuthService {
         @Inject(CACHE_MANAGER) private cacheManager: Cache,
     ) { }
 
+    normalizeEmail(email: string): string | null {
+        const trimmed = email?.trim();
+        if (!trimmed) return null;
+        return trimmed.toLowerCase();
+    }
+
     async findByEmail(email: string): Promise<UserDocument | null> {
-        return this.userModel.findOne({ email });
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return null;
+        return this.userModel.findOne({ email: normalized });
     }
 
     async findByEmailExcludingUser(email: string, userId: string): Promise<UserDocument | null> {
-        return this.userModel.findOne({ email, _id: { $ne: userId } });
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return null;
+        return this.userModel.findOne({ email: normalized, _id: { $ne: userId } });
     }
 
     // 登录仅支持邮箱：account 字段保留，但必须是邮箱格式
     async findByAccount(account: string): Promise<UserDocument | null> {
         const trimmed = account.trim();
         const emailRegex = /^\S+@\S+\.\S+$/;
-        if (!emailRegex.test(trimmed)) {
+        const normalized = this.normalizeEmail(trimmed);
+        if (!normalized || !emailRegex.test(normalized)) {
             return null;
         }
-        return this.userModel.findOne({ email: trimmed.toLowerCase() });
+        return this.userModel.findOne({ email: normalized });
     }
 
     async findById(userId: string): Promise<UserDocument | null> {
@@ -68,7 +93,8 @@ export class AuthService {
     }
 
     async createUser(username: string, password: string, email: string): Promise<UserDocument> {
-        const user = new this.userModel({ username, password, email, emailVerified: true });
+        const normalized = this.normalizeEmail(email);
+        const user = new this.userModel({ username, password, email: normalized ?? email, emailVerified: true });
         return user.save();
     }
 
@@ -138,9 +164,11 @@ export class AuthService {
     }
 
     async updateEmail(userId: string, email: string): Promise<UserDocument | null> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return null;
         return this.userModel.findByIdAndUpdate(
             userId,
-            { email, emailVerified: true },
+            { email: normalized, emailVerified: true },
             { new: true }
         );
     }
@@ -253,16 +281,91 @@ export class AuthService {
     }
 
     async storeEmailCode(email: string, code: string): Promise<void> {
-        await this.cacheManager.set(`verify:email:${email}`, code, EMAIL_CODE_TTL_SECONDS);
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return;
+        await this.cacheManager.set(`verify:email:${normalized}`, code, EMAIL_CODE_TTL_SECONDS);
     }
 
-    async verifyEmailCode(email: string, code: string): Promise<boolean> {
-        const stored = await this.cacheManager.get<string>(`verify:email:${email}`);
-        if (!stored || stored !== code) {
-            return false;
+    async verifyEmailCode(email: string, code: string): Promise<CodeVerifyResult> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return 'missing';
+        const stored = await this.cacheManager.get<string>(`verify:email:${normalized}`);
+        if (!stored) return 'missing';
+        if (stored !== code) return 'mismatch';
+        await this.cacheManager.del(`verify:email:${normalized}`);
+        return 'ok';
+    }
+
+    async storeResetCode(email: string, code: string): Promise<void> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return;
+        await this.cacheManager.set(this.resetCodeKey(normalized), code, RESET_CODE_TTL_SECONDS);
+    }
+
+    async verifyResetCode(email: string, code: string): Promise<CodeVerifyResult> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return 'missing';
+        const stored = await this.cacheManager.get<string>(this.resetCodeKey(normalized));
+        if (!stored) return 'missing';
+        if (stored !== code) return 'mismatch';
+        await this.cacheManager.del(this.resetCodeKey(normalized));
+        return 'ok';
+    }
+
+    async getResetSendStatus(email: string, ip: string | null): Promise<{ retryAfterSeconds: number } | null> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return null;
+        const key = this.resetSendKey(normalized, ip);
+        const nextAllowed = await this.cacheManager.get<number>(key);
+        if (!nextAllowed) return null;
+        const retryAfterSeconds = Math.max(nextAllowed - this.nowSeconds(), 0);
+        if (retryAfterSeconds <= 0) {
+            await this.cacheManager.del(key);
+            return null;
         }
-        await this.cacheManager.del(`verify:email:${email}`);
-        return true;
+        return { retryAfterSeconds };
+    }
+
+    async markResetSend(email: string, ip: string | null): Promise<void> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return;
+        const nextAllowed = this.nowSeconds() + RESET_SEND_INTERVAL_SECONDS;
+        await this.cacheManager.set(this.resetSendKey(normalized, ip), nextAllowed, RESET_SEND_INTERVAL_SECONDS);
+    }
+
+    async getResetAttemptStatus(email: string): Promise<{ retryAfterSeconds: number } | null> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return null;
+        const record = await this.cacheManager.get<ResetAttemptRecord>(this.resetAttemptKey(normalized));
+        if (!record) return null;
+        if (record.count < RESET_MAX_ATTEMPTS) return null;
+        const retryAfterSeconds = Math.max(RESET_ATTEMPT_WINDOW_SECONDS - (this.nowSeconds() - record.firstFailedAt), 0);
+        if (retryAfterSeconds <= 0) {
+            await this.cacheManager.del(this.resetAttemptKey(normalized));
+            return null;
+        }
+        return { retryAfterSeconds };
+    }
+
+    async recordResetAttempt(email: string): Promise<{ locked: boolean; retryAfterSeconds?: number }> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return { locked: false };
+        const nowSeconds = this.nowSeconds();
+        const existing = await this.cacheManager.get<ResetAttemptRecord>(this.resetAttemptKey(normalized));
+        const firstFailedAt = existing?.firstFailedAt ?? nowSeconds;
+        const nextCount = (existing?.count ?? 0) + 1;
+        const ttlSeconds = Math.max(RESET_ATTEMPT_WINDOW_SECONDS - (nowSeconds - firstFailedAt), 1);
+        await this.cacheManager.set(this.resetAttemptKey(normalized), { count: nextCount, firstFailedAt }, ttlSeconds);
+        if (nextCount >= RESET_MAX_ATTEMPTS) {
+            return { locked: true, retryAfterSeconds: ttlSeconds };
+        }
+        return { locked: false };
+    }
+
+    async clearResetAttempts(email: string): Promise<void> {
+        const normalized = this.normalizeEmail(email);
+        if (!normalized) return;
+        await this.cacheManager.del(this.resetAttemptKey(normalized));
     }
 
     private resolveTokenTtlSeconds(token: string): number {
@@ -299,6 +402,18 @@ export class AuthService {
 
     private loginLockKey(email: string, ip: string | null): string {
         return `${LOGIN_LOCK_PREFIX}${email.toLowerCase()}:${this.normalizeIpKey(ip)}`;
+    }
+
+    private resetCodeKey(email: string): string {
+        return `${RESET_CODE_PREFIX}${email}`;
+    }
+
+    private resetSendKey(email: string, ip: string | null): string {
+        return `${RESET_SEND_PREFIX}${email}:${this.normalizeIpKey(ip)}`;
+    }
+
+    private resetAttemptKey(email: string): string {
+        return `${RESET_ATTEMPT_PREFIX}${email}`;
     }
 
     private normalizeIpKey(ip: string | null): string {

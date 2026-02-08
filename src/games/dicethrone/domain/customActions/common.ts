@@ -5,10 +5,34 @@
 
 import type {
     DiceThroneEvent,
+    CpChangedEvent,
     PendingInteraction,
     InteractionRequestedEvent,
 } from '../types';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { RESOURCE_IDS } from '../resources';
+import { CP_MAX } from '../types';
+
+// ============================================================================
+// 资源处理器
+// ============================================================================
+
+/** 通用 CP 获取：params.amount 指定数量 */
+function handleGainCp({ attackerId, state, timestamp, action }: CustomActionContext): DiceThroneEvent[] {
+    const params = (action as any).params;
+    const amount = (params?.amount as number) || 0;
+    if (amount <= 0) return [];
+
+    const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
+    const newCp = Math.min(currentCp + amount, CP_MAX);
+
+    return [{
+        type: 'CP_CHANGED',
+        payload: { playerId: attackerId, delta: amount, newValue: newCp },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as CpChangedEvent];
+}
 
 // ============================================================================
 // 骰子修改处理器
@@ -206,6 +230,9 @@ function handleTransferStatus({ attackerId, sourceAbilityId, state, timestamp }:
 // ============================================================================
 
 export function registerCommonCustomActions(): void {
+    // --- 资源相关 ---
+    registerCustomActionHandler('gain-cp', handleGainCp, { categories: ['resource'] });
+
     // --- 骰子相关：修改骰子数值 ---
     registerCustomActionHandler('modify-die-to-6', handleModifyDieTo6, {
         categories: ['dice'],

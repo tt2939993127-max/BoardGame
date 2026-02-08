@@ -33,9 +33,13 @@ const HandCard: React.FC<{
     onSelect: () => void;
 }> = ({ card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, onSelect }) => {
     const [isHovered, setIsHovered] = useState(false);
+    const [isShaking, setIsShaking] = useState(false);
 
     // Lookup Data
     const def = lookupCardDef(card.defId);
+    if (card.defId.includes('venus') || card.defId.includes('servitor')) {
+        console.log('HandCard Debug:', card.defId, def, 'HasPreview:', !!def?.previewRef);
+    }
     const isMinion = card.type === 'minion';
     const minionDef = isMinion ? lookupMinionDef(card.defId) : null;
 
@@ -58,8 +62,7 @@ const HandCard: React.FC<{
             layout
             layoutId={card.uid}
             className={`
-                relative flex-shrink-0 origin-bottom 
-                ${disableInteraction ? '' : 'cursor-pointer pointer-events-auto'}
+                relative flex-shrink-0 origin-bottom cursor-pointer pointer-events-auto
             `}
             style={{
                 width: `${CARD_WIDTH_VW}vw`,
@@ -71,14 +74,22 @@ const HandCard: React.FC<{
             animate={{
                 y: isSelected ? `-${SELECTED_Y_LIFT_VW}vw` : (isHovered ? `-${HOVER_Y_LIFT_VW}vw` : '0'),
                 scale: isHovered || isSelected ? 1.15 : 1,
-                rotate: isHovered || isSelected ? 0 : rotationSeed,
+                rotate: isShaking ? [0, -6, 6, -4, 4, 0] : (isHovered || isSelected ? 0 : rotationSeed),
                 opacity: 1
             }}
             exit={{ y: 200, opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
             transition={{ type: 'spring', stiffness: 450, damping: 25 }}
-            onHoverStart={() => !disableInteraction && setIsHovered(true)}
+            onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
-            onClick={() => !disableInteraction && onSelect()}
+            onClick={() => {
+                if (disableInteraction) {
+                    // 不可操作时摇头抖动
+                    setIsShaking(true);
+                    setTimeout(() => setIsShaking(false), 400);
+                    return;
+                }
+                onSelect();
+            }}
         >
             {/* Card Container */}
             <div className={`

@@ -21,6 +21,10 @@ import { pyromancerDiceDefinition } from '../heroes/pyromancer/diceConfig';
 import { pyromancerResourceDefinitions } from '../heroes/pyromancer/resourceConfig';
 import { moonElfDiceDefinition } from '../heroes/moon_elf/diceConfig';
 import { moonElfResourceDefinitions } from '../heroes/moon_elf/resourceConfig';
+import { shadowThiefDiceDefinition } from '../heroes/shadow_thief/diceConfig';
+import { SHADOW_THIEF_RESOURCES as shadowThiefResourceDefinitions } from '../heroes/shadow_thief/resourceConfig';
+import { paladinDiceDefinition } from '../heroes/paladin/diceConfig';
+import { paladinResourceDefinitions } from '../heroes/paladin/resourceConfig';
 
 // 注册 DiceThrone 游戏特定条件（骰子组合、顺子等）
 registerDiceThroneConditions();
@@ -30,10 +34,14 @@ diceSystem.registerDefinition(monkDiceDefinition);
 diceSystem.registerDefinition(barbarianDiceDefinition);
 diceSystem.registerDefinition(pyromancerDiceDefinition);
 diceSystem.registerDefinition(moonElfDiceDefinition);
+diceSystem.registerDefinition(shadowThiefDiceDefinition);
+diceSystem.registerDefinition(paladinDiceDefinition);
 monkResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 barbarianResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 pyromancerResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 moonElfResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
+shadowThiefResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
+paladinResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 
 // ============================================================================
 // 领域内核定义

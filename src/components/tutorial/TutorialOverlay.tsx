@@ -13,13 +13,6 @@ export const TutorialOverlay: React.FC = () => {
     const lastStepIdRef = useRef<string | null>(null);
     const hasAutoScrolledRef = useRef(false);
 
-    useEffect(() => {
-        if (!isActive || !currentStep) return;
-        // 日志已移除：TutorialOverlay 步骤变化过于频繁
-    }, [currentStep, isActive]);
-
-
-
     // 更新高亮位置
     useEffect(() => {
         if (!isActive || !currentStep) return;
@@ -30,6 +23,7 @@ export const TutorialOverlay: React.FC = () => {
         }
 
         let resizeObserver: ResizeObserver | null = null;
+        let rafId: number | null = null;
 
         const updateRect = () => {
             if (currentStep.highlightTarget) {
@@ -38,13 +32,23 @@ export const TutorialOverlay: React.FC = () => {
 
                 if (el) {
                     const rect = el.getBoundingClientRect();
-                    setTargetRect(rect);
+                    setTargetRect(prev => {
+                        // 只在位置/尺寸实际变化时更新，避免无意义的重渲染
+                        if (prev && Math.abs(prev.top - rect.top) < 0.5 && Math.abs(prev.left - rect.left) < 0.5
+                            && Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5) {
+                            return prev;
+                        }
+                        return rect;
+                    });
 
                     if (!hasAutoScrolledRef.current) {
-                        const inView = rect.top >= 0
-                            && rect.left >= 0
-                            && rect.bottom <= window.innerHeight
-                            && rect.right <= window.innerWidth;
+                        // 使用宽松的视口检测（允许边缘溢出 50px），避免对底部手牌区等
+                        // 故意贴边/微溢出的元素触发 scrollIntoView 导致布局抖动
+                        const tolerance = 50;
+                        const inView = rect.top >= -tolerance
+                            && rect.left >= -tolerance
+                            && rect.bottom <= window.innerHeight + tolerance
+                            && rect.right <= window.innerWidth + tolerance;
                         if (!inView) {
                             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }
@@ -63,13 +67,22 @@ export const TutorialOverlay: React.FC = () => {
             }
         };
 
-        updateRect();
-        window.addEventListener('resize', updateRect);
-        window.addEventListener('scroll', updateRect, true);
+        // rAF 轮询：持续追踪高亮目标位置（应对地图 transform 动画等场景）
+        // 降频到约 10fps 避免每帧强制布局计算导致的微抖动
+        let lastPollTime = 0;
+        const POLL_INTERVAL = 100; // ms
+        const poll = () => {
+            const now = performance.now();
+            if (now - lastPollTime >= POLL_INTERVAL) {
+                lastPollTime = now;
+                updateRect();
+            }
+            rafId = requestAnimationFrame(poll);
+        };
+        rafId = requestAnimationFrame(poll);
 
         return () => {
-            window.removeEventListener('resize', updateRect);
-            window.removeEventListener('scroll', updateRect, true);
+            if (rafId !== null) cancelAnimationFrame(rafId);
             resizeObserver?.disconnect();
         };
     }, [isActive, currentStep]);
@@ -150,6 +163,21 @@ export const TutorialOverlay: React.FC = () => {
 
         // 为旋转的方形箭头添加通用基础类
         const arrowBase = "bg-white w-4 h-4 absolute rotate-45 border-gray-100 z-0";
+
+        // 视口边界约束：确保提示框不会溢出视口
+        const safeMargin = 8;
+        if (typeof styles.top === 'number') {
+            // 不依赖估算高度，直接确保 top 不会太低
+            // 提示框有 max-height: calc(100vh - top - margin) 的 CSS 约束
+            styles.top = Math.max(safeMargin, Math.min(styles.top as number, window.innerHeight - safeMargin - 120));
+        }
+        if (typeof styles.left === 'number') {
+            styles.left = Math.max(safeMargin, Math.min(styles.left as number, window.innerWidth - tooltipWidth - safeMargin));
+        }
+
+        // 计算提示框最大高度，确保不溢出视口底部
+        const topValue = typeof styles.top === 'number' ? styles.top : safeMargin;
+        styles.maxHeight = window.innerHeight - topValue - safeMargin;
         setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
 
     }, [targetRect]);
@@ -158,8 +186,6 @@ export const TutorialOverlay: React.FC = () => {
 
     // 在智能回合期间不显示遮罩层 - 让智能方静默移动
     if (currentStep.aiActions && currentStep.aiActions.length > 0) return null;
-
-
 
     // 矢量路径用于带孔洞的遮罩
     let maskPath = `M0 0 h${window.innerWidth} v${window.innerHeight} h-${window.innerWidth} z`;
@@ -192,32 +218,32 @@ export const TutorialOverlay: React.FC = () => {
             {/* 目标高亮环（苹果风格蓝色光晕）- 目标存在时始终可见 */}
             {targetRect && (
                 <div
-                    className="absolute pointer-events-none transition-all duration-300"
+                    className="absolute pointer-events-none"
                     style={{
                         top: targetRect.top - 4,
                         left: targetRect.left - 4,
                         width: targetRect.width + 8,
                         height: targetRect.height + 8,
                         borderRadius: '12px',
-                        boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 12px rgba(59, 130, 246, 0.3)'
+                        boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 12px rgba(59, 130, 246, 0.3)',
                     }}
                 />
             )}
 
-            {/* 提示框弹窗 */}
+            {/* 提示框弹窗 - requireAction 时不拦截点击，让用户与游戏 UI 交互 */}
             <div
-                className="pointer-events-auto transition-all duration-300 ease-out flex flex-col items-center absolute"
-                style={tooltipStyles.style}
+                className={`${currentStep.requireAction ? 'pointer-events-none' : 'pointer-events-auto'} flex flex-col items-center absolute`}
+                style={{ ...tooltipStyles.style, overflow: 'hidden' }}
             >
                 {/* 样式三角箭头 */}
                 <div className={`absolute w-0 h-0 border-solid ${tooltipStyles.arrowClass}`} />
 
                 {/* 内容卡片 */}
-                <div className="bg-[#fcfbf9] rounded-sm shadow-[0_8px_30px_rgba(67,52,34,0.12)] p-5 border border-[#e5e0d0] max-w-sm w-72 animate-in fade-in zoom-in-95 duration-200 relative font-serif">
+                <div className="bg-[#fcfbf9] rounded-sm shadow-[0_8px_30px_rgba(67,52,34,0.12)] p-5 border border-[#e5e0d0] max-w-sm w-72 animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col" style={{ maxHeight: 'inherit', overflow: 'hidden' }}>
                     {/* 装饰性边角（右上）*/}
                     <div className="absolute top-1.5 right-1.5 w-2 h-2 border-t border-r border-[#c0a080] opacity-40" />
 
-                    <div className="text-[#433422] font-bold text-lg mb-4 leading-relaxed text-left">
+                    <div className="text-[#433422] font-bold text-lg mb-4 leading-relaxed text-left overflow-y-auto flex-1 min-h-0">
                         {t(currentStep.content, { defaultValue: currentStep.content })}
                     </div>
 

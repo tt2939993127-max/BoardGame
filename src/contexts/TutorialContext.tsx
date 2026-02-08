@@ -116,6 +116,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         controllerRef.current?.consumeAi(stepId);
     }, []);
 
+    // AI 动作执行 effect
+    // 使用 ref 管理 timer，避免 tutorial 对象频繁变化导致 timer 被 React effect cleanup 取消
+    const aiTimerRef = useRef<number | undefined>(undefined);
+
     useEffect(() => {
         if (!tutorial.active || !tutorial.step || !hasAiActions(tutorial.step)) return;
         if (!isControllerReady) return;
@@ -124,30 +128,41 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (executedAiStepsRef.current.has(stepId)) return;
         executedAiStepsRef.current.add(stepId);
 
-        let moveTimer: number | undefined;
-        let advanceTimer: number | undefined;
-        let cancelled = false;
+        // 缓存当前步骤的 autoAdvance 判断和 aiActions，避免闭包引用被清理后的状态
+        const shouldAutoAdvanceAfterAi = shouldAutoAdvance(tutorial.step);
+        const aiActions = tutorial.step.aiActions ? [...tutorial.step.aiActions] : [];
 
-        moveTimer = window.setTimeout(() => {
-            if (cancelled) return;
+        // 使用 ref 管理 timer，不在 cleanup 中取消
+        // 这样即使 tutorial 对象变化触发 effect 重新执行，timer 也不会被取消
+        if (aiTimerRef.current !== undefined) {
+            window.clearTimeout(aiTimerRef.current);
+        }
+
+        // setup 步骤（首步）使用更短延迟，加速教程初始化
+        const delay = tutorial.stepIndex === 0 ? 300 : 1000;
+
+        aiTimerRef.current = window.setTimeout(() => {
+            aiTimerRef.current = undefined;
             const controller = controllerRef.current;
             if (!controller) return;
 
-            tutorial.step?.aiActions?.forEach((action: TutorialAiAction) => {
-                controller.dispatchCommand(action.commandType, action.payload);
+            aiActions.forEach((action: TutorialAiAction) => {
+                // 如果 aiAction 指定了 playerId，注入到 payload 中供 adapter 使用
+                const actionPayload = action.playerId
+                    ? { ...(action.payload as Record<string, unknown> ?? {}), __tutorialPlayerId: action.playerId }
+                    : action.payload;
+                controller.dispatchCommand(action.commandType, actionPayload);
             });
             controller.consumeAi(stepId);
 
-            if (tutorial.step && shouldAutoAdvance(tutorial.step)) {
-                advanceTimer = window.setTimeout(() => controller.next('auto'), 500);
+            // 同步调用 next，避免 consumeAi 触发状态更新后 effect 清理导致 advanceTimer 被取消
+            if (shouldAutoAdvanceAfterAi) {
+                controller.next('auto');
             }
-        }, 1000);
+        }, delay);
 
-        return () => {
-            cancelled = true;
-            if (moveTimer !== undefined) window.clearTimeout(moveTimer);
-            if (advanceTimer !== undefined) window.clearTimeout(advanceTimer);
-        };
+        // 不返回 cleanup 函数 — timer 通过 aiTimerRef 管理
+        // 只在新步骤的 AI actions 需要执行时才清除旧 timer
     }, [tutorial, isControllerReady]);
 
     const value = useMemo<TutorialContextType>(() => {

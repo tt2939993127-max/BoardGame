@@ -26,7 +26,7 @@ import { FeedbackModal } from '../system/FeedbackModal';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { matchSocket, type MatchChatMessage } from '../../services/matchSocket';
-import { MAX_CHAT_LENGTH } from '../../shared/chat';
+import { MAX_CHAT_LENGTH, MAX_CHAT_MESSAGES } from '../../shared/chat';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { FriendsChatModal } from '../social/FriendsChatModal';
 import { useSocial } from '../../contexts/SocialContext';
@@ -75,6 +75,14 @@ export const getLatestIncomingMessage = (
         if (!isSelfChatMessage(message, myPlayerId, myDisplayName)) return message;
     }
     return null;
+};
+
+export const trimChatMessages = (
+    messages: MatchChatMessage[],
+    maxMessages = MAX_CHAT_MESSAGES
+) => {
+    if (messages.length <= maxMessages) return messages;
+    return messages.slice(messages.length - maxMessages);
 };
 
 export const GameHUD = ({
@@ -177,7 +185,13 @@ export const GameHUD = ({
             if (message.matchId !== matchId) return;
             setChatMessages((prev) => {
                 if (prev.some((m) => m.id === message.id)) return prev;
-                return [...prev, message];
+                const next = [...prev, message];
+                const trimmed = next.length > MAX_CHAT_MESSAGES;
+                const nextMessages = trimChatMessages(next);
+                if (trimmed) {
+                    console.warn(`[HUD-CHAT] event=trim_messages matchId=${matchId ?? 'unknown'} size=${next.length} max=${MAX_CHAT_MESSAGES}`);
+                }
+                return nextMessages;
             });
             if (!isSelfMessage(message) && !isChatPanelOpenRef.current) {
                 setUnreadChatCount((prev) => prev + 1);
@@ -224,7 +238,15 @@ export const GameHUD = ({
                 text: trimmed,
                 createdAt: new Date().toISOString(),
             };
-            setChatMessages(prev => [...prev, localMessage]);
+            setChatMessages((prev) => {
+                const next = [...prev, localMessage];
+                const trimmed = next.length > MAX_CHAT_MESSAGES;
+                const nextMessages = trimChatMessages(next);
+                if (trimmed) {
+                    console.warn(`[HUD-CHAT] event=trim_messages matchId=${matchId ?? 'local'} size=${next.length} max=${MAX_CHAT_MESSAGES}`);
+                }
+                return nextMessages;
+            });
             setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
         }
 

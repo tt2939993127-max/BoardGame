@@ -71,18 +71,23 @@ const validateRollDice = (
     if (state.turnPhase !== 'offensiveRoll' && state.turnPhase !== 'defensiveRoll') {
         return fail('invalid_phase');
     }
-    
+
     const rollerId = getRollerId(state);
     if (!isMoveAllowed(playerId, rollerId)) {
         return fail('player_mismatch');
     }
-    
+
     if (state.rollCount >= state.rollLimit) {
         return fail('roll_limit_reached');
     }
-    
+
+    // 防御阶段必须先选择防御技能才能掷骰（规则 §3.6 步骤 2→3）
+    if (state.turnPhase === 'defensiveRoll' && state.pendingAttack && !state.pendingAttack.defenseAbilityId) {
+        return fail('defense_ability_not_selected');
+    }
+
     return ok();
-};
+}
 
 /**
  * 验证选择角色命令
@@ -216,7 +221,26 @@ const validateSelectAbility = (
         if (!isMoveAllowed(playerId, state.pendingAttack.defenderId)) {
             return fail('player_mismatch');
         }
-        // 实时计算可用技能（派生状态）
+
+        // 防御阶段分两步：
+        // 1. 掷骰前选择防御技能（规则 §3.6 步骤 2）：只需验证玩家拥有该防御技能
+        // 2. 掷骰后确认骰面后的技能激活：用 getAvailableAbilityIds 检查骰面
+        if (!state.pendingAttack.defenseAbilityId && state.rollCount === 0) {
+            // 掷骰前选择：验证玩家拥有该防御技能（不检查骰面）
+            const defender = state.players[state.pendingAttack.defenderId];
+            if (!defender) return fail('player_not_found');
+            const hasAbility = defender.abilities.some(a => {
+                if (a.type !== 'defensive') return false;
+                if (a.id === abilityId) return true;
+                return a.variants?.some(v => v.id === abilityId) ?? false;
+            });
+            if (!hasAbility) {
+                return fail('ability_not_available');
+            }
+            return ok();
+        }
+
+        // 掷骰后选择：实时计算可用技能（派生状态）
         const availableAbilityIds = getAvailableAbilityIds(state, state.pendingAttack.defenderId);
         if (!availableAbilityIds.includes(abilityId)) {
             return fail('ability_not_available');

@@ -19,9 +19,9 @@
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import type { ISourceOptions } from '@tsparticles/engine';
-import type { IParticlesProps } from '@tsparticles/react';
-
-type ParticlesComponent = React.ComponentType<IParticlesProps>;
+import { getParticlesComponent, type ParticlesComponent } from './particleEngine';
+import { useParticlePool } from './particlePool';
+import type { ParticleLease } from './particlePoolStore';
 
 // ============================================================================
 // 预设配置
@@ -143,25 +143,6 @@ export interface BurstParticlesProps {
   className?: string;
 }
 
-/** 引擎初始化缓存（全局单例，避免重复初始化） */
-let engineInitPromise: Promise<ParticlesComponent> | null = null;
-
-async function getParticlesComponent(): Promise<ParticlesComponent> {
-  if (!engineInitPromise) {
-    engineInitPromise = (async () => {
-      const [{ initParticlesEngine, Particles }, { loadSlim }] = await Promise.all([
-        import('@tsparticles/react'),
-        import('@tsparticles/slim'),
-      ]);
-      await initParticlesEngine(async (engine) => {
-        await loadSlim(engine);
-      });
-      return Particles;
-    })();
-  }
-  return engineInitPromise;
-}
-
 /** 将 BurstConfig 转换为 tsParticles ISourceOptions */
 function buildOptions(cfg: BurstConfig, colors: string[]): ISourceOptions {
   return {
@@ -215,9 +196,13 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
   onComplete,
   className = '',
 }) => {
+  const pool = useParticlePool();
   const [Comp, setComp] = useState<ParticlesComponent | null>(null);
   const [ready, setReady] = useState(false);
   const completeTimerRef = useRef<number>(0);
+  const idRef = useRef(`burst-${Math.random().toString(16).slice(2)}`);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const leaseRef = useRef<ParticleLease | null>(null);
 
   // 合并预设 + 自定义配置
   const mergedConfig = useMemo<BurstConfig>(() => {
@@ -227,9 +212,35 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
 
   const options = useMemo(() => buildOptions(mergedConfig, color), [mergedConfig, color]);
 
-  // 动态加载 tsParticles
+  const releaseLease = useCallback(() => {
+    if (!pool || !leaseRef.current) return;
+    pool.release(leaseRef.current);
+    leaseRef.current = null;
+  }, [pool]);
+
+  useEffect(() => {
+    if (!active) {
+      releaseLease();
+      return;
+    }
+    if (!pool || typeof window === 'undefined') return;
+    if (!containerRef.current) return;
+    releaseLease();
+    const { lease } = pool.acquire({
+      target: containerRef.current,
+      options,
+      label: preset,
+    });
+    leaseRef.current = lease;
+    return () => {
+      releaseLease();
+    };
+  }, [active, options, pool, preset, releaseLease]);
+
+  // 动态加载 tsParticles（fallback：未启用对象池时）
   useEffect(() => {
     if (!active || typeof window === 'undefined') return;
+    if (pool) return;
     let mounted = true;
 
     void getParticlesComponent().then((P) => {
@@ -240,33 +251,37 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
     });
 
     return () => { mounted = false; };
-  }, [active]);
+  }, [active, pool]);
 
   // 效果完成回调（基于最大生命周期）
   const handleComplete = useCallback(() => {
-    if (!onComplete) return;
     const maxLife = mergedConfig.life.max * 1000 + 200; // 加 200ms 缓冲
-    completeTimerRef.current = window.setTimeout(onComplete, maxLife);
-  }, [onComplete, mergedConfig.life.max]);
+    completeTimerRef.current = window.setTimeout(() => {
+      if (onComplete) onComplete();
+      releaseLease();
+    }, maxLife);
+  }, [mergedConfig.life.max, onComplete, releaseLease]);
 
   useEffect(() => {
-    if (active && ready) {
+    const canRun = pool ? active : (active && ready);
+    if (canRun) {
       handleComplete();
     }
     return () => window.clearTimeout(completeTimerRef.current);
-  }, [active, ready, handleComplete]);
+  }, [active, handleComplete, pool, ready]);
 
   if (!active || typeof window === 'undefined') return null;
 
   return (
     <div
+      ref={containerRef}
       className={`absolute inset-0 pointer-events-none ${className}`}
       data-burst-particles
       aria-hidden
     >
-      {Comp && ready ? (
+      {!pool && Comp && ready ? (
         <Comp
-          id={`burst-${Date.now()}`}
+          id={idRef.current}
           options={options}
         />
       ) : null}

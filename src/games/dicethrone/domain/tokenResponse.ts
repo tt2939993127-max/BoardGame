@@ -32,27 +32,35 @@ import { TOKEN_IDS } from './ids';
 // ============================================================================
 
 /**
- * 检查玩家是否有可用于减伤的 Token（太极或闪避）
+ * 检查玩家是否有指定时机可用的 Token（基于 tokenDefinitions）
  */
-export function hasDefensiveTokens(state: DiceThroneCore, playerId: PlayerId): boolean {
+const hasTokensForTiming = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    timing: 'beforeDamageDealt' | 'beforeDamageReceived'
+): boolean => {
     const player = state.players[playerId];
     if (!player) return false;
-    
-    const taiji = player.tokens[TOKEN_IDS.TAIJI] ?? 0;
-    const evasive = player.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-    
-    return taiji > 0 || evasive > 0;
+
+    return (state.tokenDefinitions ?? []).some(def => {
+        if (def.category !== 'consumable') return false;
+        if (!def.activeUse?.timing?.includes(timing)) return false;
+        return (player.tokens[def.id] ?? 0) > 0;
+    });
+};
+
+/**
+ * 检查玩家是否有可用于减伤的 Token（beforeDamageReceived）
+ */
+export function hasDefensiveTokens(state: DiceThroneCore, playerId: PlayerId): boolean {
+    return hasTokensForTiming(state, playerId, 'beforeDamageReceived');
 }
 
 /**
- * 检查玩家是否有可用于加伤的 Token（太极）
+ * 检查玩家是否有可用于加伤的 Token（beforeDamageDealt）
  */
 export function hasOffensiveTokens(state: DiceThroneCore, playerId: PlayerId): boolean {
-    const player = state.players[playerId];
-    if (!player) return false;
-    
-    const taiji = player.tokens[TOKEN_IDS.TAIJI] ?? 0;
-    return taiji > 0;
+    return hasTokensForTiming(state, playerId, 'beforeDamageDealt');
 }
 
 /**
@@ -135,28 +143,40 @@ export function createTokenResponseRequestedEvent(
 const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThroneCore>> = {
     /**
      * 修改造成的伤害（加伤）
+     * - crit: value=1，每层 +1 伤害
+     * - accuracy: value=0，不加伤害但使攻击不可防御
      */
     modifyDamageDealt: (ctx) => {
         const { tokenDef, amount } = ctx;
         const effect = tokenDef.activeUse?.effect;
         const modifier = (effect?.value ?? 1) * amount;
+
+        // 精准 (accuracy)：value=0 且 tokenId 为 accuracy → 使攻击不可防御
+        const isAccuracy = tokenDef.id === TOKEN_IDS.ACCURACY;
         return {
             success: true,
             damageModifier: modifier,
+            extra: isAccuracy ? { makeUndefendable: true } : undefined,
         };
     },
 
     /**
      * 修改受到的伤害（减伤）
+     * - protect: value=-1，每层 -1 伤害
+     * - retribution: value=0，不减伤但反弹 2 点不可防御伤害给攻击者
      */
     modifyDamageReceived: (ctx) => {
         const { tokenDef, amount } = ctx;
         const effect = tokenDef.activeUse?.effect;
         // value 通常为负数（如 -1），amount 为消耗数量
         const modifier = (effect?.value ?? -1) * amount;
+
+        // 神罚 (retribution)：value=0 且 tokenId 为 retribution → 反弹 2 点伤害
+        const isRetribution = tokenDef.id === TOKEN_IDS.RETRIBUTION;
         return {
             success: true,
             damageModifier: modifier,
+            extra: isRetribution ? { reflectDamage: 2 * amount } : undefined,
         };
     },
 
@@ -272,13 +292,18 @@ export function processTokenUsage(
     
     // 生成 TOKEN_USED 事件
     const effectType = responseType === 'beforeDamageDealt' ? 'damageBoost' : 'damageReduction';
+    const resolvedEffectType = result.rollResult
+        ? 'evasionAttempt'
+        : effect.type === 'removeDebuff'
+            ? 'removeDebuff'
+            : effectType;
     const event: TokenUsedEvent = {
         type: 'TOKEN_USED',
         payload: {
             playerId,
             tokenId: tokenDef.id,
             amount: actualAmount,
-            effectType: result.rollResult ? 'evasionAttempt' : effectType,
+            effectType: resolvedEffectType,
             damageModifier: result.damageModifier,
             evasionRoll: result.rollResult,
         },

@@ -191,6 +191,28 @@ const summonerWarsCheatModifier: CheatResourceModifier<SummonerWarsCore> = {
             },
         };
     },
+    dealCardToDiscard: (core, playerId, atlasIndex) => {
+        const normalizedId = normalizePlayerId(playerId);
+        if (!normalizedId) return core;
+        const player = core.players[normalizedId];
+        if (!player) return core;
+        // 在牌库中查找匹配精灵图索引的卡牌，移入弃牌堆
+        const cardIndex = player.deck.findIndex(c => c.spriteIndex === atlasIndex);
+        if (cardIndex === -1) return core;
+        const newDeck = [...player.deck];
+        const [card] = newDeck.splice(cardIndex, 1);
+        return {
+            ...core,
+            players: {
+                ...core.players,
+                [normalizedId]: {
+                    ...player,
+                    deck: newDeck,
+                    discard: [...player.discard, card],
+                },
+            },
+        };
+    },
 };
 
 // 创建系统集合（包含 FlowSystem）

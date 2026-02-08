@@ -478,12 +478,23 @@ export const HandArea = ({
         };
     }, [handleDragEnd]);
 
+    // 教程高亮目标：根据手牌数量动态计算卡牌区域宽度，避免全屏宽度的蓝框
+    const cardSpreadWidth = totalCards > 0
+        ? (totalCards - 1) * 7 + 12 + 4 // (n-1)*间距 + 卡宽 + 两侧余量（单位 vw）
+        : 20;
+    const cardAreaHeight = 18; // 卡牌可见高度（vw），卡牌高度约19.7vw减去底部溢出2vw
+
     return (
         <div
             ref={handAreaRef}
             className="absolute bottom-0 left-0 right-0 z-[100] flex justify-center items-end pb-0 h-[22vw] pointer-events-none"
-            data-tutorial-id="hand-area"
         >
+            {/* 教程高亮目标：仅覆盖实际卡牌区域 */}
+            <div
+                data-tutorial-id="hand-area"
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-none"
+                style={{ width: `${cardSpreadWidth}vw`, height: `${cardAreaHeight}vw` }}
+            />
             <div className="relative w-[95vw] h-full flex justify-center items-end">
                 <AnimatePresence>
                     {hand.map((card, i) => {

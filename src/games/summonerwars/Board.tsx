@@ -95,7 +95,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 教学系统集成
   useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
-  useTutorial();
+  const { isActive: isTutorialActive, currentStep: tutorialStep } = useTutorial();
+
+  // 教程纯信息步骤时禁止地图拖拽/缩放（防止蓝色高亮框与元素脱节）
+  // 有 allowedCommands 或 advanceOnEvents 的步骤需要用户与地图交互，不禁用
+  const mapInteractionDisabled = isTutorialActive && !!tutorialStep
+    && !tutorialStep.requireAction
+    && !(tutorialStep.allowedCommands && tutorialStep.allowedCommands.length > 0)
+    && !(tutorialStep.advanceOnEvents && tutorialStep.advanceOnEvents.length > 0);
 
   // 重赛系统
   const { state: rematchState, vote: handleRematchVote } = useRematch();
@@ -213,7 +220,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       const attackSnapshot = { ...pending };
       window.setTimeout(() => {
         const hitIntensity = attackSnapshot.hits >= 3 ? 'strong' : 'normal';
-        pushBoardEffect({ type: 'shockwave', position: attackSnapshot.target, sourcePosition: attackSnapshot.attacker, intensity: hitIntensity });
+        pushBoardEffect({ type: 'shockwave', position: attackSnapshot.target, sourcePosition: attackSnapshot.attacker, intensity: hitIntensity, attackType: attackSnapshot.attackType });
         for (const dmg of attackSnapshot.damages) {
           pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
         }
@@ -237,7 +244,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       setHitStopTarget(pending.target);
       setTimeout(() => setHitStopTarget(null), 200);
     }
-    pushBoardEffect({ type: 'shockwave', position: pending.target, sourcePosition: pending.attacker, intensity: hitIntensity });
+    pushBoardEffect({ type: 'shockwave', position: pending.target, sourcePosition: pending.attacker, intensity: hitIntensity, attackType: pending.attackType });
     for (const dmg of pending.damages) {
       pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
     }
@@ -360,6 +367,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 className="w-full h-full flex items-center justify-center px-[10vw]"
                 initialScale={1}
                 dragBoundsPaddingRatioY={0.3}
+                interactionDisabled={mapInteractionDisabled}
                 containerTestId="sw-map-container"
                 contentTestId="sw-map-content"
                 scaleTestId="sw-map-scale"
@@ -509,11 +517,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     结束阶段
                   </GameButton>
                 </div>
-                <DeckPile
-                  type="discard" count={myDiscardCount} position="right"
-                  topCard={myDiscard[myDiscard.length - 1] ?? null}
-                  onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
-                />
+                <div data-tutorial-id="sw-discard-pile">
+                  <DeckPile
+                    type="discard" count={myDiscardCount} position="right"
+                    topCard={myDiscard[myDiscard.length - 1] ?? null}
+                    onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+                  />
+                </div>
               </div>
 
               {/* 右侧：阶段指示器 */}
@@ -529,7 +539,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               </div>
 
               {/* 顶部中央：提示横幅 */}
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto z-30">
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-action-banner">
                 <StatusBanners
                   currentPhase={currentPhase}
                   isMyTurn={isMyTurn}

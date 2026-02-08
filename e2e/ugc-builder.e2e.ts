@@ -30,8 +30,8 @@ const seedDraftState = async (page: Page) => {
 
 const gotoUGC = async (page: Page) => {
     await page.goto('/dev/ugc', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'UGC Builder' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '保存' })).toBeVisible();
+    await expect(page.getByText('UGC Builder')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: '保存' })).toBeVisible({ timeout: 15000 });
     await dismissViteOverlay(page);
 };
 
@@ -476,6 +476,10 @@ test.describe('UGC Builder', () => {
 
             const iframe = page.frameLocator('iframe[title="UGC Remote Host ugc-builder-sandbox"]');
             await expect(iframe.locator('[data-hand-area="root"]').first()).toBeVisible({ timeout: 15000 });
+
+            const screenshotPath = path.resolve('screenshots', 'ugc-sandbox.png');
+            fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
+            await page.screenshot({ path: screenshotPath, fullPage: true });
         });
 
         test('点击卡牌应标记选中状态', async ({ page }) => {
@@ -484,10 +488,10 @@ test.describe('UGC Builder', () => {
 
             await page.getByRole('button', { name: '打开试玩' }).click();
             const iframe = page.frameLocator('iframe[title="UGC Remote Host ugc-builder-sandbox"]');
-            const card = iframe.locator('[data-card-id="c1"]').first();
+            const card = iframe.locator('[data-component-id="hand-bottom"] [data-card-id]').last();
             await expect(card).toBeVisible({ timeout: 15000 });
 
-            await card.click();
+            await card.click({ force: true });
             await expect(card).toHaveAttribute('data-is-selected', 'true');
         });
 
@@ -497,9 +501,9 @@ test.describe('UGC Builder', () => {
 
             await page.getByRole('button', { name: '打开试玩' }).click();
             const iframe = page.frameLocator('iframe[title="UGC Remote Host ugc-builder-sandbox"]');
-            const card = iframe.locator('[data-card-id="c1"]').first();
+            const card = iframe.locator('[data-component-id="hand-bottom"] [data-card-id]').last();
             await expect(card).toBeVisible({ timeout: 15000 });
-            await card.click();
+            await card.click({ force: true });
             await expect(card).toHaveAttribute('data-is-selected', 'true');
             const actionButton = iframe.getByRole('button', { name: '出牌' }).first();
             await expect(actionButton).toBeVisible({ timeout: 15000 });

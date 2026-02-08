@@ -11,9 +11,7 @@ import {
 import type { PlayerPanelData } from '../../../core/ui';
 import {
     HitStopContainer,
-    SlashEffect,
     type HitStopConfig,
-    type SlashConfig,
 } from '../../../components/common/animations';
 
 /** 护盾图标组件 */
@@ -37,15 +35,11 @@ export const PlayerStats = ({
     hpRef,
     hitStopActive,
     hitStopConfig,
-    slashActive,
-    slashConfig,
 }: {
     player: HeroState;
     hpRef?: RefObject<HTMLDivElement | null>;
     hitStopActive?: boolean;
     hitStopConfig?: HitStopConfig;
-    slashActive?: boolean;
-    slashConfig?: SlashConfig;
 }) => {
     const { t } = useTranslation('game-dicethrone');
 
@@ -112,7 +106,6 @@ export const PlayerStats = ({
                         );
                     }}
                 />
-                <SlashEffect isActive={!!slashActive} {...(slashConfig ?? {})} className="z-50" />
             </div>
         </HitStopContainer>
     );

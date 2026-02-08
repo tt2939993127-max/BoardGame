@@ -81,6 +81,55 @@ export function validate(
             return { valid: true };
         }
 
+        case SU_COMMANDS.SELECT_FACTION: {
+            if (phase !== 'factionSelect') {
+                return { valid: false, error: '只能在派系选择阶段选择派系' };
+            }
+            // Check turn order strictness
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: '不是你的回合' };
+            }
+            const selection = core.factionSelection;
+            if (!selection) return { valid: false, error: '派系选择状态未初始化' };
+
+            const factionId = command.payload.factionId;
+            if (selection.takenFactions.includes(factionId)) {
+                return { valid: false, error: '该派系已被选择' };
+            }
+            const playerSelections = selection.playerSelections[command.playerId] || [];
+            if (playerSelections.length >= 2) {
+                return { valid: false, error: '你已选择了两个派系' };
+            }
+
+            return { valid: true };
+        }
+
+        case SU_COMMANDS.USE_TALENT: {
+            if (phase !== 'playCards') {
+                return { valid: false, error: '只能在出牌阶段使用天赋' };
+            }
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: '不是你的回合' };
+            }
+            const { minionUid, baseIndex } = command.payload;
+            const targetBase = core.bases[baseIndex];
+            if (!targetBase) return { valid: false, error: '无效的基地索引' };
+            const targetMinion = targetBase.minions.find(m => m.uid === minionUid);
+            if (!targetMinion) return { valid: false, error: '基地上没有该随从' };
+            if (targetMinion.controller !== command.playerId) {
+                return { valid: false, error: '只能使用自己控制的随从的天赋' };
+            }
+            if (targetMinion.talentUsed) {
+                return { valid: false, error: '本回合天赋已使用' };
+            }
+            // 检查是否有天赋能力
+            const mDef = getCardDef(targetMinion.defId);
+            if (!mDef || !('abilityTags' in mDef) || !mDef.abilityTags?.includes('talent')) {
+                return { valid: false, error: '该随从没有天赋能力' };
+            }
+            return { valid: true };
+        }
+
         default:
             return { valid: false, error: '未知命令' };
     }

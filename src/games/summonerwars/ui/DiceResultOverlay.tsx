@@ -5,7 +5,7 @@
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Swords, Crosshair, Zap } from 'lucide-react';
 import type { DiceFace } from '../config/dice';
 import { getSpriteAtlasSource, getSpriteAtlasStyle, DICE_FACE_SPRITE_MAP } from './cardAtlas';
@@ -142,18 +142,33 @@ export const DiceResultOverlay: React.FC<DiceResultOverlayProps> = ({
   duration = 2500,
   onClose,
 }) => {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(() => Boolean(results && results.length > 0));
+  const timerRef = useRef<number | null>(null);
+  const closeNow = useCallback(() => {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setVisible(false);
+    onClose?.();
+  }, [onClose]);
 
   useEffect(() => {
     if (results && results.length > 0) {
       setVisible(true);
-      const timer = setTimeout(() => {
-        setVisible(false);
-        onClose?.();
-      }, duration);
-      return () => clearTimeout(timer);
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+      }
+      timerRef.current = window.setTimeout(closeNow, duration);
+      return () => {
+        if (timerRef.current) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+      };
     }
-  }, [results, duration, onClose]);
+    return undefined;
+  }, [results, duration, closeNow]);
 
   if (!results || results.length === 0) return null;
 
@@ -174,7 +189,8 @@ export const DiceResultOverlay: React.FC<DiceResultOverlayProps> = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+            className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer"
+            onClick={closeNow}
           >
             <div
               className="flex flex-col items-center gap-[0.8vw]"

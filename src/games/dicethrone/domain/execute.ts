@@ -234,25 +234,6 @@ export function execute(
                 events.push(responseWindowEvent);
                 return events; // 等待响应窗口关闭
             }
-            
-            // 防御阶段自动选择唯一技能（实时计算可用技能）
-            const availableAbilityIds = getAvailableAbilityIds(state, rollerId);
-            if (state.turnPhase === 'defensiveRoll' && 
-                state.pendingAttack && 
-                !state.pendingAttack.defenseAbilityId && 
-                availableAbilityIds.length === 1) {
-                const autoAbilityEvent: AbilityActivatedEvent = {
-                    type: 'ABILITY_ACTIVATED',
-                    payload: { 
-                        abilityId: availableAbilityIds[0], 
-                        playerId: state.pendingAttack.defenderId,
-                        isDefense: true,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                };
-                events.push(autoAbilityEvent);
-            }
             break;
         }
 
@@ -832,6 +813,36 @@ export function execute(
                 pendingDamage.responseType
             );
             events.push(...tokenEvents);
+
+            // 精准 (accuracy)：使攻击不可防御
+            if (result.extra?.makeUndefendable && state.pendingAttack) {
+                events.push({
+                    type: 'ATTACK_MADE_UNDEFENDABLE',
+                    payload: { attackerId: pendingDamage.sourcePlayerId, tokenId },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+            }
+
+            // 神罚 (retribution)：反弹伤害给攻击者
+            const reflectDamage = result.extra?.reflectDamage as number | undefined;
+            if (reflectDamage && reflectDamage > 0) {
+                const attackerPlayer = state.players[pendingDamage.sourcePlayerId];
+                const attackerHp = attackerPlayer?.resources[RESOURCE_IDS.HP] ?? 0;
+                const actualReflect = Math.min(reflectDamage, attackerHp);
+                events.push({
+                    type: 'DAMAGE_DEALT',
+                    payload: {
+                        targetId: pendingDamage.sourcePlayerId,
+                        amount: reflectDamage,
+                        actualDamage: actualReflect,
+                        sourceAbilityId: 'retribution-reflect',
+                        type: 'undefendable',
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+            }
             
             // 如果完全闪避，关闭响应窗口
             if (result.fullyEvaded) {

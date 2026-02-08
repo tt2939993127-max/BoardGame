@@ -406,6 +406,17 @@ export interface DiceThroneCore {
         /** 触发时间戳 */
         timestamp: number;
     };
+    /**
+     * 额外攻击进行中标志（晕眩 daze 触发）
+     * 当攻击方有 daze 时，攻击结算后对手获得一次额外攻击机会
+     * 此标志在额外攻击的 offensiveRoll 开始时设置，在进入 main2 时清除并恢复原活跃玩家
+     */
+    extraAttackInProgress?: {
+        /** 额外攻击的发起者（即原攻击的防御方） */
+        attackerId: PlayerId;
+        /** 原回合的活跃玩家（额外攻击结束后恢复） */
+        originalActivePlayerId: PlayerId;
+    };
 }
 // 命令定义
 // ============================================================================
@@ -938,6 +949,14 @@ export interface AttackResolvedEvent extends GameEvent<'ATTACK_RESOLVED'> {
     };
 }
 
+/** 攻击变为不可防御事件 */
+export interface AttackMadeUndefendableEvent extends GameEvent<'ATTACK_MADE_UNDEFENDABLE'> {
+    payload: {
+        attackerId: PlayerId;
+        tokenId?: string;
+    };
+}
+
 /** 选择请求事件 */
 export interface ChoiceRequestedEvent extends GameEvent<'CHOICE_REQUESTED'> {
     payload: {
@@ -1094,7 +1113,7 @@ export interface TokenUsedEvent extends GameEvent<'TOKEN_USED'> {
         tokenId: string;
         amount: number;
         /** 效果类型 */
-        effectType: 'damageBoost' | 'damageReduction' | 'evasionAttempt';
+        effectType: 'damageBoost' | 'damageReduction' | 'evasionAttempt' | 'removeDebuff';
         /** 伤害修改量（加伤/减伤） */
         damageModifier?: number;
         /** 闪避投骰结果（仅 evasionAttempt） */
@@ -1177,6 +1196,18 @@ export interface BonusDiceSettledEvent extends GameEvent<'BONUS_DICE_SETTLED'> {
     };
 }
 
+/** 额外攻击触发事件（晕眩 daze 触发：攻击结算后对手获得一次额外攻击） */
+export interface ExtraAttackTriggeredEvent extends GameEvent<'EXTRA_ATTACK_TRIGGERED'> {
+    payload: {
+        /** 额外攻击的发起者（原攻击的防御方） */
+        attackerId: PlayerId;
+        /** 额外攻击的目标（原攻击方，即被 daze 的玩家） */
+        targetId: PlayerId;
+        /** 触发来源（状态效果 ID） */
+        sourceStatusId: string;
+    };
+}
+
 /** 所有 DiceThrone 事件 */
 export type DiceThroneEvent =
     | DiceRolledEvent
@@ -1208,6 +1239,7 @@ export type DiceThroneEvent =
     | AttackInitiatedEvent
     | AttackPreDefenseResolvedEvent
     | AttackResolvedEvent
+    | AttackMadeUndefendableEvent
     | ChoiceRequestedEvent
     | ChoiceResolvedEvent
     | TurnChangedEvent
@@ -1227,7 +1259,8 @@ export type DiceThroneEvent =
     | AbilityReselectionRequiredEvent
     | BonusDiceRerollRequestedEvent
     | BonusDieRerolledEvent
-    | BonusDiceSettledEvent;
+    | BonusDiceSettledEvent
+    | ExtraAttackTriggeredEvent;
 
 // ============================================================================
 // 常量

@@ -5,7 +5,7 @@ import { ADMIN_API_URL } from '../../config/server';
 import { useToast } from '../../contexts/ToastContext';
 import { ArrowLeft, Mail, Calendar, Hash, Ban, CheckCircle, Clock } from 'lucide-react';
 import { cn } from '../../lib/utils';
-// import DataTable from './components/DataTable'; // 如需在此显示对局历史
+import ImageLightbox from '../../components/common/ImageLightbox';
 
 interface UserDetail {
     id: string;
@@ -18,7 +18,20 @@ interface UserDetail {
     createdAt: string;
     lastOnline?: string;
     avatar?: string;
-    // matches: Match[]; // 如果 API 返回 matches 列表
+}
+
+interface UserStats {
+    totalMatches: number;
+    wins: number;
+    winRate: number;
+}
+
+interface RecentMatch {
+    matchID: string;
+    gameName: string;
+    result: string;
+    opponent: string;
+    endedAt: string;
 }
 
 export default function UserDetailPage() {
@@ -27,7 +40,10 @@ export default function UserDetailPage() {
     const { token } = useAuth();
     const { error: toastError } = useToast();
     const [user, setUser] = useState<UserDetail | null>(null);
+    const [stats, setStats] = useState<UserStats | null>(null);
+    const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
     const [loading, setLoading] = useState(true);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -37,7 +53,9 @@ export default function UserDetailPage() {
                 });
                 if (!res.ok) throw new Error('Failed to fetch user');
                 const data = await res.json();
-                setUser(data);
+                setUser(data.user);
+                if (data.stats) setStats(data.stats);
+                if (data.recentMatches) setRecentMatches(data.recentMatches);
             } catch (err) {
                 console.error(err);
                 toastError('获取详情失败');
@@ -78,7 +96,10 @@ export default function UserDetailPage() {
                 <div className="px-8 pb-8">
                     <div className="flex flex-col md:flex-row items-start md:items-end -mt-12 mb-6 gap-6">
                         <div className="w-24 h-24 rounded-2xl bg-white p-1 shadow-lg ring-1 ring-zinc-100">
-                            <div className="w-full h-full rounded-xl bg-zinc-100 flex items-center justify-center overflow-hidden">
+                            <div
+                                className={cn("w-full h-full rounded-xl bg-zinc-100 flex items-center justify-center overflow-hidden", user.avatar && "cursor-zoom-in")}
+                                onClick={() => user.avatar && setPreviewImage(user.avatar)}
+                            >
                                 {user.avatar ? (
                                     <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
                                 ) : (
@@ -181,33 +202,38 @@ export default function UserDetailPage() {
                                 </div>
                             )}
 
-                            {/* 统计信息占位 */}
+                            {/* 统计信息 */}
                             <div className="bg-zinc-900 text-white p-6 rounded-2xl shadow-xl">
                                 <h3 className="text-sm font-bold opacity-80 mb-4">游戏数据</h3>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-sm text-zinc-400">总胜率</span>
-                                        <span className="font-bold text-xl text-emerald-400">55%</span>
-                                    </div>
-                                    <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-                                        <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 w-[55%]" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4 pt-2">
-                                        <div>
-                                            <span className="text-xs text-zinc-500 block">胜场</span>
-                                            <span className="font-bold">128</span>
+                                {stats && stats.totalMatches > 0 ? (
+                                    <div className="space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm text-zinc-400">总胜率</span>
+                                            <span className="font-bold text-xl text-emerald-400">{Math.round(stats.winRate)}%</span>
                                         </div>
-                                        <div>
-                                            <span className="text-xs text-zinc-500 block">胜率排名</span>
-                                            <span className="font-bold">#42</span>
+                                        <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                                            <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400" style={{ width: `${Math.round(stats.winRate)}%` }} />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 pt-2">
+                                            <div>
+                                                <span className="text-xs text-zinc-500 block">总场次</span>
+                                                <span className="font-bold">{stats.totalMatches}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs text-zinc-500 block">胜场</span>
+                                                <span className="font-bold">{stats.wins}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <p className="text-sm text-zinc-500">暂无对局数据</p>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+            <ImageLightbox src={previewImage} onClose={() => setPreviewImage(null)} />
         </div>
     );
 }

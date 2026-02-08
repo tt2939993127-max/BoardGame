@@ -22,6 +22,10 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: devPort,
       strictPort: true,
+      // 排除测试产物目录，避免 Playwright 写入截图/报告时触发 HMR full-reload
+      watch: {
+        ignored: ['**/test-results/**', '**/playwright-report/**', '**/.tmp/**', '**/evidence/**'],
+      },
       proxy: {
         '/games': {
           target: 'http://127.0.0.1:18000',
@@ -51,6 +55,10 @@ export default defineConfig(({ mode }) => {
             }
           },
         },
+        '/feedback': {
+          target: 'http://127.0.0.1:18001',
+          changeOrigin: true,
+        },
         '/social-socket': {
           target: 'http://127.0.0.1:18001',
           changeOrigin: true,
@@ -64,10 +72,7 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:18001',
           changeOrigin: true,
         },
-        '/assets': {
-          target: 'http://127.0.0.1:18001',
-          changeOrigin: true,
-        },
+
       },
     }
   }

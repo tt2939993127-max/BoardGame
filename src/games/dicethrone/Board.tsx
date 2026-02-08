@@ -20,8 +20,6 @@ import { useShake } from '../../components/common/animations/ShakeContainer';
 import { usePulseGlow } from '../../components/common/animations/PulseGlow';
 import {
     useHitStop,
-    useSlashEffect,
-    getSlashPresetByDamage,
     getHitStopPresetByDamage,
 } from '../../components/common/animations';
 import { getLocalizedAssetPath } from '../../core';
@@ -401,20 +399,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         triggerHitStop: triggerOpponentHitStop,
     } = useHitStop(80);
     const {
-        isActive: isOpponentSlashActive,
-        config: opponentSlashConfig,
-        triggerSlash: triggerOpponentSlash,
-    } = useSlashEffect();
-    const {
         isActive: isSelfHitStopActive,
         config: selfHitStopConfig,
         triggerHitStop: triggerSelfHitStop,
     } = useHitStop(80);
-    const {
-        isActive: isSelfSlashActive,
-        config: selfSlashConfig,
-        triggerSlash: triggerSelfSlash,
-    } = useSlashEffect();
 
     // DOM 引用
     const opponentHpRef = React.useRef<HTMLDivElement>(null);
@@ -839,10 +827,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         getEffectStartPos,
         pushFlyingEffect,
         triggerOpponentShake,
-        triggerSlash: triggerOpponentSlash,
         triggerHitStop: triggerOpponentHitStop,
         triggerSelfImpact: (damage) => {
-            triggerSelfSlash(getSlashPresetByDamage(damage));
             triggerSelfHitStop(getHitStopPresetByDamage(damage));
         },
         locale,
@@ -930,8 +916,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         isOpponentShaking={isOpponentShaking}
                         hitStopActive={isOpponentHitStopActive}
                         hitStopConfig={opponentHitStopConfig}
-                        slashActive={isOpponentSlashActive}
-                        slashConfig={opponentSlashConfig}
                         shouldAutoObserve={shouldAutoObserve}
                         onToggleView={() => {
                             toggleViewMode();
@@ -956,8 +940,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         selfHpRef={selfHpRef}
                         hitStopActive={isSelfHitStopActive}
                         hitStopConfig={selfHitStopConfig}
-                        slashActive={isSelfSlashActive}
-                        slashConfig={selfSlashConfig}
                         drawDeckRef={drawDeckRef}
                         onPurifyClick={() => openModal('purify')}
                         canUsePurify={canUsePurify}

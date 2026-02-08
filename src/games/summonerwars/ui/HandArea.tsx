@@ -99,6 +99,7 @@ const HandCard: React.FC<{
     <motion.div
       className="relative cursor-pointer select-none group"
       data-card-id={card.id}
+      data-tutorial-id={index === 0 ? 'sw-first-hand-card' : undefined}
       data-card-type={card.cardType}
       data-card-name={card.name}
       data-card-cost={getCardCost(card)}

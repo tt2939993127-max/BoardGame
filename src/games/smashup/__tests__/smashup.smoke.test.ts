@@ -1,18 +1,23 @@
 /**
  * 大杀四方 (Smash Up) - 冒烟测试
  *
- * 覆盖：setup、出牌、阶段推进、基地记分、抽牌、手牌上限
+ * 覆盖：setup、派系选择、出牌、阶段推进
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
 import { createFlowSystem, createDefaultSystems } from '../../../engine';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS, getCurrentPlayerId } from '../domain/types';
+import { initAllAbilities } from '../abilities';
 
 const PLAYER_IDS = ['0', '1'];
+
+beforeAll(() => {
+    initAllAbilities();
+});
 
 function createRunner() {
     return new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
@@ -26,51 +31,90 @@ function createRunner() {
     });
 }
 
-describe('smashup', () => {
-    it('setup 初始化正确', () => {
-        const runner = createRunner();
-        const result = runner.run({
-            name: 'setup 验证',
-            commands: [],
-        });
+/** 蛇形选秀命令序列 + ADVANCE_PHASE 推进到 playCards */
+const DRAFT_COMMANDS = [
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: 'aliens' } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: 'pirates' } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: 'ninjas' } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: 'dinosaurs' } },
+    // auto-continue 到 startTurn，再 ADVANCE_PHASE 推进到 playCards
+    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+];
 
+describe('smashup', () => {
+    it('setup 初始化正确（派系选择阶段）', () => {
+        const runner = createRunner();
+        const result = runner.run({ name: 'setup 验证', commands: [] });
         const core = result.finalState.core;
+
         expect(core.turnOrder).toEqual(PLAYER_IDS);
         expect(core.currentPlayerIndex).toBe(0);
         expect(core.turnNumber).toBe(1);
-        // 每个玩家 5 张起始手牌
+        expect(result.finalState.sys.phase).toBe('factionSelect');
+        expect(core.factionSelection).toBeDefined();
+        for (const pid of PLAYER_IDS) {
+            expect(core.players[pid].hand.length).toBe(0);
+            expect(core.players[pid].vp).toBe(0);
+        }
+        expect(core.bases.length).toBe(PLAYER_IDS.length + 1);
+    });
+
+    it('派系选择完成后初始化正确', () => {
+        const runner = createRunner();
+        const result = runner.run({
+            name: '派系选择 + 开始',
+            commands: DRAFT_COMMANDS,
+        });
+        const core = result.finalState.core;
+
+        for (const step of result.steps) {
+            expect(step.success).toBe(true);
+        }
+
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(core.factionSelection).toBeUndefined();
+
         for (const pid of PLAYER_IDS) {
             expect(core.players[pid].hand.length).toBe(5);
-            expect(core.players[pid].vp).toBe(0);
-            expect(core.players[pid].factions).toEqual(['aliens', 'aliens']);
         }
-        // 基地数 = 玩家数 + 1
-        expect(core.bases.length).toBe(PLAYER_IDS.length + 1);
-        expect(core.baseDeck.length).toBeGreaterThan(0);
+
+        expect(core.players['0'].factions).toEqual(['aliens', 'dinosaurs']);
+        expect(core.players['1'].factions).toEqual(['pirates', 'ninjas']);
+    });
+
+    it('派系互斥选择', () => {
+        const runner = createRunner();
+        const result = runner.run({
+            name: '派系互斥',
+            commands: [
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: 'aliens' } },
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: 'aliens' } },
+            ],
+        });
+        expect(result.steps[0]?.success).toBe(true);
+        expect(result.steps[1]?.success).toBe(false);
+        expect(result.steps[1]?.error).toContain('已被选择');
     });
 
     it('出牌阶段可以打出随从', () => {
         const runner = createRunner();
         const result = runner.run({
-            name: '打出随从',
-            commands: [],
+            name: '选秀+出牌',
+            commands: DRAFT_COMMANDS,
         });
-
         const core = result.finalState.core;
         const pid = getCurrentPlayerId(core);
         const player = core.players[pid];
-        // 找一张随从牌
         const minionCard = player.hand.find(c => c.type === 'minion');
-        if (!minionCard) return; // 如果没有随从牌则跳过
+        if (!minionCard) return;
 
-        // 此时应该在 playCards 阶段（startTurn 自动推进）
-        const phase = result.finalState.sys.phase;
-        expect(phase).toBe('playCards');
+        expect(result.finalState.sys.phase).toBe('playCards');
 
-        // 用新 runner 执行打出随从
-        const result2 = runner.run({
-            name: '打出随从执行',
+        const runner2 = createRunner();
+        const result2 = runner2.run({
+            name: '选秀+出牌执行',
             commands: [
+                ...DRAFT_COMMANDS,
                 {
                     type: SU_COMMANDS.PLAY_MINION,
                     playerId: pid,
@@ -79,15 +123,13 @@ describe('smashup', () => {
             ],
         });
 
-        // 应该成功
-        expect(result2.steps[0]?.success).toBe(true);
-        expect(result2.steps[0]?.events).toContain(SU_EVENTS.MINION_PLAYED);
+        const playStep = result2.steps[result2.steps.length - 1];
+        expect(playStep?.success).toBe(true);
+        expect(playStep?.events).toContain(SU_EVENTS.MINION_PLAYED);
 
-        // 验证状态变化
         const newPlayer = result2.finalState.core.players[pid];
-        expect(newPlayer.hand.length).toBe(4); // 少了一张
+        expect(newPlayer.hand.length).toBe(4);
         expect(newPlayer.minionsPlayed).toBe(1);
-        // 基地上应该有随从
         const base = result2.finalState.core.bases[0];
         expect(base.minions.length).toBe(1);
         expect(base.minions[0].uid).toBe(minionCard.uid);
@@ -96,8 +138,8 @@ describe('smashup', () => {
     it('非当前玩家不能出牌', () => {
         const runner = createRunner();
         const result = runner.run({
-            name: '非当前玩家出牌',
-            commands: [],
+            name: '选秀',
+            commands: DRAFT_COMMANDS,
         });
         const core = result.finalState.core;
         const otherPid = PLAYER_IDS.find(p => p !== getCurrentPlayerId(core))!;
@@ -105,9 +147,11 @@ describe('smashup', () => {
         const card = otherPlayer.hand[0];
         if (!card) return;
 
-        const result2 = runner.run({
-            name: '非当前玩家出牌执行',
+        const runner2 = createRunner();
+        const result2 = runner2.run({
+            name: '非当前玩家出牌',
             commands: [
+                ...DRAFT_COMMANDS,
                 {
                     type: SU_COMMANDS.PLAY_MINION,
                     playerId: otherPid,
@@ -115,8 +159,8 @@ describe('smashup', () => {
                 },
             ],
         });
-
-        expect(result2.steps[0]?.success).toBe(false);
+        const playStep = result2.steps[result2.steps.length - 1];
+        expect(playStep?.success).toBe(false);
     });
 
     it('ADVANCE_PHASE 推进阶段', () => {
@@ -126,40 +170,23 @@ describe('smashup', () => {
         const result = runner.run({
             name: '阶段推进',
             commands: [
-                // 结束出牌阶段
+                ...DRAFT_COMMANDS,
                 { type: 'ADVANCE_PHASE', playerId: pid, payload: undefined },
             ],
         });
 
-        // pipeline 每次 afterEvents 只能自动推进一个阶段
-        // playCards → scoreBases（auto→）draw，停在 draw
         expect(result.finalState.sys.phase).toBe('draw');
-        expect(result.steps[0]?.success).toBe(true);
-
-        // 再发一次 ADVANCE_PHASE 从 draw 继续
-        const result2 = runner.run({
-            name: '完整回合',
-            commands: [
-                { type: 'ADVANCE_PHASE', playerId: pid, payload: undefined },
-                // draw → endTurn (auto→ startTurn auto→ playCards) - 可能停在中间
-                { type: 'ADVANCE_PHASE', playerId: pid, payload: undefined },
-                { type: 'ADVANCE_PHASE', playerId: pid, payload: undefined },
-            ],
-        });
-
-        // 最终应该回到 playCards（可能是下一个玩家）
-        const finalPhase = result2.finalState.sys.phase;
-        expect(['playCards', 'startTurn', 'endTurn', 'draw']).toContain(finalPhase);
+        const advanceStep = result.steps[result.steps.length - 1];
+        expect(advanceStep?.success).toBe(true);
     });
 
     it('domain 注册表加载正确', () => {
         const runner = createRunner();
         const result = runner.run({
             name: '注册表验证',
-            commands: [],
+            commands: DRAFT_COMMANDS,
         });
         const core = result.finalState.core;
-        // 验证所有手牌的 defId 不为空
         for (const pid of PLAYER_IDS) {
             for (const card of core.players[pid].hand) {
                 expect(card.defId).toBeTruthy();

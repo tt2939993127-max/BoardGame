@@ -17,6 +17,7 @@ import type { CardPreviewRef } from '../../../systems/CardSystem/types';
 
 /** 游戏阶段（按规则顺序） */
 export type GamePhase =
+    | 'factionSelect' // 0. 派系选择
     | 'startTurn'    // 1. 回合开始
     | 'playCards'    // 2. 出牌阶段
     | 'scoreBases'   // 3. 基地记分
@@ -24,7 +25,7 @@ export type GamePhase =
     | 'endTurn';     // 5. 回合结束
 
 export const PHASE_ORDER: GamePhase[] = [
-    'startTurn', 'playCards', 'scoreBases', 'draw', 'endTurn',
+    'factionSelect', 'startTurn', 'playCards', 'scoreBases', 'draw', 'endTurn',
 ];
 
 // ============================================================================
@@ -116,16 +117,30 @@ export interface MinionOnBase {
     powerModifier: number;
     /** 本回合是否已使用天赋 */
     talentUsed: boolean;
-    /** 附着的行动卡 UID 列表 */
-    attachedActions: string[];
+    /** 附着的行动卡列表（带 owner 追踪） */
+    attachedActions: AttachedActionOnMinion[];
+}
+
+/** 随从上附着的行动卡 */
+export interface AttachedActionOnMinion {
+    uid: string;
+    defId: string;
+    ownerId: PlayerId;
+}
+
+/** 基地上附着的持续行动卡 */
+export interface OngoingActionOnBase {
+    uid: string;
+    defId: string;
+    ownerId: PlayerId;
 }
 
 /** 场上的基地 */
 export interface BaseInPlay {
     defId: string;
     minions: MinionOnBase[];
-    /** 持续行动卡 UID 列表 */
-    ongoingActions: string[];
+    /** 持续行动卡列表 */
+    ongoingActions: OngoingActionOnBase[];
 }
 
 // ============================================================================
@@ -177,6 +192,48 @@ export interface SmashUpCore {
     nextUid: number;
     /** 游戏结果 */
     gameResult?: GameOverResult;
+
+    // === 新增字段 ===
+    /** 派系选择阶段状态（选择完成后置为 undefined） */
+    factionSelection?: FactionSelectionState;
+    /** Me First 响应窗口状态 */
+    meFirstWindow?: MeFirstState;
+    /** 疯狂牌库（克苏鲁扩展，defId 列表） */
+    madnessDeck?: string[];
+    /** 当前活跃的 Prompt */
+    activePrompt?: PromptConfig;
+}
+
+export interface FactionSelectionState {
+    /** 已被选择的派系 */
+    takenFactions: string[];
+    /** 每位玩家已选的派系 */
+    playerSelections: Record<PlayerId, string[]>;
+    /** 选择完成的玩家 */
+    completedPlayers: PlayerId[];
+}
+
+export interface MeFirstState {
+    active: boolean;
+    triggerContext: string;
+    responderQueue: PlayerId[];
+    currentIndex: number;
+    consecutivePasses: number;
+}
+
+export interface PromptConfig {
+    id: string;
+    playerId: PlayerId;
+    title: string;
+    description?: string;
+    options: PromptOption[];
+    sourceId?: string;
+}
+
+export interface PromptOption {
+    label: string;
+    value: any;
+    disabled?: boolean;
 }
 
 // ============================================================================
@@ -205,6 +262,12 @@ export const SU_COMMANDS = {
     PLAY_MINION: 'su:play_minion',
     PLAY_ACTION: 'su:play_action',
     DISCARD_TO_LIMIT: 'su:discard_to_limit',
+    // === 新增 ===
+    SELECT_FACTION: 'su:select_faction',
+    RESOLVE_PROMPT: 'su:resolve_prompt',
+    USE_TALENT: 'su:use_talent',
+    ME_FIRST_PLAY: 'su:me_first_play',
+    ME_FIRST_PASS: 'su:me_first_pass',
 } as const;
 
 /** 打出随从 */
@@ -231,10 +294,36 @@ export interface DiscardToLimitCommand extends Command<typeof SU_COMMANDS.DISCAR
     };
 }
 
+/** 选择派系 */
+export interface SelectFactionCommand extends Command<typeof SU_COMMANDS.SELECT_FACTION> {
+    payload: {
+        factionId: string;
+    };
+}
+
+/** 解决 Prompt */
+export interface ResolvePromptCommand extends Command<typeof SU_COMMANDS.RESOLVE_PROMPT> {
+    payload: {
+        promptId: string;
+        result: any;
+    };
+}
+
+/** 使用天赋 */
+export interface UseTalentCommand extends Command<typeof SU_COMMANDS.USE_TALENT> {
+    payload: {
+        minionUid: string;
+        baseIndex: number;
+    };
+}
+
 export type SmashUpCommand =
     | PlayMinionCommand
     | PlayActionCommand
-    | DiscardToLimitCommand;
+    | DiscardToLimitCommand
+    | SelectFactionCommand
+    | ResolvePromptCommand
+    | UseTalentCommand;
 
 // ============================================================================
 // 事件类型
@@ -253,6 +342,23 @@ export const SU_EVENTS = {
     DECK_RESHUFFLED: 'su:deck_reshuffled',
     MINION_RETURNED: 'su:minion_returned',
     LIMIT_MODIFIED: 'su:limit_modified',
+    // === 新增 ===
+    FACTION_SELECTED: 'su:faction_selected',
+    ALL_FACTIONS_SELECTED: 'su:all_factions_selected',
+    PROMPT_CREATED: 'su:prompt_created',
+    PROMPT_RESOLVED: 'su:prompt_resolved',
+    ME_FIRST_OPENED: 'su:me_first_opened',
+    ME_FIRST_CLOSED: 'su:me_first_closed',
+    MINION_DESTROYED: 'su:minion_destroyed',
+    MINION_MOVED: 'su:minion_moved',
+    POWER_COUNTER_ADDED: 'su:power_counter_added',
+    POWER_COUNTER_REMOVED: 'su:power_counter_removed',
+    ONGOING_ATTACHED: 'su:ongoing_attached',
+    ONGOING_DETACHED: 'su:ongoing_detached',
+    TALENT_USED: 'su:talent_used',
+    CARD_TO_DECK_BOTTOM: 'su:card_to_deck_bottom',
+    CARD_RECOVERED_FROM_DISCARD: 'su:card_recovered_from_discard',
+    HAND_SHUFFLED_INTO_DECK: 'su:hand_shuffled_into_deck',
 } as const;
 
 export interface MinionPlayedEvent extends GameEvent<typeof SU_EVENTS.MINION_PLAYED> {
@@ -369,4 +475,152 @@ export type SmashUpEvent =
     | BaseReplacedEvent
     | DeckReshuffledEvent
     | MinionReturnedEvent
-    | LimitModifiedEvent;
+    | LimitModifiedEvent
+    | FactionSelectedEvent
+    | AllFactionsSelectedEvent
+    | PromptCreatedEvent
+    | PromptResolvedEvent
+    | MinionDestroyedEvent
+    | MinionMovedEvent
+    | PowerCounterAddedEvent
+    | PowerCounterRemovedEvent
+    | OngoingAttachedEvent
+    | OngoingDetachedEvent
+    | TalentUsedEvent
+    | CardToDeckBottomEvent
+    | CardRecoveredFromDiscardEvent
+    | HandShuffledIntoDeckEvent;
+
+// ============================================================================
+// 新增事件接口
+// ============================================================================
+
+export interface FactionSelectedEvent extends GameEvent<typeof SU_EVENTS.FACTION_SELECTED> {
+    payload: {
+        playerId: PlayerId;
+        factionId: string;
+    };
+}
+
+export interface AllFactionsSelectedEvent extends GameEvent<typeof SU_EVENTS.ALL_FACTIONS_SELECTED> {
+    payload: {
+        readiedPlayers: Record<PlayerId, {
+            deck: CardInstance[];
+            hand: CardInstance[];
+        }>;
+        nextUid: number;
+    };
+}
+
+export interface PromptCreatedEvent extends GameEvent<typeof SU_EVENTS.PROMPT_CREATED> {
+    payload: {
+        prompt: PromptConfig;
+    };
+}
+
+export interface PromptResolvedEvent extends GameEvent<typeof SU_EVENTS.PROMPT_RESOLVED> {
+    payload: {
+        promptId: string;
+        result: any;
+    };
+}
+
+// ============================================================================
+// 新增事件接口（能力系统）
+// ============================================================================
+
+export interface MinionDestroyedEvent extends GameEvent<typeof SU_EVENTS.MINION_DESTROYED> {
+    payload: {
+        minionUid: string;
+        minionDefId: string;
+        fromBaseIndex: number;
+        ownerId: PlayerId;
+        reason: string;
+    };
+}
+
+export interface MinionMovedEvent extends GameEvent<typeof SU_EVENTS.MINION_MOVED> {
+    payload: {
+        minionUid: string;
+        minionDefId: string;
+        fromBaseIndex: number;
+        toBaseIndex: number;
+        reason: string;
+    };
+}
+
+export interface PowerCounterAddedEvent extends GameEvent<typeof SU_EVENTS.POWER_COUNTER_ADDED> {
+    payload: {
+        minionUid: string;
+        baseIndex: number;
+        amount: number;
+        reason: string;
+    };
+}
+
+export interface PowerCounterRemovedEvent extends GameEvent<typeof SU_EVENTS.POWER_COUNTER_REMOVED> {
+    payload: {
+        minionUid: string;
+        baseIndex: number;
+        amount: number;
+        reason: string;
+    };
+}
+
+export interface OngoingAttachedEvent extends GameEvent<typeof SU_EVENTS.ONGOING_ATTACHED> {
+    payload: {
+        cardUid: string;
+        defId: string;
+        ownerId: PlayerId;
+        targetType: 'base' | 'minion';
+        targetBaseIndex: number;
+        targetMinionUid?: string;
+    };
+}
+
+export interface OngoingDetachedEvent extends GameEvent<typeof SU_EVENTS.ONGOING_DETACHED> {
+    payload: {
+        cardUid: string;
+        defId: string;
+        ownerId: PlayerId;
+        reason: string;
+    };
+}
+
+export interface TalentUsedEvent extends GameEvent<typeof SU_EVENTS.TALENT_USED> {
+    payload: {
+        playerId: PlayerId;
+        minionUid: string;
+        defId: string;
+        baseIndex: number;
+    };
+}
+
+/** 卡牌放入牌库底 */
+export interface CardToDeckBottomEvent extends GameEvent<typeof SU_EVENTS.CARD_TO_DECK_BOTTOM> {
+    payload: {
+        cardUid: string;
+        defId: string;
+        ownerId: PlayerId;
+        reason: string;
+    };
+}
+
+/** 从弃牌堆取回卡牌到手牌 */
+export interface CardRecoveredFromDiscardEvent extends GameEvent<typeof SU_EVENTS.CARD_RECOVERED_FROM_DISCARD> {
+    payload: {
+        playerId: PlayerId;
+        cardUids: string[];
+        reason: string;
+    };
+}
+
+/** 手牌洗入牌库 */
+export interface HandShuffledIntoDeckEvent extends GameEvent<typeof SU_EVENTS.HAND_SHUFFLED_INTO_DECK> {
+    payload: {
+        playerId: PlayerId;
+        /** 洗入后的牌库 uid 列表（确定性） */
+        newDeckUids: string[];
+        reason: string;
+    };
+}

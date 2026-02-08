@@ -226,6 +226,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 **粒子系统使用规范**：
 - **通用粒子组件**放在 `src/components/common/animations/`，游戏层通过 props/配置注入差异
 - **动态加载**：tsParticles 必须 `import()` 懒加载，避免首屏体积膨胀和 SSR 问题
+- **对象池复用（强制）**：全局使用 `ParticlePoolProvider` 复用粒子实例；`BurstParticles` 已自动接入对象池，禁止在游戏层手动创建/销毁 tsParticles 实例
 - **生命周期**：粒子效果必须有明确的 `duration`/`life` 配置，禁止无限循环粒子（VictoryParticles 等全屏庆祝除外）
 - **性能预算**：单次爆发粒子数建议 ≤50，持续性粒子 ≤30；移动端可通过 `reducedMotion` 降级为简化版
 - **配置外置**：粒子参数（颜色/数量/速度/重力）以配置对象形式定义，方便游戏层覆盖

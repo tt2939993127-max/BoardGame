@@ -24,6 +24,12 @@ export class SendRegisterCodeDto {
     email?: string;
 }
 
+export class SendResetCodeDto {
+    @IsOptional()
+    @IsString()
+    email?: string;
+}
+
 export class LoginDto {
     @IsOptional()
     @IsString()
@@ -58,6 +64,20 @@ export class VerifyEmailDto {
     @IsOptional()
     @IsString()
     code?: string;
+}
+
+export class ResetPasswordDto {
+    @IsOptional()
+    @IsString()
+    email?: string;
+
+    @IsOptional()
+    @IsString()
+    code?: string;
+
+    @IsOptional()
+    @IsString()
+    newPassword?: string;
 }
 
 export class UpdateAvatarDto {

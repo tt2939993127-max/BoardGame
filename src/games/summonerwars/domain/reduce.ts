@@ -148,7 +148,8 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       const unit = newBoard[attacker.row][attacker.col].unit;
       if (unit) {
-        newBoard[attacker.row][attacker.col].unit = { ...unit, hasAttacked: true };
+        // 攻击后清除治疗模式标记
+        newBoard[attacker.row][attacker.col].unit = { ...unit, hasAttacked: true, healingMode: false };
       }
       const pid = unit?.owner as PlayerId;
       return {
@@ -187,7 +188,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
             },
           };
         } else {
-          cell.unit = { ...cell.unit, damage: newDamage };
+          cell.unit = { ...cell.unit, damage: newDamage, wasAttackedThisTurn: true };
         }
       } else if (cell.structure) {
         const newDamage = cell.structure.damage + damage;
@@ -238,7 +239,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       const newBoard = core.board.map(row => row.map(cell => {
         const newCell = { ...cell };
         if (newCell.unit) {
-          newCell.unit = { ...newCell.unit, hasMoved: false, hasAttacked: false };
+          newCell.unit = { ...newCell.unit, hasMoved: false, hasAttacked: false, wasAttackedThisTurn: false };
         }
         return newCell;
       }));
@@ -275,17 +276,56 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
 
         cell.unit = undefined;
 
+        // 圣洁审判：友方单位被消灭时移除1充能
+        let updatedActiveEvents = ownerPlayer.activeEvents;
+        const holyJudgmentIdx = updatedActiveEvents.findIndex(ev => {
+          const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+          return baseId === 'paladin-holy-judgment' && (ev.charges ?? 0) > 0;
+        });
+        if (holyJudgmentIdx >= 0) {
+          updatedActiveEvents = updatedActiveEvents.map((ev, i) => {
+            if (i === holyJudgmentIdx) {
+              const newCharges = Math.max(0, (ev.charges ?? 0) - 1);
+              return { ...ev, charges: newCharges };
+            }
+            return ev;
+          });
+          // 充能归零时自动弃置
+          const hjEvent = updatedActiveEvents[holyJudgmentIdx];
+          if ((hjEvent.charges ?? 0) <= 0) {
+            const discardedEvent = updatedActiveEvents[holyJudgmentIdx];
+            updatedActiveEvents = updatedActiveEvents.filter((_, i) => i !== holyJudgmentIdx);
+            const ownerWithUpdatedEvents = {
+              ...ownerPlayer,
+              activeEvents: updatedActiveEvents,
+              discard: [...ownerPlayer.discard, discardedEvent],
+            };
+            if (hasRelentless && isCommon && !isSelfDestruct) {
+              return {
+                ...core, board: newBoard,
+                players: { ...core.players, [actualOwner]: { ...ownerWithUpdatedEvents, hand: [...ownerWithUpdatedEvents.hand, destroyedCard] } },
+              };
+            }
+            return {
+              ...core, board: newBoard,
+              players: { ...core.players, [actualOwner]: { ...ownerWithUpdatedEvents, discard: [...ownerWithUpdatedEvents.discard, destroyedCard] } },
+            };
+          }
+        }
+
+        const ownerWithEvents = { ...ownerPlayer, activeEvents: updatedActiveEvents };
+
         if (hasRelentless && isCommon && !isSelfDestruct) {
           // 返回手牌而非弃牌堆
           return {
             ...core, board: newBoard,
-            players: { ...core.players, [actualOwner]: { ...ownerPlayer, hand: [...ownerPlayer.hand, destroyedCard] } },
+            players: { ...core.players, [actualOwner]: { ...ownerWithEvents, hand: [...ownerWithEvents.hand, destroyedCard] } },
           };
         }
 
         return {
           ...core, board: newBoard,
-          players: { ...core.players, [actualOwner]: { ...ownerPlayer, discard: [...ownerPlayer.discard, destroyedCard] } },
+          players: { ...core.players, [actualOwner]: { ...ownerWithEvents, discard: [...ownerWithEvents.discard, destroyedCard] } },
         };
       }
       return { ...core, board: newBoard };
@@ -337,6 +377,17 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
           [crPlayerId]: { ...crPlayer, hand: [...crPlayer.hand, crCard], discard: crNewDiscard },
         },
       };
+    }
+
+    case SW_EVENTS.HEALING_MODE_SET: {
+      // 治疗模式：标记单位下次攻击为治疗
+      const { position: hmPos } = payload as { position: CellCoord };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const hmUnit = newBoard[hmPos.row]?.[hmPos.col]?.unit;
+      if (hmUnit) {
+        newBoard[hmPos.row][hmPos.col].unit = { ...hmUnit, healingMode: true };
+      }
+      return { ...core, board: newBoard };
     }
 
     case SW_EVENTS.ABILITY_TRIGGERED:
@@ -423,14 +474,37 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     }
 
     case SW_EVENTS.FUNERAL_PYRE_CHARGED: {
-      const { playerId: fpPlayerId, cardId: fpCardId } = payload as { playerId: PlayerId; cardId: string };
+      const { playerId: fpPlayerId, cardId: fpCardId, eventCardId: fpEventCardId, charges: fpAbsoluteCharges } = payload as {
+        playerId: PlayerId; cardId?: string; eventCardId?: string; charges?: number;
+      };
       const fpPlayer = core.players[fpPlayerId];
-      const newActiveEvents = fpPlayer.activeEvents.map(ev =>
-        ev.id === fpCardId ? { ...ev, charges: (ev.charges ?? 0) + 1 } : ev
-      );
+      const targetId = fpEventCardId ?? fpCardId;
+      const newActiveEvents: EventCard[] = [];
+      let newDiscard = fpPlayer.discard;
+
+      for (const ev of fpPlayer.activeEvents) {
+        if (ev.id !== targetId) {
+          newActiveEvents.push(ev);
+          continue;
+        }
+
+        // 如果提供了绝对充能值则直接设置，否则+1
+        const newCharges = fpAbsoluteCharges !== undefined ? fpAbsoluteCharges : (ev.charges ?? 0) + 1;
+        const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+        if (baseId === 'paladin-holy-judgment' && newCharges <= 0) {
+          newDiscard = [...newDiscard, { ...ev, charges: newCharges }];
+          continue;
+        }
+
+        newActiveEvents.push({ ...ev, charges: newCharges });
+      }
+
       return {
         ...core,
-        players: { ...core.players, [fpPlayerId]: { ...fpPlayer, activeEvents: newActiveEvents } },
+        players: {
+          ...core.players,
+          [fpPlayerId]: { ...fpPlayer, activeEvents: newActiveEvents, discard: newDiscard },
+        },
       };
     }
 
@@ -496,7 +570,7 @@ function initializeBoardFromFactions(
 
   for (const pid of ['0', '1'] as PlayerId[]) {
     const factionId = factions[pid];
-    if (!factionId || factionId === 'unselected') continue;
+    if (!factionId) continue;
     
     const deckData = createDeckByFactionId(factionId as FactionId);
     const isBottom = pid === '0';

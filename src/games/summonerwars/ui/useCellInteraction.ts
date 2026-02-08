@@ -814,6 +814,11 @@ export function useCellInteraction({
   // 自动跳过无可用操作的阶段
   useEffect(() => {
     if (!isMyTurn || isGameOver) return;
+    if (!core.hostStarted) return;
+    if (typeof window !== 'undefined') {
+      const holder = window as Window & { __SW_DISABLE_AUTO_SKIP__?: boolean };
+      if (holder.__SW_DISABLE_AUTO_SKIP__) return;
+    }
     const hasActions = hasAvailableActions(core, activePlayerId as '0' | '1');
     if (!hasActions) {
       const timer = setTimeout(() => { moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({}); }, 300);

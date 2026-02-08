@@ -38,13 +38,15 @@ export const impactVariants: Variants = {
     },
 };
 
-/** 震动动画变体 */
+/** 震动动画变体 — 加强版，XY 双轴 + 微旋转 */
 export const shakeVariants: Variants = {
-    idle: { x: 0 },
+    idle: { x: 0, y: 0, rotate: 0 },
     shake: {
-        x: [-10, 10, -8, 8, -5, 5, 0],
+        x: [-14, 12, -10, 8, -6, 4, -2, 0],
+        y: [0, -6, 4, -3, 2, -1, 0],
+        rotate: [0, -1.5, 1, -0.8, 0.5, 0],
         transition: {
-            duration: 0.4,
+            duration: 0.5,
             ease: 'easeOut',
         },
     },

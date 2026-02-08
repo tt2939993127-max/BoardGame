@@ -10,6 +10,7 @@ import { Review, type ReviewDocument } from '../review/schemas/review.schema';
 import type { QueryMatchesDto } from './dtos/query-matches.dto';
 import type { QueryRoomsDto } from './dtos/query-rooms.dto';
 import type { QueryUsersDto } from './dtos/query-users.dto';
+import type { RoomFilterDto } from './dtos/room-filter.dto';
 import { MatchRecord, type MatchRecordDocument, type MatchRecordPlayer } from './schemas/match-record.schema';
 import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from './schemas/room-match.schema';
 
@@ -24,6 +25,12 @@ const UNREAD_TOTAL_KEY_PREFIX = 'social:unread:total:';
 const DELETED_USER_PLACEHOLDER = '[已删除用户]';
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const resolveOwnerUserId = (ownerKey?: string) => {
+    if (!ownerKey?.startsWith('user:')) return null;
+    const trimmed = ownerKey.slice('user:'.length).trim();
+    if (!trimmed.length) return null;
+    return Types.ObjectId.isValid(trimmed) ? trimmed : null;
+};
 
 type AdminStatsBase = {
     totalUsers: number;
@@ -32,6 +39,12 @@ type AdminStatsBase = {
     totalMatches: number;
     todayMatches: number;
     games: Array<{ name: string; count: number }>;
+    playTimeStats: Array<{
+        gameName: string;
+        totalDuration: number;
+        avgDuration: number;
+        count: number;
+    }>;
 };
 
 type AdminStats = AdminStatsBase & {
@@ -133,6 +146,12 @@ type UserDetailResult =
     | { ok: true; data: UserDetail }
     | { ok: false; code: 'notFound' };
 
+type BulkDeleteResult = {
+    requested: number;
+    deleted: number;
+    skipped: Array<{ id: string; reason: 'invalidId' | 'notFound' | 'cannotDeleteAdmin' }>;
+};
+
 type MatchListItem = {
     matchID: string;
     gameName: string;
@@ -164,6 +183,7 @@ type RoomListItem = {
     roomName?: string;
     ownerKey?: string;
     ownerType?: 'user' | 'guest';
+    ownerName?: string;
     isLocked: boolean;
     players: RoomPlayerItem[];
     createdAt: Date;
@@ -196,6 +216,7 @@ const isValidStats = (value: unknown): value is AdminStatsBase => {
         && typeof stats.totalMatches === 'number'
         && typeof stats.todayMatches === 'number'
         && Array.isArray(stats.games)
+        && Array.isArray(stats.playTimeStats)
     );
 };
 
@@ -222,7 +243,7 @@ export class AdminService {
         @InjectModel(MatchRecord.name) private readonly matchRecordModel: Model<MatchRecordDocument>,
         @InjectModel(ROOM_MATCH_MODEL_NAME) private readonly roomMatchModel: Model<RoomMatchDocument>,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-    ) {}
+    ) { }
 
     async getStats(): Promise<AdminStats> {
         const cached = await this.cacheManager.get<AdminStatsBase>(ADMIN_STATS_CACHE_KEY);
@@ -315,12 +336,7 @@ export class AdminService {
     async getRooms(query: QueryRoomsDto) {
         const page = query.page || 1;
         const limit = query.limit || 20;
-        const filter: Record<string, unknown> = {};
-
-        if (query.gameName) {
-            const escaped = escapeRegExp(query.gameName.trim());
-            filter.gameName = { $regex: `^${escaped}$`, $options: 'i' };
-        }
+        const filter = this.buildRoomFilter(query);
 
         const [records, total] = await Promise.all([
             this.roomMatchModel
@@ -334,6 +350,22 @@ export class AdminService {
         ]);
 
         const items: RoomListItem[] = records.map(record => this.buildRoomListItem(record));
+        const ownerUserIds = Array.from(
+            new Set(items.map(item => resolveOwnerUserId(item.ownerKey)).filter(Boolean) as string[])
+        );
+        if (ownerUserIds.length > 0) {
+            const owners = await this.userModel
+                .find({ _id: { $in: ownerUserIds } })
+                .select('_id username')
+                .lean<Pick<LeanUser, '_id' | 'username'>[]>();
+            const ownerMap = new Map(owners.map(owner => [owner._id.toString(), owner.username]));
+            items.forEach(item => {
+                const ownerId = resolveOwnerUserId(item.ownerKey);
+                if (ownerId) {
+                    item.ownerName = ownerMap.get(ownerId);
+                }
+            });
+        }
 
         return {
             items,
@@ -344,9 +376,103 @@ export class AdminService {
         };
     }
 
+    async deleteMatch(matchID: string): Promise<boolean> {
+        const result = await this.matchRecordModel.deleteOne({ matchID });
+        const deleted = (result.deletedCount ?? 0) > 0;
+        if (deleted) {
+            await this.invalidateAdminStatsCache();
+        }
+        return deleted;
+    }
+
+    async bulkDeleteMatches(matchIDs: string[]) {
+        const uniqueIds = Array.from(new Set(matchIDs.filter(Boolean)));
+        if (!uniqueIds.length) {
+            return { requested: 0, deleted: 0 };
+        }
+        const result = await this.matchRecordModel.deleteMany({ matchID: { $in: uniqueIds } });
+        if ((result.deletedCount ?? 0) > 0) {
+            await this.invalidateAdminStatsCache();
+        }
+        return { requested: uniqueIds.length, deleted: result.deletedCount ?? 0 };
+    }
+
+    async bulkDeleteUsers(userIds: string[]): Promise<BulkDeleteResult> {
+        const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+        const skipped: BulkDeleteResult['skipped'] = [];
+        if (!uniqueIds.length) {
+            return { requested: 0, deleted: 0, skipped };
+        }
+
+        const validIds = uniqueIds.filter(id => Types.ObjectId.isValid(id));
+        const invalidIds = uniqueIds.filter(id => !Types.ObjectId.isValid(id));
+        invalidIds.forEach(id => skipped.push({ id, reason: 'invalidId' }));
+
+        const users = await this.userModel.find({ _id: { $in: validIds } }).lean<LeanUser[]>();
+        const userMap = new Map(users.map(user => [user._id.toString(), user]));
+
+        validIds
+            .filter(id => !userMap.has(id))
+            .forEach(id => skipped.push({ id, reason: 'notFound' }));
+
+        const deletableUsers = users.filter(user => user.role !== 'admin');
+        users
+            .filter(user => user.role === 'admin')
+            .forEach(user => skipped.push({ id: user._id.toString(), reason: 'cannotDeleteAdmin' }));
+
+        if (deletableUsers.length === 0) {
+            return { requested: uniqueIds.length, deleted: 0, skipped };
+        }
+
+        const deletableIds = deletableUsers.map(user => user._id.toString());
+        const usernames = deletableUsers.map(user => user.username).filter(Boolean);
+
+        await Promise.all([
+            this.friendModel.deleteMany({ $or: [{ user: { $in: deletableIds } }, { friend: { $in: deletableIds } }] }),
+            this.messageModel.deleteMany({ $or: [{ from: { $in: deletableIds } }, { to: { $in: deletableIds } }] }),
+            this.reviewModel.deleteMany({ user: { $in: deletableIds } }),
+            this.userModel.deleteMany({ _id: { $in: deletableIds } }),
+            usernames.length
+                ? this.matchRecordModel.updateMany(
+                    { 'players.name': { $in: usernames } },
+                    { $set: { 'players.$[player].name': DELETED_USER_PLACEHOLDER } },
+                    { arrayFilters: [{ 'player.name': { $in: usernames } }] }
+                )
+                : Promise.resolve(),
+        ]);
+
+        await Promise.all(deletableIds.map(id => this.clearUserCache(id)));
+        await this.invalidateAdminStatsCache();
+
+        return {
+            requested: uniqueIds.length,
+            deleted: deletableIds.length,
+            skipped,
+        };
+    }
+
     async destroyRoom(matchID: string): Promise<boolean> {
         const result = await this.roomMatchModel.deleteOne({ matchID });
         return (result.deletedCount ?? 0) > 0;
+    }
+
+    async bulkDestroyRooms(matchIDs: string[]) {
+        const uniqueIds = Array.from(new Set(matchIDs.filter(Boolean)));
+        if (!uniqueIds.length) {
+            return { requested: 0, deleted: 0 };
+        }
+        const result = await this.roomMatchModel.deleteMany({ matchID: { $in: uniqueIds } });
+        return { requested: uniqueIds.length, deleted: result.deletedCount ?? 0 };
+    }
+
+    async bulkDestroyRoomsByFilter(filterDto: RoomFilterDto) {
+        const filter = this.buildRoomFilter(filterDto);
+        const total = await this.roomMatchModel.countDocuments(filter);
+        if (total === 0) {
+            return { requested: 0, deleted: 0 };
+        }
+        const result = await this.roomMatchModel.deleteMany(filter);
+        return { requested: total, deleted: result.deletedCount ?? 0 };
     }
 
     async getUsers(query: QueryUsersDto) {
@@ -364,6 +490,10 @@ export class AdminService {
 
         if (typeof query.banned === 'boolean') {
             filter.banned = query.banned;
+        }
+
+        if (query.role) {
+            filter.role = query.role;
         }
 
         const [users, total] = await Promise.all([
@@ -454,12 +584,8 @@ export class AdminService {
             ),
         ]);
 
-        await this.cacheManager.del(`${ONLINE_KEY_PREFIX}${userId}`);
-        await this.cacheManager.del(`${UNREAD_TOTAL_KEY_PREFIX}${userId}`);
-        await this.removeCacheByPattern(`${UNREAD_KEY_PREFIX}${userId}:*`);
-        await this.removeCacheByPattern(`${UNREAD_KEY_PREFIX}*:${userId}`);
-        await this.cacheManager.del(ADMIN_STATS_CACHE_KEY);
-        await this.removeCacheByPattern(`${ADMIN_STATS_TREND_CACHE_PREFIX}*`);
+        await this.clearUserCache(userId);
+        await this.invalidateAdminStatsCache();
 
         return {
             ok: true,
@@ -536,16 +662,25 @@ export class AdminService {
             filter.gameName = { $regex: `^${escaped}$`, $options: 'i' };
         }
 
-        const dateRange: Record<string, Date> = {};
+        if (query.search) {
+            const escaped = escapeRegExp(query.search.trim());
+            filter.$or = [
+                { matchID: { $regex: escaped, $options: 'i' } },
+                { 'players.name': { $regex: escaped, $options: 'i' } },
+            ];
+        }
+
+        const endedAtFilter: Record<string, Date | boolean | null> = {
+            $exists: true,
+            $ne: null,
+        };
         if (query.startDate) {
-            dateRange.$gte = new Date(query.startDate);
+            endedAtFilter.$gte = new Date(query.startDate);
         }
         if (query.endDate) {
-            dateRange.$lte = new Date(query.endDate);
+            endedAtFilter.$lte = new Date(query.endDate);
         }
-        if (Object.keys(dateRange).length > 0) {
-            filter.endedAt = dateRange;
-        }
+        filter.endedAt = endedAtFilter;
 
         const [records, total] = await Promise.all([
             this.matchRecordModel
@@ -612,7 +747,7 @@ export class AdminService {
         if (!usernames.length) return new Map<string, number>();
 
         const results = await this.matchRecordModel.aggregate<AggregateCount>([
-            { $match: { 'players.name': { $in: usernames } } },
+            { $match: { 'players.name': { $in: usernames }, endedAt: { $exists: true, $ne: null } } },
             { $unwind: '$players' },
             { $match: { 'players.name': { $in: usernames } } },
             { $group: { _id: '$players.name', count: { $sum: 1 } } },
@@ -622,7 +757,7 @@ export class AdminService {
     }
 
     private async getUserStatsByName(username: string) {
-        const totalMatches = await this.matchRecordModel.countDocuments({ 'players.name': username });
+        const totalMatches = await this.matchRecordModel.countDocuments({ 'players.name': username, endedAt: { $exists: true, $ne: null } });
         if (!totalMatches) {
             return {
                 totalMatches: 0,
@@ -634,7 +769,7 @@ export class AdminService {
         }
 
         const results = await this.matchRecordModel.aggregate<AggregateCount>([
-            { $match: { 'players.name': username } },
+            { $match: { 'players.name': username, endedAt: { $exists: true, $ne: null } } },
             { $unwind: '$players' },
             { $match: { 'players.name': username } },
             { $group: { _id: '$players.result', count: { $sum: 1 } } },
@@ -656,7 +791,7 @@ export class AdminService {
 
     private async getRecentMatchesByName(username: string) {
         const records = await this.matchRecordModel
-            .find({ 'players.name': username })
+            .find({ 'players.name': username, endedAt: { $exists: true, $ne: null } })
             .sort({ endedAt: -1 })
             .limit(RECENT_MATCH_LIMIT)
             .lean<LeanMatchRecord[]>();
@@ -678,13 +813,15 @@ export class AdminService {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
+        const matchEndedFilter = { endedAt: { $exists: true, $ne: null } };
         const [totalUsers, todayUsers, bannedUsers, totalMatches, todayMatches, gameStats] = await Promise.all([
             this.userModel.countDocuments(),
             this.userModel.countDocuments({ createdAt: { $gte: todayStart } }),
             this.userModel.countDocuments({ banned: true }),
-            this.matchRecordModel.countDocuments(),
+            this.matchRecordModel.countDocuments(matchEndedFilter),
             this.matchRecordModel.countDocuments({ endedAt: { $gte: todayStart } }),
             this.matchRecordModel.aggregate<AggregateCount>([
+                { $match: matchEndedFilter },
                 { $group: { _id: '$gameName', count: { $sum: 1 } } },
                 { $sort: { count: -1 } },
             ]),
@@ -700,6 +837,7 @@ export class AdminService {
                 name: String(item._id),
                 count: Number(item.count || 0),
             })),
+            playTimeStats: await this.getGamePlayStats(),
         };
 
         await this.cacheManager.set(ADMIN_STATS_CACHE_KEY, stats, ADMIN_STATS_TTL_SECONDS);
@@ -736,6 +874,29 @@ export class AdminService {
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,
         };
+    }
+
+    private buildRoomFilter(query: RoomFilterDto) {
+        const filter: Record<string, unknown> = {};
+        const gameName = query.gameName?.trim();
+        const search = query.search?.trim();
+
+        if (gameName) {
+            const escaped = escapeRegExp(gameName);
+            filter.gameName = { $regex: `^${escaped}$`, $options: 'i' };
+        }
+
+        if (search) {
+            const escaped = escapeRegExp(search);
+            filter.$or = [
+                { matchID: { $regex: escaped, $options: 'i' } },
+                { 'metadata.setupData.roomName': { $regex: escaped, $options: 'i' } },
+                { 'metadata.roomName': { $regex: escaped, $options: 'i' } },
+                { 'state.G.__setupData.roomName': { $regex: escaped, $options: 'i' } },
+            ];
+        }
+
+        return filter;
     }
 
     private async getOnlineUserIds(): Promise<string[]> {
@@ -788,6 +949,48 @@ export class AdminService {
             return [];
         }
         return [];
+    }
+
+    private async getGamePlayStats() {
+        // Only consider matches that have ended and have valid duration
+        const stats = await this.matchRecordModel.aggregate([
+            {
+                $match: {
+                    endedAt: { $exists: true, $ne: null },
+                    createdAt: { $exists: true, $ne: null }
+                }
+            },
+            {
+                $project: {
+                    gameName: 1,
+                    // Use $toLong if available, otherwise just subtract dates
+                    // MongoDB dates subtract to milliseconds
+                    duration: { $subtract: ["$endedAt", "$createdAt"] }
+                }
+            },
+            // Filter reasonable durations (e.g., > 1 min, < 24 hours) - optional but good for data quality
+            {
+                $match: {
+                    duration: { $gt: 1000 * 60, $lt: 1000 * 60 * 60 * 24 }
+                }
+            },
+            {
+                $group: {
+                    _id: "$gameName",
+                    totalDuration: { $sum: "$duration" },
+                    avgDuration: { $avg: "$duration" },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { totalDuration: -1 } }
+        ]);
+
+        return stats.map(s => ({
+            gameName: s._id || 'Unknown',
+            totalDuration: Math.round(s.totalDuration || 0),
+            avgDuration: Math.round(s.avgDuration || 0),
+            count: s.count || 0
+        }));
     }
 
     private async resolveRedisKeys(client: { keys?: (...args: any[]) => any } | null, pattern: string): Promise<string[]> {
@@ -860,5 +1063,17 @@ export class AdminService {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    }
+
+    private async clearUserCache(userId: string) {
+        await this.cacheManager.del(`${ONLINE_KEY_PREFIX}${userId}`);
+        await this.cacheManager.del(`${UNREAD_TOTAL_KEY_PREFIX}${userId}`);
+        await this.removeCacheByPattern(`${UNREAD_KEY_PREFIX}${userId}:*`);
+        await this.removeCacheByPattern(`${UNREAD_KEY_PREFIX}*:${userId}`);
+    }
+
+    private async invalidateAdminStatsCache() {
+        await this.cacheManager.del(ADMIN_STATS_CACHE_KEY);
+        await this.removeCacheByPattern(`${ADMIN_STATS_TREND_CACHE_PREFIX}*`);
     }
 }

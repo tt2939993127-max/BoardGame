@@ -19,6 +19,8 @@ export interface MapContainerProps {
   maxScale?: number;
   /** 纵向拖拽边界放松比例（相对容器高度） */
   dragBoundsPaddingRatioY?: number;
+  /** 禁用拖拽和缩放（教程非交互步骤时使用） */
+  interactionDisabled?: boolean;
   /** 测试标识（容器） */
   containerTestId?: string;
   /** 测试标识（地图内容） */
@@ -36,6 +38,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   minScale = 0.5,
   maxScale = 3,
   dragBoundsPaddingRatioY = 0,
+  interactionDisabled = false,
   containerTestId,
   contentTestId,
   scaleTestId,
@@ -100,11 +103,12 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   // 鼠标按下（只在容器内触发）
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return; // 只响应左键
+    if (interactionDisabled) return; // 教程非交互步骤时禁止拖拽
     
     isPointerDownRef.current = true;
     pointerStartRef.current = { x: e.clientX, y: e.clientY };
     positionStartRef.current = { x: position.x, y: position.y };
-  }, [position]);
+  }, [position, interactionDisabled]);
 
   // 全局鼠标移动和松开（使用 useEffect 注册）
   useEffect(() => {
@@ -143,6 +147,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
 
   // 滚轮缩放
   const handleWheel = useCallback((e: WheelEvent) => {
+    if (interactionDisabled) return; // 教程非交互步骤时禁止缩放
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     setScale(prev => {
@@ -150,7 +155,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       setPosition(current => clampPosition(current.x, current.y, nextScale));
       return nextScale;
     });
-  }, [minScale, maxScale, clampPosition]);
+  }, [minScale, maxScale, clampPosition, interactionDisabled]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -166,6 +171,14 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     });
   }, [clampPosition]);
 
+  // 教程禁用交互时，重置地图到默认位置和缩放
+  useEffect(() => {
+    if (interactionDisabled) {
+      setScale(initialScale);
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [interactionDisabled, initialScale]);
+
   return (
     <div
       ref={containerRef}
@@ -174,7 +187,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       onDragStart={(e) => e.preventDefault()}
       data-testid={containerTestId}
       style={{ 
-        cursor: isDragging ? 'grabbing' : 'grab',
+        cursor: interactionDisabled ? 'default' : isDragging ? 'grabbing' : 'grab',
         userSelect: 'none',
         WebkitUserSelect: 'none',
       }}

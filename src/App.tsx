@@ -13,6 +13,7 @@ import { ModalStackRoot } from './components/system/ModalStackRoot';
 import { ToastViewport } from './components/system/ToastViewport';
 import { EngineNotificationListener } from './components/system/EngineNotificationListener';
 import { GlobalHUD } from './components/system/GlobalHUD';
+import { ParticlePoolProvider } from './components/common/animations/particlePool';
 
 import { Home } from './pages/Home';
 import { MatchRoom } from './pages/MatchRoom';
@@ -20,6 +21,7 @@ import { LocalMatchRoom } from './pages/LocalMatchRoom';
 import React from 'react';
 
 const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
+const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectAudioPreview'));
 const UnifiedBuilder = React.lazy(() => import('./ugc/builder/pages/UnifiedBuilder').then(m => ({ default: m.UnifiedBuilder })));
 const UGCRuntimeViewPage = React.lazy(() => import('./ugc/runtime/RuntimeViewPage'));
 const UGCSandbox = React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox })));
@@ -28,6 +30,7 @@ const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
 const UsersPage = React.lazy(() => import('./pages/admin/Users'));
 const UserDetailPage = React.lazy(() => import('./pages/admin/UserDetail'));
 const MatchesPage = React.lazy(() => import('./pages/admin/Matches'));
+const RoomsPage = React.lazy(() => import('./pages/admin/Rooms'));
 const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 
 import AdminGuard from './components/auth/AdminGuard';
@@ -43,11 +46,13 @@ const App = () => {
                 <DebugProvider>
                   <TutorialProvider>
                     <BrowserRouter>
-                      <Routes>
+                      <ParticlePoolProvider>
+                        <Routes>
                         <Route path="/" element={<Home />} />
                         <Route path="/play/:gameId/match/:matchId" element={<MatchRoom />} />
                         <Route path="/play/:gameId/local" element={<LocalMatchRoom />} />
                         <Route path="/dev/slicer" element={<React.Suspense fallback={<div>Loading...</div>}><DevToolsSlicer /></React.Suspense>} />
+                        <Route path="/dev/fx" element={<React.Suspense fallback={<div>Loading...</div>}><DevToolsFxPreview /></React.Suspense>} />
                         <Route path="/dev/ugc" element={<React.Suspense fallback={<div className="flex bg-slate-900 h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div></div>}><UnifiedBuilder /></React.Suspense>} />
                         <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<div className="flex bg-slate-900 h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div></div>}><UGCRuntimeViewPage /></React.Suspense>} />
                         <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<div className="flex bg-slate-900 h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div></div>}><UGCSandbox /></React.Suspense>} />
@@ -66,13 +71,15 @@ const App = () => {
                           <Route path="users" element={<UsersPage />} />
                           <Route path="users/:id" element={<UserDetailPage />} />
                           <Route path="matches" element={<MatchesPage />} />
+                          <Route path="rooms" element={<RoomsPage />} />
                           <Route path="feedback" element={<FeedbackPage />} />
                         </Route>
-                      </Routes>
-                      <GlobalHUD />
-                      <ModalStackRoot />
-                      <ToastViewport />
-                      <EngineNotificationListener />
+                        </Routes>
+                        <GlobalHUD />
+                        <ModalStackRoot />
+                        <ToastViewport />
+                        <EngineNotificationListener />
+                      </ParticlePoolProvider>
                     </BrowserRouter>
                   </TutorialProvider>
                 </DebugProvider>

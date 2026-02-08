@@ -49,7 +49,7 @@ export const DiceThroneCharacterSelection: React.FC<DiceThroneCharacterSelection
         id: char.id,
         nameKey: char.nameKey,
         // 仅显示目前已实现的英雄
-        selectable: ['monk', 'barbarian', 'pyromancer', 'moon_elf', 'shadow_thief'].includes(char.id),
+        selectable: ['monk', 'barbarian', 'pyromancer', 'moon_elf', 'shadow_thief', 'paladin'].includes(char.id),
     }));
 
     // 资源配置

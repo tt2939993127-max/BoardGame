@@ -13,4 +13,8 @@ export class QueryMatchesDto extends PaginationQueryDto {
     @IsOptional()
     @IsISO8601()
     endDate?: string;
+
+    @IsOptional()
+    @IsString()
+    search?: string;
 }

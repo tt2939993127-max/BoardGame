@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv';
 import path from 'path';
 
 // Load environment variables from .env file
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const port = process.env.PW_PORT || process.env.E2E_PORT || '5173';
 const baseURL = process.env.VITE_FRONTEND_URL || `http://localhost:${port}`;

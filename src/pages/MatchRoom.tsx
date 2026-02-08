@@ -391,11 +391,11 @@ export const MatchRoom = () => {
 
     useEffect(() => {
         return () => {
-            if (isActive) {
+            if (tutorialStartedRef.current) {
                 closeTutorial();
             }
         };
-    }, [closeTutorial, isActive]);
+    }, [closeTutorial]);
 
     useEffect(() => {
         // 关键约束：教程提示层只允许在 /tutorial 路由出现。
@@ -418,7 +418,6 @@ export const MatchRoom = () => {
                 allowPointerThrough: true,
                 onClose: () => {
                     tutorialModalIdRef.current = null;
-                    closeTutorial();
                 },
                 render: () => <TutorialOverlay />,
             });

@@ -55,6 +55,8 @@ export interface AbilityContext {
     positions?: CellCoord[];
     cardIds?: string[];
   };
+  /** 本次攻击的骰子结果（afterAttack 时可用） */
+  diceResults?: import('../config/dice').DiceFace[];
   /** 时间戳 */
   timestamp: number;
 }
@@ -576,6 +578,22 @@ export function resolveEffect(
           },
           timestamp,
         });
+      } else if (effect.actionId === 'judgment_draw') {
+        // 裁决：攻击后按 melee（❤️）数量抓牌
+        const meleeCount = (ctx.diceResults ?? []).filter(r => r === 'melee').length;
+        if (meleeCount > 0) {
+          events.push({
+            type: SW_EVENTS.CARD_DRAWN,
+            payload: { playerId: ctx.ownerId, count: meleeCount, sourceAbilityId: 'judgment' },
+            timestamp,
+          });
+        }
+      } else if (effect.actionId === 'divine_shield_check') {
+        // 神圣护盾：被动效果，在攻击流程中由 execute.ts 处理
+        // 此处不做任何事，仅作为占位
+      } else if (effect.actionId === 'healing_convert') {
+        // 治疗：beforeAttack 效果，在 ACTIVATE_ABILITY 中处理
+        // 此处不做任何事，仅作为占位
       } else {
         events.push({
           type: SW_EVENTS.ABILITY_TRIGGERED,
@@ -937,6 +955,18 @@ export function calculateEffectiveStrength(
           strength += 1;
         }
       }
+    }
+  }
+
+  // 圣洁审判：友方主动事件区有 paladin-holy-judgment 时，友方士兵+1战力
+  if (unit.card.unitClass === 'common') {
+    const player = state.players[unit.owner];
+    const hasHolyJudgment = player.activeEvents.some(ev => {
+      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+      return baseId === 'paladin-holy-judgment' && (ev.charges ?? 0) > 0;
+    });
+    if (hasHolyJudgment) {
+      strength += 1;
     }
   }
 

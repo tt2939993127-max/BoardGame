@@ -206,6 +206,9 @@ const shouldBlockCommand = (tutorial: TutorialState, command: Command): boolean 
 const clearAiActions = (tutorial: TutorialState): TutorialState => ({
     ...tutorial,
     aiActions: undefined,
+    // 同时清除 step 上的 aiActions，避免 TutorialOverlay 和 AI effect
+    // 通过 tutorial.step.aiActions 读到旧值而永远返回 null
+    step: tutorial.step ? { ...tutorial.step, aiActions: undefined } : tutorial.step,
 });
 
 export function createTutorialSystem<TCore>(): EngineSystem<TCore> {

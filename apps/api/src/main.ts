@@ -17,8 +17,13 @@ async function bootstrap() {
             origin: '*',
             credentials: true,
         },
+        // 反馈接口可能携带 base64 图片，放宽 body 限制
+        rawBody: false,
     });
+    // 提升 JSON body 大小限制（默认 100KB 不够反馈截图）
     const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.use(express.json({ limit: '2mb' }));
+    expressApp.use(express.urlencoded({ extended: true, limit: '2mb' }));
     const gameServerTarget =
         process.env.GAME_SERVER_PROXY_TARGET
         || process.env.GAME_SERVER_URL
@@ -40,7 +45,7 @@ async function bootstrap() {
     if (existsSync(distPath)) {
         expressApp.use(express.static(distPath));
 
-        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin)(\/|$)/;
+        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings)(\/|$)/;
         expressApp.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
             if (spaExclude.test(req.path)) return next();
             return res.sendFile(join(distPath, 'index.html'));

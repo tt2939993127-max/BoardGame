@@ -4,6 +4,7 @@ import { registerPyromancerCustomActions } from './pyromancer';
 import { registerMoonElfCustomActions } from './moon_elf';
 import { registerCommonCustomActions } from './common';
 import { registerShadowThiefCustomActions } from './shadow_thief';
+import { registerPaladinCustomActions } from './paladin';
 
 let initialized = false;
 
@@ -35,6 +36,9 @@ export function initializeCustomActions(): void {
     // 注册影子盗贼处理器
     registerShadowThiefCustomActions();
 
+    // 注册圣骑士处理器
+    registerPaladinCustomActions();
+
     initialized = true;
 }
 
@@ -44,6 +48,7 @@ export { registerBarbarianCustomActions } from './barbarian';
 export { registerPyromancerCustomActions } from './pyromancer';
 export { registerMoonElfCustomActions } from './moon_elf';
 export { registerShadowThiefCustomActions } from './shadow_thief';
+export { registerPaladinCustomActions } from './paladin';
 export { registerCommonCustomActions } from './common';
 
 

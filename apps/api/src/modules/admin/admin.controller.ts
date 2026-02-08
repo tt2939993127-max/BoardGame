@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
 import { BanUserDto } from './dtos/ban-user.dto';
+import { BulkIdsDto } from './dtos/bulk-ids.dto';
+import { RoomFilterDto } from './dtos/room-filter.dto';
 import { QueryMatchesDto } from './dtos/query-matches.dto';
 import { QueryRoomsDto } from './dtos/query-rooms.dto';
 import { QueryStatsDto } from './dtos/query-stats.dto';
@@ -49,6 +51,18 @@ export class AdminController {
             return this.sendError(res, 404, t('admin.error.roomNotFound'));
         }
         return res.status(200).json({ message: t('admin.success.roomDestroyed'), matchID: matchId });
+    }
+
+    @Post('rooms/bulk-delete')
+    async bulkDestroyRooms(@Body() body: BulkIdsDto, @Res() res: Response) {
+        const result = await this.adminService.bulkDestroyRooms(body.ids || []);
+        return res.status(200).json(result);
+    }
+
+    @Post('rooms/bulk-delete-by-filter')
+    async bulkDestroyRoomsByFilter(@Body() body: RoomFilterDto, @Res() res: Response) {
+        const result = await this.adminService.bulkDestroyRoomsByFilter(body);
+        return res.status(200).json(result);
     }
 
     @Get('users/:id')
@@ -112,6 +126,12 @@ export class AdminController {
         return res.status(200).json({ message: t('admin.success.userDeleted'), user: result.user });
     }
 
+    @Post('users/bulk-delete')
+    async bulkDeleteUsers(@Body() body: BulkIdsDto, @Res() res: Response) {
+        const result = await this.adminService.bulkDeleteUsers(body.ids || []);
+        return res.status(200).json(result);
+    }
+
     @Get('matches')
     async getMatches(@Query() query: QueryMatchesDto, @Res() res: Response) {
         const result = await this.adminService.getMatches(query);
@@ -126,6 +146,22 @@ export class AdminController {
             return this.sendError(res, 404, t('admin.error.matchNotFound'));
         }
         return res.json(match);
+    }
+
+    @Delete('matches/:id')
+    async deleteMatch(@Param('id') matchId: string, @Req() req: Request, @Res() res: Response) {
+        const { t } = createRequestI18n(req);
+        const ok = await this.adminService.deleteMatch(matchId);
+        if (!ok) {
+            return this.sendError(res, 404, t('admin.error.matchNotFound'));
+        }
+        return res.status(200).json({ message: t('admin.success.matchDeleted'), matchID: matchId });
+    }
+
+    @Post('matches/bulk-delete')
+    async bulkDeleteMatches(@Body() body: BulkIdsDto, @Res() res: Response) {
+        const result = await this.adminService.bulkDeleteMatches(body.ids || []);
+        return res.status(200).json(result);
     }
 
     private sendError(res: Response, status: number, message: string) {

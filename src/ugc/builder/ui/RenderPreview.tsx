@@ -438,6 +438,7 @@ export function PreviewCanvas({
           const rawActions = Array.isArray(comp.data.actions)
             ? (comp.data.actions as ActionBarRuntimeAction[])
             : [];
+          const showFrame = comp.data.showFrame !== false;
           const allowActionHooks = comp.data.allowActionHooks !== false;
           const visibleActions = getVisibleActions({
             actions: rawActions,
@@ -462,8 +463,11 @@ export function PreviewCanvas({
             selectedCardIds,
           };
 
+          const containerClassName = showFrame
+            ? 'relative border border-slate-600/50 rounded bg-slate-900/40 p-2'
+            : 'relative p-1';
           return (
-            <div key={comp.id} style={style} className="relative border border-slate-600/50 rounded bg-slate-900/40 p-2">
+            <div key={comp.id} style={style} className={containerClassName}>
               {visibleActions.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-slate-500 text-xs">
                   {String(comp.data.name || '操作栏')} (无动作)
@@ -505,9 +509,13 @@ export function PreviewCanvas({
           const phases = Array.isArray(comp.data.phases)
             ? (comp.data.phases as Array<{ id: string; label: string }>)
             : [];
+          const showFrame = comp.data.showFrame !== false;
           if (phases.length === 0) {
+            const emptyClassName = showFrame
+              ? 'border border-slate-600/50 rounded bg-slate-900/40 p-2'
+              : 'p-1';
             return (
-              <div key={comp.id} style={style} className="border border-slate-600/50 rounded bg-slate-900/40 p-2">
+              <div key={comp.id} style={style} className={emptyClassName}>
                 <span className="text-slate-400 text-xs">{String(comp.data.name || '阶段提示')} (无阶段)</span>
               </div>
             );
@@ -561,9 +569,22 @@ export function PreviewCanvas({
               ? comp.data.currentPlayerLabel
               : undefined);
           const orientation = (comp.data.orientation === 'vertical' ? 'vertical' : 'horizontal') as 'vertical' | 'horizontal';
+          const alignMode = comp.data.align === 'right'
+            ? 'right'
+            : comp.data.align === 'center'
+              ? 'center'
+              : 'left';
+          const alignClassName = alignMode === 'right'
+            ? 'items-end text-right'
+            : alignMode === 'center'
+              ? 'items-center text-center'
+              : 'items-start text-left';
 
+          const frameClassName = showFrame
+            ? 'border border-slate-600/50 rounded bg-slate-900/40 p-2'
+            : 'p-1';
           return (
-            <div key={comp.id} style={style} className="border border-slate-600/50 rounded bg-slate-900/40 p-2">
+            <div key={comp.id} style={style} className={frameClassName}>
               <PhaseHudSkeleton
                 phases={phases}
                 currentPhaseId={currentPhaseId}
@@ -583,7 +604,7 @@ export function PreviewCanvas({
                 renderCurrentPlayer={(label) => label ? (
                   <div className="text-[10px] text-amber-200">{label}</div>
                 ) : null}
-                className="flex flex-col gap-2"
+                className={`flex flex-col gap-2 ${alignClassName}`}
               />
             </div>
           );
@@ -615,6 +636,7 @@ export function PreviewCanvas({
           ) as string | undefined;
           const renderFaceMode = String(comp.data.renderFaceMode || 'auto') as 'auto' | 'front' | 'back';
           const allowActionHooks = comp.data.allowActionHooks !== false;
+          const showFrame = comp.data.showFrame !== false;
           
           // 获取关联数据
           const items = targetSchemaId ? (previewInstances[targetSchemaId] || []) : [];
@@ -650,6 +672,9 @@ export function PreviewCanvas({
             const runtimePlayerIds = Array.isArray(playerIds)
               ? playerIds.map(id => String(id)).filter(Boolean)
               : [];
+            const normalizedCurrentPlayerId = typeof currentPlayerId === 'string' && currentPlayerId.trim()
+              ? String(currentPlayerId)
+              : undefined;
             const derivedPlayerIdsFromData = bindEntity
               ? Array.from(new Set(
                 items
@@ -661,13 +686,21 @@ export function PreviewCanvas({
                   .filter((value): value is string => Boolean(value))
               ))
               : [];
-            const resolvedPlayerIds = runtimePlayerIds.length > 0
+            const hasRuntimeOverlap = runtimePlayerIds.some(id =>
+              derivedPlayerIdsFromData.includes(id)
+              || (explicitPlayerIds?.includes(id) ?? false)
+              || derivedPlayerIds.includes(id)
+            );
+            const useRuntimePlayerIds = runtimePlayerIds.length > 0
+              && (!normalizedCurrentPlayerId || runtimePlayerIds.includes(normalizedCurrentPlayerId))
+              && hasRuntimeOverlap;
+            const resolvedPlayerIds = useRuntimePlayerIds
               ? runtimePlayerIds
               : (explicitPlayerIds && explicitPlayerIds.length > 0)
                 ? explicitPlayerIds
                 : (derivedPlayerIds.length > 0 ? derivedPlayerIds : derivedPlayerIdsFromData);
-            const resolvedCurrentPlayerId = typeof currentPlayerId === 'string' && currentPlayerId.trim()
-              ? currentPlayerId
+            const resolvedCurrentPlayerId = normalizedCurrentPlayerId && resolvedPlayerIds.includes(normalizedCurrentPlayerId)
+              ? normalizedCurrentPlayerId
               : (comp.data.currentPlayerId as string | undefined);
             const playerContext = resolvePlayerContext({
               items,
@@ -708,8 +741,11 @@ export function PreviewCanvas({
           
           // 如果没有数据，显示占位
           if (resolvedItems.length === 0) {
+            const emptyClassName = showFrame
+              ? 'border-2 border-dashed border-slate-600 rounded flex items-center justify-center'
+              : 'flex items-center justify-center';
             return (
-              <div key={comp.id} style={style} className="border-2 border-dashed border-slate-600 rounded flex items-center justify-center">
+              <div key={comp.id} style={style} className={emptyClassName}>
                 <span className="text-slate-400 text-xs">{String(comp.data.name || comp.type)} (无数据)</span>
               </div>
             );
@@ -747,8 +783,16 @@ export function PreviewCanvas({
           const canSelect = canInteract && (interactionMode === 'click' || interactionMode === 'both');
           const canDrag = canInteract && (interactionMode === 'drag' || interactionMode === 'both');
 
+          const zoneFrameClassName = showFrame
+            ? 'border border-slate-600/50 rounded bg-slate-800/30'
+            : '';
           return (
-            <div key={comp.id} style={style} className="relative border border-slate-600/50 rounded bg-slate-800/30 overflow-hidden">
+            <div
+              key={comp.id}
+              style={style}
+              data-component-id={comp.id}
+              className={`relative overflow-hidden ${zoneFrameClassName}`}
+            >
               <HandAreaSkeleton
                 cards={resolvedItems}
                 canDrag={canDrag}

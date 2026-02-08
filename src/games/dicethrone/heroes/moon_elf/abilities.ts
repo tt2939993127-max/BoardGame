@@ -6,6 +6,10 @@ import { MOON_ELF_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../../domain/ids'
 
 const FACE = MOON_ELF_DICE_FACE_IDS;
 
+export const MOON_ELF_SFX_SHOT = 'combat.general.mini_games_sound_effects_and_music_pack.bow.sfx_weapon_bow_shoot_1';
+export const MOON_ELF_SFX_HIT = 'combat.general.mini_games_sound_effects_and_music_pack.bow.sfx_weapon_bow_hit_2';
+export const MOON_ELF_SFX_ULTIMATE = 'fantasy.shooting_thunder_arrow_noreverb_01';
+
 // 文本辅助
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
 const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
@@ -35,6 +39,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('longbow', 'name'),
         type: 'offensive',
         description: abilityText('longbow', 'description'),
+        sfxKey: MOON_ELF_SFX_SHOT,
         variants: [
             { id: 'longbow-3-1', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 3 } }, effects: [damage(3, abilityEffectText('longbow-3', 'damage3'))], priority: 1 },
             { id: 'longbow-4-1', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 4 } }, effects: [damage(5, abilityEffectText('longbow-4', 'damage5'))], priority: 2 },
@@ -47,6 +52,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('covert-fire', 'name'),
         type: 'offensive',
         description: abilityText('covert-fire', 'description'),
+        sfxKey: MOON_ELF_SFX_SHOT,
         trigger: { type: 'diceSet', faces: { [FACE.BOW]: 3, [FACE.MOON]: 1 } },
         effects: [
             inflictStatus(STATUS_IDS.TARGETED, 1, abilityEffectText('covert-fire', 'inflictTargeted')),
@@ -59,6 +65,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('covering-fire', 'name'),
         type: 'offensive',
         description: abilityText('covering-fire', 'description'),
+        sfxKey: MOON_ELF_SFX_SHOT,
         trigger: { type: 'diceSet', faces: { [FACE.BOW]: 2, [FACE.FOOT]: 2 } },
         effects: [
             grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('covering-fire', 'gainEvasive'), { timing: 'preDefense' }),
@@ -71,6 +78,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('exploding-arrow', 'name'),
         type: 'offensive',
         description: abilityText('exploding-arrow', 'description'),
+        sfxKey: MOON_ELF_SFX_HIT,
         trigger: { type: 'diceSet', faces: { [FACE.BOW]: 1, [FACE.MOON]: 3 } },
         effects: [{ description: abilityEffectText('exploding-arrow', 'rollAndResolve'), action: { type: 'custom', target: 'opponent', customActionId: 'moon_elf-exploding-arrow-resolve-1' }, timing: 'withDamage' }],
     },
@@ -80,6 +88,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('entangling-shot', 'name'),
         type: 'offensive',
         description: abilityText('entangling-shot', 'description'),
+        sfxKey: MOON_ELF_SFX_HIT,
         trigger: { type: 'smallStraight' },
         effects: [
             inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('entangling-shot', 'inflictEntangle')),
@@ -92,6 +101,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('eclipse', 'name'),
         type: 'offensive',
         description: abilityText('eclipse', 'description'),
+        sfxKey: MOON_ELF_SFX_HIT,
         trigger: { type: 'diceSet', faces: { [FACE.MOON]: 4 } },
         effects: [
             inflictStatus(STATUS_IDS.TARGETED, 1, abilityEffectText('eclipse', 'inflictTargeted')),
@@ -106,6 +116,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('blinding-shot', 'name'),
         type: 'offensive',
         description: abilityText('blinding-shot', 'description'),
+        sfxKey: MOON_ELF_SFX_HIT,
         trigger: { type: 'largeStraight' },
         effects: [
             inflictStatus(STATUS_IDS.BLINDED, 1, abilityEffectText('blinding-shot', 'inflictBlinded')),
@@ -119,6 +130,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         name: abilityText('lunar-eclipse', 'name'),
         type: 'offensive',
         description: abilityText('lunar-eclipse', 'description'),
+        sfxKey: MOON_ELF_SFX_ULTIMATE,
         tags: ['ultimate'],
         trigger: { type: 'diceSet', faces: { [FACE.MOON]: 5 } },
         effects: [
@@ -148,6 +160,7 @@ export const LONGBOW_2: AbilityDef = {
     name: abilityText('longbow-2', 'name'),
     type: 'offensive',
     description: abilityText('longbow-2', 'description'),
+    sfxKey: MOON_ELF_SFX_SHOT,
     variants: [
         { id: 'longbow-3-2', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 3 } }, effects: [damage(4, abilityEffectText('longbow-2', 'damage4')), { description: '若投出4个相同数字，施加缠绕', action: { type: 'custom', target: 'opponent', customActionId: 'moon_elf-longbow-bonus-check-4' }, timing: 'postDamage' }], priority: 1 },
         { id: 'longbow-4-2', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 4 } }, effects: [damage(6, abilityEffectText('longbow-2', 'damage6')), { description: '若投出4个相同数字，施加缠绕', action: { type: 'custom', target: 'opponent', customActionId: 'moon_elf-longbow-bonus-check-4' }, timing: 'postDamage' }], priority: 2 },
@@ -160,6 +173,7 @@ export const LONGBOW_3: AbilityDef = {
     name: abilityText('longbow-3', 'name'),
     type: 'offensive',
     description: abilityText('longbow-3', 'description'),
+    sfxKey: MOON_ELF_SFX_SHOT,
     variants: [
         { id: 'longbow-3-3', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 3 } }, effects: [damage(5, abilityEffectText('longbow-3', 'damage5')), { description: '若投出3个相同数字，施加缠绕', action: { type: 'custom', target: 'opponent', customActionId: 'moon_elf-longbow-bonus-check-3' }, timing: 'postDamage' }], priority: 1 },
         { id: 'longbow-4-3', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 4 } }, effects: [damage(7, abilityEffectText('longbow-3', 'damage7')), { description: '若投出3个相同数字，施加缠绕', action: { type: 'custom', target: 'opponent', customActionId: 'moon_elf-longbow-bonus-check-3' }, timing: 'postDamage' }], priority: 2 },
@@ -172,6 +186,7 @@ export const COVERT_FIRE_2: AbilityDef = {
     name: abilityText('covert-fire-2', 'name'),
     type: 'offensive',
     description: abilityText('covert-fire-2', 'description'),
+    sfxKey: MOON_ELF_SFX_SHOT,
     variants: [
         { id: 'deadeye-shot-2', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 3, [FACE.MOON]: 2 } }, effects: [inflictStatus(STATUS_IDS.TARGETED, 1, abilityEffectText('deadeye-shot', 'inflictTargeted')), damage(6, abilityEffectText('deadeye-shot', 'damage6'))], priority: 1 },
         { id: 'focus', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 2, [FACE.MOON]: 1 } }, effects: [inflictStatus(STATUS_IDS.TARGETED, 1, abilityEffectText('focus', 'inflictTargeted')), inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('focus', 'inflictEntangle'))], priority: 0 },
@@ -183,6 +198,7 @@ export const COVERING_FIRE_2: AbilityDef = {
     name: abilityText('covering-fire-2', 'name'),
     type: 'offensive',
     description: abilityText('covering-fire-2', 'description'),
+    sfxKey: MOON_ELF_SFX_SHOT,
     variants: [
         { id: 'covering-fire-2', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 2, [FACE.FOOT]: 3 } }, effects: [grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('covering-fire-2', 'gainEvasive'), { timing: 'preDefense' }), damage(9, abilityEffectText('covering-fire-2', 'damage9'))], priority: 1 },
         { id: 'silencing-trace', trigger: { type: 'diceSet', faces: { [FACE.FOOT]: 3 } }, effects: [grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('silencing-trace', 'gainEvasive'), { timing: 'preDefense' }), { description: '造成 2 不可防御伤害', action: { type: 'damage', target: 'opponent', value: 2, isUndefendable: true } }], priority: 0 },
@@ -194,6 +210,7 @@ export const EXPLODING_ARROW_2: AbilityDef = {
     name: abilityText('exploding-arrow-2', 'name'),
     type: 'offensive',
     description: abilityText('exploding-arrow-2', 'description'),
+    sfxKey: MOON_ELF_SFX_HIT,
     trigger: { type: 'diceSet', faces: { [FACE.BOW]: 1, [FACE.MOON]: 3 } },
     effects: [{ description: abilityEffectText('exploding-arrow', 'rollAndResolve'), action: { type: 'custom', target: 'opponent', customActionId: 'moon_elf-exploding-arrow-resolve-2' }, timing: 'withDamage' }],
 };
@@ -203,6 +220,7 @@ export const EXPLODING_ARROW_3: AbilityDef = {
     name: abilityText('exploding-arrow-3', 'name'),
     type: 'offensive',
     description: abilityText('exploding-arrow-3', 'description'),
+    sfxKey: MOON_ELF_SFX_HIT,
     trigger: { type: 'diceSet', faces: { [FACE.BOW]: 1, [FACE.MOON]: 3 } },
     effects: [{ description: abilityEffectText('exploding-arrow', 'rollAndResolve'), action: { type: 'custom', target: 'opponent', customActionId: 'moon_elf-exploding-arrow-resolve-3' }, timing: 'withDamage' }],
 };
@@ -212,6 +230,7 @@ export const ENTANGLING_SHOT_2: AbilityDef = {
     name: abilityText('entangling-shot-2', 'name'),
     type: 'offensive',
     description: abilityText('entangling-shot-2', 'description'),
+    sfxKey: MOON_ELF_SFX_HIT,
     trigger: { type: 'smallStraight' },
     effects: [inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('entangling-shot-2', 'inflictEntangle')), damage(9, abilityEffectText('entangling-shot-2', 'damage9'))],
 };
@@ -221,6 +240,7 @@ export const BLINDING_SHOT_2: AbilityDef = {
     name: abilityText('blinding-shot-2', 'name'),
     type: 'offensive',
     description: abilityText('blinding-shot-2', 'description'),
+    sfxKey: MOON_ELF_SFX_HIT,
     variants: [
         { id: 'blinding-shot-2', trigger: { type: 'largeStraight' }, effects: [inflictStatus(STATUS_IDS.BLINDED, 1, abilityEffectText('blinding-shot-2', 'inflictBlinded')), grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('blinding-shot-2', 'gainEvasive'), { timing: 'preDefense' }), damage(10, abilityEffectText('blinding-shot-2', 'damage10'))], priority: 1 },
         { id: 'moons-blessing', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 1, [FACE.FOOT]: 2, [FACE.MOON]: 1 } }, effects: [grantToken(TOKEN_IDS.EVASIVE, 3, abilityEffectText('moons-blessing', 'gainEvasive3'), { timing: 'preDefense' }), inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('moons-blessing', 'inflictEntangle'))], priority: 0 },
@@ -232,6 +252,7 @@ export const ECLIPSE_2: AbilityDef = {
     name: abilityText('eclipse-2', 'name'),
     type: 'offensive',
     description: abilityText('eclipse-2', 'description'),
+    sfxKey: MOON_ELF_SFX_HIT,
     variants: [
         { id: 'eclipse-2', trigger: { type: 'diceSet', faces: { [FACE.MOON]: 4 } }, effects: [inflictStatus(STATUS_IDS.BLINDED, 1, abilityEffectText('eclipse-2', 'inflictBlinded')), inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('eclipse-2', 'inflictEntangle')), inflictStatus(STATUS_IDS.TARGETED, 1, abilityEffectText('eclipse-2', 'inflictTargeted')), damage(9, abilityEffectText('eclipse-2', 'damage9'))], priority: 1 },
         { id: 'dark-moon', trigger: { type: 'diceSet', faces: { [FACE.MOON]: 3 } }, effects: [grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('dark-moon', 'gainEvasive'), { timing: 'preDefense' }), inflictStatus(STATUS_IDS.BLINDED, 1, abilityEffectText('dark-moon', 'inflictBlinded')), inflictStatus(STATUS_IDS.ENTANGLE, 1, abilityEffectText('dark-moon', 'inflictEntangle')), inflictStatus(STATUS_IDS.TARGETED, 1, abilityEffectText('dark-moon', 'inflictTargeted'))], priority: 0 },

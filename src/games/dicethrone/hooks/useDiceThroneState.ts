@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 import type { PlayerId, MatchState, PromptState, ResponseWindowState } from '../../../engine/types';
 import type { HeroState, Die, TurnPhase, PendingAttack } from '../types';
 import type { DiceThroneCore } from '../domain';
-import { getAvailableAbilityIds } from '../domain/rules';
+import { getAvailableAbilityIds, getDefensiveAbilityIds } from '../domain/rules';
 
 // ============================================================================
 // 类型定义
@@ -134,9 +134,16 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
         const rollerId = turnPhase === 'defensiveRoll' && core.pendingAttack
             ? core.pendingAttack.defenderId
             : core.activePlayerId;
-        const availableAbilityIds = isRollPhase
-            ? getAvailableAbilityIds(core, rollerId)
-            : [];
+        // 防御阶段掷骰前（未选择防御技能）：列出所有防御技能供选择（不检查骰面）
+        // 规则 §3.6 步骤 2：先选择防御技能，再掷骰
+        const isPreRollDefenseSelection = turnPhase === 'defensiveRoll'
+            && core.pendingAttack
+            && !core.pendingAttack.defenseAbilityId;
+        const availableAbilityIds = isPreRollDefenseSelection
+            ? getDefensiveAbilityIds(core, rollerId)
+            : isRollPhase
+                ? getAvailableAbilityIds(core, rollerId)
+                : [];
         
         return {
             players: core.players,

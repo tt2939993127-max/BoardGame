@@ -11,25 +11,27 @@ import Board1 from './dicethrone/Board';
 import Tutorial1 from './dicethrone/tutorial';
 import Thumbnail1 from './dicethrone/thumbnail';
 
-import manifest2 from './smashup/manifest';
-import Game2 from './smashup/game';
-import Board2 from './smashup/Board';
-import Tutorial2 from './smashup/tutorial';
-import Thumbnail2 from './smashup/thumbnail';
+import manifest2 from './fxpreview/manifest';
 
-import manifest3 from './summonerwars/manifest';
-import Game3 from './summonerwars/game';
-import Board3 from './summonerwars/Board';
-import Tutorial3 from './summonerwars/tutorial';
-import Thumbnail3 from './summonerwars/thumbnail';
+import manifest3 from './smashup/manifest';
+import Game3 from './smashup/game';
+import Board3 from './smashup/Board';
+import Tutorial3 from './smashup/tutorial';
+import Thumbnail3 from './smashup/thumbnail';
 
-import manifest4 from './tictactoe/manifest';
-import Game4 from './tictactoe/game';
-import Board4 from './tictactoe/Board';
-import Tutorial4 from './tictactoe/tutorial';
-import Thumbnail4 from './tictactoe/thumbnail';
+import manifest4 from './summonerwars/manifest';
+import Game4 from './summonerwars/game';
+import Board4 from './summonerwars/Board';
+import Tutorial4 from './summonerwars/tutorial';
+import Thumbnail4 from './summonerwars/thumbnail';
 
-import manifest5 from './ugcbuilder/manifest';
+import manifest5 from './tictactoe/manifest';
+import Game5 from './tictactoe/game';
+import Board5 from './tictactoe/Board';
+import Tutorial5 from './tictactoe/tutorial';
+import Thumbnail5 from './tictactoe/thumbnail';
+
+import manifest6 from './ugcbuilder/manifest';
 
 const entry0: GameClientManifestEntry = {
     manifest: manifest0,
@@ -46,10 +48,7 @@ const entry1: GameClientManifestEntry = {
 
 const entry2: GameClientManifestEntry = {
     manifest: manifest2,
-    game: Game2,
-    board: Board2,
-    tutorial: Tutorial2,
-    thumbnail: <Thumbnail2 />,
+    thumbnail: <ManifestGameThumbnail manifest={manifest2} />,
 };
 
 const entry3: GameClientManifestEntry = {
@@ -70,7 +69,15 @@ const entry4: GameClientManifestEntry = {
 
 const entry5: GameClientManifestEntry = {
     manifest: manifest5,
-    thumbnail: <ManifestGameThumbnail manifest={manifest5} />,
+    game: Game5,
+    board: Board5,
+    tutorial: Tutorial5,
+    thumbnail: <Thumbnail5 />,
+};
+
+const entry6: GameClientManifestEntry = {
+    manifest: manifest6,
+    thumbnail: <ManifestGameThumbnail manifest={manifest6} />,
 };
 
 export const GAME_CLIENT_MANIFEST: GameClientManifestEntry[] = [
@@ -80,6 +87,7 @@ export const GAME_CLIENT_MANIFEST: GameClientManifestEntry[] = [
     entry3,
     entry4,
     entry5,
+    entry6,
 ];
 
 export const GAME_CLIENT_MANIFEST_BY_ID: Record<string, GameClientManifestEntry> = Object.fromEntries(

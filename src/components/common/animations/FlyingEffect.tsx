@@ -1,5 +1,14 @@
+/**
+ * FlyingEffect — 飞行特效组件
+ *
+ * 火焰流星效果：canvas 粒子系统实现。
+ * 飞行体头部是明亮的核心光点，每帧从头部向后方喷射大量粒子，
+ * 粒子带反向速度 + 随机扰动，opacity/size 随时间衰减，形成拖尾火焰。
+ * 到达目标时粒子停止喷射，残留粒子自然消散。
+ */
 import React from 'react';
-import { motion, AnimatePresence, useMotionValue, useAnimationFrame } from 'framer-motion';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence, useMotionValue, useAnimate } from 'framer-motion';
 
 // ============================================================================
 // 类型
@@ -12,7 +21,7 @@ export interface FlyingEffectData {
     color?: string;
     startPos: { x: number; y: number };
     endPos: { x: number; y: number };
-    /** 效果强度（伤害/治疗量），影响尾迹粒子密度。默认 1 */
+    /** 效果强度（伤害/治疗量），影响粒子密度。默认 1 */
     intensity?: number;
 }
 
@@ -35,319 +44,380 @@ export const getElementCenter = (element: HTMLElement | null) => {
 // 样式配置
 // ============================================================================
 
-/** 类型对应的颜色配置 */
-const TYPE_STYLES: Record<string, {
-    bgClass: string;
-    impactColor: string;
+interface EffectStyle {
+    coreColor: string;
+    glowColor: string;
     floatColor: string;
-    glowShadow: string;
-    /** 尾迹粒子颜色数组（tsParticles 用） */
-    trailColors: string[];
-}> = {
+    /** 尾焰颜色梯度（头→尾） */
+    flameColors: string[];
+}
+
+const TYPE_STYLES: Record<string, EffectStyle> = {
     damage: {
-        bgClass: 'from-red-600 to-red-800',
-        impactColor: 'rgba(239, 68, 68, 0.6)',
+        coreColor: '#fff',
+        glowColor: 'rgba(239, 68, 68, 0.8)',
         floatColor: 'text-red-400',
-        glowShadow: '0 0 12px 4px rgba(239, 68, 68, 0.5)',
-        trailColors: ['#ef4444', '#f87171', '#fca5a5', '#fff'],
+        flameColors: ['#ffffff', '#fef08a', '#fb923c', '#ef4444', '#991b1b'],
     },
     heal: {
-        bgClass: 'from-emerald-500 to-green-600',
-        impactColor: 'rgba(52, 211, 153, 0.6)',
+        coreColor: '#fff',
+        glowColor: 'rgba(52, 211, 153, 0.8)',
         floatColor: 'text-emerald-400',
-        glowShadow: '0 0 12px 4px rgba(52, 211, 153, 0.5)',
-        trailColors: ['#34d399', '#6ee7b7', '#a7f3d0', '#fff'],
+        flameColors: ['#ffffff', '#a7f3d0', '#6ee7b7', '#34d399', '#065f46'],
     },
     buff: {
-        bgClass: 'from-amber-500 to-orange-600',
-        impactColor: 'rgba(251, 191, 36, 0.5)',
+        coreColor: '#fff',
+        glowColor: 'rgba(251, 191, 36, 0.7)',
         floatColor: 'text-amber-400',
-        glowShadow: '0 0 12px 4px rgba(251, 191, 36, 0.4)',
-        trailColors: ['#fbbf24', '#fcd34d', '#fde68a'],
+        flameColors: ['#ffffff', '#fde68a', '#fbbf24', '#f59e0b', '#92400e'],
     },
     custom: {
-        bgClass: 'from-slate-500 to-slate-600',
-        impactColor: 'rgba(148, 163, 184, 0.5)',
+        coreColor: '#fff',
+        glowColor: 'rgba(148, 163, 184, 0.6)',
         floatColor: 'text-slate-300',
-        glowShadow: '0 0 12px 4px rgba(148, 163, 184, 0.4)',
-        trailColors: ['#94a3b8', '#cbd5e1'],
+        flameColors: ['#ffffff', '#e2e8f0', '#94a3b8', '#64748b', '#334155'],
     },
 };
 
-function getStyle(type: string, color?: string) {
+function getStyle(type: string, color?: string): EffectStyle {
     const base = TYPE_STYLES[type] ?? TYPE_STYLES.custom;
-    if (type === 'buff' && color) {
-        return { ...base, bgClass: color };
-    }
+    if (type === 'buff' && color) return { ...base, glowColor: color };
     return base;
-}
-
-function getSizeClass(type: string) {
-    if (type === 'damage' || type === 'heal') return 'w-[2.5vw] h-[2.5vw] text-[1.2vw]';
-    return 'w-[3vw] h-[3vw] text-[1.5vw]';
 }
 
 // ============================================================================
 // 常量
 // ============================================================================
 
-const FLIGHT_DURATION = 0.5; // 秒
+const FLIGHT_SPEED = 900;
+const MIN_FLIGHT = 0.3;
+const MAX_FLIGHT = 1.0;
+
+function calcFlightDuration(dx: number, dy: number): number {
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    return Math.min(MAX_FLIGHT, Math.max(MIN_FLIGHT, dist / FLIGHT_SPEED));
+}
+
+// ============================================================================
+// Canvas 粒子系统 — 火焰流星拖尾
+// ============================================================================
+
+interface Particle {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;     // 剩余生命 0→1（1=刚生成）
+    maxLife: number;
+    size: number;
+    colorIdx: number;  // 颜色梯度索引（0=最亮）
+}
 
 /**
- * 根据 intensity 计算尾迹粒子数
- * intensity 1 → 6 粒子，每 +1 → +3，上限 30
+ * 解析 hex 颜色为 RGB
  */
-function getTrailParticleCount(intensity: number): number {
-    return Math.min(30, 6 + Math.max(0, intensity - 1) * 3);
-}
-
-// ============================================================================
-// tsParticles 尾迹粒子
-// ============================================================================
-
-type ParticlesComponent = React.ComponentType<import('@tsparticles/react').IParticlesProps>;
-
-/** 引擎初始化缓存（与 BurstParticles 共享同一个 promise） */
-let engineInitPromise: Promise<ParticlesComponent> | null = null;
-
-async function getParticlesComponent(): Promise<ParticlesComponent> {
-    if (!engineInitPromise) {
-        engineInitPromise = (async () => {
-            const [{ initParticlesEngine, Particles }, { loadSlim }] = await Promise.all([
-                import('@tsparticles/react'),
-                import('@tsparticles/slim'),
-            ]);
-            await initParticlesEngine(async (engine) => {
-                await loadSlim(engine);
-            });
-            return Particles;
-        })();
-    }
-    return engineInitPromise;
-}
-
-/** 构建尾迹粒子的 tsParticles 配置 */
-function buildTrailOptions(
-    count: number,
-    colors: string[],
-    speed: number,
-): import('@tsparticles/engine').ISourceOptions {
-    return {
-        fullScreen: { enable: false, zIndex: 0 },
-        fpsLimit: 60,
-        detectRetina: true,
-        particles: {
-            number: { value: count },
-            color: { value: colors },
-            shape: { type: ['circle'] },
-            opacity: {
-                value: { min: 0.5, max: 1 },
-                animation: {
-                    enable: true,
-                    speed: 2,
-                    startValue: 'max' as const,
-                    destroy: 'min' as const,
-                },
-            },
-            size: {
-                value: { min: 1.5, max: 4 },
-                animation: {
-                    enable: true,
-                    speed: 3,
-                    startValue: 'max' as const,
-                    destroy: 'min' as const,
-                },
-            },
-            move: {
-                enable: true,
-                // 粒子从发射点向反方向扩散（模拟尾迹脱落）
-                speed: { min: speed * 0.3, max: speed * 0.8 },
-                direction: 'none' as const,
-                outModes: { default: 'destroy' as const },
-                gravity: { enable: false },
-            },
-            life: {
-                duration: { value: { min: 0.15, max: 0.35 } },
-                count: 1,
-            },
-        },
-    };
+function hexToRgb(hex: string): [number, number, number] {
+    const h = hex.replace('#', '');
+    return [
+        parseInt(h.substring(0, 2), 16),
+        parseInt(h.substring(2, 4), 16),
+        parseInt(h.substring(4, 6), 16),
+    ];
 }
 
 /**
- * 尾迹粒子容器 — 跟随飞行体位置，持续发射粒子
+ * 火焰流星 canvas 渲染器。
  *
- * 使用 tsParticles，粒子数量与 intensity 成正比。
- * 容器通过 useAnimationFrame 同步飞行体的 motionValue 位置。
+ * 每帧在飞行体当前位置喷射粒子，粒子带有：
+ * - 反向速度（沿飞行反方向）+ 随机扰动
+ * - 随时间衰减的 opacity 和 size
+ * - 颜色从亮（白/黄）渐变到暗（红/深色）
  */
-const TrailEmitter: React.FC<{
-    motionX: import('framer-motion').MotionValue<number>;
-    motionY: import('framer-motion').MotionValue<number>;
+const FlameTrailCanvas: React.FC<{
+    /** 飞行体当前绝对 X（视口坐标） */
+    headXRef: React.MutableRefObject<number>;
+    /** 飞行体当前绝对 Y（视口坐标） */
+    headYRef: React.MutableRefObject<number>;
+    /** 飞行方向（归一化） */
+    dirX: number;
+    dirY: number;
+    /** 颜色梯度 */
+    flameColors: string[];
+    /** 是否仍在喷射 */
+    emitting: boolean;
+    /** 强度 */
     intensity: number;
-    trailColors: string[];
-}> = ({ motionX, motionY, intensity, trailColors }) => {
-    const containerRef = React.useRef<HTMLDivElement>(null);
-    const [Comp, setComp] = React.useState<ParticlesComponent | null>(null);
+}> = ({ headXRef, headYRef, dirX, dirY, flameColors, emitting, intensity }) => {
+    const canvasRef = React.useRef<HTMLCanvasElement>(null);
+    const particlesRef = React.useRef<Particle[]>([]);
+    const rafRef = React.useRef(0);
+    const lastTimeRef = React.useRef(0);
+    const emittingRef = React.useRef(emitting);
+    emittingRef.current = emitting;
 
-    // 动态加载 tsParticles
+    // 预解析颜色
+    const rgbColors = React.useMemo(() => flameColors.map(hexToRgb), [flameColors]);
+
     React.useEffect(() => {
-        let mounted = true;
-        void getParticlesComponent().then((P) => {
-            if (mounted) setComp(() => P);
-        });
-        return () => { mounted = false; };
-    }, []);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    // 每帧同步容器位置到飞行体当前坐标
-    useAnimationFrame(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        el.style.transform = `translate(${motionX.get()}px, ${motionY.get()}px)`;
-    });
+        const dpr = window.devicePixelRatio || 1;
 
-    const count = getTrailParticleCount(intensity);
-    // 高 intensity 粒子速度更快，视觉更猛烈
-    const speed = 3 + Math.min(intensity, 8) * 0.8;
+        const resize = () => {
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            canvas.style.width = `${window.innerWidth}px`;
+            canvas.style.height = `${window.innerHeight}px`;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        };
+        resize();
+        window.addEventListener('resize', resize);
 
-    const options = React.useMemo(
-        () => buildTrailOptions(count, trailColors, speed),
-        [count, trailColors, speed],
-    );
+        // 每帧喷射的粒子数
+        const spawnRate = Math.min(25, 6 + intensity * 3);
+
+        const loop = (time: number) => {
+            if (!lastTimeRef.current) lastTimeRef.current = time;
+            const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05); // 限制 dt 防跳帧
+            lastTimeRef.current = time;
+
+            const particles = particlesRef.current;
+            const hx = headXRef.current;
+            const hy = headYRef.current;
+
+            // 喷射新粒子
+            if (emittingRef.current) {
+                for (let i = 0; i < spawnRate; i++) {
+                    // 反向速度 + 随机扰动
+                    const speed = 40 + Math.random() * 120;
+                    const spread = (Math.random() - 0.5) * 2.5; // 扩散角度
+                    const perpX = -dirY;
+                    const perpY = dirX;
+                    const vx = -dirX * speed + perpX * spread * 30 + (Math.random() - 0.5) * 20;
+                    const vy = -dirY * speed + perpY * spread * 30 + (Math.random() - 0.5) * 20;
+
+                    const maxLife = 0.2 + Math.random() * 0.4;
+                    const size = 2 + Math.random() * 4;
+                    // 颜色：大部分粒子用中间色，少量用亮色
+                    const colorIdx = Math.random() < 0.2 ? 0 : Math.floor(Math.random() * (rgbColors.length - 1)) + 1;
+
+                    particles.push({
+                        x: hx + (Math.random() - 0.5) * 6,
+                        y: hy + (Math.random() - 0.5) * 6,
+                        vx, vy,
+                        life: 1,
+                        maxLife,
+                        size,
+                        colorIdx: Math.min(colorIdx, rgbColors.length - 1),
+                    });
+                }
+            }
+
+            // 更新粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life -= dt / p.maxLife;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                // 减速
+                p.vx *= 0.96;
+                p.vy *= 0.96;
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+            }
+
+            // 绘制
+            ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+            for (const p of particles) {
+                const t = 1 - p.life; // 0=新生 → 1=消亡
+                const alpha = p.life * p.life; // 二次衰减，更自然
+                const radius = p.size * (0.3 + p.life * 0.7);
+
+                if (radius <= 0.2 || alpha <= 0.01) continue;
+
+                // 颜色随生命周期从亮到暗
+                const ci = Math.min(
+                    Math.floor(t * (rgbColors.length - 1)),
+                    rgbColors.length - 1,
+                );
+                const [r, g, b] = rgbColors[ci];
+
+                // 外层辉光
+                ctx.globalAlpha = alpha * 0.3;
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius * 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 核心
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 飞行体头部光点（仅在喷射时）
+            if (emittingRef.current) {
+                // 外层辉光
+                ctx.globalAlpha = 0.4;
+                ctx.fillStyle = `rgb(${rgbColors[0][0]},${rgbColors[0][1]},${rgbColors[0][2]})`;
+                ctx.beginPath();
+                ctx.arc(hx, hy, 12, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 核心白点
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.globalAlpha = 1;
+
+            rafRef.current = requestAnimationFrame(loop);
+        };
+
+        rafRef.current = requestAnimationFrame(loop);
+
+        return () => {
+            cancelAnimationFrame(rafRef.current);
+            window.removeEventListener('resize', resize);
+        };
+    }, [dirX, dirY, intensity, rgbColors, headXRef, headYRef]);
 
     return (
-        <div
-            ref={containerRef}
-            className="absolute pointer-events-none"
-            style={{
-                width: 40,
-                height: 40,
-                left: -20,
-                top: -20,
-            }}
-        >
-            {Comp && (
-                <Comp
-                    id={`trail-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`}
-                    options={options}
-                />
-            )}
-        </div>
+        <canvas
+            ref={canvasRef}
+            className="fixed inset-0 pointer-events-none z-[9998]"
+        />
     );
 };
 
 // ============================================================================
-// 到达冲击波
+// 飘字
 // ============================================================================
 
-/** 到达时的冲击闪光 + 扩散环 */
-const ArrivalImpact: React.FC<{
-    deltaX: number;
-    deltaY: number;
-    impactColor: string;
-    glowShadow: string;
-}> = ({ deltaX, deltaY, impactColor, glowShadow }) => (
-    <>
-        {/* 闪光 */}
-        <motion.div
-            className="absolute rounded-full"
-            style={{
-                width: 20,
-                height: 20,
-                left: '50%',
-                top: '50%',
-                marginLeft: -10,
-                marginTop: -10,
-                backgroundColor: impactColor,
-                boxShadow: glowShadow,
-            }}
-            initial={{ x: deltaX, y: deltaY, scale: 0, opacity: 0 }}
-            animate={{
-                x: deltaX,
-                y: deltaY,
-                scale: [0, 2, 2.5],
-                opacity: [0, 0.8, 0],
-            }}
-            transition={{
-                duration: 0.35,
-                delay: FLIGHT_DURATION - 0.05,
-                ease: 'easeOut',
-            }}
-        />
-        {/* 扩散环 */}
-        <motion.div
-            className="absolute rounded-full"
-            style={{
-                width: 30,
-                height: 30,
-                left: '50%',
-                top: '50%',
-                marginLeft: -15,
-                marginTop: -15,
-                border: `2px solid ${impactColor}`,
-            }}
-            initial={{ x: deltaX, y: deltaY, scale: 0, opacity: 0 }}
-            animate={{
-                x: deltaX,
-                y: deltaY,
-                scale: [0, 2.5],
-                opacity: [0, 0.6, 0],
-            }}
-            transition={{
-                duration: 0.4,
-                delay: FLIGHT_DURATION,
-                ease: 'easeOut',
-            }}
-        />
-    </>
-);
-
-// ============================================================================
-// 飘字（到达后向上浮出）
-// ============================================================================
-
-/** 到达后的伤害/治疗飘字 */
-const FloatingText: React.FC<{
+/**
+ * 飘字 — 通用浮动文字组件（原神风格）
+ *
+ * 三阶段独立 Tween 动画（使用 useAnimate 精确控制每阶段时长和缓动）：
+ * 1. Pop（弹出 ~50ms）：快速从小放大到超过目标尺寸
+ * 2. Hold（缩回 ~80ms）：缩回到正常大小
+ * 3. Float（上浮淡出 ~800ms）：斜向上浮 + 淡出
+ *
+ * 高 intensity 时字号略大，模拟暴击效果。
+ */
+const FloatingTextInner: React.FC<{
     content: React.ReactNode;
-    deltaX: number;
-    deltaY: number;
+    x: number;
+    y: number;
     floatColor: string;
-    type: string;
-}> = ({ content, deltaX, deltaY, floatColor, type }) => {
-    // 只有 damage 和 heal 显示飘字
-    if (type !== 'damage' && type !== 'heal') return null;
+    intensity: number;
+    onComplete: () => void;
+}> = ({ content, x, y, floatColor, intensity, onComplete }) => {
+    const [scope, animate] = useAnimate();
+    const isCritical = intensity >= 5;
+    const fontSize = isCritical
+        ? Math.min(2.2, 1.4 + intensity * 0.08)
+        : Math.min(1.6, 1.0 + intensity * 0.06);
+
+    const popScale = isCritical ? 1.8 : 1.3;
+    const holdScale = isCritical ? 1.15 : 1.0;
+    const floatDistance = 50;
+    const driftX = 20;
+
+    React.useEffect(() => {
+        const run = async () => {
+            // 阶段 1：Pop — 快速弹出放大
+            await animate(scope.current, {
+                scale: popScale,
+                opacity: 1,
+            }, {
+                duration: 0.06,
+                ease: [0.2, 0, 0.4, 1],
+            });
+
+            // 阶段 2：Hold — 缩回正常大小，短暂停留
+            await animate(scope.current, {
+                scale: holdScale,
+            }, {
+                duration: 0.1,
+                ease: [0.34, 1.56, 0.64, 1], // 弹性回弹
+            });
+
+            // 阶段 3：Float — 斜向上浮 + 淡出
+            await animate(scope.current, {
+                x: x + driftX,
+                y: y - floatDistance,
+                opacity: 0,
+                scale: holdScale * 0.85,
+            }, {
+                duration: 0.8,
+                ease: [0.2, 0.8, 0.3, 1], // 上升减速
+            });
+
+            onComplete();
+        };
+        void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <motion.div
-            className="absolute pointer-events-none"
+            ref={scope}
+            className="absolute pointer-events-none z-20"
             style={{
-                left: '50%',
-                top: '50%',
-            }}
-            initial={{ x: deltaX - 12, y: deltaY, opacity: 0, scale: 0.5 }}
-            animate={{
-                x: deltaX - 12,
-                y: deltaY - 50,
-                opacity: [0, 1, 1, 0],
-                scale: [0.5, 1.4, 1.2, 0.8],
-            }}
-            transition={{
-                duration: 0.8,
-                delay: FLIGHT_DURATION + 0.05,
-                ease: 'easeOut',
-                opacity: { times: [0, 0.15, 0.6, 1] },
-                scale: { times: [0, 0.2, 0.5, 1] },
+                left: '50%', top: '50%',
+                translateX: '-50%', translateY: '-50%',
+                x, y,
+                opacity: 0,
+                scale: 0.3,
             }}
         >
             <span
                 className={`font-black whitespace-nowrap ${floatColor}`}
                 style={{
-                    fontSize: '1.6vw',
-                    textShadow: '0 2px 8px rgba(0,0,0,0.7), 0 0 4px rgba(0,0,0,0.5)',
+                    fontSize: `${fontSize}vw`,
+                    textShadow: `
+                        0 0 4px currentColor,
+                        0 2px 6px rgba(0,0,0,0.9)
+                    `,
+                    WebkitTextStroke: '0.3px rgba(0,0,0,0.4)',
                 }}
             >
                 {content}
             </span>
         </motion.div>
+    );
+};
+
+const FloatingText: React.FC<{
+    active: boolean;
+    content: React.ReactNode;
+    x: number;
+    y: number;
+    floatColor: string;
+    type: string;
+    intensity: number;
+    onComplete: () => void;
+}> = ({ active, content, x, y, floatColor, type, intensity, onComplete }) => {
+    if (!active || (type !== 'damage' && type !== 'heal')) return null;
+    return (
+        <FloatingTextInner
+            content={content}
+            x={x} y={y}
+            floatColor={floatColor}
+            intensity={intensity}
+            onComplete={onComplete}
+        />
     );
 };
 
@@ -361,95 +431,150 @@ const FlyingEffectItem: React.FC<{
 }> = ({ effect, onComplete }) => {
     const deltaX = effect.endPos.x - effect.startPos.x;
     const deltaY = effect.endPos.y - effect.startPos.y;
+    const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const dirX = dist > 0 ? deltaX / dist : 1;
+    const dirY = dist > 0 ? deltaY / dist : 0;
     const style = getStyle(effect.type, effect.color);
-    const sizeClass = getSizeClass(effect.type);
-    const showTrail = effect.type === 'damage' || effect.type === 'heal';
+    const hasTrail = effect.type === 'damage' || effect.type === 'heal';
     const intensity = effect.intensity ?? 1;
+    const flightDuration = calcFlightDuration(deltaX, deltaY);
 
-    // 飞行体位置的 motionValue，供尾迹粒子跟随
     const motionX = useMotionValue(0);
     const motionY = useMotionValue(0);
 
-    // 自动清理：飞行完成 + 飘字动画后移除
-    const timerRef = React.useRef<number>(0);
+    // 绝对坐标 ref（供 canvas 读取，避免 motionValue 订阅开销）
+    const headXRef = React.useRef(effect.startPos.x);
+    const headYRef = React.useRef(effect.startPos.y);
+
+    // 同步绝对坐标
     React.useEffect(() => {
-        const totalMs = showTrail
-            ? (FLIGHT_DURATION + 0.85) * 1000
-            : FLIGHT_DURATION * 1000 + 300;
-        timerRef.current = window.setTimeout(() => onComplete(effect.id), totalMs);
-        return () => window.clearTimeout(timerRef.current);
-    }, [effect.id, onComplete, showTrail]);
+        const unsubX = motionX.on('change', (v) => { headXRef.current = effect.startPos.x + v; });
+        const unsubY = motionY.on('change', (v) => { headYRef.current = effect.startPos.y + v; });
+        return () => { unsubX(); unsubY(); };
+    }, [motionX, motionY, effect.startPos.x, effect.startPos.y]);
+
+    const [arrived, setArrived] = React.useState(false);
+    const [emitting, setEmitting] = React.useState(true);
+    const pendingRef = React.useRef(0);
+
+    const handleArrive = React.useCallback(() => {
+        setArrived(true);
+        setEmitting(false);
+
+        const hasDamageOrHeal = effect.type === 'damage' || effect.type === 'heal';
+        pendingRef.current = hasDamageOrHeal ? 1 : 0;
+        if (pendingRef.current === 0) {
+            setTimeout(() => onComplete(effect.id), 600);
+        }
+    }, [effect.id, effect.type, onComplete]);
+
+    const handlePhaseComplete = React.useCallback(() => {
+        pendingRef.current--;
+        if (pendingRef.current <= 0) {
+            onComplete(effect.id);
+        }
+    }, [effect.id, onComplete]);
+
+    // 兜底清理
+    React.useEffect(() => {
+        const maxMs = (flightDuration + 3) * 1000;
+        const timer = window.setTimeout(() => onComplete(effect.id), maxMs);
+        return () => window.clearTimeout(timer);
+    }, [effect.id, flightDuration, onComplete]);
 
     return (
-        <motion.div
-            className="fixed z-[9999] pointer-events-none"
-            style={{
-                left: effect.startPos.x,
-                top: effect.startPos.y,
-            }}
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-        >
-            {/* tsParticles 尾迹 — 跟随飞行体 */}
-            {showTrail && (
-                <TrailEmitter
-                    motionX={motionX}
-                    motionY={motionY}
+        <>
+            {/* 火焰拖尾 canvas */}
+            {hasTrail && (
+                <FlameTrailCanvas
+                    headXRef={headXRef}
+                    headYRef={headYRef}
+                    dirX={dirX}
+                    dirY={dirY}
+                    flameColors={style.flameColors}
+                    emitting={emitting}
                     intensity={intensity}
-                    trailColors={style.trailColors}
                 />
             )}
 
-            {/* 主飞行体（圆形图标） */}
             <motion.div
-                className="relative"
-                initial={{ x: 0, y: 0, scale: 0.6, opacity: 0 }}
-                animate={{
-                    x: deltaX,
-                    y: deltaY,
-                    scale: [0.6, 1.2, 1],
-                    opacity: [0, 1, 1, 0],
-                }}
-                transition={{
-                    duration: FLIGHT_DURATION,
-                    ease: [0.34, 1.56, 0.64, 1],
-                    scale: { times: [0, 0.3, 1] },
-                    opacity: { times: [0, 0.1, 0.85, 1] },
-                }}
-                style={{ x: motionX, y: motionY }}
+                className="fixed z-[9999] pointer-events-none"
+                style={{ left: effect.startPos.x, top: effect.startPos.y }}
+                initial={{ opacity: 1 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
             >
-                <div
-                    className={`
-                        flex items-center justify-center rounded-full shadow-2xl
-                        bg-gradient-to-br ${style.bgClass} ${sizeClass}
-                        font-black text-white drop-shadow-md
-                    `}
-                    style={{ boxShadow: style.glowShadow }}
-                >
-                    {effect.content}
-                </div>
-            </motion.div>
-
-            {/* 到达冲击 */}
-            {showTrail && (
-                <ArrivalImpact
-                    deltaX={deltaX}
-                    deltaY={deltaY}
-                    impactColor={style.impactColor}
-                    glowShadow={style.glowShadow}
+                {/* 不可见的位移驱动 — 驱动 motionX/motionY */}
+                <motion.div
+                    style={{ x: motionX, y: motionY, width: 1, height: 1, position: 'absolute' }}
+                    initial={{ x: 0, y: 0 }}
+                    animate={{ x: deltaX, y: deltaY }}
+                    transition={{
+                        duration: flightDuration,
+                        ease: [0.22, 1.0, 0.36, 1],
+                    }}
+                    onAnimationComplete={handleArrive}
                 />
-            )}
 
-            {/* 飘字 */}
-            <FloatingText
-                content={effect.content}
-                deltaX={deltaX}
-                deltaY={deltaY}
-                floatColor={style.floatColor}
-                type={effect.type}
-            />
-        </motion.div>
+                {/* buff/custom 类型：简单光球飞行（无火焰拖尾） */}
+                {!hasTrail && (
+                    <motion.div
+                        className="relative"
+                        initial={{ x: 0, y: 0, scale: 0.2, opacity: 0 }}
+                        animate={{
+                            x: deltaX, y: deltaY,
+                            scale: [0.2, 1, 1, 0.3],
+                            opacity: [0, 1, 0.9, 0],
+                        }}
+                        transition={{
+                            duration: flightDuration,
+                            ease: [0.22, 1.0, 0.36, 1],
+                            scale: { times: [0, 0.2, 0.75, 1] },
+                            opacity: { times: [0, 0.06, 0.75, 1] },
+                        }}
+                        style={{ x: motionX, y: motionY }}
+                    >
+                        <div
+                            className="absolute rounded-full"
+                            style={{
+                                width: 36, height: 36, left: -18, top: -18,
+                                background: `radial-gradient(circle, ${style.glowColor} 0%, transparent 70%)`,
+                                filter: 'blur(3px)',
+                            }}
+                        />
+                        <div
+                            className="absolute rounded-full"
+                            style={{
+                                width: 8, height: 8, left: -4, top: -4,
+                                backgroundColor: style.coreColor,
+                                boxShadow: `0 0 6px 3px ${style.coreColor}, 0 0 12px 6px ${style.glowColor}`,
+                            }}
+                        />
+                        <div
+                            className="absolute flex items-center justify-center font-black text-white text-[1vw]"
+                            style={{
+                                width: 32, height: 32, left: -16, top: -16,
+                                textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+                            }}
+                        >
+                            {effect.content}
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* 飘字 */}
+                <FloatingText
+                    active={arrived}
+                    content={effect.content}
+                    x={deltaX}
+                    y={deltaY}
+                    floatColor={style.floatColor}
+                    type={effect.type}
+                    intensity={intensity}
+                    onComplete={handlePhaseComplete}
+                />
+            </motion.div>
+        </>
     );
 };
 
@@ -460,17 +585,19 @@ const FlyingEffectItem: React.FC<{
 export const FlyingEffectsLayer: React.FC<{
     effects: FlyingEffectData[];
     onEffectComplete: (id: string) => void;
-}> = ({ effects, onEffectComplete }) => (
-    <AnimatePresence>
-        {effects.map(effect => (
-            <FlyingEffectItem
-                key={effect.id}
-                effect={effect}
-                onComplete={onEffectComplete}
-            />
-        ))}
-    </AnimatePresence>
-);
+}> = ({ effects, onEffectComplete }) =>
+    createPortal(
+        <AnimatePresence>
+            {effects.map(effect => (
+                <FlyingEffectItem
+                    key={effect.id}
+                    effect={effect}
+                    onComplete={onEffectComplete}
+                />
+            ))}
+        </AnimatePresence>,
+        document.body,
+    );
 
 export const useFlyingEffects = () => {
     const [effects, setEffects] = React.useState<FlyingEffectData[]>([]);

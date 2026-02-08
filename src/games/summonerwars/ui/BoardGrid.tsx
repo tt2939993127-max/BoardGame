@@ -302,6 +302,7 @@ const UnitCell: React.FC<{
     <motion.div
       className="absolute flex items-center justify-center cursor-pointer pointer-events-auto"
       data-testid={`sw-unit-${row}-${col}`}
+      data-tutorial-id={unit.card.unitClass === 'summoner' && unit.owner === myPlayerId ? 'sw-my-summoner' : unit.card.unitClass === 'summoner' && unit.owner !== myPlayerId ? 'sw-enemy-summoner' : undefined}
       data-owner={unit.owner}
       data-unit-class={unit.card.unitClass}
       data-unit-name={unit.card.name}
@@ -417,6 +418,7 @@ const StructureCell: React.FC<{
     <div
       className="absolute flex items-center justify-center cursor-pointer pointer-events-auto"
       data-testid={`sw-structure-${row}-${col}`}
+      data-tutorial-id={structure.card.isGate && structure.owner === myPlayerId ? 'sw-my-gate' : undefined}
       data-owner={structure.owner}
       data-structure-name={structure.card.name}
       data-structure-life={structure.card.life}

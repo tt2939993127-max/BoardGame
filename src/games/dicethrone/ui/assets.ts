@@ -99,8 +99,7 @@ const CHARACTER_PORTRAIT_INDEX: Record<string, number> = {
     shadow_thief: 9,
     ninja: 10,
     samurai: 11,
-    barbarian: 12,
-    tactician: 13,
+    barbarian: 13,
     seraph: 14,
 };
 

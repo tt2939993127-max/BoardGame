@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Put, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Put, Req, Res, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
@@ -34,6 +34,7 @@ export class UserSettingsController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @UsePipes(new ValidationPipe({ whitelist: true, transform: true, expectedType: UpdateAudioSettingsDto }))
     @Put('audio')
     async updateAudioSettings(
         @CurrentUser() currentUser: { userId: string } | null,

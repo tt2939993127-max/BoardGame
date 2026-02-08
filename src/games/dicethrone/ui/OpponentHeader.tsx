@@ -6,9 +6,7 @@ import { RESOURCE_IDS } from '../domain/resources';
 import { ShakeContainer } from '../../../components/common/animations/ShakeContainer';
 import {
     HitStopContainer,
-    SlashEffect,
     type HitStopConfig,
-    type SlashConfig,
 } from '../../../components/common/animations';
 import { StatusEffectsContainer, TokensContainer, type StatusAtlases } from './statusEffects';
 import { getPortraitStyle } from './assets';
@@ -22,8 +20,6 @@ export const OpponentHeader = ({
     isOpponentShaking,
     hitStopActive,
     hitStopConfig,
-    slashActive,
-    slashConfig,
     shouldAutoObserve,
     onToggleView,
     headerError,
@@ -39,8 +35,6 @@ export const OpponentHeader = ({
     isOpponentShaking: boolean;
     hitStopActive?: boolean;
     hitStopConfig?: HitStopConfig;
-    slashActive?: boolean;
-    slashConfig?: SlashConfig;
     shouldAutoObserve: boolean;
     onToggleView: () => void;
     headerError?: string | null;
@@ -141,7 +135,6 @@ export const OpponentHeader = ({
 
                         </div>
                     </HitStopContainer>
-                    <SlashEffect isActive={!!slashActive} {...(slashConfig ?? {})} className="z-50" />
                 </ShakeContainer>
             </div>
         </div>

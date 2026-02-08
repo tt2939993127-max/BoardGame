@@ -1,4 +1,4 @@
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext, type Locator } from '@playwright/test';
 
 const setEnglishLocale = async (context: BrowserContext | Page) => {
     await context.addInitScript(() => {
@@ -124,6 +124,110 @@ const applyDiceValues = async (page: Page, values: number[]) => {
     }
     await diceSection.getByTestId('dt-debug-dice-apply').click();
     await closeDebugPanelIfOpen(page);
+};
+
+const openDebugStateTab = async (page: Page) => {
+    await ensureDebugPanelOpen(page);
+    await page.getByTestId('debug-tab-state').click();
+};
+
+const readDebugCoreState = async (page: Page) => {
+    await openDebugStateTab(page);
+    const rawStateText = await page.getByTestId('debug-state-json').textContent();
+    const stateText = rawStateText?.trim();
+    if (!stateText) {
+        throw new Error('Failed to read debug game state.');
+    }
+    const state = JSON.parse(stateText) as { core?: Record<string, unknown> };
+    const core = (state.core ?? state) as Record<string, unknown>;
+    return JSON.parse(JSON.stringify(core)) as Record<string, unknown>;
+};
+
+const applyCoreState = async (
+    page: Page,
+    updater: (core: Record<string, unknown>) => Record<string, unknown>
+) => {
+    const core = await readDebugCoreState(page);
+    const nextCore = updater(core);
+    const stateInput = page.getByTestId('debug-state-input');
+    if (!await stateInput.isVisible().catch(() => false)) {
+        await page.getByTestId('debug-state-toggle-input').click();
+    }
+    await stateInput.fill(JSON.stringify(nextCore));
+    await page.getByTestId('debug-state-apply').click();
+    await closeDebugPanelIfOpen(page);
+};
+
+const setPendingDamage = async (page: Page, pendingDamage: Record<string, unknown>) => {
+    await applyCoreState(page, (core) => ({
+        ...core,
+        pendingDamage,
+    }));
+};
+
+const setPlayerCp = async (page: Page, playerId: string, value: number) => {
+    await applyCoreState(page, (core) => {
+        const players = core.players as Record<string, any> | undefined;
+        const player = players?.[playerId];
+        if (!player) return core;
+        player.resources = player.resources ?? {};
+        player.resources.cp = value;
+        return core;
+    });
+};
+
+const ensureCardInHand = async (page: Page, cardId: string, playerId = '0') => {
+    await applyCoreState(page, (core) => {
+        const players = core.players as Record<string, any> | undefined;
+        const player = players?.[playerId];
+        if (!player) return core;
+        const takeCard = (list: any[]) => {
+            const idx = list.findIndex((card) => card?.id === cardId);
+            if (idx === -1) return null;
+            return list.splice(idx, 1)[0];
+        };
+        player.hand = player.hand ?? [];
+        player.deck = player.deck ?? [];
+        player.discard = player.discard ?? [];
+        const card = takeCard(player.hand) ?? takeCard(player.deck) ?? takeCard(player.discard);
+        if (card) {
+            player.hand.push(card);
+        }
+        return core;
+    });
+};
+
+const dragCardUp = async (page: Page, cardId: string, distance = 220) => {
+    const card = page.locator(`[data-card-id="${cardId}"]`).first();
+    await expect(card).toBeVisible({ timeout: 15000 });
+    const box = await card.boundingBox();
+    if (!box) {
+        throw new Error(`Card ${cardId} has no bounding box.`);
+    }
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX, startY - distance, { steps: 10 });
+    await page.mouse.up();
+};
+
+const waitForTutorialStep = async (page: Page, stepId: string, timeout = 15000) => {
+    await page.waitForFunction(
+        (target) => {
+            const el = document.querySelector('[data-tutorial-step]');
+            return el && el.getAttribute('data-tutorial-step') === target;
+        },
+        stepId,
+        { timeout }
+    );
+};
+
+const closeTokenResponseModal = async (modal: Locator) => {
+    const button = modal.getByRole('button', { name: /Skip|Confirm|跳过|确认/i }).first();
+    if (await button.isVisible().catch(() => false)) {
+        await button.click();
+    }
 };
 
 const getModalContainerByHeading = async (page: Page, heading: RegExp, timeout = 8000) => {
@@ -466,12 +570,72 @@ test.describe('DiceThrone E2E', () => {
         await expect(page.getByText(/Main Phase \(2\)|主要阶段 \(2\)/)).toBeVisible({ timeout: 20000 });
         await logTutorialStep('main2');
 
-        // Advance tutorial overlay until finish (non-action steps show a Next/Finish button).
-        // We do not assert every copy string; we only assert completion path.
-        for (let i = 0; i < 6; i += 1) {
-            await clickNextOverlayStep();
+        const waitStep = async (stepId: string, timeout = 15000) => {
+            await waitForTutorialStep(page, stepId, timeout);
+            await logTutorialStep(stepId);
+        };
+
+        await waitStep('taiji-response');
+        // pendingDamage 已由教程 aiActions 中的 MERGE_STATE 注入
+        const taijiModal = await getModalContainerByHeading(page, /Respond|响应/i, 15000);
+        const useTaijiButton = taijiModal.getByRole('button', { name: /Use Taiji|使用太极/i });
+        if (await useTaijiButton.isVisible().catch(() => false)) {
+            await useTaijiButton.click();
+        }
+        await closeTokenResponseModal(taijiModal);
+
+        await waitStep('evasive-response');
+        // pendingDamage 已由教程 aiActions 中的 MERGE_STATE 注入
+        const evasiveModal = await getModalContainerByHeading(page, /Respond|响应/i, 15000);
+        const useEvasiveButton = evasiveModal.getByRole('button', { name: /Use Evasive|使用闪避/i });
+        if (await useEvasiveButton.isVisible().catch(() => false)) {
+            await useEvasiveButton.click();
+        }
+        await page.waitForTimeout(300);
+        if (await evasiveModal.isVisible().catch(() => false)) {
+            await closeTokenResponseModal(evasiveModal);
         }
 
+        await waitStep('purify-use');
+        const statusTokens = page.locator('[data-tutorial-id="status-tokens"]');
+        await expect(statusTokens).toBeVisible({ timeout: 10000 });
+        await statusTokens.locator('.cursor-pointer').first().click();
+        const purifyModal = await getModalContainerByHeading(page, /Purify|净化/i, 15000);
+        await purifyModal.getByRole('button', { name: /Confirm|确认/i }).click();
+
+        await waitStep('inner-peace');
+        await dragCardUp(page, 'card-inner-peace');
+
+        await waitStep('play-six');
+        await ensureCardInHand(page, 'card-play-six');
+        await dragCardUp(page, 'card-play-six');
+        const diceTrayInteraction = page.locator('[data-tutorial-id="dice-tray"]');
+        await expect(diceTrayInteraction).toBeVisible({ timeout: 15000 });
+        await diceTrayInteraction.locator('.cursor-pointer').first().click();
+        await page.getByRole('button', { name: /Confirm|确认/i }).first().click();
+
+        await waitStep('meditation-2');
+        await setPlayerCp(page, '0', 2);
+        await ensureCardInHand(page, 'card-meditation-2');
+        await dragCardUp(page, 'card-meditation-2');
+
+        await waitStep('defense-roll');
+        await advanceToOffensiveRoll(page);
+        await expect(rollButton).toBeEnabled({ timeout: 10000 });
+        await rollButton.click();
+        await page.waitForTimeout(300);
+        await applyDiceValues(page, [1, 1, 1, 1, 1]);
+
+        await waitStep('defense-end');
+        await expect(advanceButton).toBeEnabled({ timeout: 10000 });
+        await advanceButton.click();
+        const confirmHeading = page.getByRole('heading', { name: /End offensive roll\?|确认结束攻击掷骰？/i });
+        if (await confirmHeading.isVisible({ timeout: 2000 }).catch(() => false)) {
+            const confirmSkipModal = confirmHeading.locator('..').locator('..');
+            await confirmSkipModal.getByRole('button', { name: /Confirm|确认/i }).click();
+        }
+
+        await waitStep('finish', 20000);
         const finishButton = page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).first();
         if (await finishButton.isVisible({ timeout: 6000 }).catch(() => false)) {
             await page.screenshot({ path: 'test-results/tutorial-final-step.png', fullPage: false });
@@ -773,19 +937,8 @@ test.describe('DiceThrone E2E', () => {
 
         await expect(page.getByText(/Main Phase \(1\)|主要阶段 \(1\)/)).toBeVisible({ timeout: 10000 });
         await advanceToOffensiveRoll(page);
-        await page.locator('[data-testid="debug-toggle"]').click();
-        await page.getByRole('button', { name: /📊 State|📊 状态/i }).click();
-
-        const rawStateText = await page.locator('pre').filter({ hasText: '"core"' }).first().textContent();
-        const stateText = rawStateText?.trim();
-        if (!stateText) {
-            throw new Error('Failed to read debug game state.');
-        }
-
-        const state = JSON.parse(stateText) as { core?: Record<string, unknown> };
-        const core = (state.core ?? state) as Record<string, unknown>;
-        const pendingDamage = {
-            id: `e2e-damage-${Date.now()}`,
+        await setPendingDamage(page, {
+            id: 'tutorial-skip-response',
             sourcePlayerId: '0',
             targetPlayerId: '1',
             originalDamage: 2,
@@ -793,17 +946,8 @@ test.describe('DiceThrone E2E', () => {
             responseType: 'beforeDamageDealt',
             responderId: '0',
             isFullyEvaded: false,
-        };
+        });
 
-        await page.getByRole('button', { name: /📝 赋值|📝 Set State/i }).click();
-        await page.getByPlaceholder(/粘贴游戏状态 JSON|Paste game state JSON/i).fill(JSON.stringify({
-            ...core,
-            pendingDamage,
-        }));
-        await page.getByRole('button', { name: /✓ 应用状态|✓ Apply/i }).click();
-        await closeDebugPanelIfOpen(page);
-
-        await page.waitForTimeout(500);
         const responseModal = await getModalContainerByHeading(page, /Respond|响应/i, 15000);
         const skipButton = responseModal.getByRole('button', { name: /Skip|跳过/i });
         await expect(skipButton).toBeVisible({ timeout: 5000 });

@@ -211,6 +211,17 @@ const resetDice = (state: DiceThroneCore): void => {
 };
 
 /**
+ * 确保当前骰子使用指定玩家的骰子定义
+ */
+const ensurePlayerDice = (state: DiceThroneCore, playerId?: string): void => {
+    if (!playerId) return;
+    const player = state.players[playerId];
+    const characterId = player?.characterId;
+    if (!characterId || characterId === 'unselected') return;
+    state.dice = createCharacterDice(characterId);
+};
+
+/**
  * 处理技能激活事件
  */
 const handleAbilityActivated: EventHandler<Extract<DiceThroneEvent, { type: 'ABILITY_ACTIVATED' }>> = (
@@ -218,12 +229,35 @@ const handleAbilityActivated: EventHandler<Extract<DiceThroneEvent, { type: 'ABI
     event
 ) => {
     const newState = cloneState(state);
-    const { abilityId, isDefense } = event.payload;
+    const { abilityId, isDefense, playerId } = event.payload;
 
     newState.activatingAbilityId = abilityId;
 
     if (isDefense && newState.pendingAttack) {
+        // 如果已经选择了相同的防御技能（如 onPhaseEnter 自动选择），跳过重复处理
+        if (newState.pendingAttack.defenseAbilityId === abilityId) {
+            return newState;
+        }
         newState.pendingAttack.defenseAbilityId = abilityId;
+
+        // 防御技能选择后，根据技能定义设置 rollDiceCount
+        // 规则 §3.6 步骤 2：先选择防御技能，再掷骰
+        const defenderId = playerId ?? newState.pendingAttack.defenderId;
+        const defender = newState.players[defenderId];
+        if (defender) {
+            const ability = defender.abilities.find(a => {
+                if (a.id === abilityId) return true;
+                // 检查 variants
+                return a.variants?.some(v => v.id === abilityId);
+            });
+            if (ability?.trigger) {
+                const triggerDiceCount = (ability.trigger as { diceCount?: number }).diceCount;
+                if (triggerDiceCount !== undefined && triggerDiceCount > 0) {
+                    newState.rollDiceCount = triggerDiceCount;
+                    resetDice(newState);
+                }
+            }
+        }
     }
 
 
@@ -691,6 +725,36 @@ const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type: 'ATTAC
     // 清除待处理攻击
     newState.pendingAttack = null;
 
+    return newState;
+};
+
+/**
+ * 处理精准 Token 使攻击不可防御事件
+ */
+const handleAttackMadeUndefendable = (
+    state: DiceThroneCore,
+    _event: DiceThroneEvent
+): DiceThroneCore => {
+    if (!state.pendingAttack) return state;
+    const newState = cloneState(state);
+    newState.pendingAttack = { ...newState.pendingAttack!, isDefendable: false };
+    return newState;
+};
+
+/**
+ * 处理额外攻击触发事件（晕眩 daze）
+ * 设置 extraAttackPending 标志，FlowHooks 在进入 offensiveRoll 时读取并切换活跃玩家
+ */
+const handleExtraAttackTriggered = (
+    state: DiceThroneCore,
+    event: DiceThroneEvent
+): DiceThroneCore => {
+    const newState = cloneState(state);
+    const payload = (event as any).payload as { attackerId: string; targetId: string };
+    newState.extraAttackInProgress = {
+        attackerId: payload.attackerId,
+        originalActivePlayerId: state.activePlayerId,
+    };
     return newState;
 };
 
@@ -1364,6 +1428,8 @@ export const reduce = (
             return handleAttackPreDefenseResolved(state, event);
         case 'ATTACK_RESOLVED':
             return handleAttackResolved(state, event);
+        case 'ATTACK_MADE_UNDEFENDABLE':
+            return handleAttackMadeUndefendable(state, event);
         case 'CHOICE_REQUESTED':
             return handleChoiceRequested(state, event);
         case 'CHOICE_RESOLVED':
@@ -1402,6 +1468,8 @@ export const reduce = (
             return handleBonusDieRerolled(state, event);
         case 'BONUS_DICE_SETTLED':
             return handleBonusDiceSettled(state, event);
+        case 'EXTRA_ATTACK_TRIGGERED':
+            return handleExtraAttackTriggered(state, event);
         case 'CHARACTER_SELECTED':
             return handleCharacterSelected(state, event);
         case 'HERO_INITIALIZED':
@@ -1425,13 +1493,21 @@ export const reduce = (
                     newState.rollDiceCount = 5;
                     newState.rollConfirmed = false;
                     newState.pendingAttack = null;
+                    ensurePlayerDice(newState, phaseEvent.payload.activePlayerId);
                     resetDice(newState);
                 } else if (phaseEvent.payload.to === 'defensiveRoll') {
                     newState.rollCount = 0;
                     newState.rollLimit = 1;
-                    newState.rollDiceCount = 4;
                     newState.rollConfirmed = false;
+                    newState.rollDiceCount = 0;
+                    const defenderId = newState.pendingAttack?.defenderId ?? phaseEvent.payload.activePlayerId;
+                    ensurePlayerDice(newState, defenderId);
                     resetDice(newState);
+                }
+
+                // 进入 main2 时清除额外攻击标志（额外攻击已结束）
+                if (phaseEvent.payload.to === 'main2' && newState.extraAttackInProgress) {
+                    newState.extraAttackInProgress = undefined;
                 }
 
                 return newState;

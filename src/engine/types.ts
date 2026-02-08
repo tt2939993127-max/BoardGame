@@ -230,6 +230,8 @@ export interface TutorialRandomPolicy {
 export interface TutorialAiAction {
     commandType: string;
     payload?: unknown;
+    /** 覆盖执行者 playerId（教程模式下默认使用 coreCurrentPlayer，此字段可强制指定） */
+    playerId?: string;
 }
 
 export interface TutorialStepSnapshot {

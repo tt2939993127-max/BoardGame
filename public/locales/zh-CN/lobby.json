@@ -98,6 +98,11 @@
       "description": "专为棋牌游戏设计的素材提取工具。支持圆形/方形裁切、批量导出精灵图。",
       "players": "单人工具"
     },
+    "fxpreview": {
+      "title": "特效音频预览",
+      "description": "预览所有通用动画特效（飞行粒子、震动、钝帧、斜切、爆发粒子）和音频资源。",
+      "players": "单人工具"
+    },
     "ugcbuilder": {
       "title": "UGC 原型制作器",
       "description": "快速创建桌游原型。支持卡牌设计、规则配置、AI辅助生成。",

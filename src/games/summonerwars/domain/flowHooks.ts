@@ -124,6 +124,15 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
           // 有充能的殉葬火堆：不自动弃置，由 UI 处理
           continue;
         }
+        if (baseId === 'paladin-holy-judgment' && (activeEvent.charges ?? 0) > 0) {
+          // 圣洁审判有充能时：消耗1充能代替弃置
+          events.push({
+            type: SW_EVENTS.FUNERAL_PYRE_CHARGED,
+            payload: { playerId, eventCardId: activeEvent.id, charges: (activeEvent.charges ?? 0) - 1 },
+            timestamp: Date.now(),
+          });
+          continue;
+        }
         events.push({
           type: SW_EVENTS.ACTIVE_EVENT_DISCARDED,
           payload: { playerId, cardId: activeEvent.id },

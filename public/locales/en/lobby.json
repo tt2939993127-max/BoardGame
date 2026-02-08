@@ -98,6 +98,11 @@
       "description": "A toolkit for board game assets. Supports circular/square cuts and sprite exports.",
       "players": "Solo Tool"
     },
+    "fxpreview": {
+      "title": "Effect & Audio Preview",
+      "description": "Preview all common animation effects (flying particles, shake, hit-stop, slash, burst) and audio assets.",
+      "players": "Solo Tool"
+    },
     "ugcbuilder": {
       "title": "UGC Prototype Builder",
       "description": "Quickly create board game prototypes. Supports card design, rule config, and AI-assisted generation.",

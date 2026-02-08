@@ -1,4 +1,3 @@
-import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthController } from './auth.controller';
@@ -10,7 +9,6 @@ import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 
 @Module({
     imports: [
-        CacheModule.register(),
         MongooseModule.forFeature([
             { name: User.name, schema: UserSchema },
             { name: AdminAuditLog.name, schema: AdminAuditLogSchema },

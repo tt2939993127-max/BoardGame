@@ -158,6 +158,15 @@ export const canAdvancePhase = (state: DiceThroneCore): boolean => {
         return false;
     }
 
+    // 防御阶段：必须已选择防御技能才能推进
+    // 规则 §3.6：先选技能 → 掷骰 → 确认
+    // 注意：pendingAttack 为 null 表示攻击已结算（ATTACK_RESOLVED），此时允许推进
+    if (state.turnPhase === 'defensiveRoll') {
+        if (state.pendingAttack && !state.pendingAttack.defenseAbilityId) {
+            return false;
+        }
+    }
+
     // 有待处理的奖励骰重掷时不可推进（需要先完成重掷交互）
     if (state.pendingBonusDiceSettlement) {
         return false;
@@ -212,6 +221,31 @@ export const getNextPhase = (state: DiceThroneCore): TurnPhase => {
 // ============================================================================
 
 /**
+ * 获取玩家拥有的所有防御技能 ID 列表（不检查骰面）
+ * 用于防御阶段掷骰前的技能选择（规则 §3.6 步骤 2）
+ */
+export const getDefensiveAbilityIds = (
+    state: DiceThroneCore,
+    playerId: PlayerId
+): string[] => {
+    const player = state.players[playerId];
+    if (!player) return [];
+
+    const ids: string[] = [];
+    for (const def of player.abilities) {
+        if (def.type !== 'defensive') continue;
+        if (def.variants?.length) {
+            for (const variant of def.variants) {
+                ids.push(variant.id);
+            }
+        } else {
+            ids.push(def.id);
+        }
+    }
+    return ids;
+};
+
+/**
  * 获取当前可用的技能 ID 列表
  */
 export const getAvailableAbilityIds = (
@@ -262,6 +296,7 @@ export const getAvailableAbilityIds = (
 
     return available;
 };
+
 
 // ============================================================================
 // 卡牌规则

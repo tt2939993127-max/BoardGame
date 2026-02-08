@@ -6,7 +6,7 @@ import { StatusEffectsContainer, TokensContainer, type StatusAtlases } from './s
 import { PlayerStats } from './PlayerStats';
 import { DrawDeck } from './DrawDeck';
 import { STATUS_IDS } from '../domain/ids';
-import type { HitStopConfig, SlashConfig } from '../../../components/common/animations';
+import type { HitStopConfig } from '../../../components/common/animations';
 
 
 export const LeftSidebar = ({
@@ -18,8 +18,6 @@ export const LeftSidebar = ({
     selfHpRef,
     hitStopActive,
     hitStopConfig,
-    slashActive,
-    slashConfig,
     drawDeckRef,
     onPurifyClick,
     canUsePurify,
@@ -35,8 +33,6 @@ export const LeftSidebar = ({
     selfHpRef?: RefObject<HTMLDivElement | null>;
     hitStopActive?: boolean;
     hitStopConfig?: HitStopConfig;
-    slashActive?: boolean;
-    slashConfig?: SlashConfig;
     drawDeckRef?: RefObject<HTMLDivElement | null>;
     /** 点击净化 Token 的回调 */
     onPurifyClick?: () => void;
@@ -103,8 +99,6 @@ export const LeftSidebar = ({
                         hpRef={selfHpRef}
                         hitStopActive={hitStopActive}
                         hitStopConfig={hitStopConfig}
-                        slashActive={slashActive}
-                        slashConfig={slashConfig}
                     />
                 </div>
                 <div className="w-full px-[1vw] pt-[0.5vw]" data-tutorial-id="draw-deck">

@@ -142,8 +142,10 @@ src/
 - **撤销系统**：`src/engine/systems/UndoSystem.ts`（通过 `createDefaultSystems` 启用）
 - **通用游戏系统**：`src/systems/`（StatusEffect/Ability/Resource/Token/Dice/Card 等，含条件注册表）
 - **动画组件库**：`src/components/common/animations/`
-  - `FlyingEffect` / `ShakeContainer` / `PulseGlow` / `variants` / `VictoryParticles`
+  - `FlyingEffect` / `ShakeContainer` / `PulseGlow` / `variants` / `VictoryParticles` / `BurstParticles`
   - `VictoryParticles` 依赖 `@tsparticles/react` + `@tsparticles/slim`，用于胜利弹出粒子特效（动态加载，避免 SSR 访问 window）
+  - `ParticlePoolProvider` + `particlePoolStore`：粒子对象池复用入口（统一渲染粒子实例，避免频繁创建/销毁）
+  - `BurstParticles` 会在存在 Provider 时自动复用对象池实例（fallback：无 Provider 时本地动态加载）
 - **国际化**：`src/lib/i18n/`
 - **音频管理**：`src/lib/audio/AudioManager.ts`
 

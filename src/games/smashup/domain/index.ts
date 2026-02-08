@@ -12,7 +12,6 @@ import type {
     SmashUpEvent,
     GamePhase,
     PlayerState,
-    CardInstance,
     BaseInPlay,
     TurnStartedEvent,
     TurnEndedEvent,
@@ -24,7 +23,6 @@ import type {
 import {
     PHASE_ORDER,
     SU_EVENTS,
-    STARTING_HAND_SIZE,
     DRAW_PER_TURN,
     HAND_LIMIT,
     VP_TO_WIN,
@@ -33,75 +31,9 @@ import {
 } from './types';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
-import { getFactionCards, getAllBaseDefIds, getBaseDef } from '../data/cards';
-
-// ============================================================================
-// 辅助：构建牌库
-// ============================================================================
-
-/** 将派系卡牌定义展开为卡牌实例列表 */
-function buildDeck(
-    factions: [string, string],
-    owner: PlayerId,
-    startUid: number,
-    random: RandomFn
-): { deck: CardInstance[]; nextUid: number } {
-    const cards: CardInstance[] = [];
-    let uid = startUid;
-    for (const factionId of factions) {
-        const defs = getFactionCards(factionId);
-        for (const def of defs) {
-            for (let i = 0; i < def.count; i++) {
-                cards.push({
-                    uid: `c${uid++}`,
-                    defId: def.id,
-                    type: def.type,
-                    owner,
-                });
-            }
-        }
-    }
-    return { deck: random.shuffle(cards), nextUid: uid };
-}
-
-/** 从牌库顶部抽牌 */
-function drawCards(
-    player: PlayerState,
-    count: number,
-    random: RandomFn
-): {
-    hand: CardInstance[];
-    deck: CardInstance[];
-    discard: CardInstance[];
-    drawnUids: string[];
-    reshuffledDeckUids?: string[];
-} {
-    let deck = [...player.deck];
-    let discard = [...player.discard];
-    const drawn: CardInstance[] = [];
-    let reshuffledDeckUids: string[] | undefined;
-
-    for (let i = 0; i < count; i++) {
-        if (deck.length === 0 && discard.length > 0) {
-            deck = random.shuffle([...discard]);
-            discard = [];
-            if (!reshuffledDeckUids) {
-                reshuffledDeckUids = deck.map(card => card.uid);
-            }
-        }
-        if (deck.length === 0) break;
-        drawn.push(deck[0]);
-        deck = deck.slice(1);
-    }
-
-    return {
-        hand: [...player.hand, ...drawn],
-        deck,
-        discard,
-        drawnUids: drawn.map(c => c.uid),
-        reshuffledDeckUids,
-    };
-}
+import { getAllBaseDefIds, getBaseDef } from '../data/cards';
+import { drawCards } from './utils';
+import { triggerAllBaseAbilities, triggerBaseAbility } from './baseAbilities';
 
 // ============================================================================
 // Setup
@@ -110,29 +42,22 @@ function drawCards(
 function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
     let nextUid = 1;
 
-    // MVP：所有玩家都用海盗+忍者来测试流程
-    // TODO: 派系选择系统
     const players: Record<PlayerId, PlayerState> = {};
+    const playerSelections: Record<PlayerId, string[]> = {};
     for (const pid of playerIds) {
-        const { deck, nextUid: newUid } = buildDeck(['pirates', 'ninjas'], pid, nextUid, random);
-        nextUid = newUid;
-
-        // 抽起始手牌
-        const hand = deck.slice(0, STARTING_HAND_SIZE);
-        const remainingDeck = deck.slice(STARTING_HAND_SIZE);
-
         players[pid] = {
             id: pid,
             vp: 0,
-            hand,
-            deck: remainingDeck,
+            hand: [],
+            deck: [],
             discard: [],
             minionsPlayed: 0,
             minionLimit: 1,
             actionsPlayed: 0,
             actionLimit: 1,
-            factions: ['pirates', 'ninjas'],
+            factions: [] as any,
         };
+        playerSelections[pid] = [];
     }
 
     // 翻开 玩家数+1 张基地
@@ -154,6 +79,11 @@ function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
         turnNumber: 1,
         nextUid,
         gameResult: undefined,
+        factionSelection: {
+            takenFactions: [],
+            playerSelections,
+            completedPlayers: [],
+        }
     };
 }
 
@@ -162,12 +92,14 @@ function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
 // ============================================================================
 
 export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
-    // 首回合直接进入出牌阶段（startTurn 阶段的效果仅从第二回合起生效）
-    initialPhase: 'playCards',
+    initialPhase: 'factionSelect',
 
     getNextPhase({ from }): string {
         const idx = PHASE_ORDER.indexOf(from as GamePhase);
-        if (idx === -1 || idx >= PHASE_ORDER.length - 1) return PHASE_ORDER[0];
+        if (idx === -1 || idx >= PHASE_ORDER.length - 1) {
+            // endTurn 后回到 startTurn（跳过 factionSelect，它只在游戏开始时使用一次）
+            return 'startTurn';
+        }
         return PHASE_ORDER[idx + 1];
     },
 
@@ -193,77 +125,144 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         return [];
     },
 
-    onPhaseEnter({ state, to, random }): GameEvent[] {
+    onPhaseEnter({ state, from, to, random }): GameEvent[] {
         const core = state.core;
         const pid = getCurrentPlayerId(core);
         const now = Date.now();
         const events: GameEvent[] = [];
 
         if (to === 'startTurn') {
+            let nextPlayerId = pid;
+            let nextTurnNumber = core.turnNumber;
+            if (from === 'endTurn') {
+                const nextIndex = (core.currentPlayerIndex + 1) % core.turnOrder.length;
+                nextPlayerId = core.turnOrder[nextIndex];
+                if (nextIndex === 0) {
+                    nextTurnNumber = core.turnNumber + 1;
+                }
+            }
             const turnStarted: TurnStartedEvent = {
                 type: SU_EVENTS.TURN_STARTED,
                 payload: {
-                    playerId: pid,
-                    turnNumber: core.turnNumber + (core.currentPlayerIndex === 0 ? 1 : 0),
+                    playerId: nextPlayerId,
+                    turnNumber: nextTurnNumber,
                 },
                 timestamp: now,
             };
             events.push(turnStarted);
+
+            // 触发基地 onTurnStart 能力（如更衣室：有随从则抽牌）
+            const baseEvents = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now);
+            events.push(...baseEvents);
         }
 
         if (to === 'scoreBases') {
-            // 检查所有基地是否达到临界点
-            for (let i = 0; i < core.bases.length; i++) {
-                const base = core.bases[i];
-                const baseDef = getBaseDef(base.defId);
-                if (!baseDef) continue;
-                const totalPower = getTotalPowerOnBase(base);
-                if (totalPower >= baseDef.breakpoint) {
-                    // 计算排名
-                    const playerPowers = new Map<PlayerId, number>();
-                    for (const m of base.minions) {
-                        const prev = playerPowers.get(m.controller) ?? 0;
-                        playerPowers.set(m.controller, prev + m.basePower + m.powerModifier);
+            // Property 15: 循环检查所有达到临界点的基地
+            // 每次记分后重新检查（因为 afterScoring 能力可能改变状态）
+            let currentBases = core.bases;
+            let currentBaseDeck = core.baseDeck;
+            let scoredCount = 0;
+
+            // 最多循环基地数量次（防止无限循环）
+            const maxIterations = core.bases.length;
+            for (let iter = 0; iter < maxIterations; iter++) {
+                let foundIndex = -1;
+                for (let i = 0; i < currentBases.length; i++) {
+                    const base = currentBases[i];
+                    const baseDef = getBaseDef(base.defId);
+                    if (!baseDef) continue;
+                    const totalPower = getTotalPowerOnBase(base);
+                    if (totalPower >= baseDef.breakpoint) {
+                        foundIndex = i;
+                        break;
+                        // TODO Property 14: 多基地同时达标时，通过 PromptSystem 让玩家选择顺序
                     }
-                    const sorted = Array.from(playerPowers.entries())
-                        .filter(([, p]) => p > 0)
-                        .sort((a, b) => b[1] - a[1]);
-                    const rankings = sorted.map(([playerId, power], rank) => ({
+                }
+                if (foundIndex === -1) break; // 无基地达标，退出循环
+
+                const base = currentBases[foundIndex];
+                const baseDef = getBaseDef(base.defId)!;
+
+                // 触发 beforeScoring 基地能力
+                const beforeCtx = {
+                    state: core,
+                    baseIndex: foundIndex,
+                    baseDefId: base.defId,
+                    playerId: pid,
+                    now,
+                };
+                const bsEvents = triggerBaseAbility(base.defId, 'beforeScoring', beforeCtx);
+                events.push(...bsEvents);
+
+                // 计算排名
+                const playerPowers = new Map<PlayerId, number>();
+                for (const m of base.minions) {
+                    const prev = playerPowers.get(m.controller) ?? 0;
+                    playerPowers.set(m.controller, prev + m.basePower + m.powerModifier);
+                }
+                const sorted = Array.from(playerPowers.entries())
+                    .filter(([, p]) => p > 0)
+                    .sort((a, b) => b[1] - a[1]);
+
+                // Property 16: 平局玩家获得该名次最高 VP
+                // 例：两人并列第一 → 都拿第一名 VP，第三名拿第三名 VP
+                const rankings: { playerId: string; power: number; vp: number }[] = [];
+                let rankSlot = 0; // 当前名次槽位（0=第一名, 1=第二名, 2=第三名）
+                for (let i = 0; i < sorted.length; i++) {
+                    const [playerId, power] = sorted[i];
+                    // 如果不是第一个且力量与前一个不同，推进名次槽位
+                    if (i > 0 && power < sorted[i - 1][1]) {
+                        rankSlot = i; // 跳过被平局占用的名次
+                    }
+                    rankings.push({
                         playerId,
                         power,
-                        vp: rank < 3 ? baseDef.vpAwards[rank] : 0,
-                    }));
+                        vp: rankSlot < 3 ? baseDef.vpAwards[rankSlot] : 0,
+                    });
+                }
 
-                    const scoreEvt: BaseScoredEvent = {
-                        type: SU_EVENTS.BASE_SCORED,
-                        payload: { baseIndex: i, baseDefId: base.defId, rankings },
+                const scoreEvt: BaseScoredEvent = {
+                    type: SU_EVENTS.BASE_SCORED,
+                    payload: { baseIndex: foundIndex, baseDefId: base.defId, rankings },
+                    timestamp: now,
+                };
+                events.push(scoreEvt);
+
+                // 触发 afterScoring 基地能力
+                const afterCtx = {
+                    state: core,
+                    baseIndex: foundIndex,
+                    baseDefId: base.defId,
+                    playerId: pid,
+                    rankings,
+                    now,
+                };
+                const asEvents = triggerBaseAbility(base.defId, 'afterScoring', afterCtx);
+                events.push(...asEvents);
+
+                // 替换基地
+                if (currentBaseDeck.length > 0) {
+                    const replaceEvt: BaseReplacedEvent = {
+                        type: SU_EVENTS.BASE_REPLACED,
+                        payload: {
+                            baseIndex: foundIndex,
+                            oldBaseDefId: base.defId,
+                            newBaseDefId: currentBaseDeck[0],
+                        },
                         timestamp: now,
                     };
-                    events.push(scoreEvt);
-
-                    // 补充新基地
-                    if (core.baseDeck.length > 0) {
-                        const replaceEvt: BaseReplacedEvent = {
-                            type: SU_EVENTS.BASE_REPLACED,
-                            payload: {
-                                baseIndex: i,
-                                oldBaseDefId: base.defId,
-                                newBaseDefId: core.baseDeck[0],
-                            },
-                            timestamp: now,
-                        };
-                        events.push(replaceEvt);
-                    }
-
-                    // MVP：只处理第一个达到临界点的基地，避免索引偏移
-                    // TODO: 支持多基地同时记分（当前玩家选择顺序）
-                    break;
+                    events.push(replaceEvt);
+                    // 更新本地追踪（reducer 会处理实际状态）
+                    currentBaseDeck = currentBaseDeck.slice(1);
                 }
+
+                // 从本地追踪中移除已记分基地（用于循环检查）
+                currentBases = currentBases.filter((_, i) => i !== foundIndex);
+                scoredCount++;
             }
         }
 
         if (to === 'draw') {
-            // 抽 2 张牌
             const player = core.players[pid];
             if (player) {
                 const { drawnUids, reshuffledDeckUids } = drawCards(player, DRAW_PER_TURN, random);
@@ -293,6 +292,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         const core = state.core;
         const pid = getCurrentPlayerId(core);
         const phase = state.sys.phase as GamePhase;
+
+        // factionSelect 自动推进 check
+        if (phase === 'factionSelect') {
+            // 如果所有人都选完了（reducer把selection置空了），则自动进入下一阶段
+            if (!core.factionSelection) {
+                return { autoContinue: true, playerId: pid };
+            }
+        }
 
         // startTurn 自动推进到 playCards
         if (phase === 'startTurn') {
@@ -387,3 +394,15 @@ export const SmashUpDomain: DomainCore<SmashUpCore, SmashUpCommand, SmashUpEvent
 
 export type { SmashUpCommand, SmashUpCore, SmashUpEvent } from './types';
 export { SU_COMMANDS, SU_EVENTS } from './types';
+export { registerAbility, resolveAbility, resolveOnPlay, resolveTalent, resolveSpecial, clearRegistry } from './abilityRegistry';
+export type { AbilityContext, AbilityResult, AbilityExecutor } from './abilityRegistry';
+export {
+    registerBaseAbility,
+    triggerBaseAbility,
+    triggerAllBaseAbilities,
+    hasBaseAbility,
+    clearBaseAbilityRegistry,
+    registerBaseAbilities,
+    triggerExtendedBaseAbility,
+} from './baseAbilities';
+export type { BaseTriggerTiming, BaseAbilityContext, BaseAbilityResult, BaseAbilityExecutor } from './baseAbilities';

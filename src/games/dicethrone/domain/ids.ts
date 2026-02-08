@@ -63,6 +63,21 @@ export const TOKEN_IDS = {
 
     /** 伏击（影子盗贼） - 增加伤害 */
     SNEAK_ATTACK: 'sneak_attack',
+
+    /** 神圣祝福（圣骑士） - 免疫一次致死伤害并回血 */
+    BLESSING_OF_DIVINITY: 'blessing_of_divinity',
+
+    /** 神罚（圣骑士） - 反弹伤害 */
+    RETRIBUTION: 'retribution',
+
+    /** 暴击（圣骑士） - 增加伤害 */
+    CRIT: 'crit',
+
+    /** 守护（圣骑士） - 减免伤害 */
+    PROTECT: 'protect',
+
+    /** 精准（圣骑士） - 攻击不可防御 */
+    ACCURACY: 'accuracy',
 } as const;
 
 export type TokenId = (typeof TOKEN_IDS)[keyof typeof TOKEN_IDS];
@@ -154,6 +169,23 @@ export const SHADOW_THIEF_DICE_FACE_IDS = {
 export type ShadowThiefDiceFaceId = (typeof SHADOW_THIEF_DICE_FACE_IDS)[keyof typeof SHADOW_THIEF_DICE_FACE_IDS];
 
 // ============================================================================
+// 骰面 ID（圣骑士骰子）
+// ============================================================================
+
+export const PALADIN_DICE_FACE_IDS = {
+    /** 剑 - 骰值 1, 2 */
+    SWORD: 'sword',
+    /** 头盔 - 骰值 3, 4 */
+    HELM: 'helm',
+    /** 恢复/心 - 骰值 5 */
+    HEART: 'heart',
+    /** 祈祷/圣光/手 - 骰值 6 */
+    PRAY: 'pray',
+} as const;
+
+export type PaladinDiceFaceId = (typeof PALADIN_DICE_FACE_IDS)[keyof typeof PALADIN_DICE_FACE_IDS];
+
+// ============================================================================
 // DiceThrone 领域命令 ID
 // ============================================================================
 
@@ -176,6 +208,7 @@ export const DICETHRONE_CARD_ATLAS_IDS = {
     PYROMANCER: 'dicethrone:pyromancer-cards',
     MOON_ELF: 'dicethrone:moon_elf-cards',
     SHADOW_THIEF: 'dicethrone:shadow_thief-cards',
+    PALADIN: 'dicethrone:paladin-cards',
 } as const;
 
 export const DICETHRONE_STATUS_ATLAS_IDS = {
@@ -184,4 +217,5 @@ export const DICETHRONE_STATUS_ATLAS_IDS = {
     PYROMANCER: 'dicethrone:pyromancer-status',
     MOON_ELF: 'dicethrone:moon_elf-status',
     SHADOW_THIEF: 'dicethrone:shadow_thief-status',
+    PALADIN: 'dicethrone:paladin-status',
 } as const;

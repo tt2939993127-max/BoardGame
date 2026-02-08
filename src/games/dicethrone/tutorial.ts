@@ -154,9 +154,23 @@ export const DiceThroneTutorial: TutorialManifest = {
             aiActions: [
                 { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.TAIJI, amount: 1 } },
                 { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'defensiveRoll' } },
+                // 注入 pendingDamage 以触发 Token 响应窗口
+                { commandType: CHEAT_COMMANDS.MERGE_STATE, payload: { fields: {
+                    pendingDamage: {
+                        id: 'tutorial-taiji',
+                        sourcePlayerId: '0',
+                        targetPlayerId: '1',
+                        originalDamage: 2,
+                        currentDamage: 2,
+                        responseType: 'beforeDamageDealt',
+                        responderId: '0',
+                        isFullyEvaded: false,
+                    },
+                } } },
             ],
             advanceOnEvents: [
                 { type: 'TOKEN_USED', match: { playerId: '0', tokenId: TOKEN_IDS.TAIJI } },
+                { type: 'TOKEN_RESPONSE_CLOSED', match: { pendingDamageId: 'tutorial-taiji' } },
             ],
         },
         {
@@ -169,9 +183,23 @@ export const DiceThroneTutorial: TutorialManifest = {
             aiActions: [
                 { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.EVASIVE, amount: 1 } },
                 { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'defensiveRoll' } },
+                // 注入 pendingDamage 以触发 Token 响应窗口（防御方视角）
+                { commandType: CHEAT_COMMANDS.MERGE_STATE, payload: { fields: {
+                    pendingDamage: {
+                        id: 'tutorial-evasive',
+                        sourcePlayerId: '1',
+                        targetPlayerId: '0',
+                        originalDamage: 2,
+                        currentDamage: 2,
+                        responseType: 'beforeDamageReceived',
+                        responderId: '0',
+                        isFullyEvaded: false,
+                    },
+                } } },
             ],
             advanceOnEvents: [
                 { type: 'TOKEN_USED', match: { playerId: '0', tokenId: TOKEN_IDS.EVASIVE } },
+                { type: 'TOKEN_RESPONSE_CLOSED', match: { pendingDamageId: 'tutorial-evasive' } },
             ],
         },
         {

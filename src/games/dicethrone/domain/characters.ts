@@ -10,6 +10,8 @@ import { MONK_ABILITIES, MONK_TOKENS, MONK_INITIAL_TOKENS, getMonkStartingDeck }
 import { BARBARIAN_ABILITIES, BARBARIAN_TOKENS, BARBARIAN_INITIAL_TOKENS, getBarbarianStartingDeck } from '../heroes/barbarian';
 import { PYROMANCER_ABILITIES, PYROMANCER_TOKENS, PYROMANCER_INITIAL_TOKENS, getPyromancerStartingDeck } from '../heroes/pyromancer';
 import { MOON_ELF_ABILITIES, MOON_ELF_TOKENS, MOON_ELF_INITIAL_TOKENS, getMoonElfStartingDeck } from '../heroes/moon_elf';
+import { SHADOW_THIEF_ABILITIES, SHADOW_THIEF_TOKENS, SHADOW_THIEF_INITIAL_TOKENS, getShadowThiefStartingDeck } from '../heroes/shadow_thief';
+import { PALADIN_ABILITIES, PALADIN_TOKENS, PALADIN_INITIAL_TOKENS, getPaladinStartingDeck } from '../heroes/paladin';
 import { diceSystem } from '../../../systems/DiceSystem';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
@@ -84,7 +86,25 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'ultimate-inferno': 1,
         },
     },
-    shadow_thief: { ...BARBARIAN_DATA, id: 'shadow_thief' },
+    shadow_thief: {
+        id: 'shadow_thief',
+        abilities: SHADOW_THIEF_ABILITIES,
+        tokens: SHADOW_THIEF_TOKENS,
+        initialTokens: SHADOW_THIEF_INITIAL_TOKENS,
+        diceDefinitionId: 'shadow_thief-dice',
+        getStartingDeck: getShadowThiefStartingDeck,
+        initialAbilityLevels: {
+            'dagger-strike': 1,
+            'pickpocket': 1,
+            'steal': 1,
+            'kidney-shot': 1,
+            'shadow-dance': 1,
+            'cornucopia': 1,
+            'shadow-shank': 1,
+            'shadow-defense': 1,
+            'fearless-riposte': 1,
+        },
+    },
     moon_elf: {
         id: 'moon_elf',
         abilities: MOON_ELF_ABILITIES,
@@ -104,7 +124,24 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'elusive-step': 1,
         },
     },
-    paladin: { ...BARBARIAN_DATA, id: 'paladin' },
+    paladin: {
+        id: 'paladin',
+        abilities: PALADIN_ABILITIES,
+        tokens: PALADIN_TOKENS,
+        initialTokens: PALADIN_INITIAL_TOKENS,
+        diceDefinitionId: 'paladin-dice',
+        getStartingDeck: getPaladinStartingDeck,
+        initialAbilityLevels: {
+            'righteous-combat': 1,
+            'blessing-of-might': 1,
+            'holy-strike': 1,
+            'holy-light': 1,
+            'vengeance': 1,
+            'righteous-prayer': 1,
+            'holy-defense': 1,
+            'unyielding-faith': 1,
+        },
+    },
     ninja: { ...BARBARIAN_DATA, id: 'ninja' },
     treant: { ...BARBARIAN_DATA, id: 'treant' },
     vampire_lord: { ...BARBARIAN_DATA, id: 'vampire_lord' },

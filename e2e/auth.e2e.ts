@@ -25,4 +25,15 @@ test.describe('Auth Modal E2E', () => {
         await expect(page.locator('input[type="password"]')).toHaveCount(2);
         await expect(page.locator('input[type="password"]').nth(1)).toBeVisible();
     });
+
+    test('Reset password flow shows reset fields', async ({ page }) => {
+        await page.getByRole('button', { name: /Log In|登录/i }).click();
+        await expect(page.getByRole('heading', { name: /Welcome Back|欢迎回来/i })).toBeVisible();
+
+        await page.getByRole('button', { name: /Forgot password\?|忘记密码/i }).click();
+        await expect(page.getByRole('heading', { name: /Reset Password|重置密码/i })).toBeVisible();
+        await expect(page.getByPlaceholder(/your@email\.com/i)).toBeVisible();
+        await expect(page.getByPlaceholder(/000000/)).toBeVisible();
+        await expect(page.locator('input[type="password"]')).toHaveCount(2);
+    });
 });

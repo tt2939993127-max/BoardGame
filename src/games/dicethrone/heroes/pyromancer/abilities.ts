@@ -183,6 +183,7 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
         name: abilityText('magma-armor', 'name'),
         type: 'defensive',
         description: abilityText('magma-armor', 'description'),
+        trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 5 },
         effects: [
             {
                 description: abilityEffectText('magma-armor', 'main'),
@@ -423,6 +424,7 @@ export const MAGMA_ARMOR_2: AbilityDef = {
     name: abilityText('magma-armor-2', 'name'),
     type: 'defensive',
     description: abilityText('magma-armor-2', 'description'),
+    trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 5 },
     effects: [
         {
             description: abilityEffectText('magma-armor-2', 'main'),
@@ -436,6 +438,7 @@ export const MAGMA_ARMOR_3: AbilityDef = {
     name: abilityText('magma-armor-3', 'name'),
     type: 'defensive',
     description: abilityText('magma-armor-3', 'description'),
+    trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 5 },
     effects: [
         {
             description: abilityEffectText('magma-armor-3', 'main'),

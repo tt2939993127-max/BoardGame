@@ -3,7 +3,7 @@
  *
  * 效果概览：
  * - 召唤（游戏王风格）：光柱坠落 + 冲击波 + 碎片粒子(tsParticles) + 地裂线
- * - 攻击气浪（通用）：白色锥形冲击波从攻击者→目标方向扩散
+ * - 攻击气浪（通用）：白色锥形冲击波从攻击者→目标方向扩散（远程含通用气浪投射物）
  * - 受伤：SlashEffect 斜切 + 红色脉冲 + 伤害数字飞出
  */
 
@@ -11,6 +11,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SlashEffect, getSlashPresetByDamage } from '../../../components/common/animations/SlashEffect';
 import { BurstParticles } from '../../../components/common/animations/BurstParticles';
+import { ShockwaveProjectile } from '../../../components/common/animations/ShockwaveProjectile';
 
 // ============================================================================
 // 效果类型
@@ -23,6 +24,8 @@ export interface BoardEffectData {
   intensity: 'normal' | 'strong';
   /** 伤害值（damage 效果时使用） */
   damageAmount?: number;
+  /** 攻击类型（shockwave 使用） */
+  attackType?: 'melee' | 'ranged';
   /** 攻击源位置（shockwave 使用） */
   sourcePosition?: { row: number; col: number };
 }
@@ -177,6 +180,10 @@ const ShockwaveEffect: React.FC<{
   // 锥形起始点在容器内的相对位置
   const originXPct = ((srcCx - minX) / coneW) * 100;
   const originYPct = ((srcCy - minY) / coneH) * 100;
+  const targetXPct = ((tgtCx - minX) / coneW) * 100;
+  const targetYPct = ((tgtCy - minY) / coneH) * 100;
+  const showProjectile = effect.attackType === 'ranged';
+  const projectileSize = Math.max(6, Math.min(12, dist * 0.4));
 
   return (
     <div
@@ -268,6 +275,16 @@ const ShockwaveEffect: React.FC<{
         );
       })}
 
+      {/* 远程气浪投射物（通用气流形态） */}
+      {showProjectile && (
+        <ShockwaveProjectile
+          start={{ xPct: originXPct, yPct: originYPct }}
+          end={{ xPct: targetXPct, yPct: targetYPct }}
+          intensity={effect.intensity}
+          sizePct={projectileSize}
+        />
+      )}
+
       {/* 源点发射闪光 */}
       <motion.div
         className="absolute rounded-full"
@@ -287,8 +304,8 @@ const ShockwaveEffect: React.FC<{
       <motion.div
         className="absolute rounded-full"
         style={{
-          left: `${((tgtCx - minX) / coneW) * 100}%`,
-          top: `${((tgtCy - minY) / coneH) * 100}%`,
+          left: `${targetXPct}%`,
+          top: `${targetYPct}%`,
           width: isStrong ? '32%' : '24%',
           height: isStrong ? '32%' : '24%',
           transform: 'translate(-50%, -50%)',

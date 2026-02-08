@@ -116,37 +116,37 @@ export const useHitStop = (defaultDuration = 80) => {
   return { isActive, config, triggerHitStop };
 };
 
-/** 预设配置 */
+/** 预设配置 — 加强版，更明显的冻结与闪白 */
 export const HIT_STOP_PRESETS = {
   /** 轻击 - 短暂但可感知 */
   light: {
-    duration: 150,
-    scale: 1.06,
-    flashIntensity: 0.5,
+    duration: 180,
+    scale: 1.08,
+    flashIntensity: 0.55,
     enhanceContrast: true,
   } as HitStopConfig,
   
   /** 普通击中 */
   normal: {
-    duration: 200,
-    scale: 1.08,
-    flashIntensity: 0.65,
+    duration: 240,
+    scale: 1.1,
+    flashIntensity: 0.7,
     enhanceContrast: true,
   } as HitStopConfig,
   
   /** 重击 - 明显冻结 */
   heavy: {
-    duration: 260,
-    scale: 1.1,
-    flashIntensity: 0.8,
+    duration: 320,
+    scale: 1.14,
+    flashIntensity: 0.85,
     enhanceContrast: true,
   } as HitStopConfig,
   
   /** 暴击 - 最大冲击 */
   critical: {
-    duration: 320,
-    scale: 1.14,
-    flashIntensity: 0.95,
+    duration: 400,
+    scale: 1.18,
+    flashIntensity: 1,
     enhanceContrast: true,
   } as HitStopConfig,
 } as const;
