@@ -13,6 +13,8 @@ import { ReviewModule } from './modules/review/review.module';
 import { UgcModule } from './modules/ugc/ugc.module';
 import { LayoutModule } from './modules/layout/layout.module';
 import { UserSettingsModule } from './modules/user-settings/user-settings.module';
+import { CustomDeckModule } from './modules/custom-deck/custom-deck.module';
+import { SponsorModule } from './modules/sponsor/sponsor.module';
 
 import { FeedbackModule } from './modules/feedback/feedback.module';
 
@@ -61,6 +63,8 @@ import { FeedbackModule } from './modules/feedback/feedback.module';
         UgcModule,
         LayoutModule,
         UserSettingsModule,
+        CustomDeckModule,
+        SponsorModule,
     ],
 })
 export class AppModule { }

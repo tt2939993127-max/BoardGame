@@ -17,6 +17,7 @@ import {
     persistMatchCredentials,
     clearMatchCredentials,
     clearOwnerActiveMatch,
+    suppressOwnerActiveMatch,
     readStoredMatchCredentials,
     validateStoredMatchSeat,
 } from '../hooks/match/useMatchStatus';
@@ -27,6 +28,7 @@ import { useToast } from '../contexts/ToastContext';
 import { SocketIO } from 'boardgame.io/multiplayer';
 import { GAME_SERVER_URL } from '../config/server';
 import { getGameById } from '../config/games.config';
+import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { GameHUD } from '../components/game/GameHUD';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { SEO } from '../components/common/SEO';
@@ -62,7 +64,7 @@ export const MatchRoom = () => {
             board: impl.board,
             debug: false,
             multiplayer: SocketIO({ server: GAME_SERVER_URL }),
-            loading: () => <LoadingScreen title="Connecting" description={t('matchRoom.loadingResources')} />
+            loading: () => <LoadingScreen title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} />
         });
     }, [gameId]);
 
@@ -94,7 +96,7 @@ export const MatchRoom = () => {
                     board,
                     debug: false,
                     multiplayer: SocketIO({ server: GAME_SERVER_URL }),
-                    loading: () => <LoadingScreen title="Connecting" description={t('matchRoom.joiningRoom')} />
+                    loading: () => <LoadingScreen title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} />
                 });
                 setUgcGameClient(() => client as GameClientComponent);
             })
@@ -122,7 +124,7 @@ export const MatchRoom = () => {
             board: impl.board,
             debug: false,
             numPlayers: 2,
-            loading: () => <LoadingScreen title="Tutorial" description={t('matchRoom.loadingResources')} />
+            loading: () => <LoadingScreen title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
         }) as React.ComponentType<{ playerID?: string | null }>;
     }, [gameId]);
 
@@ -418,6 +420,9 @@ export const MatchRoom = () => {
     }, [isTutorialRoute, matchId, statusPlayerID, matchStatus.isLoading, matchStatus.players, toast]);
     useEffect(() => {
         if (!isTutorialRoute) return;
+        // 等待 i18n 命名空间加载完成，避免在 namespace 加载期间启动教程
+        // （namespace 加载会导致 TutorialClient 卸载重挂载，重置 boardgame.io 状态）
+        if (!isGameNamespaceReady) return;
         // 只有首次进入且当前未激活时才启动，避免结束后被再次拉起导致提示闪现
         if (!isActive && !tutorialStartedRef.current) {
             const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
@@ -430,7 +435,7 @@ export const MatchRoom = () => {
                 return () => clearTimeout(timer);
             }
         }
-    }, [startTutorial, isTutorialRoute, isActive, gameId]);
+    }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady]);
 
     useEffect(() => {
         if (!isTutorialRoute) return;
@@ -517,6 +522,20 @@ export const MatchRoom = () => {
         // 确保即使在跨标签页同步延迟时，主页也能立即排除此房间。
         suppressOwnerActiveMatch(matchId);
     };
+
+    const lobbyPresence = useLobbyMatchPresence({
+        gameId,
+        matchId,
+        enabled: !isTutorialRoute && Boolean(gameId && matchId),
+        requireSeen: true,
+    });
+
+    useEffect(() => {
+        if (isTutorialRoute || !matchId || !lobbyPresence.isMissing) return;
+        clearMatchLocalState();
+        toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+        navigateBackToLobby();
+    }, [isTutorialRoute, matchId, lobbyPresence.isMissing, toast]);
 
     const handleForceExitLocal = () => {
         clearMatchLocalState();

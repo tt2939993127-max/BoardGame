@@ -407,6 +407,8 @@ export interface PipelineContext<TCore = unknown> {
     random: RandomFn;
     /** 玩家列表 */
     playerIds: PlayerId[];
+    /** afterEvents 多轮迭代的当前轮次（0 = 首轮，>0 = 后续轮次） */
+    afterEventsRound?: number;
 }
 
 // ============================================================================

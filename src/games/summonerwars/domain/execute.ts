@@ -37,6 +37,7 @@ import {
 } from './helpers';
 import { rollDice, countHits } from '../config/dice';
 import { createDeckByFactionId } from '../config/factions';
+import { buildGameDeckFromCustom } from '../config/deckBuilder';
 import { calculateEffectiveStrength, getEffectiveLife, triggerAbilities, triggerAllUnitsAbilities, hasHellfireBlade } from './abilityResolver';
 import { reduceEvent } from './reduce';
 import type { AbilityContext } from './abilityResolver';
@@ -1322,6 +1323,22 @@ export function executeCommand(
       break;
     }
 
+    case SW_COMMANDS.SELECT_CUSTOM_DECK: {
+      const deckData = payload.deckData as import('./types').SerializedCustomDeck;
+      // 生成 FACTION_SELECTED 事件，使用召唤师所属阵营作为 factionId
+      // 同时附带 customDeckData 标记，让 reduce 层存储自定义牌组数据
+      events.push({
+        type: SW_SELECTION_EVENTS.FACTION_SELECTED,
+        payload: {
+          playerId: command.playerId,
+          factionId: deckData.summonerFaction,
+          customDeckData: deckData,
+        },
+        timestamp,
+      });
+      break;
+    }
+
     case SW_COMMANDS.PLAYER_READY: {
       events.push({
         type: SW_SELECTION_EVENTS.PLAYER_READY,
@@ -1351,7 +1368,11 @@ export function executeCommand(
         for (const pid of ['0', '1'] as PlayerId[]) {
           const factionId = core.selectedFactions[pid];
           if (factionId && factionId !== 'unselected') {
-            const deckData = createDeckByFactionId(factionId as import('./types').FactionId);
+            // 检测自定义牌组：优先使用自定义牌组数据
+            const customDeckData = core.customDeckData?.[pid];
+            const deckData = customDeckData
+              ? buildGameDeckFromCustom(customDeckData)
+              : createDeckByFactionId(factionId as import('./types').FactionId);
             const deckWithIds = deckData.deck.map((c, i) => ({ ...c, id: `${c.id}-${pid}-${i}` }));
             shuffledDecks[pid] = random.shuffle(deckWithIds);
           }

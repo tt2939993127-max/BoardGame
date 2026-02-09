@@ -41,13 +41,12 @@ function createRunner(setup?: (ids: PlayerId[], random: RandomFn) => MatchState<
     });
 }
 
-/** 蛇形选秀 + 推进到 playCards */
+/** 蛇形选秀（多轮 afterEvents 自动推进 factionSelect → startTurn → playCards） */
 const DRAFT_COMMANDS: SmashUpCommand[] = [
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
 ] as any[];
 
 // ============================================================================
@@ -55,19 +54,20 @@ const DRAFT_COMMANDS: SmashUpCommand[] = [
 // ============================================================================
 
 describe('完整回合循环', () => {
-    it('playCards → scoreBases(auto skip) → draw 完整流转', () => {
+    it('playCards → scoreBases(auto) → draw(auto) → endTurn(auto) → startTurn(P1, auto) → playCards(P1) 完整流转', () => {
         const runner = createRunner();
         const result = runner.run({
             name: '完整回合',
             commands: [
                 ...DRAFT_COMMANDS,
-                // playCards → scoreBases(auto skip) → draw（auto-continue 只推进一步）
+                // playCards → 多轮 afterEvents 自动推进整个链条到 P1 的 playCards
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
             ] as any[],
         });
 
-        // 无基地达标，scoreBases auto-continue 到 draw，停在 draw
-        expect(result.finalState.sys.phase).toBe('draw');
+        // 多轮 afterEvents 自动推进到 P1 的 playCards
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(result.finalState.core.currentPlayerIndex).toBe(1);
 
         // 验证 P0 抽了 2 张牌（DRAW_PER_TURN = 2）
         const core = result.finalState.core;
@@ -76,40 +76,21 @@ describe('完整回合循环', () => {
         expect(p0.hand.length).toBe(7);
     });
 
-    it('draw 阶段手牌不超限自动推进到 endTurn → startTurn', () => {
-        const runner = createRunner();
-        const result = runner.run({
-            name: '自动推进到下一回合',
-            commands: [
-                ...DRAFT_COMMANDS,
-                // P0: playCards → scoreBases(auto skip) → draw
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                // draw → endTurn → auto → startTurn（手牌 7 ≤ 上限 10，不需弃牌）
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-            ] as any[],
-        });
-
-        // draw ADVANCE → endTurn，endTurn auto-continue → startTurn
-        expect(result.finalState.sys.phase).toBe('startTurn');
-    });
-
     it('两个完整回合后回到 P0', () => {
         const runner = createRunner();
         const result = runner.run({
             name: '两个完整回合',
             commands: [
                 ...DRAFT_COMMANDS,
-                // P0 回合：playCards → scoreBases(auto) → draw
+                // P0 回合：playCards → 自动推进到 P1 的 playCards
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                // draw → endTurn(auto) → startTurn(auto) → playCards(P1)
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                // P1 回合：playCards → scoreBases(auto) → draw
-                { type: 'ADVANCE_PHASE', playerId: '1', payload: undefined },
-                // draw → endTurn(auto) → startTurn(auto) → playCards(P0)
+                // P1 回合：playCards → 自动推进到 P0 的 playCards
                 { type: 'ADVANCE_PHASE', playerId: '1', payload: undefined },
             ] as any[],
         });
 
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(result.finalState.core.currentPlayerIndex).toBe(0);
         expect(result.finalState.core.players['0'].minionsPlayed).toBe(0);
         expect(result.finalState.core.players['0'].actionsPlayed).toBe(0);
     });
@@ -122,17 +103,17 @@ describe('完整回合循环', () => {
 describe('随从消灭能力集成', () => {
     it('打出有 onPlay 消灭能力的随从时触发消灭', () => {
         const runner = createRunner();
-        // 选秀：P0 选 pirates+ninjas，P1 选 aliens+dinosaurs
-        // 这样 P0 有忍者（有消灭能力的随从）
+        // 选秀：P0 选 ninjas+pirates，P1 选 aliens+dinosaurs
+        const ninjasDraft: SmashUpCommand[] = [
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+        ] as any[];
+
         const result = runner.run({
             name: '选秀',
-            commands: [
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-            ] as any[],
+            commands: ninjasDraft,
         });
 
         const core = result.finalState.core;
@@ -149,11 +130,7 @@ describe('随从消灭能力集成', () => {
         const result2 = runner2.run({
             name: '打出随从作为目标',
             commands: [
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+                ...ninjasDraft,
                 {
                     type: SU_COMMANDS.PLAY_MINION,
                     playerId: '0',
@@ -242,15 +219,16 @@ describe('额度修改能力', () => {
     it('时间法师 onPlay 增加行动额度', () => {
         const runner = createRunner();
         // P0 选 wizards + aliens
+        const wizardsDraft: SmashUpCommand[] = [
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+            { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+        ] as any[];
+
         const result = runner.run({
             name: '选秀',
-            commands: [
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-            ] as any[],
+            commands: wizardsDraft,
         });
 
         const core = result.finalState.core;
@@ -265,11 +243,7 @@ describe('额度修改能力', () => {
         const result2 = runner2.run({
             name: '打出时间法师',
             commands: [
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+                ...wizardsDraft,
                 {
                     type: SU_COMMANDS.PLAY_MINION,
                     playerId: pid,
@@ -342,7 +316,7 @@ describe('手牌超限弃牌', () => {
         const result = runner2.run({
             name: '手牌超限停在 draw',
             commands: [
-                // playCards → scoreBases(auto skip) → draw（抽 2 张后手牌 = 11 > 10）
+                // playCards → scoreBases(auto) → draw（抽 2 张后手牌 = 11 > 10，停在 draw）
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
             ] as any[],
         });
@@ -354,7 +328,7 @@ describe('手牌超限弃牌', () => {
         expect(p0.hand.length).toBeGreaterThan(HAND_LIMIT);
     });
 
-    it('DISCARD_TO_LIMIT 弃牌后手牌 = HAND_LIMIT，自动推进', () => {
+    it('DISCARD_TO_LIMIT 弃牌后手牌 = HAND_LIMIT，自动推进到下一回合', () => {
         // 选秀 + 注入额外手牌
         const runner1 = createRunner();
         const draftResult = runner1.run({
@@ -402,9 +376,9 @@ describe('手牌超限弃牌', () => {
             expect(p0After.discard.some(c => c.uid === uid)).toBe(true);
         }
 
-        // 弃牌后 auto-continue：draw → endTurn（FlowSystem 每次 pipeline 只推进一步）
-        // endTurn → startTurn 需要下一次 pipeline 执行
-        expect(result.finalState.sys.phase).toBe('endTurn');
+        // 多轮 afterEvents 自动推进：draw → endTurn → startTurn(P1) → playCards(P1)
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(result.finalState.core.currentPlayerIndex).toBe(1);
     });
 
     it('手牌未超限时 DISCARD_TO_LIMIT 被拒绝', () => {
@@ -413,9 +387,9 @@ describe('手牌超限弃牌', () => {
             name: '手牌未超限弃牌被拒',
             commands: [
                 ...DRAFT_COMMANDS,
-                // 推进到 draw（手牌 = 7，未超限）
+                // 推进到 P1 的 playCards（多轮自动推进，draw 阶段已过）
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                // 尝试弃牌（应该失败，因为 draw 阶段已 auto-continue 到 endTurn）
+                // 尝试弃牌（应该失败，因为已经不在 draw 阶段）
                 {
                     type: SU_COMMANDS.DISCARD_TO_LIMIT,
                     playerId: '0',
@@ -460,9 +434,7 @@ describe('≥15 VP 胜利检查', () => {
         const result = runner2.run({
             name: 'VP 达标游戏结束',
             commands: [
-                // P0 回合：playCards → scoreBases(auto) → draw
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                // draw → endTurn → isGameOver 检查
+                // P0 回合：playCards → 多轮自动推进（含 endTurn，isGameOver 检查）
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
             ] as any[],
         });
@@ -486,8 +458,7 @@ describe('≥15 VP 胜利检查', () => {
             name: 'VP 未达标继续',
             commands: [
                 ...DRAFT_COMMANDS,
-                // P0 完整回合
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+                // P0 完整回合（多轮自动推进到 P1 的 playCards）
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
             ] as any[],
         });
@@ -498,7 +469,8 @@ describe('≥15 VP 胜利检查', () => {
         const gameOver = SmashUpDomain.isGameOver!(core);
         expect(gameOver).toBeUndefined();
 
-        // 游戏应该继续到下一回合
-        expect(result.finalState.sys.phase).toBe('startTurn');
+        // 游戏应该继续到 P1 的 playCards
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(result.finalState.core.currentPlayerIndex).toBe(1);
     });
 });

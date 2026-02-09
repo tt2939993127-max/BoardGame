@@ -27,9 +27,10 @@ function readSource(relativePath: string): string {
 describe('SmashUp Board data-tutorial-id 属性', () => {
     // 合并所有相关源码
     const boardSrc = readSource('Board.tsx');
+    const handSrc = readSource('ui/HandArea.tsx');
     const deckSrc = readSource('ui/DeckDiscardZone.tsx');
     const factionSrc = readSource('ui/FactionSelection.tsx');
-    const allSrc = boardSrc + deckSrc + factionSrc;
+    const allSrc = boardSrc + handSrc + deckSrc + factionSrc;
 
     for (const id of REQUIRED_IDS) {
         it(`包含 data-tutorial-id="${id}"`, () => {

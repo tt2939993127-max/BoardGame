@@ -100,7 +100,15 @@ describe('UserSettings Module (e2e)', () => {
         expect(emptyRes.body.empty).toBe(true);
         expect(emptyRes.body.settings).toBeNull();
 
-        const payload = { muted: true, masterVolume: 0.7, sfxVolume: 0.4, bgmVolume: 0.2 };
+        const payload = {
+            muted: true,
+            masterVolume: 0.7,
+            sfxVolume: 0.4,
+            bgmVolume: 0.2,
+            bgmSelections: {
+                summonerwars: { normal: 'bgm_key_a', battle: 'bgm_key_b' },
+            },
+        };
         const updateRes = await request(app.getHttpServer())
             .put('/auth/user-settings/audio')
             .set('Authorization', `Bearer ${token}`)
@@ -121,6 +129,7 @@ describe('UserSettings Module (e2e)', () => {
         expect(saved).toBeTruthy();
         expect(saved?.muted).toBe(true);
         expect(saved?.masterVolume).toBe(payload.masterVolume);
+        expect(saved?.bgmSelections).toMatchObject(payload.bgmSelections);
     });
 
     it('参数校验 - invalid volume', async () => {

@@ -6,12 +6,14 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { recoverCardsFromDiscard, grantExtraAction, moveMinion, destroyMinion, getMinionPower } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraAction, moveMinion, destroyMinion, getMinionPower, setPromptContinuation } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, CardsDrawnEvent, MinionReturnedEvent, OngoingAttachedEvent } from '../domain/types';
 import { registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, RestrictionCheckContext, TriggerContext } from '../domain/ongoingEffects';
 import { drawCards } from '../domain/utils';
+import { registerPromptContinuation } from '../domain/promptContinuation';
+import { getCardDef } from '../data/cards';
 
 /** 注册蒸汽朋克派系所有能力 */
 export function registerSteampunkAbilities(): void {
@@ -35,20 +37,25 @@ export function registerSteampunkAbilities(): void {
     registerTrigger('steampunk_escape_hatch', 'onMinionDestroyed', steampunkEscapeHatchTrigger);
 }
 
-/** 废物利用 onPlay：从弃牌堆取回一张行动卡到手牌（MVP：自动取第一张） */
+/** 废物利用 onPlay：从弃牌堆取回一张行动卡到手牌 */
 function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    // 找弃牌堆中的行动卡（排除刚打出的自己）
-    const actionInDiscard = player.discard.find(
-        c => c.type === 'action' && c.uid !== ctx.cardUid
-    );
-    if (!actionInDiscard) return { events: [] };
-
+    const actionsInDiscard = player.discard.filter(c => c.type === 'action' && c.uid !== ctx.cardUid);
+    if (actionsInDiscard.length === 0) return { events: [] };
+    if (actionsInDiscard.length === 1) {
+        return { events: [recoverCardsFromDiscard(ctx.playerId, [actionsInDiscard[0].uid], 'steampunk_scrap_diving', ctx.now)] };
+    }
+    const options = actionsInDiscard.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid } };
+    });
     return {
-        events: [recoverCardsFromDiscard(
-            ctx.playerId, [actionInDiscard.uid],
-            'steampunk_scrap_diving', ctx.now
-        )],
+        events: [setPromptContinuation({
+            abilityId: 'steampunk_scrap_diving',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要从弃牌堆取回的行动卡', options } },
+        }, ctx.now)],
     };
 }
 
@@ -151,53 +158,66 @@ function steampunkEscapeHatchTrigger(ctx: TriggerContext): SmashUpEvent[] {
 
 /**
  * 机械师 onPlay：从弃牌堆打出一张持续行动卡到基地
- * MVP：自动选弃牌堆中第一张 ongoing 行动卡
  */
 function steampunkMechanic(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    const ongoingInDiscard = player.discard.find(
-        c => c.type === 'action' && c.uid !== ctx.cardUid
-    );
-    if (!ongoingInDiscard) return { events: [] };
-
+    const actionsInDiscard = player.discard.filter(c => c.type === 'action' && c.uid !== ctx.cardUid);
+    if (actionsInDiscard.length === 0) return { events: [] };
+    if (actionsInDiscard.length === 1) {
+        return { events: [recoverCardsFromDiscard(ctx.playerId, [actionsInDiscard[0].uid], 'steampunk_mechanic', ctx.now)] };
+    }
+    const options = actionsInDiscard.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid } };
+    });
     return {
-        events: [recoverCardsFromDiscard(
-            ctx.playerId, [ongoingInDiscard.uid],
-            'steampunk_mechanic', ctx.now
-        )],
+        events: [setPromptContinuation({
+            abilityId: 'steampunk_mechanic',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要从弃牌堆打出的行动卡', options } },
+        }, ctx.now)],
     };
 }
 
 /**
  * 换场 onPlay：取回一张己方 ongoing 行动卡到手牌 + 额外行动
- * MVP：自动选第一张己方 ongoing 行动卡
  */
 function steampunkChangeOfVenue(ctx: AbilityContext): AbilityResult {
-    const events: SmashUpEvent[] = [];
-
-    // 找己方 ongoing 行动卡
+    // 收集所有己方 ongoing 行动卡
+    const myOngoings: { uid: string; defId: string; ownerId: string; baseIndex: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
-        const myOngoing = base.ongoingActions.find(o => o.ownerId === ctx.playerId);
-        if (myOngoing) {
-            // 取回到手牌（通过 ONGOING_DETACHED 事件）
-            events.push({
-                type: SU_EVENTS.ONGOING_DETACHED,
-                payload: {
-                    cardUid: myOngoing.uid,
-                    defId: myOngoing.defId,
-                    ownerId: myOngoing.ownerId,
-                    reason: 'steampunk_change_of_venue',
-                },
-                timestamp: ctx.now,
-            });
-            break;
+        for (const o of base.ongoingActions) {
+            if (o.ownerId === ctx.playerId) {
+                const def = getCardDef(o.defId);
+                const name = def?.name ?? o.defId;
+                myOngoings.push({ uid: o.uid, defId: o.defId, ownerId: o.ownerId, baseIndex: i, label: name });
+            }
         }
     }
-
-    // 额外行动
-    events.push(grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now));
-    return { events };
+    if (myOngoings.length === 0) {
+        // 没有 ongoing 行动卡，仍给额外行动
+        return { events: [grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now)] };
+    }
+    if (myOngoings.length === 1) {
+        return {
+            events: [
+                { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid: myOngoings[0].uid, defId: myOngoings[0].defId, ownerId: myOngoings[0].ownerId, reason: 'steampunk_change_of_venue' }, timestamp: ctx.now },
+                grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now),
+            ],
+        };
+    }
+    const options = myOngoings.map((o, i) => ({
+        id: `ongoing-${i}`, label: o.label, value: { cardUid: o.uid, defId: o.defId, ownerId: o.ownerId },
+    }));
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'steampunk_change_of_venue',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要取回的持续行动卡', options } },
+        }, ctx.now)],
+    };
 }
 
 /**
@@ -226,4 +246,33 @@ function steampunkCaptainAhab(ctx: AbilityContext): AbilityResult {
         }
     }
     return { events: [] };
+}
+
+
+// ============================================================================
+// Prompt 继续函数
+// ============================================================================
+
+/** 注册蒸汽朋克派系的 Prompt 继续函数 */
+export function registerSteampunkPromptContinuations(): void {
+    // 废物利用：选择弃牌堆行动卡后取回
+    registerPromptContinuation('steampunk_scrap_diving', (ctx) => {
+        const { cardUid } = ctx.selectedValue as { cardUid: string };
+        return [recoverCardsFromDiscard(ctx.playerId, [cardUid], 'steampunk_scrap_diving', ctx.now)];
+    });
+
+    // 机械师：选择弃牌堆行动卡后取回
+    registerPromptContinuation('steampunk_mechanic', (ctx) => {
+        const { cardUid } = ctx.selectedValue as { cardUid: string };
+        return [recoverCardsFromDiscard(ctx.playerId, [cardUid], 'steampunk_mechanic', ctx.now)];
+    });
+
+    // 换场：选择 ongoing 行动卡后取回 + 额外行动
+    registerPromptContinuation('steampunk_change_of_venue', (ctx) => {
+        const { cardUid, defId, ownerId } = ctx.selectedValue as { cardUid: string; defId: string; ownerId: string };
+        return [
+            { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'steampunk_change_of_venue' }, timestamp: ctx.now },
+            grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now),
+        ];
+    });
 }

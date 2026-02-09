@@ -7,6 +7,7 @@
 
 import { useGameAudio } from '../../../lib/audio/useGameAudio';
 import { DICETHRONE_AUDIO_CONFIG } from '../audio.config';
+import { DICETHRONE_MANIFEST } from '../manifest';
 import type { DiceThroneCore, TurnPhase } from '../domain/types';
 import type { MatchState, PlayerId } from '../../../engine/types';
 
@@ -33,6 +34,7 @@ export function useDiceThroneAudio(config: DiceThroneAudioConfig) {
 
     useGameAudio({
         config: DICETHRONE_AUDIO_CONFIG,
+        gameId: DICETHRONE_MANIFEST.id,
         G,
         ctx: {
             currentPhase,

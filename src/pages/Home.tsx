@@ -15,6 +15,10 @@ import {
     exitMatch,
     getOwnerActiveMatch,
     clearOwnerActiveMatch,
+    publishMatchCleanupNotice,
+    readMatchCleanupNotice,
+    hasSeenMatchCleanupNotice,
+    markMatchCleanupNoticeSeen,
     isOwnerActiveMatchSuppressed,
     rejoinMatch,
     getLatestStoredMatchCredentials,
@@ -34,6 +38,7 @@ import { LobbyClient } from 'boardgame.io/client';
 import { GAME_SERVER_URL } from '../config/server';
 import { SEO } from '../components/common/SEO';
 import { useLobbyStats } from '../hooks/useLobbyStats';
+import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 
 const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
@@ -192,6 +197,27 @@ export const Home = () => {
         };
     }, []);
 
+    const handleCleanupNotice = useCallback(() => {
+        const notice = readMatchCleanupNotice();
+        if (!notice) return;
+        if (hasSeenMatchCleanupNotice(notice)) return;
+        markMatchCleanupNoticeSeen(notice);
+        toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+    }, [toast]);
+
+    useEffect(() => {
+        const handleStorageNotice = (event: StorageEvent) => {
+            if (event.key && event.key !== 'match_cleanup_notice') return;
+            handleCleanupNotice();
+        };
+        window.addEventListener('match-cleanup-notice', handleCleanupNotice);
+        window.addEventListener('storage', handleStorageNotice);
+        return () => {
+            window.removeEventListener('match-cleanup-notice', handleCleanupNotice);
+            window.removeEventListener('storage', handleStorageNotice);
+        };
+    }, [handleCleanupNotice]);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -284,6 +310,27 @@ export const Home = () => {
             cancelled = true;
         };
     }, [localStorageTick, user]);
+
+    const lobbyPresence = useLobbyMatchPresence({
+        gameId: activeMatch?.gameName,
+        matchId: activeMatch?.matchID,
+        enabled: Boolean(activeMatch?.gameName && activeMatch?.matchID),
+        requireSeen: true,
+    });
+
+    useEffect(() => {
+        if (!activeMatch || !lobbyPresence.isMissing) return;
+        const notice = publishMatchCleanupNotice(activeMatch.matchID);
+        if (notice && !hasSeenMatchCleanupNotice(notice)) {
+            markMatchCleanupNoticeSeen(notice);
+            toast.warning({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+        }
+        clearMatchCredentials(activeMatch.matchID);
+        clearOwnerActiveMatch(activeMatch.matchID);
+        setActiveMatch(null);
+        setMyMatchRole(null);
+        setLocalStorageTick((t) => t + 1);
+    }, [activeMatch, lobbyPresence.isMissing, toast]);
 
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;

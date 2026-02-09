@@ -9,6 +9,8 @@ import { Review, ReviewSchema } from '../review/schemas/review.schema';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './guards/admin.guard';
+import { UgcAsset, UgcAssetSchema } from '../ugc/schemas/ugc-asset.schema';
+import { UgcPackage, UgcPackageSchema } from '../ugc/schemas/ugc-package.schema';
 import { MatchRecord, MatchRecordSchema } from './schemas/match-record.schema';
 import { ROOM_MATCH_MODEL_NAME, RoomMatchSchema } from './schemas/room-match.schema';
 
@@ -21,6 +23,8 @@ import { ROOM_MATCH_MODEL_NAME, RoomMatchSchema } from './schemas/room-match.sch
             { name: Friend.name, schema: FriendSchema },
             { name: Message.name, schema: MessageSchema },
             { name: Review.name, schema: ReviewSchema },
+            { name: UgcPackage.name, schema: UgcPackageSchema },
+            { name: UgcAsset.name, schema: UgcAssetSchema },
         ]),
     ],
     controllers: [AdminController],

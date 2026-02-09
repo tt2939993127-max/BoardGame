@@ -3,16 +3,17 @@
  * 监听游戏状态变化并自动播放对应音效
  * 支持通用注册表 + 游戏逻辑配置
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioManager } from './AudioManager';
 import { playSynthSound, getSynthSoundKeys } from './SynthAudio';
-import type { AudioRuntimeContext, GameAudioConfig, SoundKey } from './types';
-import { resolveAudioEvent, resolveAudioKey, resolveBgmKey } from './audioRouting';
+import type { AudioRuntimeContext, BgmDefinition, BgmGroupId, GameAudioConfig, SoundKey } from './types';
+import { resolveAudioEvent, resolveAudioKey, resolveBgmGroup, resolveBgmKey } from './audioRouting';
 import { useAudio } from '../../contexts/AudioContext';
 import { COMMON_AUDIO_BASE_PATH, loadCommonAudioRegistry } from './commonRegistry';
 
 interface UseGameAudioOptions<G, Ctx = unknown, Meta extends Record<string, unknown> = Record<string, unknown>> {
     config: GameAudioConfig;
+    gameId?: string;
     G: G;
     ctx: Ctx;
     eventEntries?: unknown[];
@@ -80,7 +81,7 @@ export function playSound(key: SoundKey): void {
 }
 
 /** 操作被拒绝/失败时的反馈音效 key */
-const DENIED_SOUND_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.negative.signal_negative_jrpg_a';
+const DENIED_SOUND_KEY = 'puzzle.18.negative_pop_01';
 
 /**
  * 播放操作被拒绝的反馈音效
@@ -96,6 +97,7 @@ export function playDeniedSound(): void {
  */
 export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unknown> = Record<string, unknown>>({
     config,
+    gameId,
     G,
     ctx,
     eventEntries,
@@ -105,7 +107,8 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
     const prevRuntimeRef = useRef<AudioRuntimeContext<G, Ctx, Meta> | null>(null);
     const lastLogSignatureRef = useRef<string | null>(null);
     const currentBgmKeyRef = useRef<string | null>(null);
-    const { setPlaylist, playBgm, stopBgm } = useAudio();
+    const currentBgmGroupRef = useRef<BgmGroupId | null>(null);
+    const { setPlaylist, playBgm, stopBgm, bgmSelections, setActiveBgmContext } = useAudio();
     const [registryLoaded, setRegistryLoaded] = useState(false);
     const eventEntriesVersion = (() => {
         if (!eventEntries || eventEntries.length === 0) return 0;
@@ -115,6 +118,51 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
 
     const runtimeContext: AudioRuntimeContext<G, Ctx, Meta> = { G, ctx, meta };
 
+    const bgmDefinitionMap = useMemo(() => {
+        return new Map((config.bgm ?? []).map((def) => [def.key, def]));
+    }, [config.bgm]);
+
+    const resolveFallbackGroup = useCallback((): BgmGroupId => {
+        if (config.bgmGroups) {
+            if (config.bgmGroups.normal) return 'normal';
+            const firstGroup = Object.keys(config.bgmGroups)[0];
+            if (firstGroup) return firstGroup as BgmGroupId;
+        }
+        return 'normal';
+    }, [config.bgmGroups]);
+
+    const resolveBgmPlan = useCallback(() => {
+        const allBgm = config.bgm ?? [];
+        if (allBgm.length === 0) {
+            return {
+                activeGroup: null as BgmGroupId | null,
+                playlist: [] as BgmDefinition[],
+                targetKey: null as string | null,
+            };
+        }
+
+        const allKeys = allBgm.map((def) => def.key);
+        const fallbackGroup = resolveFallbackGroup();
+        const activeGroup = resolveBgmGroup(runtimeContext, config.bgmRules, fallbackGroup);
+        const groupKeys = config.bgmGroups?.[activeGroup] ?? allKeys;
+        const effectiveKeys = groupKeys.length > 0 ? groupKeys : allKeys;
+        const playlist = effectiveKeys
+            .map((key) => bgmDefinitionMap.get(key))
+            .filter((entry): entry is BgmDefinition => !!entry);
+        const fallbackKeyFromGroup = effectiveKeys.find((key) => allKeys.includes(key)) ?? allKeys[0] ?? null;
+        const resolvedKey = resolveBgmKey(runtimeContext, config.bgmRules, null);
+        const safeFallbackKey = resolvedKey && effectiveKeys.includes(resolvedKey)
+            ? resolvedKey
+            : fallbackKeyFromGroup;
+        const selection = gameId ? bgmSelections?.[gameId]?.[activeGroup] : undefined;
+        const candidateKey = selection && effectiveKeys.includes(selection) ? selection : safeFallbackKey;
+        const targetKey = candidateKey && allKeys.includes(candidateKey)
+            ? candidateKey
+            : fallbackKeyFromGroup;
+
+        return { activeGroup, playlist, targetKey };
+    }, [bgmDefinitionMap, bgmSelections, config.bgm, config.bgmGroups, config.bgmRules, gameId, resolveFallbackGroup, runtimeContext]);
+
     useEffect(() => {
         let active = true;
         loadCommonAudioRegistry()
@@ -122,6 +170,11 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 if (!active) return;
                 AudioManager.registerRegistryEntries(registry.entries, COMMON_AUDIO_BASE_PATH);
                 setRegistryLoaded(true);
+
+                // P1: 立即预加载关键音效，消除首次播放延迟
+                if (config.criticalSounds && config.criticalSounds.length > 0) {
+                    AudioManager.preloadKeys(config.criticalSounds);
+                }
             })
             .catch((error) => {
                 console.error('[AudioRegistry] 通用音频注册表加载失败', error);
@@ -148,43 +201,69 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 }
             }
 
-            if (config.bgm && config.bgm.length > 0) {
-                const fallbackKey = config.bgm[0]?.key ?? null;
-                const initialBgm = resolveBgmKey(runtimeContext, config.bgmRules, fallbackKey);
-                setPlaylist(config.bgm);
-                if (initialBgm) {
-                    playBgm(initialBgm);
-                    currentBgmKeyRef.current = initialBgm;
-                } else {
-                    stopBgm();
-                }
+            const { activeGroup, playlist, targetKey } = resolveBgmPlan();
+            setPlaylist(playlist);
+            if (gameId && activeGroup) {
+                setActiveBgmContext(gameId, activeGroup);
+                currentBgmGroupRef.current = activeGroup;
+            }
+            if (targetKey) {
+                playBgm(targetKey);
+                currentBgmKeyRef.current = targetKey;
             } else {
-                setPlaylist([]);
                 stopBgm();
             }
 
             initializedRef.current = true;
         }
-    }, [registryLoaded, config, runtimeContext, setPlaylist, playBgm, stopBgm, eventEntriesVersion]);
+    }, [
+        registryLoaded,
+        config,
+        runtimeContext,
+        setPlaylist,
+        playBgm,
+        stopBgm,
+        eventEntriesVersion,
+        resolveBgmPlan,
+        gameId,
+        setActiveBgmContext,
+    ]);
 
     useEffect(() => {
         if (!initializedRef.current || !registryLoaded) return;
         if (!config.bgm || config.bgm.length === 0) return;
 
-        const fallbackKey = config.bgm[0]?.key ?? null;
-        const targetBgm = resolveBgmKey(runtimeContext, config.bgmRules, fallbackKey);
+        const { activeGroup, playlist, targetKey } = resolveBgmPlan();
+        if (gameId && activeGroup && currentBgmGroupRef.current !== activeGroup) {
+            setActiveBgmContext(gameId, activeGroup);
+            currentBgmGroupRef.current = activeGroup;
+        }
+        if (playlist.length > 0) {
+            setPlaylist(playlist);
+        }
 
-        if (!targetBgm) {
+        if (!targetKey) {
             stopBgm();
             currentBgmKeyRef.current = null;
             return;
         }
 
-        if (currentBgmKeyRef.current !== targetBgm) {
-            playBgm(targetBgm);
-            currentBgmKeyRef.current = targetBgm;
+        if (currentBgmKeyRef.current !== targetKey) {
+            playBgm(targetKey);
+            currentBgmKeyRef.current = targetKey;
         }
-    }, [registryLoaded, config.bgm, config.bgmRules, runtimeContext, playBgm, stopBgm]);
+    }, [
+        registryLoaded,
+        config.bgm,
+        config.bgmRules,
+        runtimeContext,
+        playBgm,
+        stopBgm,
+        resolveBgmPlan,
+        gameId,
+        setActiveBgmContext,
+        setPlaylist,
+    ]);
 
     useEffect(() => {
         if (!registryLoaded) return;
@@ -254,6 +333,8 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             stopBgm();
             AudioManager.stopBgm();
             currentBgmKeyRef.current = null;
+            currentBgmGroupRef.current = null;
+            setActiveBgmContext(null, null);
         }
-    ), [setPlaylist, stopBgm]);
+    ), [setPlaylist, stopBgm, setActiveBgmContext]);
 }

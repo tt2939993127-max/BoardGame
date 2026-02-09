@@ -65,17 +65,17 @@ export const PulseGlow = ({
             {useRipple && isGlowing && (
                 <>
                     <motion.span
-                        className="absolute inset-0 rounded-full border pointer-events-none"
+                        className="absolute inset-0 rounded-full border-2 pointer-events-none"
                         style={{ borderColor: glowColor }}
-                        initial={{ opacity: 0.5, scale: 1 }}
-                        animate={{ opacity: [0.5, 0], scale: [1, 1.8] }}
+                        initial={{ opacity: 0.8, scale: 1 }}
+                        animate={{ opacity: [0.8, 0], scale: [1, 2.2] }}
                         transition={rippleTransitionBase}
                     />
                     <motion.span
-                        className="absolute inset-0 rounded-full border pointer-events-none"
+                        className="absolute inset-0 rounded-full border-2 pointer-events-none"
                         style={{ borderColor: glowColor }}
-                        initial={{ opacity: 0.45, scale: 1 }}
-                        animate={{ opacity: [0.45, 0], scale: [1, 1.8] }}
+                        initial={{ opacity: 0.7, scale: 1 }}
+                        animate={{ opacity: [0.7, 0], scale: [1, 2.2] }}
                         transition={{ ...rippleTransitionBase, delay: loop ? 0.8 : 0 }}
                     />
                 </>

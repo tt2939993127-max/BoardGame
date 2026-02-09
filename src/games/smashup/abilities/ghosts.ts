@@ -6,12 +6,15 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, grantExtraAction, destroyMinion, getMinionPower } from '../domain/abilityHelpers';
+import { grantExtraMinion, grantExtraAction, destroyMinion, getMinionPower, setPromptContinuation, buildMinionTargetOptions } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, CardsDiscardedEvent, VpAwardedEvent, SmashUpEvent, MinionReturnedEvent } from '../domain/types';
+import type { MinionCardDef } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerProtection } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext } from '../domain/ongoingEffects';
+import { registerPromptContinuation } from '../domain/promptContinuation';
+import { getCardDef, getBaseDef } from '../data/cards';
 
 /** 注册幽灵派系所有能力 */
 export function registerGhostAbilities(): void {
@@ -33,19 +36,32 @@ export function registerGhostAbilities(): void {
     registerAbility('ghost_make_contact', 'onPlay', ghostMakeContact);
 }
 
-/** 幽灵 onPlay：弃一张手牌（MVP：自动弃第一张非自身的手牌） */
+/** 幽灵 onPlay：弃一张手牌 */
 function ghostGhost(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    // 排除刚打出的自己
     const discardable = player.hand.filter(c => c.uid !== ctx.cardUid);
     if (discardable.length === 0) return { events: [] };
-    const card = discardable[0];
-    const evt: CardsDiscardedEvent = {
-        type: SU_EVENTS.CARDS_DISCARDED,
-        payload: { playerId: ctx.playerId, cardUids: [card.uid] },
-        timestamp: ctx.now,
+    if (discardable.length === 1) {
+        const evt: CardsDiscardedEvent = {
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId: ctx.playerId, cardUids: [discardable[0].uid] },
+            timestamp: ctx.now,
+        };
+        return { events: [evt] };
+    }
+    // 多张手牌：Prompt 选择弃哪张
+    const options = discardable.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid } };
+    });
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'ghost_ghost',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要弃掉的手牌', options } },
+        }, ctx.now)],
     };
-    return { events: [evt] };
 }
 
 /** 招魂 onPlay：手牌≤2时抽到5张 */
@@ -108,86 +124,150 @@ function ghostIncorporealChecker(ctx: ProtectionCheckContext): boolean {
 }
 
 /**
- * ghost_make_contact onPlay：控制对手一个随从（将其控制权转移给自己）
- * 
- * MVP：自动选对手力量最高的随从，将其控制权转移
- * 实现方式：通过 MINION_RETURNED 将对手随从回手 + 重新打出到同基地（简化实现）
- * 更准确的实现：直接修改 controller（需要新事件类型）
- * 当前 MVP：移动对手最强随从到自己控制的基地
+ * ghost_make_contact onPlay：控制对手一个随从（将其返回手牌）
  */
 function ghostMakeContact(ctx: AbilityContext): AbilityResult {
-    // 找所有对手随从，按力量降序
-    const targets: { uid: string; defId: string; baseIndex: number; owner: string; power: number }[] = [];
+    const targets: { uid: string; defId: string; baseIndex: number; owner: string; power: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
             if (m.controller === ctx.playerId) continue;
-            targets.push({
-                uid: m.uid, defId: m.defId, baseIndex: i,
-                owner: m.owner, power: getMinionPower(ctx.state, m, i),
-            });
+            const power = getMinionPower(ctx.state, m, i);
+            const def = getCardDef(m.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? m.defId;
+            const baseDef = getBaseDef(ctx.state.bases[i].defId);
+            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+            targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, power, label: `${name} (力量 ${power}) @ ${baseName}` });
         }
     }
     if (targets.length === 0) return { events: [] };
-    targets.sort((a, b) => b.power - a.power);
-    const target = targets[0];
-
-    // MVP：将对手随从返回其手牌（简化版"控制"）
-    const evt: MinionReturnedEvent = {
-        type: SU_EVENTS.MINION_RETURNED,
-        payload: {
-            minionUid: target.uid,
-            minionDefId: target.defId,
-            fromBaseIndex: target.baseIndex,
-            toPlayerId: target.owner,
-            reason: 'ghost_make_contact',
-        },
-        timestamp: ctx.now,
+    if (targets.length === 1) {
+        const t = targets[0];
+        const evt: MinionReturnedEvent = {
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: t.uid, minionDefId: t.defId, fromBaseIndex: t.baseIndex, toPlayerId: t.owner, reason: 'ghost_make_contact' },
+            timestamp: ctx.now,
+        };
+        return { events: [evt] };
+    }
+    // 多目标：Prompt 选择
+    const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'ghost_make_contact',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要控制的对手随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
-    return { events: [evt] };
 }
 
 /**
  * 灵魂 onPlay：选择一个随从，弃等量力量的手牌来消灭它
- * MVP：自动选最强的对手随从（如果手牌足够弃掉），弃掉力量最低的手牌
  */
 function ghostSpirit(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    // 可弃的手牌（排除刚打出的自己）
     const discardable = player.hand.filter(c => c.uid !== ctx.cardUid);
     if (discardable.length === 0) return { events: [] };
 
-    // 找所有对手随从，按力量降序
-    const targets: { uid: string; defId: string; baseIndex: number; owner: string; power: number }[] = [];
+    // 找所有可消灭的对手随从（力量 ≤ 可弃手牌数）
+    const targets: { uid: string; defId: string; baseIndex: number; owner: string; power: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
             if (m.controller === ctx.playerId) continue;
-            targets.push({
-                uid: m.uid, defId: m.defId, baseIndex: i,
-                owner: m.owner, power: getMinionPower(ctx.state, m, i),
+            const power = getMinionPower(ctx.state, m, i);
+            if (power <= discardable.length) {
+                const def = getCardDef(m.defId) as MinionCardDef | undefined;
+                const name = def?.name ?? m.defId;
+                const baseDef = getBaseDef(ctx.state.bases[i].defId);
+                const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+                targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, power, label: `${name} (力量 ${power}, 需弃 ${power} 张牌) @ ${baseName}` });
+            }
+        }
+    }
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return spiritDestroyTarget(ctx, targets[0], discardable);
+    }
+    // 多目标：Prompt 选择
+    const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'ghost_spirit',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要消灭的随从（需弃等量力量的手牌）', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
+    };
+}
+
+/** 灵魂辅助：弃牌并消灭目标 */
+function spiritDestroyTarget(
+    ctx: AbilityContext,
+    target: { uid: string; defId: string; baseIndex: number; owner: string; power: number },
+    discardable: { uid: string }[],
+): AbilityResult {
+    const events: SmashUpEvent[] = [];
+    const toDiscard = discardable.slice(0, target.power);
+    if (toDiscard.length > 0) {
+        events.push({
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId: ctx.playerId, cardUids: toDiscard.map(c => c.uid) },
+            timestamp: ctx.now,
+        } as CardsDiscardedEvent);
+    }
+    events.push(destroyMinion(target.uid, target.defId, target.baseIndex, target.owner, 'ghost_spirit', ctx.now));
+    return { events };
+}
+
+
+// ============================================================================
+// Prompt 继续函数
+// ============================================================================
+
+/** 注册幽灵派系的 Prompt 继续函数 */
+export function registerGhostPromptContinuations(): void {
+    // 幽灵：选择弃哪张手牌
+    registerPromptContinuation('ghost_ghost', (ctx) => {
+        const { cardUid } = ctx.selectedValue as { cardUid: string };
+        return [{
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId: ctx.playerId, cardUids: [cardUid] },
+            timestamp: ctx.now,
+        }];
+    });
+
+    // 灵魂：选择目标后弃牌并消灭
+    registerPromptContinuation('ghost_spirit', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        const power = getMinionPower(ctx.state, target, baseIndex);
+        const player = ctx.state.players[ctx.playerId];
+        const discardable = player.hand.filter(c => c.uid !== minionUid);
+        const toDiscard = discardable.slice(0, power);
+        const events: SmashUpEvent[] = [];
+        if (toDiscard.length > 0) {
+            events.push({
+                type: SU_EVENTS.CARDS_DISCARDED,
+                payload: { playerId: ctx.playerId, cardUids: toDiscard.map(c => c.uid) },
+                timestamp: ctx.now,
             });
         }
-    }
-    targets.sort((a, b) => b.power - a.power);
+        events.push(destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'ghost_spirit', ctx.now));
+        return events;
+    });
 
-    // 找一个手牌数量足够弃掉的目标（力量 = 需弃牌数）
-    for (const target of targets) {
-        if (target.power <= discardable.length) {
-            const events: SmashUpEvent[] = [];
-            // 弃掉 target.power 张手牌
-            const toDiscard = discardable.slice(0, target.power);
-            if (toDiscard.length > 0) {
-                const discardEvt: CardsDiscardedEvent = {
-                    type: SU_EVENTS.CARDS_DISCARDED,
-                    payload: { playerId: ctx.playerId, cardUids: toDiscard.map(c => c.uid) },
-                    timestamp: ctx.now,
-                };
-                events.push(discardEvt);
-            }
-            // 消灭目标
-            events.push(destroyMinion(target.uid, target.defId, target.baseIndex, target.owner, 'ghost_spirit', ctx.now));
-            return { events };
-        }
-    }
-
-    return { events: [] };
+    // 心灵接触：选择目标后返回手牌
+    registerPromptContinuation('ghost_make_contact', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [{
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'ghost_make_contact' },
+            timestamp: ctx.now,
+        }];
+    });
 }

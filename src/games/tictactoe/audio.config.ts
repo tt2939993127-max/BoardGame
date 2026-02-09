@@ -5,6 +5,10 @@
 import type { AudioEvent, GameAudioConfig } from '../../lib/audio/types';
 
 export const TIC_TAC_TOE_AUDIO_CONFIG: GameAudioConfig = {
+    criticalSounds: [
+        'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.heavy_object_move',
+        'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.puzzle_heavy_object_move',
+    ],
     eventSoundResolver: (event) => {
         if (event.type === 'CELL_OCCUPIED') {
             const payload = (event as AudioEvent & { payload?: { playerId?: string } }).payload;

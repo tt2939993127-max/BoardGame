@@ -46,6 +46,15 @@ export const FEEDBACK_API_URL = normalizeUrl(
     import.meta.env.VITE_FEEDBACK_API_URL || FALLBACK_FEEDBACK_API_URL
 );
 
+// 赞助列表 API 地址
+const FALLBACK_SPONSOR_API_URL = import.meta.env.DEV
+    ? '/sponsors'
+    : (BACKEND_URL ? `${BACKEND_URL}/sponsors` : '/sponsors');
+
+export const SPONSOR_API_URL = normalizeUrl(
+    import.meta.env.VITE_SPONSOR_API_URL || FALLBACK_SPONSOR_API_URL
+);
+
 // UGC API 地址
 const FALLBACK_UGC_API_URL = import.meta.env.DEV
     ? '/ugc'

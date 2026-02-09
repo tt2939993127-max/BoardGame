@@ -56,12 +56,14 @@ export class UserSettingsController {
         masterVolume: number;
         sfxVolume: number;
         bgmVolume: number;
+        bgmSelections?: Record<string, Record<string, string>>;
     }) {
         return {
             muted: settings.muted,
             masterVolume: settings.masterVolume,
             sfxVolume: settings.sfxVolume,
             bgmVolume: settings.bgmVolume,
+            bgmSelections: settings.bgmSelections ?? {},
         };
     }
 

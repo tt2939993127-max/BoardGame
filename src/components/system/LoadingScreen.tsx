@@ -8,6 +8,8 @@ interface LoadingScreenProps {
     description?: string;
     fullScreen?: boolean;
     className?: string;
+    titleClassName?: string;
+    descriptionClassName?: string;
 }
 
 /**
@@ -18,7 +20,9 @@ export const LoadingScreen = ({
     title,
     description,
     fullScreen = true,
-    className
+    className,
+    titleClassName,
+    descriptionClassName
 }: LoadingScreenProps) => {
     const { t } = useTranslation('lobby');
 
@@ -56,7 +60,10 @@ export const LoadingScreen = ({
                             initial={{ y: 20, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             transition={{ delay: 0.2 }}
-                            className="text-amber-500 font-bold text-lg md:text-xl tracking-[0.2em] uppercase mb-2"
+                            className={clsx(
+                                "text-amber-500 font-bold text-lg md:text-xl tracking-[0.2em] uppercase mb-2",
+                                titleClassName
+                            )}
                         >
                             {title}
                         </motion.h2>
@@ -66,7 +73,10 @@ export const LoadingScreen = ({
                         initial={{ y: 20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.3 }}
-                        className="text-amber-200/60 text-xs md:text-sm font-serif tracking-widest leading-relaxed line-clamp-2"
+                        className={clsx(
+                            "text-amber-200/60 text-xs md:text-sm font-serif tracking-widest leading-relaxed line-clamp-2",
+                            descriptionClassName
+                        )}
                     >
                         {description || t('matchRoom.loadingResources')}
                     </motion.p>

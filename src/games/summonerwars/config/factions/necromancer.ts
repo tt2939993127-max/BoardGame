@@ -356,7 +356,7 @@ export function createNecromancerDeck(): {
       { unit: { ...undeadArcher, id: 'necro-start-archer' }, position: { row: 2, col: 2 } },
       { unit: { ...plagueZombie, id: 'necro-start-zombie' }, position: { row: 3, col: 3 } },
     ],
-    startingGate: { ...STRUCTURE_CARDS[0], id: 'necro-start-gate' },
+    startingGate: { ...STRUCTURE_CARDS[0], id: `${STRUCTURE_CARDS[0].id}-0` },
     startingGatePosition: { row: 2, col: 3 },
     deck,
   };

@@ -62,13 +62,12 @@ function setupWithBreakpoint(ids: PlayerId[], random: RandomFn): MatchState<Smas
     return { sys, core };
 }
 
-/** 蛇形选秀 + 推进到 playCards */
+/** 蛇形选秀（多轮 afterEvents 自动推进到 playCards） */
 const DRAFT_COMMANDS = [
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
 ] as any[];
 
 /** 直接从 playCards 推进到 scoreBases（配合 setupWithBreakpoint） */
@@ -90,20 +89,21 @@ beforeAll(() => {
 });
 
 describe('Me First! 响应窗口', () => {
-    it('无基地达标时不打开 Me First! 响应窗口，直接推进到 draw', () => {
+    it('无基地达标时不打开 Me First! 响应窗口，自动推进到下一回合', () => {
         const runner = createRunner();
         const result = runner.run({
             name: '无基地达标跳过响应窗口',
             commands: [
                 ...DRAFT_COMMANDS,
-                // playCards → scoreBases → 无基地达标 → auto-continue → draw
+                // playCards → 多轮自动推进（scoreBases→draw→endTurn→startTurn(P1)→playCards(P1)）
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
             ] as any[],
         });
 
-        // 无基地达标，scoreBases 直接跳过，推进到 draw
+        // 无基地达标，scoreBases 直接跳过，多轮自动推进到 P1 的 playCards
         expect(result.finalState.sys.responseWindow.current).toBeUndefined();
-        expect(result.finalState.sys.phase).toBe('draw');
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(result.finalState.core.currentPlayerIndex).toBe(1);
     });
 
     it('有基地达标时打开 Me First! 响应窗口', () => {
@@ -173,16 +173,15 @@ describe('Me First! 响应窗口', () => {
             name: '完整回合无 meFirst',
             commands: [
                 ...DRAFT_COMMANDS,
-                // P0 回合：playCards → scoreBases(auto skip) → draw(auto) → endTurn(auto) → startTurn(auto)
+                // P0 回合：playCards → 多轮自动推进到 P1 的 playCards
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                // draw → endTurn → startTurn → playCards
-                { type: 'ADVANCE_PHASE', playerId: '1', payload: undefined },
+                // P1 回合：playCards → 多轮自动推进到 P0 的 playCards
                 { type: 'ADVANCE_PHASE', playerId: '1', payload: undefined },
             ] as any[],
         });
 
-        // P1 的回合，playCards 阶段
+        // P0 的第二回合，playCards 阶段
         expect(result.finalState.sys.phase).toBe('playCards');
-        expect(result.finalState.core.currentPlayerIndex).toBe(1);
+        expect(result.finalState.core.currentPlayerIndex).toBe(0);
     });
 });

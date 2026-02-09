@@ -27,6 +27,7 @@ import {
   discardFromHand,
 } from '../../../systems/CardSystem';
 import { createDeckByFactionId } from '../config/factions';
+import { buildGameDeckFromCustom } from '../config/deckBuilder';
 
 // ============================================================================
 // 状态归约
@@ -538,8 +539,25 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     // ========== 阵营选择事件 ==========
 
     case SW_SELECTION_EVENTS.FACTION_SELECTED: {
-      const { playerId: pid, factionId } = payload as { playerId: PlayerId; factionId: FactionId };
-      return { ...core, selectedFactions: { ...core.selectedFactions, [pid]: factionId } };
+      const { playerId: pid, factionId, customDeckData } = payload as {
+        playerId: PlayerId; factionId: FactionId;
+        customDeckData?: import('./types').SerializedCustomDeck;
+      };
+      let newCore = { ...core, selectedFactions: { ...core.selectedFactions, [pid]: factionId } };
+      if (customDeckData) {
+        // 存储自定义牌组数据，供 HOST_START_GAME 时使用
+        newCore = {
+          ...newCore,
+          customDeckData: { ...(newCore.customDeckData ?? {}), [pid]: customDeckData },
+        };
+      } else {
+        // 选择预构筑阵营时，清除该玩家的自定义牌组数据
+        if (newCore.customDeckData?.[pid]) {
+          const { [pid]: _, ...rest } = newCore.customDeckData;
+          newCore = { ...newCore, customDeckData: Object.keys(rest).length > 0 ? rest : undefined };
+        }
+      }
+      return newCore;
     }
 
     case SW_SELECTION_EVENTS.PLAYER_READY: {
@@ -584,7 +602,11 @@ function initializeBoardFromFactions(
     const factionId = factions[pid];
     if (!factionId) continue;
     
-    const deckData = createDeckByFactionId(factionId as FactionId);
+    // 检测自定义牌组：优先使用自定义牌组数据获取棋盘布局
+    const customDeckData = core.customDeckData?.[pid];
+    const deckData = customDeckData
+      ? buildGameDeckFromCustom(customDeckData)
+      : createDeckByFactionId(factionId as FactionId);
     const isBottom = pid === '0';
     const player = { ...newPlayers[pid] };
     

@@ -50,17 +50,17 @@ function getCardCost(card: Card): number {
 function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number } | null {
   const spriteIndex = 'spriteIndex' in card ? card.spriteIndex : undefined;
   const spriteAtlas = 'spriteAtlas' in card ? card.spriteAtlas : undefined;
-  
+
   if (spriteIndex === undefined) return null;
-  
+
   // 传送门使用全局共用图集
   if (spriteAtlas === 'portal') {
     return { atlasId: 'sw:portal', frameIndex: spriteIndex };
   }
-  
+
   const atlasType = (spriteAtlas ?? 'cards') as 'hero' | 'cards';
   const atlasId = resolveCardAtlasId(card as { id: string; faction?: string }, atlasType);
-  
+
   return { atlasId, frameIndex: spriteIndex };
 }
 
@@ -86,86 +86,86 @@ const HandCard: React.FC<{
   onClick,
   onMagnify,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const spriteConfig = getCardSpriteConfig(card);
-  
-  // 卡牌间距（使用vw单位，进一步缩小间距）
-  const cardSpacingVw = totalCards > 6 ? -6 : totalCards > 4 ? -5.5 : -5;
-  
-  const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    onMagnify?.();
-  }, [onMagnify]);
-  
-  return (
-    <motion.div
-      className="relative cursor-pointer select-none group"
-      data-card-id={card.id}
-      data-tutorial-id={index === 0 ? 'sw-first-hand-card' : undefined}
-      data-card-type={card.cardType}
-      data-card-name={card.name}
-      data-card-cost={getCardCost(card)}
-      data-selected={isSelected ? 'true' : 'false'}
-      data-can-afford={canAfford ? 'true' : 'false'}
-      data-can-play={canPlay ? 'true' : 'false'}
-      style={{
-        width: `${CARD_WIDTH_VW}vw`,
-        marginLeft: index === 0 ? 0 : `${cardSpacingVw}vw`,
-        zIndex: isSelected ? 100 : isHovered ? 50 : index,
-      }}
-      initial={false}
-      animate={{
-        y: isSelected ? -30 : isHovered ? -20 : 0,
-        scale: isHovered ? 1.08 : 1,
-      }}
-      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      onHoverStart={() => setIsHovered(true)}
-      onHoverEnd={() => setIsHovered(false)}
-      onClick={onClick}
-    >
-      <div
-        className={`
+    const [isHovered, setIsHovered] = useState(false);
+    const spriteConfig = getCardSpriteConfig(card);
+
+    // 卡牌间距（使用vw单位，进一步缩小间距）
+    const cardSpacingVw = totalCards > 6 ? -6 : totalCards > 4 ? -5.5 : -5;
+
+    const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      onMagnify?.();
+    }, [onMagnify]);
+
+    return (
+      <motion.div
+        className="relative cursor-pointer select-none group"
+        data-card-id={card.id}
+        data-tutorial-id={index === 0 ? 'sw-first-hand-card' : undefined}
+        data-card-type={card.cardType}
+        data-card-name={card.name}
+        data-card-cost={getCardCost(card)}
+        data-selected={isSelected ? 'true' : 'false'}
+        data-can-afford={canAfford ? 'true' : 'false'}
+        data-can-play={canPlay ? 'true' : 'false'}
+        style={{
+          width: `${CARD_WIDTH_VW}vw`,
+          marginLeft: index === 0 ? 0 : `${cardSpacingVw}vw`,
+          zIndex: isSelected ? 100 : isHovered ? 50 : index,
+        }}
+        initial={false}
+        animate={{
+          y: isSelected ? -30 : isHovered ? -20 : 0,
+          scale: isHovered ? 1.08 : 1,
+        }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        onHoverStart={() => setIsHovered(true)}
+        onHoverEnd={() => setIsHovered(false)}
+        onClick={onClick}
+      >
+        <div
+          className={`
           relative w-full rounded-lg overflow-hidden
           border-2 transition-all duration-150
-          ${isSelected 
-            ? 'border-amber-400 shadow-lg shadow-amber-400/60 ring-2 ring-amber-400/30' 
-            : canPlay
-              ? 'border-green-400/80 hover:border-green-300 shadow-md shadow-green-400/30'
-              : canAfford 
-                ? 'border-slate-500/80 hover:border-slate-400' 
-                : 'border-slate-700/60'
-          }
+          ${isSelected
+              ? 'border-amber-400 shadow-lg shadow-amber-400/60 ring-2 ring-amber-400/30'
+              : canPlay
+                ? 'border-green-400/80 hover:border-green-300 shadow-md shadow-green-400/30'
+                : canAfford
+                  ? 'border-slate-500/80 hover:border-slate-400'
+                  : 'border-slate-700/60'
+            }
           cursor-pointer
           ${!canAfford ? 'grayscale' : ''}
         `}
-      >
-        {spriteConfig ? (
-          <CardSprite
-            atlasId={spriteConfig.atlasId}
-            frameIndex={spriteConfig.frameIndex}
-            className="w-full"
-          />
-        ) : (
-          <div className="w-full aspect-[1044/729] bg-gradient-to-b from-slate-700 to-slate-900 flex items-center justify-center">
-            <span className="text-slate-400 text-sm">{card.name}</span>
-          </div>
-        )}
-        
-        {isSelected && (
-          <div className="absolute inset-0 bg-amber-400/15 pointer-events-none" />
-        )}
-        
-        {/* 放大镜按钮 */}
-        <button
-          onClick={handleMagnifyClick}
-          className="absolute top-[0.3vw] right-[0.3vw] w-[1.8vw] h-[1.8vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-20"
         >
-          <MagnifyIcon className="w-[1vw] h-[1vw]" />
-        </button>
-      </div>
-    </motion.div>
-  );
-};
+          {spriteConfig ? (
+            <CardSprite
+              atlasId={spriteConfig.atlasId}
+              frameIndex={spriteConfig.frameIndex}
+              className="w-full"
+            />
+          ) : (
+            <div className="w-full aspect-[1044/729] bg-gradient-to-b from-slate-700 to-slate-900 flex items-center justify-center">
+              <span className="text-slate-400 text-sm">{card.name}</span>
+            </div>
+          )}
+
+          {isSelected && (
+            <div className="absolute inset-0 bg-amber-400/15 pointer-events-none" />
+          )}
+
+          {/* 放大镜按钮 */}
+          <button
+            onClick={handleMagnifyClick}
+            className="absolute top-[0.3vw] right-[0.3vw] w-[1.8vw] h-[1.8vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-20"
+          >
+            <MagnifyIcon className="w-[1vw] h-[1vw]" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  };
 
 export const HandArea: React.FC<HandAreaProps> = ({
   cards,
@@ -183,16 +183,16 @@ export const HandArea: React.FC<HandAreaProps> = ({
 }) => {
   const { t } = useTranslation('game-summonerwars');
   const showToast = useToast();
-  
+
   // 追踪新增卡牌（用于发牌动画）
   const prevCardIdsRef = useRef<string[]>([]);
   const [newCardIds, setNewCardIds] = useState<Set<string>>(new Set());
-  
+
   useEffect(() => {
     const currentIds = cards.map(c => c.id);
     const prevIds = prevCardIdsRef.current;
     const added = currentIds.filter(id => !prevIds.includes(id));
-    
+
     if (added.length > 0) {
       setNewCardIds(new Set(added));
       // 动画完成后清除标记
@@ -202,9 +202,11 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
     prevCardIdsRef.current = currentIds;
   }, [cards]);
-  
+
   const canPlayCard = useCallback((card: Card): boolean => {
     if (!isMyTurn) return false;
+    // 魔力阶段弃牌不需要检查费用，任何手牌都可以弃
+    if (phase === 'magic') return true;
     const cost = getCardCost(card);
     if (cost > currentMagic) return false;
     if (phase === 'summon' && card.cardType === 'unit') return true;
@@ -213,17 +215,16 @@ export const HandArea: React.FC<HandAreaProps> = ({
       const event = card as EventCard;
       return event.playPhase === phase || event.playPhase === 'any';
     }
-    if (phase === 'magic') return true;
     return false;
   }, [phase, isMyTurn, currentMagic]);
-  
+
   const handleCardClick = useCallback((cardId: string) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
-    
+
     const cost = getCardCost(card);
     const canAfford = cost <= currentMagic;
-    
+
     // 血契召唤选卡模式：点击费用≤2的单位卡直接选中（免费放置，不检查魔力）
     if (bloodSummonSelectingCard) {
       if (card.cardType === 'unit' && cost <= 2) {
@@ -234,19 +235,30 @@ export const HandArea: React.FC<HandAreaProps> = ({
       }
       return;
     }
-    
-    // 检查是否可以支付费用
+
+    // 魔力阶段弃牌不需要检查费用 — 弃牌是为了获得魔力，不是消耗魔力
+    // 但魔力阶段的事件卡（playPhase=magic/any）仍需检查费用
+    if (phase === 'magic' && isMyTurn) {
+      // 事件卡在魔力阶段可以打出（需要检查费用）
+      if (card.cardType === 'event') {
+        const event = card as EventCard;
+        if ((event.playPhase === 'magic' || event.playPhase === 'any') && canAfford) {
+          onPlayEvent?.(cardId);
+          return;
+        }
+      }
+      // 其余情况：选中/取消选中用于弃牌（无需费用检查）
+      onCardClick?.(cardId);
+      return;
+    }
+
+    // 非魔力阶段：检查是否可以支付费用
     if (!canAfford) {
       playDeniedSound();
       showToast.warning(t('handArea.insufficientMagic', { cost, current: currentMagic }));
       return;
     }
-    
-    if (phase === 'magic' && isMyTurn) {
-      onCardClick?.(cardId);
-      return;
-    }
-    
+
     // 事件卡：在对应阶段直接打出
     if (card.cardType === 'event' && isMyTurn) {
       const event = card as EventCard;
@@ -260,7 +272,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
         return;
       }
     }
-    
+
     if ((phase === 'summon' || phase === 'build') && isMyTurn) {
       const canPlay = canPlayCard(card);
       if (canPlay) {
@@ -281,20 +293,20 @@ export const HandArea: React.FC<HandAreaProps> = ({
       }
       return;
     }
-    
+
     if (!isMyTurn) {
       playDeniedSound();
       showToast.warning(t('hint.waitingOpponent'));
       return;
     }
-    
+
     onCardClick?.(cardId);
   }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, showToast]);
-  
+
   if (cards.length === 0) {
     return null;
   }
-  
+
   return (
     <div
       className={`relative flex items-end justify-center ${className}`}
@@ -303,18 +315,19 @@ export const HandArea: React.FC<HandAreaProps> = ({
       <div className="flex items-end">
         <AnimatePresence>
           {cards.map((card, index) => {
-            const canAfford = getCardCost(card) <= currentMagic;
+            // 魔力阶段弃牌时所有卡都"买得起"（不消耗魔力）
+            const canAfford = phase === 'magic' ? true : getCardCost(card) <= currentMagic;
             const canPlay = canPlayCard(card);
             const isSelected = selectedCardId === card.id || selectedCardIds.includes(card.id);
             const isNew = newCardIds.has(card.id);
-            
+
             return (
               <motion.div
                 key={card.id}
                 layout
                 initial={isNew ? { x: -200, y: 50, opacity: 0, scale: 0.7 } : false}
                 animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-                exit={{ x: 200, y: -30, opacity: 0, scale: 0.7 }}
+                exit={{ opacity: 0, scale: 0.8 }}
                 transition={{ type: 'spring', stiffness: 300, damping: 25 }}
               >
                 <HandCard

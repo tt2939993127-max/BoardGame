@@ -29,7 +29,7 @@ describe('ReviewService', () => {
         moduleRef = await Test.createTestingModule({
             imports: [
                 CacheModule.register({ isGlobal: true }),
-                MongooseModule.forRoot(mongoUri),
+                MongooseModule.forRoot(mongoUri, externalMongoUri ? { dbName: 'boardgame_test_review_service' } : undefined),
                 ReviewModule,
             ],
         }).compile();

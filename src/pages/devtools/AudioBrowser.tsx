@@ -332,10 +332,16 @@ const AudioBrowser: React.FC = () => {
         if (group !== selectedGroup) return false;
         if (selectedSub && (e.category?.sub ?? '') !== selectedSub) return false;
       }
-      if (filter && !e.key.toLowerCase().includes(filter.toLowerCase())) return false;
+      if (filter) {
+        const q = filter.toLowerCase();
+        const matchKey = e.key.toLowerCase().includes(q);
+        const matchSrc = e.src?.toLowerCase().includes(q);
+        const matchName = friendlyName(e.key).toLowerCase().includes(q);
+        if (!matchKey && !matchSrc && !matchName) return false;
+      }
       return true;
     });
-  }, [entries, typeFilter, selectedGroup, selectedSub, filter]);
+  }, [entries, typeFilter, selectedGroup, selectedSub, filter, friendlyName]);
 
   const playEntry = useCallback((entry: AudioRegistryEntry) => {
     if (entry.type === 'bgm') {
@@ -386,7 +392,7 @@ const AudioBrowser: React.FC = () => {
               <div className="flex gap-2 mb-3">
                 <input
                   type="text"
-                  placeholder="搜索键名..."
+                  placeholder="搜索键名 / 文件名..."
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500"

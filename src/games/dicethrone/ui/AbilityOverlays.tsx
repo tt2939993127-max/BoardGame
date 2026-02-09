@@ -150,19 +150,13 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         return undefined;
     };
 
-    export const AbilityOverlays = ({
-        isEditing,
-        availableAbilityIds,
-        canSelect,
-        canHighlight,
-        onSelectAbility,
-        onHighlightedAbilityClick,
-        selectedAbilityId,
-        activatingAbilityId,
-        abilityLevels,
-        characterId = 'monk', // 用于查找对应角色的升级卡定义
-        locale,
-    }: {
+    /** AbilityOverlays 通过 ref 暴露的方法 */
+    export interface AbilityOverlaysHandle {
+        /** 保存当前布局到服务端 */
+        saveLayout: () => Promise<{ hint: string }>;
+    }
+
+    interface AbilityOverlaysProps {
         isEditing: boolean;
         availableAbilityIds: string[];
         canSelect: boolean;
@@ -174,33 +168,44 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         abilityLevels?: Record<string, number>;
         characterId?: string;
         locale?: string;
-    }) => {
+    }
+
+    export const AbilityOverlays = React.forwardRef<AbilityOverlaysHandle, AbilityOverlaysProps>(({
+        isEditing,
+        availableAbilityIds,
+        canSelect,
+        canHighlight,
+        onSelectAbility,
+        onHighlightedAbilityClick,
+        selectedAbilityId,
+        activatingAbilityId,
+        abilityLevels,
+        characterId = 'monk', // 用于查找对应角色的升级卡定义
+        locale,
+    }, ref) => {
         const { t } = useTranslation('game-dicethrone');
 
         // 游戏级布局配置：所有用户共享一致的默认布局
         const [slots, setSlots] = React.useState(() => (
             DEFAULT_ABILITY_SLOT_LAYOUT.map(slot => ({ ...slot }))
         ));
-        const [isSaving, setIsSaving] = React.useState(false);
-        const [saveHint, setSaveHint] = React.useState<string | null>(null);
         const [editingId, setEditingId] = React.useState<string | null>(null);
         const containerRef = React.useRef<HTMLDivElement>(null);
         const dragInfo = React.useRef<{ id: string, type: 'move' | 'resize', startX: number, startY: number, startVal: { x: number; y: number; w: number; h: number } } | null>(null);
 
-        const handleSaveLayout = React.useCallback(async () => {
-            setIsSaving(true);
-            setSaveHint(null);
-            try {
-                const result = await saveDiceThroneAbilityLayout(slots);
-                const hint = result.relativePath ? `已写入 ${result.relativePath}` : '已写入布局文件';
-                setSaveHint(hint);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : '保存失败';
-                setSaveHint(message);
-            } finally {
-                setIsSaving(false);
-            }
-        }, [slots]);
+        // 通过 ref 暴露保存方法，供调试面板调用
+        React.useImperativeHandle(ref, () => ({
+            saveLayout: async () => {
+                try {
+                    const result = await saveDiceThroneAbilityLayout(slots);
+                    const hint = result.relativePath ? `已写入 ${result.relativePath}` : '已写入布局文件';
+                    return { hint };
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : '保存失败';
+                    return { hint: message };
+                }
+            },
+        }), [slots]);
 
         const resolveAbilityId = (slotId: string) => {
             const mapping = ABILITY_SLOT_MAP[slotId];
@@ -250,22 +255,6 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                 className="absolute inset-0 z-20 pointer-events-none"
                 data-tutorial-id="ability-slots"
             >
-                {isEditing && (
-                    <div className="absolute top-[0.6vw] right-[0.6vw] z-50 flex items-center gap-[0.4vw] pointer-events-auto">
-                        {saveHint && (
-                            <span className="text-[0.6vw] text-emerald-200 bg-black/70 px-[0.4vw] py-[0.2vw] rounded border border-emerald-400/40">
-                                {saveHint}
-                            </span>
-                        )}
-                        <button
-                            onClick={handleSaveLayout}
-                            disabled={isSaving}
-                            className={`px-[0.6vw] py-[0.35vw] text-[0.65vw] font-bold rounded border transition-colors ${isSaving ? 'bg-emerald-300 text-black/70 border-emerald-200' : 'bg-emerald-600 text-white border-emerald-400 hover:bg-emerald-500'}`}
-                        >
-                            {isSaving ? '保存中…' : '保存布局'}
-                        </button>
-                    </div>
-                )}
                 {slots.map((slot) => {
                     // 方案 A：不再需要计算精灵图位置（col, row, bgX, bgY），玩家面板已包含基础技能
                     const isResolved = resolveAbilityId(slot.id);
@@ -341,4 +330,6 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                 })}
             </div>
         );
-    };
+    });
+
+    AbilityOverlays.displayName = 'AbilityOverlays';

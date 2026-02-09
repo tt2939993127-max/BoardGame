@@ -14,23 +14,128 @@ const resolveTokenSfx = (state: DiceThroneCore, tokenId?: string): string | null
     return def?.sfxKey ?? null;
 };
 
+// DT 专属 BGM（与 SW 区分，使用不同的 fantasy 曲目）
+const BGM_HANG_THEM_KEY = 'bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_main';
+const BGM_MY_KINGDOM_KEY = 'bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_main';
+const BGM_FISH_BAY_KEY = 'bgm.fantasy.fantasy_music_pack_vol.fish_bay_rt_4.fantasy_vol5_fish_bay_main';
+const BGM_HANG_THEM_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_intensity_2';
+const BGM_MY_KINGDOM_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_intensity_2';
+const BGM_GOLDEN_CLOUDS_KEY = 'bgm.ethereal.ethereal_music_pack.golden_clouds_rt_3.ethereal_golden_clouds_main';
+const BGM_GOLDEN_CLOUDS_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.golden_clouds_rt_3.ethereal_golden_clouds_intensity_2';
+const BGM_ENIGMATIC_BADGER_KEY = 'bgm.ethereal.ethereal_music_pack.enigmatic_badger_rt_7.ethereal_enigmatic_badger_main';
+const BGM_ENIGMATIC_BADGER_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.enigmatic_badger_rt_7.ethereal_enigmatic_badger_intensity_2';
+const BGM_STAIRWAY_KEY = 'bgm.ethereal.ethereal_music_pack.stairway_rt_4.ethereal_stairway_main';
+const BGM_STAIRWAY_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.stairway_rt_4.ethereal_stairway_intensity_2';
+
 export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
+    criticalSounds: [
+        'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_001',
+        'dice.decks_and_cards_sound_fx_pack.few_dice_roll_001',
+        'dice.decks_and_cards_sound_fx_pack.dice_handling_001',
+        'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none',
+        'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a',
+        'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a',
+        'card.handling.decks_and_cards_sound_fx_pack.card_placing_001',
+        'card.handling.decks_and_cards_sound_fx_pack.card_take_001',
+        'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001',
+        'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001',
+        'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001',
+        'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst',
+    ],
     bgm: [
         {
-            key: 'bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main',
-            name: 'Dragon Dance',
+            key: BGM_HANG_THEM_KEY,
+            name: 'Hang Them',
             src: '',
             volume: 0.5,
             category: { group: 'bgm', sub: 'battle' },
         },
         {
-            key: 'bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main',
-            name: 'Shields and Spears',
+            key: BGM_MY_KINGDOM_KEY,
+            name: 'My Kingdom',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle' },
+        },
+        {
+            key: BGM_FISH_BAY_KEY,
+            name: 'Fish Bay',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle' },
+        },
+        {
+            key: BGM_HANG_THEM_INTENSE_KEY,
+            name: 'Hang Them (Intensity 2)',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle_intense' },
+        },
+        {
+            key: BGM_MY_KINGDOM_INTENSE_KEY,
+            name: 'My Kingdom (Intensity 2)',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle_intense' },
+        },
+        {
+            key: BGM_GOLDEN_CLOUDS_KEY,
+            name: 'Golden Clouds',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle' },
+        },
+        {
+            key: BGM_GOLDEN_CLOUDS_INTENSE_KEY,
+            name: 'Golden Clouds (Intensity 2)',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle_intense' },
+        },
+        {
+            key: BGM_ENIGMATIC_BADGER_KEY,
+            name: 'Enigmatic Badger',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle' },
+        },
+        {
+            key: BGM_ENIGMATIC_BADGER_INTENSE_KEY,
+            name: 'Enigmatic Badger (Intensity 2)',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle_intense' },
+        },
+        {
+            key: BGM_STAIRWAY_KEY,
+            name: 'Stairway',
+            src: '',
+            volume: 0.5,
+            category: { group: 'bgm', sub: 'battle' },
+        },
+        {
+            key: BGM_STAIRWAY_INTENSE_KEY,
+            name: 'Stairway (Intensity 2)',
             src: '',
             volume: 0.5,
             category: { group: 'bgm', sub: 'battle_intense' },
         },
     ],
+    bgmGroups: {
+        normal: [
+            BGM_HANG_THEM_KEY,
+            BGM_MY_KINGDOM_KEY,
+            BGM_FISH_BAY_KEY,
+            BGM_GOLDEN_CLOUDS_KEY,
+            BGM_ENIGMATIC_BADGER_KEY,
+        ],
+        battle: [
+            BGM_HANG_THEM_INTENSE_KEY,
+            BGM_MY_KINGDOM_INTENSE_KEY,
+            BGM_STAIRWAY_KEY,
+            BGM_STAIRWAY_INTENSE_KEY,
+        ],
+    },
     // 事件映射由 resolver 统一按类别处理
     eventSoundMap: {},
     eventSoundResolver: (event, context) => {
@@ -52,8 +157,8 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         if (event.type === 'CP_CHANGED') {
             const delta = (event as AudioEvent & { payload?: { delta?: number } }).payload?.delta ?? 0;
             return delta >= 0
-                ? 'fantasy.magic_sword_recharge_01'
-                : 'fantasy.dark_sword_recharge';
+                ? 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001'
+                : 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
         }
 
         if (event.type === 'CARD_PLAYED') {
@@ -232,11 +337,13 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
                 const { currentPhase } = context.ctx as { currentPhase?: TurnPhase };
                 return currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
             },
-            key: 'bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main',
+            key: BGM_HANG_THEM_INTENSE_KEY,
+            group: 'battle',
         },
         {
             when: () => true,
-            key: 'bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main',
+            key: BGM_HANG_THEM_KEY,
+            group: 'normal',
         },
     ],
     stateTriggers: [

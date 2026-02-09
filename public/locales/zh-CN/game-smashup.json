@@ -55,7 +55,8 @@
     "you_badge": "我",
     "talent_used": "已用",
     "card_placeholder": "卡牌",
-    "me_first_title": "⚡ 先手响应！"
+    "me_first_title": "⚡ 先手响应！",
+    "thinking": "思考中..."
   },
   "factions": {
     "pirates": {

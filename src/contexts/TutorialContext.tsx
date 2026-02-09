@@ -12,13 +12,6 @@ export type { TutorialManifest } from '../engine/types';
 import { DEFAULT_TUTORIAL_STATE } from '../engine/types';
 import { TUTORIAL_COMMANDS } from '../engine/systems/TutorialSystem';
 
-const isDev = import.meta.env.DEV;
-const warnDev = (...args: unknown[]) => {
-    if (isDev) {
-        console.warn(...args);
-    }
-};
-
 type TutorialNextReason = 'manual' | 'auto';
 
 interface TutorialController {
@@ -128,21 +121,12 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const aiTimerRef = useRef<number | undefined>(undefined);
 
     useEffect(() => {
-        warnDev('[TutorialContext] AI effect check:', {
-            active: tutorial.active,
-            hasStep: !!tutorial.step,
-            stepId: tutorial.step?.id,
-            hasAi: tutorial.step ? hasAiActions(tutorial.step) : false,
-            isControllerReady,
-            executedSteps: [...executedAiStepsRef.current],
-        });
         if (!tutorial.active || !tutorial.step || !hasAiActions(tutorial.step)) return;
         if (!isControllerReady) return;
 
         const stepId = tutorial.step.id;
         if (executedAiStepsRef.current.has(stepId)) return;
         executedAiStepsRef.current.add(stepId);
-        warnDev('[TutorialContext] AI effect: scheduling aiActions for step', stepId);
 
         // 缓存当前步骤的 autoAdvance 判断和 aiActions，避免闭包引用被清理后的状态
         const shouldAutoAdvanceAfterAi = shouldAutoAdvance(tutorial.step);
@@ -160,11 +144,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         aiTimerRef.current = window.setTimeout(() => {
             aiTimerRef.current = undefined;
             const controller = controllerRef.current;
-            if (!controller) {
-                warnDev('[TutorialContext] AI timer fired but controller is null!');
-                return;
-            }
-            warnDev('[TutorialContext] AI timer fired, dispatching', aiActions.length, 'actions for step', stepId);
+            if (!controller) return;
 
             aiActions.forEach((action: TutorialAiAction) => {
                 // 如果 aiAction 指定了 playerId，注入到 payload 中供 adapter 使用
@@ -223,19 +203,6 @@ export const useTutorialBridge = (tutorial: TutorialState, moves: Record<string,
         if (!context) return;
         const signature = `${tutorial.active}-${tutorial.stepIndex}-${tutorial.step?.id ?? ''}-${tutorial.steps?.length ?? 0}-${tutorial.aiActions?.length ?? 0}`;
         if (lastSyncSignatureRef.current === signature) return;
-        if (lastSyncSignatureRef.current !== null) {
-            const prev = lastSyncSignatureRef.current.split('-');
-            const curr = signature.split('-');
-            if (prev[1] !== curr[1] || prev[2] !== curr[2]) {
-                warnDev(
-                    `[useTutorialBridge] tutorial state changed from stepIndex=${prev[1]} stepId=${prev[2]} to stepIndex=${curr[1]} stepId=${curr[2]}`
-                );
-            }
-            // 追踪 active 变化
-            if (prev[0] !== curr[0]) {
-                warnDev(`[useTutorialBridge] tutorial active changed from ${prev[0]} to ${curr[0]}`);
-            }
-        }
         lastSyncSignatureRef.current = signature;
         context.syncTutorialState(tutorial);
     }, [context, tutorial]);

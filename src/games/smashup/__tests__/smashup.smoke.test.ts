@@ -32,14 +32,12 @@ function createRunner() {
     });
 }
 
-/** 蛇形选秀命令序列 + ADVANCE_PHASE 推进到 playCards */
+/** 蛇形选秀命令序列（多轮 afterEvents 会自动推进 factionSelect → startTurn → playCards） */
 const DRAFT_COMMANDS = [
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-    // auto-continue 到 startTurn，再 ADVANCE_PHASE 推进到 playCards
-    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
 ];
 
 describe('smashup', () => {
@@ -172,13 +170,18 @@ describe('smashup', () => {
             name: '阶段推进',
             commands: [
                 ...DRAFT_COMMANDS,
-                // playCards → scoreBases(auto skip, 无基地达标) → draw
+                // playCards → scoreBases(auto) → draw(auto) → endTurn(auto) → startTurn(P1, auto) → playCards(P1)
+                // 多轮 afterEvents 会自动推进整个链条
                 { type: 'ADVANCE_PHASE', playerId: pid, payload: undefined },
             ],
         });
 
-        // 无基地达标，scoreBases auto-continue 到 draw
-        expect(result.finalState.sys.phase).toBe('draw');
+        // 多轮 afterEvents 自动推进到 P1 的 playCards
+        expect(result.finalState.sys.phase).toBe('playCards');
+        // 当前玩家切换到 P1
+        expect(result.finalState.core.currentPlayerIndex).toBe(1);
+        // P0 在 draw 阶段抽了 2 张牌（5+2=7）
+        expect(result.finalState.core.players['0'].hand.length).toBe(7);
         // ADVANCE_PHASE 步骤成功
         const advanceStep = result.steps[DRAFT_COMMANDS.length];
         expect(advanceStep?.success).toBe(true);

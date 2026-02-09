@@ -366,7 +366,7 @@ export function createPaladinDeck(): {
       { unit: { ...templePriest, id: 'paladin-start-priest' }, position: { row: 3, col: 2 } },      // ■
       { unit: { ...fortressArcher, id: 'paladin-start-archer' }, position: { row: 2, col: 4 } },   // ▲
     ],
-    startingGate: { ...STRUCTURE_CARDS_PALADIN[0], id: 'paladin-start-gate' },
+    startingGate: { ...STRUCTURE_CARDS_PALADIN[0], id: `${STRUCTURE_CARDS_PALADIN[0].id}-0` },
     startingGatePosition: { row: 2, col: 3 },
     deck,
   };

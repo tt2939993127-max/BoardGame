@@ -51,8 +51,8 @@ import { getOptimizedAudioUrl } from '../../../core/AssetLoader';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const CP_GAIN_KEY = 'fantasy.magic_sword_recharge_01';
-const CP_SPEND_KEY = 'fantasy.dark_sword_recharge';
+const CP_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
+const CP_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
 const CARD_PLAY_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
 const DAMAGE_LIGHT_KEY = 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst';
 const DAMAGE_HEAVY_KEY = 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst';

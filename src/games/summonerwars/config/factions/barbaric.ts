@@ -337,7 +337,7 @@ export function createBarbaricDeck(): {
       { unit: { ...archer, id: 'barbaric-start-archer' }, position: { row: 2, col: 3 } },  // ▲ 边境弓箭手
       { unit: { ...lioness, id: 'barbaric-start-lioness' }, position: { row: 2, col: 2 } },  // ■ 雌狮
     ],
-    startingGate: { ...STRUCTURE_CARDS_BARBARIC[0], id: 'barbaric-start-gate' },
+    startingGate: { ...STRUCTURE_CARDS_BARBARIC[0], id: `${STRUCTURE_CARDS_BARBARIC[0].id}-0` },
     startingGatePosition: { row: 1, col: 3 },
     deck,
   };

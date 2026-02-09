@@ -1,4 +1,4 @@
-import type { AudioCategory, AudioEvent, AudioRuntimeContext, BgmRule, GameAudioConfig, SoundKey } from './types';
+import type { AudioCategory, AudioEvent, AudioRuntimeContext, BgmGroupId, BgmRule, GameAudioConfig, SoundKey } from './types';
 
 export function resolveEventSoundKey<
     G = unknown,
@@ -55,6 +55,26 @@ export function resolveBgmKey<
     }
 
     return fallbackKey ?? null;
+}
+
+export function resolveBgmGroup<
+    G = unknown,
+    Ctx = unknown,
+    Meta extends Record<string, unknown> = Record<string, unknown>
+>(
+    context: AudioRuntimeContext<G, Ctx, Meta>,
+    rules: Array<BgmRule<G, Ctx, Meta>> | undefined,
+    fallbackGroup: BgmGroupId = 'normal'
+): BgmGroupId {
+    if (rules && rules.length > 0) {
+        for (const rule of rules) {
+            if (rule.when(context)) {
+                return rule.group ?? fallbackGroup;
+            }
+        }
+    }
+
+    return fallbackGroup;
 }
 
 export function resolveAudioEvent(

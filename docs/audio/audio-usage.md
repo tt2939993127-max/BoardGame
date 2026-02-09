@@ -62,35 +62,55 @@ node scripts/audio/generate_ai_audio_registry_dicethrone.js
 ### 2.5 AI 查找/筛选音效（推荐流程）
 **目标**：在挑选音效时，用最小 token 成本定位合适 key。
 
-**优先级**（从省 token 到最全面）：
-1. `docs/audio/registry.ai.dicethrone.json`（DiceThrone 专用、最小）
-2. `docs/audio/registry.ai.json`（全量精简）
-3. `public/assets/common/audio/registry.json`（全量原始）
+**首选方法：语义目录**
 
-**推荐步骤：**
-1. 明确语义关键词（例：`holy`/`divine`/`shadow`/`poison`/`bow`/`hit`/`shield`）。
-2. 先搜 `registry.ai.dicethrone.json`，未命中再搜 `registry.ai.json`。
-3. 选中 key 后，再确认是否存在于 `registry.json`（最终来源）。
+1. 打开 `docs/audio/audio-catalog.md`（42 KB，531 个语义组，AI 可一次性读取）
+2. 搜索场景关键词（如 `negative`、`click`、`sword`、`heal`、`alert`）
+3. 找到组后，复制 grep 模式列的值（如 `puzzle.*negative_pop`）
+4. 在 `registry.json` 中 grep 该模式获取完整 key
+5. 变体替换末尾数字/字母（`_01` → `_02`）
+
+**生成/更新目录：**
+```bash
+node scripts/audio/generate_audio_catalog.js
+```
+
+**备选方法（精简 registry）：**
+- `docs/audio/registry.ai.json`（全量精简，仅保留 key/type/category）
+- `docs/audio/registry.ai.dicethrone.json`（DiceThrone 专用，最小）
 
 **AI 查询示例（grep_search）：**
 ```json
 {
-  "SearchPath": "docs/audio/registry.ai.dicethrone.json",
-  "Query": "divine_magic|holy|choir",
-  "CaseSensitive": false,
-  "MatchPerLine": true
+  "SearchPath": "docs/audio/audio-catalog.md",
+  "Query": "negative|denied|fail|error",
+  "CaseSensitive": false
 }
 ```
 
-**如果未命中，再查全量精简版：**
+**如果目录中未找到合适的，再搜全量 registry：**
 ```json
 {
-  "SearchPath": "docs/audio/registry.ai.json",
-  "Query": "shadow|stealth|poison|venom",
-  "CaseSensitive": false,
-  "MatchPerLine": true
+  "SearchPath": "public/assets/common/audio/registry.json",
+  "Query": "negative_pop",
+  "CaseSensitive": false
 }
 ```
+
+### 2.6 音效预览（/dev/audio）
+用于在浏览器内快速试听、复制 key、检查分类与翻译。
+
+**入口**：访问 `/dev/audio`。
+
+**功能**：
+- 左侧分类树（group/sub）筛选
+- 关键词搜索（key / src / 友好名称）
+- 类型过滤（音效/音乐）
+- 点击名称复制 key，点击播放按钮试听
+
+**注意事项**：
+- 预览依赖 `public/assets/common/audio/registry.json`，新增音效后需先重新生成 registry。
+- 友好中文名来自 `public/assets/common/audio/phrase-mappings.zh-CN.json`，如翻译更新需同步生成并刷新页面。
 
 ## 3. 代码使用规范（强制）
 ### 3.1 使用 registry key
@@ -103,10 +123,11 @@ node scripts/audio/generate_ai_audio_registry_dicethrone.js
 return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
 ```
 
-### 3.2 事件音 vs UI 音（统一标准）
+### 3.2 事件音 vs UI 音 vs 拒绝音（统一标准）
 - **游戏态事件音**：通过事件流触发（`eventSoundResolver` / `audioKey` / `audioCategory`）。
 - **UI 点击音**：仅用于纯 UI 操作（面板/Tab 切换），通过 `GameButton`。
-- **单一来源原则**：同一动作只能由“事件音”或“按钮音”二选一，禁止重复。
+- **操作拒绝音**：用户尝试不合法操作时（非自己回合、条件不满足等），通过 `playDeniedSound()` 播放（key: `puzzle.18.negative_pop_01`）。
+- **单一来源原则**：同一动作只能由"事件音"、"按钮音"或"拒绝音"其中之一触发，禁止重复。
 
 示例：
 ```ts

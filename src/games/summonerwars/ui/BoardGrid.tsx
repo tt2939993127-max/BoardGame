@@ -4,18 +4,17 @@
  * 包含：网格高亮层、卡牌层（单位/建筑/残影）
  */
 
-import React from 'react';
-import { motion } from 'framer-motion';
-import { HitStopContainer, getHitStopPresetByDamage } from '../../../components/common/animations/HitStopContainer';
+import React, { useEffect, useRef } from 'react';
+import { motion, useAnimate } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import type { GridConfig } from '../../../core/ui/board-layout.types';
 import { cellToNormalizedBounds } from '../../../core/ui/board-hit-test';
 import type { SummonerWarsCore, CellCoord } from '../domain/types';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import { CardSprite } from './CardSprite';
-import { getUnitSpriteConfig, getStructureSpriteConfig, getGhostSpriteConfig } from './spriteHelpers';
-import type { AbilityModeState } from './useGameEvents';
+import { getUnitSpriteConfig, getStructureSpriteConfig, getEventSpriteConfig } from './spriteHelpers';
+import type { AbilityModeState, DyingEntity } from './useGameEvents';
 import type { AnnihilateModeState } from './StatusBanners';
-import type { DeathGhost, PendingAttack } from './useGameEvents';
 
 // ============================================================================
 // 辅助函数
@@ -31,6 +30,9 @@ export function getCellPosition(row: number, col: number, grid: GridConfig) {
     height: cellBounds.height * 100,
   };
 }
+
+/** 格子唯一 key */
+const getCellKey = (row: number, col: number) => `${row}-${col}`;
 
 // ============================================================================
 // Props
@@ -64,14 +66,19 @@ interface BoardGridProps {
   afterAttackAbilityHighlights: CellCoord[];
   // 动画状态
   attackAnimState: { attacker: CellCoord; target: CellCoord; hits: number } | null;
-  hitStopTarget: CellCoord | null;
-  deathGhosts: DeathGhost[];
-  pendingAttackRef: React.RefObject<PendingAttack | null>;
+  // 播放摧毁动画中的格子（用于隐藏本体）
+  destroyingCells?: Set<string>;
+  // 临时本体缓存（死亡动画前保留）
+  dyingEntities?: DyingEntity[];
   // 回调
   onCellClick: (row: number, col: number) => void;
-  onAttackAnimComplete: () => void;
+  onAttackHit: () => void;
+  onAttackReturn: () => void;
   onMagnifyUnit: (unit: import('../domain/types').BoardUnit) => void;
   onMagnifyStructure: (structure: import('../domain/types').BoardStructure) => void;
+  onMagnifyEventCard?: (card: import('../domain/types').EventCard) => void;
+  // 用于动画追踪
+  newUnitIds?: Set<string>;
 }
 
 // ============================================================================
@@ -193,9 +200,14 @@ const CardLayer: React.FC<{
         const cell = core.board[row]?.[col];
         if (!cell) return null;
 
+        const isDestroying = props.destroyingCells?.has(getCellKey(row, col));
+        if (isDestroying) return null;
+
         const viewCoord = toViewCoord({ row, col });
         const pos = getCellPosition(viewCoord.row, viewCoord.col, currentGrid);
         const cellKey = `card-${row}-${col}`;
+
+        const dyingEntity = props.dyingEntities?.find(entity => entity.position.row === row && entity.position.col === col);
 
         if (cell.unit) {
           return (
@@ -228,29 +240,45 @@ const CardLayer: React.FC<{
           );
         }
 
+        if (dyingEntity) {
+          return (
+            <DyingEntityCell
+              key={cellKey}
+              entity={dyingEntity}
+              pos={pos}
+              isMine={dyingEntity.owner === myPlayerId}
+            />
+          );
+        }
+
         return null;
       })
     )}
-    {/* 死亡残影 */}
-    {props.deathGhosts.map((ghost) => {
-      const vc = toViewCoord(ghost.position);
-      const pos = getCellPosition(vc.row, vc.col, currentGrid);
-      const spriteConfig = getGhostSpriteConfig(ghost.card);
-      const isMine = ghost.owner === myPlayerId;
-      return (
-        <div
-          key={ghost.id}
-          className="absolute flex items-center justify-center pointer-events-none"
-          style={{ left: `${pos.left}%`, top: `${pos.top}%`, width: `${pos.width}%`, height: `${pos.height}%`, zIndex: 40 }}
-        >
-          <CardSprite
-            atlasId={spriteConfig.atlasId}
-            frameIndex={spriteConfig.frameIndex}
-            className={`rounded shadow-lg opacity-80 ${!isMine ? 'rotate-180' : ''}`}
-          />
-        </div>
-      );
-    })}
+  </div>
+);
+
+const DyingEntityCell: React.FC<{
+  entity: DyingEntity;
+  pos: { left: number; top: number; width: number; height: number };
+  isMine: boolean;
+}> = ({ entity, pos, isMine }) => (
+  <div
+    className="absolute flex items-center justify-center pointer-events-none"
+    style={{
+      left: `${pos.left}%`,
+      top: `${pos.top}%`,
+      width: `${pos.width}%`,
+      height: `${pos.height}%`,
+      zIndex: 35,
+    }}
+  >
+    <div className="relative w-[85%] shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] rounded-lg">
+      <CardSprite
+        atlasId={entity.atlasId}
+        frameIndex={entity.frameIndex}
+        className={`rounded ${!isMine ? 'rotate-180' : ''}`}
+      />
+    </div>
   </div>
 );
 
@@ -269,6 +297,8 @@ const UnitCell: React.FC<{
   currentGrid: GridConfig;
   props: BoardGridProps;
 }> = ({ row, col, unit, pos, viewCoord, core, myPlayerId, toViewCoord, currentGrid, props }) => {
+  const isNew = props.newUnitIds?.has(unit.cardId) ?? false;
+  const { t } = useTranslation('game-summonerwars');
   const spriteConfig = getUnitSpriteConfig(unit);
   const isMyUnit = unit.owner === myPlayerId;
   const damage = unit.damage;
@@ -280,27 +310,54 @@ const UnitCell: React.FC<{
   const isAttacker = props.attackAnimState
     && props.attackAnimState.attacker.row === row
     && props.attackAnimState.attacker.col === col;
-  const isHitStopActive = props.hitStopTarget
-    && props.hitStopTarget.row === row
-    && props.hitStopTarget.col === col;
 
-  let lungeX = '0%';
-  let lungeY = '0%';
+  // 命令式 lunge 动画（useAnimate）
+  const [scope, animate] = useAnimate<HTMLDivElement>();
+  const animatingRef = useRef(false);
+
+  let lungeXPct = 0;
+  let lungeYPct = 0;
   if (isAttacker && props.attackAnimState) {
     const tgtView = toViewCoord(props.attackAnimState.target);
     const tgtPos = getCellPosition(tgtView.row, tgtView.col, currentGrid);
     const dx = (tgtPos.left + tgtPos.width / 2) - (pos.left + pos.width / 2);
     const dy = (tgtPos.top + tgtPos.height / 2) - (pos.top + pos.height / 2);
-    lungeX = `${dx * 70 / pos.width}%`;
-    lungeY = `${dy * 70 / pos.height}%`;
+    lungeXPct = dx * 70 / pos.width;
+    lungeYPct = dy * 70 / pos.height;
   }
 
-  const hitStopPreset = isHitStopActive
-    ? getHitStopPresetByDamage(props.pendingAttackRef.current?.hits ?? 1)
-    : undefined;
+  useEffect(() => {
+    if (!isAttacker || animatingRef.current) return;
+    animatingRef.current = true;
+
+    const run = async () => {
+      try {
+        // 冲向目标
+        await animate(scope.current, {
+          x: `${lungeXPct}%`, y: `${lungeYPct}%`, scale: 1.05,
+        }, { duration: 0.16, ease: [0.2, 0, 0.3, 1] });
+
+        // 命中：触发伤害特效
+        props.onAttackHit();
+
+        // 短暂停留让命中感更强
+        await new Promise(r => setTimeout(r, 80));
+
+        // 回弹归位
+        await animate(scope.current, {
+          x: '0%', y: '0%', scale: 1,
+        }, { duration: 0.16, ease: [0, 0, 0.2, 1] });
+      } finally {
+        animatingRef.current = false;
+        props.onAttackReturn();
+      }
+    };
+    run();
+  }, [isAttacker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <motion.div
+      ref={scope}
       className="absolute flex items-center justify-center cursor-pointer pointer-events-auto"
       data-testid={`sw-unit-${row}-${col}`}
       data-tutorial-id={unit.card.unitClass === 'summoner' && unit.owner === myPlayerId ? 'sw-my-summoner' : unit.card.unitClass === 'summoner' && unit.owner !== myPlayerId ? 'sw-enemy-summoner' : undefined}
@@ -315,30 +372,24 @@ const UnitCell: React.FC<{
         zIndex: isAttacker ? 50 : undefined,
       }}
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
-      animate={isAttacker ? {
-        x: ['0%', '0%', lungeX, '0%'],
-        y: ['0%', '-15%', lungeY, '0%'],
-        scale: [1, 1.15, 1.05, 1],
-      } : { x: '0%', y: '0%', scale: 1 }}
-      transition={isAttacker ? {
-        duration: 0.4, times: [0, 0.2, 0.6, 1], ease: [0.25, 0, 0.3, 1],
+      initial={isNew ? { opacity: 0, scale: 1.1 } : false}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={isNew ? {
+        type: 'spring', stiffness: 80, damping: 15, mass: 1.2,
       } : { duration: 0 }}
-      onAnimationComplete={isAttacker ? props.onAttackAnimComplete : undefined}
     >
-      <HitStopContainer
-        isActive={!!isHitStopActive}
-        {...(hitStopPreset ?? {})}
-        className={`relative w-[85%] group transition-all duration-200 ${isUnitSelected
-          ? 'ring-2 ring-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.6)] rounded-lg scale-105 z-10'
+      <div
+        className={`relative w-[85%] group transition-[background-color,box-shadow] duration-200 ${isUnitSelected
+          ? 'ring-2 ring-amber-400 shadow-[0_15px_30px_rgba(0,0,0,0.6),0_0_12px_rgba(251,191,36,0.6)] rounded-lg scale-105 z-10 -translate-y-[5%]'
           : isMyUnit && props.actionableUnitPositions.some(p => p.row === row && p.col === col)
-            ? 'ring-2 ring-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)] rounded-lg'
-            : 'hover:ring-1 hover:ring-white/40 hover:shadow-[0_0_8px_rgba(255,255,255,0.2)] rounded-lg'
-        }`}
+            ? 'ring-2 ring-green-400 shadow-[0_10px_20px_rgba(0,0,0,0.4),0_0_10px_rgba(74,222,128,0.5)] rounded-lg'
+            : 'hover:ring-1 hover:ring-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_20px_40px_rgba(0,0,0,0.5)] rounded-lg'
+          }`}
       >
         <CardSprite
           atlasId={spriteConfig.atlasId}
           frameIndex={spriteConfig.frameIndex}
-          className={`rounded shadow-lg ${!isMyUnit ? 'rotate-180' : ''}`}
+          className={`rounded ${!isMyUnit ? 'rotate-180' : ''}`}
         />
         {/* 伤害红色遮罩 */}
         {damage > 0 && (
@@ -359,12 +410,6 @@ const UnitCell: React.FC<{
             {life - damage}/{life}
           </span>
         </div>
-        {/* 附加卡指示 */}
-        {hasAttached && (
-          <div className="absolute -bottom-[0.2vw] left-1/2 -translate-x-1/2 bg-orange-500/90 text-white text-[0.5vw] px-[0.3vw] rounded-sm shadow">
-            附加
-          </div>
-        )}
         {/* 充能指示器 */}
         {(unit.boosts ?? 0) > 0 && (() => {
           const boosts = unit.boosts ?? 0;
@@ -393,7 +438,44 @@ const UnitCell: React.FC<{
             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
           </svg>
         </button>
-      </HitStopContainer>
+        {/* 附加卡 - 叠在单位卡下方，露出名字 */}
+        {hasAttached && unit.attachedCards && unit.attachedCards.map((attachedCard, idx) => {
+          const eventSprite = getEventSpriteConfig(attachedCard);
+          return (
+            <div
+              key={attachedCard.id}
+              className="absolute left-0 right-0 cursor-pointer pointer-events-auto"
+              style={{
+                aspectRatio: '0.714',
+                [isMyUnit ? 'bottom' : 'top']: `-${8 + idx * 8}%`,
+                zIndex: -1 - idx,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onMagnifyEventCard?.(attachedCard);
+              }}
+            >
+              <CardSprite
+                atlasId={eventSprite.atlasId}
+                frameIndex={eventSprite.frameIndex}
+                className={`rounded ${!isMyUnit ? 'rotate-180' : ''}`}
+              />
+            </div>
+          );
+        })}
+        {/* 附加标识 - 单位卡底部居中 */}
+        {hasAttached && (
+          <div
+            className={`absolute ${isMyUnit ? 'bottom-0' : 'top-0'} left-1/2 -translate-x-1/2 ${isMyUnit ? 'translate-y-1/2' : '-translate-y-1/2'} bg-orange-500/90 text-white text-[0.5vw] px-[0.3vw] rounded-sm shadow z-20 pointer-events-auto cursor-pointer`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (unit.attachedCards?.[0]) props.onMagnifyEventCard?.(unit.attachedCards[0]);
+            }}
+          >
+            {t('ui.attached')}
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 };
@@ -412,6 +494,7 @@ const StructureCell: React.FC<{
 }> = ({ row, col, structure, pos, viewCoord, myPlayerId, props }) => {
   const spriteConfig = getStructureSpriteConfig(structure);
   const isMyStructure = structure.owner === myPlayerId;
+  const isNew = props.newUnitIds?.has(structure.cardId) ?? false;
   const damage = structure.damage;
   const life = structure.card.life;
 
@@ -431,11 +514,16 @@ const StructureCell: React.FC<{
       }}
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
     >
-      <div className="relative w-[85%] group">
+      <motion.div
+        className="relative w-[85%] group shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_20px_40px_rgba(0,0,0,0.5)] transition-shadow rounded-lg"
+        initial={isNew ? { opacity: 0, scale: 1.1 } : false}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+      >
         <CardSprite
           atlasId={spriteConfig.atlasId}
           frameIndex={spriteConfig.frameIndex}
-          className={`rounded shadow-lg ${!isMyStructure ? 'rotate-180' : ''}`}
+          className={`rounded ${!isMyStructure ? 'rotate-180' : ''}`}
         />
         {/* 伤害红色遮罩 */}
         {damage > 0 && (() => {
@@ -468,7 +556,7 @@ const StructureCell: React.FC<{
             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
           </svg>
         </button>
-      </div>
+      </motion.div>
     </div>
   );
 };
@@ -481,10 +569,40 @@ export const BoardGrid: React.FC<BoardGridProps> = (props) => {
   const { core, currentGrid, shouldFlipView, myPlayerId } = props;
   const { toViewCoord, fromViewCoord } = useViewCoords(shouldFlipView);
 
+  // 追踪新出现的单位用于播放召唤动画
+  const prevUnitIdsRef = React.useRef<Set<string>>(new Set());
+  const newUnitsMemo = React.useMemo(() => {
+    const current = new Set<string>();
+    core.board.forEach(row => row.forEach(cell => {
+      if (cell.unit) current.add(cell.unit.cardId);
+      if (cell.structure) current.add(cell.structure.cardId);
+    }));
+
+    // 如果是初始状态（只有召唤师和初始城门），不显示动画
+    if (prevUnitIdsRef.current.size === 0) {
+      prevUnitIdsRef.current = current;
+      return new Set<string>();
+    }
+
+    const added = new Set<string>();
+    current.forEach(id => {
+      if (!prevUnitIdsRef.current.has(id)) added.add(id);
+    });
+
+    prevUnitIdsRef.current = current;
+    return added;
+  }, [core.board]);
+
   return (
     <>
       <GridLayer currentGrid={currentGrid} core={core} fromViewCoord={fromViewCoord} props={props} />
-      <CardLayer core={core} currentGrid={currentGrid} myPlayerId={myPlayerId} toViewCoord={toViewCoord} props={props} />
+      <CardLayer
+        core={core}
+        currentGrid={currentGrid}
+        myPlayerId={myPlayerId}
+        toViewCoord={toViewCoord}
+        props={{ ...props, newUnitIds: newUnitsMemo }}
+      />
     </>
   );
 };

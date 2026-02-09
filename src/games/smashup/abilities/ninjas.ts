@@ -6,12 +6,13 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, moveMinion, getMinionPower, grantExtraMinion } from '../domain/abilityHelpers';
+import { destroyMinion, moveMinion, getMinionPower, grantExtraMinion, setPromptContinuation, buildMinionTargetOptions } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, MinionReturnedEvent, MinionPlayedEvent } from '../domain/types';
-import { getCardDef } from '../data/cards';
+import { getCardDef, getBaseDef } from '../data/cards';
 import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
+import { registerPromptContinuation } from '../domain/promptContinuation';
 
 /** 注册忍者派系所有能力 */
 export function registerNinjaAbilities(): void {
@@ -36,57 +37,83 @@ export function registerNinjaAbilities(): void {
     registerNinjaOngoingEffects();
 }
 
-/** 忍者大师 onPlay：消灭本基地一个随从（MVP：自动选力量最低的对手随从） */
+/** 忍者大师 onPlay：消灭本基地一个随从 */
 function ninjaMaster(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
-
-    const targets = base.minions
-        .filter(m => m.uid !== ctx.cardUid)
-        .sort((a, b) => getMinionPower(ctx.state, a, ctx.baseIndex) - getMinionPower(ctx.state, b, ctx.baseIndex));
-    const target = targets[0];
-    if (!target) return { events: [] };
-
+    const targets = base.minions.filter(m => m.uid !== ctx.cardUid);
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return { events: [destroyMinion(targets[0].uid, targets[0].defId, ctx.baseIndex, targets[0].owner, 'ninja_master', ctx.now)] };
+    }
+    const options = targets.map(t => {
+        const def = getCardDef(t.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? t.defId;
+        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
+        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
+    });
     return {
-        events: [
-            destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, 'ninja_master', ctx.now),
-        ],
+        events: [setPromptContinuation({
+            abilityId: 'ninja_master',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要消灭的随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
 }
 
-/** 猛虎刺客 onPlay：消灭本基地一个力量≤3的随从（MVP：自动选第一个） */
+/** 猛虎刺客 onPlay：消灭本基地一个力量≤3的随从 */
 function ninjaTigerAssassin(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
-
-    const target = base.minions.find(
+    const targets = base.minions.filter(
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) <= 3
     );
-    if (!target) return { events: [] };
-
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return { events: [destroyMinion(targets[0].uid, targets[0].defId, ctx.baseIndex, targets[0].owner, 'ninja_tiger_assassin', ctx.now)] };
+    }
+    const options = targets.map(t => {
+        const def = getCardDef(t.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? t.defId;
+        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
+        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
+    });
     return {
-        events: [
-            destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, 'ninja_tiger_assassin', ctx.now),
-        ],
+        events: [setPromptContinuation({
+            abilityId: 'ninja_tiger_assassin',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要消灭的力量≤3的随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
 }
 
-/** 手里剑 onPlay：消灭一个力量≤3的随从（任意基地，MVP：自动选第一个对手随从） */
+/** 手里剑 onPlay：消灭一个力量≤3的随从（任意基地） */
 function ninjaSeeingStars(ctx: AbilityContext): AbilityResult {
+    const targets: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
-        const base = ctx.state.bases[i];
-        const target = base.minions.find(
-            m => m.controller !== ctx.playerId && getMinionPower(ctx.state, m, i) <= 3
-        );
-        if (target) {
-            return {
-                events: [
-                    destroyMinion(target.uid, target.defId, i, target.owner, 'ninja_seeing_stars', ctx.now),
-                ],
-            };
+        for (const m of ctx.state.bases[i].minions) {
+            if (m.controller !== ctx.playerId && getMinionPower(ctx.state, m, i) <= 3) {
+                const def = getCardDef(m.defId) as MinionCardDef | undefined;
+                const name = def?.name ?? m.defId;
+                const baseDef = getBaseDef(ctx.state.bases[i].defId);
+                const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+                const power = getMinionPower(ctx.state, m, i);
+                targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, label: `${name} (力量 ${power}) @ ${baseName}` });
+            }
         }
     }
-    return { events: [] };
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return { events: [destroyMinion(targets[0].uid, targets[0].defId, targets[0].baseIndex, targets[0].owner, 'ninja_seeing_stars', ctx.now)] };
+    }
+    const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'ninja_seeing_stars',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要消灭的力量≤3的随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
+    };
 }
 
 // ninja_poison (ongoing) - 已通过 ongoingModifiers 系统实现力量修正（-4力量）
@@ -331,5 +358,42 @@ function registerNinjaOngoingEffects(): void {
     registerProtection('ninja_infiltrate', 'affect', (ctx) => {
         // 检查目标随从是否附着了 infiltrate
         return ctx.targetMinion.attachedActions.some(a => a.defId === 'ninja_infiltrate');
+    });
+}
+
+// ============================================================================
+// Prompt 继续函数
+// ============================================================================
+
+/** 注册忍者派系的 Prompt 继续函数 */
+export function registerNinjaPromptContinuations(): void {
+    // 忍者大师：选择目标后消灭
+    registerPromptContinuation('ninja_master', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'ninja_master', ctx.now)];
+    });
+
+    // 猛虎刺客：选择目标后消灭
+    registerPromptContinuation('ninja_tiger_assassin', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'ninja_tiger_assassin', ctx.now)];
+    });
+
+    // 手里剑：选择目标后消灭
+    registerPromptContinuation('ninja_seeing_stars', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'ninja_seeing_stars', ctx.now)];
     });
 }

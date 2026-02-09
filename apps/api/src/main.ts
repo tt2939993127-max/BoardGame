@@ -55,7 +55,7 @@ async function bootstrap() {
     if (existsSync(distPath)) {
         expressApp.use(express.static(distPath));
 
-        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings)(\/|$)/;
+        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings|sponsors)(\/|$)/;
         expressApp.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
             if (spaExclude.test(req.path)) return next();
             return res.sendFile(join(distPath, 'index.html'));

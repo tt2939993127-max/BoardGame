@@ -11,6 +11,7 @@ export default function SystemHealthPage() {
     const [socketStatus, setSocketStatus] = useState({ connected: false, reconnectAttempts: 0 });
     const { matches = [] } = useLobbyStats();
     const [stats, setStats] = useState<any>(null);
+    const [persistedRoomTotal, setPersistedRoomTotal] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     // 实时更新Socket状态
@@ -48,6 +49,16 @@ export default function SystemHealthPage() {
                     const data = await res.json();
                     setStats(data);
                     setIsLoading(false);
+                }
+
+                const roomsRes = await fetch(`${ADMIN_API_URL}/rooms?page=1&limit=1`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (roomsRes.ok && isMounted) {
+                    const roomsData = await roomsRes.json();
+                    setPersistedRoomTotal(Number(roomsData?.total ?? 0));
                 }
             } catch (error) {
                 console.error('[SystemHealth] Failed to fetch admin stats:', error);
@@ -110,7 +121,7 @@ export default function SystemHealthPage() {
                     <div>
                         <p className="text-sm text-zinc-500 font-medium">当前活跃玩家</p>
                         <h3 className="text-2xl font-bold text-zinc-900 mt-1">{totalPlayers}</h3>
-                        <p className="text-xs text-zinc-400 mt-1">分布在 {activeRooms} 个房间中</p>
+                        <p className="text-xs text-zinc-400 mt-1">分布在 {activeRooms} 个实时房间中</p>
                     </div>
                 </div>
 
@@ -140,7 +151,7 @@ export default function SystemHealthPage() {
                         </div>
                     </div>
                     <div>
-                        <p className="text-sm text-zinc-500 font-medium">进行中的房间</p>
+                        <p className="text-sm text-zinc-500 font-medium">实时房间（含游客）</p>
                         <h3 className="text-2xl font-bold text-zinc-900 mt-1">
                             {activeRooms}
                         </h3>
@@ -152,7 +163,7 @@ export default function SystemHealthPage() {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-zinc-100 lg:col-span-2">
                     <h3 className="text-lg font-bold text-zinc-900 mb-6 flex items-center gap-2">
                         <Zap size={18} className="text-amber-500" />
-                        实时房间分布
+                        实时房间分布（含游客）
                     </h3>
 
                     {safeMatches.length === 0 ? (
@@ -196,6 +207,14 @@ export default function SystemHealthPage() {
                                 <span className="text-sm font-medium text-zinc-600">总注册用户</span>
                             </div>
                             <span className="font-mono font-bold text-zinc-900">{stats?.totalUsers || '-'}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <Zap size={18} className="text-zinc-400" />
+                                <span className="text-sm font-medium text-zinc-600">持久化房间</span>
+                            </div>
+                            <span className="font-mono font-bold text-zinc-900">{persistedRoomTotal ?? '-'}</span>
                         </div>
 
                         <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl">

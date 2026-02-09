@@ -12,6 +12,9 @@ import {
     grantExtraAction,
     destroyMinion,
     getMinionPower,
+    setPromptContinuation,
+    buildMinionTargetOptions,
+    recoverCardsFromDiscard,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type {
@@ -19,8 +22,11 @@ import type {
     CardsDrawnEvent,
     CardsDiscardedEvent,
     DeckReshuffledEvent,
+    MinionCardDef,
 } from '../domain/types';
 import { drawCards } from '../domain/utils';
+import { registerPromptContinuation } from '../domain/promptContinuation';
+import { getCardDef, getBaseDef } from '../data/cards';
 
 /** 注册远古之物派系所有能力 */
 export function registerElderThingAbilities(): void {
@@ -186,61 +192,65 @@ function elderThingSpreadingHorror(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 开始召唤 onPlay：弃牌堆随从放牌库顶 + 额外行动（MVP：自动选力量最高的随从） */
+/** 开始召唤 onPlay：从弃牌堆选一个随从放牌库顶 + 额外行动 */
 function elderThingBeginTheSummoning(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const player = ctx.state.players[ctx.playerId];
-
-    // 从弃牌堆找随从（选力量最高的，MVP 策略）
     const minionsInDiscard = player.discard.filter(c => c.type === 'minion');
-    if (minionsInDiscard.length > 0) {
-        // MVP：选第一个随从放牌库顶
-        const chosen = minionsInDiscard[0];
-        // 重建牌库：chosen 放顶部 + 原牌库
-        const newDeckUids = [chosen.uid, ...player.deck.map(c => c.uid)];
-        const reshuffleEvt: DeckReshuffledEvent = {
-            type: SU_EVENTS.DECK_RESHUFFLED,
-            payload: { playerId: ctx.playerId, deckUids: newDeckUids },
-            timestamp: ctx.now,
-        };
-        events.push(reshuffleEvt);
+
+    if (minionsInDiscard.length === 0) {
+        // 没有随从可选，仍给额外行动
+        events.push(grantExtraAction(ctx.playerId, 'elder_thing_begin_the_summoning', ctx.now));
+        return { events };
     }
-
-    // 额外打出一张行动
-    events.push(grantExtraAction(ctx.playerId, 'elder_thing_begin_the_summoning', ctx.now));
-
-    return { events };
+    if (minionsInDiscard.length === 1) {
+        const chosen = minionsInDiscard[0];
+        const newDeckUids = [chosen.uid, ...player.deck.map(c => c.uid)];
+        events.push({ type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId: ctx.playerId, deckUids: newDeckUids }, timestamp: ctx.now } as DeckReshuffledEvent);
+        events.push(grantExtraAction(ctx.playerId, 'elder_thing_begin_the_summoning', ctx.now));
+        return { events };
+    }
+    // 多个随从：Prompt 选择
+    const options = minionsInDiscard.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid } };
+    });
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'elder_thing_begin_the_summoning',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要放到牌库顶的随从', options } },
+        }, ctx.now)],
+    };
 }
 
-/** 深不可测的目的 onPlay：对手展示手牌，有疯狂卡的必须消灭一个随从（MVP：自动选最弱随从） */
+/** 深不可测的目的 onPlay：对手展示手牌，有疯狂卡的必须消灭一个自己的随从 */
 function elderThingUnfathomableGoals(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
 
     for (const pid of ctx.state.turnOrder) {
         if (pid === ctx.playerId) continue;
         const opponent = ctx.state.players[pid];
-
-        // 检查手牌中是否有疯狂卡
         const hasMadness = opponent.hand.some(c => c.defId === MADNESS_CARD_DEF_ID);
         if (!hasMadness) continue;
 
-        // 必须消灭一个自己的随从（MVP：选力量最低的）
-        let weakest: { uid: string; defId: string; baseIndex: number; owner: string; power: number } | undefined;
+        // 收集该对手的所有随从
+        const opMinions: { uid: string; defId: string; baseIndex: number; owner: string; power: number }[] = [];
         for (let i = 0; i < ctx.state.bases.length; i++) {
             for (const m of ctx.state.bases[i].minions) {
                 if (m.controller !== pid) continue;
-                const power = getMinionPower(ctx.state, m, i);
-                if (!weakest || power < weakest.power) {
-                    weakest = { uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, power };
-                }
+                opMinions.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, power: getMinionPower(ctx.state, m, i) });
             }
         }
-        if (weakest) {
-            events.push(destroyMinion(
-                weakest.uid, weakest.defId, weakest.baseIndex, weakest.owner,
-                'elder_thing_unfathomable_goals', ctx.now
-            ));
+        if (opMinions.length === 0) continue;
+        if (opMinions.length === 1) {
+            events.push(destroyMinion(opMinions[0].uid, opMinions[0].defId, opMinions[0].baseIndex, opMinions[0].owner, 'elder_thing_unfathomable_goals', ctx.now));
+            continue;
         }
+        // 多个随从：对手应选择（MVP：自动选最弱的，因为 Prompt 目前只支持当前玩家选择）
+        opMinions.sort((a, b) => a.power - b.power);
+        events.push(destroyMinion(opMinions[0].uid, opMinions[0].defId, opMinions[0].baseIndex, opMinions[0].owner, 'elder_thing_unfathomable_goals', ctx.now));
     }
 
     return { events };
@@ -250,3 +260,22 @@ function elderThingUnfathomableGoals(ctx: AbilityContext): AbilityResult {
 // TODO: elder_thing_shoggoth (onPlay) - 限制打出条件 + 对手选择抽疯狂卡或被消灭随从（需要 Prompt 多人选择）
 // TODO: elder_thing_dunwich_horror (ongoing) - +5力量但回合结束消灭（需要 ongoing + onTurnEnd 触发）
 // TODO: elder_thing_the_price_of_power (special) - 计分前按对手疯狂卡数+力量（需要 beforeScoring 时机）
+
+
+// ============================================================================
+// Prompt 继续函数
+// ============================================================================
+
+/** 注册远古之物派系的 Prompt 继续函数 */
+export function registerElderThingPromptContinuations(): void {
+    // 开始召唤：选择弃牌堆随从后放牌库顶 + 额外行动
+    registerPromptContinuation('elder_thing_begin_the_summoning', (ctx) => {
+        const { cardUid } = ctx.selectedValue as { cardUid: string };
+        const player = ctx.state.players[ctx.playerId];
+        const newDeckUids = [cardUid, ...player.deck.map(c => c.uid)];
+        return [
+            { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId: ctx.playerId, deckUids: newDeckUids }, timestamp: ctx.now },
+            grantExtraAction(ctx.playerId, 'elder_thing_begin_the_summoning', ctx.now),
+        ];
+    });
+}

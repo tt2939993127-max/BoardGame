@@ -111,7 +111,7 @@ describe('跨英雄对战', () => {
             expect(state.core.players['1'].resources[RESOURCE_IDS.CP]).toBe(INITIAL_CP);
             expect(state.core.players['0'].hand.length).toBe(4);
             expect(state.core.players['1'].hand.length).toBe(4);
-            expect(state.core.turnPhase).toBe('upkeep');
+            expect(state.core.turnPhase).toBe('main1');
         });
     });
 
@@ -149,7 +149,6 @@ describe('跨英雄对战', () => {
             const result = runner.run({
                 name: '圣骑士防御',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),

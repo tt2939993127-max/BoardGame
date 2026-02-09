@@ -28,11 +28,13 @@ import { UndoProvider } from '../../contexts/UndoContext';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { loadStatusAtlases, type StatusAtlases } from './ui/statusEffects';
 import { getAbilitySlotId } from './ui/AbilityOverlays';
+import type { AbilityOverlaysHandle } from './ui/AbilityOverlays';
 import { HandArea } from './ui/HandArea';
 import { loadCardAtlasConfig } from './ui/cardAtlas';
 import { TUTORIAL_COMMANDS } from '../../engine/systems/TutorialSystem';
 import DiceThroneTutorial from './tutorial';
 import { DiceThroneCharacterSelection } from './ui/CharacterSelectionAdapter';
+import { TutorialSelectionGate } from '../../components/game/framework';
 import { OpponentHeader } from './ui/OpponentHeader';
 import { LeftSidebar } from './ui/LeftSidebar';
 import { CenterBoard } from './ui/CenterBoard';
@@ -162,6 +164,36 @@ const resolveMoves = (raw: Record<string, unknown>): DiceThroneMoveMap => {
         hostStartGame: () => hostStartGameRaw?.({}),
         playerReady: () => playerReadyRaw?.({}),
     };
+};
+
+/** 调试面板内的布局保存按钮 */
+const LayoutSaveButton = ({ abilityOverlaysRef }: { abilityOverlaysRef: React.RefObject<AbilityOverlaysHandle | null> }) => {
+    const [isSaving, setIsSaving] = React.useState(false);
+    const [saveHint, setSaveHint] = React.useState<string | null>(null);
+
+    const handleSave = React.useCallback(async () => {
+        if (!abilityOverlaysRef.current) return;
+        setIsSaving(true);
+        setSaveHint(null);
+        const result = await abilityOverlaysRef.current.saveLayout();
+        setSaveHint(result.hint);
+        setIsSaving(false);
+    }, [abilityOverlaysRef]);
+
+    return (
+        <div className="space-y-1">
+            <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className={`w-full py-2 rounded font-bold text-xs border transition-[background-color] duration-200 ${isSaving ? 'bg-emerald-300 border-emerald-200 text-black/70' : 'bg-emerald-600 border-emerald-400 text-white hover:bg-emerald-500'}`}
+            >
+                {isSaving ? '保存中…' : '💾 保存布局'}
+            </button>
+            {saveHint && (
+                <p className="text-[10px] text-emerald-400 bg-black/40 px-2 py-1 rounded">{saveHint}</p>
+            )}
+        </div>
+    );
 };
 
 // --- Main Layout ---
@@ -414,6 +446,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const selfBuffRef = React.useRef<HTMLDivElement>(null);
     const drawDeckRef = React.useRef<HTMLDivElement>(null);
     const discardPileRef = React.useRef<HTMLDivElement>(null);
+    const abilityOverlaysRef = React.useRef<AbilityOverlaysHandle>(null);
 
     // 使用 useInteractionState Hook 管理交互状态
     const pendingInteraction = G.pendingInteraction;
@@ -829,12 +862,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         advanceTutorialIfNeeded('advance-phase-button');
     };
 
+    // 弃牌阶段：只有手牌不超限时才自动推进（upkeep/income 已由引擎层 onAutoContinueCheck 处理）
     React.useEffect(() => {
-        if (isActivePlayer && ['upkeep', 'income'].includes(currentPhase)) {
-            const timer = setTimeout(() => engineMoves.advancePhase(), 800);
-            return () => clearTimeout(timer);
-        }
-        // 弃牌阶段：只有手牌不超限时才自动推进
         if (isActivePlayer && currentPhase === 'discard' && player.hand.length <= HAND_LIMIT) {
             const timer = setTimeout(() => engineMoves.advancePhase(), 800);
             return () => clearTimeout(timer);
@@ -908,33 +937,30 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
     // --- Setup 阶段：仅渲染全屏选角界面 ---
     if (currentPhase === 'setup') {
-        // 教学模式下不显示选角界面，教程清单会通过 AI 动作自动选角
-        // 但需要等待 AI 动作执行完成（约 1 秒），期间显示加载提示
-        if (isTutorialActive) {
-            return (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0F0F23] text-white">
-                    <div className="text-[1.5vw] font-bold animate-pulse">{t('status.loadingGameState', { playerId: rootPid })}</div>
-                </div>
-            );
-        }
-
         return (
-            <UndoProvider value={{ G: rawG, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
-                <div className="relative w-full h-dvh bg-[#0a0a0c] overflow-hidden font-sans select-none">
-                    <DiceThroneCharacterSelection
-                        isOpen={true}
-                        currentPlayerId={rootPid}
-                        hostPlayerId={G.hostPlayerId}
-                        selectedCharacters={G.selectedCharacters}
-                        readyPlayers={G.readyPlayers ?? {}}
-                        playerNames={playerNames}
-                        onSelect={engineMoves.selectCharacter}
-                        onReady={engineMoves.playerReady}
-                        onStart={engineMoves.hostStartGame}
-                        locale={locale}
-                    />
-                </div>
-            </UndoProvider>
+            <TutorialSelectionGate
+                isTutorialMode={gameMode?.mode === 'tutorial'}
+                isTutorialActive={isTutorialActive}
+                containerClassName="bg-[#0F0F23] text-white"
+                textClassName="text-[1.5vw] font-bold"
+            >
+                <UndoProvider value={{ G: rawG, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
+                    <div className="relative w-full h-dvh bg-[#0a0a0c] overflow-hidden font-sans select-none">
+                        <DiceThroneCharacterSelection
+                            isOpen={true}
+                            currentPlayerId={rootPid}
+                            hostPlayerId={G.hostPlayerId}
+                            selectedCharacters={G.selectedCharacters}
+                            readyPlayers={G.readyPlayers ?? {}}
+                            playerNames={playerNames}
+                            onSelect={engineMoves.selectCharacter}
+                            onReady={engineMoves.playerReady}
+                            onStart={engineMoves.hostStartGame}
+                            locale={locale}
+                        />
+                    </div>
+                </UndoProvider>
+            </TutorialSelectionGate>
         );
     }
 
@@ -956,6 +982,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                             >
                                 {isLayoutEditing ? t('layout.exitEdit') : t('layout.enterEdit')}
                             </button>
+                            {isLayoutEditing && (
+                                <LayoutSaveButton abilityOverlaysRef={abilityOverlaysRef} />
+                            )}
                         </div>
                     </GameDebugPanel>
                 )}
@@ -1036,6 +1065,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         characterId={viewPlayer.characterId}
                         locale={locale}
                         onMagnifyImage={(image) => setMagnifiedImage(image)}
+                        abilityOverlaysRef={abilityOverlaysRef}
                     />
 
                     <RightSidebar

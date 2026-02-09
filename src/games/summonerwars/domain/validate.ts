@@ -57,6 +57,16 @@ export function validateCommand(
       return { valid: true };
     }
 
+    case SW_COMMANDS.SELECT_CUSTOM_DECK: {
+      if (core.hostStarted) return { valid: false, error: '游戏已开始，无法更改牌组' };
+      const deckData = payload.deckData as Record<string, unknown> | undefined;
+      if (!deckData) return { valid: false, error: '缺少牌组数据' };
+      if (!deckData.summonerId || typeof deckData.summonerId !== 'string') return { valid: false, error: '缺少召唤师 ID' };
+      if (!deckData.summonerFaction || typeof deckData.summonerFaction !== 'string') return { valid: false, error: '缺少召唤师阵营' };
+      if (!Array.isArray(deckData.cards)) return { valid: false, error: '缺少卡牌列表' };
+      return { valid: true };
+    }
+
     case SW_COMMANDS.PLAYER_READY: {
       if (core.hostStarted) return { valid: false, error: '游戏已开始' };
       const cmdPlayerId = command.playerId as PlayerId;

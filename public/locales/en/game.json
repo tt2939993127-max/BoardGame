@@ -148,7 +148,15 @@
     "switchTrack": "Switch Track",
     "tracks": {
       "main_theme": "Classic Duel",
-      "chill_piano": "Chill Piano"
+      "chill_piano": "Chill Piano",
+      "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main": "Dragon Dance",
+      "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main": "Shields and Spears",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main": "Corsair",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main": "Lonely Bard",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_intensity_2": "Corsair (Intensity 2)",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_intensity_2": "Lonely Bard (Intensity 2)",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_main": "Tiki Party",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_intensity_2": "Tiki Party (Intensity 2)"
     }
   },
   "layoutEditor": {

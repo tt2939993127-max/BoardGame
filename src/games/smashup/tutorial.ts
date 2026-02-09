@@ -98,8 +98,10 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
                 { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS }, playerId: '1' },
                 { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS }, playerId: '1' },
                 { commandType: SU_COMMANDS.SELECT_FACTION, payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                // 推进阶段：factionSelect → startTurn → playCards
-                { commandType: FLOW_COMMANDS.ADVANCE_PHASE, payload: undefined },
+                // 注意：不需要显式 ADVANCE_PHASE。
+                // ALL_FACTIONS_SELECTED 事件清除 factionSelection 后，
+                // FlowSystem.onAutoContinueCheck 会自动推进 factionSelect → startTurn → playCards。
+                // 如果加了显式 ADVANCE_PHASE，会从 playCards 多推一整轮，导致轮到对手。
                 // 作弊：替换 P0 手牌为教学指定卡牌
                 {
                     commandType: CHEAT_COMMANDS.MERGE_STATE,
@@ -212,6 +214,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             position: 'left',
             requireAction: true,
             allowedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            advanceOnEvents: [MATCH_PHASE_SCORE],
         },
 
         // ================================================================
@@ -237,16 +240,17 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
         },
 
-        // 12: 记分阶段 AI 自动推进 — 自动通过记分阶段
+        // 12: 记分阶段自动推进 — 进入此步骤时 blockedCommands 被清除，
+        // FlowSystem.onAutoContinueCheck 自动推进 scoreBases → draw → endTurn → ...
+        // 使用 advanceOnEvents 监听 PHASE_CHANGED(draw) 来在抽牌阶段到来时推进到下一步。
+        // 但由于 draw 也会自动推进，整个链条会一口气跑完。
+        // 所以这里不阻塞，让链条跑完，步骤仅作为过渡信息展示。
         {
             id: 'scoringPhase',
             content: 'game-smashup:tutorial.steps.scoringPhase',
             position: 'center',
             requireAction: false,
             showMask: true,
-            aiActions: [
-                { commandType: FLOW_COMMANDS.ADVANCE_PHASE, payload: undefined },
-            ],
         },
 
         // 13: 抽牌阶段说明 — 高亮牌库/弃牌区，介绍每回合抽 2 张
@@ -272,18 +276,18 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
         // 第五部分：结束抽牌 + 对手回合 + 总结
         // ================================================================
 
-        // 15: 结束抽牌 — 引导玩家点击结束按钮推进阶段
+        // 15: 结束抽牌 — 抽牌阶段会自动推进（手牌不超限时）
         {
             id: 'endDraw',
             content: 'game-smashup:tutorial.steps.endDraw',
-            highlightTarget: 'su-end-turn-btn',
-            position: 'left',
-            requireAction: true,
-            allowedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            position: 'center',
+            requireAction: false,
+            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
         },
 
         // 16: 对手回合 — AI 自动执行对手的完整回合
         // P1 的回合流程：playCards → scoreBases(auto) → draw → endTurn(auto) → startTurn(P0)
+        // 多轮 afterEvents 会自动推进整个链条，只需一次 ADVANCE_PHASE
         {
             id: 'opponentTurn',
             content: 'game-smashup:tutorial.steps.opponentTurn',
@@ -291,9 +295,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             requireAction: false,
             showMask: true,
             aiActions: [
-                // P1 出牌阶段 → 直接结束（不打牌）
-                { commandType: FLOW_COMMANDS.ADVANCE_PHASE, payload: undefined, playerId: '1' },
-                // P1 抽牌阶段 → 结束（draw → endTurn(auto) → startTurn(auto, 切回 P0)）
+                // P1 出牌阶段 → 直接结束（不打牌），后续阶段自动推进直到切回 P0
                 { commandType: FLOW_COMMANDS.ADVANCE_PHASE, payload: undefined, playerId: '1' },
             ],
             advanceOnEvents: [

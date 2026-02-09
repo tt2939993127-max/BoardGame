@@ -3,7 +3,6 @@
   "subtitle": "征服 Itharia 的战场",
   "description": "召唤师战争是一款快速紧凑的2人游戏。玩家扮演召唤者，通过控制神秘召唤石力量来领导他们的种族征服Itharia这个饱受战争创伤的星球。",
   "players": "2人",
-  
   "factionSelection": {
     "title": "选择你的阵营",
     "subtitle": "每位召唤师拥有独特的军队与战术",
@@ -14,9 +13,12 @@
     "ready": "准备",
     "waiting": "等待其他玩家...",
     "start": "开始游戏",
-    "waitAll": "等待全员就绪"
+    "waitAll": "等待全员就绪",
+    "customDeck": "自定义牌组",
+    "clickToBuild": "点击进入构建",
+    "customDeckLabel": "自定义牌组",
+    "customDeckSummoner": "召唤师: {{name}}"
   },
-  
   "factions": {
     "necromancer": "堕落王国",
     "trickster": "欺心巫族",
@@ -25,7 +27,6 @@
     "frost": "极地矮人",
     "barbaric": "野蛮部落"
   },
-  
   "actions": {
     "closePreview": "关闭预览",
     "close": "关闭",
@@ -61,20 +62,41 @@
   "ui": {
     "mapAlt": "战场地图",
     "opponentActiveEvents": "对方持续效果",
-    "activeEvents": "持续效果"
+    "activeEvents": "持续效果",
+    "attached": "附加",
+    "click_to_magnify": "点击放大"
   },
   "phaseTracker": {
     "turn": "回合 {{count}}"
   },
   "phaseDesc": {
-    "summon": ["从手牌召唤单位", "放置在城门相邻的空格"],
-    "move": ["移动最多3个单位", "每个单位最多移动2格", "不能对角线移动"],
-    "build": ["建造城门或建筑", "放置在后方3行或召唤师相邻"],
-    "attack": ["用最多3个单位攻击", "近战：相邻目标", "远程：最多3格直线"],
-    "magic": ["弃置手牌获取魔力", "每张牌+1魔力"],
-    "draw": ["抽牌至5张", "牌堆空时无法抽牌"]
+    "summon": [
+      "从手牌召唤单位",
+      "放置在城门相邻的空格"
+    ],
+    "move": [
+      "移动最多3个单位",
+      "每个单位最多移动2格",
+      "不能对角线移动"
+    ],
+    "build": [
+      "建造城门或建筑",
+      "放置在后方3行或召唤师相邻"
+    ],
+    "attack": [
+      "用最多3个单位攻击",
+      "近战：相邻目标",
+      "远程：最多3格直线"
+    ],
+    "magic": [
+      "弃置手牌获取魔力",
+      "每张牌+1魔力"
+    ],
+    "draw": [
+      "抽牌至5张",
+      "牌堆空时无法抽牌"
+    ]
   },
-  
   "tutorial": {
     "title": "召唤师战争教学",
     "welcome": "欢迎来到召唤师战争！在这个游戏中，你将扮演一位强大的召唤师，指挥你的军队征服战场。",
@@ -116,7 +138,6 @@
       "finish": "恭喜完成教学！\n\n你已掌握了 6 个回合阶段、召唤/移动/攻击的基本操作、事件卡施放、以及召唤师技能的使用。\n\n去挑战真正的对手吧！"
     }
   },
-  
   "phase": {
     "summon": "召唤",
     "move": "移动",
@@ -125,7 +146,6 @@
     "magic": "魔力",
     "draw": "抽牌"
   },
-  
   "hint": {
     "factionSelect": "选择阵营并准备开始",
     "summon": "从手牌召唤单位到城门旁",
@@ -136,15 +156,69 @@
     "draw": "抽牌至5张",
     "waitingOpponent": "等待对手行动..."
   },
-  
   "action": {
     "summon": "召唤",
     "move": "移动",
     "attack": "攻击",
     "castSpell": "施放法术",
     "endPhase": "结束阶段",
+    "confirmEndPhase": "还有{{count}}个单位可操作，确认结束？",
     "endTurn": "结束回合",
     "discardSelected": "弃牌 +{{count}}"
+  },
+  "deckBuilder": {
+    "title": "自定义牌组构建",
+    "factions": "阵营列表",
+    "cardPool": "卡牌池",
+    "myDeck": "我的牌组",
+    "count": "总计",
+    "selectFactionFirst": "请先选择一个阵营以查看卡牌",
+    "summoners": "召唤师",
+    "champions": "冠军单位",
+    "commons": "普通单位",
+    "units": "单位",
+    "events": "事件卡",
+    "structures": "建筑卡",
+    "emptyState": "开始选择卡牌来构建你的传奇牌组",
+    "save": "保存牌组",
+    "saving": "保存中...",
+    "load": "加载",
+    "loading": "加载中...",
+    "delete": "删除",
+    "close": "关闭",
+    "placeholderName": "牌组名称...",
+    "invalidDeck": "无效牌组",
+    "savedDecks": "已保存的牌组",
+    "noSavedDecks": "暂无已保存的牌组",
+    "startingCards": "起始卡牌",
+    "buildCards": "选入卡牌",
+    "beta": "公测版",
+    "useDeck": "使用此牌组",
+    "confirmDeck": "确认使用",
+    "resetDeck": "重置牌组",
+    "saveSuccess": "牌组保存成功",
+    "deleteSuccess": "牌组已删除",
+    "saveFailed": "保存失败，请重试",
+    "loadFailed": "加载失败，请重试",
+    "deleteFailed": "删除失败，请重试",
+    "loginRequired": "请先登录以使用自定义牌组功能",
+    "deckLimitReached": "已达到牌组数量上限（{{max}}个），请删除旧牌组后再创建",
+    "selectSummonerFirst": "请先选择一个召唤师",
+    "symbolMismatch": "卡牌符号与召唤师不匹配",
+    "validation": {
+      "needSummoner": "需要选择1个召唤师",
+      "needGate10hp": "需要1个十生命城门",
+      "needGate5hp": "需要3个五生命城门",
+      "needStartingUnits": "需要2个起始单位",
+      "needEpicEvents": "需要2个史诗事件",
+      "needStandardEvents": "需要6张标准事件",
+      "needChampions": "需要3个冠军单位",
+      "needCommons": "需要16个普通单位",
+      "symbolMismatch": "卡牌「{{name}}」的符号与召唤师不匹配",
+      "maxStandardEvents": "同名标准事件最多2张",
+      "maxChampions": "同名冠军单位最多1个",
+      "maxCommons": "同名普通单位最多4个"
+    }
   },
   "cardSelector": {
     "reviveUndead": "复活死灵：选择弃牌堆中的亡灵单位",
@@ -175,7 +249,20 @@
     "insufficientMagic": "魔力不足！需要 {{cost}} 魔力，当前只有 {{current}} 魔力",
     "eventPhaseOnly": "该事件只能在{{phase}}施放",
     "onlyUnitInSummon": "召唤阶段只能打出单位卡",
-    "onlyStructureInBuild": "建造阶段只能打出建筑卡"
+    "onlyStructureInBuild": "建造阶段只能打出建筑卡",
+    "holyArrowUnitOnly": "圣光箭只能弃除单位卡",
+    "noSameNameDiscard": "不能弃除同名单位",
+    "noDuplicateNameDiscard": "不能弃除多张同名单位",
+    "holyArrowAtLeastOne": "圣光箭至少弃除一张单位卡",
+    "healingNeedsDiscard": "治疗需要弃除一张手牌"
+  },
+  "interaction": {
+    "cannotAttackThere": "无法攻击该目标",
+    "outOfRange": "目标超出攻击范围",
+    "notInLine": "远程攻击必须在直线上",
+    "cannotMoveThere": "无法移动到该位置",
+    "cannotSummonThere": "无法在该位置召唤",
+    "cannotBuildThere": "无法在该位置建造"
   },
   "destroyEffect": {
     "destroyed": "{{name}} 被摧毁！"
@@ -253,19 +340,16 @@
     "holyArrow": "✨ 圣光箭（弃牌换魔力与战力）",
     "healing": "✨ 治疗（弃牌转换为治疗攻击）"
   },
-  
   "status": {
     "yourTurn": "你的回合",
     "opponentTurn": "对手回合",
     "waiting": "等待中..."
   },
-  
   "log": {
     "unit_moved": "单位移动",
     "unit_attacked": "攻击命中 {{hits}} 次",
     "phase_ended": "阶段结束"
   },
-  
   "result": {
     "victory": "胜利！",
     "defeat": "失败",

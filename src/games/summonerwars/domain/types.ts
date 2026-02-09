@@ -202,6 +202,8 @@ export interface SummonerWarsCore {
   hostPlayerId: PlayerId;
   /** 房主是否已点击开始 */
   hostStarted: boolean;
+  /** 自定义牌组数据（选角阶段使用，玩家选择自定义牌组时存储） */
+  customDeckData?: Partial<Record<PlayerId, SerializedCustomDeck>>;
 }
 
 // ============================================================================
@@ -212,6 +214,7 @@ export interface SummonerWarsCore {
 export const SW_COMMANDS = {
   // 阵营选择阶段
   SELECT_FACTION: 'sw:select_faction',
+  SELECT_CUSTOM_DECK: 'sw:select_custom_deck',
   PLAYER_READY: 'sw:player_ready',
   HOST_START_GAME: 'sw:host_start_game',
   // 召唤阶段
@@ -319,6 +322,13 @@ export interface FuneralPyreHealCommand {
   skip?: boolean;
 }
 
+/** 选择自定义牌组命令 */
+export interface SelectCustomDeckCommand {
+  type: typeof SW_COMMANDS.SELECT_CUSTOM_DECK;
+  /** 序列化的自定义牌组数据 */
+  deckData: SerializedCustomDeck;
+}
+
 /** 所有命令联合类型 */
 export type SWCommand =
   | SummonUnitCommand
@@ -332,7 +342,8 @@ export type SWCommand =
   | PlayEventCommand
   | BloodSummonStepCommand
   | ActivateAbilityCommand
-  | FuneralPyreHealCommand;
+  | FuneralPyreHealCommand
+  | SelectCustomDeckCommand;
 
 // ============================================================================
 // 事件类型
@@ -408,6 +419,28 @@ export type UnitInstance = BoardUnit;
 // ============================================================================
 // 阵营选择
 // ============================================================================
+
+/** 序列化的单张卡牌条目（存储/传输用） */
+export interface SerializedCardEntry {
+  /** 卡牌基础 ID（如 'necro-undead-warrior'） */
+  cardId: string;
+  /** 卡牌所属阵营 */
+  faction: FactionId;
+  /** 数量 */
+  count: number;
+}
+
+/** 序列化的自定义牌组（存储/传输用） */
+export interface SerializedCustomDeck {
+  /** 牌组名称 */
+  name: string;
+  /** 召唤师卡牌 ID */
+  summonerId: string;
+  /** 召唤师所属阵营 */
+  summonerFaction: FactionId;
+  /** 手动选择的卡牌列表 */
+  cards: SerializedCardEntry[];
+}
 
 /** 阵营选择事件 */
 export const SW_SELECTION_EVENTS = {

@@ -150,7 +150,15 @@
     "switchTrack": "切换曲目",
     "tracks": {
       "main_theme": "经典对弈",
-      "chill_piano": "轻柔钢琴"
+      "chill_piano": "轻柔钢琴",
+      "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main": "龙之舞",
+      "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main": "盾与矛",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main": "海盗之歌",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main": "孤独诗人",
+      "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_intensity_2": "海盗之歌（强度2）",
+      "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_intensity_2": "孤独诗人（强度2）",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_main": "热带派对",
+      "bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_intensity_2": "热带派对（强度2）"
     }
   },
   "layoutEditor": {

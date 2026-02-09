@@ -1,0 +1,70 @@
+/**
+ * 召唤师战争 - 卡牌预览映射
+ *
+ * 用于 ActionLog / HUD 的卡牌预览获取（基于卡牌配置静态映射）。
+ */
+
+import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { Card, FactionId } from '../domain/types';
+import { createDeckByFactionId } from '../config/factions';
+import { resolveCardAtlasId } from './cardAtlas';
+
+interface CardPreviewMeta {
+  name: string;
+  previewRef: CardPreviewRef | null;
+}
+
+const CARD_PREVIEW_MAP = new Map<string, CardPreviewMeta>();
+
+const ALL_FACTIONS: FactionId[] = [
+  'necromancer',
+  'trickster',
+  'paladin',
+  'goblin',
+  'frost',
+  'barbaric',
+];
+
+const normalizeCardId = (cardId: string): string => (
+  cardId.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '')
+);
+
+const buildPreviewRef = (card: Card): CardPreviewRef | null => {
+  if (card.spriteIndex === undefined || card.spriteIndex === null) return null;
+  const spriteAtlas = card.spriteAtlas ?? 'cards';
+  if (spriteAtlas === 'portal') {
+    return { type: 'atlas', atlasId: 'sw:portal', index: card.spriteIndex };
+  }
+  const atlasId = resolveCardAtlasId(card, spriteAtlas as 'hero' | 'cards');
+  return { type: 'atlas', atlasId, index: card.spriteIndex };
+};
+
+const registerCard = (card: Card): void => {
+  const baseId = normalizeCardId(card.id);
+  if (CARD_PREVIEW_MAP.has(baseId)) return;
+  CARD_PREVIEW_MAP.set(baseId, {
+    name: card.name,
+    previewRef: buildPreviewRef(card),
+  });
+};
+
+const initializeCardPreviewMap = (): void => {
+  if (CARD_PREVIEW_MAP.size > 0) return;
+  for (const faction of ALL_FACTIONS) {
+    const deckData = createDeckByFactionId(faction);
+    registerCard(deckData.summoner);
+    registerCard(deckData.startingGate);
+    deckData.startingUnits.forEach((unit) => registerCard(unit.unit));
+    deckData.deck.forEach((card) => registerCard(card));
+  }
+};
+
+export const getSummonerWarsCardPreviewMeta = (cardId: string): CardPreviewMeta | null => {
+  initializeCardPreviewMap();
+  const baseId = normalizeCardId(cardId);
+  return CARD_PREVIEW_MAP.get(baseId) ?? null;
+};
+
+export const getSummonerWarsCardPreviewRef = (cardId: string): CardPreviewRef | null => {
+  return getSummonerWarsCardPreviewMeta(cardId)?.previewRef ?? null;
+};

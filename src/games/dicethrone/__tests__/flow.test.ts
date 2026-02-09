@@ -479,7 +479,7 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
         name: '初始设置：体力/CP/手牌数量',
         commands: [],
         expect: {
-            turnPhase: 'upkeep',
+            turnPhase: 'main1',
             turnNumber: 1,
             activePlayerId: '0',
             players: {
@@ -519,14 +519,13 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
         ],
         expect: {
             errorAtStep: { step: 1, error: 'cannot_advance_phase' },
-            turnPhase: 'upkeep',
+            turnPhase: 'main1',
             pendingInteraction: { type: 'modifyDie', selectCount: 1, playerId: '0', dieModifyMode: 'any' },
         },
     },
     {
         name: '进入防御阶段后掷骰配置正确',
         commands: [
-            cmd('ADVANCE_PHASE', '0'), // upkeep -> main1（跳过收入）
             cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
             cmd('ROLL_DICE', '0'),
             cmd('CONFIRM_ROLL', '0'),
@@ -551,10 +550,8 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
     //     ...
     // },
     {
-        name: '先手首回合跳过收入阶段',
-        commands: [
-            { type: 'ADVANCE_PHASE', playerId: '0', payload: {} },
-        ],
+        name: '先手首回合跳过收入阶段（自动推进）',
+        commands: [],
         expect: {
             turnPhase: 'main1',
             players: {
@@ -568,15 +565,13 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
     {
         name: '非先手收入阶段获得1CP与1张牌',
         commands: [
-            { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // upkeep -> main1 (跳过 income)
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // main1 -> offensiveRoll
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // offensiveRoll -> main2
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // main2 -> discard
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // discard -> upkeep (换人)
-            { type: 'ADVANCE_PHASE', playerId: '1', payload: {} }, // upkeep -> income
         ],
         expect: {
-            turnPhase: 'income',
+            turnPhase: 'main1',
             activePlayerId: '1',
             turnNumber: 2,
             players: {
@@ -591,7 +586,6 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
     {
         name: '掷骰次数上限为3',
         commands: [
-            { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // upkeep -> main1
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // main1 -> offensiveRoll
             { type: 'ROLL_DICE', playerId: '0', payload: {} },
             { type: 'ROLL_DICE', playerId: '0', payload: {} },
@@ -599,7 +593,7 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
             { type: 'ROLL_DICE', playerId: '0', payload: {} }, // 超过上限
         ],
         expect: {
-            errorAtStep: { step: 6, error: 'roll_limit_reached' },
+            errorAtStep: { step: 5, error: 'roll_limit_reached' },
             turnPhase: 'offensiveRoll',
             roll: { count: 3, limit: 3, diceCount: 5, confirmed: false },
         },
@@ -610,14 +604,13 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
             { type: 'DRAW_CARD', playerId: '0', payload: {} },
             { type: 'DRAW_CARD', playerId: '0', payload: {} },
             { type: 'DRAW_CARD', playerId: '0', payload: {} }, // 手牌 7 (>6)
-            { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // upkeep -> main1
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // main1 -> offensiveRoll
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // offensiveRoll -> main2
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // main2 -> discard
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} }, // discard -> 应被阻止
         ],
         expect: {
-            errorAtStep: { step: 8, error: 'cannot_advance_phase' },
+            errorAtStep: { step: 7, error: 'cannot_advance_phase' },
             turnPhase: 'discard',
             players: {
                 '0': {
@@ -642,7 +635,6 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
             cmd('DRAW_CARD', '0'), // meditation-2
 
             // 进入主阶段（先手首回合跳过收入）
-            cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
 
             // 先升到 II（花费 2 CP）
             cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
@@ -768,7 +760,7 @@ describe('王权骰铸流程测试', () => {
             expect(result.assertionErrors).toEqual([]);
         });
 
-        it('选角准备后自动进入 upkeep 阶段', () => {
+        it('选角准备后自动进入 main1 阶段（upkeep/income 自动推进）', () => {
             const playerIds: PlayerId[] = ['0', '1'];
             const pipelineConfig = {
                 domain: DiceThroneDomain,
@@ -799,8 +791,8 @@ describe('王权骰铸流程测试', () => {
             }
 
             expect(state.core.hostStarted).toBe(true);
-            expect(state.core.turnPhase).toBe('upkeep');
-            expect(state.sys.phase).toBe('upkeep');
+            expect(state.core.turnPhase).toBe('main1');
+            expect(state.sys.phase).toBe('main1');
         });
 
         it('响应窗口：对手持有任意骰子卡（roll）时应打开 afterRollConfirmed', () => {
@@ -816,7 +808,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -840,7 +831,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -864,7 +854,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -888,7 +877,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_CARD', '0', { cardId: 'card-palm-strike' }),
                 ],
             });
@@ -907,7 +895,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd(DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN, '0'),
                 ],
                 expect: {
@@ -928,7 +915,6 @@ describe('王权骰铸流程测试', () => {
                     '1': 'pyromancer',
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -958,7 +944,6 @@ describe('王权骰铸流程测试', () => {
                     '1': 'pyromancer',
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 ],
             });
@@ -976,13 +961,10 @@ describe('王权骰铸流程测试', () => {
                     '1': 'pyromancer',
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (player1)
-                    cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '1'), // income -> main1
                     cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll
                 ],
             });
@@ -1007,7 +989,7 @@ describe('王权骰铸流程测试', () => {
                 ],
                 expect: {
                     errorAtStep: { step: 1, error: 'not_enough_cp' },
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     players: {
                         '0': { cp: 1, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 1 } },
                     },
@@ -1027,7 +1009,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll (should skip to main2)
                 ],
                 expect: {
@@ -1054,7 +1035,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('USE_PURIFY', '0', { statusId: STATUS_IDS.KNOCKDOWN }),
                 ],
                 expect: {
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     players: {
                         '0': { tokens: { [TOKEN_IDS.PURIFY]: 0 }, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 0 } },
                     },
@@ -1078,7 +1059,7 @@ describe('王权骰铸流程测试', () => {
                 ],
                 expect: {
                     errorAtStep: { step: 1, error: 'no_status' },
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     players: {
                         '0': { tokens: { [TOKEN_IDS.PURIFY]: 1 }, statusEffects: { [STATUS_IDS.KNOCKDOWN]: 0 } },
                     },
@@ -1096,7 +1077,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '小顺可用和谐',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1115,7 +1095,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '大顺可用定水神拳',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1134,7 +1113,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '3个拳头可用拳法',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1153,7 +1131,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '4个莲花可用花开见佛',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1172,7 +1149,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '3个太极可用禅忘',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1191,7 +1167,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '3拳+1掌可用太极连环拳',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1210,7 +1185,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '3个掌可用雷霆一击',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1243,7 +1217,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '和谐命中后获得太极',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1281,7 +1254,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '定水神拳命中后获得太极+闪避',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1320,7 +1292,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '花开见佛命中后太极满值',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1360,7 +1331,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
@@ -1379,7 +1349,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '内心平静获得2太极',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_CARD', '0', { cardId: 'card-inner-peace' }),
                 ],
                 expect: {
@@ -1398,7 +1367,6 @@ describe('王权骰铸流程测试', () => {
                 name: '佛光普照多状态',
                 setup: createSetupWithHand(['card-buddha-light', 'card-enlightenment'], { cp: 2 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     // buddha-light 需要 3 CP，初始只有 2 CP，先卖卡获取 CP
                     cmd('SELL_CARD', '0', { cardId: 'card-enlightenment' }), // +1 CP, 总 3
                     cmd('PLAY_CARD', '0', { cardId: 'card-buddha-light' }),
@@ -1425,7 +1393,6 @@ describe('王权骰铸流程测试', () => {
                 name: '深思获得5太极',
                 setup: createSetupWithHand(['card-deep-thought', 'card-enlightenment'], { cp: 2 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     // deep-thought 需要 3 CP，初始只有 2 CP，先卖卡获取 CP
                     cmd('SELL_CARD', '0', { cardId: 'card-enlightenment' }), // +1 CP, 总 3
                     cmd('PLAY_CARD', '0', { cardId: 'card-deep-thought' }),
@@ -1451,7 +1418,6 @@ describe('王权骰铸流程测试', () => {
                 name: '掌击给对手倒地',
                 setup: createSetupWithHand(['card-palm-strike']),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-palm-strike' }),
                 ],
                 expect: {
@@ -1537,7 +1503,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('DRAW_CARD', '0'), // palm-strike
                     cmd('DRAW_CARD', '0'), // meditation-3
                     cmd('DRAW_CARD', '0'), // meditation-2
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
@@ -1574,7 +1539,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('DRAW_CARD', '0'), // lotus-bloom-2
                     cmd('DRAW_CARD', '0'), // mahayana-2
                     cmd('DRAW_CARD', '0'), // thrust-punch-2
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-thrust-punch-2', targetAbilityId: 'fist-technique' }),
                 ],
                 expect: {
@@ -1609,7 +1573,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('DRAW_CARD', '0'), // combo-punch-2
                     cmd('DRAW_CARD', '0'), // lotus-bloom-2
                     cmd('DRAW_CARD', '0'), // mahayana-2
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-mahayana-2', targetAbilityId: 'harmony' }),
                 ],
                 expect: {
@@ -1654,7 +1617,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('DRAW_CARD', '0'), // 11: lotus-bloom-2
                     cmd('DRAW_CARD', '0'), // 12: mahayana-2
                     cmd('DRAW_CARD', '0'), // 13: thrust-punch-2
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-thrust-punch-2', targetAbilityId: 'fist-technique' }),
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -1705,7 +1667,6 @@ describe('王权骰铸流程测试', () => {
                     cmd('DRAW_CARD', '0'), // 10: combo-punch-2
                     cmd('DRAW_CARD', '0'), // 11: lotus-bloom-2
                     cmd('DRAW_CARD', '0'), // 12: mahayana-2
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-mahayana-2', targetAbilityId: 'harmony' }),
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -1738,7 +1699,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '清修在防御阶段可用',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1777,7 +1737,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '清修防御结算获得太极并造成伤害',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1815,7 +1774,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '防御投掷确认后响应窗口排除防御方',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1847,7 +1805,6 @@ describe('王权骰铸流程测试', () => {
                 name: '防御阶段掉骰上限1',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
@@ -1856,7 +1813,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('ROLL_DICE', '1'), // 第二次应失败
                 ],
                 expect: {
-                    errorAtStep: { step: 8, error: 'roll_limit_reached' },
+                    errorAtStep: { step: 7, error: 'roll_limit_reached' },
                     turnPhase: 'defensiveRoll',
                     roll: { count: 1, limit: 1 },
                 },
@@ -1871,7 +1828,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '卖牌获得1CP',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('SELL_CARD', '0', { cardId: 'card-inner-peace' }),
                 ],
                 expect: {
@@ -1895,14 +1851,13 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '主要阶段卡在投掷阶段无法使用',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     // 在投掷阶段尝试使用 main 卡（enlightenment 是 main 卡）
                     cmd('PLAY_CARD', '0', { cardId: 'card-enlightenment' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 4, error: 'wrongPhaseForMain' },
+                    errorAtStep: { step: 3, error: 'wrongPhaseForMain' },
                     turnPhase: 'offensiveRoll',
                 },
             });
@@ -1915,12 +1870,11 @@ describe('王权骰铸流程测试', () => {
                 name: 'CP不足时无法打出卡牌',
                 setup: createSetupWithHand(['card-buddha-light'], { cp: INITIAL_CP }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     // buddha-light 需要 3 CP，初始只有 2 CP
                     cmd('PLAY_CARD', '0', { cardId: 'card-buddha-light' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 2, error: 'notEnoughCp' },
+                    errorAtStep: { step: 1, error: 'notEnoughCp' },
                     turnPhase: 'main1',
                     players: {
                         '0': { cp: INITIAL_CP }, // CP 未变
@@ -1936,14 +1890,13 @@ describe('王权骰铸流程测试', () => {
                 name: '升级卡在投掷阶段无法使用',
                 setup: createSetupWithHand(['card-meditation-2']),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     // 在投掷阶段尝试使用升级卡
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 4, error: 'wrongPhaseForUpgrade' },
+                    errorAtStep: { step: 3, error: 'wrongPhaseForUpgrade' },
                     turnPhase: 'offensiveRoll',
                 },
             });
@@ -1956,12 +1909,11 @@ describe('王权骰铸流程测试', () => {
                 name: '升级卡跳级使用',
                 setup: createSetupWithHand(['card-meditation-3']),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     // 尝试直接跳到 III 级（当前是 I 级）
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-3', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 2, error: 'upgradeCardSkipLevel' },
+                    errorAtStep: { step: 1, error: 'upgradeCardSkipLevel' },
                     turnPhase: 'main1',
                     players: {
                         '0': { abilityLevels: { meditation: 1 } }, // 等级未变
@@ -1977,12 +1929,11 @@ describe('王权骰铸流程测试', () => {
                 name: '投掷阶段卡在主要阶段无法使用',
                 setup: createSetupWithHand(['card-play-six']),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     // 在主要阶段尝试使用 roll 卡
                     cmd('PLAY_CARD', '0', { cardId: 'card-play-six' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 2, error: 'wrongPhaseForRoll' },
+                    errorAtStep: { step: 1, error: 'wrongPhaseForRoll' },
                     turnPhase: 'main1',
                 },
             });
@@ -2021,7 +1972,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '有太极时触发重掷交互',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -2064,7 +2014,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '重掷奖励骰并结算',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -2107,7 +2056,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '无太极时直接结算',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -2147,7 +2095,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '太极不足(1)时直接结算',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -2188,7 +2135,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '跳过重掷直接结算',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -2227,7 +2173,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '超过重掷次数限制',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -2240,7 +2185,7 @@ describe('王权骰铸流程测试', () => {
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 1 }),
                 ],
                 expect: {
-                    errorAtStep: { step: 11, error: 'bonus_reroll_limit_reached' },
+                    errorAtStep: { step: 10, error: 'bonus_reroll_limit_reached' },
                     pendingBonusDiceSettlement: {
                         sourceAbilityId: 'thunder-strike',
                         attackerId: '0',
@@ -2283,7 +2228,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '有太极时触发重掷交互',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -2332,7 +2276,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '重掷奖励骰并结算',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -2393,7 +2336,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '无太极时直接结算',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -2449,7 +2391,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '总和 >= 12 触发倒地',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -2498,7 +2439,6 @@ describe('王权骰铸流程测试', () => {
             const result = runner.run({
                 name: '多次重掷并结算',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-storm-assault-2', targetAbilityId: 'thunder-strike' }),
                     cmd('ADVANCE_PHASE', '0'), // -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
@@ -2549,7 +2489,6 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand(['card-play-six'], { cp: 10 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-play-six' }),
                     cmd('MODIFY_DIE', '0', { dieId: 0, newValue: 6 }),
@@ -2573,7 +2512,6 @@ describe('王权骰铸流程测试', () => {
                 name: '俺也一样 copy',
                 setup: createSetupWithHand(['card-me-too'], { cp: 10 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-me-too' }),
@@ -2600,7 +2538,6 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand(['card-surprise'], { cp: 10 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-surprise' }),
                     cmd('MODIFY_DIE', '0', { dieId: 2, newValue: 6 }),
@@ -2623,7 +2560,6 @@ describe('王权骰铸流程测试', () => {
                 name: '意不意外 any-2',
                 setup: createSetupWithHand(['card-unexpected'], { cp: 10 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-unexpected' }),
@@ -2649,7 +2585,6 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand(['card-flick'], { cp: 10 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-flick' }),
                     cmd('MODIFY_DIE', '0', { dieId: 0, newValue: 3 }),
@@ -2673,7 +2608,6 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand(['card-worthy-of-me'], { cp: 10 }),
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-worthy-of-me' }),
                     cmd('CONFIRM_INTERACTION', '0', { interactionId, selectedDiceIds: [0, 1] }),
@@ -2695,7 +2629,6 @@ describe('王权骰铸流程测试', () => {
                 name: '我又行了 reroll-5',
                 setup: createSetupWithHand(['card-i-can-again'], { cp: 10 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('PLAY_CARD', '0', { cardId: 'card-i-can-again' }),
@@ -2727,7 +2660,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -2790,7 +2722,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'), // 进攻方确认骰面
@@ -2844,7 +2775,6 @@ describe('王权骰铸流程测试', () => {
                     },
                 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'), // 进攻方确认骰面

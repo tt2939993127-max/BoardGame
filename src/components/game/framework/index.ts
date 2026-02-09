@@ -15,6 +15,8 @@ export { ResourceTraySkeleton } from './ResourceTraySkeleton';
 export { SpotlightSkeleton } from './SpotlightSkeleton';
 export { CharacterSelectionSkeleton } from './CharacterSelectionSkeleton';
 export type { CharacterSelectionSkeletonProps } from './CharacterSelectionSkeleton';
+export { TutorialSelectionGate } from './TutorialSelectionGate';
+export type { TutorialSelectionGateProps } from './TutorialSelectionGate';
 
 // 棋盘布局组件
 export { BoardLayoutEditor } from './BoardLayoutEditor';

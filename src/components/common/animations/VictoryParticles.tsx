@@ -1,7 +1,7 @@
 /**
  * VictoryParticles — 胜利彩带特效（Canvas 2D）
  *
- * 从底部中央向上喷射彩色粒子，模拟庆祝彩带效果。
+ * 全屏 UI 层庆祝效果（非棋盘俯视角），使用重力模拟彩带下落。
  * 基于自研 Canvas 粒子引擎，零外部依赖。
  */
 
@@ -24,18 +24,18 @@ const VICTORY_COLORS = ['#F59E0B', '#10B981', '#38BDF8', '#F472B6', '#FDE047', '
 
 const VICTORY_PRESET: ParticlePreset = {
   count: 70,
-  speed: { min: 3, max: 8 },
+  speed: { min: 4, max: 10 },
   size: { min: 2, max: 5 },
   life: { min: 1.0, max: 2.5 },
-  gravity: 0.8,
+  gravity: 1.2, // UI 层庆祝效果，使用重力模拟彩带下落
   shapes: ['circle', 'square', 'star'],
   rotate: true,
   opacityDecay: true,
   sizeDecay: false,
-  direction: 'top',
+  direction: 'top', // 向上喷射后下落
   glow: true,
   glowScale: 2,
-  drag: 0.99,
+  drag: 0.98, // 轻微空气阻力
   additive: true,
   turbulence: 0.6,
   turbulenceFreq: 1.5,
@@ -62,9 +62,9 @@ export function VictoryParticles({ active, className = '' }: VictoryParticlesPro
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const rect = container.getBoundingClientRect();
-    const cw = rect.width;
-    const ch = rect.height;
+    // 使用 offsetWidth/offsetHeight 获取 CSS 布局尺寸（不受父级 transform scale 影响）
+    const cw = container.offsetWidth;
+    const ch = container.offsetHeight;
 
     canvas.width = cw * dpr;
     canvas.height = ch * dpr;
@@ -72,8 +72,8 @@ export function VictoryParticles({ active, className = '' }: VictoryParticlesPro
     canvas.style.height = `${ch}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // 从底部中央喷射
-    particlesRef.current = spawnParticles(VICTORY_PRESET, rgbColors, cw / 2, ch * 0.65);
+    // 从顶部中央喷射（UI 层庆祝效果）
+    particlesRef.current = spawnParticles(VICTORY_PRESET, rgbColors, cw / 2, ch * 0.3);
 
     let lastTime = 0;
 

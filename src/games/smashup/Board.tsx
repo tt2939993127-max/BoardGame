@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { MatchState } from '../../engine/types';
 import type { SmashUpCore, BaseInPlay, CardInstance, MinionOnBase } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
+import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { getTotalEffectivePowerOnBase } from './domain/ongoingModifiers';
 import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText } from './data/cards';
 import type { ActionCardDef } from './domain/types';
@@ -24,6 +25,7 @@ import { CardPreview, registerCardAtlasSource } from '../../components/common/me
 import { AnimatePresence, motion } from 'framer-motion';
 import { loadCardAtlasConfig } from './ui/cardAtlas';
 import { SMASHUP_ATLAS_IDS } from './domain/ids';
+import { SMASH_UP_MANIFEST } from './manifest';
 import { HandArea } from './ui/HandArea';
 import { useGameEvents } from './ui/useGameEvents';
 import { SmashUpEffectsLayer } from './ui/BoardEffects';
@@ -33,6 +35,9 @@ import { getFactionMeta } from './ui/factionMeta';
 import { DeckDiscardZone } from './ui/DeckDiscardZone';
 import { SMASHUP_AUDIO_CONFIG } from './audio.config';
 import { useTutorialBridge, useTutorial } from '../../contexts/TutorialContext';
+import { useGameMode } from '../../contexts/GameModeContext';
+import { TutorialSelectionGate } from '../../components/game/framework';
+import { LoadingScreen } from '../../components/system/LoadingScreen';
 
 type Props = BoardProps<MatchState<SmashUpCore>>;
 
@@ -69,6 +74,7 @@ const PLAYER_CONFIG = [
 const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     const { t } = useTranslation('game-smashup');
     const core = G.core;
+    const gameMode = useGameMode();
     const phase = G.sys.phase;
     const currentPid = getCurrentPlayerId(core);
     const isMyTurn = playerID === currentPid;
@@ -90,6 +96,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     // 音效系统
     useGameAudio({
         config: SMASHUP_AUDIO_CONFIG,
+        gameId: SMASH_UP_MANIFEST.id,
         G: G.core,
         ctx: {
             currentPhase: phase,
@@ -104,7 +111,24 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
 
     // 教学系统集成
     useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
-    const { isActive: isTutorialActive } = useTutorial();
+    const { isActive: isTutorialActive, currentStep: tutorialStep } = useTutorial();
+    const isTutorialMode = gameMode?.mode === 'tutorial';
+
+    // 教学模式下的命令权限检查
+    const isTutorialCommandAllowed = useCallback((commandType: string): boolean => {
+        if (!isTutorialActive || !tutorialStep) return true;
+        // 系统命令不受限制
+        if (commandType.startsWith('SYS_')) return true;
+        // 有 allowedCommands 白名单时，只允许白名单内的命令
+        if (tutorialStep.allowedCommands && tutorialStep.allowedCommands.length > 0) {
+            return tutorialStep.allowedCommands.includes(commandType);
+        }
+        // 有 blockedCommands 黑名单时，阻止黑名单内的命令
+        if (tutorialStep.blockedCommands && tutorialStep.blockedCommands.length > 0) {
+            return !tutorialStep.blockedCommands.includes(commandType);
+        }
+        return true;
+    }, [isTutorialActive, tutorialStep]);
 
     // 基地 DOM 引用（用于力量浮字定位）
     const baseRefsMap = useRef<Map<number, HTMLElement>>(new Map());
@@ -173,9 +197,13 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
 
     // --- Handlers ---
     const handlePlayMinion = useCallback((cardUid: string, baseIndex: number) => {
+        if (!isTutorialCommandAllowed(SU_COMMANDS.PLAY_MINION)) {
+            playDeniedSound();
+            return;
+        }
         moves[SU_COMMANDS.PLAY_MINION]?.({ cardUid, baseIndex });
         setSelectedCardUid(null);
-    }, [moves]);
+    }, [moves, isTutorialCommandAllowed]);
 
     // VIEWING STATE
     const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' } | null>(null);
@@ -197,13 +225,20 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
             return;
         }
 
+        // 教学模式下检查命令权限
+        const commandType = card.type === 'action' ? SU_COMMANDS.PLAY_ACTION : SU_COMMANDS.PLAY_MINION;
+        if (!isTutorialCommandAllowed(commandType)) {
+            playDeniedSound();
+            return;
+        }
+
         // Normal play logic
         if (card.type === 'action') {
             moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid: card.uid });
         } else {
             setSelectedCardUid(curr => curr === card.uid ? null : card.uid);
         }
-    }, [isMyTurn, phase, moves]);
+    }, [isMyTurn, phase, moves, isTutorialCommandAllowed]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
         setViewingCard({ defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' });
@@ -213,21 +248,39 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
         setViewingCard({ defId, type: 'action' });
     }, []);
 
+    // 防御性检查：HMR 或 boardgame.io client 重建时 core 可能不完整
+    if (!core.turnOrder || !core.bases) {
+        return (
+            <LoadingScreen
+                description={t('ui.loading', { defaultValue: '加载中...' })}
+                className="bg-[#3e2723]"
+            />
+        );
+    }
+
     // EARLY RETURN: Faction Selection
     if (phase === 'factionSelect') {
         return (
-            <div className="relative w-full h-screen bg-[#3e2723] overflow-hidden font-sans select-none">
-                <div className="absolute inset-0 z-0 pointer-events-none opacity-40 mix-blend-multiply">
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')]" />
+            <TutorialSelectionGate
+                isTutorialMode={isTutorialMode}
+                isTutorialActive={isTutorialActive}
+                containerClassName="bg-[#3e2723]"
+                textClassName="text-lg"
+            >
+                <div className="relative w-full h-screen bg-[#3e2723] overflow-hidden font-sans select-none">
+                    <div className="absolute inset-0 z-0 pointer-events-none opacity-40 mix-blend-multiply">
+                        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')]" />
+                    </div>
+                    <FactionSelection core={core} moves={moves} playerID={playerID} />
                 </div>
-                <FactionSelection core={core} moves={moves} playerID={playerID} />
-            </div>
+            </TutorialSelectionGate>
         );
     }
 
     return (
         // BACKGROUND: A warm, dark wooden table texture. 
-        <div className="relative w-full h-screen bg-[#3e2723] overflow-hidden font-sans select-none">
+        <div className="relative w-full h-screen bg-[#3e2723] overflow-hidden font-sans select-none"
+        >
 
             {/* Table Texture Layer */}
             <div className="absolute inset-0 z-0 pointer-events-none opacity-40 mix-blend-multiply">
@@ -329,8 +382,19 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                             className="pointer-events-auto"
                         >
                             <button
-                                onClick={() => moves['ADVANCE_PHASE']?.()}
-                                className="group w-24 h-24 rounded-full bg-slate-900 border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center hover:scale-110 hover:rotate-3 transition-all active:scale-95 text-white relative overflow-hidden"
+                                onClick={() => {
+                                    if (!isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE)) {
+                                        playDeniedSound();
+                                        return;
+                                    }
+                                    moves['ADVANCE_PHASE']?.();
+                                }}
+                                disabled={!isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE)}
+                                className={`group w-24 h-24 rounded-full border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center transition-all text-white relative overflow-hidden ${
+                                    !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE)
+                                        ? 'bg-slate-600 opacity-50 cursor-not-allowed'
+                                        : 'bg-slate-900 hover:scale-110 hover:rotate-3 active:scale-95'
+                                }`}
                             >
                                 <div className="absolute inset-0 opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]" />
 
@@ -388,7 +452,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
             {/* Not a bar, but floating elements */}
             {
                 myPlayer && (
-                    <div className="absolute bottom-0 inset-x-0 h-[220px] z-30 pointer-events-none" data-tutorial-id="su-hand-area">
+                    <div className="absolute bottom-0 inset-x-0 h-[220px] z-30 pointer-events-none">
 
                         {/* Discard Overlay (Messy Pile) */}
                         {needDiscard && (
@@ -418,11 +482,12 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                             onCardSelect={handleCardClick}
                             isDiscardMode={needDiscard}
                             discardSelection={discardSelection}
-                            // If not my turn, hand is "put down" (lower opacity or stylized)
-                            // Even if not my turn, interaction is enabled for viewing. 
-                            // Visual feedback (shaking) is handled inside HandArea if we wanted to block it, 
-                            // but now we handle the click in the parent to show details.
-                            disableInteraction={false}
+                            // 教学模式下，当不允许打出随从和行动时禁用手牌交互（摇头反馈）
+                            disableInteraction={
+                                isTutorialActive &&
+                                !isTutorialCommandAllowed(SU_COMMANDS.PLAY_MINION) &&
+                                !isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION)
+                            }
                             onCardView={handleViewCardDetail}
                         />
 

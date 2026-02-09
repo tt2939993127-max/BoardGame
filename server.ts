@@ -1,5 +1,5 @@
 import 'dotenv/config'; // 加载 .env
-import type { Game } from 'boardgame.io';
+import type { Game, Server, State } from 'boardgame.io';
 import { createRequire } from 'module';
 import { Server as IOServer, Socket as IOSocket } from 'socket.io';
 import bodyParser from 'koa-bodyparser';
@@ -19,6 +19,7 @@ import { mongoStorage } from './src/server/storage/MongoStorage';
 import { hybridStorage } from './src/server/storage/HybridStorage';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
+import { hasOccupiedPlayers } from './src/server/matchOccupancy';
 import { registerOfflineInteractionAdjudication } from './src/server/offlineInteractionAdjudicator';
 import { buildUgcServerGames } from './src/server/ugcRegistration';
 
@@ -450,6 +451,54 @@ const recreateRequestStream = (ctx: any, body: unknown) => {
     ctx.req = newStream;
 };
 
+const resolveOwnerKeyFromRoom = (metadata?: Server.MatchData | null, state?: State | null): string | undefined => {
+    const setupDataFromMeta = (metadata?.setupData as { ownerKey?: string } | undefined) || undefined;
+    const setupDataFromState = (state?.G?.__setupData as { ownerKey?: string } | undefined) || undefined;
+    return setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey;
+};
+
+const isEmptyRoomByMetadata = (metadata?: Server.MatchData | null): boolean => {
+    if (!metadata?.players) return false;
+    const players = metadata.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean | null }>;
+    return !hasOccupiedPlayers(players);
+};
+
+const shouldCleanupMissingOwnerRoom = (metadata?: Server.MatchData | null, state?: State | null): boolean => {
+    if (!isEmptyRoomByMetadata(metadata)) return false;
+    const ownerKey = resolveOwnerKeyFromRoom(metadata, state);
+    return !ownerKey;
+};
+
+const cleanupMissingOwnerRoom = async (
+    matchID: string,
+    metadata?: Server.MatchData | null,
+    state?: State | null,
+    context?: string,
+    emitRemoval = false
+): Promise<boolean> => {
+    if (!shouldCleanupMissingOwnerRoom(metadata, state)) return false;
+
+    await db.wipe(matchID);
+
+    const indexedGame = matchGameIndex.get(matchID) ?? null;
+    const metaGame = resolveGameFromUrl(metadata?.gameName);
+    const game = indexedGame || metaGame;
+
+    if (emitRemoval && game) {
+        emitMatchEnded(game, matchID);
+    } else if (game) {
+        lobbyCacheByGame.get(game)?.delete(matchID);
+        matchGameIndex.delete(matchID);
+    } else {
+        matchGameIndex.delete(matchID);
+    }
+
+    matchSubscribers.delete(matchID);
+    rematchStateByMatch.delete(matchID);
+    console.warn(`[RoomCleanup] reason=missing_owner context=${context ?? 'unknown'} matchID=${matchID} game=${game ?? 'unknown'}`);
+    return true;
+};
+
 // 预处理 /join：校验密码
 const interceptJoinMiddleware = async (ctx: any, next: () => Promise<void>) => {
     if (ctx.method === 'POST') {
@@ -500,6 +549,13 @@ const interceptJoinMiddleware = async (ctx: any, next: () => Promise<void>) => {
                 jwtSecret: JWT_SECRET,
             });
             if (!guard.allowed) {
+                if (guard.reason === 'missing_owner') {
+                    const cleaned = await cleanupMissingOwnerRoom(matchID, roomData.metadata, roomData.state, 'join', true);
+                    if (cleaned) {
+                        ctx.throw(404, 'Match not found');
+                        return;
+                    }
+                }
                 console.warn(
                     `[JoinGuard] rejected matchID=${matchID} reason=${guard.reason ?? 'unknown'} ownerKey=${guard.ownerKey ?? ''} requesterKey=${guard.requesterKey ?? ''}`
                 );
@@ -563,10 +619,17 @@ app.use(async (ctx, next) => {
     if (ctx.method === 'POST') {
         const claimMatch = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/claim-seat$/);
         if (claimMatch) {
+            const gameNameFromUrl = claimMatch[1];
             const matchID = claimMatch[2];
             const parse = bodyParser();
             await (parse as any)(ctx, async () => undefined);
             await claimSeatHandler(ctx as any, matchID);
+            // claim-seat 成功后触发大厅广播，确保其他玩家能看到房间状态更新
+            if (ctx.status === 200 || !ctx.status) {
+                setTimeout(() => {
+                    void handleMatchJoined(matchID, gameNameFromUrl);
+                }, 50);
+            }
             return;
         }
         const match = ctx.path.match(/^\/games\/([^/]+)\/([^/]+)\/destroy$/);
@@ -755,6 +818,8 @@ const fetchLobbyMatch = async (matchID: string): Promise<LobbyMatch | null> => {
     try {
         const match = await db.fetch(matchID, { metadata: true, state: true });
         if (!match || !match.metadata) return null;
+        const cleaned = await cleanupMissingOwnerRoom(matchID, match.metadata, match.state, 'lobby:fetch');
+        if (cleaned) return null;
         // 从游戏状态 G.__setupData 中读取房间名与 owner 信息
         const setupData = match.state?.G?.__setupData as { roomName?: string; ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string } | undefined;
         const roomName = setupData?.roomName;
@@ -785,6 +850,8 @@ const fetchMatchesByGame = async (gameName: SupportedGame): Promise<LobbyMatch[]
         for (const matchID of matchIDs) {
             const match = await db.fetch(matchID, { metadata: true, state: true });
             if (!match || !match.metadata) continue;
+            const cleaned = await cleanupMissingOwnerRoom(matchID, match.metadata, match.state, `lobby:list:${gameName}`);
+            if (cleaned) continue;
             // 从游戏状态 G.__setupData 中读取房间名与 owner 信息
             const setupData = match.state?.G?.__setupData as { roomName?: string; ownerKey?: string; ownerType?: 'user' | 'guest'; password?: string } | undefined;
             const roomName = setupData?.roomName;
@@ -1139,14 +1206,10 @@ app.use(async (ctx, next) => {
 
     if (method === 'POST') {
         // 创建房间: POST /games/:name/create
+        // 注意：自定义创建中间件已在 interceptCreateMiddleware 中处理并触发 handleMatchCreated，
+        // 此处仅作为兜底（boardgame.io 默认路由走到这里时才触发）
         if (url.match(/^\/games\/[^/]+\/create$/)) {
-            console.log('[LobbyIO] 检测到房间创建');
-            const responseBody = ctx.body as { matchID?: string } | undefined;
-            const matchID = responseBody?.matchID;
-            const gameName = url.match(/^\/games\/([^/]+)\/create$/)?.[1];
-            setTimeout(() => {
-                void handleMatchCreated(matchID, gameName);
-            }, 100); // 短暂延迟确保数据已写入
+            // 自定义中间件已处理，跳过重复广播
         }
         // 加入房间: POST /games/:name/:matchID/join
         else if (url.match(/^\/games\/[^/]+\/[^/]+\/join$/)) {

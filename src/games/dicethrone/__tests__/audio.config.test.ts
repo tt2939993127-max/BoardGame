@@ -9,8 +9,8 @@ import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
 import { MONK_ABILITIES } from '../heroes/monk/abilities';
 import type { AudioEvent } from '../../../lib/audio/types';
 
-const CP_GAIN_KEY = 'fantasy.magic_sword_recharge_01';
-const CP_SPEND_KEY = 'fantasy.dark_sword_recharge';
+const CP_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
+const CP_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
 
 const ABILITY_SFX_KEYS = {
     transcendence: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst',
@@ -95,6 +95,46 @@ describe('DiceThrone 音效配置', () => {
 
             const result = resolver(event, mockContext);
             expect(result).toBeNull();
+        });
+    });
+
+    describe('BGM 配置', () => {
+        it('应有 11 首 BGM（5 normal + 3 normal intense + 1 battle + 2 battle intense）', () => {
+            expect(DICETHRONE_AUDIO_CONFIG.bgm).toHaveLength(11);
+        });
+
+        it('BGM 不应与 SW 撞曲（禁止 Dragon Dance / Shields and Spears）', () => {
+            const keys = DICETHRONE_AUDIO_CONFIG.bgm!.map(b => b.key);
+            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main');
+            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main');
+        });
+
+        it('应有 bgmGroups（normal + battle）', () => {
+            expect(DICETHRONE_AUDIO_CONFIG.bgmGroups).toBeDefined();
+            expect(DICETHRONE_AUDIO_CONFIG.bgmGroups!.normal).toBeDefined();
+            expect(DICETHRONE_AUDIO_CONFIG.bgmGroups!.battle).toBeDefined();
+            expect(DICETHRONE_AUDIO_CONFIG.bgmGroups!.normal.length).toBeGreaterThanOrEqual(3);
+            expect(DICETHRONE_AUDIO_CONFIG.bgmGroups!.battle.length).toBeGreaterThanOrEqual(3);
+        });
+
+        it('bgmRules 应按阶段切换 group', () => {
+            const rules = DICETHRONE_AUDIO_CONFIG.bgmRules ?? [];
+            const battleRule = rules.find(r => r.when({ G: {}, ctx: { currentPhase: 'offensiveRoll' }, meta: {} } as any));
+            const normalRule = rules.find(r => r.when({ G: {}, ctx: { currentPhase: 'upkeep' }, meta: {} } as any));
+            expect(battleRule?.group).toBe('battle');
+            expect(normalRule?.group).toBe('normal');
+        });
+
+        it('所有 BGM key 必须存在于 registry', () => {
+            const registryRaw = require('fs').readFileSync(
+                require('path').join(process.cwd(), 'public', 'assets', 'common', 'audio', 'registry.json'),
+                'utf-8'
+            );
+            const registry = JSON.parse(registryRaw) as { entries: Array<{ key: string }> };
+            const registryMap = new Map(registry.entries.map(e => [e.key, e]));
+            for (const bgm of DICETHRONE_AUDIO_CONFIG.bgm!) {
+                expect(registryMap.has(bgm.key), `BGM key 不在 registry: ${bgm.key}`).toBe(true);
+            }
         });
     });
 

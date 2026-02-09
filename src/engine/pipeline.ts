@@ -25,13 +25,6 @@ import type {
 import { DEFAULT_TUTORIAL_STATE } from './types';
 import type { EngineSystem, GameSystemsConfig } from './systems/types';
 
-const isDev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
-const logDev = (...args: unknown[]) => {
-    if (isDev) {
-        console.log(...args);
-    }
-};
-
 function sortSystems<TCore>(systems: EngineSystem<TCore>[]): EngineSystem<TCore>[] {
     // 稳定排序：priority 越小越先执行；priority 相同按传入顺序
     return systems
@@ -122,7 +115,6 @@ export function createInitialSystemState(
     // 让每个系统初始化自己的状态（按 priority 排序）
     for (const system of sortedSystems) {
         if (system.setup) {
-            logDev(`[Pipeline] Calling setup for system: ${system.id || system.name || 'unknown'}`);
             const partial = system.setup(playerIds);
             sys = { ...sys, ...partial };
         }
@@ -193,6 +185,7 @@ export function executePipeline<
 ): PipelineResult<TCore> {
     const { domain } = config;
     const systems = sortSystems(config.systems);
+    const MAX_AFTER_EVENTS_ROUNDS = 10;
 
     let currentState = state;
     const allEvents: GameEvent[] = [];
@@ -254,34 +247,49 @@ export function executePipeline<
 
             ctx.events = [...preCommandEvents];
 
-            // 执行 afterEvents hooks
-            for (const s of systems) {
-                if (!s.afterEvents) continue;
-                const r = s.afterEvents(ctx);
-                if (r?.state) {
-                    currentState = r.state;
-                    ctx.state = currentState;
-                }
-                if (r?.events && r.events.length > 0) {
-                    allEvents.push(...r.events);
-                    systemEventsToReduce.push(...r.events);
-                    ctx.events = [...ctx.events, ...r.events];
-                }
-            }
+            // 执行 afterEvents hooks（多轮迭代）
+            // 当某个系统（如 FlowSystem）在 afterEvents 中产生新事件时，
+            // 需要重新执行一轮，让优先级更高的系统（如 TutorialSystem）能看到这些事件。
+            // 关键：每轮只传递上一轮产生的事件，避免旧事件重复触发（如 BONUS_DICE_SETTLED 导致二次推进）。
+            for (let round = 0; round < MAX_AFTER_EVENTS_ROUNDS; round++) {
+                ctx.afterEventsRound = round;
+                let hasNewEvents = false;
+                const roundEvents: GameEvent[] = [];
 
-            if (systemEventsToReduce.length > 0) {
-                // 注意：SYS_PHASE_CHANGED 需要传递给 reducer 以同步 core.turnPhase
-                const reducibleEvents = systemEventsToReduce.filter((e) => 
-                    !e.type.startsWith('SYS_') || e.type === 'SYS_PHASE_CHANGED'
-                );
-                if (reducibleEvents.length > 0) {
-                    let core = currentState.core;
-                    for (const ev of reducibleEvents) {
-                        core = domain.reduce(core, ev as unknown as TEvent);
+                for (const s of systems) {
+                    if (!s.afterEvents) continue;
+                    const r = s.afterEvents(ctx);
+                    if (r?.state) {
+                        currentState = r.state;
+                        ctx.state = currentState;
                     }
-                    currentState = { ...currentState, core };
-                    ctx.state = currentState;
+                    if (r?.events && r.events.length > 0) {
+                        allEvents.push(...r.events);
+                        systemEventsToReduce.push(...r.events);
+                        roundEvents.push(...r.events);
+                        hasNewEvents = true;
+                    }
                 }
+
+                // 本轮产生的事件需要先 reduce 进 core，再进入下一轮
+                if (roundEvents.length > 0) {
+                    const reducible = roundEvents.filter((e) =>
+                        !e.type.startsWith('SYS_') || e.type === 'SYS_PHASE_CHANGED'
+                    );
+                    if (reducible.length > 0) {
+                        let core = currentState.core;
+                        for (const ev of reducible) {
+                            core = domain.reduce(core, ev as unknown as TEvent);
+                        }
+                        currentState = { ...currentState, core };
+                        ctx.state = currentState;
+                    }
+                }
+
+                if (!hasNewEvents) break;
+
+                // 下一轮只看本轮产生的新事件，防止旧事件重复触发系统逻辑
+                ctx.events = roundEvents;
             }
 
             return {
@@ -344,39 +352,52 @@ export function executePipeline<
     currentState = { ...currentState, core };
     ctx.state = currentState;
 
-    // 5. 执行 Systems.afterEvents hooks -> 更新 state.sys
-    for (const system of systems) {
-        if (system.afterEvents) {
-            const result = system.afterEvents(ctx);
-            if (result) {
-                if (result.state) {
-                    currentState = result.state;
-                    ctx.state = currentState;
-                }
-                if (result.events) {
-                    allEvents.push(...result.events);
-                    systemEventsToReduce.push(...result.events);
-                    if (result.events.length > 0) {
-                        ctx.events = [...ctx.events, ...result.events];
+    // 5. 执行 Systems.afterEvents hooks -> 更新 state.sys（多轮迭代）
+    // 关键：每轮只传递上一轮产生的事件，避免旧事件重复触发（如 BONUS_DICE_SETTLED 导致二次推进）。
+    for (let round = 0; round < MAX_AFTER_EVENTS_ROUNDS; round++) {
+        ctx.afterEventsRound = round;
+        let hasNewEvents = false;
+        const roundEvents: GameEvent[] = [];
+
+        for (const system of systems) {
+            if (system.afterEvents) {
+                const result = system.afterEvents(ctx);
+                if (result) {
+                    if (result.state) {
+                        currentState = result.state;
+                        ctx.state = currentState;
+                    }
+                    if (result.events) {
+                        allEvents.push(...result.events);
+                        systemEventsToReduce.push(...result.events);
+                        roundEvents.push(...result.events);
+                        if (result.events.length > 0) {
+                            hasNewEvents = true;
+                        }
                     }
                 }
             }
         }
-    }
 
-    if (systemEventsToReduce.length > 0) {
-        // 注意：SYS_PHASE_CHANGED 需要传递给 reducer 以同步 core.turnPhase
-        const reducibleEvents = systemEventsToReduce.filter((event) => 
-            !event.type.startsWith('SYS_') || event.type === 'SYS_PHASE_CHANGED'
-        );
-        if (reducibleEvents.length > 0) {
-            let core = currentState.core;
-            for (const event of reducibleEvents) {
-                core = domain.reduce(core, event as unknown as TEvent);
+        // 本轮产生的事件需要先 reduce 进 core，再进入下一轮
+        if (roundEvents.length > 0) {
+            const reducible = roundEvents.filter((event) =>
+                !event.type.startsWith('SYS_') || event.type === 'SYS_PHASE_CHANGED'
+            );
+            if (reducible.length > 0) {
+                let core = currentState.core;
+                for (const event of reducible) {
+                    core = domain.reduce(core, event as unknown as TEvent);
+                }
+                currentState = { ...currentState, core };
+                ctx.state = currentState;
             }
-            currentState = { ...currentState, core };
-            ctx.state = currentState;
         }
+
+        if (!hasNewEvents) break;
+
+        // 下一轮只看本轮产生的新事件，防止旧事件重复触发系统逻辑
+        ctx.events = roundEvents;
     }
 
     return {

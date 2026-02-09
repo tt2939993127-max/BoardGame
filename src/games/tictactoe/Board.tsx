@@ -13,6 +13,7 @@ import { useGameMode } from '../../contexts/GameModeContext';
 import { motion } from 'framer-motion';
 import { useGameAudio, playSound, playDeniedSound } from '../../lib/audio/useGameAudio';
 import { TIC_TAC_TOE_AUDIO_CONFIG } from './audio.config';
+import { TIC_TAC_TOE_MANIFEST } from './manifest';
 
 type Props = BoardProps<MatchState<TicTacToeCore>>;
 
@@ -169,6 +170,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
     // 音效系统
     useGameAudio({
         config: TIC_TAC_TOE_AUDIO_CONFIG,
+        gameId: TIC_TAC_TOE_MANIFEST.id,
         G: G.core,
         ctx,
         eventEntries: G.sys.eventStream.entries,

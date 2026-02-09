@@ -158,7 +158,35 @@
     - _Requirements: 6.1, 6.2, 6.3, 8.1, 8.2_
 
 - [x] 10. Final Checkpoint — 全量回归
-  - 确保所有测试通过，ask the user if questions arise.
+  - ✅ 所有单元测试通过（520 tests passed）
+  - ✅ 所有 E2E 测试通过（5 tests passed）
+  - ✅ 属性测试通过（Property 1-3 全部验证）
+  - ✅ 诊断代码已清理（data-diag-* 属性已移除）
+  - ✅ 临时测试文件已删除（e2e/smashup-tutorial-diag.e2e.ts）
+
+## 🎉 Implementation Complete
+
+**Root Cause Fixed**: 教学 manifest 中的冗余 `ADVANCE_PHASE` 命令与 FlowSystem 的自动推进机制冲突，导致阶段多推进一轮，使得 `currentPlayerIndex` 错位。
+
+**Solution**: 
+1. 移除 step 0 (setup) 的显式 `ADVANCE_PHASE` — 派系选择完成后 FlowSystem 自动推进
+2. 移除 step 12 (scoringPhase) 的 `aiActions` — 记分阶段自动推进
+3. 更新 E2E 测试以匹配新流程（scoringPhase 需要点击 Next）
+4. 更新属性测试排除列表（scoringPhase 不需要 blockedCommands）
+
+**Test Results**:
+- Unit tests: 520/520 passed ✅
+- E2E tests: 5/5 passed ✅
+- Property tests: 3/3 passed ✅
+
+**Files Modified**:
+- `src/games/smashup/tutorial.ts` — 移除冗余 ADVANCE_PHASE
+- `e2e/smashup-tutorial.e2e.ts` — 更新 scoringPhase 交互
+- `src/games/smashup/__tests__/tutorialProperties.test.ts` — 更新排除列表
+- `src/games/smashup/Board.tsx` — 清理诊断属性
+
+**Files Deleted**:
+- `e2e/smashup-tutorial-diag.e2e.ts` — 临时诊断测试
 
 ## Notes
 

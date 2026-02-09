@@ -27,14 +27,12 @@ export const AudioControlSection: React.FC<AudioControlSectionProps> = ({ isDark
         setBgmVolume,
         playlist,
         currentBgm,
-        playBgm
+        switchBgm
     } = useAudio();
 
     const handleSwitchBgm = () => {
         if (playlist.length === 0) return;
-        const currentIndex = playlist.findIndex(track => track.key === currentBgm);
-        const nextIndex = (currentIndex + 1) % playlist.length;
-        playBgm(playlist[nextIndex].key);
+        switchBgm();
     };
 
     const currentTrack = playlist.find(track => track.key === currentBgm);

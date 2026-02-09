@@ -58,6 +58,8 @@ export type ViewCommandType =
     | 'USE_ABILITY'         // 使用技能
     | 'RESPOND'             // 响应（如闪避、格挡）
     | 'PASS'                // 跳过
+    | 'BID'                 // 叫分
+    | 'CALL_LANDLORD'       // 抢地主
     | 'CUSTOM';             // 自定义命令
 
 /**

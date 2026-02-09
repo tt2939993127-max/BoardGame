@@ -67,9 +67,7 @@ function tryCmd(
 
 /** 创建已推进到 main1 的状态 */
 function setupToMain1(random: RandomFn = fixedRandom): MatchState<DiceThroneCore> {
-    let state = createInitializedState(['0', '1'], random);
-    state = execCmd(state, cmd('ADVANCE_PHASE', '0')); // upkeep → income (auto → main1)
-    return state;
+    return createInitializedState(['0', '1'], random);
 }
 
 // ============================================================================

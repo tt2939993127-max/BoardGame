@@ -1,11 +1,14 @@
 import { AUTH_API_URL } from '../config/server';
 import i18n from '../lib/i18n';
 
+export type BgmSelections = Record<string, Record<string, string>>;
+
 export type AudioSettings = {
     muted: boolean;
     masterVolume: number;
     sfxVolume: number;
     bgmVolume: number;
+    bgmSelections?: BgmSelections;
 };
 
 export type AudioSettingsResponse = {

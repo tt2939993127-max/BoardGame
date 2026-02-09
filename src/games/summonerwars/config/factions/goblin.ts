@@ -344,7 +344,7 @@ export function createGoblinDeck(): {
       { unit: { ...slinger, id: 'goblin-start-slinger' }, position: { row: 1, col: 4 } },       // ▲ 部落投石手
       { unit: { ...beastRider, id: 'goblin-start-rider' }, position: { row: 2, col: 2 } },     // ■ 野兽骑手
     ],
-    startingGate: { ...STRUCTURE_CARDS_GOBLIN[0], id: 'goblin-start-gate' },
+    startingGate: { ...STRUCTURE_CARDS_GOBLIN[0], id: `${STRUCTURE_CARDS_GOBLIN[0].id}-0` },
     startingGatePosition: { row: 1, col: 3 },  // 起始城门位置
     deck,
   };

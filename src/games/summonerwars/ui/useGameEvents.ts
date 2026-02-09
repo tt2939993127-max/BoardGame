@@ -5,13 +5,14 @@
  * 遵循 lastSeenEventId 模式，首次挂载跳过历史事件
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MatchState } from '../../../engine/types';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import type { EventStreamEntry, MatchState } from '../../../engine/types';
 import type { SummonerWarsCore, PlayerId, CellCoord, UnitCard, StructureCard } from '../domain/types';
 import { SW_EVENTS } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
 import type { DestroyEffectData } from './DestroyEffect';
 import type { DiceFace } from '../config/dice';
+import { getDestroySpriteConfig } from './spriteHelpers';
 
 // ============================================================================
 // 类型定义
@@ -34,13 +35,14 @@ export interface PendingAttack {
   damages: Array<{ position: CellCoord; damage: number }>;
 }
 
-/** 死亡残影 */
-export interface DeathGhost {
+/** 临时可视缓存（死亡动画前保留本体） */
+export interface DyingEntity {
   id: string;
   position: CellCoord;
-  card: UnitCard | StructureCard;
   owner: PlayerId;
   type: 'unit' | 'structure';
+  atlasId: string;
+  frameIndex: number;
 }
 
 /** 技能模式状态 */
@@ -78,6 +80,46 @@ export interface AfterAttackAbilityModeState {
   sourcePosition: CellCoord;
 }
 
+interface EventStreamDelta {
+  newEntries: EventStreamEntry[];
+  nextLastSeenId: number;
+  shouldReset: boolean;
+}
+
+export function computeEventStreamDelta(
+  entries: EventStreamEntry[],
+  lastSeenEventId: number
+): EventStreamDelta {
+  if (entries.length === 0) {
+    return {
+      newEntries: [],
+      nextLastSeenId: lastSeenEventId > -1 ? -1 : lastSeenEventId,
+      shouldReset: lastSeenEventId > -1,
+    };
+  }
+
+  const lastEntryId = entries[entries.length - 1].id;
+  if (lastSeenEventId > -1 && lastEntryId < lastSeenEventId) {
+    return {
+      newEntries: entries,
+      nextLastSeenId: lastEntryId,
+      shouldReset: true,
+    };
+  }
+
+  const newEntries = lastSeenEventId < 0
+    ? entries
+    : entries.filter(entry => entry.id > lastSeenEventId);
+
+  return {
+    newEntries,
+    nextLastSeenId: newEntries.length > 0
+      ? newEntries[newEntries.length - 1].id
+      : lastSeenEventId,
+    shouldReset: false,
+  };
+}
+
 // ============================================================================
 // Hook 参数
 // ============================================================================
@@ -89,6 +131,8 @@ interface UseGameEventsParams {
   pushDestroyEffect: (data: Omit<DestroyEffectData, 'id'>) => void;
   pushBoardEffect: (data: { type: string; position: CellCoord; sourcePosition?: CellCoord; intensity?: string; damageAmount?: number; attackType?: 'melee' | 'ranged' }) => void;
   triggerShake: (intensity: string, type: string) => void;
+  /** 摧毁特效触发时的音效回调 */
+  onDestroySound?: (type: 'unit' | 'structure', isGate?: boolean) => void;
 }
 
 // ============================================================================
@@ -97,13 +141,13 @@ interface UseGameEventsParams {
 
 export function useGameEvents({
   G, core, myPlayerId,
-  pushDestroyEffect, pushBoardEffect, triggerShake,
+  pushDestroyEffect, pushBoardEffect, triggerShake, onDestroySound,
 }: UseGameEventsParams) {
   // 骰子结果状态
   const [diceResult, setDiceResult] = useState<DiceResultState | null>(null);
 
-  // 死亡残影（攻击动画期间保留）
-  const [deathGhosts, setDeathGhosts] = useState<DeathGhost[]>([]);
+  // 临时本体缓存（攻击动画期间保留）
+  const [dyingEntities, setDyingEntities] = useState<DyingEntity[]>([]);
 
   // 技能模式
   const [abilityMode, setAbilityMode] = useState<AbilityModeState | null>(null);
@@ -120,26 +164,26 @@ export function useGameEvents({
   // 待播放的攻击效果队列
   const pendingAttackRef = useRef<PendingAttack | null>(null);
 
-  // 待延迟播放的摧毁效果
-  const pendingDestroyRef = useRef<DestroyEffectData[]>([]);
+  // 待延迟播放的摧毁效果（含 isGate 标记用于音效区分）
+  const pendingDestroyRef = useRef<(DestroyEffectData & { isGate?: boolean })[]>([]);
+  // 摧毁音效回调 ref（避免 useCallback 依赖变化）
+  const onDestroySoundRef = useRef(onDestroySound);
+  onDestroySoundRef.current = onDestroySound;
 
   // 事件流诊断日志控制
   const eventStreamLogRef = useRef(0);
   const eventBatchLogRef = useRef(0);
-  const pendingDestroyLogRef = useRef(0);
   const EVENT_STREAM_WARN = 180;
   const EVENT_STREAM_STEP = 10;
   const EVENT_BATCH_WARN = 20;
   const EVENT_BATCH_STEP = 10;
-  const PENDING_DESTROY_WARN = 6;
-  const PENDING_DESTROY_STEP = 4;
 
   // 追踪已处理的事件流 ID
   const lastSeenEventId = useRef<number>(-1);
   const isFirstMount = useRef(true);
 
   // 监听事件流
-  useEffect(() => {
+  useLayoutEffect(() => {
     const entries = getEventStreamEntries(G);
 
     if (entries.length >= EVENT_STREAM_WARN && entries.length >= eventStreamLogRef.current + EVENT_STREAM_STEP) {
@@ -156,16 +200,25 @@ export function useGameEvents({
       return;
     }
 
-    const newEntries = lastSeenEventId.current < 0
-      ? entries
-      : entries.filter(e => e.id > lastSeenEventId.current);
+    const { newEntries, nextLastSeenId, shouldReset } = computeEventStreamDelta(
+      entries,
+      lastSeenEventId.current
+    );
+
+    if (shouldReset) {
+      pendingAttackRef.current = null;
+      pendingDestroyRef.current = [];
+      setDiceResult(null);
+      setDyingEntities([]);
+    }
+
+    lastSeenEventId.current = nextLastSeenId;
 
     if (newEntries.length === 0) return;
     if (newEntries.length >= EVENT_BATCH_WARN && newEntries.length >= eventBatchLogRef.current + EVENT_BATCH_STEP) {
       eventBatchLogRef.current = newEntries.length;
       console.warn(`[SW-EVENT] event=batch size=${newEntries.length}`);
     }
-    lastSeenEventId.current = newEntries[newEntries.length - 1].id;
 
     for (const entry of newEntries) {
       const event = entry.event;
@@ -186,10 +239,6 @@ export function useGameEvents({
         };
         const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
         const isOpponentAttack = attackerUnit ? attackerUnit.owner !== myPlayerId : false;
-
-        if (pendingAttackRef.current) {
-          console.warn('[SW-EVENT] event=attack_overlap note=pending_attack_exists');
-        }
 
         pendingAttackRef.current = {
           attacker: p.attacker, target: p.target,
@@ -309,41 +358,64 @@ export function useGameEvents({
     }
   }, [G, core, myPlayerId, pushDestroyEffect, pushBoardEffect, triggerShake]);
 
+  /** 查找被摧毁的卡牌（弃牌堆/手牌兜底） */
+  const resolveDestroyedCard = (owner: PlayerId, cardId?: string) => {
+    if (!cardId) return undefined;
+    const player = core.players[owner];
+    if (!player) return undefined;
+    return (
+      player.discard.find(c => c.id === cardId)
+      ?? player.hand.find(c => c.id === cardId)
+    );
+  };
+
   /** 处理摧毁事件（单位/建筑通用） */
   function handleDestroyEvent(payload: Record<string, unknown>, type: 'unit' | 'structure') {
     const position = payload.position as CellCoord;
     const cardName = payload.cardName as string;
     const cardId = payload.cardId as string | undefined;
     const owner = (payload.owner as PlayerId) ?? (myPlayerId as PlayerId);
+    const destroyedCard = resolveDestroyedCard(owner, cardId);
 
-    const destroyEffect: DestroyEffectData = { id: '', position, cardName, type };
+    // 检测是否为传送门（用于音效区分）
+    const isGate = type === 'structure' && destroyedCard?.cardType === 'structure' && !!(destroyedCard as StructureCard).isGate;
+
+    // 查找弃牌堆中的卡牌，获取精灵图信息用于碎裂特效
+    let atlasId: string | undefined;
+    let frameIndex: number | undefined;
+    if (destroyedCard && (destroyedCard.cardType === 'unit' || destroyedCard.cardType === 'structure')) {
+      const sprite = getDestroySpriteConfig(destroyedCard as UnitCard | StructureCard);
+      atlasId = sprite.atlasId;
+      frameIndex = sprite.frameIndex;
+    }
+
+    const destroyEffect: DestroyEffectData = { id: '', position, cardName, type, atlasId, frameIndex };
     const pending = pendingAttackRef.current;
-    const shouldDelay = pending
-      && pending.target.row === position.row
-      && pending.target.col === position.col;
+    // 延迟条件：攻击目标位置 或 任何受伤位置（含溅射/反击等）
+    const shouldDelay = pending && (
+      (pending.target.row === position.row && pending.target.col === position.col)
+      || pending.damages.some(d => d.position.row === position.row && d.position.col === position.col)
+    );
 
     if (shouldDelay) {
-      pendingDestroyRef.current.push(destroyEffect);
-      if (pendingDestroyRef.current.length >= PENDING_DESTROY_WARN
-        && pendingDestroyRef.current.length >= pendingDestroyLogRef.current + PENDING_DESTROY_STEP) {
-        pendingDestroyLogRef.current = pendingDestroyRef.current.length;
-        console.warn(`[SW-EVENT] event=pending_destroy_backlog size=${pendingDestroyRef.current.length}`);
-      }
-      if (cardId) {
-        const discardedCard = core.players[owner]?.discard.find(c => c.id === cardId);
-        if (discardedCard && (discardedCard.cardType === 'unit' || discardedCard.cardType === 'structure')) {
-          setDeathGhosts(prev => ([
-            ...prev,
-            {
-              id: `ghost-${cardId}-${Date.now()}`,
-              position, card: discardedCard as UnitCard | StructureCard,
-              owner, type,
-            },
-          ]));
-        }
+      pendingDestroyRef.current.push({ ...destroyEffect, isGate });
+      if (atlasId !== undefined && frameIndex !== undefined) {
+        setDyingEntities(prev => ([
+          ...prev,
+          {
+            id: `dying-${cardId ?? 'unknown'}-${Date.now()}`,
+            position,
+            owner,
+            type,
+            atlasId,
+            frameIndex,
+          },
+        ]));
       }
     } else {
-      pushDestroyEffect({ position, cardName, type });
+      pushDestroyEffect({ position, cardName, type, atlasId, frameIndex });
+      // 非延迟摧毁：立即播放音效
+      onDestroySoundRef.current?.(type, isGate);
     }
   }
 
@@ -358,21 +430,25 @@ export function useGameEvents({
     pendingAttackRef.current = null;
   }, []);
 
-  // 播放延迟的摧毁特效
+  // 播放延迟的摧毁特效（含音效）
   const flushPendingDestroys = useCallback(() => {
     if (pendingDestroyRef.current.length > 0) {
       for (const effect of pendingDestroyRef.current) {
-        pushDestroyEffect({ position: effect.position, cardName: effect.cardName, type: effect.type });
+        pushDestroyEffect({
+          position: effect.position, cardName: effect.cardName, type: effect.type,
+          atlasId: effect.atlasId, frameIndex: effect.frameIndex,
+        });
+        // 死亡/摧毁音效（传送门 vs 城墙区分）
+        onDestroySoundRef.current?.(effect.type, effect.isGate);
       }
       pendingDestroyRef.current = [];
-      pendingDestroyLogRef.current = 0;
-      setDeathGhosts([]);
+      setDyingEntities([]);
     }
   }, [pushDestroyEffect]);
 
   return {
     diceResult,
-    deathGhosts,
+    dyingEntities,
     abilityMode,
     setAbilityMode,
     soulTransferMode,

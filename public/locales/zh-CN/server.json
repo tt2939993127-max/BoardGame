@@ -95,6 +95,7 @@
       "userNotFound": "用户不存在",
       "matchNotFound": "对局不存在",
       "roomNotFound": "房间不存在",
+      "ugcPackageNotFound": "UGC 包不存在",
       "missingBanReason": "请输入封禁原因",
       "cannotBanAdmin": "不能封禁管理员账号",
       "cannotDeleteAdmin": "不能删除管理员账号"

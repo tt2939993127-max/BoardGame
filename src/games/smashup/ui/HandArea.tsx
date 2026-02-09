@@ -65,30 +65,30 @@ const HandCard: React.FC<HandCardProps> = ({
     // Max overlap at 10 cards
     const spacingVw = total <= 7 ? 0.8 : -1 * ((total - 7) * 0.8);
 
-    const zIndex = isSelected || isDiscardSelected ? 100 : (isHovered ? 50 : index);
+    // zIndex 用 CSS hover 提升，避免 state 变化触发 layout 重算导致抽搐
+    const baseZIndex = isSelected || isDiscardSelected ? 100 : index;
 
     return (
         <motion.div
-            layout
-            layoutId={card.uid}
             className={`
                 relative flex-shrink-0 origin-bottom cursor-pointer pointer-events-auto
+                hover:!z-50
             `}
             style={{
                 width: `${CARD_WIDTH_VW}vw`,
                 aspectRatio: `${CARD_ASPECT_RATIO}`,
                 marginLeft: index === 0 ? 0 : `${spacingVw}vw`,
-                zIndex
+                zIndex: baseZIndex
             }}
             initial={{ y: 200, opacity: 0, scale: 0.8 }}
             animate={{
-                y: isSelected ? `-${SELECTED_Y_LIFT_VW}vw` : '0',
+                y: isSelected ? `-${SELECTED_Y_LIFT_VW}vw` : (isHovered ? '-1.5vw' : '0'),
                 scale: isSelected ? 1.15 : 1,
-                rotate: isShaking ? [0, -6, 6, -4, 4, 0] : (isHovered || isSelected ? 0 : rotationSeed),
+                rotate: isShaking ? [0, -6, 6, -4, 4, 0] : (isSelected ? 0 : rotationSeed),
                 opacity: 1
             }}
             exit={{ y: 200, opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-            transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
             onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
             onClick={() => {
@@ -191,7 +191,7 @@ export const HandArea: React.FC<Props> = ({
             className="absolute bottom-4 left-0 right-0 h-[20vh] flex flex-col justify-end items-center pointer-events-none z-40"
             data-testid="su-hand-area"
         >
-            <div className="flex items-end justify-center px-4 max-w-[90vw] perspective-[1000px]">
+            <div className="flex items-end justify-center px-4 max-w-[90vw] perspective-[1000px]" data-tutorial-id="su-hand-area">
                 <AnimatePresence>
                     {hand.map((card, i) => (
                         <HandCard

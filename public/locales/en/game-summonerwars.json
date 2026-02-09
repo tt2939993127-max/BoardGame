@@ -3,7 +3,6 @@
   "subtitle": "Conquer the Battlefields of Itharia",
   "description": "Summoner Wars is a fast-paced, tactical 2-player game. Players take on the role of Summoners, leading their faction to conquer the war-torn world of Itharia through the power of mysterious Summoning Stones.",
   "players": "2 Players",
-  
   "factionSelection": {
     "title": "Choose Your Faction",
     "subtitle": "Each summoner commands a unique army and tactics",
@@ -14,9 +13,12 @@
     "ready": "Ready",
     "waiting": "Waiting for others...",
     "start": "Start Game",
-    "waitAll": "Waiting for all players"
+    "waitAll": "Waiting for all players",
+    "customDeck": "Custom Deck",
+    "clickToBuild": "Click to Build",
+    "customDeckLabel": "Custom Deck",
+    "customDeckSummoner": "Summoner: {{name}}"
   },
-  
   "factions": {
     "necromancer": "Fallen Kingdom",
     "trickster": "Trickster Clan",
@@ -25,7 +27,6 @@
     "frost": "Frost Dwarves",
     "barbaric": "Barbarian Horde"
   },
-  
   "actions": {
     "closePreview": "Close Preview",
     "close": "Close",
@@ -61,20 +62,41 @@
   "ui": {
     "mapAlt": "Battlefield Map",
     "opponentActiveEvents": "Opponent Active Effects",
-    "activeEvents": "Active Effects"
+    "activeEvents": "Active Effects",
+    "attached": "Attached",
+    "click_to_magnify": "Click to Magnify"
   },
   "phaseTracker": {
     "turn": "Turn {{count}}"
   },
   "phaseDesc": {
-    "summon": ["Summon units from hand", "Place adjacent to your gate"],
-    "move": ["Move up to 3 units", "Each unit moves up to 2 spaces", "No diagonal movement"],
-    "build": ["Build gates or structures", "Place in back 3 rows or adjacent to your summoner"],
-    "attack": ["Attack with up to 3 units", "Melee: adjacent targets", "Ranged: up to 3 spaces in a straight line"],
-    "magic": ["Discard cards to gain magic", "+1 magic per card"],
-    "draw": ["Draw up to 5 cards", "No draw if deck is empty"]
+    "summon": [
+      "Summon units from hand",
+      "Place adjacent to your gate"
+    ],
+    "move": [
+      "Move up to 3 units",
+      "Each unit moves up to 2 spaces",
+      "No diagonal movement"
+    ],
+    "build": [
+      "Build gates or structures",
+      "Place in back 3 rows or adjacent to your summoner"
+    ],
+    "attack": [
+      "Attack with up to 3 units",
+      "Melee: adjacent targets",
+      "Ranged: up to 3 spaces in a straight line"
+    ],
+    "magic": [
+      "Discard cards to gain magic",
+      "+1 magic per card"
+    ],
+    "draw": [
+      "Draw up to 5 cards",
+      "No draw if deck is empty"
+    ]
   },
-  
   "tutorial": {
     "title": "Summoner Wars Tutorial",
     "welcome": "Welcome to Summoner Wars! In this game, you will play as a powerful Summoner, commanding your army to conquer the battlefield.",
@@ -116,7 +138,6 @@
       "finish": "Congratulations on completing the tutorial!\n\nYou've learned the 6 turn phases, basic summoning/moving/attacking, event card casting, and how to use Summoner abilities.\n\nNow go challenge a real opponent!"
     }
   },
-  
   "phase": {
     "summon": "Summon",
     "move": "Move",
@@ -125,7 +146,6 @@
     "magic": "Magic",
     "draw": "Draw"
   },
-  
   "hint": {
     "factionSelect": "Choose a faction and get ready",
     "summon": "Summon units from hand adjacent to gates",
@@ -136,15 +156,69 @@
     "draw": "Draw up to 5 cards",
     "waitingOpponent": "Waiting for opponent..."
   },
-  
   "action": {
     "summon": "Summon",
     "move": "Move",
     "attack": "Attack",
     "castSpell": "Cast Spell",
     "endPhase": "End Phase",
+    "confirmEndPhase": "{{count}} unit(s) can still act. End?",
     "endTurn": "End Turn",
     "discardSelected": "Discard +{{count}}"
+  },
+  "deckBuilder": {
+    "title": "Custom Deck Builder",
+    "factions": "Factions",
+    "cardPool": "Card Pool",
+    "myDeck": "My Deck",
+    "count": "Total",
+    "selectFactionFirst": "Select a faction to view cards",
+    "summoners": "Summoners",
+    "champions": "Champions",
+    "commons": "Commons",
+    "units": "Units",
+    "events": "Events",
+    "structures": "Structures",
+    "emptyState": "Start picking cards to build your legendary deck",
+    "save": "Save Deck",
+    "saving": "Saving...",
+    "load": "Load",
+    "loading": "Loading...",
+    "delete": "Delete",
+    "close": "Close",
+    "placeholderName": "Deck Name...",
+    "invalidDeck": "Invalid Deck",
+    "savedDecks": "Saved Decks",
+    "noSavedDecks": "No saved decks yet",
+    "startingCards": "Starting Cards",
+    "buildCards": "Build Cards",
+    "beta": "BETA",
+    "useDeck": "Use This Deck",
+    "confirmDeck": "Confirm",
+    "resetDeck": "Reset Deck",
+    "saveSuccess": "Deck saved successfully",
+    "deleteSuccess": "Deck deleted",
+    "saveFailed": "Save failed, please try again",
+    "loadFailed": "Load failed, please try again",
+    "deleteFailed": "Delete failed, please try again",
+    "loginRequired": "Please log in to use the custom deck feature",
+    "deckLimitReached": "Deck limit reached ({{max}}). Please delete an old deck first",
+    "selectSummonerFirst": "Please select a summoner first",
+    "symbolMismatch": "Card symbols do not match the summoner",
+    "validation": {
+      "needSummoner": "Need 1 Summoner",
+      "needGate10hp": "Need 1 ten-life Gate",
+      "needGate5hp": "Need 3 five-life Gates",
+      "needStartingUnits": "Need 2 Starting Units",
+      "needEpicEvents": "Need 2 Epic Events",
+      "needStandardEvents": "Need 6 Standard Events",
+      "needChampions": "Need 3 Champions",
+      "needCommons": "Need 16 Commons",
+      "symbolMismatch": "Card \"{{name}}\" does not match summoner symbols",
+      "maxStandardEvents": "Max 2 copies of the same Standard Event",
+      "maxChampions": "Max 1 copy of the same Champion",
+      "maxCommons": "Max 4 copies of the same Common"
+    }
   },
   "cardSelector": {
     "reviveUndead": "Revive Undead: Select an undead unit from the discard pile",
@@ -175,7 +249,12 @@
     "insufficientMagic": "Not enough magic! Need {{cost}}, you have {{current}}",
     "eventPhaseOnly": "This event can only be played during {{phase}}",
     "onlyUnitInSummon": "Only unit cards can be played in the Summon phase",
-    "onlyStructureInBuild": "Only structure cards can be played in the Build phase"
+    "onlyStructureInBuild": "Only structure cards can be played in the Build phase",
+    "holyArrowUnitOnly": "Holy Arrow only allows discarding unit cards",
+    "noSameNameDiscard": "Cannot discard units with the same name",
+    "noDuplicateNameDiscard": "Cannot discard multiple units with the same name",
+    "holyArrowAtLeastOne": "Holy Arrow requires discarding at least one unit card",
+    "healingNeedsDiscard": "Healing requires discarding a card"
   },
   "destroyEffect": {
     "destroyed": "{{name}} destroyed!"
@@ -253,22 +332,27 @@
     "holyArrow": "✨ Holy Arrow (Discard for magic and strength)",
     "healing": "✨ Healing (Discard to convert attack to healing)"
   },
-  
   "status": {
     "yourTurn": "Your Turn",
     "opponentTurn": "Opponent's Turn",
     "waiting": "Waiting..."
   },
-  
   "log": {
     "unit_moved": "Unit moved",
     "unit_attacked": "Attack hit {{hits}} times",
     "phase_ended": "Phase ended"
   },
-  
   "result": {
     "victory": "Victory!",
     "defeat": "Defeat",
     "summonerDefeated": "Summoner Defeated"
+  },
+  "interaction": {
+    "cannotAttackThere": "Cannot attack that target",
+    "outOfRange": "Target is out of attack range",
+    "notInLine": "Ranged attacks must be in a straight line",
+    "cannotMoveThere": "Cannot move there",
+    "cannotSummonThere": "Cannot summon there",
+    "cannotBuildThere": "Cannot build there"
   }
 }

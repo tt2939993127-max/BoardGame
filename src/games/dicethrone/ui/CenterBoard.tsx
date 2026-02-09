@@ -1,7 +1,9 @@
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { getLocalizedAssetPath } from '../../../core';
 import { AbilityOverlays } from './AbilityOverlays';
+import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
 
 export interface CenterBoardProps {
@@ -21,6 +23,8 @@ export interface CenterBoardProps {
     characterId?: string;
     locale?: string;
     onMagnifyImage: (image: string) => void;
+    /** ref 转发给 AbilityOverlays，供调试面板调用保存布局 */
+    abilityOverlaysRef?: React.Ref<AbilityOverlaysHandle>;
 }
 
 export const CenterBoard = ({
@@ -40,6 +44,7 @@ export const CenterBoard = ({
     characterId = 'monk',
     locale,
     onMagnifyImage,
+    abilityOverlaysRef,
 }: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
 
@@ -60,6 +65,7 @@ export const CenterBoard = ({
                         alt={t('imageAlt.playerBoard')}
                     />
                     <AbilityOverlays
+                        ref={abilityOverlaysRef}
                         isEditing={isLayoutEditing && isSelfView}
                         availableAbilityIds={availableAbilityIds}
                         canSelect={canSelectAbility}

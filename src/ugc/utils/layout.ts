@@ -88,13 +88,26 @@ export function migrateLayoutComponents(components: unknown[]): unknown[] {
     // 确保基本字段存在
     const migrated = { ...comp } as Record<string, unknown>;
 
-    if (!migrated.anchor) {
+    const hasAnchor = typeof migrated.anchor === 'object' && migrated.anchor !== null;
+    const hasPivot = typeof migrated.pivot === 'object' && migrated.pivot !== null;
+    const hasOffset = typeof migrated.offset === 'object' && migrated.offset !== null;
+    const legacyX = typeof migrated.x === 'number' ? migrated.x : undefined;
+    const legacyY = typeof migrated.y === 'number' ? migrated.y : undefined;
+
+    if (!hasAnchor && !hasPivot && !hasOffset && (legacyX !== undefined || legacyY !== undefined)) {
+      migrated.anchor = { x: 0, y: 0 };
+      migrated.pivot = { x: 0, y: 0 };
+      migrated.offset = { x: legacyX ?? 0, y: legacyY ?? 0 };
+      return migrated;
+    }
+
+    if (!hasAnchor) {
       migrated.anchor = { x: 0.5, y: 0.5 };
     }
-    if (!migrated.pivot) {
+    if (!hasPivot) {
       migrated.pivot = { x: 0.5, y: 0.5 };
     }
-    if (!migrated.offset) {
+    if (!hasOffset) {
       migrated.offset = { x: 0, y: 0 };
     }
 

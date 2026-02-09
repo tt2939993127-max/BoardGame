@@ -115,8 +115,9 @@ export function getStructureAt(state: SummonerWarsCore, coord: CellCoord): Board
   return getCell(state, coord)?.structure;
 }
 
-/** 检查格子是否为空 */
+/** 检查格子是否为空（越界坐标返回 false） */
 export function isCellEmpty(state: SummonerWarsCore, coord: CellCoord): boolean {
+  if (!isValidCoord(coord)) return false;
   const cell = getCell(state, coord);
   return !cell?.unit && !cell?.structure;
 }

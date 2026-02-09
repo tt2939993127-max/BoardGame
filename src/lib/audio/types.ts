@@ -46,6 +46,8 @@ export interface BgmDefinition {
     category?: AudioCategory;
 }
 
+export type BgmGroupId = 'normal' | 'battle' | (string & {});
+
 export interface AudioEvent {
     type: string;
     /** 事件级音效 key（优先级最高） */
@@ -73,6 +75,7 @@ export interface BgmRule<
 > {
     when: (context: AudioRuntimeContext<G, Ctx, Meta>) => boolean;
     key: string;
+    group?: BgmGroupId;
 }
 
 export interface AudioStateTrigger<
@@ -93,6 +96,8 @@ export interface GameAudioConfig {
     sounds?: Record<SoundKey, SoundDefinition>;
     // BGM 定义列表
     bgm?: BgmDefinition[];
+    // BGM 分组（用于按阶段切换）
+    bgmGroups?: Record<BgmGroupId, SoundKey[]>;
     // 事件类型 -> 音效 key
     eventSoundMap?: Record<string, SoundKey>;
     // 事件解析（用于复杂逻辑）
@@ -103,6 +108,12 @@ export interface GameAudioConfig {
     stateTriggers?: Array<AudioStateTrigger>;
     // 日志事件选择器（从原始 entry 提取 AudioEvent）
     eventSelector?: (entry: unknown) => AudioEvent | null | undefined;
+    /**
+     * 关键音效列表（进入游戏后立即预加载）
+     * 这些音效会在 registry 加载完成后立即创建 Howl 实例并下载，
+     * 消除首次播放延迟。建议只放 5-15 个"第一回合就会触发"的高频音效。
+     */
+    criticalSounds?: SoundKey[];
 }
 
 // 音频上下文状态

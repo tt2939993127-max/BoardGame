@@ -16,6 +16,7 @@ export default defineConfig({
             'src/core/**/__tests__/**/*.test.{ts,tsx}',
             'src/components/**/__tests__/**/*.test.{ts,tsx}',
             'src/api/**/__tests__/**/*.test.{ts,tsx}',
+            'src/hooks/**/__tests__/**/*.test.{ts,tsx}',
             'src/lib/**/__tests__/**/*.test.{ts,tsx}',
             'src/games/**/__tests__/**/*.test.{ts,tsx}',
             'src/engine/**/__tests__/**/*.test.{ts,tsx}',

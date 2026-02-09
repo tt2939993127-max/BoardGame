@@ -5,20 +5,77 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { AudioEvent } from '../../../lib/audio/types';
-import { SUMMONER_WARS_AUDIO_CONFIG } from '../audio.config';
+import {
+    COMBAT_STRUCTURE_DAMAGE_KEY,
+    COMBAT_STRUCTURE_DESTROY_KEY,
+    COMBAT_UNIT_DESTROY_KEY,
+    resolveDamageSound,
+    resolveMeleeAttackSound,
+    resolveRangedAttackSound,
+    resolveStructureDestroySound,
+    SUMMONER_WARS_AUDIO_CONFIG,
+} from '../audio.config';
 import { SW_EVENTS } from '../domain/types';
 import { abilityRegistry } from '../domain/abilities';
 
 const BGM_NORMAL_KEY = 'bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main';
 const BGM_BATTLE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main';
+const BGM_CORSAIR_KEY = 'bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main';
+const BGM_LONELY_BARD_KEY = 'bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main';
+const BGM_CORSAIR_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_intensity_2';
+const BGM_LONELY_BARD_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_intensity_2';
+const BGM_LUMINESCE_KEY = 'bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_main';
+const BGM_LUMINESCE_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_intensity_2';
+const BGM_WIND_CHIME_KEY = 'bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_main';
+const BGM_WIND_CHIME_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_intensity_2';
 const STINGER_WIN_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win';
 const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose';
 
-const MAGIC_GAIN_KEY = 'fantasy.magic_sword_recharge_01';
-const MAGIC_SPEND_KEY = 'fantasy.dark_sword_recharge';
+const MAGIC_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
+const MAGIC_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
 const SUMMON_KEY = 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a';
-const MOVE_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001';
+const MOVE_FALLBACK_KEY = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.armor_movement_h';
+const FACTION_MOVE_KEYS: Record<string, string[]> = {
+    necromancer: [
+        'monster.general.khron_studio_monster_library_vol_4_assets.skeleton.skeletons_footstep.feetcrea_skeletons_footstep_01',
+        'monster.general.khron_studio_monster_library_vol_4_assets.skeleton.skeletons_footstep.feetcrea_skeletons_footstep_02',
+        'monster.general.khron_studio_monster_library_vol_4_assets.skeleton.skeletons_footstep.feetcrea_skeletons_footstep_03',
+        'monster.general.khron_studio_monster_library_vol_4_assets.skeleton.skeletons_footstep.feetcrea_skeletons_footstep_04',
+    ],
+    goblin: [
+        'monster.general.khron_studio_monster_library_vol_3_assets.goblin.goblin_footstep.feetcrea_goblin_footstep_01',
+        'monster.general.khron_studio_monster_library_vol_3_assets.goblin.goblin_footstep.feetcrea_goblin_footstep_02',
+        'monster.general.khron_studio_monster_library_vol_3_assets.goblin.goblin_footstep.feetcrea_goblin_footstep_03',
+        'monster.general.khron_studio_monster_library_vol_3_assets.goblin.goblin_footstep.feetcrea_goblin_footstep_04',
+    ],
+    paladin: [
+        'monster.general.khron_studio_monster_library_vol_3_assets.orc.orc_footstep_with_armour.creahmn_orc_footstep_with_armour_01',
+        'monster.general.khron_studio_monster_library_vol_3_assets.orc.orc_footstep_with_armour.creahmn_orc_footstep_with_armour_02',
+        'monster.general.khron_studio_monster_library_vol_3_assets.orc.orc_footstep_with_armour.creahmn_orc_footstep_with_armour_03',
+        'monster.general.khron_studio_monster_library_vol_3_assets.orc.orc_footstep_with_armour.creahmn_orc_footstep_with_armour_04',
+    ],
+    barbaric: [
+        'monster.general.khron_studio_monster_library_vol_3_assets.troll.troll_footstep.feetcrea_troll_footstep_01',
+        'monster.general.khron_studio_monster_library_vol_3_assets.troll.troll_footstep.feetcrea_troll_footstep_02',
+        'monster.general.khron_studio_monster_library_vol_3_assets.troll.troll_footstep.feetcrea_troll_footstep_03',
+        'monster.general.khron_studio_monster_library_vol_3_assets.troll.troll_footstep.feetcrea_troll_footstep_04',
+    ],
+};
+const ALL_MOVE_KEYS = [
+    MOVE_FALLBACK_KEY,
+    ...Object.values(FACTION_MOVE_KEYS).flat(),
+];
 const BUILD_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
+const GATE_BUILD_KEYS = [
+    'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_01_krst',
+    'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_02_krst',
+    'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_03_krst',
+];
+const GATE_DESTROY_KEYS = [
+    'magic.general.spells_variations_vol_1.close_temporal_rift_summoning.magspel_close_temporal_rift_summoning_01_krst',
+    'magic.general.spells_variations_vol_1.close_temporal_rift_summoning.magspel_close_temporal_rift_summoning_02_krst',
+    'magic.general.spells_variations_vol_1.close_temporal_rift_summoning.magspel_close_temporal_rift_summoning_03_krst',
+];
 const CARD_DRAW_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_take_001';
 const CARD_DISCARD_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001';
 const EVENT_PLAY_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_magic_deck_001';
@@ -27,6 +84,7 @@ const DAMAGE_LIGHT_KEY = 'combat.general.fight_fury_vol_2.versatile_punch_hit.fg
 const DAMAGE_HEAVY_KEY = 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst';
 const UNIT_DESTROY_KEY = 'combat.general.fight_fury_vol_2.body_hitting_the_ground_with_blood.fghtbf_body_hitting_the_ground_with_blood_01_krst';
 const STRUCTURE_DAMAGE_KEY = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.shield_impact_a';
+const STRUCTURE_DESTROY_KEY = 'magic.general.spells_variations_vol_2.stonecrash_impact.magelem_stonecrash_impact_01_krst_none';
 const MAGIC_SHOCK_KEY = 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_shock';
 const HEAL_KEY = 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_light';
 const HEAL_MODE_KEY = 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_ward';
@@ -95,7 +153,7 @@ describe('Summoner Wars 音效配置', () => {
         expect(resolver({ type: SW_EVENTS.PLAYER_READY } as AudioEvent, mockContext)).toBe(POSITIVE_SIGNAL_KEY);
         expect(resolver({ type: SW_EVENTS.HOST_STARTED } as AudioEvent, mockContext)).toBe(UPDATE_CHIME_KEY);
         expect(resolver({ type: SW_EVENTS.UNIT_SUMMONED } as AudioEvent, mockContext)).toBe(SUMMON_KEY);
-        expect(resolver({ type: SW_EVENTS.UNIT_MOVED } as AudioEvent, mockContext)).toBe(MOVE_KEY);
+        expect(resolver({ type: SW_EVENTS.UNIT_MOVED } as AudioEvent, mockContext)).toBe(MOVE_FALLBACK_KEY);
         expect(resolver({ type: SW_EVENTS.STRUCTURE_BUILT } as AudioEvent, mockContext)).toBe(BUILD_KEY);
         expect(resolver({ type: SW_EVENTS.CARD_DRAWN } as AudioEvent, mockContext)).toBe(CARD_DRAW_KEY);
         expect(resolver({ type: SW_EVENTS.CARD_DISCARDED } as AudioEvent, mockContext)).toBe(CARD_DISCARD_KEY);
@@ -104,18 +162,43 @@ describe('Summoner Wars 音效配置', () => {
         expect(resolver({ type: SW_EVENTS.HEALING_MODE_SET } as AudioEvent, mockContext)).toBe(HEAL_MODE_KEY);
     });
 
+    it('应区分传送门与城墙的建造/摧毁音效', () => {
+        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
+        if (!resolver) throw new Error('eventSoundResolver 未定义');
+
+        // 城墙建造 → 放置音
+        const wallBuild = resolver({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: false } } } as AudioEvent, mockContext);
+        expect(wallBuild).toBe(BUILD_KEY);
+
+        // 传送门建造 → 时空裂隙打开音
+        const gateBuild = resolver({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: true } } } as AudioEvent, mockContext);
+        expect(GATE_BUILD_KEYS).toContain(gateBuild);
+
+        // 城墙摧毁 → 石块崩碎
+        const wallDestroy = resolveStructureDestroySound(false);
+        expect(wallDestroy).toBe(STRUCTURE_DESTROY_KEY);
+
+        // 传送门摧毁 → 时空裂隙关闭音
+        const gateDestroy = resolveStructureDestroySound(true);
+        expect(GATE_DESTROY_KEYS).toContain(gateDestroy);
+    });
+
     it('应解析伤害与治疗音效', () => {
         const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
         if (!resolver) throw new Error('eventSoundResolver 未定义');
 
-        const light = resolver({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 1 } } as AudioEvent, mockContext);
-        const heavy = resolver({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 3 } } as AudioEvent, mockContext);
+        const light = resolveDamageSound(1);
+        const heavy = resolveDamageSound(3);
         expect(light).toBe(DAMAGE_LIGHT_KEY);
         expect(heavy).toBe(DAMAGE_HEAVY_KEY);
+        expect(resolver({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 1 } } as AudioEvent, mockContext)).toBeUndefined();
         expect(resolver({ type: SW_EVENTS.UNIT_HEALED } as AudioEvent, mockContext)).toBe(HEAL_KEY);
         expect(resolver({ type: SW_EVENTS.STRUCTURE_HEALED } as AudioEvent, mockContext)).toBe(HEAL_KEY);
-        expect(resolver({ type: SW_EVENTS.STRUCTURE_DAMAGED } as AudioEvent, mockContext)).toBe(STRUCTURE_DAMAGE_KEY);
-        expect(resolver({ type: SW_EVENTS.UNIT_DESTROYED } as AudioEvent, mockContext)).toBe(UNIT_DESTROY_KEY);
+        expect(resolver({ type: SW_EVENTS.STRUCTURE_DAMAGED } as AudioEvent, mockContext)).toBeUndefined();
+        expect(resolver({ type: SW_EVENTS.UNIT_DESTROYED } as AudioEvent, mockContext)).toBeUndefined();
+        expect(COMBAT_STRUCTURE_DAMAGE_KEY).toBe(STRUCTURE_DAMAGE_KEY);
+        expect(COMBAT_UNIT_DESTROY_KEY).toBe(UNIT_DESTROY_KEY);
+        expect(COMBAT_STRUCTURE_DESTROY_KEY).toBe(STRUCTURE_DESTROY_KEY);
     });
 
     it('应解析魔力变化音效', () => {
@@ -132,10 +215,11 @@ describe('Summoner Wars 音效配置', () => {
         const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
         if (!resolver) throw new Error('eventSoundResolver 未定义');
 
-        const meleeKey = resolver({ type: SW_EVENTS.UNIT_ATTACKED } as AudioEvent, mockContext);
+        expect(resolver({ type: SW_EVENTS.UNIT_ATTACKED } as AudioEvent, mockContext)).toBeUndefined();
+        const meleeKey = resolveMeleeAttackSound();
         expect([...MELEE_LIGHT_KEYS, ...MELEE_HEAVY_KEYS]).toContain(meleeKey);
 
-        const rangedKey = resolver({ type: SW_EVENTS.UNIT_ATTACKED, payload: { attackType: 'ranged' } } as AudioEvent, mockContext);
+        const rangedKey = resolveRangedAttackSound();
         expect(RANGED_ATTACK_KEYS).toContain(rangedKey);
 
         const moveKey = resolver({ type: SW_EVENTS.UNIT_PUSHED } as AudioEvent, mockContext);
@@ -176,6 +260,14 @@ describe('Summoner Wars 音效配置', () => {
         expect(normalKey).toBe(BGM_NORMAL_KEY);
     });
 
+    it('应定义 BGM 分组', () => {
+        const groups = SUMMONER_WARS_AUDIO_CONFIG.bgmGroups ?? {};
+        expect(groups.normal).toBeDefined();
+        expect(groups.battle).toBeDefined();
+        expect(groups.normal).toContain(BGM_NORMAL_KEY);
+        expect(groups.battle).toContain(BGM_BATTLE_KEY);
+    });
+
     it('游戏结束应触发胜负音效', () => {
         const trigger = SUMMONER_WARS_AUDIO_CONFIG.stateTriggers?.[0];
         if (!trigger) throw new Error('stateTriggers 未定义');
@@ -193,13 +285,23 @@ describe('Summoner Wars 音效配置', () => {
         const keys = [
             BGM_NORMAL_KEY,
             BGM_BATTLE_KEY,
+            BGM_CORSAIR_KEY,
+            BGM_LONELY_BARD_KEY,
+            BGM_CORSAIR_INTENSE_KEY,
+            BGM_LONELY_BARD_INTENSE_KEY,
+            BGM_LUMINESCE_KEY,
+            BGM_LUMINESCE_INTENSE_KEY,
+            BGM_WIND_CHIME_KEY,
+            BGM_WIND_CHIME_INTENSE_KEY,
             STINGER_WIN_KEY,
             STINGER_LOSE_KEY,
             MAGIC_GAIN_KEY,
             MAGIC_SPEND_KEY,
             SUMMON_KEY,
-            MOVE_KEY,
+            ...ALL_MOVE_KEYS,
             BUILD_KEY,
+            ...GATE_BUILD_KEYS,
+            ...GATE_DESTROY_KEYS,
             CARD_DRAW_KEY,
             CARD_DISCARD_KEY,
             EVENT_PLAY_KEY,
@@ -208,6 +310,7 @@ describe('Summoner Wars 音效配置', () => {
             DAMAGE_HEAVY_KEY,
             UNIT_DESTROY_KEY,
             STRUCTURE_DAMAGE_KEY,
+            STRUCTURE_DESTROY_KEY,
             MAGIC_SHOCK_KEY,
             HEAL_KEY,
             HEAL_MODE_KEY,

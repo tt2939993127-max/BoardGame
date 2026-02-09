@@ -309,7 +309,7 @@ const ensureCardInHand = async (page: Page, cardId: string, playerId = '0') => {
 };
 
 const dragCardUp = async (page: Page, cardId: string, distance = 220) => {
-    const card = page.locator(`[data-card-id="${cardId}"]`).first();
+    const card = page.locator(`[data-card-key^="${cardId}-"]`).first();
     await expect(card).toBeVisible({ timeout: 15000 });
     const box = await card.boundingBox();
     if (!box) {
@@ -394,7 +394,7 @@ const waitForRoomReady = async (page: Page, timeout = 45000) => {
             .catch(() => false);
         if (hasSelection || hasCharacterCard) return;
         const hasHandCard = await page
-            .locator('[data-card-id]')
+            .locator('[data-card-key]')
             .first()
             .isVisible({ timeout: 500 })
             .catch(() => false);
@@ -414,8 +414,8 @@ const assertHandCardsVisible = async (page: Page, expectedCount: number, label: 
     const handArea = page.locator('[data-tutorial-id="hand-area"]');
     await expect(handArea, `[${label}] 手牌区域未显示`).toBeVisible();
 
-    // data-card-id 元素不在 hand-area 容器内，需全局查询
-    const handCards = page.locator('[data-card-id]');
+    // data-card-key 元素不在 hand-area 容器内，需全局查询
+    const handCards = page.locator('[data-card-key]');
 
     // 等待手牌加载，如果为空则等待一段时间
     let attempts = 0;
@@ -493,14 +493,15 @@ const createRoomViaAPI = async (page: Page): Promise<string | null> => {
             document.cookie = `bg_guest_id=${encodeURIComponent(id)}; path=/; SameSite=Lax`;
         }, guestId);
 
-        const { matchID } = await lobbyClient.createMatch('dicethrone', {
-            numPlayers: 2,
-            setupData: {
+        const { matchID } = await lobbyClient.createMatch(
+            'dicethrone',
+            2,
+            {
                 guestId,
                 ownerKey: `guest:${guestId}`,
                 ownerType: 'guest',
             }
-        });
+        );
         console.log(`[API] Created room ${matchID}`);
 
         // 认领房主席位 (playerID=0) - 使用 claimSeat API
@@ -658,12 +659,12 @@ guestChar: string,
                 .isVisible({ timeout: 500 })
                 .catch(() => false);
             const hostHandVisible = await hostPage
-                .locator('[data-card-id]')
+                .locator('[data-card-key]')
                 .first()
                 .isVisible({ timeout: 500 })
                 .catch(() => false);
             const guestHandVisible = await guestPage
-                .locator('[data-card-id]')
+                .locator('[data-card-key]')
                 .first()
                 .isVisible({ timeout: 500 })
                 .catch(() => false);

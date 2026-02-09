@@ -8,7 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS } from '../domain/types';
 import type { MinionReturnedEvent, VpAwardedEvent, SmashUpEvent, SmashUpCore, CardsDiscardedEvent, CardsDrawnEvent, MinionCardDef } from '../domain/types';
-import { setPromptContinuation, buildBaseTargetOptions, getMinionPower } from '../domain/abilityHelpers';
+import { setPromptContinuation, buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower } from '../domain/abilityHelpers';
 import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getBaseDef, getCardDef } from '../data/cards';
 
@@ -30,50 +30,67 @@ export function registerAlienAbilities(): void {
     registerAbility('alien_scout', 'onPlay', alienScout);
 }
 
-/** 外星霸主 onPlay：将一个随从返回拥有者手牌（MVP：自动选本基地力量最高的对手随从） */
+/** 外星霸主 onPlay：将一个随从返回拥有者手牌 */
 function alienSupremeOverlord(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
-    // 选本基地力量最高的对手随从
-    const targets = base.minions
-        .filter(m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid)
-        .sort((a, b) => getMinionPower(ctx.state, b, ctx.baseIndex) - getMinionPower(ctx.state, a, ctx.baseIndex));
-    const target = targets[0];
-    if (!target) return { events: [] };
-    const evt: MinionReturnedEvent = {
-        type: SU_EVENTS.MINION_RETURNED,
-        payload: {
-            minionUid: target.uid,
-            minionDefId: target.defId,
-            fromBaseIndex: ctx.baseIndex,
-            toPlayerId: target.owner,
-            reason: 'alien_supreme_overlord',
-        },
-        timestamp: ctx.now,
+    const targets = base.minions.filter(m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid);
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        const target = targets[0];
+        const evt: MinionReturnedEvent = {
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: ctx.baseIndex, toPlayerId: target.owner, reason: 'alien_supreme_overlord' },
+            timestamp: ctx.now,
+        };
+        return { events: [evt] };
+    }
+    // 多目标：Prompt 选择
+    const options = targets.map(t => {
+        const def = getCardDef(t.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? t.defId;
+        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
+        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
+    });
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'alien_supreme_overlord',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要返回手牌的随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
-    return { events: [evt] };
 }
 
 /** 采集者 onPlay：收回本基地一个力量≤3的对手随从 */
 function alienCollector(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
-    const target = base.minions.find(
+    const targets = base.minions.filter(
         m => m.controller !== ctx.playerId && getMinionPower(ctx.state, m, ctx.baseIndex) <= 3
     );
-    if (!target) return { events: [] };
-    const evt: MinionReturnedEvent = {
-        type: SU_EVENTS.MINION_RETURNED,
-        payload: {
-            minionUid: target.uid,
-            minionDefId: target.defId,
-            fromBaseIndex: ctx.baseIndex,
-            toPlayerId: target.owner,
-            reason: 'alien_collector',
-        },
-        timestamp: ctx.now,
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        const target = targets[0];
+        const evt: MinionReturnedEvent = {
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: ctx.baseIndex, toPlayerId: target.owner, reason: 'alien_collector' },
+            timestamp: ctx.now,
+        };
+        return { events: [evt] };
+    }
+    const options = targets.map(t => {
+        const def = getCardDef(t.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? t.defId;
+        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
+        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
+    });
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'alien_collector',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要收回的力量≤3的对手随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
-    return { events: [evt] };
 }
 
 /** 侵略者 onPlay：获得1VP */
@@ -86,29 +103,40 @@ function alienInvader(ctx: AbilityContext): AbilityResult {
     return { events: [evt] };
 }
 
-/** 解体 onPlay：将一个力量≤3的随从放入拥有者手牌（MVP：自动选第一个对手随从） */
+/** 解体 onPlay：将一个力量≤3的随从放入拥有者手牌 */
 function alienDisintegrate(ctx: AbilityContext): AbilityResult {
+    // 收集所有基地上力量≤3的对手随从
+    const targets: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
-        const base = ctx.state.bases[i];
-        const target = base.minions.find(
-            m => m.controller !== ctx.playerId && getMinionPower(ctx.state, m, i) <= 3
-        );
-        if (target) {
-            const evt: MinionReturnedEvent = {
-                type: SU_EVENTS.MINION_RETURNED,
-                payload: {
-                    minionUid: target.uid,
-                    minionDefId: target.defId,
-                    fromBaseIndex: i,
-                    toPlayerId: target.owner,
-                    reason: 'alien_disintegrate',
-                },
-                timestamp: ctx.now,
-            };
-            return { events: [evt] };
+        for (const m of ctx.state.bases[i].minions) {
+            if (m.controller !== ctx.playerId && getMinionPower(ctx.state, m, i) <= 3) {
+                const def = getCardDef(m.defId) as MinionCardDef | undefined;
+                const name = def?.name ?? m.defId;
+                const baseDef = getBaseDef(ctx.state.bases[i].defId);
+                const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+                const power = getMinionPower(ctx.state, m, i);
+                targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, label: `${name} (力量 ${power}) @ ${baseName}` });
+            }
         }
     }
-    return { events: [] };
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        const t = targets[0];
+        const evt: MinionReturnedEvent = {
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: t.uid, minionDefId: t.defId, fromBaseIndex: t.baseIndex, toPlayerId: t.owner, reason: 'alien_disintegrate' },
+            timestamp: ctx.now,
+        };
+        return { events: [evt] };
+    }
+    const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'alien_disintegrate',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要返回手牌的力量≤3的随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
+    };
 }
 
 /** 麦田怪圈 onPlay：将一个基地的所有随从返回手牌（通过 Prompt 选择基地） */
@@ -254,5 +282,47 @@ export function registerAlienPromptContinuations(): void {
     registerPromptContinuation('alien_crop_circles', (ctx) => {
         const { baseIndex } = ctx.selectedValue as { baseIndex: number };
         return returnAllMinionsFromBase(ctx.state, baseIndex, ctx.now);
+    });
+
+    // 外星霸主：选择目标后返回手牌
+    registerPromptContinuation('alien_supreme_overlord', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [{
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'alien_supreme_overlord' },
+            timestamp: ctx.now,
+        } as MinionReturnedEvent];
+    });
+
+    // 采集者：选择目标后返回手牌
+    registerPromptContinuation('alien_collector', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [{
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'alien_collector' },
+            timestamp: ctx.now,
+        } as MinionReturnedEvent];
+    });
+
+    // 解体：选择目标后返回手牌
+    registerPromptContinuation('alien_disintegrate', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [{
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'alien_disintegrate' },
+            timestamp: ctx.now,
+        } as MinionReturnedEvent];
     });
 }

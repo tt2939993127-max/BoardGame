@@ -6,11 +6,14 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, destroyMinion, getMinionPower } from '../domain/abilityHelpers';
+import { grantExtraMinion, destroyMinion, getMinionPower, setPromptContinuation, buildMinionTargetOptions, buildBaseTargetOptions } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, DeckReshuffledEvent, SmashUpEvent } from '../domain/types';
+import type { MinionCardDef } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
+import { registerPromptContinuation } from '../domain/promptContinuation';
+import { getCardDef, getBaseDef } from '../data/cards';
 
 /** 注册机器人派系所有能力 */
 export function registerRobotAbilities(): void {
@@ -34,12 +37,26 @@ function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
     const myMinionCount = base.minions.filter(m => m.controller === ctx.playerId).length + 1;
-    const target = base.minions.find(
+    const targets = base.minions.filter(
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myMinionCount
     );
-    if (!target) return { events: [] };
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return { events: [destroyMinion(targets[0].uid, targets[0].defId, ctx.baseIndex, targets[0].owner, 'robot_microbot_guard', ctx.now)] };
+    }
+    // 多目标：Prompt 选择
+    const options = targets.map(t => {
+        const def = getCardDef(t.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? t.defId;
+        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
+        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
+    });
     return {
-        events: [destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, 'robot_microbot_guard', ctx.now)],
+        events: [setPromptContinuation({
+            abilityId: 'robot_microbot_guard',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要消灭的随从（力量低于己方随从数量）', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
 }
 
@@ -105,20 +122,36 @@ function robotZapbot(ctx: AbilityContext): AbilityResult {
 
 /** 技术中心 onPlay：选择一个基地，该基地上你每有一个随从就抽一张牌 */
 function robotTechCenter(ctx: AbilityContext): AbilityResult {
-    // MVP：自动选己方随从最多的基地
-    let bestCount = 0;
+    // 收集有己方随从的基地
+    const candidates: { baseIndex: number; count: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const count = ctx.state.bases[i].minions.filter(m => m.controller === ctx.playerId).length;
-        if (count > bestCount) {
-            bestCount = count;
+        if (count > 0) {
+            const baseDef = getBaseDef(ctx.state.bases[i].defId);
+            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+            candidates.push({ baseIndex: i, count, label: `${baseName} (${count} 个随从)` });
         }
     }
-    if (bestCount === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [] };
+    // 单基地自动选择
+    if (candidates.length === 1) {
+        return drawForBase(ctx, candidates[0].baseIndex, candidates[0].count);
+    }
+    // 多基地：Prompt 选择
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'robot_tech_center',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择一个基地（按该基地上你的随从数抽牌）', options: buildBaseTargetOptions(candidates) } },
+        }, ctx.now)],
+    };
+}
 
+/** 技术中心辅助：按基地上己方随从数抽牌 */
+function drawForBase(ctx: AbilityContext, baseIndex: number, count: number): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    const { drawnUids } = drawCards(player, bestCount, ctx.random);
+    const { drawnUids } = drawCards(player, count, ctx.random);
     if (drawnUids.length === 0) return { events: [] };
-
     const evt: CardsDrawnEvent = {
         type: SU_EVENTS.CARDS_DRAWN,
         payload: { playerId: ctx.playerId, count: drawnUids.length, cardUids: drawnUids },
@@ -144,6 +177,41 @@ function robotNukebotOnDestroy(ctx: AbilityContext): AbilityResult {
 }
 
 // robot_microbot_alpha (ongoing) - 已通过 ongoingModifiers 系统实现力量修正
+
+// ============================================================================
+// Prompt 继续函数
+// ============================================================================
+
+/** 注册机器人派系的 Prompt 继续函数 */
+export function registerRobotPromptContinuations(): void {
+    // 微型机守护者：选择目标后消灭
+    registerPromptContinuation('robot_microbot_guard', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'robot_microbot_guard', ctx.now)];
+    });
+
+    // 技术中心：选择基地后按随从数抽牌
+    registerPromptContinuation('robot_tech_center', (ctx) => {
+        const { baseIndex } = ctx.selectedValue as { baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const count = base.minions.filter(m => m.controller === ctx.playerId).length;
+        if (count === 0) return [];
+        const player = ctx.state.players[ctx.playerId];
+        if (!player || player.deck.length === 0) return [];
+        const actualDraw = Math.min(count, player.deck.length);
+        const drawnUids = player.deck.slice(0, actualDraw).map(c => c.uid);
+        return [{
+            type: SU_EVENTS.CARDS_DRAWN,
+            payload: { playerId: ctx.playerId, count: actualDraw, cardUids: drawnUids },
+            timestamp: ctx.now,
+        }];
+    });
+}
 
 
 // ============================================================================

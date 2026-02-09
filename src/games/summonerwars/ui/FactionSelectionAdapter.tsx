@@ -19,6 +19,8 @@ import type { FactionId } from '../domain/types';
 import { FACTION_CATALOG, type FactionCatalogEntry } from '../config/factions';
 import { CardSprite } from './CardSprite';
 import { initSpriteAtlases } from './cardAtlas';
+import { DeckBuilderDrawer } from './DeckBuilderDrawer';
+import type { SerializedCustomDeck } from '../config/deckSerializer';
 import type { TFunction } from 'i18next';
 
 // 模块级初始化精灵图注册表（同步、幂等，确保首次渲染即可用）
@@ -52,6 +54,15 @@ export interface FactionSelectionProps {
   onSelect: (factionId: FactionId) => void;
   onReady: () => void;
   onStart: () => void;
+  /** 选择自定义牌组的回调（传递序列化牌组数据） */
+  onSelectCustomDeck?: (deck: SerializedCustomDeck) => void;
+}
+
+/** 自定义牌组选择信息（用于 UI 展示） */
+interface CustomDeckInfo {
+  deckName: string;
+  summonerName: string;
+  summonerFaction: FactionId;
 }
 
 export const FactionSelection: React.FC<FactionSelectionProps> = ({
@@ -64,12 +75,16 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   onSelect,
   onReady,
   onStart,
+  onSelectCustomDeck,
 }) => {
   const { t } = useTranslation('game-summonerwars');
   const isHost = currentPlayerId === hostPlayerId;
   const playerIds = ['0', '1'];
 
-  // 当前玩家已选阵营
+  // 自定义牌组选择状态（按玩家 ID 存储）
+  const [customDeckSelections, setCustomDeckSelections] = useState<Record<string, CustomDeckInfo>>({});
+
+  // 当前玩家已选阵营（包括自定义牌组的情况）
   const myFaction = selectedFactions[currentPlayerId];
   const hasSelected = myFaction && myFaction !== 'unselected';
 
@@ -97,6 +112,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   // 放大预览状态（支持 tip 图和召唤师卡牌两种）
   const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
   const [magnifySprite, setMagnifySprite] = useState<{ atlasId: string; frameIndex: number } | null>(null);
+  const [isDeckBuilderOpen, setIsDeckBuilderOpen] = useState(false);
 
   // 点击卡牌放大查看召唤师
   const handleMagnifyCard = useCallback((factionId: string, e: React.MouseEvent) => {
@@ -104,6 +120,28 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
     const atlasId = getSummonerAtlasId(factionId);
     if (atlasId) setMagnifySprite({ atlasId, frameIndex: 0 });
   }, []);
+
+  /**
+   * 处理自定义牌组确认
+   * 将牌组数据存储到本地状态用于 UI 展示，并通过回调通知父组件
+   */
+  const handleConfirmCustomDeck = useCallback((deck: SerializedCustomDeck) => {
+    // 记录自定义牌组选择信息（用于 PlayerStatusCard 展示）
+    setCustomDeckSelections(prev => ({
+      ...prev,
+      [currentPlayerId]: {
+        deckName: deck.name,
+        summonerName: deck.summonerId,
+        summonerFaction: deck.summonerFaction,
+      },
+    }));
+
+    // 通知父组件（如果有回调）
+    onSelectCustomDeck?.(deck);
+
+    // 关闭抽屉
+    setIsDeckBuilderOpen(false);
+  }, [currentPlayerId, onSelectCustomDeck]);
 
   if (!isOpen) return null;
 
@@ -114,31 +152,49 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100] flex flex-col bg-[#0d1117] overflow-hidden select-none text-white font-sans w-screen h-screen"
     >
-      {/* 背景氛围层 */}
+      {/* 背景氛围层 - 动态流光 */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-[#0d1117] via-[#161b22] to-[#0d1117]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_20%,_rgba(245,158,11,0.06)_0%,_transparent_60%)]" />
-        <div className="absolute inset-0 opacity-[0.03]" style={{
+        {/* 动态径向光晕 */}
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.03, 0.08, 0.03],
+          }}
+          transition={{
+            duration: 8,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,_rgba(245,158,11,1)_0%,_transparent_70%)]"
+        />
+        <div className="absolute inset-0 opacity-[0.02]" style={{
           backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.4\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
         }} />
       </div>
 
-      {/* 标题区 */}
-      <div className="relative z-10 text-center pt-[2.5vh] pb-[1.5vh]">
-        <h1 className="text-[clamp(18px,1.6vw,32px)] font-black tracking-[0.25em] text-amber-400/90"
-          style={{ textShadow: '0 0 20px rgba(245,158,11,0.3)' }}>
+      {/* 标题区 - 装饰强化 */}
+      <div className="relative z-10 text-center pt-[3vh] pb-[2vh]">
+        <div className="absolute top-[2vh] left-1/2 -translate-x-1/2 w-[30vw] h-[1px] bg-gradient-to-r from-transparent via-amber-500/50 to-transparent" />
+        <motion.h1
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="text-[clamp(24px,2.2vw,42px)] font-black tracking-[0.3em] text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-500 to-amber-700"
+          style={{ filter: 'drop-shadow(0 0 15px rgba(245,158,11,0.4))' }}
+        >
           {t('factionSelection.title')}
-        </h1>
-        <p className="text-[clamp(10px,0.65vw,14px)] text-white/35 mt-[0.5vh] tracking-wider">
+        </motion.h1>
+        <p className="text-[clamp(12px,0.75vw,16px)] text-amber-100/40 mt-[0.5vh] tracking-[0.5em] font-light uppercase">
           {t('factionSelection.subtitle')}
         </p>
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[15vw] h-[1px] bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
       </div>
 
       {/* 主内容区 */}
       <div className="relative z-10 flex-1 flex flex-col min-h-0 px-[4vw]">
         {/* 阵营卡片网格（两排三列） */}
         <div className="flex-shrink-0">
-          <div className="grid grid-cols-3 gap-[0.8vw] max-w-[54vw] mx-auto">
+          <div className="grid grid-cols-4 gap-[0.8vw] max-w-[72vw] mx-auto">
             {availableFactions.map((faction, index) => {
               const isSelectedByMe = selectedFactions[currentPlayerId] === faction.id;
               const occupyingPlayers = playerIds.filter(
@@ -159,6 +215,36 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                 />
               );
             })}
+
+            {/* Custom Deck Placeholder */}
+            {currentPlayerId && (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                whileHover={{ scale: 1.02, y: -4 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{
+                  delay: availableFactions.length * 0.06,
+                  duration: 0.3,
+                  scale: { type: 'spring', stiffness: 400, damping: 20 }
+                }}
+                className={clsx(
+                  'relative rounded-lg overflow-hidden cursor-pointer group',
+                  'border-2 border-dashed border-white/20 hover:border-amber-400/60 transition-colors shadow-lg flex flex-col items-center justify-center bg-white/5'
+                )}
+                onClick={() => setIsDeckBuilderOpen(true)}
+              >
+                <div className="w-16 h-16 rounded-full border-2 border-white/20 flex items-center justify-center mb-4 group-hover:border-amber-400/80 transition-colors">
+                  <span className="text-3xl text-white/50 group-hover:text-amber-400 font-light">+</span>
+                </div>
+                <div className="text-white/70 font-bold uppercase tracking-widest text-sm group-hover:text-amber-100">
+                  {t('factionSelection.customDeck')}
+                </div>
+                <div className="text-white/30 text-[10px] mt-1">
+                  {t('factionSelection.clickToBuild')}
+                </div>
+              </motion.div>
+            )}
           </div>
         </div>
 
@@ -175,14 +261,23 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
                     transition={{ duration: 0.2 }}
-                    className="h-full cursor-zoom-in rounded-lg overflow-hidden border border-white/10 hover:border-amber-400/40 transition-colors duration-200"
+                    className="relative group h-full cursor-zoom-in rounded-lg overflow-hidden border-2 border-amber-900/30 shadow-[0_0_30px_rgba(0,0,0,0.5)] transition-all duration-300 hover:border-amber-500/50"
                     onClick={() => setMagnifyImage(previewEntry.tipImagePath)}
                   >
+                    {/* 装饰边框背景 */}
+                    <div className="absolute inset-0 z-0 bg-amber-950/20" />
+
                     <OptimizedImage
                       src={previewEntry.tipImagePath}
-                      className="h-full w-auto object-contain"
+                      className="relative z-10 h-full w-auto object-contain transition-transform duration-500 group-hover:scale-[1.02]"
                       alt={t('factionSelection.tipAlt', { name: t(previewEntry.nameKey) })}
                     />
+
+                    {/* 内角边框装饰 */}
+                    <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-amber-500/40 rounded-tl-sm pointer-events-none" />
+                    <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-amber-500/40 rounded-tr-sm pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-amber-500/40 rounded-bl-sm pointer-events-none" />
+                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-amber-500/40 rounded-br-sm pointer-events-none" />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -209,6 +304,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
                   factionId={selectedFactions[pid as PlayerId]}
                   isReady={!!readyPlayers[pid as PlayerId]}
                   playerName={playerNames[pid as PlayerId]}
+                  customDeckInfo={customDeckSelections[pid]}
                   t={t}
                 />
               ))}
@@ -262,6 +358,14 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
           />
         )}
       </MagnifyOverlay>
+
+      {/* Deck Builder Drawer */}
+      <DeckBuilderDrawer
+        isOpen={isDeckBuilderOpen}
+        onClose={() => setIsDeckBuilderOpen(false)}
+        onConfirm={handleConfirmCustomDeck}
+        currentPlayerId={currentPlayerId}
+      />
     </motion.div>
   );
 };
@@ -290,13 +394,19 @@ const FactionCard: React.FC<FactionCardProps> = ({
     <motion.div
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.06, duration: 0.3 }}
+      whileHover={{ scale: 1.02, y: -4 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{
+        delay: index * 0.06,
+        duration: 0.3,
+        scale: { type: 'spring', stiffness: 400, damping: 20 }
+      }}
       className={clsx(
         'relative rounded-lg overflow-hidden cursor-pointer group',
         'border-2 transition-[border-color,box-shadow] duration-200',
         isSelectedByMe
-          ? 'border-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.35)]'
-          : 'border-white/8 hover:border-white/25'
+          ? 'border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.4)]'
+          : 'border-white/10 hover:border-amber-400/40 shadow-xl'
       )}
       onClick={() => onSelect(faction.id)}
       onMouseEnter={() => onHover(faction.id)}
@@ -381,11 +491,13 @@ interface PlayerStatusCardProps {
   factionId: FactionId | 'unselected' | undefined;
   isReady: boolean;
   playerName: string;
+  /** 自定义牌组选择信息（如果该玩家选择了自定义牌组） */
+  customDeckInfo?: CustomDeckInfo;
   t: TFunction;
 }
 
 const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
-  pid, isMe, factionId, isReady, playerName, t,
+  pid, isMe, factionId, isReady, playerName, customDeckInfo, t,
 }) => {
   const colors = PLAYER_COLORS[pid as '0' | '1'];
   const selected = factionId && factionId !== 'unselected';
@@ -393,16 +505,44 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
     ? FACTION_CATALOG.find(f => f.id === factionId)
     : null;
 
+  // 判断是否为自定义牌组选择
+  const isCustomDeck = !!customDeckInfo;
+
+  // 显示名称：自定义牌组显示"自定义牌组"标签，否则显示阵营名
+  const displayName = isCustomDeck
+    ? t('factionSelection.customDeckLabel')
+    : factionEntry
+      ? t(factionEntry.nameKey)
+      : t('factionSelection.notSelected');
+
+  // 自定义牌组时显示召唤师所属阵营信息
+  const customDeckSubtext = isCustomDeck && customDeckInfo
+    ? (() => {
+        const summonerFactionEntry = FACTION_CATALOG.find(f => f.id === customDeckInfo.summonerFaction);
+        return summonerFactionEntry
+          ? t('factionSelection.customDeckSummoner', { name: t(summonerFactionEntry.nameKey) })
+          : customDeckInfo.deckName;
+      })()
+    : null;
+
   return (
     <div
       className={clsx(
-        'flex items-center gap-[0.6vw] px-[0.8vw] py-[0.5vw] rounded-lg transition-[background-color,border-color] duration-200',
-        'border',
+        'relative flex items-center gap-[0.8vw] px-[1vw] py-[0.6vw] rounded-lg transition-all duration-300',
+        'border backdrop-blur-md overflow-hidden',
         isMe
-          ? 'bg-white/10 border-amber-400/40'
-          : 'bg-white/5 border-white/8'
+          ? 'bg-amber-900/10 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.1)]'
+          : 'bg-white/5 border-white/10'
       )}
     >
+      {/* 侧边装饰条 */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-[3px]"
+        style={{ backgroundColor: colors.bg }}
+      />
+
+      {/* 内部背景斜切流光 */}
+      <div className="absolute inset-0 opacity-[0.05] pointer-events-none bg-gradient-to-tr from-transparent via-white to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
       {/* 玩家标识圆球 */}
       <div
         className="rounded-full flex items-center justify-center font-black shrink-0"
@@ -421,11 +561,23 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
       {/* 信息区 */}
       <div className="flex-1 min-w-0">
         <div className={clsx(
-          'text-[clamp(11px,0.7vw,15px)] font-bold leading-tight truncate',
-          selected ? 'text-amber-300' : 'text-white/40'
+          'text-[clamp(11px,0.7vw,15px)] font-bold leading-tight truncate flex items-center gap-1',
+          (selected || isCustomDeck) ? 'text-amber-300' : 'text-white/40'
         )}>
-          {factionEntry ? t(factionEntry.nameKey) : t('factionSelection.notSelected')}
+          {displayName}
+          {/* 自定义牌组标识徽章 */}
+          {isCustomDeck && (
+            <span className="inline-flex items-center bg-purple-500/20 text-purple-300 text-[8px] px-1.5 py-0.5 rounded border border-purple-500/30 uppercase tracking-wider font-bold shrink-0">
+              DIY
+            </span>
+          )}
         </div>
+        {/* 自定义牌组时显示召唤师信息 */}
+        {customDeckSubtext ? (
+          <div className="text-[clamp(9px,0.5vw,12px)] text-purple-300/60 truncate leading-tight mt-[0.1vw]">
+            {customDeckSubtext}
+          </div>
+        ) : null}
         <div className="text-[clamp(9px,0.5vw,12px)] text-white/40 truncate leading-tight mt-[0.1vw]">
           {playerName}
           {isMe && <span className="ml-1 text-amber-400/70 font-bold">{t('player.youTag')}</span>}
@@ -473,11 +625,11 @@ const ActionButton: React.FC<ActionButtonProps> = ({
         disabled={!everyoneReady}
         onClick={onStart}
         className={clsx(
-          'px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider',
-          'border-2 transition-[background-color,border-color,opacity,transform] duration-200',
+          'px-[2.5vw] py-[0.7vw] rounded-xl text-[clamp(12px,0.9vw,18px)] font-black tracking-[0.2em] uppercase',
+          'border-2 transition-[background-color,border-color,opacity,transform,box-shadow] duration-200',
           everyoneReady
-            ? 'bg-gradient-to-b from-amber-400 to-amber-600 text-white border-amber-300 shadow-[0_3px_0_#b45309] hover:brightness-110 active:translate-y-[2px] active:shadow-none cursor-pointer'
-            : 'bg-white/5 text-white/25 border-white/10 cursor-not-allowed'
+            ? 'bg-gradient-to-b from-amber-400 via-amber-600 to-amber-700 text-white border-amber-300 shadow-[0_4px_0_#92400e,0_8px_20px_rgba(245,158,11,0.25)] hover:brightness-110 active:translate-y-[2px] active:shadow-[0_2px_0_#92400e] cursor-pointer'
+            : 'bg-white/5 text-white/20 border-white/10 cursor-not-allowed'
         )}
       >
         {everyoneReady

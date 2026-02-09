@@ -9,6 +9,7 @@ export const TutorialOverlay: React.FC = () => {
         : undefined;
     const namespaces = stepNamespace ? ['tutorial', stepNamespace] : ['tutorial'];
     const { t } = useTranslation(namespaces);
+    const stepPosition = currentStep?.position;
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const lastStepIdRef = useRef<string | null>(null);
     const hasAutoScrolledRef = useRef(false);
@@ -95,7 +96,8 @@ export const TutorialOverlay: React.FC = () => {
 
     // 根据目标矩形计算布局
     useEffect(() => {
-        if (!targetRect) {
+        const isCenterPosition = stepPosition === 'center';
+        if (!targetRect || isCenterPosition) {
             // 默认：底部居中
             setTooltipStyles({
                 style: {
@@ -121,7 +123,9 @@ export const TutorialOverlay: React.FC = () => {
 
         let pos: 'right' | 'left' | 'bottom' | 'top';
 
-        if (spaceRight > tooltipWidth + 20) {
+        if (stepPosition) {
+            pos = stepPosition;
+        } else if (spaceRight > tooltipWidth + 20) {
             pos = 'right';
         } else if (spaceLeft > tooltipWidth + 20) {
             pos = 'left';
@@ -180,7 +184,7 @@ export const TutorialOverlay: React.FC = () => {
         styles.maxHeight = window.innerHeight - topValue - safeMargin;
         setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
 
-    }, [targetRect]);
+    }, [targetRect, stepPosition]);
 
     if (!isActive || !currentStep) return null;
 

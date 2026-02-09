@@ -305,6 +305,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         });
         setLocalStorageTick(t => t + 1);
         setShowCreateRoomModal(false);
+        // 通知大厅刷新，确保其他玩家能看到房间状态更新
+        lobbySocket.requestRefresh(normalizedGameId);
         onNavigate?.();
         navigate(`/play/${gameName}/match/${matchID}?playerID=0`);
         return { success: true };
@@ -328,15 +330,31 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 ...(guestId ? { guestId } : {}),
                 ...(password ? { password } : {}),
             };
-            const { matchID } = await lobbyClient.createMatch(
-                gameId,
-                { numPlayers, setupData },
-                token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
-            );
+            let matchID: string;
+            try {
+                const result = await lobbyClient.createMatch(
+                    gameId,
+                    { numPlayers, setupData },
+                    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+                );
+                matchID = result.matchID;
+            } catch (createError) {
+                // 将创建阶段的错误抛出，由外层 catch 统一处理
+                throw createError;
+            }
+
+            if (!matchID) {
+                console.error('[handleCreateRoom] 服务器返回空 matchID');
+                toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
+                return;
+            }
 
             const claimResult = await tryClaimSeat(matchID, gameId);
             if (!claimResult.success) {
-                toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                console.error('[handleCreateRoom] claim-seat 失败', { matchID, error: claimResult.error });
+                toast.error({ kind: 'i18n', key: 'error.roomCreatedButClaimFailed', ns: 'lobby' });
+                // 请求刷新大厅，让用户能看到已创建的房间
+                lobbySocket.requestRefresh(normalizedGameId);
                 return;
             }
         } catch (error) {

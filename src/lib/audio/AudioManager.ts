@@ -460,6 +460,32 @@ class AudioManagerClass {
         };
     }
 
+    /**
+     * 预加载指定音效 key 列表
+     * 提前创建 Howl 实例并下载音频文件，消除首次播放延迟。
+     * 已加载或已失败的 key 会被跳过。
+     */
+    preloadKeys(keys: SoundKey[]): void {
+        for (const key of keys) {
+            if (this.sounds.has(key) || this.failedKeys.has(key)) continue;
+            const definition = this.soundDefinitions.get(key) ?? this.resolveRegistrySoundDefinition(key);
+            if (!definition) continue;
+            this.soundDefinitions.set(key, definition);
+            const howl = new Howl({
+                src: Array.isArray(definition.src) ? definition.src : [definition.src],
+                volume: (definition.volume ?? 1.0) * this._sfxVolume,
+                loop: definition.loop ?? false,
+                sprite: definition.sprite,
+                preload: true,
+                onloaderror: (_id, error) => {
+                    console.error(`[Audio] preload_failed key=${key} src=${formatSrcForLog(definition.src)} error=${String(error)}`);
+                    this.failedKeys.add(key);
+                },
+            });
+            this.sounds.set(key, howl);
+        }
+    }
+
     stopAll(): void {
         Howler.stop();
         if (this._currentBgm !== null) {
@@ -467,6 +493,7 @@ class AudioManagerClass {
             this.notifyBgmChange();
         }
     }
+
 
     unloadAll(): void {
         for (const howl of this.sounds.values()) howl.unload();

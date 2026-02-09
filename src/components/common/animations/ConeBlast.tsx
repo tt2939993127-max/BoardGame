@@ -120,9 +120,9 @@ export const ConeBlast: React.FC<ConeBlastProps> = ({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const rect = container.getBoundingClientRect();
-    const cw = rect.width;
-    const ch = rect.height;
+    // 使用 offsetWidth/offsetHeight 获取 CSS 布局尺寸（不受父级 transform scale 影响）
+    const cw = container.offsetWidth;
+    const ch = container.offsetHeight;
     canvas.width = cw * dpr;
     canvas.height = ch * dpr;
     canvas.style.width = `${cw}px`;
@@ -150,9 +150,13 @@ export const ConeBlast: React.FC<ConeBlastProps> = ({
     );
     const flightDuration = Math.max(0.15, Math.min(0.5, distPct / 180));
 
-    // 头部参数
-    const headRadius = isStrong ? 5 : 3.5;
-    const glowRadius = isStrong ? 22 : 16;
+    // 视觉缩放因子：基于飞行像素距离，让特效大小与格子间距成比例
+    // 参考基准：totalDist ~250px 时 scale=1（原始设计值），再乘 3 倍放大
+    const vScale = Math.max(0.5, totalDist / 250) * 3;
+
+    // 头部参数（基于 vScale 缩放）
+    const headRadius = (isStrong ? 5 : 3.5) * vScale;
+    const glowRadius = (isStrong ? 22 : 16) * vScale;
 
     // 尾迹粒子池
     const trailParticles: Particle[] = [];
@@ -164,6 +168,9 @@ export const ConeBlast: React.FC<ConeBlastProps> = ({
     const impactPreset: ParticlePreset = {
       ...IMPACT_PRESET,
       count: isStrong ? 24 : 16,
+      speed: { min: IMPACT_PRESET.speed.min * vScale, max: IMPACT_PRESET.speed.max * vScale },
+      size: { min: IMPACT_PRESET.size.min * vScale, max: IMPACT_PRESET.size.max * vScale },
+      spread: (IMPACT_PRESET.spread ?? 6) * vScale,
     };
 
     // 命中阶段
@@ -197,16 +204,16 @@ export const ConeBlast: React.FC<ConeBlastProps> = ({
         for (let i = 0; i < spawnPerFrame; i++) {
           // 粒子从头部位置生成，速度方向为反向 + 横向扩散
           const spreadAngle = (Math.random() - 0.5) * (isStrong ? 1.2 : 0.8);
-          const backSpeed = 1 + Math.random() * 3;
-          const vx = (-dirX * backSpeed + perpX * Math.sin(spreadAngle) * 2) * (0.7 + Math.random() * 0.6);
-          const vy = (-dirY * backSpeed + perpY * Math.sin(spreadAngle) * 2) * (0.7 + Math.random() * 0.6);
-          const size = (isStrong ? 2 : 1.5) + Math.random() * (isStrong ? 3 : 2);
+          const backSpeed = (1 + Math.random() * 3) * vScale;
+          const vx = (-dirX * backSpeed + perpX * Math.sin(spreadAngle) * 2 * vScale) * (0.7 + Math.random() * 0.6);
+          const vy = (-dirY * backSpeed + perpY * Math.sin(spreadAngle) * 2 * vScale) * (0.7 + Math.random() * 0.6);
+          const size = ((isStrong ? 2 : 1.5) + Math.random() * (isStrong ? 3 : 2)) * vScale;
           const life = 0.12 + Math.random() * 0.25;
           const rgb = TRAIL_COLORS[Math.floor(Math.random() * TRAIL_COLORS.length)];
 
           trailParticles.push(createParticle({
-            x: hx + (Math.random() - 0.5) * 4,
-            y: hy + (Math.random() - 0.5) * 4,
+            x: hx + (Math.random() - 0.5) * 4 * vScale,
+            y: hy + (Math.random() - 0.5) * 4 * vScale,
             vx, vy,
             maxLife: life,
             size,
@@ -315,7 +322,7 @@ export const ConeBlast: React.FC<ConeBlastProps> = ({
         drawParticles(ctx, impactParticles, impactPreset, cw, ch);
 
         // 命中闪光
-        const flashR = (isStrong ? 25 : 18) * (0.3 + hitT * 0.7);
+        const flashR = ((isStrong ? 25 : 18) * (0.3 + hitT * 0.7)) * vScale;
         const flashAlpha = (1 - hitT * hitT) * 0.7;
         const flashGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, flashR);
         flashGrad.addColorStop(0, `rgba(255,255,255,${flashAlpha})`);
@@ -328,10 +335,10 @@ export const ConeBlast: React.FC<ConeBlastProps> = ({
         ctx.fill();
 
         // 扩散环
-        const ringR = (isStrong ? 30 : 22) * (0.3 + hitT * 1.5);
+        const ringR = ((isStrong ? 30 : 22) * (0.3 + hitT * 1.5)) * vScale;
         ctx.globalAlpha = (1 - hitT) * 0.5;
         ctx.strokeStyle = 'rgba(200,230,255,0.6)';
-        ctx.lineWidth = isStrong ? 2 : 1.5;
+        ctx.lineWidth = (isStrong ? 2 : 1.5) * vScale;
         ctx.beginPath();
         ctx.arc(ex, ey, ringR, 0, Math.PI * 2);
         ctx.stroke();

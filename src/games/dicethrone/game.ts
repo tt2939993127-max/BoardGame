@@ -493,6 +493,17 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             }
         }
 
+        // upkeep / income 阶段：纯自动结算（burn/poison/CP/抽牌），无需玩家操作，直接推进
+        // 通过 SYS_PHASE_CHANGED 事件检测刚进入该阶段，确保只在阶段切换时触发一次
+        if (core.turnPhase === 'upkeep' || core.turnPhase === 'income') {
+            const justEnteredPhase = events.some(
+                e => e.type === 'SYS_PHASE_CHANGED' && (e as any).payload?.to === core.turnPhase
+            );
+            if (justEnteredPhase && canAdvancePhase(core)) {
+                return { autoContinue: true, playerId: core.activePlayerId };
+            }
+        }
+
         // 检查是否有需要自动继续的事件
         const hasTokenResponseClosed = events.some(e => e.type === 'TOKEN_RESPONSE_CLOSED');
         const hasChoiceResolved = events.some(e => e.type === 'CHOICE_RESOLVED');

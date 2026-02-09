@@ -1,39 +1,69 @@
-﻿import { useRef, useEffect, useState } from 'react';
+﻿import { useRef, useEffect, useState, useCallback } from 'react';
 import { X, Github, Heart, MessageCircle, Coffee } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { createParticle, parseColorToRgb, type Particle } from '../common/animations/canvasParticleEngine';
+import { useToast } from '../../contexts/ToastContext';
+import { SPONSOR_API_URL } from '../../config/server';
 
 interface AboutModalProps {
     onClose: () => void;
 }
 
-// Mock Sponsor Data
-const SPONSORS = [
-    { name: "BoardGameFan", amount: 50 },
-    { name: "Supporter001", amount: 100 },
-    { name: "GamingLife", amount: 200 },
-    { name: "RetroPlayer", amount: 66 },
-    { name: "DiceKing", amount: 88 },
-    { name: "MeepleMaster", amount: 50 },
-    { name: "CardShark", amount: 120 },
-    { name: "TableTopHero", amount: 500 },
-    { name: "Anonymous", amount: 10 },
-    { name: "DevSupporter", amount: 1024 },
-    { name: "OpenSourceLover", amount: 666 },
-    { name: "CoffeeBuyer", amount: 25 },
-    { name: "ServerFund", amount: 300 },
-    { name: "MaintenanceCrew", amount: 50 },
-    { name: "BugHunter", amount: 10 },
-    { name: "FeatureRequester", amount: 100 }
-];
+interface SponsorItem {
+    id: string;
+    name: string;
+    amount: number;
+    isPinned: boolean;
+    createdAt: string;
+}
+
+const ROW_HEIGHT = 48;
+const PAGE_SIZE = 50;
+const OVERSCAN = 6;
 
 export const AboutModal = ({ onClose }: AboutModalProps) => {
     const { t } = useTranslation('game');
+    const { success, error } = useToast();
     const backdropRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const particleCanvasRef = useRef<HTMLCanvasElement>(null);
     const [isHovered, setIsHovered] = useState(false);
+    const [sponsors, setSponsors] = useState<SponsorItem[]>([]);
+    const [sponsorLoading, setSponsorLoading] = useState(false);
+    const [sponsorError, setSponsorError] = useState(false);
+    const [containerHeight, setContainerHeight] = useState(0);
+    const [startIndex, setStartIndex] = useState(0);
+    const [sponsorHasMore, setSponsorHasMore] = useState(true);
+    const scrollTopRef = useRef(0);
+    const startIndexRef = useRef(0);
+    const sponsorLoadingRef = useRef(false);
+    const sponsorPageRef = useRef(1);
+
+    const gitUrl = 'https://github.com/zhuanggenhua/BoardGame';
+    const qqGroup = '1081373485';
+
+    const handleCopyQq = async () => {
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(qqGroup);
+                success('QQ群号已复制');
+                return;
+            }
+            const textarea = document.createElement('textarea');
+            textarea.value = qqGroup;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            success('QQ群号已复制');
+        } catch {
+            error('复制失败，请手动复制');
+        }
+    };
 
     // 金色荧光粒子 (Canvas 2D) - 预渲染辉光精灵 + additive 混合 + 呼吸脉冲
     // 参考技术：offscreen sprite pre-render + radialGradient + lighter compositing
@@ -202,27 +232,121 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
         };
     }, []);
 
+    const updateStartIndex = useCallback((scrollTop: number) => {
+        const nextStart = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+        if (nextStart !== startIndexRef.current) {
+            startIndexRef.current = nextStart;
+            setStartIndex(nextStart);
+        }
+    }, []);
+
+    const loadSponsors = useCallback(async (page: number, replace = false) => {
+        if (sponsorLoadingRef.current) return;
+        sponsorLoadingRef.current = true;
+        setSponsorLoading(true);
+        setSponsorError(false);
+        try {
+            const res = await fetch(`${SPONSOR_API_URL}?page=${page}&limit=${PAGE_SIZE}`);
+            if (!res.ok) throw new Error('Failed to fetch sponsors');
+            const data = await res.json();
+            const items = Array.isArray(data.items) ? (data.items as SponsorItem[]) : [];
+            const hasMore = typeof data.hasMore === 'boolean' ? data.hasMore : items.length >= PAGE_SIZE;
+            sponsorPageRef.current = page;
+            setSponsorHasMore(hasMore);
+            setSponsors(prev => (replace ? items : [...prev, ...items]));
+        } catch {
+            setSponsorError(true);
+        } finally {
+            sponsorLoadingRef.current = false;
+            setSponsorLoading(false);
+        }
+    }, []);
+
+    const loadMoreSponsors = useCallback(() => {
+        if (!sponsorHasMore || sponsorLoadingRef.current) return;
+        loadSponsors(sponsorPageRef.current + 1);
+    }, [sponsorHasMore, loadSponsors]);
+
+    useEffect(() => {
+        loadSponsors(1, true);
+    }, [loadSponsors]);
+
+    useEffect(() => {
+        const element = scrollRef.current;
+        if (!element) return;
+        const updateHeight = () => setContainerHeight(element.clientHeight);
+        updateHeight();
+        const resizeObserver = new ResizeObserver(() => updateHeight());
+        resizeObserver.observe(element);
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const element = scrollRef.current;
+        if (!element) return;
+        const handleScroll = () => {
+            const baseHeight = sponsors.length * ROW_HEIGHT;
+            const loopEnabled = !sponsorHasMore && baseHeight > 0;
+            let nextScrollTop = element.scrollTop;
+            if (loopEnabled && nextScrollTop >= baseHeight) {
+                nextScrollTop -= baseHeight;
+                element.scrollTop = nextScrollTop;
+            }
+            scrollTopRef.current = nextScrollTop;
+            updateStartIndex(nextScrollTop);
+            if (sponsorHasMore && nextScrollTop + containerHeight >= baseHeight - ROW_HEIGHT * 4) {
+                loadMoreSponsors();
+            }
+        };
+        element.addEventListener('scroll', handleScroll);
+        handleScroll();
+        return () => element.removeEventListener('scroll', handleScroll);
+    }, [containerHeight, loadMoreSponsors, sponsors.length, updateStartIndex]);
+
     // 自动轮播逻辑
     useEffect(() => {
         let animationFrameId: number;
         const animate = () => {
             const element = scrollRef.current;
-            if (element && !isHovered) {
+            const baseHeight = sponsors.length * ROW_HEIGHT;
+            const loopEnabled = !sponsorHasMore && baseHeight > 0;
+            if (element && !isHovered && baseHeight > containerHeight) {
                 const speed = 0.8 * Math.max(1, window.innerWidth / 1920);
-                element.scrollTop += speed;
-                if (element.scrollTop >= element.scrollHeight / 3) {
-                    element.scrollTop -= element.scrollHeight / 3;
+                let nextScrollTop = element.scrollTop + speed;
+                element.scrollTop = nextScrollTop;
+                if (loopEnabled && nextScrollTop >= baseHeight) {
+                    nextScrollTop -= baseHeight;
+                    element.scrollTop = nextScrollTop;
+                }
+                scrollTopRef.current = nextScrollTop;
+                updateStartIndex(nextScrollTop);
+                if (sponsorHasMore && nextScrollTop + containerHeight >= baseHeight - ROW_HEIGHT * 4) {
+                    loadMoreSponsors();
                 }
             }
             animationFrameId = requestAnimationFrame(animate);
         };
         animationFrameId = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(animationFrameId);
-    }, [isHovered]);
+    }, [containerHeight, isHovered, loadMoreSponsors, sponsorHasMore, sponsors.length, updateStartIndex]);
 
     const handleBackdropClick = (e: React.MouseEvent) => {
         if (backdropRef.current === e.target) onClose();
     };
+
+    const baseCount = sponsors.length;
+    const baseHeight = baseCount * ROW_HEIGHT;
+    const loopEnabled = !sponsorHasMore && baseCount > 0;
+    const totalCount = loopEnabled ? baseCount * 2 : baseCount;
+    const totalHeight = loopEnabled ? baseHeight * 2 : baseHeight;
+    const visibleCount = containerHeight > 0
+        ? Math.ceil(containerHeight / ROW_HEIGHT) + OVERSCAN * 2
+        : 0;
+    const endIndex = Math.min(totalCount, startIndex + visibleCount);
+    const visibleIndexes: number[] = [];
+    for (let i = startIndex; i < endIndex; i++) {
+        visibleIndexes.push(i);
+    }
 
     return (
         <div
@@ -249,7 +373,7 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                     {/* 布局规范：GitHub & QQ 双列并排 */}
                     <div className="grid grid-cols-2 gap-3">
                         <a
-                            href="https://github.com/your-repo/boardgame"
+                            href={gitUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-3 p-3 rounded-xl bg-parchment-card-bg hover:bg-white/80 border border-parchment-brown/10 transition-all group shadow-sm"
@@ -263,15 +387,19 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                             </div>
                         </a>
 
-                        <div className="flex items-center gap-3 p-3 rounded-xl bg-parchment-card-bg hover:bg-white/80 border border-parchment-brown/10 transition-all group shadow-sm">
+                        <button
+                            type="button"
+                            onClick={handleCopyQq}
+                            className="flex items-center gap-3 p-3 rounded-xl bg-parchment-card-bg hover:bg-white/80 border border-parchment-brown/10 transition-all group shadow-sm text-left"
+                        >
                             <div className="p-2 bg-parchment-base-bg rounded-lg text-[#0099FF] border border-parchment-brown/10 shrink-0">
                                 <MessageCircle size={20} />
                             </div>
                             <div className="min-w-0">
                                 <h3 className="font-bold text-xs text-parchment-base-text truncate">{t('hud.about.qqTitle')}</h3>
-                                <p className="text-[10px] text-parchment-light-text truncate font-mono">123456789</p>
+                                <p className="text-[10px] text-parchment-light-text truncate font-mono">{qqGroup}</p>
                             </div>
-                        </div>
+                        </button>
                     </div>
 
                     <div className="pt-4 border-t border-parchment-brown/10 space-y-4">
@@ -285,12 +413,27 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
 
                         <div className="flex justify-center gap-10">
                             {[
-                                { label: t('hud.about.wechatLabel'), color: 'text-green-600' },
-                                { label: t('hud.about.alipayLabel'), color: 'text-blue-600' }
+                                {
+                                    label: t('hud.about.wechatLabel'),
+                                    color: 'text-green-600',
+                                    src: '/logos/weixin.jpg',
+                                    alt: '微信支付二维码'
+                                },
+                                {
+                                    label: t('hud.about.alipayLabel'),
+                                    color: 'text-blue-600',
+                                    src: '/logos/zhifubao.jpg',
+                                    alt: '支付宝支付二维码'
+                                }
                             ].map((qr, idx) => (
                                 <div key={idx} className="flex flex-col items-center gap-1.5 pt-1">
-                                    <div className="w-24 h-24 bg-zinc-100 flex items-center justify-center text-zinc-300 text-[10px] rounded-lg border border-parchment-brown/5 shadow-inner">
-                                        QRCode
+                                    <div className="w-24 h-24 bg-zinc-100 flex items-center justify-center text-zinc-300 text-[10px] rounded-lg border border-parchment-brown/5 shadow-inner overflow-hidden">
+                                        <img
+                                            src={qr.src}
+                                            alt={qr.alt}
+                                            className="w-full h-full object-cover"
+                                            loading="lazy"
+                                        />
                                     </div>
                                     <span className={`text-[10px] font-bold ${qr.color} opacity-80`}>{qr.label}</span>
                                 </div>
@@ -306,20 +449,47 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                             <canvas ref={particleCanvasRef} className="absolute inset-0 pointer-events-none" />
 
                             <div ref={scrollRef} className="absolute inset-0 overflow-y-auto scrollbar-thin scrollbar-thumb-parchment-gold/20">
-                                <div className="flex flex-col items-center w-full">
-                                    {[...SPONSORS, ...SPONSORS, ...SPONSORS].map((sponsor, i) => (
-                                        <div key={i} className="py-2 w-full flex justify-center">
-                                            <div className="text-sm font-bold text-parchment-brown/80 flex items-center gap-3 bg-parchment-base-bg/60 px-4 py-1.5 rounded-full backdrop-blur-sm shadow-sm border border-parchment-gold/20 hover:bg-parchment-base-bg/90 transition-colors cursor-default max-w-max">
-                                                <div className="flex items-center gap-1.5">
-                                                    <Coffee size={12} className="text-parchment-gold" />
-                                                    <span>{sponsor.name}</span>
+                                {sponsorLoading && sponsors.length === 0 && (
+                                    <div className="py-4 text-xs text-parchment-light-text text-center">赞助名单加载中...</div>
+                                )}
+                                {sponsorError && !sponsorLoading && sponsors.length === 0 && (
+                                    <div className="py-4 text-xs text-parchment-light-text text-center">赞助名单加载失败</div>
+                                )}
+                                {!sponsorLoading && !sponsorError && sponsors.length === 0 && (
+                                    <div className="py-4 text-xs text-parchment-light-text text-center">暂无赞助记录</div>
+                                )}
+                                {!sponsorError && baseCount > 0 && (
+                                    <div className="relative w-full" style={{ height: totalHeight }}>
+                                        {visibleIndexes.map((itemIndex) => {
+                                            const sponsorIndex = loopEnabled ? itemIndex % baseCount : itemIndex;
+                                            const sponsor = sponsors[sponsorIndex];
+                                            if (!sponsor) return null;
+                                            return (
+                                                <div
+                                                    key={`${sponsor.id}-${itemIndex}`}
+                                                    className="flex items-center justify-center w-full"
+                                                    style={{ position: 'absolute', top: itemIndex * ROW_HEIGHT, height: ROW_HEIGHT, left: 0, right: 0 }}
+                                                >
+                                                    <div className="text-sm font-bold text-parchment-brown/80 flex items-center gap-3 bg-parchment-base-bg/60 px-4 py-1.5 rounded-full backdrop-blur-sm shadow-sm border border-parchment-gold/20 hover:bg-parchment-base-bg/90 transition-colors cursor-default max-w-max">
+                                                        <div className="flex items-center gap-2">
+                                                            <Coffee size={12} className="text-parchment-gold" />
+                                                            <div className="flex flex-col">
+                                                                <span>{sponsor.name}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="w-[1px] h-3 bg-parchment-brown/20" />
+                                                        <span className="font-mono text-parchment-gold text-xs">¥{sponsor.amount}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="w-[1px] h-3 bg-parchment-brown/20" />
-                                                <span className="font-mono text-parchment-gold text-xs">¥{sponsor.amount}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                                {sponsorLoading && sponsors.length > 0 && (
+                                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] text-parchment-light-text/80 bg-parchment-base-bg/80 px-2 py-0.5 rounded-full">
+                                        加载更多...
+                                    </div>
+                                )}
                             </div>
 
                             <div className="absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-parchment-base-bg/10 to-transparent z-10 pointer-events-none" />

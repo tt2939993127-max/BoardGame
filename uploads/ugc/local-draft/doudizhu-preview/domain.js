@@ -199,41 +199,92 @@ const domain = (() => {
     return turnNumber;
   };
 
+  const parseBidScore = (payload) => {
+    if (!payload || typeof payload !== 'object') return 1;
+    const raw = payload.score ?? payload.bid ?? payload.bidScore ?? 1;
+    const score = Number(raw);
+    if (!Number.isFinite(score)) return 1;
+    return Math.floor(score);
+  };
+
+  const applyLandlord = (state, landlordId) => {
+    const zones = state.publicZones || {};
+    const hands = (zones.hands && typeof zones.hands === 'object') ? zones.hands : {};
+    const landlordCards = Array.isArray(zones.landlordCards) ? zones.landlordCards : [];
+    const updatedHand = (hands[landlordId] || []).concat(landlordCards);
+    const nextHands = {
+      ...hands,
+      [landlordId]: updatedHand,
+    };
+    const nextPlayers = { ...state.players };
+    Object.keys(nextPlayers).forEach(id => {
+      const player = nextPlayers[id];
+      const publicState = player && typeof player === 'object' ? (player.public || {}) : {};
+      const role = id === landlordId ? '地主' : '农民';
+      const handCount = nextHands[id] ? nextHands[id].length : (player?.handCount ?? 0);
+      nextPlayers[id] = {
+        ...player,
+        handCount,
+        public: {
+          ...publicState,
+          role,
+        },
+      };
+    });
+    return {
+      ...state,
+      phase: 'action',
+      turnNumber: 1,
+      activePlayerId: landlordId,
+      players: nextPlayers,
+      publicZones: {
+        ...zones,
+        hands: nextHands,
+        landlordId,
+        lastPlay: null,
+        passCount: 0,
+      },
+    };
+  };
+
   return {
     gameId: 'doudizhu',
 
     setup(playerIds, random) {
       const order = normalizePlayerOrder(playerIds);
-      const landlordId = order[0] || 'player-1';
+      const startPlayerId = order[0] || 'player-1';
       const deck = random.shuffle(createDeck());
       const hands = {};
       order.forEach((id, index) => {
         hands[id] = deck.slice(index * 17, index * 17 + 17);
       });
       const landlordCards = deck.slice(51, 54);
-      hands[landlordId] = (hands[landlordId] || []).concat(landlordCards);
 
       const players = {};
       order.forEach(id => {
         players[id] = {
           ...buildPlayerState(hands[id].length),
-          public: { role: id === landlordId ? '地主' : '农民' },
+          public: { role: '待定', bid: null },
         };
       });
 
       return {
-        phase: 'play',
+        phase: 'bid',
         turnNumber: 1,
-        activePlayerId: landlordId,
+        activePlayerId: startPlayerId,
         players,
         publicZones: {
           playerOrder: order,
-          landlordId,
+          landlordId: null,
           hands,
           deck: deck.slice(54),
           landlordCards,
           lastPlay: null,
           passCount: 0,
+          bids: {},
+          highestBid: 0,
+          highestBidderId: null,
+          bidCount: 0,
         },
       };
     },
@@ -259,6 +310,32 @@ const domain = (() => {
       const hands = (zones.hands && typeof zones.hands === 'object') ? zones.hands : {};
       const hand = hands[playerId] || [];
       const lastPlay = zones.lastPlay || null;
+      const phase = String(state.phase || 'action');
+
+      if (phase === 'bid') {
+        if (commandType === 'BID') {
+          const bids = (zones.bids && typeof zones.bids === 'object') ? zones.bids : {};
+          if (bids[playerId] !== undefined && bids[playerId] !== null) {
+            return { valid: false, error: '已完成叫分' };
+          }
+          const bidScore = parseBidScore(command.payload || {});
+          if (bidScore < 1 || bidScore > 3) {
+            return { valid: false, error: '叫分必须在 1-3 分之间' };
+          }
+          return { valid: true };
+        }
+        if (commandType === 'CALL_LANDLORD') {
+          if (zones.landlordId) {
+            return { valid: false, error: '地主已确定' };
+          }
+          return { valid: true };
+        }
+        return { valid: false, error: '当前阶段无法执行该命令' };
+      }
+
+      if (phase !== 'action') {
+        return { valid: false, error: '当前阶段无法执行该命令' };
+      }
 
       if (commandType === 'PASS') {
         if (!lastPlay) {
@@ -301,6 +378,13 @@ const domain = (() => {
       const commandType = String(command.type || '');
       const playerId = String(command.playerId || '');
 
+      if (commandType === 'BID') {
+        const score = Math.max(1, Math.min(3, parseBidScore(command.payload || {})));
+        return [{ type: 'BIDDED', payload: { playerId, score } }];
+      }
+      if (commandType === 'CALL_LANDLORD') {
+        return [{ type: 'LANDLORD_CALLED', payload: { playerId } }];
+      }
       if (commandType === 'PASS') {
         return [{ type: 'PASSED', payload: { playerId } }];
       }
@@ -334,6 +418,53 @@ const domain = (() => {
       const playerOrder = zones.playerOrder || Object.keys(state.players || {});
       const hands = (zones.hands && typeof zones.hands === 'object') ? zones.hands : {};
 
+      if (event.type === 'BIDDED') {
+        const playerId = String(event.payload.playerId || '');
+        const score = Number(event.payload.score || 1);
+        const bids = (zones.bids && typeof zones.bids === 'object') ? zones.bids : {};
+        const nextBids = { ...bids, [playerId]: score };
+        const bidCount = Number(zones.bidCount || 0) + 1;
+        const highestBid = Math.max(Number(zones.highestBid || 0), score);
+        const highestBidderId = score >= highestBid ? playerId : (zones.highestBidderId || null);
+        const nextPlayerId = getNextPlayerId(playerId, playerOrder);
+        const nextTurnNumber = updateTurnNumber(state.turnNumber, state.activePlayerId, nextPlayerId, playerOrder);
+        const nextPlayers = { ...state.players };
+        if (nextPlayers[playerId]) {
+          const publicState = nextPlayers[playerId].public || {};
+          nextPlayers[playerId] = {
+            ...nextPlayers[playerId],
+            public: {
+              ...publicState,
+              bid: score,
+            },
+          };
+        }
+        let nextState = {
+          ...state,
+          turnNumber: nextTurnNumber,
+          activePlayerId: nextPlayerId,
+          players: nextPlayers,
+          publicZones: {
+            ...zones,
+            bids: nextBids,
+            bidCount,
+            highestBid,
+            highestBidderId,
+          },
+        };
+        if (bidCount >= playerOrder.length) {
+          const resolvedLandlordId = highestBidderId || playerOrder[0] || playerId;
+          nextState = applyLandlord(nextState, resolvedLandlordId);
+        }
+        return nextState;
+      }
+
+      if (event.type === 'LANDLORD_CALLED') {
+        const playerId = String(event.payload.playerId || '');
+        const resolvedLandlordId = playerId || playerOrder[0];
+        return applyLandlord(state, resolvedLandlordId);
+      }
+
       if (event.type === 'PLAYED') {
         const playerId = String(event.payload.playerId || '');
         const cardIds = Array.isArray(event.payload.cardIds)
@@ -355,8 +486,10 @@ const domain = (() => {
             handCount: remaining.length,
           };
         }
+        const nextPhase = remaining.length === 0 ? 'resolve' : state.phase;
         return {
           ...state,
+          phase: nextPhase,
           turnNumber: nextTurnNumber,
           activePlayerId: nextPlayerId,
           players: nextPlayers,

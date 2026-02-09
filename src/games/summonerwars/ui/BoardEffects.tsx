@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { SummonEffect } from '../../../components/common/animations/SummonEffect';
 import { ConeBlast } from '../../../components/common/animations/ConeBlast';
 import { DamageFlash } from '../../../components/common/animations/DamageFlash';
@@ -33,6 +33,44 @@ export interface BoardEffectData {
 // 召唤效果（委托通用 SummonEffect 组件）
 // ============================================================================
 
+/** 卡牌宽高比（与 CardSprite 一致） */
+const CARD_ASPECT_RATIO = 1044 / 729;
+/** 卡牌在格子内的宽度比例（与 UnitCell 的 w-[85%] 一致） */
+const CARD_WIDTH_RATIO = 0.85;
+
+/**
+ * 特效容器：以格子为定位基准，内部用与卡牌相同的 aspectRatio 约束尺寸。
+ * overflowScale 控制容器相对于格子的放大倍数（用于需要溢出的特效如召唤光柱）。
+ */
+const EffectCellContainer: React.FC<{
+  pos: { left: number; top: number; width: number; height: number };
+  overflowScale?: number;
+  className?: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}> = ({ pos, overflowScale = 1, className = '', style, children }) => {
+  // 容器定位到格子（或放大后居中）
+  const w = pos.width * overflowScale;
+  const h = pos.height * overflowScale;
+  const l = pos.left - (w - pos.width) / 2;
+  const t = pos.top - (h - pos.height) / 2;
+
+  return (
+    <div
+      className={`absolute pointer-events-none flex items-center justify-center ${className}`}
+      style={{ left: `${l}%`, top: `${t}%`, width: `${w}%`, height: `${h}%`, overflow: 'visible', ...style }}
+    >
+      {/* 内层：与卡牌相同的宽度比例 + 宽高比，确保特效与卡牌大小一致 */}
+      <div
+        className="relative"
+        style={{ width: `${CARD_WIDTH_RATIO * 100}%`, aspectRatio: `${CARD_ASPECT_RATIO}`, maxHeight: '100%' }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const SummonEffectAdapter: React.FC<{
   effect: BoardEffectData;
   getCellPosition: (row: number, col: number) => { left: number; top: number; width: number; height: number };
@@ -41,15 +79,24 @@ const SummonEffectAdapter: React.FC<{
   const pos = getCellPosition(effect.position.row, effect.position.col);
   const isStrong = effect.intensity === 'strong';
 
+  // 召唤光柱需要比卡牌大得多的 canvas 空间，不走卡牌大小约束
+  // 容器以格子为中心放大 7.5 倍（1.5x 原始 5 倍），canvas 铺满整个容器
+  const scale = 7.5;
+  const w = pos.width * scale;
+  const h = pos.height * scale;
+  const l = pos.left - (w - pos.width) / 2;
+  const t = pos.top - (h - pos.height) / 2;
+
   return (
     <div
       className="absolute pointer-events-none z-30"
-      style={{ left: `${pos.left}%`, top: `${pos.top}%`, width: `${pos.width}%`, height: `${pos.height}%` }}
+      style={{ left: `${l}%`, top: `${t}%`, width: `${w}%`, height: `${h}%` }}
     >
       <SummonEffect
         active
         intensity={effect.intensity}
         color={isStrong ? 'gold' : 'blue'}
+        originY={0.5}
         onComplete={() => onComplete(effect.id)}
       />
     </div>
@@ -75,20 +122,22 @@ const ShockwaveEffect: React.FC<{
     const tgtPos = getCellPosition(effect.position.row, effect.position.col);
     const dmg = effect.damageAmount ?? (effect.intensity === 'strong' ? 3 : 1);
     return (
-      <ImpactContainer
-        isActive
-        damage={dmg}
-        effects={{ shake: true, hitStop: false }}
-        className="absolute pointer-events-none z-30"
-        style={{ left: `${tgtPos.left}%`, top: `${tgtPos.top}%`, width: `${tgtPos.width}%`, height: `${tgtPos.height}%`, overflow: 'visible' }}
-        onComplete={() => onComplete(effect.id)}
-      >
-        <DamageFlash
-          active
+      <EffectCellContainer pos={tgtPos} className="z-30">
+        <ImpactContainer
+          isActive
           damage={dmg}
-          intensity={effect.intensity}
-        />
-      </ImpactContainer>
+          effects={{ shake: true, hitStop: false }}
+          className="absolute inset-0"
+          style={{ overflow: 'visible' }}
+          onComplete={() => onComplete(effect.id)}
+        >
+          <DamageFlash
+            active
+            damage={dmg}
+            intensity={effect.intensity}
+          />
+        </ImpactContainer>
+      </EffectCellContainer>
     );
   }
 
@@ -126,20 +175,22 @@ const DamageEffectAdapter: React.FC<{
   const dmg = effect.damageAmount ?? (isStrong ? 3 : 1);
 
   return (
-    <ImpactContainer
-      isActive
-      damage={dmg}
-      effects={{ shake: true, hitStop: false }}
-      className="absolute pointer-events-none z-30"
-      style={{ left: `${pos.left}%`, top: `${pos.top}%`, width: `${pos.width}%`, height: `${pos.height}%`, overflow: 'visible' }}
-      onComplete={() => onComplete(effect.id)}
-    >
-      <DamageFlash
-        active
+    <EffectCellContainer pos={pos} className="z-30">
+      <ImpactContainer
+        isActive
         damage={dmg}
-        intensity={effect.intensity}
-      />
-    </ImpactContainer>
+        effects={{ shake: true, hitStop: false }}
+        className="absolute inset-0"
+        style={{ overflow: 'visible' }}
+        onComplete={() => onComplete(effect.id)}
+      >
+        <DamageFlash
+          active
+          damage={dmg}
+          intensity={effect.intensity}
+        />
+      </ImpactContainer>
+    </EffectCellContainer>
   );
 };
 
@@ -190,22 +241,44 @@ export const BoardEffectsLayer: React.FC<{
   effects: BoardEffectData[];
   getCellPosition: (row: number, col: number) => { left: number; top: number; width: number; height: number };
   onEffectComplete: (id: string) => void;
-}> = ({ effects, getCellPosition, onEffectComplete }) => (
-  <AnimatePresence>
-    {effects.map((effect) => {
-      switch (effect.type) {
-        case 'summon':
-          return <SummonEffectAdapter key={effect.id} effect={effect} getCellPosition={getCellPosition} onComplete={onEffectComplete} />;
-        case 'shockwave':
-          return <ShockwaveEffect key={effect.id} effect={effect} getCellPosition={getCellPosition} onComplete={onEffectComplete} />;
-        case 'damage':
-          return <DamageEffectAdapter key={effect.id} effect={effect} getCellPosition={getCellPosition} onComplete={onEffectComplete} />;
-        default:
-          return null;
-      }
-    })}
-  </AnimatePresence>
-);
+}> = ({ effects, getCellPosition, onEffectComplete }) => {
+  const hasSummon = effects.some((e) => e.type === 'summon');
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-20" style={{ overflow: 'visible' }}>
+      {/* 召唤暗角遮罩：召唤时场景变暗，聚焦光柱 */}
+      <AnimatePresence>
+        {hasSummon && (
+          <motion.div
+            key="summon-dim"
+            className="absolute inset-0 z-10"
+            style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.5) 60%, rgba(0,0,0,0.7) 100%)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 特效层（在遮罩之上） */}
+      <AnimatePresence>
+        {effects.map((effect) => {
+          switch (effect.type) {
+            case 'summon':
+              return <SummonEffectAdapter key={effect.id} effect={effect} getCellPosition={getCellPosition} onComplete={onEffectComplete} />;
+            case 'shockwave':
+              return <ShockwaveEffect key={effect.id} effect={effect} getCellPosition={getCellPosition} onComplete={onEffectComplete} />;
+            case 'damage':
+              return <DamageEffectAdapter key={effect.id} effect={effect} getCellPosition={getCellPosition} onComplete={onEffectComplete} />;
+            default:
+              return null;
+          }
+        })}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 // ============================================================================
 // Hook：管理棋盘效果状态

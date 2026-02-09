@@ -1,6 +1,7 @@
 /**
  * 召唤师战争 - 地图容器组件
- * 支持拖拽和鼠标滚轮缩放，区分点击和拖拽
+ * 支持拖拽、鼠标滚轮缩放，区分点击和拖拽
+ * 支持教程自动平移（panToTarget）
  */
 
 import React, { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
@@ -21,6 +22,10 @@ export interface MapContainerProps {
   dragBoundsPaddingRatioY?: number;
   /** 禁用拖拽和缩放（教程非交互步骤时使用） */
   interactionDisabled?: boolean;
+  /** 教程自动平移：传入 data-tutorial-id 值，地图会平滑移动使该元素居中 */
+  panToTarget?: string | null;
+  /** 教程自动平移时的缩放倍率（不传则保持当前缩放） */
+  panToScale?: number;
   /** 测试标识（容器） */
   containerTestId?: string;
   /** 测试标识（地图内容） */
@@ -39,6 +44,8 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   maxScale = 3,
   dragBoundsPaddingRatioY = 0,
   interactionDisabled = false,
+  panToTarget,
+  panToScale,
   containerTestId,
   contentTestId,
   scaleTestId,
@@ -51,7 +58,9 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [contentSize, setContentSize] = useState({ width: 0, height: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  
+  // 平滑过渡标记：panToTarget 触发时启用较长 transition
+  const [isAnimating, setIsAnimating] = useState(false);
+
   // 拖拽状态 ref
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const positionStartRef = useRef({ x: 0, y: 0 });
@@ -104,7 +113,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return; // 只响应左键
     if (interactionDisabled) return; // 教程非交互步骤时禁止拖拽
-    
+
     isPointerDownRef.current = true;
     pointerStartRef.current = { x: e.clientX, y: e.clientY };
     positionStartRef.current = { x: position.x, y: position.y };
@@ -114,15 +123,16 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => {
       if (!isPointerDownRef.current) return;
-      
+
       const dx = e.clientX - pointerStartRef.current.x;
       const dy = e.clientY - pointerStartRef.current.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
+
       // 超过阈值才开始拖拽
       if (distance > DRAG_THRESHOLD) {
         setIsDragging(true);
-        
+        setIsAnimating(false);
+
         const nextPosition = {
           x: positionStartRef.current.x + dx,
           y: positionStartRef.current.y + dy,
@@ -138,7 +148,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
 
     window.addEventListener('mousemove', handleGlobalMouseMove);
     window.addEventListener('mouseup', handleGlobalMouseUp);
-    
+
     return () => {
       window.removeEventListener('mousemove', handleGlobalMouseMove);
       window.removeEventListener('mouseup', handleGlobalMouseUp);
@@ -171,13 +181,82 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     });
   }, [clampPosition]);
 
-  // 教程禁用交互时，重置地图到默认位置和缩放
+  // 教程禁用交互时，若没有 panToTarget 则重置地图到默认位置和缩放
   useEffect(() => {
-    if (interactionDisabled) {
+    if (interactionDisabled && !panToTarget) {
+      console.log(`[MapContainer] reset effect: interactionDisabled=${interactionDisabled}, panToTarget=${panToTarget}`);
+      setIsAnimating(true);
       setScale(initialScale);
       setPosition({ x: 0, y: 0 });
+      const timerId = window.setTimeout(() => setIsAnimating(false), 400);
+      return () => window.clearTimeout(timerId);
     }
-  }, [interactionDisabled, initialScale]);
+  }, [interactionDisabled, initialScale, panToTarget]);
+
+  // 教程自动平移：当 panToTarget 变化时，计算目标元素在内容区域中的位置并平移使其居中
+  // 同时支持 panToScale 指定聚焦时的缩放倍率
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  useEffect(() => {
+    if (!panToTarget || !contentRef.current || !containerRef.current) {
+      console.log(`[MapContainer] panToTarget effect skipped: panToTarget=${panToTarget}, contentRef=${!!contentRef.current}, containerRef=${!!containerRef.current}`);
+      return;
+    }
+    console.log(`[MapContainer] panToTarget effect triggered: target=${panToTarget}, panToScale=${panToScale}`);
+    // 延迟一帧确保 DOM 已更新（教程步骤切换后元素可能刚挂载）
+    const rafId = requestAnimationFrame(() => {
+      const el = contentRef.current?.querySelector(`[data-tutorial-id="${panToTarget}"]`);
+      if (!el || !contentRef.current || !containerRef.current) {
+        console.log(`[MapContainer] rAF: element not found for target=${panToTarget}`);
+        return;
+      }
+
+      const contentEl = contentRef.current;
+      const contentW = contentEl.offsetWidth;
+      const contentH = contentEl.offsetHeight;
+      if (!contentW || !contentH) {
+        console.log(`[MapContainer] rAF: content size is 0`);
+        return;
+      }
+
+      const currentScale = scaleRef.current;
+      const targetScale = panToScale != null
+        ? Math.max(minScale, Math.min(maxScale, panToScale))
+        : currentScale;
+
+      // 临时重置 transform 为无偏移状态来测量目标的真实 CSS 布局位置
+      const savedTransform = contentEl.style.transform;
+      const savedTransition = contentEl.style.transition;
+      contentEl.style.transition = 'none';
+      contentEl.style.transform = 'translate(0px, 0px) scale(1)';
+      contentEl.getBoundingClientRect(); // 强制回流
+
+      const contentRect = contentEl.getBoundingClientRect();
+      const elRect = (el as HTMLElement).getBoundingClientRect();
+
+      const targetCenterX = (elRect.left + elRect.right) / 2 - contentRect.left;
+      const targetCenterY = (elRect.top + elRect.bottom) / 2 - contentRect.top;
+
+      // 恢复原始 transform
+      contentEl.style.transform = savedTransform;
+      contentEl.getBoundingClientRect(); // 强制回流
+      contentEl.style.transition = savedTransition;
+
+      const contentCenterX = contentW / 2;
+      const contentCenterY = contentH / 2;
+      const targetTx = (contentCenterX - targetCenterX) * targetScale;
+      const targetTy = (contentCenterY - targetCenterY) * targetScale;
+
+      const clamped = clampPosition(targetTx, targetTy, targetScale);
+      console.log(`[MapContainer] rAF: targetCenter=(${targetCenterX.toFixed(1)}, ${targetCenterY.toFixed(1)}), contentCenter=(${contentCenterX.toFixed(1)}, ${contentCenterY.toFixed(1)}), targetTx=${targetTx.toFixed(1)}, targetTy=${targetTy.toFixed(1)}, clamped=(${clamped.x.toFixed(1)}, ${clamped.y.toFixed(1)}), targetScale=${targetScale}, currentScale=${currentScale}`);
+      setIsAnimating(true);
+      if (targetScale !== currentScale) setScale(targetScale);
+      setPosition(clamped);
+      const timerId = window.setTimeout(() => setIsAnimating(false), 400);
+      return () => window.clearTimeout(timerId);
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [panToTarget, panToScale, minScale, maxScale, clampPosition]);
 
   return (
     <div
@@ -186,7 +265,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       onMouseDown={handleMouseDown}
       onDragStart={(e) => e.preventDefault()}
       data-testid={containerTestId}
-      style={{ 
+      style={{
         cursor: interactionDisabled ? 'default' : isDragging ? 'grabbing' : 'grab',
         userSelect: 'none',
         WebkitUserSelect: 'none',
@@ -207,7 +286,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         data-testid={contentTestId}
         style={{
           transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-          transition: isDragging ? 'none' : 'transform 75ms',
+          transition: isDragging ? 'none' : isAnimating ? 'transform 350ms ease-out' : 'transform 75ms',
           willChange: 'transform',
           pointerEvents: isDragging ? 'none' : 'auto',
         }}

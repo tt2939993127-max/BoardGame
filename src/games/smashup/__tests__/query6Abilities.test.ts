@@ -162,7 +162,7 @@ describe('海盗派系能力（第6批）', () => {
         expect(moveEvents.length).toBe(0);
     });
 
-    it('pirate_shanghai: 移动最强对手随从到己方随从最多的基地', () => {
+    it('pirate_shanghai: 多目标时创建 Prompt 选择随从', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -177,13 +177,13 @@ describe('海盗派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const moveEvents = events.filter(e => e.type === SU_EVENTS.MINION_MOVED);
-        expect(moveEvents.length).toBe(1);
-        expect((moveEvents[0] as any).payload.minionUid).toBe('m1'); // 最强对手随从
-        expect((moveEvents[0] as any).payload.toBaseIndex).toBe(1); // 己方随从最多的基地
+        // 多个对手随从时应创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('pirate_shanghai_choose_minion');
     });
 
-    it('pirate_sea_dogs: 移动最弱对手随从到随从最少的基地', () => {
+    it('pirate_sea_dogs: 多目标时创建 Prompt 选择随从', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -198,10 +198,10 @@ describe('海盗派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const moveEvents = events.filter(e => e.type === SU_EVENTS.MINION_MOVED);
-        expect(moveEvents.length).toBe(1);
-        expect((moveEvents[0] as any).payload.minionUid).toBe('m2'); // 最弱
-        expect((moveEvents[0] as any).payload.toBaseIndex).toBe(1); // 随从最少
+        // 多个随从时应创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('pirate_sea_dogs_choose_minion');
     });
 
     it('pirate_powderkeg: 消灭己方随从并消灭同基地力量≤被消灭随从的随从', () => {

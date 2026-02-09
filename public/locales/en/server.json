@@ -95,6 +95,7 @@
       "userNotFound": "User not found",
       "matchNotFound": "Match not found",
       "roomNotFound": "Room not found",
+      "ugcPackageNotFound": "UGC package not found",
       "missingBanReason": "Please provide a ban reason",
       "cannotBanAdmin": "Cannot ban admin account",
       "cannotDeleteAdmin": "Cannot delete admin account"

@@ -25,23 +25,91 @@ async function setupExecutor(playerIds: string[] = ['player-1', 'player-2', 'pla
   return { executor, state: setupResult.result! };
 }
 
+async function applyCommand(
+  executor: RuntimeDomainExecutor,
+  state: Awaited<ReturnType<RuntimeDomainExecutor['setup']>>['result'],
+  command: { type: string; playerId: string; payload?: Record<string, unknown> },
+) {
+  const payload = command.payload ?? {};
+  const validation = await executor.validate(state!, {
+    ...command,
+    payload,
+    timestamp: Date.now(),
+  });
+  expect(validation.result?.valid).toBe(true);
+  const executeResult = await executor.execute(state!, {
+    ...command,
+    payload,
+    timestamp: Date.now(),
+  }, 7);
+  expect(executeResult.success).toBe(true);
+  let next = state!;
+  for (const event of executeResult.result || []) {
+    const reduceResult = await executor.reduce(next, event);
+    expect(reduceResult.success).toBe(true);
+    next = reduceResult.result!;
+  }
+  return next;
+}
+
 describe('DouDiZhu DomainCore', () => {
-  it('setup 应发牌并固定地主为首位', async () => {
+  it('setup 应发牌并进入叫分阶段', async () => {
     const { state } = await setupExecutor();
     const zones = state.publicZones as Record<string, unknown>;
     const hands = zones.hands as Record<string, Array<{ id: string }>>;
 
     expect(state.activePlayerId).toBe('player-1');
-    expect(zones.landlordId).toBe('player-1');
-    expect(hands['player-1'].length).toBe(20);
+    expect(state.phase).toBe('bid');
+    expect(zones.landlordId).toBeNull();
+    expect(hands['player-1'].length).toBe(17);
     expect(hands['player-2'].length).toBe(17);
     expect(hands['player-3'].length).toBe(17);
-    expect(state.players['player-1'].handCount).toBe(20);
+    expect(state.players['player-1'].handCount).toBe(17);
+    expect(state.players['player-1'].public?.role).toBe('待定');
+    expect(state.players['player-1'].public?.bid).toBeNull();
+    expect(zones.highestBid).toBe(0);
+  });
+
+  it('叫分后应记录分数并推进回合', async () => {
+    const { executor, state } = await setupExecutor();
+    const nextState = await applyCommand(executor, state, {
+      type: 'BID',
+      playerId: 'player-1',
+      payload: { score: 2 },
+    });
+    const zones = nextState.publicZones as Record<string, unknown>;
+    expect(nextState.phase).toBe('bid');
+    expect(nextState.activePlayerId).toBe('player-2');
+    expect(zones.highestBid).toBe(2);
+    expect(zones.bids).toEqual({ 'player-1': 2 });
+    expect(nextState.players['player-1'].public?.bid).toBe(2);
+  });
+
+  it('抢地主后应进入出牌阶段并补底牌', async () => {
+    const { executor, state } = await setupExecutor();
+    const nextState = await applyCommand(executor, state, {
+      type: 'CALL_LANDLORD',
+      playerId: 'player-1',
+      payload: {},
+    });
+    const zones = nextState.publicZones as Record<string, unknown>;
+    const hands = zones.hands as Record<string, Array<{ id: string }>>;
+    expect(nextState.phase).toBe('action');
+    expect(nextState.activePlayerId).toBe('player-1');
+    expect(zones.landlordId).toBe('player-1');
+    expect(hands['player-1'].length).toBe(20);
+    expect(nextState.players['player-1'].public?.role).toBe('地主');
+    expect(nextState.players['player-2'].public?.role).toBe('农民');
   });
 
   it('validate 应拒绝非当前玩家出牌与无上家时 PASS', async () => {
     const { executor, state } = await setupExecutor();
-    const invalidTurn = await executor.validate(state, {
+    const actionState = await applyCommand(executor, state, {
+      type: 'CALL_LANDLORD',
+      playerId: 'player-1',
+      payload: {},
+    });
+    const invalidTurn = await executor.validate(actionState, {
       type: 'PLAY_CARD',
       playerId: 'player-2',
       payload: { cardIds: [] },
@@ -50,7 +118,7 @@ describe('DouDiZhu DomainCore', () => {
     expect(invalidTurn.success).toBe(true);
     expect(invalidTurn.result?.valid).toBe(false);
 
-    const invalidPass = await executor.validate(state, {
+    const invalidPass = await executor.validate(actionState, {
       type: 'PASS',
       playerId: 'player-1',
       payload: {},
@@ -62,7 +130,12 @@ describe('DouDiZhu DomainCore', () => {
 
   it('出牌与连续 PASS 应推进回合并清空上轮出牌', async () => {
     const { executor, state: initial } = await setupExecutor();
-    const zones = initial.publicZones as Record<string, unknown>;
+    const actionState = await applyCommand(executor, initial, {
+      type: 'CALL_LANDLORD',
+      playerId: 'player-1',
+      payload: {},
+    });
+    const zones = actionState.publicZones as Record<string, unknown>;
     const hands = zones.hands as Record<string, Array<{ id: string }>>;
     const firstCardId = hands['player-1'][0].id;
 
@@ -72,13 +145,13 @@ describe('DouDiZhu DomainCore', () => {
       payload: { cardIds: [firstCardId] },
       timestamp: Date.now(),
     };
-    const validation = await executor.validate(initial, playCommand);
+    const validation = await executor.validate(actionState, playCommand);
     expect(validation.result?.valid).toBe(true);
 
-    const executeResult = await executor.execute(initial, playCommand, 7);
+    const executeResult = await executor.execute(actionState, playCommand, 7);
     expect(executeResult.success).toBe(true);
 
-    const reduceResult = await executor.reduce(initial, executeResult.result![0]);
+    const reduceResult = await executor.reduce(actionState, executeResult.result![0]);
     expect(reduceResult.success).toBe(true);
     let state = reduceResult.result!;
     let nextZones = state.publicZones as Record<string, unknown>;

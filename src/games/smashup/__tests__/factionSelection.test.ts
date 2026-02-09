@@ -35,6 +35,14 @@ function createRunner() {
     });
 }
 
+/** 完成全部4次派系选择的标准命令序列（蛇形选秀：P0→P1→P1→P0） */
+const FULL_DRAFT_COMMANDS = [
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
+    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+] as const;
+
 describe('派系选择系统', () => {
     // Property 1: 派系互斥选择
     describe('Property 1: 派系互斥选择', () => {
@@ -81,12 +89,7 @@ describe('派系选择系统', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '蛇形选秀',
-                commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                ],
+                commands: [...FULL_DRAFT_COMMANDS],
             });
             for (const step of result.steps) {
                 expect(step.success).toBe(true);
@@ -112,10 +115,7 @@ describe('派系选择系统', () => {
             const result = runner.run({
                 name: '超额选择',
                 commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
+                    ...FULL_DRAFT_COMMANDS,
                     // 选秀已完成，再选应失败（阶段已推进）
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ROBOTS } },
                 ],
@@ -133,15 +133,10 @@ describe('派系选择系统', () => {
     describe('Property 2: 牌库构建正确性', () => {
         it('选择完成后每位玩家牌库+手牌=40张', () => {
             const runner = createRunner();
+            // 第4次选择后自动推进到 playCards，无需额外 ADVANCE_PHASE
             const result = runner.run({
                 name: '牌库构建',
-                commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                ],
+                commands: [...FULL_DRAFT_COMMANDS],
             });
             const core = result.finalState.core;
             for (const pid of PLAYER_IDS) {
@@ -155,13 +150,7 @@ describe('派系选择系统', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '派系归属',
-                commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                ],
+                commands: [...FULL_DRAFT_COMMANDS],
             });
             const core = result.finalState.core;
 
@@ -176,15 +165,10 @@ describe('派系选择系统', () => {
     describe('Property 3: 选择完成后初始化', () => {
         it('每位玩家有5张起始手牌', () => {
             const runner = createRunner();
+            // 第4次选择后自动推进，手牌在初始化时发放
             const result = runner.run({
                 name: '起始手牌',
-                commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                ],
+                commands: [...FULL_DRAFT_COMMANDS],
             });
             const core = result.finalState.core;
             for (const pid of PLAYER_IDS) {
@@ -196,13 +180,7 @@ describe('派系选择系统', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '基地数量',
-                commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                ],
+                commands: [...FULL_DRAFT_COMMANDS],
             });
             expect(result.finalState.core.bases.length).toBe(PLAYER_IDS.length + 1);
         });
@@ -211,13 +189,7 @@ describe('派系选择系统', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '阶段推进',
-                commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                ],
+                commands: [...FULL_DRAFT_COMMANDS],
             });
             expect(result.finalState.sys.phase).toBe('playCards');
         });
@@ -226,13 +198,7 @@ describe('派系选择系统', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '选择状态清除',
-                commands: [
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.NINJAS } },
-                    { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.DINOSAURS } },
-                    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                ],
+                commands: [...FULL_DRAFT_COMMANDS],
             });
             expect(result.finalState.core.factionSelection).toBeUndefined();
         });
@@ -252,7 +218,6 @@ describe('派系选择系统', () => {
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: selectedFactions[2] } },
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: selectedFactions[3] } },
                     { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: selectedFactions[1] } },
-                    { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
                 ],
             });
 

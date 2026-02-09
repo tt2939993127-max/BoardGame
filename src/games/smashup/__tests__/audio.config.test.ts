@@ -9,7 +9,22 @@ import { SMASHUP_AUDIO_CONFIG } from '../audio.config';
 import { SU_EVENTS } from '../domain/types';
 
 const BGM_NORMAL_KEY = 'bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_main';
-const BGM_BATTLE_KEY = 'bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_intensity_2';
+const BGM_BATTLE_KEY = 'bgm.funk.funk_music_pack.move_your_feet_rt_2.funk_move_your_feet_main';
+const BGM_BUBBLEGUM_KEY = 'bgm.general.casual_music_pack_vol.bubblegum_rt_2.casual_bubblegum_main';
+const BGM_FIELD_DAY_KEY = 'bgm.general.casual_music_pack_vol.field_day_rt_2.casual_field_day_main';
+const BGM_LIZARDS_KEY = 'bgm.general.casual_music_pack_vol.lizards_rt_1.casual_lizards_main';
+const BGM_BUBBLEGUM_INTENSE_KEY = 'bgm.general.casual_music_pack_vol.bubblegum_rt_2.casual_bubblegum_intensity_2';
+const BGM_FIELD_DAY_INTENSE_KEY = 'bgm.general.casual_music_pack_vol.field_day_rt_2.casual_field_day_intensity_2';
+const BGM_SUNSET_KEY = 'bgm.general.casual_music_pack_vol.sunset_rt_1.casual_sunset_main';
+const BGM_SUNSET_INTENSE_KEY = 'bgm.general.casual_music_pack_vol.sunset_rt_1.casual_sunset_intensity_2';
+const BGM_SUNNY_DAYS_KEY = 'bgm.funk.funk_music_pack.sunny_days_rt_2.funk_sunny_days_main';
+const BGM_SUNNY_DAYS_INTENSE_KEY = 'bgm.funk.funk_music_pack.sunny_days_rt_2.funk_sunny_days_intensity_2';
+const BGM_BIG_SHOT_KEY = 'bgm.funk.funk_music_pack.big_shot_rt_4.funk_big_shot_main';
+const BGM_BIG_SHOT_INTENSE_KEY = 'bgm.funk.funk_music_pack.big_shot_rt_4.funk_big_shot_intensity_2';
+const BGM_MOVE_YOUR_FEET_INTENSE_KEY = 'bgm.funk.funk_music_pack.move_your_feet_rt_2.funk_move_your_feet_intensity_2';
+const BGM_TIKI_INTENSE_KEY = 'bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_intensity_2';
+const BGM_NOBODY_KNOWS_KEY = 'bgm.funk.funk_music_pack.nobody_knows_rt_4.funk_nobody_knows_intensity_1';
+const BGM_NOBODY_KNOWS_INTENSE_KEY = 'bgm.funk.funk_music_pack.nobody_knows_rt_4.funk_nobody_knows_intensity_2';
 const STINGER_WIN_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win';
 const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose';
 
@@ -25,7 +40,7 @@ const CARD_DISCARD_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001';
 const CARD_SHUFFLE_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_shuffle_fast_001';
 const CARD_SCROLL_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001';
 
-const MOVE_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001';
+const MOVE_KEY = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.armor_movement_h';
 const MINION_DESTROY_KEY = 'combat.general.fight_fury_vol_2.body_hitting_the_ground_with_blood.fghtbf_body_hitting_the_ground_with_blood_01_krst';
 const POWER_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
 const POWER_LOSE_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
@@ -92,10 +107,125 @@ const NINJA_ACTION_KEYS = [
     'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_02_krst',
     'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_03_krst',
 ];
+const ROBOT_MINION_KEYS = [
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robot_monster_a',
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robot_monster_b',
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_a',
+];
+const ROBOT_ACTION_KEYS = [
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.machinery.mechanical_gears',
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.machinery.cyber_drill',
+    'cyberpunk.cyberpunk_sound_fx_pack_vol.machinery.mind_reader_machine',
+];
+const GHOST_MINION_KEYS = [
+    'magic.general.spells_variations_vol_2.haunted_wrath.magevil_haunted_wrath_01_krst_none',
+    'magic.general.spells_variations_vol_2.haunted_wrath.magevil_haunted_wrath_02_krst_none',
+    'magic.general.spells_variations_vol_2.haunted_wrath.magevil_haunted_wrath_03_krst_none',
+];
+const GHOST_ACTION_KEYS = [
+    'magic.general.spells_variations_vol_3.wailing_rite.magevil_wailing_rite_01_krst_none',
+    'magic.general.spells_variations_vol_3.wailing_rite.magevil_wailing_rite_02_krst_none',
+    'magic.general.spells_variations_vol_3.wailing_rite.magevil_wailing_rite_03_krst_none',
+];
+const TRICKSTER_MINION_KEYS = [
+    'monster.general.khron_studio_monster_library_vol_3_assets.goblin.goblin_attack.creahmn_goblin_attack_01',
+    'monster.general.khron_studio_monster_library_vol_3_assets.goblin.goblin_attack.creahmn_goblin_attack_02',
+    'monster.general.khron_studio_monster_library_vol_3_assets.goblin.goblin_attack.creahmn_goblin_attack_03',
+];
+const TRICKSTER_ACTION_KEYS = [
+    'magic.general.spells_variations_vol_2.twinkle_tweak.magspel_twinkle_tweak_01_krst_none',
+    'magic.general.spells_variations_vol_2.twinkle_tweak.magspel_twinkle_tweak_02_krst_none',
+    'magic.general.spells_variations_vol_2.twinkle_tweak.magspel_twinkle_tweak_03_krst_none',
+];
+const STEAMPUNK_MINION_KEYS = [
+    'steampunk.steampunk_sound_fx_pack_vol.gas_steam.gas_click_a',
+    'steampunk.steampunk_sound_fx_pack_vol.gas_steam.gas_click_b',
+    'steampunk.steampunk_sound_fx_pack_vol.gas_steam.gas_click_c',
+];
+const STEAMPUNK_ACTION_KEYS = [
+    'steampunk.steampunk_sound_fx_pack_vol.gas_steam.steam_engine_speed_up_short_a',
+    'steampunk.steampunk_sound_fx_pack_vol.gas_steam.steam_engine_speed_up_short_b',
+    'steampunk.steampunk_sound_fx_pack_vol.gas_steam.steam_engine_speed_up_short_c',
+];
+const KILLER_PLANT_MINION_KEYS = [
+    'ambient.khron_studio_sound_of_survival_vol_1_assets.items.item_or_weapon_hit_plants.weapmisc_item_or_weapon_hit_plants_01_krst',
+    'ambient.khron_studio_sound_of_survival_vol_1_assets.items.item_or_weapon_hit_plants.weapmisc_item_or_weapon_hit_plants_02_krst',
+    'ambient.khron_studio_sound_of_survival_vol_1_assets.items.item_or_weapon_hit_plants.weapmisc_item_or_weapon_hit_plants_03_krst',
+];
+const KILLER_PLANT_ACTION_KEYS = [
+    'fantasy.poison_sword_whoosh_01',
+    'fantasy.poison_sword_whoosh_02',
+    'fantasy.poison_sword_whoosh_03',
+];
+const BEAR_CAVALRY_MINION_KEYS = [
+    'monster.general.files.10.growl_with_slobber_01',
+    'monster.general.files.10.growl_with_slobber_02',
+    'monster.general.files.10.growl_with_slobber_03',
+];
+const BEAR_CAVALRY_ACTION_KEYS = [
+    'monster.general.files.9.growl_01',
+    'monster.general.files.9.growl_02',
+    'monster.general.files.9.growl_03',
+];
+const CTHULHU_MINION_KEYS = [
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_001',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_002',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_003',
+];
+const CTHULHU_ACTION_KEYS = [
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_001',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_002',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_003',
+];
+const ELDER_THING_MINION_KEYS = [
+    'magic.general.spells_variations_vol_1.shadowstrike_beam.magspel_shadowstrike_beam_01_krst',
+    'magic.general.spells_variations_vol_1.shadowstrike_beam.magspel_shadowstrike_beam_02_krst',
+    'magic.general.spells_variations_vol_1.shadowstrike_beam.magspel_shadowstrike_beam_03_krst',
+];
+const ELDER_THING_ACTION_KEYS = [
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_astral_flare_001',
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_astral_flare_002',
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_astral_flare_003',
+];
+const INNSMOUTH_MINION_KEYS = [
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_004',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_005',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_006',
+];
+const INNSMOUTH_ACTION_KEYS = [
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_004',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_005',
+    'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_006',
+];
+const MISKATONIC_MINION_KEYS = [
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_glyphic_resonance_001',
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_glyphic_resonance_002',
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_glyphic_resonance_003',
+];
+const MISKATONIC_ACTION_KEYS = [
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_001',
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_002',
+    'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_003',
+];
 
 const ALL_KEYS = [
     BGM_NORMAL_KEY,
     BGM_BATTLE_KEY,
+    BGM_BUBBLEGUM_KEY,
+    BGM_FIELD_DAY_KEY,
+    BGM_LIZARDS_KEY,
+    BGM_BUBBLEGUM_INTENSE_KEY,
+    BGM_FIELD_DAY_INTENSE_KEY,
+    BGM_SUNSET_KEY,
+    BGM_SUNSET_INTENSE_KEY,
+    BGM_SUNNY_DAYS_KEY,
+    BGM_SUNNY_DAYS_INTENSE_KEY,
+    BGM_BIG_SHOT_KEY,
+    BGM_BIG_SHOT_INTENSE_KEY,
+    BGM_MOVE_YOUR_FEET_INTENSE_KEY,
+    BGM_TIKI_INTENSE_KEY,
+    BGM_NOBODY_KNOWS_KEY,
+    BGM_NOBODY_KNOWS_INTENSE_KEY,
     STINGER_WIN_KEY,
     STINGER_LOSE_KEY,
     SELECTION_KEY,
@@ -120,6 +250,32 @@ const ALL_KEYS = [
     ...WIZARD_ACTION_KEYS,
     ...DINO_MINION_KEYS,
     ...DINO_ACTION_KEYS,
+    ...ALIEN_MINION_KEYS,
+    ...ALIEN_ACTION_KEYS,
+    ...PIRATE_MINION_KEYS,
+    ...PIRATE_ACTION_KEYS,
+    ...NINJA_MINION_KEYS,
+    ...NINJA_ACTION_KEYS,
+    ...ROBOT_MINION_KEYS,
+    ...ROBOT_ACTION_KEYS,
+    ...GHOST_MINION_KEYS,
+    ...GHOST_ACTION_KEYS,
+    ...TRICKSTER_MINION_KEYS,
+    ...TRICKSTER_ACTION_KEYS,
+    ...STEAMPUNK_MINION_KEYS,
+    ...STEAMPUNK_ACTION_KEYS,
+    ...KILLER_PLANT_MINION_KEYS,
+    ...KILLER_PLANT_ACTION_KEYS,
+    ...BEAR_CAVALRY_MINION_KEYS,
+    ...BEAR_CAVALRY_ACTION_KEYS,
+    ...CTHULHU_MINION_KEYS,
+    ...CTHULHU_ACTION_KEYS,
+    ...ELDER_THING_MINION_KEYS,
+    ...ELDER_THING_ACTION_KEYS,
+    ...INNSMOUTH_MINION_KEYS,
+    ...INNSMOUTH_ACTION_KEYS,
+    ...MISKATONIC_MINION_KEYS,
+    ...MISKATONIC_ACTION_KEYS,
 ];
 
 const REGISTRY_PATH = path.join(process.cwd(), 'public', 'assets', 'common', 'audio', 'registry.json');
@@ -146,6 +302,33 @@ describe('Smash Up 音效配置', () => {
         const wizardAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'wizard_summon' } } as AudioEvent, mockContext);
         const dinoMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'dino_king_rex' } } as AudioEvent, mockContext);
         const dinoAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'dino_howl' } } as AudioEvent, mockContext);
+        const alienMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'alien_supreme_overlord' } } as AudioEvent, mockContext);
+        const alienAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'alien_disintegrate' } } as AudioEvent, mockContext);
+        const pirateMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'pirate_king' } } as AudioEvent, mockContext);
+        const pirateAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'pirate_dinghy' } } as AudioEvent, mockContext);
+        const ninjaMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'ninja_master' } } as AudioEvent, mockContext);
+        const ninjaAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'ninja_smoke_bomb' } } as AudioEvent, mockContext);
+        const robotMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'robot_nukebot' } } as AudioEvent, mockContext);
+        const robotAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'robot_tech_center' } } as AudioEvent, mockContext);
+        const ghostMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'ghost_spectre' } } as AudioEvent, mockContext);
+        const ghostAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'ghost_seance' } } as AudioEvent, mockContext);
+        const tricksterMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'trickster_leprechaun' } } as AudioEvent, mockContext);
+        const tricksterAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'trickster_enshrouding_mist' } } as AudioEvent, mockContext);
+        const steampunkMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'steampunk_steam_queen' } } as AudioEvent, mockContext);
+        const steampunkAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'steampunk_ornate_dome' } } as AudioEvent, mockContext);
+        const killerPlantMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'killer_plant_venus_man_trap' } } as AudioEvent, mockContext);
+        const killerPlantAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'killer_plant_budding' } } as AudioEvent, mockContext);
+        const bearCavalryMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'bear_cavalry_general_ivan' } } as AudioEvent, mockContext);
+        const bearCavalryAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'bear_cavalry_bear_hug' } } as AudioEvent, mockContext);
+        const cthulhuMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'cthulhu_star_spawn' } } as AudioEvent, mockContext);
+        const cthulhuAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'cthulhu_altar' } } as AudioEvent, mockContext);
+        const elderThingMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'elder_thing_elder_thing' } } as AudioEvent, mockContext);
+        const elderThingAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'elder_thing_power_of_madness' } } as AudioEvent, mockContext);
+        const innsmouthMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'innsmouth_the_locals' } } as AudioEvent, mockContext);
+        const innsmouthAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'innsmouth_mysteries_of_the_deep' } } as AudioEvent, mockContext);
+        const miskatonicMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'miskatonic_the_librarian' } } as AudioEvent, mockContext);
+        const miskatonicAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'miskatonic_book_of_iter_the_unseen' } } as AudioEvent, mockContext);
+        const madnessAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'special_madness' } } as AudioEvent, mockContext);
         const talentUsed = resolver({ type: SU_EVENTS.TALENT_USED, payload: { defId: 'wizard_archmage' } } as AudioEvent, mockContext);
 
         expect(ZOMBIE_MINION_KEYS).toContain(zombieMinion);
@@ -154,6 +337,33 @@ describe('Smash Up 音效配置', () => {
         expect(WIZARD_ACTION_KEYS).toContain(wizardAction);
         expect(DINO_MINION_KEYS).toContain(dinoMinion);
         expect(DINO_ACTION_KEYS).toContain(dinoAction);
+        expect(ALIEN_MINION_KEYS).toContain(alienMinion);
+        expect(ALIEN_ACTION_KEYS).toContain(alienAction);
+        expect(PIRATE_MINION_KEYS).toContain(pirateMinion);
+        expect(PIRATE_ACTION_KEYS).toContain(pirateAction);
+        expect(NINJA_MINION_KEYS).toContain(ninjaMinion);
+        expect(NINJA_ACTION_KEYS).toContain(ninjaAction);
+        expect(ROBOT_MINION_KEYS).toContain(robotMinion);
+        expect(ROBOT_ACTION_KEYS).toContain(robotAction);
+        expect(GHOST_MINION_KEYS).toContain(ghostMinion);
+        expect(GHOST_ACTION_KEYS).toContain(ghostAction);
+        expect(TRICKSTER_MINION_KEYS).toContain(tricksterMinion);
+        expect(TRICKSTER_ACTION_KEYS).toContain(tricksterAction);
+        expect(STEAMPUNK_MINION_KEYS).toContain(steampunkMinion);
+        expect(STEAMPUNK_ACTION_KEYS).toContain(steampunkAction);
+        expect(KILLER_PLANT_MINION_KEYS).toContain(killerPlantMinion);
+        expect(KILLER_PLANT_ACTION_KEYS).toContain(killerPlantAction);
+        expect(BEAR_CAVALRY_MINION_KEYS).toContain(bearCavalryMinion);
+        expect(BEAR_CAVALRY_ACTION_KEYS).toContain(bearCavalryAction);
+        expect(CTHULHU_MINION_KEYS).toContain(cthulhuMinion);
+        expect(CTHULHU_ACTION_KEYS).toContain(cthulhuAction);
+        expect(ELDER_THING_MINION_KEYS).toContain(elderThingMinion);
+        expect(ELDER_THING_ACTION_KEYS).toContain(elderThingAction);
+        expect(INNSMOUTH_MINION_KEYS).toContain(innsmouthMinion);
+        expect(INNSMOUTH_ACTION_KEYS).toContain(innsmouthAction);
+        expect(MISKATONIC_MINION_KEYS).toContain(miskatonicMinion);
+        expect(MISKATONIC_ACTION_KEYS).toContain(miskatonicAction);
+        expect(madnessAction).toBe(MADNESS_KEY);
         expect(WIZARD_MINION_KEYS).toContain(talentUsed);
         expect(resolver({ type: SU_EVENTS.CARDS_DRAWN } as AudioEvent, mockContext)).toBe(CARD_DRAW_KEY);
         expect(resolver({ type: SU_EVENTS.CARDS_DISCARDED } as AudioEvent, mockContext)).toBe(CARD_DISCARD_KEY);
@@ -173,7 +383,17 @@ describe('Smash Up 音效配置', () => {
         const battleKey = rules.find(rule => rule.when({ ...mockContext, ctx: { currentPhase: 'playCards' } }))?.key;
         const normalKey = rules.find(rule => rule.when({ ...mockContext, ctx: { currentPhase: 'draw' } }))?.key;
         expect(battleKey).toBe(BGM_BATTLE_KEY);
-        expect(normalKey).toBe(BGM_NORMAL_KEY);
+        expect(normalKey).toBe(BGM_NOBODY_KNOWS_KEY);
+    });
+
+    it('应有 bgmGroups（normal + battle）', () => {
+        expect(SMASHUP_AUDIO_CONFIG.bgmGroups).toBeDefined();
+        expect(SMASHUP_AUDIO_CONFIG.bgmGroups!.normal.length).toBeGreaterThanOrEqual(6);
+        expect(SMASHUP_AUDIO_CONFIG.bgmGroups!.battle.length).toBeGreaterThanOrEqual(5);
+    });
+
+    it('应有 17 首 BGM', () => {
+        expect(SMASHUP_AUDIO_CONFIG.bgm!.length).toBe(17);
     });
 
     it('游戏结束应触发胜负音效', () => {

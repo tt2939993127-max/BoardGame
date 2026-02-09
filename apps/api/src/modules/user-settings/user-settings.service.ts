@@ -19,6 +19,7 @@ export class UserSettingsService {
         userId: string,
         settings: AudioSettingsPayload
     ): Promise<UserAudioSettingsDocument> {
+        const normalizedSelections = normalizeBgmSelections(settings.bgmSelections);
         return this.audioSettingsModel.findOneAndUpdate(
             { userId },
             {
@@ -27,10 +28,31 @@ export class UserSettingsService {
                     masterVolume: settings.masterVolume,
                     sfxVolume: settings.sfxVolume,
                     bgmVolume: settings.bgmVolume,
+                    bgmSelections: normalizedSelections,
                 },
                 $setOnInsert: { userId },
             },
             { new: true, upsert: true }
         );
     }
+}
+
+function normalizeBgmSelections(
+    input?: Record<string, Record<string, string>>
+): Record<string, Record<string, string>> {
+    if (!input || typeof input !== 'object') return {};
+    const result: Record<string, Record<string, string>> = {};
+    for (const [gameId, groups] of Object.entries(input)) {
+        if (!groups || typeof groups !== 'object') continue;
+        const normalizedGroups: Record<string, string> = {};
+        for (const [groupId, key] of Object.entries(groups)) {
+            if (typeof key === 'string') {
+                normalizedGroups[groupId] = key;
+            }
+        }
+        if (Object.keys(normalizedGroups).length > 0) {
+            result[gameId] = normalizedGroups;
+        }
+    }
+    return result;
 }

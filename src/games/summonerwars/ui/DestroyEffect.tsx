@@ -1,20 +1,25 @@
 /**
  * 召唤师战争 - 单位/建筑摧毁动画
- * 
- * 当单位或建筑被摧毁时显示爆炸消散效果
- * 粒子散射使用 BurstParticles（Canvas 2D），形状动画保留 framer-motion
+ *
+ * 当单位或建筑被摧毁时，将卡图碎裂飞散（ShatterEffect）
+ * 同时显示摧毁文字提示
  */
 
 import React, { useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BurstParticles } from '../../../components/common/animations/BurstParticles';
+import { ShatterEffect } from '../../../components/common/animations/ShatterEffect';
+import { getSpriteAtlasSource, getSpriteAtlasStyle } from './cardAtlas';
 
 export interface DestroyEffectData {
   id: string;
   position: { row: number; col: number };
   cardName: string;
   type: 'unit' | 'structure';
+  /** 精灵图集 ID（可选，有则渲染卡图碎裂） */
+  atlasId?: string;
+  /** 精灵图帧索引 */
+  frameIndex?: number;
 }
 
 interface DestroyEffectProps {
@@ -24,11 +29,10 @@ interface DestroyEffectProps {
   onComplete: (id: string) => void;
 }
 
-/** 摧毁粒子颜色 */
-const DESTROY_COLORS = {
-  unit: ['#fb923c', '#f87171', '#fbbf24', '#fff'],
-  structure: ['#a78bfa', '#c084fc', '#e9d5ff', '#fff'],
-};
+/** 卡牌宽高比（与 CardSprite / BoardEffects 一致） */
+const CARD_ASPECT_RATIO = 1044 / 729;
+/** 卡牌在格子内的宽度比例（与 UnitCell 的 w-[85%] 一致） */
+const CARD_WIDTH_RATIO = 0.85;
 
 /** 单个摧毁效果 */
 const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
@@ -39,10 +43,17 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
   const { t } = useTranslation('game-summonerwars');
   const pos = getCellPosition(effect.position.row, effect.position.col);
   const isStructure = effect.type === 'structure';
-  
+  const [cardHidden, setCardHidden] = useState(false);
+
+  // 获取精灵图样式
+  const spriteSource = effect.atlasId ? getSpriteAtlasSource(effect.atlasId) : undefined;
+  const spriteStyle = spriteSource && effect.frameIndex != null
+    ? getSpriteAtlasStyle(effect.frameIndex, spriteSource.config)
+    : undefined;
+
   return (
     <motion.div
-      className="absolute pointer-events-none"
+      className="absolute pointer-events-none flex items-center justify-center"
       style={{
         left: `${pos.left}%`,
         top: `${pos.top}%`,
@@ -52,61 +63,55 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onAnimationComplete={() => onComplete(effect.id)}
     >
-      {/* 中心闪光 */}
-      <motion.div
-        className="absolute inset-0 flex items-center justify-center"
-        initial={{ scale: 0.5, opacity: 0 }}
-        animate={{ scale: [0.5, 1.5, 2], opacity: [0, 1, 0] }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
+      {/* 卡图 + 碎裂效果：与卡牌相同的宽度比例 + 宽高比 */}
+      <div
+        className="relative"
+        style={{ width: `${CARD_WIDTH_RATIO * 100}%`, aspectRatio: `${CARD_ASPECT_RATIO}`, maxHeight: '100%', overflow: 'visible' }}
       >
-        <div 
-          className={`w-full h-full rounded-full ${
-            isStructure 
-              ? 'bg-purple-400/60' 
-              : 'bg-red-400/60'
-          }`}
-          style={{
-            boxShadow: isStructure
-              ? '0 0 2vw 1vw rgba(168, 85, 247, 0.5)'
-              : '0 0 2vw 1vw rgba(248, 113, 113, 0.5)',
-          }}
-        />
-      </motion.div>
+        {spriteSource ? (
+          <>
+            {/* 卡图内容（碎裂时隐藏） */}
+            <div
+              data-shatter-target
+              className="absolute inset-0"
+              style={{
+                backgroundImage: `url(${spriteSource.image})`,
+                backgroundRepeat: 'no-repeat',
+                ...spriteStyle,
+                visibility: cardHidden ? 'hidden' : 'visible',
+              }}
+            />
+            <ShatterEffect
+              active
+              intensity={isStructure ? 'strong' : 'normal'}
+              onStart={() => setCardHidden(true)}
+              onComplete={() => onComplete(effect.id)}
+            />
+          </>
+        ) : (
+          /* 无精灵图时用闪光 + 延时完成 */
+          <motion.div
+            className="absolute inset-0 flex items-center justify-center"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: [0.5, 1.5, 2], opacity: [0, 1, 0] }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+            onAnimationComplete={() => onComplete(effect.id)}
+          >
+            <div
+              className={`w-full h-full rounded-full ${
+                isStructure ? 'bg-purple-400/60' : 'bg-red-400/60'
+              }`}
+              style={{
+                boxShadow: isStructure
+                  ? '0 0 2vw 1vw rgba(168, 85, 247, 0.5)'
+                  : '0 0 2vw 1vw rgba(248, 113, 113, 0.5)',
+              }}
+            />
+          </motion.div>
+        )}
+      </div>
 
-      {/* 冲击波 */}
-      <motion.div
-        className="absolute left-1/2 top-1/2 rounded-full"
-        style={{
-          width: '32%',
-          height: '32%',
-          marginLeft: '-16%',
-          marginTop: '-16%',
-          border: isStructure ? '2px solid rgba(168, 85, 247, 0.7)' : '2px solid rgba(248, 113, 113, 0.7)',
-          boxShadow: isStructure
-            ? '0 0 1.6vw 0.4vw rgba(168, 85, 247, 0.35)'
-            : '0 0 1.6vw 0.4vw rgba(248, 113, 113, 0.35)',
-        }}
-        initial={{ scale: 0.2, opacity: 0.8 }}
-        animate={{ scale: [0.2, 2.4], opacity: [0.8, 0] }}
-        transition={{ duration: 0.55, ease: 'easeOut' }}
-      />
-      
-      {/* 爆炸粒子 — Canvas 2D */}
-      <BurstParticles
-        active
-        preset={isStructure ? 'explosionStrong' : 'explosion'}
-        color={DESTROY_COLORS[effect.type]}
-      />
-
-      {/* 烟尘 — Canvas 2D */}
-      <BurstParticles
-        active
-        preset="smoke"
-        color={isStructure ? ['rgba(167,139,250,0.35)'] : ['rgba(248,113,113,0.35)']}
-      />
-      
       {/* 摧毁文字提示 */}
       <motion.div
         className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap"
@@ -115,13 +120,11 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
         animate={{ y: '-1vw', opacity: [0, 1, 1, 0], scale: 1 }}
         transition={{ duration: 0.8, times: [0, 0.2, 0.7, 1] }}
       >
-        <span 
+        <span
           className={`text-[0.9vw] font-bold ${
             isStructure ? 'text-purple-300' : 'text-red-300'
           }`}
-          style={{
-            textShadow: '0 0 0.5vw rgba(0,0,0,0.8)',
-          }}
+          style={{ textShadow: '0 0 0.5vw rgba(0,0,0,0.8)' }}
         >
           {t('destroyEffect.destroyed', { name: effect.cardName })}
         </span>
@@ -137,16 +140,18 @@ export const DestroyEffectsLayer: React.FC<{
   onEffectComplete: (id: string) => void;
 }> = ({ effects, getCellPosition, onEffectComplete }) => {
   return (
-    <AnimatePresence>
-      {effects.map((effect) => (
-        <DestroyEffectItem
-          key={effect.id}
-          effect={effect}
-          getCellPosition={getCellPosition}
-          onComplete={onEffectComplete}
-        />
-      ))}
-    </AnimatePresence>
+    <div className="absolute inset-0 pointer-events-none z-20" style={{ overflow: 'visible' }}>
+      <AnimatePresence>
+        {effects.map((effect) => (
+          <DestroyEffectItem
+            key={effect.id}
+            effect={effect}
+            getCellPosition={getCellPosition}
+            onComplete={onEffectComplete}
+          />
+        ))}
+      </AnimatePresence>
+    </div>
   );
 };
 

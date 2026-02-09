@@ -32,119 +32,119 @@ import {
 // ============================================================================
 
 export const BURST_PRESETS: Record<string, ParticlePreset> = {
-  /** 爆炸碎片 - 用于单位/建筑摧毁（带拖尾+颜色渐变到暗红） */
+  /** 爆炸碎片 - 用于单位/建筑摧毁（俯视角：径向扩散+减速停止） */
   explosion: {
     count: 28,
-    speed: { min: 2, max: 6 },
+    speed: { min: 3, max: 7 },
     size: { min: 2, max: 5 },
     life: { min: 0.4, max: 0.9 },
-    gravity: 1.5,
+    gravity: 0, // 俯视角无重力
     shapes: ['circle', 'square', 'streak'],
     rotate: true,
     opacityDecay: true,
     sizeDecay: true,
-    direction: 'none',
+    direction: 'none', // 径向扩散
     glow: true,
     glowScale: 2.5,
-    drag: 0.96,
+    drag: 0.94, // 快速减速
     additive: true,
     trailLength: 4,
     colorEnd: '#4a1010',
-    turbulence: 0.3,
+    turbulence: 0.2, // 轻微扰动
   },
-  /** 强力爆炸 - 用于建筑/冠军摧毁（更多粒子+星形碎片+脉冲） */
+  /** 强力爆炸 - 用于建筑/冠军摧毁（更多粒子+更快扩散） */
   explosionStrong: {
     count: 42,
-    speed: { min: 3, max: 8 },
+    speed: { min: 4, max: 10 },
     size: { min: 3, max: 7 },
     life: { min: 0.5, max: 1.1 },
-    gravity: 1.2,
+    gravity: 0, // 俯视角无重力
     shapes: ['circle', 'square', 'star', 'streak'],
     rotate: true,
     opacityDecay: true,
     sizeDecay: true,
-    direction: 'none',
+    direction: 'none', // 径向扩散
     glow: true,
     glowScale: 3,
-    drag: 0.95,
+    drag: 0.92, // 快速减速
     additive: true,
     trailLength: 5,
     colorEnd: '#3b0a0a',
-    turbulence: 0.5,
+    turbulence: 0.3,
     pulse: 0.15,
   },
-  /** 召唤光粒子 - 向上升腾的发光粒子（带湍流飘动+脉冲呼吸） */
+  /** 召唤光粒子 - 从中心向外扩散的发光粒子（俯视角：径向+湍流飘动） */
   summonGlow: {
     count: 18,
-    speed: { min: 0.8, max: 2.5 },
+    speed: { min: 1, max: 3 },
     size: { min: 3, max: 7 },
-    life: { min: 0.6, max: 1.2 },
-    gravity: -0.3,
+    life: { min: 0.8, max: 1.4 },
+    gravity: 0, // 俯视角无重力
     shapes: ['circle'],
     rotate: false,
     opacityDecay: true,
     sizeDecay: true,
-    direction: 'top',
+    direction: 'none', // 径向扩散
     glow: true,
     glowScale: 3.5,
-    drag: 0.99,
+    drag: 0.96, // 缓慢减速
     additive: true,
-    spread: 20,
+    spread: 360, // 全方向
     turbulence: 0.8,
     turbulenceFreq: 1.5,
     pulse: 0.2,
     pulseFreq: 5,
   },
-  /** 强力召唤光粒子 - 用于冠军召唤（拖尾+星形+更强湍流） */
+  /** 强力召唤光粒子 - 用于冠军召唤（更多粒子+星形+更强湍流） */
   summonGlowStrong: {
     count: 32,
-    speed: { min: 1, max: 3.5 },
+    speed: { min: 1.5, max: 4 },
     size: { min: 4, max: 9 },
-    life: { min: 0.8, max: 1.5 },
-    gravity: -0.4,
+    life: { min: 1.0, max: 1.8 },
+    gravity: 0, // 俯视角无重力
     shapes: ['circle', 'star'],
     rotate: true,
     opacityDecay: true,
     sizeDecay: true,
-    direction: 'top',
+    direction: 'none', // 径向扩散
     glow: true,
     glowScale: 4,
-    drag: 0.99,
+    drag: 0.95, // 缓慢减速
     additive: true,
-    spread: 30,
+    spread: 360, // 全方向
     trailLength: 3,
     turbulence: 1.2,
     turbulenceFreq: 1.8,
     pulse: 0.25,
     pulseFreq: 6,
   },
-  /** 烟尘 - 用于摧毁后的烟雾扩散（湍流飘散） */
+  /** 烟尘 - 用于摧毁后的烟雾扩散（俯视角：平面飘散） */
   smoke: {
     count: 12,
-    speed: { min: 2, max: 5 },
+    speed: { min: 1.5, max: 4 },
     size: { min: 4, max: 10 },
-    life: { min: 0.4, max: 0.8 },
-    gravity: -0.8,
+    life: { min: 0.5, max: 1.0 },
+    gravity: 0, // 俯视角无重力
     shapes: ['circle'],
     rotate: false,
     opacityDecay: true,
     sizeDecay: true,
-    direction: 'top',
+    direction: 'none', // 径向扩散
     glow: true,
     glowScale: 2,
-    drag: 0.97,
-    spread: 25,
+    drag: 0.96, // 缓慢飘散
+    spread: 360, // 全方向
     turbulence: 1.2,
     turbulenceFreq: 2,
     colorEnd: '#1e293b',
   },
-  /** 火花飞溅 - 金属碰撞/格挡（streak 为主+高速+短命） */
+  /** 火花飞溅 - 金属碰撞/格挡（streak 为主+高速+短命，保留轻微重力模拟物理感） */
   sparks: {
     count: 20,
     speed: { min: 4, max: 10 },
     size: { min: 1.5, max: 3 },
     life: { min: 0.15, max: 0.4 },
-    gravity: 2,
+    gravity: 0.5, // 保留轻微重力（火花有物理感）
     shapes: ['streak', 'circle'],
     rotate: false,
     opacityDecay: true,
@@ -157,23 +157,23 @@ export const BURST_PRESETS: Record<string, ParticlePreset> = {
     streakRatio: 4,
     colorEnd: '#92400e',
   },
-  /** 魔法尘 - 轻柔飘散的星形粒子（buff/治疗） */
+  /** 魔法尘 - 轻柔飘散的星形粒子（buff/治疗，俯视角：径向+湍流） */
   magicDust: {
     count: 14,
-    speed: { min: 0.3, max: 1.2 },
+    speed: { min: 0.5, max: 1.5 },
     size: { min: 2, max: 5 },
-    life: { min: 0.8, max: 1.6 },
-    gravity: -0.1,
+    life: { min: 1.0, max: 1.8 },
+    gravity: 0, // 俯视角无重力
     shapes: ['star', 'circle'],
     rotate: true,
     opacityDecay: true,
     sizeDecay: true,
-    direction: 'top',
+    direction: 'none', // 径向扩散
     glow: true,
     glowScale: 3,
-    drag: 0.99,
+    drag: 0.98, // 极缓慢减速
     additive: true,
-    spread: 15,
+    spread: 360, // 全方向
     turbulence: 1.0,
     turbulenceFreq: 1.2,
     pulse: 0.3,
@@ -239,15 +239,15 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const rect = container.getBoundingClientRect();
-    // canvas 比容器大 overflow 倍，居中偏移
-    const cw = rect.width * overflow;
-    const ch = rect.height * overflow;
+    // 使用 offsetWidth/offsetHeight 获取 CSS 布局尺寸（不受父级 transform scale 影响）
+    const cw = container.offsetWidth * overflow;
+    const ch = container.offsetHeight * overflow;
 
     canvas.width = cw * dpr;
     canvas.height = ch * dpr;
     canvas.style.width = `${cw}px`;
     canvas.style.height = `${ch}px`;
+
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // 粒子在 canvas 中心生成（对应容器中心）

@@ -27,7 +27,8 @@ import { ConeBlast } from '../../components/common/animations/ConeBlast';
 import { DamageFlash } from '../../components/common/animations/DamageFlash';
 import { RiftSlash, useRiftSlash, RIFT_PRESETS } from '../../components/common/animations/RiftSlash';
 import { ShatterEffect } from '../../components/common/animations/ShatterEffect';
-import { OptimizedImage } from '../../components/common/media/OptimizedImage';
+import { getOptimizedImageUrls } from '../../core/AssetLoader';
+import { getSpriteAtlasStyle, CARDS_ATLAS } from '../../games/summonerwars/ui/cardAtlas';
 import {
   LoadingArcaneAether,
   LoadingArcaneGrandmaster,
@@ -164,6 +165,23 @@ const PerfBar: React.FC<{ stats: PerfStats }> = ({ stats }) => {
   );
 };
 
+/** 通用卡图组件（用于预览） */
+const CardSprite: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => {
+  const spriteUrls = getOptimizedImageUrls('summonerwars/hero/Frost/cards');
+  const spriteStyle = getSpriteAtlasStyle(0, CARDS_ATLAS);
+  return (
+    <div
+      className={className}
+      style={{
+        backgroundImage: `url(${spriteUrls.webp})`,
+        backgroundRepeat: 'no-repeat',
+        ...spriteStyle,
+        ...style,
+      }}
+    />
+  );
+};
+
 /** 特效卡片容器 */
 const EffectCard: React.FC<{
   title: string;
@@ -197,7 +215,7 @@ const EffectCard: React.FC<{
 // ============================================================================
 
 /** 飞行特效 */
-const FlyingCard: React.FC = () => {
+const FlyingCard: React.FC<{ useRealCards?: boolean }> = () => {
   const { effects, pushEffect, removeEffect } = useFlyingEffects();
   const containerRef = useRef<HTMLDivElement>(null);
   const { stats, startMeasure } = usePerfCounter();
@@ -236,7 +254,7 @@ const FlyingCard: React.FC = () => {
 };
 
 /** 飘字 */
-const FloatingTextCard: React.FC = () => {
+const FloatingTextCard: React.FC<{ useRealCards?: boolean }> = () => {
   const { texts, pushText, removeText } = useFloatingText();
   const containerRef = useRef<HTMLDivElement>(null);
   const { stats, startMeasure } = usePerfCounter();
@@ -270,7 +288,7 @@ const FloatingTextCard: React.FC = () => {
 };
 
 /** 震动 + 钝帧 */
-const ShakeHitStopCard: React.FC = () => {
+const ShakeHitStopCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const { isShaking, triggerShake } = useShake(500);
 
   // 钝帧通过 ImpactContainer 统一管理
@@ -293,8 +311,13 @@ const ShakeHitStopCard: React.FC = () => {
       </>}
     >
       <div className="absolute inset-0 flex items-center justify-center gap-3 p-3">
-        <ShakeContainer isShaking={isShaking} className="w-24 h-16 bg-slate-700 rounded flex items-center justify-center border border-slate-600">
-          <span className="text-[10px] text-slate-300">纯震动</span>
+        <ShakeContainer isShaking={isShaking} className="relative w-24 h-16 rounded flex items-center justify-center border border-slate-600">
+          {useRealCards ? (
+            <CardSprite className="absolute inset-0 rounded" />
+          ) : (
+            <div className="absolute inset-0 bg-slate-700 rounded" />
+          )}
+          <span className="relative text-[10px] text-slate-300 z-10">纯震动</span>
         </ShakeContainer>
         <div className="flex flex-col gap-2">
           <ImpactContainer
@@ -302,27 +325,42 @@ const ShakeHitStopCard: React.FC = () => {
             effects={{ shake: true, hitStop: true }}
             hitStopConfig={HIT_STOP_PRESETS.light}
             onComplete={() => setLightActive(false)}
-            className="w-20 h-6 bg-red-900/50 rounded flex items-center justify-center border border-red-700/50"
+            className="relative w-20 h-6 rounded flex items-center justify-center border border-red-700/50"
           >
-            <span className="text-[9px] text-red-300">轻</span>
+            {useRealCards ? (
+              <CardSprite className="absolute inset-0 rounded opacity-60" />
+            ) : (
+              <div className="absolute inset-0 bg-red-900/50 rounded" />
+            )}
+            <span className="relative text-[9px] text-red-300 z-10">轻</span>
           </ImpactContainer>
           <ImpactContainer
             isActive={heavyActive} damage={5}
             effects={{ shake: true, hitStop: true }}
             hitStopConfig={HIT_STOP_PRESETS.heavy}
             onComplete={() => setHeavyActive(false)}
-            className="w-20 h-6 bg-red-900/50 rounded flex items-center justify-center border border-red-700/50"
+            className="relative w-20 h-6 rounded flex items-center justify-center border border-red-700/50"
           >
-            <span className="text-[9px] text-red-300">重</span>
+            {useRealCards ? (
+              <CardSprite className="absolute inset-0 rounded opacity-60" />
+            ) : (
+              <div className="absolute inset-0 bg-red-900/50 rounded" />
+            )}
+            <span className="relative text-[9px] text-red-300 z-10">重</span>
           </ImpactContainer>
           <ImpactContainer
             isActive={critActive} damage={10}
             effects={{ shake: true, hitStop: true }}
             hitStopConfig={HIT_STOP_PRESETS.critical}
             onComplete={() => setCritActive(false)}
-            className="w-20 h-6 bg-red-900/50 rounded flex items-center justify-center border border-red-700/50"
+            className="relative w-20 h-6 rounded flex items-center justify-center border border-red-700/50"
           >
-            <span className="text-[9px] text-red-300">暴击</span>
+            {useRealCards ? (
+              <CardSprite className="absolute inset-0 rounded opacity-60" />
+            ) : (
+              <div className="absolute inset-0 bg-red-900/50 rounded" />
+            )}
+            <span className="relative text-[9px] text-red-300 z-10">暴击</span>
           </ImpactContainer>
         </div>
       </div>
@@ -331,7 +369,7 @@ const ShakeHitStopCard: React.FC = () => {
 };
 
 /** 斜切特效 */
-const SlashCard: React.FC = () => {
+const SlashCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const { isActive, triggerSlash } = useSlashEffect();
   const [currentPreset, setCurrentPreset] = useState('normal');
   const { stats, startMeasure } = usePerfCounter();
@@ -352,7 +390,14 @@ const SlashCard: React.FC = () => {
       </>}
     >
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] text-slate-600">受击区域</span>
+        {useRealCards ? (
+          <div className="relative w-32 h-20 rounded border border-slate-600">
+            <CardSprite className="absolute inset-0 rounded" />
+            <span className="relative text-[10px] text-slate-300 z-10 flex items-center justify-center h-full">受击区域</span>
+          </div>
+        ) : (
+          <span className="text-[10px] text-slate-600">受击区域</span>
+        )}
       </div>
       <SlashEffect isActive={isActive} {...(SLASH_PRESETS[currentPreset as keyof typeof SLASH_PRESETS] ?? SLASH_PRESETS.normal)} />
     </EffectCard>
@@ -360,7 +405,7 @@ const SlashCard: React.FC = () => {
 };
 
 /** 爆发粒子 */
-const BurstCard: React.FC = () => {
+const BurstCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const timerRef = useRef<number>(0);
   const { stats, startMeasure } = usePerfCounter();
@@ -383,7 +428,14 @@ const BurstCard: React.FC = () => {
       </>}
     >
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] text-slate-600">爆发区域</span>
+        {useRealCards ? (
+          <div className="relative w-28 h-20 rounded border border-slate-600">
+            <CardSprite className="absolute inset-0 rounded" />
+            <span className="relative text-[10px] text-slate-300 z-10 flex items-center justify-center h-full">爆发区域</span>
+          </div>
+        ) : (
+          <span className="text-[10px] text-slate-600">爆发区域</span>
+        )}
       </div>
       {activePreset && (
         <BurstParticles
@@ -403,7 +455,7 @@ const BurstCard: React.FC = () => {
 };
 
 /** 胜利彩带 */
-const VictoryCard: React.FC = () => {
+const VictoryCard: React.FC<{ useRealCards?: boolean }> = () => {
   const [active, setActive] = useState(false);
   const timerRef = useRef<number>(0);
   const { stats, startMeasure } = usePerfCounter();
@@ -430,39 +482,51 @@ const VictoryCard: React.FC = () => {
 };
 
 /** 碎裂消散 */
-const ShatterCard: React.FC = () => {
+const ShatterCard: React.FC<{ useRealCards?: boolean }> = () => {
   const [active, setActive] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [intensity, setIntensity] = useState<'normal' | 'strong'>('normal');
   const { stats, startMeasure } = usePerfCounter();
 
   const trigger = useCallback((int: 'normal' | 'strong') => {
     setIntensity(int);
+    setHidden(false);
     setActive(false);
     requestAnimationFrame(() => setActive(true));
     const stop = startMeasure();
-    setTimeout(stop, 1500);
+    setTimeout(stop, 2000);
   }, [startMeasure]);
 
+  // 用冰霜阵营 cards.png 精灵图的第 0 帧（冰霜法师）
+  const spriteUrls = getOptimizedImageUrls('summonerwars/hero/Frost/cards');
+  const spriteStyle = getSpriteAtlasStyle(0, CARDS_ATLAS);
+
   return (
-    <EffectCard title="碎裂消散" icon="💀" desc="实体碎裂飞散 + 重力下坠（单位死亡/卡牌销毁）" stats={stats}
+    <EffectCard title="碎裂消散" icon="💀" desc="卡图四分五裂飞散 + 重力下坠（单位死亡/卡牌销毁）" stats={stats}
       buttons={<>
         <TriggerButton label="普通死亡" onClick={() => trigger('normal')} color="bg-slate-600 hover:bg-slate-500" />
         <TriggerButton label="强力击杀" onClick={() => trigger('strong')} color="bg-red-700 hover:bg-red-600" />
       </>}
     >
       <div className="absolute inset-0 flex items-center justify-center">
-        {/* 用实际卡图做预览背景 */}
-        <div className="relative w-24 h-32 rounded overflow-hidden border border-slate-600">
-          <OptimizedImage
-            src="summonerwars/hero/Frost/hero.png"
-            alt="预览卡图"
-            className="w-full h-full object-cover"
+        <div className="relative w-28 h-20 rounded overflow-visible">
+          {/* 卡图内容（碎裂时隐藏） */}
+          <div
+            data-shatter-target
+            className="absolute inset-0 rounded border border-slate-600"
+            style={{
+              backgroundImage: `url(${spriteUrls.webp})`,
+              backgroundRepeat: 'no-repeat',
+              ...spriteStyle,
+              visibility: hidden ? 'hidden' : 'visible',
+            }}
           />
           {active && (
             <ShatterEffect
               active
               intensity={intensity}
-              onComplete={() => setActive(false)}
+              onStart={() => setHidden(true)}
+              onComplete={() => { setActive(false); setHidden(false); }}
             />
           )}
         </div>
@@ -485,7 +549,7 @@ const ToggleChip: React.FC<{ label: string; active: boolean; onClick: () => void
 );
 
 /** 打击感组合（可自选） */
-const ImpactCard: React.FC = () => {
+const ImpactCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const [damage, setDamage] = useState(5);
   const { stats, startMeasure } = usePerfCounter();
 
@@ -543,10 +607,15 @@ const ImpactCard: React.FC = () => {
           effects={{ shake: useShakeEff, hitStop: useHitStopEff }}
           hitStopConfig={useHitStopEff ? { duration: 300 } : undefined}
           onComplete={() => setIsActive(false)}
-          className="relative w-36 h-20 bg-slate-700 rounded flex items-center justify-center border border-slate-600"
+          className="relative w-36 h-20 rounded flex items-center justify-center border border-slate-600"
           style={{ overflow: 'visible' }}
         >
-          <span className="text-[10px] text-slate-300">受击目标（伤害={damage}）</span>
+          {useRealCards ? (
+            <CardSprite className="absolute inset-0 rounded" />
+          ) : (
+            <div className="absolute inset-0 bg-slate-700 rounded" />
+          )}
+          <span className="relative text-[10px] text-slate-300 z-10">受击目标（伤害={damage}）</span>
           {/* DamageFlash 视觉覆盖层：斜切+红脉冲+数字 */}
           {isActive && (
             <DamageFlash
@@ -577,7 +646,7 @@ const ImpactCard: React.FC = () => {
 };
 
 /** 脉冲发光 */
-const PulseGlowCard: React.FC = () => {
+const PulseGlowCard: React.FC<{ useRealCards?: boolean }> = () => {
   const [isGlowing, setIsGlowing] = useState(false);
   const [loop, setLoop] = useState(false);
   const [effect, setEffect] = useState<'glow' | 'ripple'>('glow');
@@ -610,7 +679,7 @@ const PulseGlowCard: React.FC = () => {
 };
 
 /** 召唤特效 */
-const SummonCard: React.FC = () => {
+const SummonCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const [active, setActive] = useState(false);
   const [isStrong, setIsStrong] = useState(false);
   const { stats, startMeasure } = usePerfCounter();
@@ -631,6 +700,12 @@ const SummonCard: React.FC = () => {
       </>}
     >
       <div className="absolute inset-0" style={{ background: 'radial-gradient(circle, #1e293b 0%, #0f172a 100%)' }}>
+        {/* 召唤目标卡片（放在光柱原点附近，SummonEffect 原点在 cy=78% 处） */}
+        {useRealCards && (
+          <div className="absolute left-1/2 -translate-x-1/2 w-32 h-20 rounded border border-slate-600/50" style={{ top: '58%' }}>
+            <CardSprite className="absolute inset-0 rounded" />
+          </div>
+        )}
         {active && (
           <SummonEffect active intensity={isStrong ? 'strong' : 'normal'} color={isStrong ? 'gold' : 'blue'} onComplete={() => setActive(false)} />
         )}
@@ -640,7 +715,7 @@ const SummonCard: React.FC = () => {
 };
 
 /** 锥形气浪 */
-const ConeBlastCard: React.FC = () => {
+const ConeBlastCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const [active, setActive] = useState(false);
   const [intensity, setIntensity] = useState<'normal' | 'strong'>('normal');
   const { stats, startMeasure } = usePerfCounter();
@@ -660,8 +735,16 @@ const ConeBlastCard: React.FC = () => {
         <TriggerButton label="强力" onClick={() => trigger('strong')} color="bg-cyan-700 hover:bg-cyan-600" />
       </>}
     >
+      {/* 源点（左侧） */}
       <div className="absolute left-[15%] top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-cyan-500/30 border border-cyan-400/50 flex items-center justify-center text-[9px] text-cyan-300">源</div>
-      <div className="absolute left-[85%] top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-red-500/30 border border-red-400/50 flex items-center justify-center text-[9px] text-red-300">目</div>
+      {/* 目标点（右侧）- 使用实际卡图 */}
+      {useRealCards ? (
+        <div className="absolute left-[85%] top-1/2 -translate-y-1/2 -translate-x-full w-20 h-12 rounded border border-slate-600">
+          <CardSprite className="absolute inset-0 rounded" />
+        </div>
+      ) : (
+        <div className="absolute left-[85%] top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-red-500/30 border border-red-400/50 flex items-center justify-center text-[9px] text-red-300">目</div>
+      )}
       {active && (
         <ConeBlast start={{ xPct: 15, yPct: 50 }} end={{ xPct: 85, yPct: 50 }} intensity={intensity} onComplete={() => setActive(false)} />
       )}
@@ -670,7 +753,7 @@ const ConeBlastCard: React.FC = () => {
 };
 
 /** 受伤反馈 */
-const DamageFlashCard: React.FC = () => {
+const DamageFlashCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const [active, setActive] = useState(false);
   const [damage, setDamage] = useState(3);
   const [intensity, setIntensity] = useState<'normal' | 'strong'>('normal');
@@ -700,10 +783,15 @@ const DamageFlashCard: React.FC = () => {
           isActive={active} damage={damage}
           effects={{ shake: true, hitStop: false }}
           onComplete={() => setActive(false)}
-          className="relative w-32 h-20 bg-slate-700 rounded flex items-center justify-center border border-slate-600"
+          className="relative w-32 h-20 rounded flex items-center justify-center border border-slate-600"
           style={{ overflow: 'visible' }}
         >
-          <span className="text-[10px] text-slate-300">受击目标</span>
+          {useRealCards ? (
+            <CardSprite className="absolute inset-0 rounded" />
+          ) : (
+            <div className="absolute inset-0 bg-slate-700 rounded" />
+          )}
+          <span className="relative text-[10px] text-slate-300 z-10">受击目标</span>
           {/* DamageFlash 视觉覆盖层 */}
           {active && (
             <DamageFlash active damage={damage} intensity={intensity} />
@@ -715,7 +803,7 @@ const DamageFlashCard: React.FC = () => {
 };
 
 /** 次元裂隙 */
-const RiftSlashCard: React.FC = () => {
+const RiftSlashCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const { isActive, triggerRift } = useRiftSlash();
   const [currentPreset, setCurrentPreset] = useState('normal');
   const { stats, startMeasure } = usePerfCounter();
@@ -736,7 +824,14 @@ const RiftSlashCard: React.FC = () => {
       </>}
     >
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] text-slate-600">受击区域</span>
+        {useRealCards ? (
+          <div className="relative w-32 h-20 rounded border border-slate-600">
+            <CardSprite className="absolute inset-0 rounded" />
+            <span className="relative text-[10px] text-slate-300 z-10 flex items-center justify-center h-full">受击区域</span>
+          </div>
+        ) : (
+          <span className="text-[10px] text-slate-600">受击区域</span>
+        )}
       </div>
       <RiftSlash isActive={isActive} {...(RIFT_PRESETS[currentPreset as keyof typeof RIFT_PRESETS] ?? RIFT_PRESETS.normal)} />
     </EffectCard>
@@ -818,7 +913,7 @@ const EFFECT_GROUPS: EffectGroup[] = [
     id: 'particle', label: '🔥 粒子类',
     entries: [
       { id: 'burst', label: '爆发粒子', icon: '✨', component: BurstCard, usageDesc: '召唤师战争·单位被消灭' },
-      { id: 'shatter', label: '碎裂消散', icon: '💀', component: ShatterCard, usageDesc: '暂未接入·替代爆发粒子用于死亡' },
+      { id: 'shatter', label: '碎裂消散', icon: '💀', component: ShatterCard, usageDesc: '召唤师战争·单位/建筑死亡碎裂' },
       { id: 'victory', label: '胜利彩带', icon: '🎉', component: VictoryCard, usageDesc: '通用·对局胜利结算' },
       { id: 'summon', label: '召唤特效', icon: '🔮', component: SummonCard, usageDesc: '召唤师战争·召唤单位入场' },
     ],
@@ -865,6 +960,7 @@ const EFFECT_GROUPS: EffectGroup[] = [
 
 const EffectPreview: React.FC = () => {
   const [activeGroupId, setActiveGroupId] = useState(EFFECT_GROUPS[0].id);
+  const [useRealCards, setUseRealCards] = useState(true); // 全局开关：是否使用实际卡图
   const activeGroup = EFFECT_GROUPS.find(g => g.id === activeGroupId) ?? EFFECT_GROUPS[0];
   const totalCount = EFFECT_GROUPS.reduce((sum, g) => sum + g.entries.length, 0);
 
@@ -893,7 +989,7 @@ const EffectPreview: React.FC = () => {
       </nav>
 
       {/* 右侧网格预览区 */}
-      <main className="flex-1 p-4 overflow-y-auto">
+      <main className="flex-1 p-4 overflow-y-auto relative">
         <h2 className="text-base font-bold text-slate-100 border-b border-slate-700 pb-1 mb-4">
           {activeGroup.label}
         </h2>
@@ -902,7 +998,7 @@ const EffectPreview: React.FC = () => {
             const Comp = entry.component;
             return (
               <div key={entry.id} className="flex flex-col gap-1">
-                <Comp />
+                <Comp useRealCards={useRealCards} />
                 {entry.usageDesc && (
                   <div className="flex items-center gap-1.5 px-1">
                     <span className="text-[9px] text-slate-500 shrink-0">使用场景：</span>
@@ -915,6 +1011,19 @@ const EffectPreview: React.FC = () => {
             );
           })}
         </div>
+
+        {/* 右下角开关 */}
+        <button
+          onClick={() => setUseRealCards(v => !v)}
+          className={`fixed bottom-6 right-6 px-3 py-2 rounded-lg text-xs font-medium transition-[background-color,transform] hover:scale-105 ${
+            useRealCards
+              ? 'bg-emerald-600/80 text-emerald-100 border border-emerald-500/60'
+              : 'bg-slate-700/80 text-slate-400 border border-slate-600/60'
+          }`}
+          title={useRealCards ? '点击切换为占位区域' : '点击切换为实际卡图'}
+        >
+          {useRealCards ? '🃏 实际卡图' : '⬜ 占位区域'}
+        </button>
       </main>
     </div>
   );

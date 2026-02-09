@@ -28,7 +28,6 @@ describe('多回合流程', () => {
             const result = runner.run({
                 name: '先手跳过收入',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1（跳过 income）
                 ],
                 expect: {
                     turnPhase: 'main1',
@@ -46,15 +45,13 @@ describe('多回合流程', () => {
                 name: '非先手收入',
                 setup: createNoResponseSetupWithEmptyHand(),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (换人)
-                    cmd('ADVANCE_PHASE', '1'), // upkeep -> income
                 ],
                 expect: {
-                    turnPhase: 'income',
+                    turnPhase: 'main1',
                     activePlayerId: '1',
                     turnNumber: 2,
                     players: {
@@ -76,14 +73,13 @@ describe('多回合流程', () => {
                 name: '回合切换',
                 setup: createNoResponseSetupWithEmptyHand(),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (换人)
                 ],
                 expect: {
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     activePlayerId: '1',
                     turnNumber: 2,
                 },
@@ -98,21 +94,18 @@ describe('多回合流程', () => {
                 setup: createNoResponseSetupWithEmptyHand(),
                 commands: [
                     // 玩家 0 回合
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (换人)
                     // 玩家 1 回合
-                    cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '1'), // income -> main1
                     cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '1'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '1'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '1'), // discard -> upkeep (换人)
                 ],
                 expect: {
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     activePlayerId: '0',
                     turnNumber: 3,
                 },
@@ -132,7 +125,6 @@ describe('多回合流程', () => {
                     return state;
                 },
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> 跳过 offensiveRoll -> main2
                 ],
                 expect: {
@@ -157,7 +149,6 @@ describe('多回合流程', () => {
                     return state;
                 },
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PAY_TO_REMOVE_KNOCKDOWN', '0'),
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 ],
@@ -185,11 +176,10 @@ describe('多回合流程', () => {
                     return state;
                 },
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PAY_TO_REMOVE_KNOCKDOWN', '0'),
                 ],
                 expect: {
-                    errorAtStep: { step: 2, error: 'not_enough_cp' },
+                    errorAtStep: { step: 1, error: 'not_enough_cp' },
                     turnPhase: 'main1',
                     players: {
                         '0': {

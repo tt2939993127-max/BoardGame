@@ -20,6 +20,9 @@ export class UserAudioSettings {
     @Prop({ type: Number, required: true, default: 0.6 })
     bgmVolume!: number;
 
+    @Prop({ type: Object, default: {} })
+    bgmSelections!: Record<string, Record<string, string>>;
+
     createdAt!: Date;
     updatedAt!: Date;
 }

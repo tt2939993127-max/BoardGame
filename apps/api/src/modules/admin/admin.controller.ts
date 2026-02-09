@@ -9,6 +9,7 @@ import { QueryMatchesDto } from './dtos/query-matches.dto';
 import { QueryRoomsDto } from './dtos/query-rooms.dto';
 import { QueryStatsDto } from './dtos/query-stats.dto';
 import { QueryUsersDto } from './dtos/query-users.dto';
+import { QueryUgcPackagesDto } from './dtos/query-ugc-packages.dto';
 import { AdminGuard } from './guards/admin.guard';
 import { Roles } from './guards/roles.decorator';
 import { AdminService } from './admin.service';
@@ -41,6 +42,40 @@ export class AdminController {
     async getRooms(@Query() query: QueryRoomsDto, @Res() res: Response) {
         const result = await this.adminService.getRooms(query);
         return res.json(result);
+    }
+
+    @Get('ugc/packages')
+    async getUgcPackages(@Query() query: QueryUgcPackagesDto, @Res() res: Response) {
+        const result = await this.adminService.getUgcPackages(query);
+        return res.json(result);
+    }
+
+    @Post('ugc/packages/:packageId/unpublish')
+    async unpublishUgcPackage(
+        @Param('packageId') packageId: string,
+        @Req() req: Request,
+        @Res() res: Response
+    ) {
+        const { t } = createRequestI18n(req);
+        const result = await this.adminService.unpublishUgcPackage(packageId.trim());
+        if (!result.ok) {
+            return this.sendError(res, 404, t('admin.error.ugcPackageNotFound'));
+        }
+        return res.status(200).json({ package: result.package });
+    }
+
+    @Delete('ugc/packages/:packageId')
+    async deleteUgcPackage(
+        @Param('packageId') packageId: string,
+        @Req() req: Request,
+        @Res() res: Response
+    ) {
+        const { t } = createRequestI18n(req);
+        const result = await this.adminService.deleteUgcPackage(packageId.trim());
+        if (!result.ok) {
+            return this.sendError(res, 404, t('admin.error.ugcPackageNotFound'));
+        }
+        return res.status(200).json({ deleted: true, assetsDeleted: result.assetsDeleted });
     }
 
     @Delete('rooms/:id')

@@ -1,4 +1,4 @@
-<!-- OPENSPEC:START -->
+﻿<!-- OPENSPEC:START -->
 # OpenSpec Instructions
 
 These instructions are for AI assistants working in this project.
@@ -78,7 +78,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **目录/游戏边界严格区分（强制）**：本仓库为综合性游戏项目，存在同名/近似命名文件夹；修改/引用前必须以完整路径与所属 gameId（如 `src/games/dicethrone/...`）核对，禁止把不同游戏/模块的目录当成同一个。
 - **规则文档指代（强制）**：当我说“规则”时，默认指该游戏目录下 `rule/` 文件夹中的规则 Markdown（如 `src/games/dicethrone/rule/王权骰铸规则.md`）。
 - **改游戏规则/机制前先读规则文档（强制）**：当修改会影响玩法/回合/结算/卡牌或状态效果/资源等“规则或机制”时（而非纯 UI 样式/小 bug 修复），在开始改该游戏代码之前必须先检查该游戏对应脚本目录 `rule/` 文件夹下的规则文档（例如 `src/games/<gameId>/rule/`），确认约束与注意事项后再动手。
-- **Git 禁止使用 restore（强制）**：禁止使用 `git restore`（含 `--staged`）；如需丢弃/回退变更，必须先说明原因并采用可审计的替代方式。
+- **Git 变更回退与暂存规范（强制）**：
+  - **禁止擅自执行回退/暂存操作**：涉及 `git restore`、`git checkout -- <file>`、`git reset --hard`、`git stash` 等任何会丢弃或暂存工作区变更的命令时，**必须先向用户说明原因并获得明确许可后才能执行**，禁止擅自决定。
+  - **询问时必须包含**：1) 为什么需要回退/暂存；2) 受影响的文件清单；3) 推荐的具体操作方式及风险说明。
+  - **PowerShell 编码陷阱**：恢复 stash/历史版本文件时，**禁止使用 PowerShell 管道或 Out-File**（会引入 BOM 并损坏中文字符），必须使用 `cmd /c "git show <ref>:<file> > <file>"` 保持 UTF-8 无 BOM。
 - **关键逻辑注释（强制）**：涉及全局状态/架构入口/默认行为（例如 Modal 栈、路由守卫、全局事件）必须写清晰中文注释；提交前自检是否遗漏，避免再次发生。
 - **日志不需要开关，调试完后将移除（强制）**
 - **日志格式**：新增/临时日志尽量是“可直接复制”的纯文本，不要直接打印对象（避免控制台折叠与难复制）；推荐用 key=value 形式把关键字段展开，例如：`[模块] 事件=xxx userId=... matchId=... step=... costMs=...`。
@@ -253,7 +256,19 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **预设驱动**：通过 `ParticlePreset` 配置粒子行为，`BURST_PRESETS` 提供常用预设
 - **生命周期**：粒子效果必须有明确的 `life` 配置，所有粒子消散后自动停止渲染循环
 - **现有组件**：`BurstParticles`（爆炸/召唤/烟尘）、`VictoryParticles`（胜利彩带）
+- **俯视角物理规范（强制）**：本项目游戏为**俯视角棋盘游戏**（召唤师战争/Smash Up 等），**棋盘层**特效必须遵循俯视角物理：
+  - **禁止重力下坠**：`gravity: 0`（或极小值模拟空气阻力），粒子不应往下掉
+  - **平面扩散**：`direction: 'none'`（径向）或指定方向，粒子在平面上扩散
+  - **减速停止**：`drag` 较大（0.92-0.96），模拟摩擦力快速停下
+  - **淡出+缩小**：`opacityDecay: true, sizeDecay: true`，粒子逐渐消散
+  - **例外**：火花（sparks）可保留轻微重力（0.5）模拟金属碰撞的物理感
+  - **错误示例**：`gravity: 1.5` + `direction: 'top'`（向上喷射后下落）是横版平台游戏的物理模型，不适用于俯视角棋盘层
+  - **适用范围**：棋盘格子内的特效（召唤/攻击/摧毁/碎裂/爆发粒子等）
+- **UI 层特效物理规范**：全屏 UI 层的庆祝/装饰特效（如胜利彩带 `VictoryParticles`）**不受俯视角约束**，应使用符合直觉的物理模型（重力下落、向上喷射等），因为它们叠加在屏幕上而非棋盘内。
+  - **判断标准**：特效挂载在棋盘格子/卡牌上 → 俯视角；特效挂载在全屏 overlay/结算页 → UI 层物理
 - **Canvas 溢出规范（强制）**：特效 Canvas 天然超出挂载目标边界，**禁止用 `overflow: hidden` 裁切**。优先使用无溢出方案（Canvas 铺满父级，绘制基于 canvas 尺寸）；小元素挂载场景使用溢出放大方案（Canvas 比容器大 N 倍，居中偏移，容器设 `overflow: visible` + `pointer-events-none`）。详见 `docs/particle-engine.md` § Canvas 溢出规范。
+- **Canvas transform 尺寸陷阱（强制）**：棋盘层 Canvas 特效获取容器尺寸时，**禁止使用 `getBoundingClientRect()`**（会返回经过父级 `transform: scale()` 缩放后的屏幕像素尺寸），**必须使用 `offsetWidth/offsetHeight`**（CSS 布局尺寸，不受 transform 影响）。当 Canvas 用 `absolute inset-0` 定位时，其 CSS 尺寸不受 transform 影响，但 `getBoundingClientRect()` 返回的是缩放后的值，导致绘制坐标与实际定位不一致。已修复的组件：ConeBlast、SummonEffect、ShatterEffect、BurstParticles、SlashEffect、RiftSlash。例外：全屏 UI 层特效（如 VictoryParticles）和使用视口坐标的特效（如 FlyingEffect）不受此约束。
+- **棋盘特效容器与卡牌对齐规范（强制）**：棋盘格子内的特效容器应使用与卡牌相同的尺寸约束（`w-[85%]` + `aspectRatio: 1044/729`），通过 `EffectCellContainer`（`BoardEffects.tsx`）或等效方式实现，确保特效视觉范围与卡牌一致。召唤等需要大范围溢出的特效（如光柱）使用放大容器（5 倍格子大小），不走卡牌约束。`DestroyEffect` 内部也使用 `CARD_ASPECT_RATIO` + `CARD_WIDTH_RATIO` 常量保持一致。
 - **特效组件 useEffect 依赖稳定性（强制，适用于所有特效组件）**：所有特效组件（Canvas 粒子、framer-motion、DOM timer 驱动）的动画循环/timer 由 useEffect 启动，**其依赖数组中的每一项都必须引用稳定**，否则父组件重渲染会导致 useEffect 重跑 → 动画重启/中断。
   - **回调 prop（`onComplete` 等）**：必须用 `useRef` 持有，禁止放入 useEffect 依赖。Canvas 组件和 DOM timer 组件（如 ImpactContainer/DamageFlash）同样适用。
   - **数组/对象 prop（`color` 等）**：`useMemo` 的依赖不能直接用数组/对象引用（浅比较会失败），必须用 `JSON.stringify` 做值比较。
@@ -307,7 +322,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - `FloatingText` — 独立飘字（弹出+弹性缩回+上浮淡出）｜使用：仅预览页
   - `RiftSlash` — 次元裂隙直线斜切（Canvas 2D）｜使用：`DamageFlash`（内部）
   - `CardDrawAnimation` — 抽牌动画（飞出+3D翻转）｜使用：仅导出，暂无业务引用
-  - `ShatterEffect` — 碎裂消散（square 粒子 + 重力下坠 + 旋转飞散）｜使用：暂未接入，预期替代 BurstParticles 用于死亡效果
+  - `ShatterEffect` — 碎裂消散（卡图网格切割 + 重力下坠 + 旋转飞散，Canvas 2D）｜使用：`summonerwars/ui/DestroyEffect`（单位/建筑死亡）
 - **预览页同步**：新增通用特效组件后，必须在 `src/pages/devtools/EffectPreview.tsx` 的 `EFFECT_CATEGORIES` 中注册预览区块。
 
 ### 文档索引与使用时机（强制）
@@ -325,6 +340,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 | **使用 Undo / Fab 功能** | `docs/components/UndoFab.md` | UndoFab 组件的 Props 要求与环境依赖 |
 | **新增作弊/调试指令** | `docs/debug-tool-refactor.md` | 游戏专属调试配置的解耦注入方式 |
 | **粒子特效开发** (Canvas 2D 引擎) | `docs/particle-engine.md` | API、预设字段、性能优化、视觉质量规则、新增检查清单 |
+| **挑选/查找音效** (AI 音效定位) | `docs/audio/audio-catalog.md` | 语义目录，按关键词搜索定位 registry key |
 | **状态同步/存储调优** (16MB 限制) | `docs/mongodb-16mb-fix.md` | 状态裁剪策略、Log 限制、Undo 快照优化 |
 | **复杂任务规划** (多文件/长流程) | `.agent/skills/planning-with-files/SKILL.md` | 必须维护 `task_plan.md`，定期转存 `findings.md` |
 | **UI/UX 设计** (配色/组件/动效) | `.agent/skills/ui-ux-pro-max/SKILL.md` | 使用 `python3 ... search.py` 生成设计系统与样式 |
@@ -364,6 +380,12 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - **原因**：`LogSystem` 是持久化全量日志，刷新后完整恢复；`EventStreamSystem` 是实时消费通道，每条 entry 带稳定自增 `id`，撤销时会清空（避免重播）。用 LogSystem + `useRef(0)` 做消费指针，刷新后指针归零会导致历史事件全部重演。
   - **正确模式**：用 `lastSeenEventId = useRef(-1)` 追踪已消费的 `entry.id`；首次挂载时将指针推进到末尾（跳过历史）；后续只处理 `entry.id > lastSeenEventId` 的新事件。
   - **参考实现**：`src/games/summonerwars/Board.tsx` 的事件消费 effect、`src/lib/audio/useGameAudio.ts` 的音效去重。
+- **afterEventsRound 对自动推进链的限制（强制）**：
+  - `FlowSystem.afterEvents` 在 `afterEventsRound > 0` 时传空 events 给 `onAutoContinueCheck`，防止事件在多轮中被误读。
+  - **后果**：`executePipeline` 单次调用中，基于事件检测的自动推进链最多跨越**一个阶段**。例如 `discard → upkeep` 后 upkeep 可自动推进到 income（round 0），但 income 不会继续自动推进到 main1（round 1 events 为空）。
+  - **对测试的影响**：`createInitializedState`（通过 `applySetupCommands` 调用 `executePipeline`）返回的状态仍然是 **upkeep**（不是 main1），测试中仍需手动 `cmd('ADVANCE_PHASE')` 推进 upkeep → main1。
+  - **回合切换后**：`discard → upkeep` 的手动推进会触发 upkeep 自动推进到 income，因此测试中 `// upkeep -> income` 的手动推进需要删除，但 `// income -> main1` 仍需保留。
+  - **详见**：`docs/refactor/dicethrone-auto-advance-upkeep-income.md`
 
 ### 重赛系统说明 
 - **多人模式**：重赛投票通过 **socket.io 房间层**实现（`RematchContext` + `matchSocket.ts`），**不走 boardgame.io move**，以绕过 `ctx.gameover` 后禁止 move 的限制。
@@ -674,14 +696,16 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 
 #### ✅ 音效触发规范（统一标准）
 - **游戏态事件音**：一律通过事件流触发（`eventSoundResolver` 或事件元数据）。
+- **游戏态事件音**：一律通过事件流触发（`eventSoundResolver` 或事件元数据）。
 - **UI 点击音**：仅用于纯 UI 行为（打开面板/切换 Tab），通过 `GameButton` 播放。
-- **单一来源原则**：同一动作只能由“事件音”或“按钮音”二选一，禁止重复。
-- **事件元数据**：事件可携带 `audioKey` / `audioCategory`，音频系统必须优先使用。
+- **操作拒绝音**：用户尝试不合法操作时，通过 `playDeniedSound()`（`src/lib/audio/useGameAudio.ts`）播放，key 为 `puzzle.18.negative_pop_01`。
+- **单一来源原则**：同一动作只能由"事件音"、"按钮音"或"拒绝音"其中之一触发，禁止重复。
 - **阶段推进**：统一使用 `SYS_PHASE_CHANGED` 事件音效；推进按钮需关闭点击音。
 
 #### ✅ 音频文件使用规范（与图片规范一致）
 - **压缩脚本**：`npm run compress:audio -- public/assets/common/audio`
 - **生成 registry**：`node scripts/audio/generate_common_audio_registry.js`
+- **生成语义目录**：`npm run audio:catalog`（产出 `docs/audio/audio-catalog.md`，AI 查找音效首选）
 - **资源清单**：`node scripts/audio/generate_audio_assets_md.js`
 - **详见文档**：`docs/audio/audio-usage.md`
 

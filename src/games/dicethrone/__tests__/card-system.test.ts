@@ -27,7 +27,6 @@ describe('卡牌系统', () => {
             const result = runner.run({
                 name: '卖牌获得1CP',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('SELL_CARD', '0', { cardId: 'card-enlightenment' }),
                 ],
                 expect: {
@@ -48,7 +47,6 @@ describe('卡牌系统', () => {
             const result = runner.run({
                 name: '连续卖两张牌',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('SELL_CARD', '0', { cardId: 'card-enlightenment' }),
                     cmd('SELL_CARD', '0', { cardId: 'card-inner-peace' }),
                 ],
@@ -75,14 +73,13 @@ describe('卡牌系统', () => {
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'), // 手牌 7 (> HAND_LIMIT=6)
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> 应被阻止
                 ],
                 expect: {
-                    errorAtStep: { step: 8, error: 'cannot_advance_phase' },
+                    errorAtStep: { step: 7, error: 'cannot_advance_phase' },
                     turnPhase: 'discard',
                     players: {
                         '0': { handSize: HAND_LIMIT + 1 },
@@ -101,7 +98,6 @@ describe('卡牌系统', () => {
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'), // 手牌 7
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
@@ -109,7 +105,7 @@ describe('卡牌系统', () => {
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (换人)
                 ],
                 expect: {
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     activePlayerId: '1',
                     turnNumber: 2,
                     players: {
@@ -128,7 +124,6 @@ describe('卡牌系统', () => {
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'), // 手牌 7
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
@@ -136,7 +131,7 @@ describe('卡牌系统', () => {
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep
                 ],
                 expect: {
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     activePlayerId: '1',
                     players: {
                         '0': {
@@ -157,11 +152,10 @@ describe('卡牌系统', () => {
                 name: 'CP不足无法升级',
                 setup: createSetupWithHand(['card-meditation-2'], { cp: 0 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 2, error: 'notEnoughCp' },
+                    errorAtStep: { step: 1, error: 'notEnoughCp' },
                     turnPhase: 'main1',
                 },
             });
@@ -174,11 +168,10 @@ describe('卡牌系统', () => {
                 name: '跳级升级被拒绝',
                 setup: createSetupWithHand(['card-meditation-3'], { cp: 10 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-3', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 2, error: 'upgradeCardSkipLevel' },
+                    errorAtStep: { step: 1, error: 'upgradeCardSkipLevel' },
                     turnPhase: 'main1',
                 },
             });
@@ -191,12 +184,11 @@ describe('卡牌系统', () => {
                 name: '投掷阶段升级被拒绝',
                 setup: createSetupWithHand(['card-meditation-2'], { cp: 10 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 3, error: 'wrongPhaseForUpgrade' },
+                    errorAtStep: { step: 2, error: 'wrongPhaseForUpgrade' },
                     turnPhase: 'offensiveRoll',
                 },
             });

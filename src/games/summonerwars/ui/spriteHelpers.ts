@@ -42,8 +42,8 @@ export function getStructureSpriteConfig(structure: BoardStructure): SpriteConfi
   return { atlasId, frameIndex: spriteIndex };
 }
 
-/** 获取摧毁残影卡牌精灵图配置 */
-export function getGhostSpriteConfig(card: UnitCard | StructureCard): SpriteConfig {
+/** 获取摧毁动画卡牌精灵图配置 */
+export function getDestroySpriteConfig(card: UnitCard | StructureCard): SpriteConfig {
   const spriteIndex = card.spriteIndex ?? (card.cardType === 'structure' ? 0 : 0);
   const spriteAtlas = card.spriteAtlas ?? (card.cardType === 'structure' ? 'portal' : 'cards');
   // 传送门使用全局共用图集

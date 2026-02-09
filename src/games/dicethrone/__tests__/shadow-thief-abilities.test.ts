@@ -257,10 +257,10 @@ describe('暗影刺客 - 匕首打击 CP 获取', () => {
         });
 
         const result = runner.run({
-            name: '暗影刺客选角后进入 upkeep',
+            name: '暗影刺客选角后进入 main1',
             commands: [],
             expect: {
-                turnPhase: 'upkeep',
+                turnPhase: 'main1',
                 activePlayerId: '0',
                 players: {
                     '0': { hp: INITIAL_HEALTH, cp: INITIAL_CP },
@@ -415,7 +415,6 @@ describe('暗影刺客 - 聚宝盆', () => {
  * 流程：upkeep → main1（先手跳过 income）→ offensiveRoll → 掷骰 → 确认 → 选择进攻技能 → ADVANCE_PHASE → defensiveRoll
  */
 const enterDefensiveRollCommands = [
-    cmd('ADVANCE_PHASE', '0'), // upkeep → main1（先手首回合跳过 income）
     cmd('ADVANCE_PHASE', '0'), // main1 → offensiveRoll
     cmd('ROLL_DICE', '0'),
     cmd('CONFIRM_ROLL', '0'),
@@ -601,7 +600,6 @@ describe('暗影刺客 - 防御技能独立升级', () => {
         const result = runner.run({
             name: '升级暗影守护到 II 级',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep → main1
                 cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'upgrade-shadow-defense-2', targetAbilityId: 'shadow-defense' }),
             ],
             expect: {
@@ -633,7 +631,6 @@ describe('暗影刺客 - 防御技能独立升级', () => {
         const result = runner.run({
             name: '升级恐惧反击到 II 级',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep → main1
                 cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'upgrade-fearless-riposte-2', targetAbilityId: 'fearless-riposte' }),
             ],
             expect: {
@@ -665,7 +662,6 @@ describe('暗影刺客 - 防御技能独立升级', () => {
         const result = runner.run({
             name: '分别升级两个防御技能',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep → main1
                 cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'upgrade-shadow-defense-2', targetAbilityId: 'shadow-defense' }),
                 cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'upgrade-fearless-riposte-2', targetAbilityId: 'fearless-riposte' }),
             ],
@@ -698,7 +694,6 @@ describe('暗影刺客 - 防御技能独立升级', () => {
         const result = runner.run({
             name: '升级暗影守护后验证技能定义',
             commands: [
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'upgrade-shadow-defense-2', targetAbilityId: 'shadow-defense' }),
             ],
         });

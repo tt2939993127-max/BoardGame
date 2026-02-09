@@ -337,10 +337,9 @@ const SlashCanvas: React.FC<{
         if (!ctx) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const rect = container.getBoundingClientRect();
-        // 原始容器尺寸
-        const baseW = rect.width;
-        const baseH = rect.height;
+        // 使用 offsetWidth/offsetHeight 获取 CSS 布局尺寸（不受父级 transform scale 影响）
+        const baseW = container.offsetWidth;
+        const baseH = container.offsetHeight;
         // Canvas 放大后的尺寸
         const cw = baseW * OVERFLOW;
         const ch = baseH * OVERFLOW;

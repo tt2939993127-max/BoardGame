@@ -34,7 +34,8 @@ describe('Property 1: UI introduction steps block phase advancement', () => {
             s.id !== 'summary' &&
             s.id !== 'talentIntro' &&
             s.id !== 'turnCycle' &&
-            !s.aiActions // 有 aiActions 的步骤（如 scoringPhase/opponentTurn）不需要 blockedCommands
+            s.id !== 'scoringPhase' && // 依赖 FlowSystem 自动推进，不需要 blockedCommands
+            !s.aiActions // 有 aiActions 的步骤（如 opponentTurn）不需要 blockedCommands
         );
 
         // 确保至少有一些 UI 介绍步骤

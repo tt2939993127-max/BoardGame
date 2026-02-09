@@ -105,7 +105,7 @@ const StunBanner: React.FC<{
 
   if (stunMode.step === 'selectTarget') {
     return (
-      <div className="bg-yellow-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-yellow-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-yellow-900/95 px-4 py-2 rounded-lg border border-yellow-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-yellow-200 text-sm font-bold">
           {t('statusBanners.stun.selectTarget')}
         </span>
@@ -116,7 +116,7 @@ const StunBanner: React.FC<{
 
   // selectDirection 步骤
   return (
-    <div className="bg-yellow-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-yellow-500/40 flex items-center gap-3 shadow-lg">
+    <div className="bg-yellow-900/95 px-4 py-2 rounded-lg border border-yellow-500/40 flex items-center gap-3 shadow-lg">
       <span className="text-yellow-200 text-sm font-bold">{t('statusBanners.stun.direction')}</span>
       <div className="flex gap-1">
         <GameButton
@@ -202,7 +202,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 
   if (bloodSummonMode) {
     return (
-      <div className="bg-rose-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-rose-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-rose-900/95 px-4 py-2 rounded-lg border border-rose-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-rose-200 text-sm font-bold">
           {bloodSummonMode.step === 'selectTarget' && t('statusBanners.bloodSummon.selectTarget')}
           {bloodSummonMode.step === 'selectCard' && t('statusBanners.bloodSummon.selectCard')}
@@ -223,7 +223,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 
   if (annihilateMode) {
     return (
-      <div className="bg-purple-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-purple-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-purple-900/95 px-4 py-2 rounded-lg border border-purple-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-purple-200 text-sm font-bold">
           {annihilateMode.step === 'selectTargets' && t('statusBanners.annihilate.selectTargets', { count: annihilateMode.selectedTargets.length })}
           {annihilateMode.step === 'selectDamageTarget' && t('statusBanners.annihilate.selectDamageTarget', { index: annihilateMode.currentTargetIndex + 1 })}
@@ -238,7 +238,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 
   if (soulTransferMode) {
     return (
-      <div className="bg-cyan-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-cyan-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-cyan-900/95 px-4 py-2 rounded-lg border border-cyan-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-cyan-200 text-sm font-bold">{t('statusBanners.soulTransfer.message')}</span>
         <GameButton onClick={onConfirmSoulTransfer} variant="primary" size="sm">{t('actions.confirmMove')}</GameButton>
         <GameButton onClick={onSkipSoulTransfer} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
@@ -248,7 +248,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 
   if (funeralPyreMode) {
     return (
-      <div className="bg-orange-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-orange-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-orange-900/95 px-4 py-2 rounded-lg border border-orange-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-orange-200 text-sm font-bold">
           {t('statusBanners.funeralPyre.message', { charges: funeralPyreMode.charges })}
         </span>
@@ -259,7 +259,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 
   if (mindControlMode) {
     return (
-      <div className="bg-cyan-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-cyan-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-cyan-900/95 px-4 py-2 rounded-lg border border-cyan-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-cyan-200 text-sm font-bold">
           {t('statusBanners.mindControl.message', { count: mindControlMode.selectedTargets.length })}
         </span>
@@ -283,7 +283,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 
   if (hypnoticLureMode) {
     return (
-      <div className="bg-pink-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-pink-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-pink-900/95 px-4 py-2 rounded-lg border border-pink-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-pink-200 text-sm font-bold">
           {t('statusBanners.hypnoticLure.message')}
         </span>
@@ -294,7 +294,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 
   if (mindCaptureMode) {
     return (
-      <div className="bg-indigo-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-indigo-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-indigo-900/95 px-4 py-2 rounded-lg border border-indigo-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-indigo-200 text-sm font-bold">
           {t('statusBanners.mindCapture.message', { hits: mindCaptureMode.hits })}
         </span>
@@ -307,7 +307,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   if (telekinesisTargetMode) {
     const abilityName = t(`statusBanners.abilityNames.${telekinesisTargetMode.abilityId}`);
     return (
-      <div className="bg-teal-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-teal-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-teal-900/95 px-4 py-2 rounded-lg border border-teal-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-teal-200 text-sm font-bold">
           {t('statusBanners.telekinesis.message', { ability: abilityName })}
         </span>
@@ -321,7 +321,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   if (afterAttackAbilityMode) {
     const abilityName = t(`statusBanners.abilityNames.${afterAttackAbilityMode.abilityId}`);
     return (
-      <div className="bg-teal-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-teal-500/40 flex items-center gap-3 shadow-lg">
+      <div className="bg-teal-900/90 px-4 py-2 rounded-lg border border-teal-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-teal-200 text-sm font-bold">
           {t('statusBanners.afterAttack.message', { ability: abilityName })}
         </span>

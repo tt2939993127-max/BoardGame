@@ -6,24 +6,39 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, getMinionPower } from '../domain/abilityHelpers';
+import { destroyMinion, getMinionPower, setPromptContinuation, buildMinionTargetOptions } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDiscardedEvent, CardsDrawnEvent, OngoingDetachedEvent, SmashUpEvent, LimitModifiedEvent } from '../domain/types';
+import type { MinionCardDef } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
+import { registerPromptContinuation } from '../domain/promptContinuation';
+import { getCardDef, getBaseDef } from '../data/cards';
 
 /** 侏儒 onPlay：消灭力量低于己方随从数量的随从 */
 function tricksterGnome(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
-    // 计算己方随从数量（包括刚打出的自己）
     const myMinionCount = base.minions.filter(m => m.controller === ctx.playerId).length + 1;
-    const target = base.minions.find(
+    const targets = base.minions.filter(
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myMinionCount
     );
-    if (!target) return { events: [] };
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return { events: [destroyMinion(targets[0].uid, targets[0].defId, ctx.baseIndex, targets[0].owner, 'trickster_gnome', ctx.now)] };
+    }
+    const options = targets.map(t => {
+        const def = getCardDef(t.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? t.defId;
+        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
+        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
+    });
     return {
-        events: [destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, 'trickster_gnome', ctx.now)],
+        events: [setPromptContinuation({
+            abilityId: 'trickster_gnome',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要消灭的随从（力量低于己方随从数量）', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
 }
 
@@ -57,45 +72,41 @@ function tricksterTakeTheShinies(ctx: AbilityContext): AbilityResult {
 
 /** 幻想破碎 onPlay：消灭一个已打出到随从或基地上的行动卡 */
 function tricksterDisenchant(ctx: AbilityContext): AbilityResult {
-    // MVP：自动选第一个找到的对手持续行动卡
-    // 先搜索基地上的持续行动
+    // 收集所有对手的持续行动卡
+    const targets: { uid: string; defId: string; ownerId: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         for (const ongoing of base.ongoingActions) {
             if (ongoing.ownerId !== ctx.playerId) {
-                const evt: OngoingDetachedEvent = {
-                    type: SU_EVENTS.ONGOING_DETACHED,
-                    payload: {
-                        cardUid: ongoing.uid,
-                        defId: ongoing.defId,
-                        ownerId: ongoing.ownerId,
-                        reason: 'trickster_disenchant',
-                    },
-                    timestamp: ctx.now,
-                };
-                return { events: [evt] };
+                const def = getCardDef(ongoing.defId);
+                const name = def?.name ?? ongoing.defId;
+                targets.push({ uid: ongoing.uid, defId: ongoing.defId, ownerId: ongoing.ownerId, label: `${name} (基地行动)` });
             }
         }
-        // 搜索随从上的附着行动
         for (const m of base.minions) {
             for (const attached of m.attachedActions) {
                 if (attached.ownerId !== ctx.playerId) {
-                    const evt: OngoingDetachedEvent = {
-                        type: SU_EVENTS.ONGOING_DETACHED,
-                        payload: {
-                            cardUid: attached.uid,
-                            defId: attached.defId,
-                            ownerId: attached.ownerId,
-                            reason: 'trickster_disenchant',
-                        },
-                        timestamp: ctx.now,
-                    };
-                    return { events: [evt] };
+                    const def = getCardDef(attached.defId);
+                    const name = def?.name ?? attached.defId;
+                    targets.push({ uid: attached.uid, defId: attached.defId, ownerId: attached.ownerId, label: `${name} (附着行动)` });
                 }
             }
         }
     }
-    return { events: [] };
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return { events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid: targets[0].uid, defId: targets[0].defId, ownerId: targets[0].ownerId, reason: 'trickster_disenchant' }, timestamp: ctx.now } as OngoingDetachedEvent] };
+    }
+    const options = targets.map((t, i) => ({
+        id: `action-${i}`, label: t.label, value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
+    }));
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'trickster_disenchant',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要消灭的行动卡', options } },
+        }, ctx.now)],
+    };
 }
 
 /** 注册诡术师派系所有能力 */
@@ -112,6 +123,25 @@ export function registerTricksterAbilities(): void {
 
     // 注册 ongoing 拦截器
     registerTricksterOngoingEffects();
+}
+
+/** 注册诡术师派系的 Prompt 继续函数 */
+export function registerTricksterPromptContinuations(): void {
+    // 侏儒：选择目标后消灭
+    registerPromptContinuation('trickster_gnome', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'trickster_gnome', ctx.now)];
+    });
+
+    // 幻想破碎：选择行动卡后消灭
+    registerPromptContinuation('trickster_disenchant', (ctx) => {
+        const { cardUid, defId, ownerId } = ctx.selectedValue as { cardUid: string; defId: string; ownerId: string };
+        return [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'trickster_disenchant' }, timestamp: ctx.now }];
+    });
 }
 
 

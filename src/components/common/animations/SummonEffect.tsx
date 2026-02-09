@@ -35,6 +35,8 @@ export interface SummonEffectProps {
   intensity?: SummonIntensity;
   color?: SummonColorTheme;
   customColors?: SummonColorSet;
+  /** 光柱原点 Y 位置（0~1，相对于 canvas 高度，默认 0.78） */
+  originY?: number;
   onComplete?: () => void;
   className?: string;
 }
@@ -64,18 +66,18 @@ function resolveColors(color: SummonColorTheme, custom?: SummonColorSet): Summon
   return COLOR_PRESETS[color === 'custom' ? 'blue' : color];
 }
 
-/** 升腾粒子预设 */
+/** 升腾粒子预设（俯视角：径向扩散） */
 const RISE_PRESET: ParticlePreset = {
   count: 1,
   speed: { min: 1, max: 3 },
   size: { min: 2, max: 5 },
   life: { min: 0.4, max: 0.8 },
-  gravity: -0.5,
+  gravity: 0, // 俯视角无重力
   shapes: ['circle'],
   rotate: false,
   opacityDecay: true,
   sizeDecay: true,
-  direction: 'top',
+  direction: 'none', // 径向扩散
   glow: true,
   glowScale: 3,
   drag: 0.98,
@@ -147,6 +149,7 @@ export const SummonEffect: React.FC<SummonEffectProps> = ({
   intensity = 'normal',
   color = 'blue',
   customColors,
+  originY = 0.78,
   onComplete,
   className = '',
 }) => {
@@ -166,10 +169,9 @@ export const SummonEffect: React.FC<SummonEffectProps> = ({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const parentRect = parent.getBoundingClientRect();
-    // Canvas 铺满父级，无溢出
-    const cw = parentRect.width;
-    const ch = parentRect.height;
+    // 使用 offsetWidth/offsetHeight 获取 CSS 布局尺寸（不受父级 transform scale 影响）
+    const cw = parent.offsetWidth;
+    const ch = parent.offsetHeight;
     canvas.width = cw * dpr;
     canvas.height = ch * dpr;
     canvas.style.width = `${cw}px`;
@@ -181,13 +183,13 @@ export const SummonEffect: React.FC<SummonEffectProps> = ({
     const [sr, sg, sb] = c.sub;
     const [br, bg, bb] = c.bright;
 
-    // 原点：底部居中偏上（留出底部空间给冲击波环）
+    // 原点：由 originY prop 控制（默认底部居中偏上）
     const cx = cw / 2;
-    const cy = ch * 0.78;
+    const cy = ch * originY;
 
-    // 光柱参数 — 基于 canvas 尺寸
+    // 光柱参数 — 基于原点到 canvas 顶部的可用空间
     const pillarBaseWidth = isStrong ? cw * 0.08 : cw * 0.06;
-    const pillarMaxHeight = ch * 0.7;
+    const pillarMaxHeight = cy * 0.9; // 原点到顶部距离的 90%，确保不超出 canvas
     const totalDuration = isStrong ? 1.4 : 1.1;
 
     // 阶段时间点
@@ -356,7 +358,7 @@ export const SummonEffect: React.FC<SummonEffectProps> = ({
     };
 
     rafRef.current = requestAnimationFrame(loop);
-  }, [color, customColors, isStrong]);
+  }, [color, customColors, isStrong, originY]);
 
   useEffect(() => {
     if (!active) return;

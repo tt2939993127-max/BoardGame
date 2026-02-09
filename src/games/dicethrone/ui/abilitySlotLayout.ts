@@ -12,13 +12,13 @@ export interface AbilitySlotLayoutItem {
 }
 
 export const DEFAULT_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
-    { id: 'fist', x: 0.1, y: 1.5, w: 20.8, h: 38.5 },
-    { id: 'chi', x: 22.2, y: 1.4, w: 21.3, h: 39.4 },
-    { id: 'sky', x: 54.7, y: 1.4, w: 21.7, h: 39.6 },
-    { id: 'lotus', x: 77.0, y: 1.3, w: 21.5, h: 39.5 },
-    { id: 'combo', x: 0.1, y: 42.3, w: 20.9, h: 39.3 },
-    { id: 'lightning', x: 22.1, y: 42.4, w: 21.8, h: 38.7 },
-    { id: 'calm', x: 54.5, y: 42.0, w: 21.9, h: 40.2 },
-    { id: 'meditate', x: 77.3, y: 42.0, w: 21.7, h: 39.9 },
-    { id: 'ultimate', x: 0.1, y: 83.5, w: 55.0, h: 15.6 },
+    { id: 'fist', x: 0.60, y: 1.62, w: 20.80, h: 38.50 },
+    { id: 'chi', x: 23, y: 1.15, w: 20.80, h: 39.65 },
+    { id: 'sky', x: 55.50, y: 1.28, w: 20.70, h: 39.11 },
+    { id: 'lotus', x: 77.60, y: 1.42, w: 21.10, h: 39.38 },
+    { id: 'combo', x: 0.70, y: 42.05, w: 20.70, h: 38.44 },
+    { id: 'lightning', x: 22.90, y: 42.40, w: 20.90, h: 38.70 },
+    { id: 'calm', x: 55.10, y: 41.75, w: 21.20, h: 39.59 },
+    { id: 'meditate', x: 77.80, y: 41.63, w: 20.90, h: 39.53 },
+    { id: 'ultimate', x: 0.10, y: 83.50, w: 55, h: 15.60 },
 ];

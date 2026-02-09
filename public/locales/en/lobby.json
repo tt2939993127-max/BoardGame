@@ -155,7 +155,28 @@
     "tutorialTitle": "Learning {{game}}",
     "matchTitle": "Playing {{game}}",
     "loadingResources": "Loading match resources...",
-    "joiningRoom": "Joining room..."
+    "joiningRoom": "Joining room...",
+    "title": {
+      "joining": "Joining",
+      "connecting": "Connecting",
+      "tutorial": "Tutorial",
+      "local": "Local Match",
+      "sandbox": "Sandbox"
+    },
+    "sandbox": {
+      "initializing": "Initializing game sandbox..."
+    },
+    "devTools": {
+      "assetSlicer": "Asset Slicer",
+      "effectPreview": "Effect Preview",
+      "audioBrowser": "Audio Browser",
+      "ugcBuilder": "UGC Builder",
+      "runtimeView": "Runtime View",
+      "ugcSandbox": "UGC Sandbox"
+    },
+    "admin": {
+      "dashboard": "Admin Dashboard"
+    }
   },
   "error": {
     "createRoomFailed": "Failed to create room",
@@ -171,11 +192,13 @@
     "destroyNetwork": "Failed to destroy the room due to network or service issues. Please try again later.",
     "destroyFailedLocalCleaned": "Destroy request failed. Local state has been cleared so you can continue.",
     "localStateCleared": "Local state cleared. You can create or join a room again.",
+    "roomDestroyed": "Room was destroyed. Local state has been cleared.",
     "activeMatchExists": "You already have an active room. Please return to it or destroy it before creating a new one.",
     "leaveForbidden": "Unable to leave the room: invalid or expired credentials. Please re-enter the match and try again.",
     "leaveNetwork": "Failed to leave the room due to network or service issues. Please try again later.",
     "roomFull": "Room is full",
     "ownerClaimFailed": "Unable to reconnect: guest identity may be lost or credentials expired after server restart. Please retry with the original browser or create a new room.",
+    "roomCreatedButClaimFailed": "Room was created but failed to claim seat. Please go back to the lobby and try again.",
     "joinRoomFailed": "Failed to join room",
     "actionFailed": "Action failed, please try again later.",
     "serviceUnavailable": {

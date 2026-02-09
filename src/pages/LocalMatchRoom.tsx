@@ -39,7 +39,7 @@ export const LocalMatchRoom = () => {
             board: impl.board,
             debug: false,
             numPlayers: 2,
-            loading: () => <LoadingScreen title="Local Match" description={t('matchRoom.loadingResources')} />
+            loading: () => <LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />
         }) as React.ComponentType<{ playerID?: string | null }>;
     }, [gameId, gameSeed]);
 

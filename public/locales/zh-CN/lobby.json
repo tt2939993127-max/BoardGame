@@ -155,7 +155,28 @@
     "tutorialTitle": "正在学习 {{game}}",
     "matchTitle": "正在对局 {{game}}",
     "loadingResources": "正在加载对局资源...",
-    "joiningRoom": "正在加入房间..."
+    "joiningRoom": "正在加入房间...",
+    "title": {
+      "joining": "加入中",
+      "connecting": "连接中",
+      "tutorial": "学习模式",
+      "local": "本地模式",
+      "sandbox": "沙盒模式"
+    },
+    "sandbox": {
+      "initializing": "正在初始化沙盒..."
+    },
+    "devTools": {
+      "assetSlicer": "素材切片机",
+      "effectPreview": "特效预览",
+      "audioBrowser": "音效浏览器",
+      "ugcBuilder": "UGC 原型制作器",
+      "runtimeView": "运行态预览",
+      "ugcSandbox": "UGC 沙盒"
+    },
+    "admin": {
+      "dashboard": "管理后台"
+    }
   },
   "error": {
     "createRoomFailed": "创建房间失败",
@@ -171,11 +192,13 @@
     "destroyNetwork": "销毁房间失败：网络或服务异常，请稍后重试。",
     "destroyFailedLocalCleaned": "房间销毁请求异常，已清理本地状态以恢复操作。",
     "localStateCleared": "已清理本地记录，可重新创建或加入房间。",
+    "roomDestroyed": "房间已被销毁，已清理本地记录。",
     "activeMatchExists": "您已有未结束的房间，请先返回或销毁后再创建。",
     "leaveForbidden": "无法离开房间：凭证无效或已失效，请重新进入房间后再试。",
     "leaveNetwork": "离开房间失败：网络或服务异常，请稍后重试。",
     "roomFull": "房间已满",
     "ownerClaimFailed": "无法重连该房间：可能是游客身份丢失或服务器重启导致凭据失效。请使用原浏览器重试，或重新创建房间。",
+    "roomCreatedButClaimFailed": "房间已创建但入座失败，请返回大厅重试。",
     "joinRoomFailed": "加入房间失败",
     "actionFailed": "操作失败，请稍后重试。",
     "serviceUnavailable": {

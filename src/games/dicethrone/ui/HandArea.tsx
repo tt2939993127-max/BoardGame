@@ -12,6 +12,7 @@ import { getAbilitySlotId } from './AbilityOverlays';
 /** 飞出卡牌信息（成功使用后的动画） */
 type FlyingOutCard = {
     card: AbilityCard;
+    cardKey: string;
     startOffset: { x: number; y: number };
     startIndex: number;
     targetType: 'discard' | 'abilitySlot';
@@ -25,6 +26,12 @@ type HandCardEntry = {
 };
 
 const buildHandCardKey = (cardId: string, sequence: number) => `${cardId}-${sequence}`;
+const parseHandCardSequence = (cardKey: string, cardId: string) => {
+    const prefix = `${cardId}-`;
+    if (!cardKey.startsWith(prefix)) return 0;
+    const sequence = Number(cardKey.slice(prefix.length));
+    return Number.isFinite(sequence) ? sequence : 0;
+};
 
 // 5. Hand Area - 拖拽交互（向上拖拽打出，拖到弃牌堆售卖）
 const DRAG_PLAY_THRESHOLD = -150; // 向上拖拽超过此距离触发打出
@@ -82,8 +89,9 @@ export const HandArea = ({
     const [hoveredCardKey, setHoveredCardKey] = React.useState<string | null>(null);
     // 飞出动画卡牌（成功使用后飞向目标）
     const [flyingOutCard, setFlyingOutCard] = React.useState<FlyingOutCard | null>(null);
+    const handEntriesRef = React.useRef<HandCardEntry[]>([]);
+    const cardKeySequenceRef = React.useRef<Map<string, number>>(new Map());
     const pendingPlayRef = React.useRef<{
-        cardId: string;
         cardKey: string;
         card: AbilityCard;
         offset: { x: number; y: number };
@@ -96,13 +104,36 @@ export const HandArea = ({
     const dragValueMapRef = React.useRef(new Map<string, { x: MotionValue<number>; y: MotionValue<number> }>());
 
     const handEntries = React.useMemo<HandCardEntry[]>(() => {
-        const counts = new Map<string, number>();
+        const prevEntries = handEntriesRef.current;
+        const prevQueues = new Map<string, HandCardEntry[]>();
+
+        prevEntries.forEach((entry) => {
+            const queue = prevQueues.get(entry.card.id) ?? [];
+            queue.push(entry);
+            prevQueues.set(entry.card.id, queue);
+
+            const prevMax = cardKeySequenceRef.current.get(entry.card.id) ?? 0;
+            const sequence = parseHandCardSequence(entry.key, entry.card.id);
+            if (sequence > prevMax) {
+                cardKeySequenceRef.current.set(entry.card.id, sequence);
+            }
+        });
+
         return hand.map((card, index) => {
-            const sequence = (counts.get(card.id) ?? 0) + 1;
-            counts.set(card.id, sequence);
-            return { card, index, key: buildHandCardKey(card.id, sequence) };
+            const queue = prevQueues.get(card.id);
+            const reused = queue?.shift();
+            if (reused) {
+                return { ...reused, card, index };
+            }
+            const nextSequence = (cardKeySequenceRef.current.get(card.id) ?? 0) + 1;
+            cardKeySequenceRef.current.set(card.id, nextSequence);
+            return { card, index, key: buildHandCardKey(card.id, nextSequence) };
         });
     }, [hand]);
+
+    React.useEffect(() => {
+        handEntriesRef.current = handEntries;
+    }, [handEntries]);
 
     const handKeys = React.useMemo(() => handEntries.map(entry => entry.key), [handEntries]);
     const handKeyToCardId = React.useMemo(
@@ -243,7 +274,7 @@ export const HandArea = ({
         const pending = pendingPlayRef.current;
         if (pending && !handKeys.includes(pending.cardKey)) {
             // 卡牌成功使用（从手牌移除），触发飞出动画
-            const { card, offset, originalIndex } = pending;
+            const { card, offset, originalIndex, cardKey } = pending;
 
             // 判断目标位置：升级卡飞向技能槽，普通卡飞向弃牌堆
             if (card.type === 'upgrade') {
@@ -255,6 +286,7 @@ export const HandArea = ({
                 if (slotId) {
                     setFlyingOutCard({
                         card,
+                        cardKey,
                         startOffset: offset,
                         startIndex: originalIndex,
                         targetType: 'abilitySlot',
@@ -264,6 +296,7 @@ export const HandArea = ({
                     // 找不到技能槽，默认飞向弃牌堆
                     setFlyingOutCard({
                         card,
+                        cardKey,
                         startOffset: offset,
                         startIndex: originalIndex,
                         targetType: 'discard',
@@ -273,6 +306,7 @@ export const HandArea = ({
                 // 普通卡牌飞向弃牌堆
                 setFlyingOutCard({
                     card,
+                    cardKey,
                     startOffset: offset,
                     startIndex: originalIndex,
                     targetType: 'discard',
@@ -423,7 +457,7 @@ export const HandArea = ({
         // 向上拖拽打出：直接调用引擎，由引擎返回错误
         if (y < DRAG_PLAY_THRESHOLD) {
             if (onPlayCard) {
-                pendingPlayRef.current = { cardId: card.id, cardKey: entry.key, card, offset, originalIndex: currentIndex };
+                pendingPlayRef.current = { cardKey: entry.key, card, offset, originalIndex: currentIndex };
                 if (pendingPlayTimeoutRef.current) {
                     window.clearTimeout(pendingPlayTimeoutRef.current);
                 }
@@ -547,7 +581,6 @@ export const HandArea = ({
                         return (
                             <motion.div
                                 key={`${cardKey}-${returnVersion}`}
-                                data-card-id={card.id}
                                 data-card-key={cardKey}
                                 drag={canDrag}
                                 dragElastic={0.1}
@@ -673,7 +706,7 @@ export const HandArea = ({
                 {/* 飞出动画卡牌（成功使用后飞向目标） */}
                 <AnimatePresence>
                     {flyingOutCard && (() => {
-                        const { card, startOffset, startIndex, targetType, targetSlotId } = flyingOutCard;
+                        const { card, cardKey, startOffset, startIndex, targetType, targetSlotId } = flyingOutCard;
                         const flyingCenterIndex = (hand.length) / 2; // 使用移除后的手牌数量计算
                         const startIndexOffset = startIndex - flyingCenterIndex;
                         const startYOffset = Math.abs(startIndexOffset) * 0.8;
@@ -688,7 +721,7 @@ export const HandArea = ({
 
                         return (
                             <motion.div
-                                key={`flying-${card.id}`}
+                                key={`flying-${cardKey}`}
                                 className="absolute bottom-0 w-[12vw] aspect-[0.61] rounded-[0.8vw] pointer-events-none"
                                 style={{
                                     bottom: '-2vw',

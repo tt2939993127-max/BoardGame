@@ -355,7 +355,7 @@ export function createTricksterDeck(): {
       { unit: { ...telekinetic, id: 'trickster-start-telekinetic' }, position: { row: 2, col: 4 } },  // ▲
       { unit: { ...mindWitch, id: 'trickster-start-mind-witch' }, position: { row: 1, col: 2 } },    // ■
     ],
-    startingGate: { ...STRUCTURE_CARDS_TRICKSTER[0], id: 'trickster-start-gate' },
+    startingGate: { ...STRUCTURE_CARDS_TRICKSTER[0], id: `${STRUCTURE_CARDS_TRICKSTER[0].id}-0` },
     startingGatePosition: { row: 1, col: 3 },
     deck,
   };

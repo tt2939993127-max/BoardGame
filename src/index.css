@@ -41,9 +41,11 @@
 
 /* Global Styles */
 @layer base {
+
     /* Responsive Root Font Size System */
     html {
-        font-size: 16px; /* Default */
+        font-size: 16px;
+        /* Default */
     }
 
     /* Large Screens (2K/4K) */
@@ -52,11 +54,13 @@
             font-size: 18px;
         }
     }
+
     @media (min-width: 2561px) {
         html {
             font-size: 20px;
         }
     }
+
     @media (min-width: 3841px) {
         html {
             font-size: 24px;
@@ -121,7 +125,7 @@
 
     .ugc-preview-container,
     .ugc-preview-container .bgio-client,
-    .ugc-preview-container .bgio-client > * {
+    .ugc-preview-container .bgio-client>* {
         @apply w-full h-full;
     }
 
@@ -130,9 +134,24 @@
     }
 }
 
+/* 扫光动画 */
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%) skewX(-20deg);
+    }
+
+    50% {
+        transform: translateX(100%) skewX(-20deg);
+    }
+
+    100% {
+        transform: translateX(100%) skewX(-20deg);
+    }
+}
+
 /* 钝帧冻结：暂停所有子元素的 CSS 动画和过渡 */
 .hitstop-frozen,
 .hitstop-frozen * {
-  animation-play-state: paused !important;
-  transition: none !important;
+    animation-play-state: paused !important;
+    transition: none !important;
 }

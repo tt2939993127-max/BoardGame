@@ -348,7 +348,7 @@ export function createFrostDeck(): {
       { unit: { ...frostMage, id: 'frost-start-mage' }, position: { row: 2, col: 2 } },
       { unit: { ...iceGolem, id: 'frost-start-golem' }, position: { row: 1, col: 2 } },
     ],
-    startingGate: { ...STRUCTURE_CARDS_FROST[0], id: 'frost-start-gate' },
+    startingGate: { ...STRUCTURE_CARDS_FROST[0], id: `${STRUCTURE_CARDS_FROST[0].id}-0` },
     startingGatePosition: { row: 2, col: 3 },
     deck,
   };

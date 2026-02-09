@@ -18,6 +18,8 @@ import { Message, type MessageDocument } from '../src/modules/message/schemas/me
 import { Review, type ReviewDocument } from '../src/modules/review/schemas/review.schema';
 import { MatchRecord, type MatchRecordDocument } from '../src/modules/admin/schemas/match-record.schema';
 import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from '../src/modules/admin/schemas/room-match.schema';
+import { UgcPackage, type UgcPackageDocument } from '../src/modules/ugc/schemas/ugc-package.schema';
+import { UgcAsset, type UgcAssetDocument } from '../src/modules/ugc/schemas/ugc-asset.schema';
 import { GlobalHttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 
 describe('Admin Module (e2e)', () => {
@@ -29,6 +31,8 @@ describe('Admin Module (e2e)', () => {
     let friendModel: Model<FriendDocument>;
     let messageModel: Model<MessageDocument>;
     let reviewModel: Model<ReviewDocument>;
+    let ugcPackageModel: Model<UgcPackageDocument>;
+    let ugcAssetModel: Model<UgcAssetDocument>;
     let cacheManager: Cache;
     let authService: AuthService;
 
@@ -57,6 +61,8 @@ describe('Admin Module (e2e)', () => {
         friendModel = moduleRef.get<Model<FriendDocument>>(getModelToken(Friend.name));
         messageModel = moduleRef.get<Model<MessageDocument>>(getModelToken(Message.name));
         reviewModel = moduleRef.get<Model<ReviewDocument>>(getModelToken(Review.name));
+        ugcPackageModel = moduleRef.get<Model<UgcPackageDocument>>(getModelToken(UgcPackage.name));
+        ugcAssetModel = moduleRef.get<Model<UgcAssetDocument>>(getModelToken(UgcAsset.name));
         cacheManager = moduleRef.get<Cache>(CACHE_MANAGER);
         app.useGlobalPipes(
             new ValidationPipe({
@@ -76,6 +82,8 @@ describe('Admin Module (e2e)', () => {
             friendModel.deleteMany({}),
             messageModel.deleteMany({}),
             reviewModel.deleteMany({}),
+            ugcPackageModel.deleteMany({}),
+            ugcAssetModel.deleteMany({}),
         ]);
         await cacheManager.del('admin:stats');
         const store = cacheManager.store as { keys?: (pattern: string) => Promise<string[]> | string[] };
@@ -279,6 +287,90 @@ describe('Admin Module (e2e)', () => {
             .set('Authorization', `Bearer ${adminToken}`)
             .send({ reason: '测试' })
             .expect(400);
+    });
+
+    it('UGC 包列表/下架/删除', async () => {
+        const { adminToken } = await seedUsers();
+        const now = new Date();
+
+        await ugcPackageModel.create([
+            {
+                packageId: 'ugc-pub-a',
+                ownerId: 'user-a',
+                name: '测试 UGC 包 A',
+                status: 'published',
+                publishedAt: now,
+                manifest: { name: 'A' },
+                gameId: 'ugc-game',
+                version: '1.0.0',
+            },
+            {
+                packageId: 'ugc-draft-b',
+                ownerId: 'user-b',
+                name: '测试 UGC 包 B',
+                status: 'draft',
+                publishedAt: null,
+            },
+        ]);
+
+        await ugcAssetModel.create([
+            {
+                assetId: 'asset-1',
+                packageId: 'ugc-pub-a',
+                ownerId: 'user-a',
+                type: 'image',
+                originalFilename: 'cover.png',
+                originalFormat: 'png',
+                originalSize: 1024,
+                uploadedAt: now.toISOString(),
+                compressionStatus: 'completed',
+            },
+            {
+                assetId: 'asset-2',
+                packageId: 'ugc-pub-a',
+                ownerId: 'user-a',
+                type: 'json',
+                originalFilename: 'manifest.json',
+                originalFormat: 'json',
+                originalSize: 2048,
+                uploadedAt: now.toISOString(),
+                compressionStatus: 'completed',
+            },
+        ]);
+
+        const listRes = await request(app.getHttpServer())
+            .get('/admin/ugc/packages?limit=10')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(listRes.body.total).toBe(2);
+        expect(listRes.body.items.some((item: { packageId: string }) => item.packageId === 'ugc-pub-a')).toBe(true);
+
+        const unpublishRes = await request(app.getHttpServer())
+            .post('/admin/ugc/packages/ugc-pub-a/unpublish')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(unpublishRes.body.package.status).toBe('draft');
+        expect(unpublishRes.body.package.publishedAt).toBeNull();
+
+        const deleteDraftRes = await request(app.getHttpServer())
+            .delete('/admin/ugc/packages/ugc-draft-b')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(deleteDraftRes.body.deleted).toBe(true);
+        expect(deleteDraftRes.body.assetsDeleted).toBe(0);
+        expect(await ugcPackageModel.findOne({ packageId: 'ugc-draft-b' })).toBeNull();
+
+        const deletePubRes = await request(app.getHttpServer())
+            .delete('/admin/ugc/packages/ugc-pub-a')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(deletePubRes.body.assetsDeleted).toBe(2);
+        expect(await ugcPackageModel.findOne({ packageId: 'ugc-pub-a' })).toBeNull();
+        expect(await ugcAssetModel.countDocuments({ packageId: 'ugc-pub-a' })).toBe(0);
     });
 
     it('对局/房间/用户删除与批量删除', async () => {

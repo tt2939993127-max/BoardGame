@@ -130,7 +130,7 @@ describe('海盗派系能力', () => {
         expect(destroyedUids).toContain('m2');
     });
 
-    it('pirate_cannon: 消灭至多两个力量≤2的随从', () => {
+    it('pirate_cannon: 多目标时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -145,8 +145,30 @@ describe('海盗派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
+        // 多个力量≤2目标时应创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('pirate_cannon_choose_first');
+    });
+
+    it('pirate_cannon: 单目标时自动消灭', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'pirate_cannon', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 1)], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m3', 'test', '1', 5)], ongoingActions: [] },
+            ],
+        });
+
+        const events = execPlayAction(state, '0', 'a1');
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(2);
+        expect(destroyEvents.length).toBe(1);
+        expect((destroyEvents[0] as any).payload.minionUid).toBe('m1');
     });
 
     it('pirate_swashbuckling: 所有己方随从+1力量', () => {
@@ -222,7 +244,7 @@ describe('恐龙派系能力', () => {
         expect(destroyEvents.length).toBe(1);
     });
 
-    it('dino_augmentation: 己方力量最高的随从+4力量', () => {
+    it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -236,9 +258,29 @@ describe('恐龙派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
+        // 多个己方随从时应创建 Prompt 而非自动选择
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('dino_augmentation');
+    });
+
+    it('dino_augmentation: 单个己方随从时自动+4力量', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_augmentation', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                { defId: 'b1', minions: [makeMinion('m1', 'test', '0', 5)], ongoingActions: [] },
+            ],
+        });
+
+        const events = execPlayAction(state, '0', 'a1');
         const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
         expect(powerEvents.length).toBe(1);
-        expect((powerEvents[0] as any).payload.minionUid).toBe('m1'); // 力量最高的
+        expect((powerEvents[0] as any).payload.minionUid).toBe('m1');
         expect((powerEvents[0] as any).payload.amount).toBe(4);
     });
 
@@ -284,6 +326,60 @@ describe('恐龙派系能力', () => {
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(1);
         expect((destroyEvents[0] as any).payload.minionUid).toBe('m1'); // 力量4 < 5
+    });
+
+    it('dino_natural_selection: 多个可消灭目标时创建 Prompt', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_natural_selection', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'b1', minions: [
+                        makeMinion('m0', 'test', '0', 5),
+                        makeMinion('m1', 'test', '1', 3),
+                        makeMinion('m2', 'test', '1', 4),
+                    ], ongoingActions: [],
+                },
+            ],
+        });
+
+        const events = execPlayAction(state, '0', 'a1', 0);
+        // 多个目标时不直接消灭，而是创建 Prompt 让玩家选择
+        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
+        expect(destroyEvents.length).toBe(0);
+        // 应该有 PROMPT_CONTINUATION 事件
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('dino_natural_selection_choose_target');
+    });
+
+    it('dino_natural_selection: 无合法目标时无事件', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_natural_selection', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'b1', minions: [
+                        makeMinion('m0', 'test', '0', 3),
+                        makeMinion('m1', 'test', '1', 5),
+                    ], ongoingActions: [],
+                },
+            ],
+        });
+
+        const events = execPlayAction(state, '0', 'a1', 0);
+        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
+        expect(destroyEvents.length).toBe(0);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(0);
     });
 
     it('dino_wild_rampage: 目标基地己方随从+2力量', () => {

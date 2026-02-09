@@ -122,12 +122,15 @@ describe('UNIT_ATTACKED', () => {
   it('标记 hasAttacked + 增加 attackCount + 标记 hasAttackedEnemy', () => {
     const core = createInitializedCore(['0', '1'], createTestRandom());
     const pos: CellCoord = { row: 5, col: 3 };
+    const target: CellCoord = { row: 4, col: 3 };
     clearCell(core, pos);
     placeUnit(core, pos, '0', makeUnitCard('attacker'));
+    clearCell(core, target);
+    placeUnit(core, target, '1', makeUnitCard('defender'));
 
     const result = reduce(core, {
       type: SW_EVENTS.UNIT_ATTACKED,
-      payload: { attacker: pos, target: { row: 4, col: 3 }, hits: 2 },
+      payload: { attacker: pos, target, hits: 2 },
       timestamp: 0,
     });
 

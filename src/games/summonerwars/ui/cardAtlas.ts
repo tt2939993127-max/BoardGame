@@ -5,6 +5,7 @@
 
 import type { CSSProperties } from 'react';
 import { getOptimizedImageUrls } from '../../../core/AssetLoader';
+import { registerCardAtlasSource } from '../../../components/common/media/CardPreview';
 
 /** 精灵图配置（支持不规则帧尺寸） */
 export interface SpriteAtlasConfig {
@@ -236,31 +237,51 @@ export function resolveCardAtlasId(card: { id: string; faction?: string }, atlas
 /** 初始化精灵图注册（所有阵营） */
 export function initSpriteAtlases(): void {
   for (const dir of ALL_FACTION_DIRS) {
-    const heroUrls = getOptimizedImageUrls(`summonerwars/hero/${dir}/hero`);
+    const heroBase = `summonerwars/hero/${dir}/hero`;
+    const heroUrls = getOptimizedImageUrls(heroBase);
     registerSpriteAtlas(`sw:${dir.toLowerCase()}:hero`, {
       image: heroUrls.webp,
       config: HERO_ATLAS,
     });
+    registerCardAtlasSource(`sw:${dir.toLowerCase()}:hero`, {
+      image: heroBase,
+      config: HERO_ATLAS,
+    });
 
-    const cardsUrls = getOptimizedImageUrls(`summonerwars/hero/${dir}/cards`);
+    const cardsBase = `summonerwars/hero/${dir}/cards`;
+    const cardsUrls = getOptimizedImageUrls(cardsBase);
     const cardsConfig = dir === 'Necromancer' ? NECROMANCER_CARDS_ATLAS : CARDS_ATLAS;
     registerSpriteAtlas(`sw:${dir.toLowerCase()}:cards`, {
       image: cardsUrls.webp,
       config: cardsConfig,
     });
+    registerCardAtlasSource(`sw:${dir.toLowerCase()}:cards`, {
+      image: cardsBase,
+      config: cardsConfig,
+    });
   }
 
   // 骰子精灵图
-  const diceUrls = getOptimizedImageUrls('summonerwars/common/dice');
+  const diceBase = 'summonerwars/common/dice';
+  const diceUrls = getOptimizedImageUrls(diceBase);
   registerSpriteAtlas('sw:dice', {
     image: diceUrls.webp,
     config: DICE_ATLAS,
   });
+  registerCardAtlasSource('sw:dice', {
+    image: diceBase,
+    config: DICE_ATLAS,
+  });
 
   // 传送门精灵图（所有阵营共用）
-  const portalUrls = getOptimizedImageUrls('summonerwars/common/Portal');
+  const portalBase = 'summonerwars/common/Portal';
+  const portalUrls = getOptimizedImageUrls(portalBase);
   registerSpriteAtlas('sw:portal', {
     image: portalUrls.webp,
+    config: PORTAL_ATLAS,
+  });
+  registerCardAtlasSource('sw:portal', {
+    image: portalBase,
     config: PORTAL_ATLAS,
   });
 }

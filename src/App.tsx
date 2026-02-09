@@ -23,6 +23,7 @@ import { LocalMatchRoom } from './pages/LocalMatchRoom';
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
 const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectPreview'));
@@ -36,13 +37,17 @@ const UsersPage = React.lazy(() => import('./pages/admin/Users'));
 const UserDetailPage = React.lazy(() => import('./pages/admin/UserDetail'));
 const MatchesPage = React.lazy(() => import('./pages/admin/Matches'));
 const RoomsPage = React.lazy(() => import('./pages/admin/Rooms'));
+const UgcPackagesPage = React.lazy(() => import('./pages/admin/UgcPackages'));
 const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
+const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
 
 
 import AdminGuard from './components/auth/AdminGuard';
 
 const App = () => {
+  const { t } = useTranslation('lobby');
+
   return (
     <QueryClientProvider client={queryClient}>
       <GlobalErrorBoundary>
@@ -58,12 +63,12 @@ const App = () => {
                           <Route path="/" element={<Home />} />
                           <Route path="/play/:gameId/match/:matchId" element={<MatchRoom />} />
                           <Route path="/play/:gameId/local" element={<LocalMatchRoom />} />
-                          <Route path="/dev/slicer" element={<React.Suspense fallback={<LoadingScreen title="Asset Slicer" />}><DevToolsSlicer /></React.Suspense>} />
-                          <Route path="/dev/fx" element={<React.Suspense fallback={<LoadingScreen title="Effect Preview" />}><DevToolsFxPreview /></React.Suspense>} />
-                          <Route path="/dev/audio" element={<React.Suspense fallback={<LoadingScreen title="Audio Browser" />}><DevToolsAudioBrowser /></React.Suspense>} />
-                          <Route path="/dev/ugc" element={<React.Suspense fallback={<LoadingScreen title="UGC Builder" />}><UnifiedBuilder /></React.Suspense>} />
-                          <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<LoadingScreen title="Runtime View" />}><UGCRuntimeViewPage /></React.Suspense>} />
-                          <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<LoadingScreen title="UGC Sandbox" />}><UGCSandbox /></React.Suspense>} />
+                          <Route path="/dev/slicer" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
+                          <Route path="/dev/fx" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
+                          <Route path="/dev/audio" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
+                          <Route path="/dev/ugc" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcBuilder')} />}><UnifiedBuilder /></React.Suspense>} />
+                          <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.runtimeView')} />}><UGCRuntimeViewPage /></React.Suspense>} />
+                          <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
                           {/* 教程路由回退（如需要），或映射到对局路由 */}
                           <Route path="/play/:gameId/tutorial" element={<MatchRoom />} />
                           <Route path="/maintenance" element={<MaintenancePage />} />
@@ -71,7 +76,7 @@ const App = () => {
                           {/* Admin Routes */}
                           <Route path="/admin" element={
                             <AdminGuard>
-                              <React.Suspense fallback={<LoadingScreen title="Admin Dashboard" />}>
+                              <React.Suspense fallback={<LoadingScreen title={t('matchRoom.admin.dashboard')} />}>
                                 <AdminLayout />
                               </React.Suspense>
                             </AdminGuard>
@@ -81,6 +86,8 @@ const App = () => {
                             <Route path="users/:id" element={<UserDetailPage />} />
                             <Route path="matches" element={<MatchesPage />} />
                             <Route path="rooms" element={<RoomsPage />} />
+                            <Route path="ugc" element={<UgcPackagesPage />} />
+                            <Route path="sponsors" element={<SponsorsPage />} />
                             <Route path="feedback" element={<FeedbackPage />} />
                             <Route path="health" element={<SystemHealthPage />} />
                           </Route>

@@ -79,7 +79,7 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                     transition={{ repeat: Infinity, duration: 2 }}
                                     className="absolute -right-2 -top-2 text-2xl"
                                 >
-                                    ✏️
+                                    鉁忥笍
                                 </motion.div>
                             </motion.div>
                         ) : (
@@ -156,7 +156,7 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                             {/* Taken Status */}
                                             {isTaken && (
                                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center z-30">
-                                                    <span className="text-2xl mb-1">🔒</span>
+                                                    <span className="text-2xl mb-1">馃敀</span>
                                                     <span className="font-black text-white text-xs uppercase tracking-tight">
                                                         {t('ui.player_taken', { id: ownerId })}
                                                     </span>
@@ -366,7 +366,7 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                     w-12 h-12 rounded-full flex items-center justify-center font-black text-lg text-white shadow-inner border-4 border-white
                                     ${pid === '0' ? 'bg-red-500' : pidx === 1 ? 'bg-blue-500' : 'bg-green-500'}
                                 `}>
-                                    P{pid}
+                                    {t('ui.player_short', { id: pid })}
                                 </div>
 
                                 {/* Selections */}
@@ -398,8 +398,8 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                 </div>
 
                                 <div className="flex flex-col items-center">
-                                    <span className={`text-[11px] font-black uppercase tracking-tighter leading-none ${isCurrent ? 'text-amber-800' : 'text-slate-500'}`}>
-                                        Player {pid}
+                                    <span className={`text-[11px] font-black uppercase tracking-tighter leading-none ${isCurrent ? 'text-amber-800' : 'text-slate-50'}`}>
+                                        {t('ui.player_short', { id: pid })}
                                     </span>
                                     {isCurrent && (
                                         <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest mt-1 animate-pulse">

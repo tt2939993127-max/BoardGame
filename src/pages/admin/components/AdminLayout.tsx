@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useEffect, Suspense } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useModalStack } from '../../../contexts/ModalStackContext';
-import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning, DoorOpen, Activity } from 'lucide-react';
+import { LayoutDashboard, Users, Gamepad2, LogOut, ChevronRight, MessageSquareWarning, DoorOpen, Activity, Package, Heart } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { motion } from 'framer-motion';
 
@@ -22,6 +22,8 @@ export default function AdminLayout() {
         { icon: Users, label: '用户管理', path: '/admin/users' },
         { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
         { icon: DoorOpen, label: '房间管理', path: '/admin/rooms' },
+        { icon: Package, label: 'UGC 管理', path: '/admin/ugc' },
+        { icon: Heart, label: '赞助管理', path: '/admin/sponsors' },
         { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
         { icon: Activity, label: '系统健康', path: '/admin/health' },
     ];

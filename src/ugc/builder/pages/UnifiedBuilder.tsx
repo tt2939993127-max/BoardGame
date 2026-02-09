@@ -21,7 +21,7 @@ import { PreviewCanvas } from '../ui/RenderPreview';
 import { PromptGenerator, type GameContext, useRenderPrompt } from '../ai';
 import { buildRequirementsText } from '../utils/requirements';
 import { generateUnifiedPrompt, TECH_STACK, OUTPUT_RULES } from '../ai/promptUtils';
-import { resolveAnchorFromPosition, resolveLayoutRect } from '../../utils/layout';
+import { migrateLayoutComponents, resolveAnchorFromPosition, resolveLayoutRect } from '../../utils/layout';
 import { UGC_API_URL } from '../../../config/server';
 import { useToast } from '../../../contexts/ToastContext';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -68,6 +68,37 @@ const normalizeRequirements = (
       })
     : fallback.entries;
   return { rawText, entries };
+};
+
+const isLayoutPoint = (value: unknown): value is { x: number; y: number } => {
+  if (!value || typeof value !== 'object') return false;
+  const point = value as { x?: unknown; y?: unknown };
+  return typeof point.x === 'number' && typeof point.y === 'number';
+};
+
+const isValidLayoutComponent = (value: unknown): value is LayoutComponent => {
+  if (!value || typeof value !== 'object') return false;
+  const comp = value as Record<string, unknown>;
+  return typeof comp.id === 'string'
+    && typeof comp.type === 'string'
+    && isLayoutPoint(comp.anchor)
+    && isLayoutPoint(comp.pivot)
+    && isLayoutPoint(comp.offset)
+    && typeof comp.width === 'number'
+    && typeof comp.height === 'number';
+};
+
+const isLegacyLayoutComponent = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object') return false;
+  const comp = value as Record<string, unknown>;
+  const hasLegacyPosition = typeof comp.x === 'number' || typeof comp.y === 'number';
+  const hasNewLayout = isLayoutPoint(comp.anchor) && isLayoutPoint(comp.pivot) && isLayoutPoint(comp.offset);
+  return hasLegacyPosition && !hasNewLayout;
+};
+
+type ApplySavedResult = {
+  data: Record<string, unknown>;
+  didUpgrade: boolean;
 };
 
 // AI 生成请求类型
@@ -1384,9 +1415,26 @@ function UnifiedBuilderInner() {
       snapToCenters,
       snapThreshold,
     },
-  }), [state, leftPanelWidth, topPanelRatio, gridSize, showGrid, snapToGrid, snapToEdges, snapToCenters, snapThreshold]);
+  }), [
+    state,
+    leftPanelWidth,
+    topPanelRatio,
+    gridSize,
+    showGrid,
+    snapToGrid,
+    snapToEdges,
+    snapToCenters,
+    snapThreshold,
+  ]);
 
-  const applySavedData = useCallback((data: Record<string, unknown>) => {
+  const applySavedData = useCallback((data: Record<string, unknown>): ApplySavedResult => {
+    const rawLayout = Array.isArray(data.layout) ? data.layout : [];
+    const hasLegacyLayout = rawLayout.some(item => isLegacyLayoutComponent(item));
+    const migratedLayout = hasLegacyLayout ? migrateLayoutComponents(rawLayout) : rawLayout;
+    const layout = Array.isArray(migratedLayout)
+      ? migratedLayout.filter(isValidLayoutComponent)
+      : [];
+
     setState(prev => {
       const schemas = Array.isArray(data.schemas) ? data.schemas : prev.schemas;
       const requirements = normalizeRequirements(data.requirements, prev.requirements);
@@ -1399,13 +1447,14 @@ function UnifiedBuilderInner() {
         schemas,
         instances: (data.instances && typeof data.instances === 'object') ? data.instances as BuilderState['instances'] : prev.instances,
         renderComponents: Array.isArray(data.renderComponents) ? data.renderComponents : prev.renderComponents,
-        layout: Array.isArray(data.layout) ? data.layout : [],
+        layout,
         layoutGroups: Array.isArray(data.layoutGroups) ? data.layoutGroups : prev.layoutGroups,
         selectedSchemaId,
         rulesCode: typeof data.rulesCode === 'string' ? data.rulesCode : '',
         requirements,
       };
     });
+
     if (data.uiLayout && typeof data.uiLayout === 'object') {
       const uiLayout = data.uiLayout as Record<string, unknown>;
       if (typeof uiLayout.leftPanelWidth === 'number') {
@@ -1433,7 +1482,21 @@ function UnifiedBuilderInner() {
         setSnapThreshold(uiLayout.snapThreshold);
       }
     }
-  }, [setLeftPanelWidth, setTopPanelRatio]);
+
+    return {
+      data: { ...data, layout },
+      didUpgrade: hasLegacyLayout,
+    };
+  }, [
+    setLeftPanelWidth,
+    setTopPanelRatio,
+    setGridSize,
+    setShowGrid,
+    setSnapToGrid,
+    setSnapToEdges,
+    setSnapToCenters,
+    setSnapThreshold,
+  ]);
 
   const persistLocalSave = useCallback((saveData: Record<string, unknown>) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
@@ -1477,8 +1540,16 @@ function UnifiedBuilderInner() {
       }
       const project = await res.json() as BuilderProjectDetail;
       if (project?.data && typeof project.data === 'object') {
-        applySavedData(project.data);
-        persistLocalSave(project.data);
+        const result = applySavedData(project.data);
+        const nextData = result.data;
+        persistLocalSave(nextData);
+        if (result.didUpgrade) {
+          void updateBuilderProject(project.projectId, {
+            name: typeof nextData.name === 'string' ? nextData.name : project.name,
+            description: typeof nextData.description === 'string' ? nextData.description : project.description,
+            data: nextData,
+          }, true);
+        }
       }
       setActiveProjectId(project.projectId);
       setProjectNameDraft(project.name ?? '');
@@ -1713,13 +1784,14 @@ function UnifiedBuilderInner() {
       reader.onload = (ev) => {
         try {
           const data = JSON.parse(ev.target?.result as string);
-          applySavedData(data);
-          persistLocalSave(data);
+          const result = applySavedData(data);
+          const nextData = result.data;
+          persistLocalSave(nextData);
           if (token && activeProjectId) {
             void updateBuilderProject(activeProjectId, {
-              name: typeof data.name === 'string' ? data.name : stateRef.current.name,
-              description: typeof data.description === 'string' ? data.description : stateRef.current.description,
-              data,
+              name: typeof nextData.name === 'string' ? nextData.name : stateRef.current.name,
+              description: typeof nextData.description === 'string' ? nextData.description : stateRef.current.description,
+              data: nextData,
             }, true);
           }
         } catch {
@@ -1743,7 +1815,10 @@ function UnifiedBuilderInner() {
     if (saved) {
       try {
         const data = JSON.parse(saved);
-        applySavedData(data);
+        const result = applySavedData(data);
+        if (result.didUpgrade) {
+          persistLocalSave(result.data);
+        }
       } catch (err) {
         console.error('Failed to load saved state:', err);
       }

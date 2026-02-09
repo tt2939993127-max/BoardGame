@@ -12,6 +12,7 @@ import { GameModeProvider } from '../../../contexts/GameModeContext';
 import { createUgcDraftGame } from '../../client/game';
 import { createUgcRemoteHostBoard } from '../../client/board';
 import type { BuilderState } from '../context';
+import { migrateLayoutComponents } from '../../utils/layout';
 import { LoadingScreen } from '../../../components/system/LoadingScreen';
 import { useTranslation } from 'react-i18next';
 
@@ -22,17 +23,57 @@ type DraftSaveData = Pick<
   'name' | 'rulesCode' | 'schemas' | 'layout' | 'layoutGroups' | 'instances' | 'renderComponents'
 >;
 
+type LayoutComponent = DraftSaveData['layout'][number];
+
+const isLayoutPoint = (value: unknown): value is { x: number; y: number } => {
+  if (!value || typeof value !== 'object') return false;
+  const point = value as { x?: unknown; y?: unknown };
+  return typeof point.x === 'number' && typeof point.y === 'number';
+};
+
+const isLegacyLayoutComponent = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object') return false;
+  const comp = value as Record<string, unknown>;
+  const hasLegacyPosition = typeof comp.x === 'number' || typeof comp.y === 'number';
+  const hasNewLayout = isLayoutPoint(comp.anchor) && isLayoutPoint(comp.pivot) && isLayoutPoint(comp.offset);
+  return hasLegacyPosition && !hasNewLayout;
+};
+
+const isValidLayoutComponent = (value: unknown): value is LayoutComponent => {
+  if (!value || typeof value !== 'object') return false;
+  const comp = value as Record<string, unknown>;
+  return typeof comp.id === 'string'
+    && typeof comp.type === 'string'
+    && isLayoutPoint(comp.anchor)
+    && isLayoutPoint(comp.pivot)
+    && isLayoutPoint(comp.offset)
+    && typeof comp.width === 'number'
+    && typeof comp.height === 'number';
+};
+
 const loadDraftFromStorage = (): DraftSaveData | null => {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<DraftSaveData> | null;
     if (!parsed || typeof parsed !== 'object') return null;
+    const rawLayout = Array.isArray(parsed.layout) ? parsed.layout : [];
+    const hasLegacyLayout = rawLayout.some(item => isLegacyLayoutComponent(item));
+    const migratedLayout = hasLegacyLayout ? migrateLayoutComponents(rawLayout) : rawLayout;
+    const layout = Array.isArray(migratedLayout)
+      ? migratedLayout.filter(isValidLayoutComponent)
+      : [];
+    if (hasLegacyLayout) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...(parsed as Record<string, unknown>),
+        layout,
+      }));
+    }
     return {
       name: typeof parsed.name === 'string' ? parsed.name : '',
       rulesCode: typeof parsed.rulesCode === 'string' ? parsed.rulesCode : '',
       schemas: Array.isArray(parsed.schemas) ? parsed.schemas : [],
-      layout: Array.isArray(parsed.layout) ? parsed.layout : [],
+      layout,
       layoutGroups: Array.isArray(parsed.layoutGroups) ? parsed.layoutGroups : [],
       instances: parsed.instances && typeof parsed.instances === 'object' ? parsed.instances : {},
       renderComponents: Array.isArray(parsed.renderComponents) ? parsed.renderComponents : [],
@@ -44,6 +85,7 @@ const loadDraftFromStorage = (): DraftSaveData | null => {
 
 export function UGCSandbox() {
   const navigate = useNavigate();
+  const { t } = useTranslation('lobby');
   const [draft, setDraft] = useState<DraftSaveData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sandboxClient, setSandboxClient] = useState<ComponentType<{ playerID?: string | null }> | null>(null);
@@ -146,7 +188,7 @@ export function UGCSandbox() {
           board,
           debug: false,
           numPlayers: previewPlayerCount,
-          loading: () => <LoadingScreen title="Sandbox" description="Initializing game sandbox..." />
+          loading: () => <LoadingScreen title={t('matchRoom.title.sandbox')} description={t('matchRoom.sandbox.initializing')} />
         });
         setSandboxClient(() => client as ComponentType<{ playerID?: string | null }>);
       })
@@ -200,7 +242,7 @@ export function UGCSandbox() {
             {errorMessage}
           </div>
         ) : sandboxLoading ? (
-          <LoadingScreen description="沙盒加载中…" />
+          <LoadingScreen description={t('matchRoom.sandbox.initializing')} />
         ) : sandboxClient ? (
           <div className="ugc-preview-container flex-1">
             <GameModeProvider mode="local">

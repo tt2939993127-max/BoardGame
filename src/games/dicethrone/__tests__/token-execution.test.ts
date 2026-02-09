@@ -218,7 +218,6 @@ describe('眩晕 (Stun) 跳过进攻掷骰', () => {
             name: '眩晕跳过进攻',
             commands: [
                 cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '1'), // income -> main1
                 cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll（stun 触发）
             ],
             setup: createSetupAtPlayer1Upkeep([
@@ -631,7 +630,6 @@ describe('缠绕 (Entangle) 掷骰限制', () => {
             name: '缠绕减少掷骰',
             commands: [
                 cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '1'), // income -> main1
                 cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll（entangle 触发）
             ],
             setup: createSetupAtPlayer1Upkeep([

@@ -7,9 +7,12 @@ import { User, type UserDocument } from '../auth/schemas/user.schema';
 import { Friend, type FriendDocument } from '../friend/schemas/friend.schema';
 import { Message, type MessageDocument } from '../message/schemas/message.schema';
 import { Review, type ReviewDocument } from '../review/schemas/review.schema';
+import { UgcAsset, type UgcAssetDocument } from '../ugc/schemas/ugc-asset.schema';
+import { UgcPackage, type UgcPackageDocument } from '../ugc/schemas/ugc-package.schema';
 import type { QueryMatchesDto } from './dtos/query-matches.dto';
 import type { QueryRoomsDto } from './dtos/query-rooms.dto';
 import type { QueryUsersDto } from './dtos/query-users.dto';
+import type { QueryUgcPackagesDto } from './dtos/query-ugc-packages.dto';
 import type { RoomFilterDto } from './dtos/room-filter.dto';
 import { MatchRecord, type MatchRecordDocument, type MatchRecordPlayer } from './schemas/match-record.schema';
 import { ROOM_MATCH_MODEL_NAME, type RoomMatchDocument } from './schemas/room-match.schema';
@@ -171,6 +174,14 @@ type MatchDetail = {
     duration: number;
 };
 
+type UgcPackageActionResult =
+    | { ok: true; package: UgcPackageListItem }
+    | { ok: false; code: 'notFound' };
+
+type UgcPackageDeleteResult =
+    | { ok: true; assetsDeleted: number }
+    | { ok: false; code: 'notFound' };
+
 type RoomPlayerItem = {
     id: number;
     name?: string;
@@ -186,6 +197,21 @@ type RoomListItem = {
     ownerName?: string;
     isLocked: boolean;
     players: RoomPlayerItem[];
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+type UgcPackageListItem = {
+    packageId: string;
+    name: string;
+    description?: string;
+    tags?: string[];
+    ownerId: string;
+    version?: string;
+    gameId?: string;
+    coverAssetId?: string;
+    status: 'draft' | 'published';
+    publishedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -242,6 +268,8 @@ export class AdminService {
         @InjectModel(Review.name) private readonly reviewModel: Model<ReviewDocument>,
         @InjectModel(MatchRecord.name) private readonly matchRecordModel: Model<MatchRecordDocument>,
         @InjectModel(ROOM_MATCH_MODEL_NAME) private readonly roomMatchModel: Model<RoomMatchDocument>,
+        @InjectModel(UgcPackage.name) private readonly ugcPackageModel: Model<UgcPackageDocument>,
+        @InjectModel(UgcAsset.name) private readonly ugcAssetModel: Model<UgcAssetDocument>,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) { }
 
@@ -374,6 +402,70 @@ export class AdminService {
             total,
             hasMore: page * limit < total,
         };
+    }
+
+    async getUgcPackages(query: QueryUgcPackagesDto) {
+        const page = query.page || 1;
+        const limit = query.limit || 20;
+        const filter: Record<string, unknown> = {};
+
+        const search = query.search?.trim();
+        if (search) {
+            const escaped = escapeRegExp(search);
+            filter.$or = [
+                { packageId: { $regex: escaped, $options: 'i' } },
+                { name: { $regex: escaped, $options: 'i' } },
+                { gameId: { $regex: escaped, $options: 'i' } },
+                { ownerId: { $regex: escaped, $options: 'i' } },
+            ];
+        }
+
+        if (query.status) {
+            filter.status = query.status;
+        }
+
+        if (query.ownerId) {
+            filter.ownerId = query.ownerId.trim();
+        }
+
+        const [items, total] = await Promise.all([
+            this.ugcPackageModel
+                .find(filter)
+                .sort({ updatedAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .lean<UgcPackageDocument[]>(),
+            this.ugcPackageModel.countDocuments(filter),
+        ]);
+
+        return {
+            items: items.map((pkg) => this.toUgcPackageListItem(pkg)),
+            page,
+            limit,
+            total,
+            hasMore: page * limit < total,
+        };
+    }
+
+    async unpublishUgcPackage(packageId: string): Promise<UgcPackageActionResult> {
+        const pkg = await this.ugcPackageModel.findOne({ packageId });
+        if (!pkg) {
+            return { ok: false, code: 'notFound' };
+        }
+        pkg.status = 'draft';
+        pkg.publishedAt = null;
+        await pkg.save();
+        return { ok: true, package: this.toUgcPackageListItem(pkg) };
+    }
+
+    async deleteUgcPackage(packageId: string): Promise<UgcPackageDeleteResult> {
+        const pkg = await this.ugcPackageModel.findOne({ packageId }).lean<UgcPackageDocument | null>();
+        if (!pkg) {
+            return { ok: false, code: 'notFound' };
+        }
+        const assetResult = await this.ugcAssetModel.deleteMany({ packageId: pkg.packageId });
+        await this.ugcPackageModel.deleteOne({ packageId: pkg.packageId });
+        return { ok: true, assetsDeleted: assetResult.deletedCount ?? 0 };
     }
 
     async deleteMatch(matchID: string): Promise<boolean> {
@@ -873,6 +965,23 @@ export class AdminService {
             players,
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,
+        };
+    }
+
+    private toUgcPackageListItem(pkg: UgcPackageDocument): UgcPackageListItem {
+        return {
+            packageId: pkg.packageId,
+            name: pkg.name,
+            description: pkg.description,
+            tags: pkg.tags,
+            ownerId: pkg.ownerId,
+            version: pkg.version,
+            gameId: pkg.gameId,
+            coverAssetId: pkg.coverAssetId,
+            status: pkg.status,
+            publishedAt: pkg.publishedAt ?? null,
+            createdAt: pkg.createdAt,
+            updatedAt: pkg.updatedAt,
         };
     }
 

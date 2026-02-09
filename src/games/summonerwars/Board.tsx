@@ -10,7 +10,7 @@
  * - 底部中央：提示横幅
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BoardProps } from 'boardgame.io/react';
 import type { MatchState } from '../../engine/types';
@@ -23,9 +23,10 @@ import { UndoProvider } from '../../contexts/UndoContext';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
 import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
-import { useGameAudio } from '../../lib/audio/useGameAudio';
+import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
+import { TutorialSelectionGate } from '../../components/game/framework';
 import { saveSummonerWarsLayout } from '../../api/layout';
 import type { BoardLayoutConfig, GridConfig } from '../../core/ui/board-layout.types';
 import { initSpriteAtlases, resolveCardAtlasId } from './ui/cardAtlas';
@@ -39,7 +40,7 @@ import { MagnifyOverlay } from '../../components/common/overlays/MagnifyOverlay'
 import { DiceResultOverlay } from './ui/DiceResultOverlay';
 import { DestroyEffectsLayer, useDestroyEffects } from './ui/DestroyEffect';
 import { BoardEffectsLayer, useBoardEffects, useScreenShake } from './ui/BoardEffects';
-import type { Card, BoardUnit, BoardStructure, CellCoord, UnitCard, PlayerId } from './domain/types';
+import type { Card, BoardUnit, BoardStructure, CellCoord, UnitCard, EventCard, PlayerId } from './domain/types';
 import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
 import { DiscardPileOverlay } from './ui/DiscardPileOverlay';
 import { getPlayerUnits } from './domain/helpers';
@@ -53,7 +54,8 @@ import { useGameEvents } from './ui/useGameEvents';
 import { useCellInteraction } from './ui/useCellInteraction';
 import { StatusBanners } from './ui/StatusBanners';
 import { BoardGrid, getCellPosition } from './ui/BoardGrid';
-import { SUMMONER_WARS_AUDIO_CONFIG } from './audio.config';
+import { SUMMONER_WARS_AUDIO_CONFIG, resolveMeleeAttackSound, resolveRangedAttackSound, resolveDamageSound, COMBAT_UNIT_DESTROY_KEY, resolveStructureDestroySound } from './audio.config';
+import { SUMMONER_WARS_MANIFEST } from './manifest';
 
 type Props = BoardProps<MatchState<SummonerWarsCore>>;
 
@@ -71,6 +73,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const gameMode = useGameMode();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
+  const isTutorialMode = gameMode?.mode === 'tutorial';
   const { t } = useTranslation('game-summonerwars');
 
   // 阵营选择状态
@@ -108,6 +111,18 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     && !tutorialStep.requireAction
     && !(tutorialStep.allowedCommands && tutorialStep.allowedCommands.length > 0)
     && !(tutorialStep.advanceOnEvents && tutorialStep.advanceOnEvents.length > 0);
+
+  // 教程自动平移：当高亮目标在地图内部时，传给 MapContainer 让其自动居中并放大
+  // 地图内部的 tutorial-id：sw-my-summoner, sw-enemy-summoner, sw-my-gate（在 BoardGrid 内）
+  const MAP_INTERNAL_TARGETS = useMemo(() => new Set([
+    'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate',
+  ]), []);
+  const mapPanTarget = useMemo(() => {
+    if (!isTutorialActive || !tutorialStep?.highlightTarget) return null;
+    return MAP_INTERNAL_TARGETS.has(tutorialStep.highlightTarget) ? tutorialStep.highlightTarget : null;
+  }, [isTutorialActive, tutorialStep?.highlightTarget, MAP_INTERNAL_TARGETS]);
+  // 聚焦到单个单位/建筑时放大到 1.8x，让卡牌清晰可见
+  const MAP_PAN_SCALE = 1.8;
 
   // 重赛系统
   const { state: rematchState, vote: handleRematchVote } = useRematch();
@@ -175,6 +190,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 音效系统
   useGameAudio({
     config: SUMMONER_WARS_AUDIO_CONFIG,
+    gameId: SUMMONER_WARS_MANIFEST.id,
     G: G.core,
     ctx: {
       currentPhase,
@@ -198,15 +214,32 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 全屏震动
   const { shakeStyle, triggerShake } = useScreenShake();
 
+  // 远程攻击气浪完成后才 flush 摧毁效果的标记
+  const waitingForShockwaveRef = useRef(false);
+  // 远程攻击气浪到达目标后才播放的伤害特效
+  const pendingRangedDamagesRef = useRef<Array<{ position: CellCoord; damage: number }>>([]);
+  // 远程攻击气浪到达后是否需要震动
+  const pendingRangedShakeRef = useRef(false);
+  // 用 ref 持有 boardEffects 以便在回调中查找效果类型（避免闭包过期）
+  const boardEffectsRef = useRef(boardEffects);
+  boardEffectsRef.current = boardEffects;
+  const destroyingCells = useMemo(() => {
+    const next = new Set<string>();
+    destroyEffects.forEach(effect => {
+      next.add(`${effect.position.row}-${effect.position.col}`);
+    });
+    return next;
+  }, [destroyEffects]);
+
   // 攻击动画状态
   const [attackAnimState, setAttackAnimState] = useState<{
     attacker: CellCoord; target: CellCoord; hits: number;
   } | null>(null);
-  const [hitStopTarget, setHitStopTarget] = useState<CellCoord | null>(null);
 
   // 事件流消费 Hook
   const {
-    diceResult, deathGhosts,
+    diceResult,
+    dyingEntities,
     abilityMode, setAbilityMode,
     soulTransferMode, setSoulTransferMode,
     mindCaptureMode, setMindCaptureMode,
@@ -218,6 +251,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     pushDestroyEffect: (data) => pushDestroyEffect(data),
     pushBoardEffect: (data) => pushBoardEffect(data as Parameters<typeof pushBoardEffect>[0]),
     triggerShake: (intensity, type) => triggerShake(intensity as 'normal' | 'strong', type as 'impact' | 'hit'),
+    onDestroySound: (type, isGate) => {
+      playSound(type === 'structure' ? resolveStructureDestroySound(!!isGate) : COMBAT_UNIT_DESTROY_KEY);
+    },
   });
 
   // 格子交互 Hook
@@ -235,44 +271,79 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     const pending = rawCloseDiceResult();
     if (!pending) return;
 
-    if (pending.attackType === 'ranged') {
-      // 远程攻击：骰子结束后稍作延迟再播放特效
+    // 未命中：跳过所有攻击动画和音效，直接清理
+    if (pending.hits === 0) {
       clearPendingAttack();
+      flushPendingDestroys();
+      return;
+    }
+
+    if (pending.attackType === 'ranged') {
+      // 远程攻击：骰子结束后稍作延迟再播放气浪特效
+      // 注意：不在此处 clearPendingAttack，确保 180ms 内到达的 UNIT_DESTROYED 事件仍能排队
       const attackSnapshot = { ...pending };
       window.setTimeout(() => {
+        clearPendingAttack();
         const hitIntensity = attackSnapshot.hits >= 3 ? 'strong' : 'normal';
+        // 只 push 气浪，伤害特效等气浪到达目标后再播放
+        waitingForShockwaveRef.current = true;
+        pendingRangedDamagesRef.current = [...attackSnapshot.damages];
+        pendingRangedShakeRef.current = attackSnapshot.hits >= 3;
+        // 远程攻击音：气浪发射时播放
+        playSound(resolveRangedAttackSound());
         pushBoardEffect({ type: 'shockwave', position: attackSnapshot.target, sourcePosition: attackSnapshot.attacker, intensity: hitIntensity, attackType: attackSnapshot.attackType });
-        for (const dmg of attackSnapshot.damages) {
-          pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
-        }
-        if (attackSnapshot.hits >= 3) triggerShake('normal', 'hit');
-        flushPendingDestroys();
+        // 伤害特效和 flushPendingDestroys 由 handleBoardEffectComplete 在气浪完成时触发
       }, 180);
     } else {
       // 近战攻击：启动卡牌本体碰撞动画
       setAttackAnimState({ attacker: pending.attacker, target: pending.target, hits: pending.hits });
     }
-  }, [rawCloseDiceResult, clearPendingAttack, pushBoardEffect, triggerShake, flushPendingDestroys]);
+  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, pushBoardEffect]);
 
-  // 卡牌碰撞动画完成回调
-  const handleAttackAnimComplete = useCallback(() => {
+  // 近战攻击命中回调（卡牌冲到目标时触发，播放伤害特效 + 音效）
+  const handleAttackHit = useCallback(() => {
     const pending = pendingAttackRef.current;
-    if (!pending) { setAttackAnimState(null); return; }
-    clearPendingAttack();
+    if (!pending) return;
 
     const hitIntensity = pending.hits >= 3 ? 'strong' : 'normal';
-    if (pending.hits > 0) {
-      setHitStopTarget(pending.target);
-      setTimeout(() => setHitStopTarget(null), 200);
-    }
+    // 近战攻击音：冲到目标时播放
+    const attackerUnit = core.board[pending.attacker.row]?.[pending.attacker.col]?.unit;
+    playSound(resolveMeleeAttackSound(attackerUnit?.card.unitClass));
     pushBoardEffect({ type: 'shockwave', position: pending.target, sourcePosition: pending.attacker, intensity: hitIntensity, attackType: pending.attackType });
     for (const dmg of pending.damages) {
+      // 受伤音：受击特效触发时播放
+      const dmgSound = resolveDamageSound(dmg.damage);
+      if (dmgSound) playSound(dmgSound);
       pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
     }
     if (pending.hits >= 3) triggerShake('normal', 'hit');
+  }, [pendingAttackRef, pushBoardEffect, triggerShake, core.board]);
+
+  // 近战攻击回弹完成回调（卡牌回到原位后触发，flush 摧毁效果）
+  const handleAttackReturn = useCallback(() => {
+    clearPendingAttack();
     flushPendingDestroys();
     setAttackAnimState(null);
-  }, [pendingAttackRef, clearPendingAttack, pushBoardEffect, pushDestroyEffect, triggerShake, flushPendingDestroys]);
+  }, [clearPendingAttack, flushPendingDestroys]);
+
+  // 棋盘特效完成回调：远程气浪到达目标时播放伤害特效 + flush 摧毁
+  const handleBoardEffectComplete = useCallback((id: string) => {
+    const effect = boardEffectsRef.current.find(e => e.id === id);
+    if (waitingForShockwaveRef.current && effect?.type === 'shockwave') {
+      waitingForShockwaveRef.current = false;
+      // 气浪到达目标：播放伤害特效 + 受伤音
+      for (const dmg of pendingRangedDamagesRef.current) {
+        const dmgSound = resolveDamageSound(dmg.damage);
+        if (dmgSound) playSound(dmgSound);
+        pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
+      }
+      if (pendingRangedShakeRef.current) triggerShake('normal', 'hit');
+      pendingRangedDamagesRef.current = [];
+      pendingRangedShakeRef.current = false;
+      flushPendingDestroys();
+    }
+    removeBoardEffect(id);
+  }, [removeBoardEffect, flushPendingDestroys, pushBoardEffect, triggerShake]);
 
   // 卡牌放大
   const handleMagnifyCard = useCallback((card: Card) => {
@@ -289,19 +360,31 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const handleMagnifyBoardStructure = useCallback((structure: BoardStructure) => {
     setMagnifiedCard(getStructureSpriteConfig(structure));
   }, []);
+  const handleMagnifyEventCard = useCallback((card: EventCard) => {
+    setMagnifiedCard(getEventSpriteConfig(card));
+  }, []);
 
   // StatusBanners 回调
   const handleCancelAbility = useCallback(() => setAbilityMode(null), [setAbilityMode]);
   const handleCancelBeforeAttack = useCallback(() => interaction.handleCancelBeforeAttack(), [interaction]);
-  const handleCancelBloodSummon = useCallback(() => interaction.setBloodSummonMode(null), [interaction]);
+  const handleCancelBloodSummon = useCallback(() => {
+    interaction.setBloodSummonMode(null);
+    // 清除血契召唤期间选中的手牌高亮
+    interaction.handleCardSelect(null);
+  }, [interaction]);
   const handleContinueBloodSummon = useCallback(() => {
+    // 继续下一次血契召唤，恢复事件卡选中高亮
+    interaction.handleCardSelect(interaction.bloodSummonMode?.cardId ?? null);
     interaction.setBloodSummonMode({
       step: 'selectTarget',
       cardId: interaction.bloodSummonMode?.cardId,
       completedCount: interaction.bloodSummonMode?.completedCount,
     });
   }, [interaction]);
-  const handleCancelAnnihilate = useCallback(() => interaction.setAnnihilateMode(null), [interaction]);
+  const handleCancelAnnihilate = useCallback(() => {
+    interaction.setAnnihilateMode(null);
+    interaction.handleCardSelect(null);
+  }, [interaction]);
   const handleConfirmAnnihilateTargets = useCallback(() => {
     if (!interaction.annihilateMode) return;
     interaction.setAnnihilateMode({
@@ -332,12 +415,21 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 欺心巫族事件卡回调
   const handleConfirmMindControl = useCallback(() => interaction.handleConfirmMindControl(), [interaction]);
-  const handleCancelMindControl = useCallback(() => interaction.setMindControlMode(null), [interaction]);
+  const handleCancelMindControl = useCallback(() => {
+    interaction.setMindControlMode(null);
+    interaction.handleCardSelect(null);
+  }, [interaction]);
   const handleConfirmStun = useCallback((direction: 'push' | 'pull', distance: number) => {
     interaction.handleConfirmStun(direction, distance);
   }, [interaction]);
-  const handleCancelStun = useCallback(() => interaction.setStunMode(null), [interaction]);
-  const handleCancelHypnoticLure = useCallback(() => interaction.setHypnoticLureMode(null), [interaction]);
+  const handleCancelStun = useCallback(() => {
+    interaction.setStunMode(null);
+    interaction.handleCardSelect(null);
+  }, [interaction]);
+  const handleCancelHypnoticLure = useCallback(() => {
+    interaction.setHypnoticLureMode(null);
+    interaction.handleCardSelect(null);
+  }, [interaction]);
 
   // 心灵捕获 + 攻击后技能回调
   const handleConfirmMindCapture = useCallback((choice: 'control' | 'damage') => {
@@ -367,408 +459,424 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     <UndoProvider value={{ G, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
       {/* 阵营选择阶段 */}
       {isInFactionSelection ? (
-        <>
-          <FactionSelection
-            isOpen={true}
-            currentPlayerId={rootPid}
-            hostPlayerId={G.core.hostPlayerId}
-            selectedFactions={G.core.selectedFactions}
-            readyPlayers={G.core.readyPlayers ?? {}}
-            playerNames={playerNames as Record<PlayerId, string>}
-            onSelect={handleSelectFaction}
-            onReady={handlePlayerReady}
-            onStart={handleHostStart}
-          />
-          {debugPanel}
-        </>
-      ) : (
-      <div className="h-[100dvh] w-full bg-neutral-900 overflow-hidden relative flex flex-col">
-        {isEditingLayout ? (
-          <div className="flex-1 overflow-auto p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <button onClick={handleExitLayoutEditor} className="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600">{t('layoutEditor.backToGame')}</button>
-            </div>
-            <BoardLayoutEditor
-              initialConfig={layoutConfig ?? undefined}
-              backgroundImage="/assets/summonerwars/common/map.png"
-              onChange={setLayoutConfig}
-              onSave={handleSaveLayout}
-              saveLabel={t('layoutEditor.saveLayout')}
+        <TutorialSelectionGate
+          isTutorialMode={isTutorialMode}
+          isTutorialActive={isTutorialActive}
+          containerClassName="bg-neutral-900"
+          textClassName="text-lg"
+        >
+          <>
+            <FactionSelection
+              isOpen={true}
+              currentPlayerId={rootPid}
+              hostPlayerId={G.core.hostPlayerId}
+              selectedFactions={G.core.selectedFactions}
+              readyPlayers={G.core.readyPlayers ?? {}}
+              playerNames={playerNames as Record<PlayerId, string>}
+              onSelect={handleSelectFaction}
+              onReady={handlePlayerReady}
+              onStart={handleHostStart}
             />
-          </div>
-        ) : (
-          <div className="flex-1 relative overflow-hidden">
-            {/* 地图层 */}
-            <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
-              <MapContainer
-                className="w-full h-full flex items-center justify-center px-[10vw]"
-                initialScale={1}
-                dragBoundsPaddingRatioY={0.3}
-                interactionDisabled={mapInteractionDisabled}
-                containerTestId="sw-map-container"
-                contentTestId="sw-map-content"
-                scaleTestId="sw-map-scale"
-              >
-                <div className="relative inline-block">
-                  <div className="relative">
-                    <OptimizedImage
-                      src="summonerwars/common/map.png"
-                      alt={t('ui.mapAlt')}
-                      className="block w-auto h-auto max-w-none pointer-events-none select-none"
-                      draggable={false}
-                    />
-                    {/* 网格 + 卡牌层 */}
-                    <BoardGrid
-                      core={core}
-                      currentGrid={currentGrid}
-                      myPlayerId={myPlayerId}
-                      shouldFlipView={shouldFlipView}
-                      selectedHandCardId={interaction.selectedHandCardId}
-                      validSummonPositions={interaction.validSummonPositions}
-                      validBuildPositions={interaction.validBuildPositions}
-                      validMovePositions={interaction.validMovePositions}
-                      validAttackPositions={interaction.validAttackPositions}
-                      validEventTargets={interaction.validEventTargets}
-                      validAbilityPositions={interaction.validAbilityPositions}
-                      validAbilityUnits={interaction.validAbilityUnits}
-                      actionableUnitPositions={interaction.actionableUnitPositions}
-                      bloodSummonHighlights={interaction.bloodSummonHighlights}
-                      annihilateHighlights={interaction.annihilateHighlights}
-                      annihilateMode={interaction.annihilateMode}
-                      abilityMode={abilityMode}
-                      mindControlHighlights={interaction.mindControlHighlights}
-                      mindControlSelectedTargets={interaction.mindControlMode?.selectedTargets ?? []}
-                      stunHighlights={interaction.stunHighlights}
-                      hypnoticLureHighlights={interaction.hypnoticLureHighlights}
-                      afterAttackAbilityHighlights={interaction.afterAttackAbilityHighlights}
-                      attackAnimState={attackAnimState}
-                      hitStopTarget={hitStopTarget}
-                      deathGhosts={deathGhosts}
-                      pendingAttackRef={pendingAttackRef}
-                      onCellClick={interaction.handleCellClick}
-                      onAttackAnimComplete={handleAttackAnimComplete}
-                      onMagnifyUnit={handleMagnifyBoardUnit}
-                      onMagnifyStructure={handleMagnifyBoardStructure}
-                    />
-                    {/* 摧毁效果层 */}
-                    <DestroyEffectsLayer
-                      effects={destroyEffects}
-                      getCellPosition={(row, col) => {
-                        const vc = toViewCoord({ row, col });
-                        return getCellPosition(vc.row, vc.col, currentGrid);
-                      }}
-                      onEffectComplete={removeDestroyEffect}
-                    />
-                    {/* 棋盘特效层 */}
-                    <BoardEffectsLayer
-                      effects={boardEffects}
-                      getCellPosition={(row, col) => {
-                        const vc = toViewCoord({ row, col });
-                        return getCellPosition(vc.row, vc.col, currentGrid);
-                      }}
-                      onEffectComplete={removeBoardEffect}
-                    />
-                  </div>
-                </div>
-              </MapContainer>
+            {debugPanel}
+          </>
+        </TutorialSelectionGate>
+      ) : (
+        <div className="h-[100dvh] w-full bg-neutral-900 overflow-hidden relative flex flex-col">
+          {isEditingLayout ? (
+            <div className="flex-1 overflow-auto p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <button onClick={handleExitLayoutEditor} className="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600">{t('layoutEditor.backToGame')}</button>
+              </div>
+              <BoardLayoutEditor
+                initialConfig={layoutConfig ?? undefined}
+                backgroundImage="/assets/summonerwars/common/map.png"
+                onChange={setLayoutConfig}
+                onSave={handleSaveLayout}
+                saveLabel={t('layoutEditor.saveLayout')}
+              />
             </div>
-
-            {/* UI 层 */}
-            <div className="absolute inset-0 z-20 pointer-events-none">
-              {/* 左侧黑边渐变 */}
-              <div className="absolute inset-y-0 left-0" style={{ width: '10vw', background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
-              {/* 右侧黑边渐变 */}
-              <div className="absolute inset-y-0 right-0" style={{ width: '10vw', background: 'linear-gradient(to left, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
-
-              {/* 右上：对手名+魔力条 */}
-              <div className="absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2" data-testid="sw-opponent-bar">
-                <div className="flex items-center gap-3 bg-black/30 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-600/20">
-                  <span className="text-sm text-white font-medium text-opacity-100">
-                    {matchData?.[playerID === '1' ? 0 : 1]?.name ?? t('player.opponent')}
-                  </span>
-                  <EnergyBar current={opponentMagic} testId="sw-energy-opponent" />
-                </div>
+          ) : (
+            <div className="flex-1 relative overflow-hidden">
+              {/* 地图层 */}
+              <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
+                <MapContainer
+                  className="w-full h-full flex items-center justify-center px-[10vw]"
+                  initialScale={1}
+                  dragBoundsPaddingRatioY={0.3}
+                  interactionDisabled={mapInteractionDisabled}
+                  panToTarget={mapPanTarget}
+                  panToScale={mapPanTarget ? MAP_PAN_SCALE : undefined}
+                  containerTestId="sw-map-container"
+                  contentTestId="sw-map-content"
+                  scaleTestId="sw-map-scale"
+                >
+                  <div className="relative inline-block">
+                    <div className="relative">
+                      <OptimizedImage
+                        src="summonerwars/common/map.png"
+                        alt={t('ui.mapAlt')}
+                        className="block w-auto h-auto max-w-none pointer-events-none select-none"
+                        draggable={false}
+                      />
+                      {/* 网格 + 卡牌层 */}
+                      <BoardGrid
+                        core={core}
+                        currentGrid={currentGrid}
+                        myPlayerId={myPlayerId}
+                        shouldFlipView={shouldFlipView}
+                        selectedHandCardId={interaction.selectedHandCardId}
+                        validSummonPositions={interaction.validSummonPositions}
+                        validBuildPositions={interaction.validBuildPositions}
+                        validMovePositions={interaction.validMovePositions}
+                        validAttackPositions={interaction.validAttackPositions}
+                        validEventTargets={interaction.validEventTargets}
+                        validAbilityPositions={interaction.validAbilityPositions}
+                        validAbilityUnits={interaction.validAbilityUnits}
+                        actionableUnitPositions={interaction.actionableUnitPositions}
+                        bloodSummonHighlights={interaction.bloodSummonHighlights}
+                        annihilateHighlights={interaction.annihilateHighlights}
+                        annihilateMode={interaction.annihilateMode}
+                        abilityMode={abilityMode}
+                        mindControlHighlights={interaction.mindControlHighlights}
+                        mindControlSelectedTargets={interaction.mindControlMode?.selectedTargets ?? []}
+                        stunHighlights={interaction.stunHighlights}
+                        hypnoticLureHighlights={interaction.hypnoticLureHighlights}
+                        afterAttackAbilityHighlights={interaction.afterAttackAbilityHighlights}
+                        attackAnimState={attackAnimState}
+                        destroyingCells={destroyingCells}
+                        dyingEntities={dyingEntities}
+                        onCellClick={interaction.handleCellClick}
+                        onAttackHit={handleAttackHit}
+                        onAttackReturn={handleAttackReturn}
+                        onMagnifyUnit={handleMagnifyBoardUnit}
+                        onMagnifyStructure={handleMagnifyBoardStructure}
+                        onMagnifyEventCard={handleMagnifyEventCard}
+                      />
+                      {/* 摧毁效果层 */}
+                      <DestroyEffectsLayer
+                        effects={destroyEffects}
+                        getCellPosition={(row, col) => {
+                          const vc = toViewCoord({ row, col });
+                          return getCellPosition(vc.row, vc.col, currentGrid);
+                        }}
+                        onEffectComplete={removeDestroyEffect}
+                      />
+                      {/* 棋盘特效层 */}
+                      <BoardEffectsLayer
+                        effects={boardEffects}
+                        getCellPosition={(row, col) => {
+                          const vc = toViewCoord({ row, col });
+                          return getCellPosition(vc.row, vc.col, currentGrid);
+                        }}
+                        onEffectComplete={handleBoardEffectComplete}
+                      />
+                    </div>
+                  </div>
+                </MapContainer>
               </div>
 
-              {/* 右侧：对手持续效果 */}
-              {opponentActiveEvents.length > 0 && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 z-20 pointer-events-auto flex flex-row-reverse items-center gap-2"
-                  style={{ marginTop: '-8rem' }} data-testid="sw-opponent-active-events">
-                  <span className="text-[0.8vw] text-amber-300/80 font-bold tracking-wider writing-mode-vertical" style={{ writingMode: 'vertical-rl' }}>{t('ui.opponentActiveEvents')}</span>
-                  <div className="flex flex-col gap-1">
-                    {opponentActiveEvents.map((ev) => {
-                      const sprite = getEventSpriteConfig(ev);
-                      return (
-                        <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
-                          <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[7vw] rounded shadow-md border border-amber-500/40" />
-                          <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/30 transition-colors" />
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-[0.7vw] text-amber-200 text-center py-[0.1vw] rounded-b truncate px-[0.2vw]">{ev.name}</div>
-                        </div>
-                      );
-                    })}
+              {/* UI 层 */}
+              <div className="absolute inset-0 z-20 pointer-events-none">
+                {/* 左侧黑边渐变 */}
+                <div className="absolute inset-y-0 left-0" style={{ width: '10vw', background: 'linear-gradient(to right, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
+                {/* 右侧黑边渐变 */}
+                <div className="absolute inset-y-0 right-0" style={{ width: '10vw', background: 'linear-gradient(to left, rgba(0,0,0,0.95), rgba(0,0,0,0.75), rgba(0,0,0,0))' }} />
+
+                {/* 全局暗角 (Vignette) 效果 */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    background: 'radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.3) 80%, rgba(0,0,0,0.5) 100%)',
+                    mixBlendMode: 'multiply'
+                  }}
+                />
+
+                {/* 右上：对手名+魔力条 + 持续效果 */}
+                <div className="absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2" data-testid="sw-opponent-bar">
+                  <div className="flex items-center gap-3 bg-black/60 px-3 py-2 rounded-lg border border-slate-600/20">
+                    <span className="text-sm text-white font-medium text-opacity-100">
+                      {matchData?.[playerID === '1' ? 0 : 1]?.name ?? t('player.opponent')}
+                    </span>
+                    <EnergyBar current={opponentMagic} testId="sw-energy-opponent" />
                   </div>
-                </div>
-              )}
 
-              {/* 左侧：己方持续效果 */}
-              {myActiveEvents.length > 0 && (
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 z-20 pointer-events-auto flex flex-row items-center gap-2" data-testid="sw-my-active-events">
-                  <span className="text-[0.8vw] text-amber-300/80 font-bold tracking-wider writing-mode-vertical" style={{ writingMode: 'vertical-rl' }}>{t('ui.activeEvents')}</span>
-                  <div className="flex flex-col gap-1">
-                    {myActiveEvents.map((ev) => {
-                      const sprite = getEventSpriteConfig(ev);
-                      return (
-                        <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
-                          <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[7vw] rounded shadow-md border border-amber-500/40" />
-                          <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/30 transition-colors" />
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-[0.7vw] text-amber-200 text-center py-[0.1vw] rounded-b truncate px-[0.2vw]">{ev.name}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* 左下区域：玩家名+魔力条 + 抽牌堆 */}
-              <div className="absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-[3.75rem]" data-testid="sw-player-bar" data-tutorial-id="sw-player-bar">
-                <div className="flex items-center gap-3 bg-black/30 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-600/20">
-                  <span className="text-sm text-white font-medium text-opacity-100">
-                    {matchData?.[playerID === '1' ? 1 : 0]?.name ?? t('player.self')}
-                  </span>
-                  <EnergyBar current={myMagic} testId="sw-energy-player" />
-                </div>
-                <div data-tutorial-id="sw-deck-draw">
-                  <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
-                </div>
-              </div>
-
-              {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
-              <div className="absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3" data-testid="sw-phase-controls">
-                <div className="flex gap-2">
-                  {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
-                    <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
-                      {t('action.discardSelected', { count: interaction.selectedCardsForDiscard.length })}
-                    </GameButton>
+                  {/* 对手持续效果 - 紧贴魔力条下方 */}
+                  {opponentActiveEvents.length > 0 && (
+                    <div className="flex flex-row-reverse items-start gap-1.5" data-testid="sw-opponent-active-events">
+                      {opponentActiveEvents.map((ev) => {
+                        const sprite = getEventSpriteConfig(ev);
+                        return (
+                          <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
+                            <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[4.5vw] rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" />
+                            <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/20 transition-colors" />
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[0.6vw] text-amber-200 text-center py-0.5 rounded-b truncate px-1 border-t border-amber-500/20">{ev.name}</div>
+                          </div>
+                        );
+                      })}
+                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px] mt-1">{t('ui.activeEvents')}</span>
+                    </div>
                   )}
-                  <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn} variant="primary" size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
-                    {t('action.endPhase')}
-                  </GameButton>
                 </div>
-                <div data-tutorial-id="sw-discard-pile">
-                  <DeckPile
-                    type="discard" count={myDiscardCount} position="right"
-                    topCard={myDiscard[myDiscard.length - 1] ?? null}
-                    onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+
+                {/* 左下区域：玩家名+魔力条 + 持续效果 + 抽牌堆 */}
+                <div className="absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3" data-testid="sw-player-bar" data-tutorial-id="sw-player-bar">
+                  {/* 玩家持续效果 - 放在魔力条上方 */}
+                  {myActiveEvents.length > 0 && (
+                    <div className="flex flex-row items-end gap-1.5 mb-1" data-testid="sw-my-active-events">
+                      <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px] mb-1">{t('ui.activeEvents')}</span>
+                      {myActiveEvents.map((ev) => {
+                        const sprite = getEventSpriteConfig(ev);
+                        return (
+                          <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
+                            <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[4.5vw] rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" />
+                            <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/20 transition-colors" />
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[0.6vw] text-amber-200 text-center py-0.5 rounded-b truncate px-1 border-t border-amber-500/20">{ev.name}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 bg-black/60 px-3 py-2 rounded-lg border border-slate-600/20">
+                    <span className="text-sm text-white font-medium text-opacity-100">
+                      {matchData?.[playerID === '1' ? 1 : 0]?.name ?? t('player.self')}
+                    </span>
+                    <EnergyBar current={myMagic} testId="sw-energy-player" />
+                  </div>
+                  <div data-tutorial-id="sw-deck-draw" className="mt-8">
+                    <DeckPile type="draw" count={myDeckCount} position="left" testId="sw-deck-draw" />
+                  </div>
+                </div>
+
+                {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
+                <div className="absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3" data-testid="sw-phase-controls">
+                  <div className="flex gap-2">
+                    {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
+                      <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
+                        {t('action.discardSelected', { count: interaction.selectedCardsForDiscard.length })}
+                      </GameButton>
+                    )}
+                    <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn} variant={interaction.endPhaseConfirmPending ? 'danger' : 'primary'} size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
+                      {interaction.endPhaseConfirmPending
+                        ? t('action.confirmEndPhase', { count: interaction.actionableUnitPositions.length })
+                        : t('action.endPhase')}
+                    </GameButton>
+                  </div>
+                  <div data-tutorial-id="sw-discard-pile">
+                    <DeckPile
+                      type="discard" count={myDiscardCount} position="right"
+                      topCard={myDiscard[myDiscard.length - 1] ?? null}
+                      onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+                    />
+                  </div>
+                </div>
+
+                {/* 右侧：阶段指示器 */}
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-auto" data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
+                  <PhaseTracker
+                    currentPhase={currentPhase}
+                    turnNumber={core.turnNumber}
+                    isMyTurn={isMyTurn}
+                    moveCount={core.players[playerID === '1' ? '1' : '0']?.moveCount ?? 0}
+                    attackCount={core.players[playerID === '1' ? '1' : '0']?.attackCount ?? 0}
+                    className="bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]"
+                  />
+                </div>
+
+                {/* 顶部中央：提示横幅 */}
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-action-banner">
+                  <StatusBanners
+                    currentPhase={currentPhase}
+                    isMyTurn={isMyTurn}
+                    abilityMode={abilityMode}
+                    pendingBeforeAttack={interaction.pendingBeforeAttack}
+                    bloodSummonMode={interaction.bloodSummonMode}
+                    annihilateMode={interaction.annihilateMode}
+                    soulTransferMode={soulTransferMode}
+                    funeralPyreMode={interaction.funeralPyreMode}
+                    mindControlMode={interaction.mindControlMode}
+                    stunMode={interaction.stunMode}
+                    hypnoticLureMode={interaction.hypnoticLureMode}
+                    mindCaptureMode={mindCaptureMode}
+                    afterAttackAbilityMode={afterAttackAbilityMode}
+                    telekinesisTargetMode={interaction.telekinesisTargetMode}
+                    onCancelAbility={handleCancelAbility}
+                    onConfirmBeforeAttackCards={interaction.handleConfirmBeforeAttackCards}
+                    onCancelBeforeAttack={handleCancelBeforeAttack}
+                    onCancelBloodSummon={handleCancelBloodSummon}
+                    onContinueBloodSummon={handleContinueBloodSummon}
+                    onCancelAnnihilate={handleCancelAnnihilate}
+                    onConfirmAnnihilateTargets={handleConfirmAnnihilateTargets}
+                    onConfirmSoulTransfer={handleConfirmSoulTransfer}
+                    onSkipSoulTransfer={handleSkipSoulTransfer}
+                    onSkipFuneralPyre={handleSkipFuneralPyre}
+                    onConfirmMindControl={handleConfirmMindControl}
+                    onCancelMindControl={handleCancelMindControl}
+                    onConfirmStun={handleConfirmStun}
+                    onCancelStun={handleCancelStun}
+                    onCancelHypnoticLure={handleCancelHypnoticLure}
+                    onConfirmMindCapture={handleConfirmMindCapture}
+                    onCancelAfterAttackAbility={handleCancelAfterAttackAbility}
+                    onConfirmTelekinesis={handleConfirmTelekinesis}
+                    onCancelTelekinesis={handleCancelTelekinesis}
+                  />
+                </div>
+
+                {/* 底部：手牌区 */}
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
+                  <HandArea
+                    cards={myHand}
+                    phase={currentPhase}
+                    isMyTurn={isMyTurn}
+                    currentMagic={myMagic}
+                    selectedCardId={interaction.selectedHandCardId}
+                    selectedCardIds={abilityMode?.step === 'selectCards'
+                      ? interaction.abilitySelectedCardIds
+                      : interaction.selectedCardsForDiscard}
+                    onCardClick={interaction.handleCardClick}
+                    onCardSelect={interaction.handleCardSelect}
+                    onPlayEvent={interaction.handlePlayEvent}
+                    onMagnifyCard={handleMagnifyCard}
+                    bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                   />
                 </div>
               </div>
 
-              {/* 右侧：阶段指示器 */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-auto" data-testid="sw-phase-tracker" data-tutorial-id="sw-phase-tracker">
-                <PhaseTracker
-                  currentPhase={currentPhase}
-                  turnNumber={core.turnNumber}
-                  isMyTurn={isMyTurn}
-                  moveCount={core.players[playerID === '1' ? '1' : '0']?.moveCount ?? 0}
-                  attackCount={core.players[playerID === '1' ? '1' : '0']?.attackCount ?? 0}
-                  className="bg-slate-900/30 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]"
+              {/* 技能卡牌选择器 */}
+              {abilityMode && abilityMode.step === 'selectCard' && (
+                <CardSelectorOverlay
+                  title={
+                    abilityMode.abilityId === 'revive_undead' ? t('cardSelector.reviveUndead') :
+                      abilityMode.abilityId === 'infection' ? t('cardSelector.infection') : t('cardSelector.default')
+                  }
+                  cards={core.players[myPlayerId]?.discard.filter(c => {
+                    if (abilityMode.abilityId === 'revive_undead') {
+                      return c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国');
+                    }
+                    if (abilityMode.abilityId === 'infection') {
+                      return c.cardType === 'unit' && (c.id.includes('plague-zombie') || c.name.includes('疫病体'));
+                    }
+                    return true;
+                  }) ?? []}
+                  onSelect={(card) => {
+                    if (abilityMode.abilityId === 'infection' && abilityMode.targetPosition) {
+                      moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+                        abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
+                        targetCardId: card.id, targetPosition: abilityMode.targetPosition,
+                      });
+                      setAbilityMode(null);
+                    } else {
+                      setAbilityMode(abilityMode ? { ...abilityMode, step: 'selectPosition', selectedCardId: card.id } : null);
+                    }
+                  }}
+                  onCancel={() => setAbilityMode(null)}
                 />
-              </div>
+              )}
 
-              {/* 顶部中央：提示横幅 */}
-              <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-action-banner">
-                <StatusBanners
-                  currentPhase={currentPhase}
-                  isMyTurn={isMyTurn}
-                  abilityMode={abilityMode}
-                  pendingBeforeAttack={interaction.pendingBeforeAttack}
-                  bloodSummonMode={interaction.bloodSummonMode}
-                  annihilateMode={interaction.annihilateMode}
-                  soulTransferMode={soulTransferMode}
-                  funeralPyreMode={interaction.funeralPyreMode}
-                  mindControlMode={interaction.mindControlMode}
-                  stunMode={interaction.stunMode}
-                  hypnoticLureMode={interaction.hypnoticLureMode}
-                  mindCaptureMode={mindCaptureMode}
-                  afterAttackAbilityMode={afterAttackAbilityMode}
-                  telekinesisTargetMode={interaction.telekinesisTargetMode}
-                  onCancelAbility={handleCancelAbility}
-                  onConfirmBeforeAttackCards={interaction.handleConfirmBeforeAttackCards}
-                  onCancelBeforeAttack={handleCancelBeforeAttack}
-                  onCancelBloodSummon={handleCancelBloodSummon}
-                  onContinueBloodSummon={handleContinueBloodSummon}
-                  onCancelAnnihilate={handleCancelAnnihilate}
-                  onConfirmAnnihilateTargets={handleConfirmAnnihilateTargets}
-                  onConfirmSoulTransfer={handleConfirmSoulTransfer}
-                  onSkipSoulTransfer={handleSkipSoulTransfer}
-                  onSkipFuneralPyre={handleSkipFuneralPyre}
-                  onConfirmMindControl={handleConfirmMindControl}
-                  onCancelMindControl={handleCancelMindControl}
-                  onConfirmStun={handleConfirmStun}
-                  onCancelStun={handleCancelStun}
-                  onCancelHypnoticLure={handleCancelHypnoticLure}
-                  onConfirmMindCapture={handleConfirmMindCapture}
-                  onCancelAfterAttackAbility={handleCancelAfterAttackAbility}
-                  onConfirmTelekinesis={handleConfirmTelekinesis}
-                  onCancelTelekinesis={handleCancelTelekinesis}
-                />
-              </div>
+              {/* 单位操作面板（主动技能按钮） */}
+              {!abilityMode && !interaction.bloodSummonMode && !interaction.eventTargetMode && core.selectedUnit && isMyTurn && (() => {
+                const unit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
+                if (!unit || unit.owner !== myPlayerId) return null;
+                const abilities = unit.card.abilities ?? [];
+                const buttons: React.ReactNode[] = [];
 
-              {/* 底部：手牌区 */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
-                <HandArea
-                  cards={myHand}
-                  phase={currentPhase}
-                  isMyTurn={isMyTurn}
-                  currentMagic={myMagic}
-                  selectedCardId={interaction.selectedHandCardId}
-                  selectedCardIds={abilityMode?.step === 'selectCards'
-                    ? interaction.abilitySelectedCardIds
-                    : interaction.selectedCardsForDiscard}
-                  onCardClick={interaction.handleCardClick}
-                  onCardSelect={interaction.handleCardSelect}
-                  onPlayEvent={interaction.handlePlayEvent}
-                  onMagnifyCard={handleMagnifyCard}
-                  bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
-                />
-              </div>
-            </div>
-
-            {/* 技能卡牌选择器 */}
-            {abilityMode && abilityMode.step === 'selectCard' && (
-              <CardSelectorOverlay
-                title={
-                  abilityMode.abilityId === 'revive_undead' ? t('cardSelector.reviveUndead') :
-                    abilityMode.abilityId === 'infection' ? t('cardSelector.infection') : t('cardSelector.default')
+                if (abilities.includes('revive_undead') && currentPhase === 'summon') {
+                  const hasUndeadInDiscard = core.players[myPlayerId]?.discard.some(c =>
+                    c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国')
+                  );
+                  if (hasUndeadInDiscard) {
+                    buttons.push(
+                      <GameButton key="revive_undead" onClick={() => setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: unit.cardId })} variant="primary" size="md">
+                        {t('abilityButtons.reviveUndead')}
+                      </GameButton>
+                    );
+                  }
                 }
-                cards={core.players[myPlayerId]?.discard.filter(c => {
-                  if (abilityMode.abilityId === 'revive_undead') {
-                    return c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国');
+                if (abilities.includes('fire_sacrifice_summon') && currentPhase === 'summon') {
+                  const hasOtherUnits = getPlayerUnits(core, myPlayerId as '0' | '1').some(u => u.cardId !== unit.cardId);
+                  if (hasOtherUnits) {
+                    buttons.push(
+                      <GameButton key="fire_sacrifice_summon" onClick={() => setAbilityMode({ abilityId: 'fire_sacrifice_summon', step: 'selectUnit', sourceUnitId: unit.cardId })} variant="secondary" size="md">
+                        {t('abilityButtons.fireSacrificeSummon')}
+                      </GameButton>
+                    );
                   }
-                  if (abilityMode.abilityId === 'infection') {
-                    return c.cardType === 'unit' && (c.id.includes('plague-zombie') || c.name.includes('疫病体'));
-                  }
-                  return true;
-                }) ?? []}
-                onSelect={(card) => {
-                  if (abilityMode.abilityId === 'infection' && abilityMode.targetPosition) {
-                    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
-                      abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
-                      targetCardId: card.id, targetPosition: abilityMode.targetPosition,
+                }
+                if (abilities.includes('life_drain') && currentPhase === 'attack') {
+                  const nearbyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
+                    .filter(u => {
+                      if (u.cardId === unit.cardId) return false;
+                      const dist = Math.abs(u.position.row - core.selectedUnit!.row) + Math.abs(u.position.col - core.selectedUnit!.col);
+                      return dist <= 2;
                     });
-                    setAbilityMode(null);
-                  } else {
-                    setAbilityMode(abilityMode ? { ...abilityMode, step: 'selectPosition', selectedCardId: card.id } : null);
+                  if (nearbyUnits.length > 0) {
+                    buttons.push(
+                      <GameButton key="life_drain" onClick={() => setAbilityMode({ abilityId: 'life_drain', step: 'selectUnit', sourceUnitId: unit.cardId, context: 'beforeAttack' })} variant="secondary" size="md">
+                        {t('abilityButtons.lifeDrain')}
+                      </GameButton>
+                    );
                   }
-                }}
-                onCancel={() => setAbilityMode(null)}
+                }
+                if (abilities.includes('holy_arrow') && currentPhase === 'attack') {
+                  const hasValidDiscard = myHand.some(card => card.cardType === 'unit' && card.name !== unit.card.name);
+                  if (hasValidDiscard) {
+                    buttons.push(
+                      <GameButton key="holy_arrow" onClick={() => setAbilityMode({ abilityId: 'holy_arrow', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
+                        {t('abilityButtons.holyArrow')}
+                      </GameButton>
+                    );
+                  }
+                }
+                if (abilities.includes('healing') && currentPhase === 'attack') {
+                  const hasDiscard = myHand.length > 0;
+                  if (hasDiscard) {
+                    buttons.push(
+                      <GameButton key="healing" onClick={() => setAbilityMode({ abilityId: 'healing', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
+                        {t('abilityButtons.healing')}
+                      </GameButton>
+                    );
+                  }
+                }
+                if (buttons.length === 0) return null;
+                return <div className="absolute bottom-[220px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex gap-2">{buttons}</div>;
+              })()}
+
+              {/* 卡牌放大预览 */}
+              <MagnifyOverlay isOpen={!!magnifiedCard} onClose={() => setMagnifiedCard(null)} containerClassName="max-h-[85vh] max-w-[90vw]" closeLabel={t('actions.closePreview')}>
+                {magnifiedCard && <CardSprite atlasId={magnifiedCard.atlasId} frameIndex={magnifiedCard.frameIndex} className="h-[75vh] w-auto rounded-xl shadow-2xl" />}
+              </MagnifyOverlay>
+
+              {/* 弃牌堆查看浮层 */}
+              {showDiscardOverlay && (
+                <DiscardPileOverlay cards={myDiscard} onClose={() => setShowDiscardOverlay(false)} onMagnify={handleMagnifyCard} />
+              )}
+
+              {/* 骰子结果浮层 */}
+              <DiceResultOverlay
+                results={diceResult?.results ?? null}
+                attackType={diceResult?.attackType ?? null}
+                hits={diceResult?.hits ?? 0}
+                isOpponentAttack={diceResult?.isOpponentAttack ?? false}
+                onClose={handleCloseDiceResult}
               />
-            )}
 
-            {/* 单位操作面板（主动技能按钮） */}
-            {!abilityMode && !interaction.bloodSummonMode && !interaction.eventTargetMode && core.selectedUnit && isMyTurn && (() => {
-              const unit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
-              if (!unit || unit.owner !== myPlayerId) return null;
-              const abilities = unit.card.abilities ?? [];
-              const buttons: React.ReactNode[] = [];
+              {/* 结束页面遮罩 */}
+              <EndgameOverlay
+                isGameOver={!!isGameOver}
+                result={isGameOver}
+                playerID={playerID}
+                reset={isSpectator ? undefined : reset}
+                isMultiplayer={isSpectator ? false : isMultiplayer}
+                totalPlayers={matchData?.length}
+                rematchState={rematchState}
+                onVote={isSpectator ? undefined : handleRematchVote}
+              />
 
-              if (abilities.includes('revive_undead') && currentPhase === 'summon') {
-                const hasUndeadInDiscard = core.players[myPlayerId]?.discard.some(c =>
-                  c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国')
-                );
-                if (hasUndeadInDiscard) {
-                  buttons.push(
-                    <GameButton key="revive_undead" onClick={() => setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: unit.cardId })} variant="primary" size="md">
-                      {t('abilityButtons.reviveUndead')}
-                    </GameButton>
-                  );
-                }
-              }
-              if (abilities.includes('fire_sacrifice_summon') && currentPhase === 'summon') {
-                const hasOtherUnits = getPlayerUnits(core, myPlayerId as '0' | '1').some(u => u.cardId !== unit.cardId);
-                if (hasOtherUnits) {
-                  buttons.push(
-                    <GameButton key="fire_sacrifice_summon" onClick={() => setAbilityMode({ abilityId: 'fire_sacrifice_summon', step: 'selectUnit', sourceUnitId: unit.cardId })} variant="secondary" size="md">
-                      {t('abilityButtons.fireSacrificeSummon')}
-                    </GameButton>
-                  );
-                }
-              }
-              if (abilities.includes('life_drain') && currentPhase === 'attack') {
-                const nearbyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
-                  .filter(u => {
-                    if (u.cardId === unit.cardId) return false;
-                    const dist = Math.abs(u.position.row - core.selectedUnit!.row) + Math.abs(u.position.col - core.selectedUnit!.col);
-                    return dist <= 2;
-                  });
-                if (nearbyUnits.length > 0) {
-                  buttons.push(
-                    <GameButton key="life_drain" onClick={() => setAbilityMode({ abilityId: 'life_drain', step: 'selectUnit', sourceUnitId: unit.cardId, context: 'beforeAttack' })} variant="secondary" size="md">
-                      {t('abilityButtons.lifeDrain')}
-                    </GameButton>
-                  );
-                }
-              }
-              if (abilities.includes('holy_arrow') && currentPhase === 'attack') {
-                const hasValidDiscard = myHand.some(card => card.cardType === 'unit' && card.name !== unit.card.name);
-                if (hasValidDiscard) {
-                  buttons.push(
-                    <GameButton key="holy_arrow" onClick={() => setAbilityMode({ abilityId: 'holy_arrow', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
-                      {t('abilityButtons.holyArrow')}
-                    </GameButton>
-                  );
-                }
-              }
-              if (abilities.includes('healing') && currentPhase === 'attack') {
-                const hasDiscard = myHand.length > 0;
-                if (hasDiscard) {
-                  buttons.push(
-                    <GameButton key="healing" onClick={() => setAbilityMode({ abilityId: 'healing', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
-                      {t('abilityButtons.healing')}
-                    </GameButton>
-                  );
-                }
-              }
-              if (buttons.length === 0) return null;
-              return <div className="absolute bottom-[220px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex gap-2">{buttons}</div>;
-            })()}
-
-            {/* 卡牌放大预览 */}
-            <MagnifyOverlay isOpen={!!magnifiedCard} onClose={() => setMagnifiedCard(null)} containerClassName="max-h-[85vh] max-w-[90vw]" closeLabel={t('actions.closePreview')}>
-              {magnifiedCard && <CardSprite atlasId={magnifiedCard.atlasId} frameIndex={magnifiedCard.frameIndex} className="h-[75vh] w-auto rounded-xl shadow-2xl" />}
-            </MagnifyOverlay>
-
-            {/* 弃牌堆查看浮层 */}
-            {showDiscardOverlay && (
-              <DiscardPileOverlay cards={myDiscard} onClose={() => setShowDiscardOverlay(false)} onMagnify={handleMagnifyCard} />
-            )}
-
-            {/* 骰子结果浮层 */}
-            <DiceResultOverlay
-              results={diceResult?.results ?? null}
-              attackType={diceResult?.attackType ?? null}
-              hits={diceResult?.hits ?? 0}
-              isOpponentAttack={diceResult?.isOpponentAttack ?? false}
-              onClose={handleCloseDiceResult}
-            />
-
-            {/* 结束页面遮罩 */}
-            <EndgameOverlay
-              isGameOver={!!isGameOver}
-              result={isGameOver}
-              playerID={playerID}
-              reset={isSpectator ? undefined : reset}
-              isMultiplayer={isSpectator ? false : isMultiplayer}
-              totalPlayers={matchData?.length}
-              rematchState={rematchState}
-              onVote={isSpectator ? undefined : handleRematchVote}
-            />
-
-            {/* 调试面板 */}
-            {debugPanel}
-          </div>
-        )}
-      </div>
+              {/* 调试面板 */}
+              {debugPanel}
+            </div>
+          )}
+        </div>
       )}
     </UndoProvider>
   );

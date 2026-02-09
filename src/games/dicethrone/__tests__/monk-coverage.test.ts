@@ -37,7 +37,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '超脱命中后完整效果',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -91,14 +90,12 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '禅忘获得5太极和闪避',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'zen-forget' }),
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 触发 preDefense choice
                     cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
-                    cmd('ADVANCE_PHASE', '0'), // 选择完成后继续推进
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
@@ -139,13 +136,11 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '禅忘获得5太极和净化',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'zen-forget' }),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),
@@ -189,7 +184,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '太极连环拳 rollDie=拳头',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'taiji-combo' }),
@@ -230,7 +224,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '太极连环拳 rollDie=掌',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -275,7 +268,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '太极连环拳 rollDie=太极',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'taiji-combo' }),
@@ -316,7 +308,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '太极连环拳 rollDie=莲花选闪避',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),  // income -> main1
                     cmd('ADVANCE_PHASE', '0'),  // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -326,7 +317,6 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),  // defensiveRoll 退出，触发攻击结算，rollDie 产生 choice，halt
                     cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
-                    cmd('ADVANCE_PHASE', '0'),  // 继续流程到 main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -365,7 +355,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '太极连环拳 rollDie=莲花选净化',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),  // income -> main1
                     cmd('ADVANCE_PHASE', '0'),  // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -375,7 +364,6 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),  // defensiveRoll 退出，触发攻击结算，rollDie 产生 choice，halt
                     cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
-                    cmd('ADVANCE_PHASE', '0'),  // 继续流程到 main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -415,7 +403,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '清修 3太极+1拳',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -457,7 +444,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '清修 4太极+0拳',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
@@ -497,7 +483,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '清修 0太极+4拳',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -547,7 +532,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '拳法 3拳=4伤害',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-3' }),
@@ -585,7 +569,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '拳法 4拳=6伤害',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -625,7 +608,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '和谐之力 小顺子=5伤害+2气',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'harmony' }),
@@ -664,7 +646,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '定水神拳 大顺子=7伤害+闪避+2气',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -710,7 +691,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '花开见佛 4莲花=5伤害+太极上限+1',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'lotus-palm' }),
@@ -754,7 +734,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '雷霆一击 3掌=投掷3骰伤害',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -816,7 +795,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const result1 = runner.run({
                 name: '玩家0完整回合',
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -830,7 +808,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep（切换到玩家1）
                 ],
                 expect: {
-                    turnPhase: 'upkeep',
+                    turnPhase: 'main1',
                     activePlayerId: '1',
                     turnNumber: 2,
                     players: {
@@ -896,7 +874,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '两回合对局',
                 commands: [
                     // === 回合1: 玩家0攻击 ===
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -910,15 +887,11 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (切换到玩家1)
                     
                     // === 回合2: 玩家1跳过（击倒） ===
-                    cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '1'), // income -> main1
                     cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll (击倒跳到main2)
                     cmd('ADVANCE_PHASE', '1'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '1'), // discard -> upkeep (切换到玩家0)
                     
                     // === 回合3: 玩家0攻击（需要处理Token响应） ===
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '0'), // income -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -985,7 +958,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 name: '三回合对局',
                 commands: [
                     // === 回合1: 玩家0攻击（无Token响应） ===
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -999,15 +971,11 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (切换到玩家1)
                     
                     // === 回合2: 玩家1跳过（击倒） ===
-                    cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '1'), // income -> main1
                     cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll (击倒跳到main2)
                     cmd('ADVANCE_PHASE', '1'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '1'), // discard -> upkeep (切换到玩家0)
                     
                     // === 回合3: 玩家0攻击（有Token响应） ===
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '0'), // income -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1023,15 +991,11 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (切换到玩家1)
                     
                     // === 回合4: 玩家1跳过（击倒） ===
-                    cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '1'), // income -> main1
                     cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll (击倒跳到main2)
                     cmd('ADVANCE_PHASE', '1'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '1'), // discard -> upkeep (切换到玩家0)
                     
                     // === 回合5: 玩家0攻击（有Token响应） ===
-                    cmd('ADVANCE_PHASE', '0'), // upkeep -> income
-                    cmd('ADVANCE_PHASE', '0'), // income -> main1
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
@@ -1118,7 +1082,6 @@ describe('Monk 技能完整覆盖测试', () => {
             
             // 玩家0第一回合攻击（无Token响应）
             const player0FirstAttackRound = [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -1134,8 +1097,6 @@ describe('Monk 技能完整覆盖测试', () => {
             
             // 玩家1第一回合攻击（无Token响应）
             const player1FirstAttackRound = [
-                cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '1'), // income -> main1
                 cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
@@ -1151,8 +1112,6 @@ describe('Monk 技能完整覆盖测试', () => {
             
             // 玩家0后续回合攻击（无Token响应，因为清修4拳获得0太极）
             const player0AttackRound = [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '0'), // income -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -1168,8 +1127,6 @@ describe('Monk 技能完整覆盖测试', () => {
             
             // 玩家1后续回合攻击（无Token响应）
             const player1AttackRound = [
-                cmd('ADVANCE_PHASE', '1'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '1'), // income -> main1
                 cmd('ADVANCE_PHASE', '1'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
@@ -1193,8 +1150,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 ...player0AttackRound,      // 回合7: 玩家0攻击
                 ...player1AttackRound,      // 回合8: 玩家1攻击
                 // 回合9: 玩家0攻击（最后一击，玩家1死亡）
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> income
-                cmd('ADVANCE_PHASE', '0'), // income -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),

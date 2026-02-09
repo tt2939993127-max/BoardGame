@@ -289,7 +289,6 @@ describe('Moon Elf 状态效果逻辑', () => {
         const result = runner.run({
             name: '缠绕减少掷骰次数',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll（触发缠绕）
             ],
             expect: {
@@ -318,7 +317,6 @@ describe('Moon Elf 状态效果逻辑', () => {
         const result = runner.run({
             name: '无缠绕时掷骰次数正常',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
             ],
             expect: {
@@ -361,7 +359,6 @@ describe('Moon Elf 状态效果逻辑', () => {
         const result = runner.run({
             name: '致盲判定失败 → 跳过攻击',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -399,7 +396,6 @@ describe('Moon Elf 状态效果逻辑', () => {
         const result = runner.run({
             name: '致盲判定成功 → 攻击正常',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -447,7 +443,6 @@ describe('Moon Elf 状态效果逻辑', () => {
         const result = runner.run({
             name: '锁定增加伤害',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -486,7 +481,6 @@ describe('Moon Elf 状态效果逻辑', () => {
         const result = runner.run({
             name: '无锁定伤害对照',
             commands: [
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -535,7 +529,6 @@ describe('Moon Elf 状态效果逻辑', () => {
         const result = runner.run({
             name: '缠绕+致盲组合',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // upkeep -> main1
                 cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll（缠绕触发：rollLimit=2）
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -594,7 +587,6 @@ describe('Moon Elf 自定义动作', () => {
             name: '长弓II 4个相同触发缠绕',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'longbow-4-2' }),
@@ -639,7 +631,6 @@ describe('Moon Elf 自定义动作', () => {
         const result = runner.run({
             name: '长弓II 3个相同不触发缠绕',
             commands: [
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
@@ -689,7 +680,6 @@ describe('Moon Elf 自定义动作', () => {
             name: '长弓III 3个相同触发缠绕',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'longbow-3-3' }),
@@ -738,7 +728,6 @@ describe('Moon Elf 自定义动作', () => {
             name: '爆裂箭I 骰值伤害',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'exploding-arrow' }),
@@ -785,7 +774,6 @@ describe('Moon Elf 自定义动作', () => {
             name: '爆裂箭II 骰值+1伤害',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
                 cmd('SELECT_ABILITY', '0', { abilityId: 'exploding-arrow' }),
@@ -831,7 +819,6 @@ describe('Moon Elf 自定义动作', () => {
         const result = runner.run({
             name: '爆裂箭III 骰值+2伤害+缠绕',
             commands: [
-                cmd('ADVANCE_PHASE', '0'),
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),

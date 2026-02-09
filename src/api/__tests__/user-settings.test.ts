@@ -30,7 +30,15 @@ describe('user-settings api', () => {
     });
 
     it('updateAudioSettings 请求成功', async () => {
-        const settings = { muted: false, masterVolume: 0.8, sfxVolume: 0.6, bgmVolume: 0.4 };
+        const settings = {
+            muted: false,
+            masterVolume: 0.8,
+            sfxVolume: 0.6,
+            bgmVolume: 0.4,
+            bgmSelections: {
+                summonerwars: { normal: 'bgm_key_a', battle: 'bgm_key_b' },
+            },
+        };
         mockFetch.mockResolvedValue({
             ok: true,
             json: vi.fn().mockResolvedValue({ settings }),

@@ -199,7 +199,7 @@ const FlameTrailCanvas: React.FC<{
                     const vx = -dirX * speed + perpX * spread * 30 + (Math.random() - 0.5) * 20;
                     const vy = -dirY * speed + perpY * spread * 30 + (Math.random() - 0.5) * 20;
 
-                    const maxLife = 0.2 + Math.random() * 0.4;
+                    const maxLife = 0.15 + Math.random() * 0.25;
                     const size = 2 + Math.random() * 4;
                     // 颜色：大部分粒子用中间色，少量用亮色
                     const colorIdx = Math.random() < 0.2 ? 0 : Math.floor(Math.random() * (rgbColors.length - 1)) + 1;
@@ -360,7 +360,7 @@ const FloatingTextInner: React.FC<{
                 opacity: 0,
                 scale: holdScale * 0.85,
             }, {
-                duration: 0.8,
+                duration: 0.5,
                 ease: [0.2, 0.8, 0.3, 1], // 上升减速
             });
 
@@ -464,7 +464,7 @@ const FlyingEffectItem: React.FC<{
         const hasDamageOrHeal = effect.type === 'damage' || effect.type === 'heal';
         pendingRef.current = hasDamageOrHeal ? 1 : 0;
         if (pendingRef.current === 0) {
-            setTimeout(() => onComplete(effect.id), 600);
+            setTimeout(() => onComplete(effect.id), 300);
         }
     }, [effect.id, effect.type, onComplete]);
 

@@ -896,6 +896,135 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
             errorAtStep: { step: 1, error: '魔力不足' },
         },
     },
+
+    // ========== 魔力阶段弃牌测试 ==========
+    {
+        name: '魔力阶段 - 0魔力时仍可弃牌获得魔力',
+        setup: (playerIds, random) => {
+            const core = createInitializedCore(playerIds, random);
+            core.phase = 'magic';
+            core.players['0'].magic = 0;
+            // 注入一张高费单位卡（费用远超当前魔力）
+            const card: UnitCard = {
+                id: 'test-expensive-discard',
+                cardType: 'unit',
+                name: '高费单位',
+                unitClass: 'common',
+                faction: 'test',
+                strength: 5,
+                life: 8,
+                cost: 7,
+                attackType: 'melee',
+                attackRange: 1,
+                deckSymbols: [],
+            };
+            core.players['0'].hand.push(card);
+            const sys = createInitialSystemState(playerIds, []);
+            return { core, sys };
+        },
+        commands: [
+            {
+                type: SW_COMMANDS.DISCARD_FOR_MAGIC,
+                playerId: '0',
+                payload: { cardIds: ['test-expensive-discard'] },
+            },
+        ],
+        expect: {
+            phase: 'magic',
+            player0Magic: 1, // 0 + 1 = 1
+        },
+    },
+    {
+        name: '魔力阶段 - 弃多张牌获得对应魔力',
+        setup: (playerIds, random) => {
+            const core = createInitializedCore(playerIds, random);
+            core.phase = 'magic';
+            core.players['0'].magic = 3;
+            const cards: UnitCard[] = [
+                { id: 'discard-a', cardType: 'unit', name: '弃牌A', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 5, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'discard-b', cardType: 'unit', name: '弃牌B', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 6, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'discard-c', cardType: 'unit', name: '弃牌C', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 8, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+            ];
+            core.players['0'].hand.push(...cards);
+            const sys = createInitialSystemState(playerIds, []);
+            return { core, sys };
+        },
+        commands: [
+            {
+                type: SW_COMMANDS.DISCARD_FOR_MAGIC,
+                playerId: '0',
+                payload: { cardIds: ['discard-a', 'discard-b', 'discard-c'] },
+            },
+        ],
+        expect: {
+            phase: 'magic',
+            player0Magic: 6, // 3 + 3 = 6
+        },
+    },
+    {
+        name: '魔力阶段 - 弃牌不超过魔力上限（15）',
+        setup: (playerIds, random) => {
+            const core = createInitializedCore(playerIds, random);
+            core.phase = 'magic';
+            core.players['0'].magic = 14;
+            const cards: UnitCard[] = [
+                { id: 'over-a', cardType: 'unit', name: '溢出A', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 1, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'over-b', cardType: 'unit', name: '溢出B', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 1, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+            ];
+            core.players['0'].hand.push(...cards);
+            const sys = createInitialSystemState(playerIds, []);
+            return { core, sys };
+        },
+        commands: [
+            {
+                type: SW_COMMANDS.DISCARD_FOR_MAGIC,
+                playerId: '0',
+                payload: { cardIds: ['over-a', 'over-b'] },
+            },
+        ],
+        expect: {
+            phase: 'magic',
+            player0Magic: 15, // clamp(14 + 2) = 15
+        },
+    },
+    {
+        name: '魔力阶段 - 不弃牌直接结束也合法',
+        setup: (playerIds, random) => {
+            const core = createInitializedCore(playerIds, random);
+            core.phase = 'magic';
+            core.players['0'].magic = 5;
+            const sys = createInitialSystemState(playerIds, []);
+            return { core, sys };
+        },
+        commands: [
+            { type: SW_COMMANDS.END_PHASE, playerId: '0', payload: {} },
+        ],
+        expect: {
+            phase: 'draw',
+            player0Magic: 5, // 不变
+        },
+    },
+    {
+        name: '魔力阶段 - 弃无效卡牌ID不增加魔力',
+        setup: (playerIds, random) => {
+            const core = createInitializedCore(playerIds, random);
+            core.phase = 'magic';
+            core.players['0'].magic = 3;
+            const sys = createInitialSystemState(playerIds, []);
+            return { core, sys };
+        },
+        commands: [
+            {
+                type: SW_COMMANDS.DISCARD_FOR_MAGIC,
+                playerId: '0',
+                payload: { cardIds: ['nonexistent-card-1', 'nonexistent-card-2'] },
+            },
+        ],
+        expect: {
+            phase: 'magic',
+            player0Magic: 3, // 不变
+        },
+    },
 ];
 
 // ============================================================================

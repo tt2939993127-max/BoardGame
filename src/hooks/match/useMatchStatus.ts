@@ -10,9 +10,71 @@ export interface PlayerStatus {
     isConnected?: boolean;
 }
 
+export type MatchCleanupReason = 'destroyed';
+
+export type MatchCleanupNotice = {
+    matchID: string;
+    reason: MatchCleanupReason;
+    timestamp: number;
+    nonce: string;
+};
+
+const createMatchCleanupNonce = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const parseMatchCleanupNotice = (raw: string | null): MatchCleanupNotice | null => {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw) as MatchCleanupNotice;
+        if (!parsed?.matchID || !parsed?.nonce || !parsed?.reason) return null;
+        if (parsed.reason !== 'destroyed') return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+};
+
+export function readMatchCleanupNotice(): MatchCleanupNotice | null {
+    return parseMatchCleanupNotice(localStorage.getItem(MATCH_CLEANUP_NOTICE_KEY));
+}
+
+export function publishMatchCleanupNotice(matchID: string, reason: MatchCleanupReason = 'destroyed'): MatchCleanupNotice | null {
+    if (!matchID) return null;
+    const notice: MatchCleanupNotice = {
+        matchID,
+        reason,
+        timestamp: Date.now(),
+        nonce: createMatchCleanupNonce(),
+    };
+    localStorage.setItem(MATCH_CLEANUP_NOTICE_KEY, JSON.stringify(notice));
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('match-cleanup-notice'));
+    }
+    return notice;
+}
+
+export function hasSeenMatchCleanupNotice(notice: MatchCleanupNotice): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+        return sessionStorage.getItem(MATCH_CLEANUP_NOTICE_SEEN_KEY) === notice.nonce;
+    } catch {
+        return false;
+    }
+}
+
+export function markMatchCleanupNoticeSeen(notice: MatchCleanupNotice): void {
+    if (typeof window === 'undefined') return;
+    try {
+        sessionStorage.setItem(MATCH_CLEANUP_NOTICE_SEEN_KEY, notice.nonce);
+    } catch {
+        // 忽略 sessionStorage 不可用的情况
+    }
+}
+
 const OWNER_ACTIVE_MATCH_KEY = 'owner_active_match';
 const MATCH_CREDENTIALS_PREFIX = 'match_creds_';
 const OWNER_ACTIVE_MATCH_SUPPRESS_KEY = 'owner_active_match_suppressed';
+const MATCH_CLEANUP_NOTICE_KEY = 'match_cleanup_notice';
+const MATCH_CLEANUP_NOTICE_SEEN_KEY = 'match_cleanup_notice_seen';
 
 const parseOwnerActiveMatchSuppression = (raw: string | null): string[] => {
     if (!raw) return [];
