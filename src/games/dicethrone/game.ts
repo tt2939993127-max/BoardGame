@@ -24,7 +24,7 @@ import {
     type PhaseExitResult,
 } from '../../engine';
 import { DiceThroneDomain } from './domain';
-import { DICETHRONE_COMMANDS, STATUS_IDS } from './domain/ids';
+import { DICETHRONE_COMMANDS, STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { AbilityCard, DiceThroneCore, TurnPhase, DiceThroneEvent, CpChangedEvent, TurnChangedEvent, StatusRemovedEvent, AbilityActivatedEvent, ExtraAttackTriggeredEvent } from './domain/types';
 import { createDiceThroneEventSystem } from './domain/systems';
 import { canAdvancePhase, getNextPhase, getNextPlayerId } from './domain/rules';
@@ -722,11 +722,13 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return events;
                 }
 
-                // CP +1（使用 ResourceSystem 处理上限）
+                // CP +1（教会税升级时 +2）
+                const tithesUpgraded = (player.tokens[TOKEN_IDS.TITHES_UPGRADED] ?? 0) > 0;
+                const cpDelta = tithesUpgraded ? 2 : 1;
                 const cpResult = resourceSystem.modify(
                     player.resources,
                     RESOURCE_IDS.CP,
-                    1
+                    cpDelta
                 );
                 const cpEvent: CpChangedEvent = {
                     type: 'CP_CHANGED',

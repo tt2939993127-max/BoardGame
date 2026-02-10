@@ -8,8 +8,10 @@ import { getGameById } from '../config/games.config';
 import { GameHUD } from '../components/game/GameHUD';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { useState } from 'react';
+import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 
 export const LocalMatchRoom = () => {
+    usePerformanceMonitor();
     const { gameId } = useParams();
     const [searchParams] = useSearchParams();
     const { t, i18n } = useTranslation('lobby');

@@ -43,7 +43,10 @@
     "push": "Push",
     "pull": "Pull",
     "control": "Control",
-    "damage": "Damage"
+    "damage": "Damage",
+    "bloodRuneDamage": "Take 1 Damage",
+    "bloodRuneCharge": "Spend 1 Magic to Charge",
+    "feedBeastSelfDestroy": "Self-Destruct"
   },
   "player": {
     "default1": "Player 1",
@@ -218,7 +221,10 @@
       "maxStandardEvents": "Max 2 copies of the same Standard Event",
       "maxChampions": "Max 1 copy of the same Champion",
       "maxCommons": "Max 4 copies of the same Common"
-    }
+    },
+    "freeMode": "Free Build",
+    "freeModeOn": "ON",
+    "free": "Free"
   },
   "cardSelector": {
     "reviveUndead": "Revive Undead: Select an undead unit from the discard pile",
@@ -281,7 +287,11 @@
       },
       "healing": {
         "selectCards": "Healing: Select cards to discard"
-      }
+      },
+      "illusion": "Illusion: Select a common unit within 3 spaces to copy abilities",
+      "bloodRune": "Blood Rune: Take 1 damage or spend 1 magic to charge",
+      "iceShards": "Ice Shards: Spend 1 charge to deal 1 damage to enemies adjacent to buildings?",
+      "feedBeast": "Feed the Beast: Remove an adjacent ally, or self-destruct"
     },
     "beforeAttack": {
       "lifeDrain": "Pre-attack: Life Drain ready, select an attack target",

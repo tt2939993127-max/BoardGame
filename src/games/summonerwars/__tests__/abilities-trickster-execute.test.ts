@@ -105,6 +105,15 @@ function makeAllyCommon(id: string): UnitCard {
   };
 }
 
+function makeMindWitch(id: string): UnitCard {
+  return {
+    id, cardType: 'unit', name: '心灵女巫', unitClass: 'common',
+    faction: '欺心巫族', strength: 1, life: 3, cost: 1,
+    attackType: 'ranged', attackRange: 3,
+    abilities: ['illusion'], deckSymbols: [],
+  };
+}
+
 function executeAndReduce(
   state: SummonerWarsCore,
   commandType: string,
@@ -658,5 +667,228 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('3格');
+  });
+});
+
+
+// ============================================================================
+// 幻化 (illusion) 测试
+// ============================================================================
+
+describe('心灵女巫 - 幻化 (illusion)', () => {
+  it('复制3格内士兵的技能', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
+
+    // 心灵女巫在 (4,3)
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+
+    // 目标士兵在 (4,5)，距离2，有 ranged 和 charge 技能
+    placeUnit(state, { row: 4, col: 5 }, {
+      cardId: 'test-target',
+      card: makeEnemy('test-target', {
+        abilities: ['ranged', 'charge'],
+      }),
+      owner: '1',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'illusion',
+      sourceUnitId: 'test-witch',
+      targetPosition: { row: 4, col: 5 },
+    });
+
+    // 应有 ABILITIES_COPIED 事件
+    const copyEvents = events.filter(e => e.type === SW_EVENTS.ABILITIES_COPIED);
+    expect(copyEvents.length).toBe(1);
+    expect((copyEvents[0].payload as any).copiedAbilities).toEqual(['ranged', 'charge']);
+
+    // 心灵女巫应获得临时技能
+    const witch = newState.board[4][3].unit!;
+    expect(witch.tempAbilities).toEqual(['ranged', 'charge']);
+  });
+
+  it('目标必须是士兵（common），不能是召唤师或冠军', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+
+    // 放一个召唤师作为目标
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-summoner',
+      card: makeSummoner('test-summoner'),
+      owner: '1',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'illusion',
+        sourceUnitId: 'test-witch',
+        targetPosition: { row: 4, col: 4 },
+      },
+      playerId: '0',
+      timestamp: Date.now(),
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('士兵');
+  });
+
+  it('目标必须在3格以内', () => {
+    const state = createTricksterState();
+    clearArea(state, [1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+
+    // 距离4的士兵 (row 1, col 2) -> 曼哈顿距离 = |4-1| + |3-2| = 4
+    placeUnit(state, { row: 1, col: 2 }, {
+      cardId: 'test-far',
+      card: makeEnemy('test-far', { abilities: ['ranged'] }),
+      owner: '1',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'illusion',
+        sourceUnitId: 'test-witch',
+        targetPosition: { row: 1, col: 2 },
+      },
+      playerId: '0',
+      timestamp: Date.now(),
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('3格');
+  });
+
+  it('只能在移动阶段使用', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-target',
+      card: makeEnemy('test-target', { abilities: ['charge'] }),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'illusion',
+        sourceUnitId: 'test-witch',
+        targetPosition: { row: 4, col: 4 },
+      },
+      playerId: '0',
+      timestamp: Date.now(),
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('移动阶段');
+  });
+
+  it('回合切换时清除 tempAbilities', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
+
+    // 先给心灵女巫设置临时技能
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+    witch.tempAbilities = ['ranged', 'charge'];
+
+    // 模拟回合切换事件
+    const turnEvent: GameEvent = {
+      type: SW_EVENTS.TURN_CHANGED,
+      payload: { nextPlayer: '1' },
+      timestamp: Date.now(),
+    };
+    const newState = SummonerWarsDomain.reduce(state, turnEvent);
+
+    // tempAbilities 应被清除
+    const updatedWitch = newState.board[4][3].unit!;
+    expect(updatedWitch.tempAbilities).toBeUndefined();
+  });
+
+  it('getUnitAbilities 合并 tempAbilities', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
+
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+    witch.tempAbilities = ['charge', 'ferocity'];
+
+    // 验证合并：原始技能 illusion + 临时技能 charge, ferocity
+    const abilities = [...(witch.card.abilities ?? []), ...(witch.tempAbilities ?? [])];
+    expect(abilities).toContain('illusion');
+    expect(abilities).toContain('charge');
+    expect(abilities).toContain('ferocity');
+  });
+
+  it('目标没有技能时不生成 ABILITIES_COPIED 事件', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+
+    // 无技能的士兵
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-noability',
+      card: makeEnemy('test-noability', { abilities: [] }),
+      owner: '1',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const { events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'illusion',
+      sourceUnitId: 'test-witch',
+      targetPosition: { row: 4, col: 4 },
+    });
+
+    const copyEvents = events.filter(e => e.type === SW_EVENTS.ABILITIES_COPIED);
+    expect(copyEvents.length).toBe(0);
   });
 });

@@ -23,12 +23,14 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
     resetAbilityInit();
+    clearPromptContinuationRegistry();
     initAllAbilities();
 });
 
@@ -257,7 +259,7 @@ describe('黑熊骑兵派系能力', () => {
     });
 
     describe('bear_cavalry_bear_necessities（黑熊口粮）', () => {
-        it('消灭对手最强随从', () => {
+        it('多个对手随从时创建 Prompt 选择目标', () => {
             const core = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -277,9 +279,34 @@ describe('黑熊骑兵派系能力', () => {
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
                 defaultRandom
             );
+            // 多个目标时应创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            expect(promptEvents.length).toBe(1);
+            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('bear_cavalry_bear_necessities');
+        });
+
+        it('单个对手随从时自动消灭', () => {
+            const core = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'bear_cavalry_bear_necessities', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [
+                    { defId: 'base_a', minions: [
+                        makeMinion('m1', 'test', '1', 5),
+                    ], ongoingActions: [] },
+                ],
+            });
+            const state = makeMatchState(core);
+            const events = execute(state,
+                { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
+                defaultRandom
+            );
             const destroyEvt = events.find(e => e.type === SU_EVENTS.MINION_DESTROYED);
             expect(destroyEvt).toBeDefined();
-            expect(destroyEvt!.payload.minionUid).toBe('m2');
+            expect(destroyEvt!.payload.minionUid).toBe('m1');
         });
 
         it('无对手随从时消灭对手持续行动卡', () => {
@@ -447,7 +474,7 @@ describe('米斯卡塔尼克大学派系能力', () => {
             expect(returnEvt!.payload.toPlayerId).toBe('1');
         });
 
-        it('优先选力量最高的≤3随从', () => {
+        it('多个力量≤3的对手随从时创建 Prompt', () => {
             const core = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -468,9 +495,36 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
                 defaultRandom
             );
+            // 多个目标时应创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            expect(promptEvents.length).toBe(1);
+            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('miskatonic_professor');
+        });
+
+        it('单个力量≤3的对手随从时自动返回', () => {
+            const core = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('c1', 'miskatonic_professor', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [
+                    { defId: 'base_a', minions: [
+                        makeMinion('m1', 'weak_minion', '1', 2),
+                        makeMinion('m2', 'strong_minion', '1', 5),
+                    ], ongoingActions: [] },
+                ],
+            });
+            const state = makeMatchState(core);
+            const events = execute(state,
+                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
+                defaultRandom
+            );
             const returnEvt = events.find(e => e.type === SU_EVENTS.MINION_RETURNED);
             expect(returnEvt).toBeDefined();
-            expect(returnEvt!.payload.minionUid).toBe('m2');
+            expect(returnEvt!.payload.minionUid).toBe('m1');
+            expect(returnEvt!.payload.toPlayerId).toBe('1');
         });
 
         it('无力量≤3的对手随从时不产生事件', () => {
@@ -664,7 +718,7 @@ describe('幽灵派系能力', () => {
             expect(destroyEvt!.payload.minionUid).toBe('m1');
         });
 
-        it('手牌足够时优先消灭最强对手随从', () => {
+        it('多个可消灭目标时创建 Prompt', () => {
             const core = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -691,14 +745,10 @@ describe('幽灵派系能力', () => {
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
                 defaultRandom
             );
-            // 5张手牌（排除自身），力量4需要4张（够），优先选最强
-            const destroyEvt = events.find(e => e.type === SU_EVENTS.MINION_DESTROYED);
-            expect(destroyEvt).toBeDefined();
-            expect(destroyEvt!.payload.minionUid).toBe('m2');
-
-            const discardEvt = events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED);
-            expect(discardEvt).toBeDefined();
-            expect(discardEvt!.payload.cardUids).toHaveLength(4);
+            // 5张手牌（排除自身），两个目标都可消灭 → Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            expect(promptEvents.length).toBe(1);
+            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('ghost_spirit');
         });
 
         it('手牌不足以消灭任何对手随从时不产生事件', () => {

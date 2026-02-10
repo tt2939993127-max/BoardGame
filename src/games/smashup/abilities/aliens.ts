@@ -7,7 +7,7 @@
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS } from '../domain/types';
-import type { MinionReturnedEvent, VpAwardedEvent, SmashUpEvent, SmashUpCore, CardsDiscardedEvent, CardsDrawnEvent, MinionCardDef } from '../domain/types';
+import type { MinionReturnedEvent, VpAwardedEvent, SmashUpEvent, SmashUpCore, CardsDrawnEvent, MinionCardDef } from '../domain/types';
 import { setPromptContinuation, buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower } from '../domain/abilityHelpers';
 import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getBaseDef, getCardDef } from '../data/cards';
@@ -177,16 +177,6 @@ function alienCropCircles(ctx: AbilityContext): AbilityResult {
                 ctx.now
             ),
         ],
-        prompt: {
-            id: `alien_crop_circles_${ctx.now}`,
-            playerId: ctx.playerId,
-            title: '选择一个基地，将其所有随从返回手牌',
-            options: candidates.map(c => ({
-                label: c.label,
-                value: { baseIndex: c.baseIndex },
-            })),
-            sourceId: 'alien_crop_circles',
-        },
     };
 }
 
@@ -222,7 +212,7 @@ function alienScout(ctx: AbilityContext): AbilityResult {
     return { events: [drawEvt] };
 }
 
-/** 射线传递 onPlay：展示对手随机手牌，可返回牌库顶（MVP：自动弃掉该卡） */
+/** 射线传递 onPlay：展示对手随机手牌，可返回牌库顶（MVP：自动放到牌库顶） */
 function alienBeamingDown(ctx: AbilityContext): AbilityResult {
     // 找一个有手牌的对手
     for (const pid of ctx.state.turnOrder) {
@@ -234,11 +224,9 @@ function alienBeamingDown(ctx: AbilityContext): AbilityResult {
         const idx = Math.floor(ctx.random.random() * opponent.hand.length);
         const card = opponent.hand[idx];
 
-        // MVP：将其弃掉（实际应放回牌库顶，需要 CARD_TO_DECK_TOP 事件）
-        // TODO: 实现 CARD_TO_DECK_TOP 事件后改为放回牌库顶
-        const evt: CardsDiscardedEvent = {
-            type: SU_EVENTS.CARDS_DISCARDED,
-            payload: { playerId: pid, cardUids: [card.uid] },
+        const evt: SmashUpEvent = {
+            type: SU_EVENTS.CARD_TO_DECK_TOP,
+            payload: { cardUid: card.uid, defId: card.defId, ownerId: pid, reason: 'alien_beaming_down' },
             timestamp: ctx.now,
         };
         return { events: [evt] };

@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-02-08T01:55:35.314Z",
+  "generatedAt": "2026-02-10T03:44:38.258Z",
   "source": "public/assets/common/audio/registry.json",
-  "total": 6825,
+  "total": 7337,
   "entries": [
     {
       "key": "ambient.khron_studio_sound_of_survival_vol_1_assets.character.character_drink.fooddrnk_character_drink_01_krst",
@@ -4045,6 +4045,126 @@
       }
     },
     {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.a_witch_rt_3.fantasy_vol7_a_witch_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.a_witch_rt_3.fantasy_vol7_a_witch_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.a_witch_rt_3.fantasy_vol7_a_witch_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.a_witch_rt_3.fantasy_vol7_a_witch_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.a_witch_rt_3.fantasy_vol7_a_witch_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.above_rt_4.fantasy_vol7_above_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.above_rt_4.fantasy_vol7_above_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.above_rt_4.fantasy_vol7_above_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.above_rt_4.fantasy_vol7_above_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.above_rt_4.fantasy_vol7_above_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.black_doves_rt_2.fantasy_vol7_black_doves_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.black_doves_rt_2.fantasy_vol7_black_doves_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.black_doves_rt_2.fantasy_vol7_black_doves_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.black_doves_rt_2.fantasy_vol7_black_doves_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.black_doves_rt_2.fantasy_vol7_black_doves_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
       "key": "bgm.fantasy.fantasy_music_pack_vol.cabin_lunch_rt_2.fantasy_vol5_cabin_lunch_cut_30",
       "type": "bgm",
       "category": {
@@ -4125,6 +4245,86 @@
       }
     },
     {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.curious_ranger_rt_2.fantasy_vol8_curious_ranger_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.curious_ranger_rt_2.fantasy_vol8_curious_ranger_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.curious_ranger_rt_2.fantasy_vol8_curious_ranger_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.curious_ranger_rt_2.fantasy_vol8_curious_ranger_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.curious_ranger_rt_2.fantasy_vol8_curious_ranger_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.denmark_rt_3.fantasy_vol7_denmark_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.denmark_rt_3.fantasy_vol7_denmark_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.denmark_rt_3.fantasy_vol7_denmark_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.denmark_rt_3.fantasy_vol7_denmark_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.denmark_rt_3.fantasy_vol7_denmark_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
       "key": "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_cut_30",
       "type": "bgm",
       "category": {
@@ -4158,6 +4358,166 @@
     },
     {
       "key": "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.enemy_grounds_rt_3.fantasy_vol7_enemy_grounds_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.enemy_grounds_rt_3.fantasy_vol7_enemy_grounds_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.enemy_grounds_rt_3.fantasy_vol7_enemy_grounds_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.enemy_grounds_rt_3.fantasy_vol7_enemy_grounds_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.enemy_grounds_rt_3.fantasy_vol7_enemy_grounds_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_main",
       "type": "bgm",
       "category": {
         "group": "bgm",
@@ -4205,6 +4565,46 @@
       }
     },
     {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.grimlight_rt_2.fantasy_vol8_grimlight_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.grimlight_rt_2.fantasy_vol8_grimlight_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.grimlight_rt_2.fantasy_vol8_grimlight_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.grimlight_rt_2.fantasy_vol8_grimlight_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.grimlight_rt_2.fantasy_vol8_grimlight_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
       "key": "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_cut_30",
       "type": "bgm",
       "category": {
@@ -4238,6 +4638,46 @@
     },
     {
       "key": "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.iron_sky_rt_3.fantasy_vol8_iron_sky_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.iron_sky_rt_3.fantasy_vol8_iron_sky_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.iron_sky_rt_3.fantasy_vol8_iron_sky_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.iron_sky_rt_3.fantasy_vol8_iron_sky_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.iron_sky_rt_3.fantasy_vol8_iron_sky_main",
       "type": "bgm",
       "category": {
         "group": "bgm",
@@ -4285,6 +4725,46 @@
       }
     },
     {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.loria_rt_4.fantasy_vol8_loria_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.loria_rt_4.fantasy_vol8_loria_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.loria_rt_4.fantasy_vol8_loria_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.loria_rt_4.fantasy_vol8_loria_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.loria_rt_4.fantasy_vol8_loria_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
       "key": "bgm.fantasy.fantasy_music_pack_vol.lush_gardens_rt_3.fantasy_vol5_lush_gardens_cut_30",
       "type": "bgm",
       "category": {
@@ -4318,6 +4798,86 @@
     },
     {
       "key": "bgm.fantasy.fantasy_music_pack_vol.lush_gardens_rt_3.fantasy_vol5_lush_gardens_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.misty_halo_rt_3.fantasy_vol8_misty_halo_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.misty_halo_rt_3.fantasy_vol8_misty_halo_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.misty_halo_rt_3.fantasy_vol8_misty_halo_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.misty_halo_rt_3.fantasy_vol8_misty_halo_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.misty_halo_rt_3.fantasy_vol8_misty_halo_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.moonveil_rt_5.fantasy_vol8_moonveil_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.moonveil_rt_5.fantasy_vol8_moonveil_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.moonveil_rt_5.fantasy_vol8_moonveil_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.moonveil_rt_5.fantasy_vol8_moonveil_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.moonveil_rt_5.fantasy_vol8_moonveil_main",
       "type": "bgm",
       "category": {
         "group": "bgm",
@@ -4365,6 +4925,326 @@
       }
     },
     {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.mystwood_reverie_rt_4.fantasy_vol7_mystwood_reverie_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.mystwood_reverie_rt_4.fantasy_vol7_mystwood_reverie_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.mystwood_reverie_rt_4.fantasy_vol7_mystwood_reverie_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.mystwood_reverie_rt_4.fantasy_vol7_mystwood_reverie_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.mystwood_reverie_rt_4.fantasy_vol7_mystwood_reverie_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.plunder_rt_2.plunder_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.plunder_rt_2.plunder_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.plunder_rt_2.plunder_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.plunder_rt_2.plunder_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.plunder_rt_2.plunder_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.rockslides_rt_3.rockslides_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.rockslides_rt_3.rockslides_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.rockslides_rt_3.rockslides_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.rockslides_rt_3.rockslides_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.rockslides_rt_3.rockslides_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.royalty_rt_1.royalty_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.royalty_rt_1.royalty_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.royalty_rt_1.royalty_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.royalty_rt_1.royalty_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.royalty_rt_1.royalty_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.salamander_rt_2.salamander_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.salamander_rt_2.salamander_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.salamander_rt_2.salamander_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.salamander_rt_2.salamander_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.salamander_rt_2.salamander_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.seraphis_rt_3.fantasy_vol8_seraphis_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.seraphis_rt_3.fantasy_vol8_seraphis_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.seraphis_rt_3.fantasy_vol8_seraphis_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.seraphis_rt_3.fantasy_vol8_seraphis_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.seraphis_rt_3.fantasy_vol8_seraphis_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
       "key": "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_cut_30",
       "type": "bgm",
       "category": {
@@ -4405,6 +5285,166 @@
       }
     },
     {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.sorcerer_rt_3.sorcerer_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.sorcerer_rt_3.sorcerer_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.sorcerer_rt_3.sorcerer_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.sorcerer_rt_3.sorcerer_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.sorcerer_rt_3.sorcerer_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.the_gathering_rt_3.the_gathering_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.the_gathering_rt_3.the_gathering_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.the_gathering_rt_3.the_gathering_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.the_gathering_rt_3.the_gathering_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.the_gathering_rt_3.the_gathering_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
       "key": "bgm.fantasy.fantasy_music_pack_vol.the_mourning_rt_3.fantasy_vol5_the_mourning_cut_30",
       "type": "bgm",
       "category": {
@@ -4438,6 +5478,166 @@
     },
     {
       "key": "bgm.fantasy.fantasy_music_pack_vol.the_mourning_rt_3.fantasy_vol5_the_mourning_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.tomb_of_kings_rt_5.fantasy_vol7_tomb_of_kings_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.tomb_of_kings_rt_5.fantasy_vol7_tomb_of_kings_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.tomb_of_kings_rt_5.fantasy_vol7_tomb_of_kings_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.tomb_of_kings_rt_5.fantasy_vol7_tomb_of_kings_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.tomb_of_kings_rt_5.fantasy_vol7_tomb_of_kings_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.triumph_rt_3.triumph_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.triumph_rt_3.triumph_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.triumph_rt_3.triumph_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.triumph_rt_3.triumph_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.triumph_rt_3.triumph_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.warden_road_rt_3.fantasy_vol8_warden_road_cut_30",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.warden_road_rt_3.fantasy_vol8_warden_road_cut_60",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.warden_road_rt_3.fantasy_vol8_warden_road_intensity_1",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.warden_road_rt_3.fantasy_vol8_warden_road_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.warden_road_rt_3.fantasy_vol8_warden_road_main",
       "type": "bgm",
       "category": {
         "group": "bgm",
@@ -19170,6 +20370,1462 @@
       "category": {
         "group": "fantasy",
         "sub": "fire_sword_buff_03"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.blade_of_destiny_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.blade_of_destiny_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.blade_of_destiny_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.blade_of_destiny_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.charmed_bolt_swoosh_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.charmed_bolt_swoosh_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.charmed_bolt_swoosh_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.charmed_bolt_swoosh_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.charmed_bolt_swoosh_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.execution_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.execution_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.execution_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.execution_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.execution_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.fate_shot_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.fate_shot_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.fate_shot_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.fate_shot_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.fate_shot_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.medieval_stomp_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.medieval_stomp_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.medieval_stomp_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.medieval_stomp_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.silver_crossbow_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.silver_crossbow_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.silver_crossbow_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.silver_crossbow_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.combat.silver_crossbow_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.beast_footstep_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.beast_footstep_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.beast_footstep_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.beast_footstep_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.beast_footstep_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.gargoyle_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.gargoyle_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.gargoyle_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.gargoyle_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_bite_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_bite_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_bite_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_bite_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_bite_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_bite_006",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_feasting_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_feasting_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_feasting_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_feasting_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.ghoul_feasting_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.haunted_hall_dweller_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.haunted_hall_dweller_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.haunted_hall_dweller_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.haunted_hall_dweller_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.voice_of_the_dead_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.voice_of_the_dead_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.voice_of_the_dead_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.voice_of_the_dead_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.void_scream_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.void_scream_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.void_scream_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_attack_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_attack_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_attack_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_attack_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_death_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_death_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_death_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_idle_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_idle_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_idle_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_pain_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_pain_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_pain_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_pain_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.bell_of_ruin_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.bell_of_ruin_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.bell_of_ruin_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.clocktower_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.clocktower_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.clocktower_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.clocktower_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.clocktower_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.clocktower_006",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.eternal_sands_loop",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ether_bells_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ether_bells_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ether_bells_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ether_bells_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ether_bells_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ether_bells_006",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ghostly_bell_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ghostly_bell_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ghostly_bell_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ghostly_bell_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.ghostly_bell_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.vampire_castle_loop_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.vampire_castle_loop_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.vampire_castle_loop_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.void_loop_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.environment.void_loop_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.eldritch_space_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.eldritch_space_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.eldritch_space_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.eldritch_space_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.eldritch_space_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.epitaph_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.epitaph_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.epitaph_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.epitaph_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.epitaph_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.gloom_choir_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.gloom_choir_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.gloom_choir_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.gloom_choir_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.gloom_choir_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.haze_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.haze_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.haze_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.moonlight_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.moonlight_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.moonlight_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.moonlight_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.moonlight_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mysterious_box_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mysterious_box_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mysterious_box_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mysterious_box_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mystic_bell_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mystic_bell_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mystic_bell_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mystic_bell_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.mystic_bell_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.angel_dust_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.angel_dust_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.angel_dust_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.angel_dust_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.banish_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.banish_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.banish_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.banish_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.dark_rift_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.dark_rift_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.dark_rift_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.dark_rift_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.disenchant_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.disenchant_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.disenchant_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.disenchant_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.fog_disappear_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.fog_disappear_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.fog_disappear_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.fog_disappear_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.funeral_wind_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.funeral_wind_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.funeral_wind_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.funeral_wind_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.hexproof_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.hexproof_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.hexproof_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.hexproof_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.hexproof_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.into_the_darkness_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.into_the_darkness_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.into_the_darkness_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.into_the_darkness_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.into_the_darkness_005",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.intricate_craft_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.intricate_craft_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.intricate_craft_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.manaward_loop_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.manaward_loop_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.purifying_flame_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.purifying_flame_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.purifying_flame_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.purifying_flame_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.smite_001",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.smite_002",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.smite_003",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.smite_004",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.spells_and_abilities.veil_loop",
+      "type": "sfx",
+      "category": {
+        "group": "fantasy",
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
       }
     },
     {
@@ -49618,6 +52274,1446 @@
       "category": {
         "group": "ui",
         "sub": "click"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.backwards_navigation.back_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.clicks.clicks_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.hovers.hovers_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.inventory.inventory_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.notification_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.selects.select_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_negative_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_positive_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.toggles.toggle_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_a_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_a_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_a_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_a_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_a_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_b_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_b_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_b_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_b_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_c_001",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_c_002",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_c_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_c_004",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.transitions.transition_c_005",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
       }
     },
     {

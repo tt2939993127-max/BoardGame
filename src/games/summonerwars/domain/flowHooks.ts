@@ -11,8 +11,9 @@ import { SW_EVENTS, PHASE_ORDER } from './types';
 import { getSummoner, HAND_SIZE } from './helpers';
 import { triggerAllUnitsAbilities, resolveAbilityEffects } from './abilityResolver';
 import { abilityRegistry } from './abilities';
+import { getUnitAbilities } from './helpers';
 
-const PHASE_START_ABILITIES: Record<GamePhase, string[]> = {
+export const PHASE_START_ABILITIES: Record<GamePhase, string[]> = {
   factionSelect: [],
   summon: ['guidance'],
   move: ['illusion'],
@@ -22,7 +23,7 @@ const PHASE_START_ABILITIES: Record<GamePhase, string[]> = {
   draw: [],
 };
 
-const PHASE_END_ABILITIES: Record<GamePhase, string[]> = {
+export const PHASE_END_ABILITIES: Record<GamePhase, string[]> = {
   factionSelect: [],
   summon: [],
   move: [],
@@ -46,7 +47,7 @@ function triggerPhaseAbilities(
     for (let col = 0; col < core.board[row].length; col++) {
       const unit = core.board[row]?.[col]?.unit;
       if (!unit || unit.owner !== playerId) continue;
-      const unitAbilityIds = unit.card.abilities ?? [];
+      const unitAbilityIds = getUnitAbilities(unit);
       for (const abilityId of abilityIds) {
         if (!unitAbilityIds.includes(abilityId)) continue;
         const def = abilityRegistry.get(abilityId);

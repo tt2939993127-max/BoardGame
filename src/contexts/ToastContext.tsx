@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 
 export type ToastTone = 'success' | 'info' | 'warning' | 'error';
 
@@ -91,22 +91,29 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return content;
     };
 
-    const success = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: any) =>
+    type ToastOptions = Partial<Omit<Toast, 'id' | 'createdAt' | 'tone' | 'message' | 'title'>>;
+
+    const success = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) =>
         show({ tone: 'success', message: normalizeContent(message), title: title ? normalizeContent(title) : undefined, ...options }), [show]);
 
-    const info = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: any) =>
+    const info = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) =>
         show({ tone: 'info', message: normalizeContent(message), title: title ? normalizeContent(title) : undefined, ...options }), [show]);
 
-    const warning = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: any) =>
+    const warning = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) =>
         show({ tone: 'warning', message: normalizeContent(message), title: title ? normalizeContent(title) : undefined, ...options }), [show]);
 
-    const error = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: any) =>
+    const error = useCallback((message: string | ToastContent, title?: string | ToastContent, options?: ToastOptions) =>
         show({ tone: 'error', message: normalizeContent(message), title: title ? normalizeContent(title) : undefined, ...options }), [show]);
 
     const clear = useCallback(() => setToasts([]), []);
 
+    // useMemo 包裹 Provider value，避免 toasts 变化时所有只调用 show/dismiss 的消费者也重渲染
+    const value = useMemo(() => ({
+        toasts, show, success, info, warning, error, dismiss, clear,
+    }), [toasts, show, success, info, warning, error, dismiss, clear]);
+
     return (
-        <ToastContext.Provider value={{ toasts, show, success, info, warning, error, dismiss, clear }}>
+        <ToastContext.Provider value={value}>
             {children}
         </ToastContext.Provider>
     );

@@ -1,7 +1,7 @@
 # Audio Asset Symbols (Flat & Grouped)
 
-Generated on: 2026/1/25 15:33:54
-Total Metadata Symbols: 1659 (from 6775 physical files)
+Generated on: 2026/2/10 11:44:47
+Total Metadata Symbols: 1659 (from 6776 physical files)
 
 > [!TIP]
 > This is a **FLAT LIST** of all audio filenames found in the assets directory.

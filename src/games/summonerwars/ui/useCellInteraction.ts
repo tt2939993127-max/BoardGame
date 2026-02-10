@@ -229,6 +229,54 @@ export function useCellInteraction({
         })
         .map(u => u.position);
     }
+    // 幻化：3格内的士兵（任意阵营）
+    if (abilityMode.abilityId === 'illusion') {
+      let sourcePos: CellCoord | null = null;
+      for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLS; col++) {
+          const unit = core.board[row]?.[col]?.unit;
+          if (unit && unit.cardId === abilityMode.sourceUnitId) {
+            sourcePos = { row, col };
+            break;
+          }
+        }
+        if (sourcePos) break;
+      }
+      if (!sourcePos) return [];
+      const targets: CellCoord[] = [];
+      for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLS; col++) {
+          const unit = core.board[row]?.[col]?.unit;
+          if (!unit) continue;
+          if (unit.card.unitClass !== 'common') continue;
+          const dist = manhattanDistance(sourcePos, { row, col });
+          if (dist > 0 && dist <= 3) {
+            targets.push({ row, col });
+          }
+        }
+      }
+      return targets;
+    }
+    // 喂养巨食兽：相邻友方单位（非自身）
+    if (abilityMode.abilityId === 'feed_beast') {
+      let sourcePos: CellCoord | null = null;
+      for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLS; col++) {
+          const unit = core.board[row]?.[col]?.unit;
+          if (unit && unit.cardId === abilityMode.sourceUnitId) {
+            sourcePos = { row, col };
+            break;
+          }
+        }
+        if (sourcePos) break;
+      }
+      if (!sourcePos) return [];
+      const adj = getAdjacentCells(sourcePos);
+      return adj.filter(p => {
+        const unit = core.board[p.row]?.[p.col]?.unit;
+        return unit && unit.owner === (myPlayerId as '0' | '1') && unit.cardId !== abilityMode.sourceUnitId;
+      });
+    }
     return [];
   }, [abilityMode, core, myPlayerId]);
 
@@ -615,7 +663,7 @@ export function useCellInteraction({
       return;
     }
 
-    // 技能单位选择模式（火祀召唤、吸取生命）
+    // 技能单位选择模式（火祀召唤、吸取生命、幻化）
     if (abilityMode && abilityMode.step === 'selectUnit') {
       const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
@@ -626,6 +674,20 @@ export function useCellInteraction({
               abilityId: abilityMode.abilityId as PendingBeforeAttack['abilityId'],
               sourceUnitId: abilityMode.sourceUnitId,
               targetUnitId: targetUnit.cardId,
+            });
+          } else if (abilityMode.abilityId === 'illusion') {
+            // 幻化：发送目标位置
+            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+              abilityId: 'illusion',
+              sourceUnitId: abilityMode.sourceUnitId,
+              targetPosition: { row: gameRow, col: gameCol },
+            });
+          } else if (abilityMode.abilityId === 'feed_beast') {
+            // 喂养巨食兽：选择相邻友方单位移除
+            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+              abilityId: 'feed_beast',
+              sourceUnitId: abilityMode.sourceUnitId,
+              targetPosition: { row: gameRow, col: gameCol },
             });
           } else {
             moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({

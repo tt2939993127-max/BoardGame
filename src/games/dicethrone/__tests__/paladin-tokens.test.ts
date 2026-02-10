@@ -80,8 +80,8 @@ describe('圣骑士 Token 定义', () => {
         );
     });
 
-    it('Token 数量应为 5', () => {
-        expect(PALADIN_TOKENS).toHaveLength(5);
+    it('Token 数量应为 6', () => {
+        expect(PALADIN_TOKENS).toHaveLength(6);
     });
 });
 

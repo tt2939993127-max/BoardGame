@@ -21,12 +21,14 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
     resetAbilityInit();
+    clearPromptContinuationRegistry();
     initAllAbilities();
 });
 
@@ -102,7 +104,7 @@ function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
 
 describe('幽灵派系能力', () => {
     describe('ghost_ghost（幽灵：弃一张手牌）', () => {
-        it('打出时弃掉一张手牌', () => {
+        it('多张手牌时创建 Prompt 选择弃牌', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -118,10 +120,30 @@ describe('幽灵派系能力', () => {
             });
 
             const events = execPlayMinion(state, '0', 'm1', 0);
+            // 多张可弃手牌时应创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            expect(promptEvents.length).toBe(1);
+            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('ghost_ghost');
+        });
+
+        it('单张手牌时自动弃牌', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [
+                            makeCard('m1', 'ghost_ghost', 'minion', '0'),
+                            makeCard('h1', 'test_card', 'action', '0'),
+                        ],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+            });
+
+            const events = execPlayMinion(state, '0', 'm1', 0);
             const discardEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DISCARDED);
             expect(discardEvents.length).toBe(1);
             expect((discardEvents[0] as any).payload.playerId).toBe('0');
-            // 弃掉第一张非自身的手牌
             expect((discardEvents[0] as any).payload.cardUids).toEqual(['h1']);
         });
 
@@ -468,7 +490,7 @@ describe('黑熊骑兵派系能力', () => {
 
 describe('蒸汽朋克派系能力', () => {
     describe('steampunk_scrap_diving（废物利用：从弃牌堆取回行动卡）', () => {
-        it('从弃牌堆取回一张行动卡到手牌', () => {
+        it('多张行动卡时创建 Prompt 选择取回', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -484,9 +506,29 @@ describe('蒸汽朋克派系能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
+            // 多张行动卡时应创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            expect(promptEvents.length).toBe(1);
+            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('steampunk_scrap_diving');
+        });
+
+        it('单张行动卡时自动取回', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'steampunk_scrap_diving', 'action', '0')],
+                        discard: [
+                            makeCard('d1', 'test_minion', 'minion', '0'),
+                            makeCard('d2', 'test_action', 'action', '0'),
+                        ],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+
+            const events = execPlayAction(state, '0', 'a1');
             const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
             expect(recoverEvents.length).toBe(1);
-            // 取回第一张行动卡 d2
             expect((recoverEvents[0] as any).payload.cardUids).toEqual(['d2']);
         });
 

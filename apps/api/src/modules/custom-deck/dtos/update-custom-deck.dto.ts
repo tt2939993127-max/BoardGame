@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
     IsArray,
+    IsBoolean,
     IsNotEmpty,
     IsOptional,
     IsString,
@@ -35,4 +36,9 @@ export class UpdateCustomDeckDto {
     @ValidateNested({ each: true })
     @Type(() => CardEntryDto)
     cards?: CardEntryDto[];
+
+    /** 自由组卡模式 */
+    @IsOptional()
+    @IsBoolean()
+    freeMode?: boolean;
 }

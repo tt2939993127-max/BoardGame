@@ -22,6 +22,7 @@ export interface SavedDeckSummary {
     summonerFaction: string;
     cardCount: number;
     updatedAt: string;
+    freeMode: boolean;
 }
 
 /** 创建/更新牌组的请求体 */
@@ -30,6 +31,7 @@ export interface CustomDeckPayload {
     summonerId: string;
     summonerFaction: string;
     cards: SerializedCardEntry[];
+    freeMode?: boolean;
 }
 
 // ============================================================================
@@ -94,6 +96,7 @@ export async function getCustomDeck(token: string, id: string): Promise<Serializ
         summonerId: doc.summonerId,
         summonerFaction: doc.summonerFaction,
         cards: doc.cards,
+        ...(doc.freeMode ? { freeMode: true } : {}),
     };
 }
 
@@ -163,6 +166,7 @@ interface RawDeckDocument {
     summonerId: string;
     summonerFaction: FactionId;
     cards: SerializedCardEntry[];
+    freeMode?: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -176,5 +180,6 @@ function mapToSummary(doc: RawDeckDocument): SavedDeckSummary {
         summonerFaction: doc.summonerFaction,
         cardCount: doc.cards.reduce((sum, entry) => sum + entry.count, 0),
         updatedAt: doc.updatedAt,
+        freeMode: doc.freeMode ?? false,
     };
 }

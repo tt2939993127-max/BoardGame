@@ -496,6 +496,16 @@ export function getDrawCount(handSize: number): number {
 import { abilityRegistry } from './abilities';
 
 /**
+ * 获取单位的所有有效技能（包含临时技能）
+ * 合并 card.abilities 和 tempAbilities，用于所有技能检查
+ */
+export function getUnitAbilities(unit: BoardUnit): string[] {
+  const base = unit.card.abilities ?? [];
+  const temp = unit.tempAbilities ?? [];
+  return temp.length > 0 ? [...base, ...temp] : base;
+}
+
+/**
  * 检查风暴侵袭主动事件的移动减少量
  * 任一玩家主动事件区有 trickster-storm-assault 时，所有单位减少移动1格
  */
@@ -515,21 +525,21 @@ export function getStormAssaultReduction(state: SummonerWarsCore): number {
  * 检查单位是否有禁足（immobile）技能
  */
 export function isImmobile(unit: BoardUnit): boolean {
-  return (unit.card.abilities ?? []).includes('immobile');
+  return getUnitAbilities(unit).includes('immobile');
 }
 
 /**
  * 检查单位是否有冲锋（charge）技能
  */
 export function hasChargeAbility(unit: BoardUnit): boolean {
-  return (unit.card.abilities ?? []).includes('charge');
+  return getUnitAbilities(unit).includes('charge');
 }
 
 /**
  * 检查单位是否有凶残（ferocity）技能
  */
 export function hasFerocityAbility(unit: BoardUnit): boolean {
-  return (unit.card.abilities ?? []).includes('ferocity');
+  return getUnitAbilities(unit).includes('ferocity');
 }
 
 /**
@@ -551,7 +561,7 @@ export function getUnitMoveEnhancements(
   let extraDistance = 0;
   let canPassThrough = false;
   let canPassStructures = false;
-  const abilities = unit.card.abilities ?? [];
+  const abilities = getUnitAbilities(unit);
   const isChargeUnit = hasChargeAbility(unit);
 
   for (const abilityId of abilities) {
@@ -584,7 +594,7 @@ export function getUnitMoveEnhancements(
       for (let col = 0; col < BOARD_COLS; col++) {
         const nearby = state.board[row]?.[col]?.unit;
         if (nearby && nearby.owner === unit.owner && nearby.cardId !== unit.cardId) {
-          const nearbyAbilities = nearby.card.abilities ?? [];
+          const nearbyAbilities = getUnitAbilities(nearby);
           if (nearbyAbilities.includes('aerial_strike')) {
             const dist = manhattanDistance(unitPos, { row, col });
             if (dist <= 2) {
@@ -747,7 +757,7 @@ export function getValidMoveTargetsEnhanced(state: SummonerWarsCore, from: CellC
  * 获取单位的有效攻击范围（考虑远射技能）
  */
 export function getEffectiveAttackRange(unit: BoardUnit): number {
-  const abilities = unit.card.abilities ?? [];
+  const abilities = getUnitAbilities(unit);
   if (abilities.includes('ranged')) {
     return 4; // 远射：4格
   }
@@ -803,7 +813,7 @@ export function getValidAttackTargetsEnhanced(state: SummonerWarsCore, attacker:
  * 检查单位是否有稳固（stable）技能
  */
 export function hasStableAbility(unit: BoardUnit): boolean {
-  return (unit.card.abilities ?? []).includes('stable');
+  return getUnitAbilities(unit).includes('stable');
 }
 
 /**
@@ -879,7 +889,7 @@ export function getPushPullOptions(
  * 检查单位是否有缠斗（rebound/entangle）技能
  */
 export function hasEntangleAbility(unit: BoardUnit): boolean {
-  const abilities = unit.card.abilities ?? [];
+  const abilities = getUnitAbilities(unit);
   return abilities.includes('rebound') || abilities.includes('entangle');
 }
 
@@ -906,7 +916,7 @@ export function getEntangleUnits(
  * 检查单位是否有迷魂（evasion）技能
  */
 export function hasEvasionAbility(unit: BoardUnit): boolean {
-  return (unit.card.abilities ?? []).includes('evasion');
+  return getUnitAbilities(unit).includes('evasion');
 }
 
 /**

@@ -246,7 +246,7 @@ describe('僵尸派系能力', () => {
         expect(newState.players['0'].deck[0].uid).toBe('d2');
     });
 
-    it('zombie_grave_robbing: 从弃牌堆取回一张卡', () => {
+    it('zombie_grave_robbing: 多张弃牌时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -261,13 +261,30 @@ describe('僵尸派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
+        // 多张弃牌 → Prompt 选择
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('zombie_grave_robbing');
+    });
+
+    it('zombie_grave_robbing: 单张弃牌时自动取回', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'zombie_grave_robbing', 'action', '0')],
+                    discard: [makeCard('d1', 'test_action', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const events = execPlayAction(state, '0', 'a1');
         const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
         expect(recoverEvents.length).toBe(1);
-        // MVP：取回第一张卡 d1
         expect((recoverEvents[0] as any).payload.cardUids).toEqual(['d1']);
     });
 
-    it('zombie_not_enough_bullets: 取回所有同名随从', () => {
+    it('zombie_not_enough_bullets: 多组同名随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -284,20 +301,35 @@ describe('僵尸派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
+        // 2组不同 defId → Prompt 选择
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('zombie_not_enough_bullets');
+    });
+
+    it('zombie_not_enough_bullets: 单组同名随从时自动取回', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'zombie_not_enough_bullets', 'action', '0')],
+                    discard: [
+                        makeCard('d1', 'zombie_walker', 'minion', '0'),
+                        makeCard('d2', 'zombie_walker', 'minion', '0'),
+                        makeCard('d4', 'zombie_walker', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const events = execPlayAction(state, '0', 'a1');
         const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
         expect(recoverEvents.length).toBe(1);
-        // 应取回所有 zombie_walker（d1, d2, d4）
         const recoveredUids = (recoverEvents[0] as any).payload.cardUids;
         expect(recoveredUids.length).toBe(3);
         expect(recoveredUids).toContain('d1');
         expect(recoveredUids).toContain('d2');
         expect(recoveredUids).toContain('d4');
-
-        const newState = applyEvents(state, events);
-        // 手牌中应有 3 张 zombie_walker（a1 已打出进弃牌堆）
-        expect(newState.players['0'].hand.filter(c => c.defId === 'zombie_walker').length).toBe(3);
-        // 弃牌堆只剩 zombie_grave_digger + 打出的 a1
-        expect(newState.players['0'].discard.some(c => c.uid === 'd3')).toBe(true);
     });
 
     it('zombie_lend_a_hand: 弃牌堆洗回牌库', () => {

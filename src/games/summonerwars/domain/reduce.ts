@@ -252,7 +252,9 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       const newBoard = core.board.map(row => row.map(cell => {
         const newCell = { ...cell };
         if (newCell.unit) {
-          newCell.unit = { ...newCell.unit, hasMoved: false, hasAttacked: false, wasAttackedThisTurn: false };
+          // 回合切换：重置移动/攻击状态，清除临时技能（幻化）
+          const { tempAbilities: _removed, ...unitWithoutTemp } = newCell.unit;
+          newCell.unit = { ...unitWithoutTemp, hasMoved: false, hasAttacked: false, wasAttackedThisTurn: false };
         }
         return newCell;
       }));
@@ -413,6 +415,20 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     case SW_EVENTS.GRAB_FOLLOW_REQUESTED: {
       // 通知事件，不修改状态（由 UI 消费）
       return core;
+    }
+
+    case SW_EVENTS.ABILITIES_COPIED: {
+      // 幻化：将目标技能复制到源单位的 tempAbilities
+      const { sourceUnitId: copySourceId, copiedAbilities: copied } = payload as {
+        sourceUnitId: string; copiedAbilities: string[];
+      };
+      const newBoard = core.board.map(row => row.map(cell => {
+        if (cell.unit && cell.unit.cardId === copySourceId) {
+          return { ...cell, unit: { ...cell.unit, tempAbilities: copied } };
+        }
+        return cell;
+      }));
+      return { ...core, board: newBoard };
     }
 
     case SW_EVENTS.HYPNOTIC_LURE_MARKED: {

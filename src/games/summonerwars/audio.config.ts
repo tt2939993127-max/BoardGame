@@ -8,8 +8,8 @@ import type { GamePhase, PlayerId, SummonerWarsCore } from './domain/types';
 import { SW_EVENTS } from './domain/types';
 import { abilityRegistry } from './domain/abilities';
 
-const BGM_NORMAL_KEY = 'bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main';
-const BGM_BATTLE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main';
+const BGM_TO_THE_WALL_KEY = 'bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_main';
+const BGM_TO_THE_WALL_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_intensity_2';
 const BGM_CORSAIR_KEY = 'bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main';
 const BGM_LONELY_BARD_KEY = 'bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main';
 const BGM_CORSAIR_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_intensity_2';
@@ -18,6 +18,13 @@ const BGM_LUMINESCE_KEY = 'bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ether
 const BGM_LUMINESCE_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_intensity_2';
 const BGM_WIND_CHIME_KEY = 'bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_main';
 const BGM_WIND_CHIME_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_intensity_2';
+// 新增 Fantasy Vol 7/8 曲目
+const BGM_ELDER_AWAKENING_KEY = 'bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_main';
+const BGM_ELDER_AWAKENING_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_intensity_2';
+const BGM_FEYSONG_KEY = 'bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_main';
+const BGM_FEYSONG_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_intensity_2';
+const BGM_STONE_CHANT_KEY = 'bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_main';
+const BGM_STONE_CHANT_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_intensity_2';
 const STINGER_WIN_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win';
 const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose';
 
@@ -279,91 +286,45 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
         MAGIC_SPEND_KEY,
     ],
     bgm: [
-        {
-            key: BGM_NORMAL_KEY,
-            name: 'Dragon Dance',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle' },
-        },
-        {
-            key: BGM_BATTLE_KEY,
-            name: 'Shields and Spears',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle_intense' },
-        },
-        {
-            key: BGM_CORSAIR_KEY,
-            name: 'Corsair',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle' },
-        },
-        {
-            key: BGM_LONELY_BARD_KEY,
-            name: 'Lonely Bard',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle' },
-        },
-        {
-            key: BGM_CORSAIR_INTENSE_KEY,
-            name: 'Corsair (Intensity 2)',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle_intense' },
-        },
-        {
-            key: BGM_LONELY_BARD_INTENSE_KEY,
-            name: 'Lonely Bard (Intensity 2)',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle_intense' },
-        },
-        {
-            key: BGM_LUMINESCE_KEY,
-            name: 'Luminesce',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle' },
-        },
-        {
-            key: BGM_LUMINESCE_INTENSE_KEY,
-            name: 'Luminesce (Intensity 2)',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle_intense' },
-        },
-        {
-            key: BGM_WIND_CHIME_KEY,
-            name: 'Wind Chime',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle' },
-        },
-        {
-            key: BGM_WIND_CHIME_INTENSE_KEY,
-            name: 'Wind Chime (Intensity 2)',
-            src: '',
-            volume: 0.5,
-            category: { group: 'bgm', sub: 'battle_intense' },
-        },
+        // --- normal 组（7 首）---
+        { key: BGM_TO_THE_WALL_KEY, name: 'To The Wall', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle' } },
+        { key: BGM_CORSAIR_KEY, name: 'Corsair', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle' } },
+        { key: BGM_LONELY_BARD_KEY, name: 'Lonely Bard', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle' } },
+        { key: BGM_LUMINESCE_KEY, name: 'Luminesce', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle' } },
+        { key: BGM_WIND_CHIME_KEY, name: 'Wind Chime', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle' } },
+        { key: BGM_ELDER_AWAKENING_KEY, name: 'Elder Awakening', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle' } },
+        { key: BGM_FEYSONG_KEY, name: 'Feysong Fields', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle' } },
+        // --- battle 组（9 首）---
+        { key: BGM_STONE_CHANT_KEY, name: 'Stone Chant', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_TO_THE_WALL_INTENSE_KEY, name: 'To The Wall (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_CORSAIR_INTENSE_KEY, name: 'Corsair (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_LONELY_BARD_INTENSE_KEY, name: 'Lonely Bard (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_LUMINESCE_INTENSE_KEY, name: 'Luminesce (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_WIND_CHIME_INTENSE_KEY, name: 'Wind Chime (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_ELDER_AWAKENING_INTENSE_KEY, name: 'Elder Awakening (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_FEYSONG_INTENSE_KEY, name: 'Feysong Fields (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
+        { key: BGM_STONE_CHANT_INTENSE_KEY, name: 'Stone Chant (Intensity 2)', src: '', volume: 0.5, category: { group: 'bgm', sub: 'battle_intense' } },
     ],
     bgmGroups: {
         normal: [
-            BGM_NORMAL_KEY,
+            BGM_TO_THE_WALL_KEY,
             BGM_CORSAIR_KEY,
             BGM_LONELY_BARD_KEY,
             BGM_LUMINESCE_KEY,
             BGM_WIND_CHIME_KEY,
+            BGM_ELDER_AWAKENING_KEY,
+            BGM_FEYSONG_KEY,
         ],
         battle: [
-            BGM_BATTLE_KEY,
+            BGM_STONE_CHANT_KEY,
+            BGM_TO_THE_WALL_INTENSE_KEY,
             BGM_CORSAIR_INTENSE_KEY,
             BGM_LONELY_BARD_INTENSE_KEY,
             BGM_LUMINESCE_INTENSE_KEY,
             BGM_WIND_CHIME_INTENSE_KEY,
+            BGM_ELDER_AWAKENING_INTENSE_KEY,
+            BGM_FEYSONG_INTENSE_KEY,
+            BGM_STONE_CHANT_INTENSE_KEY,
         ],
     },
     eventSoundMap: {},
@@ -456,12 +417,12 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
                 const { currentPhase } = context.ctx as { currentPhase?: GamePhase };
                 return currentPhase === 'attack';
             },
-            key: BGM_BATTLE_KEY,
+            key: BGM_STONE_CHANT_KEY,
             group: 'battle',
         },
         {
             when: () => true,
-            key: BGM_NORMAL_KEY,
+            key: BGM_TO_THE_WALL_KEY,
             group: 'normal',
         },
     ],

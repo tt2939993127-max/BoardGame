@@ -105,7 +105,7 @@ const run = async () => {
     const { source, output } = parseArgs(process.argv.slice(2));
     const files = await walkFiles(source);
     const entries = [];
-    const seenKeys = new Set();
+    const entriesByKey = new Map();
 
     for (const filePath of files) {
         if (filePath === output) continue;
@@ -113,12 +113,25 @@ const run = async () => {
         if (!SUPPORTED_EXTS.has(ext)) continue;
 
         const relative = toPosixPath(path.relative(source, filePath));
+        const isCompressed = relative.split('/').includes(COMPRESSED_SEGMENT);
         const entry = buildEntry(relative);
         if (!entry) continue;
-        if (seenKeys.has(entry.key)) {
-            throw new Error(`[AudioRegistry] 发现重复 key: ${entry.key}`);
+        const existing = entriesByKey.get(entry.key);
+        if (!existing) {
+            entriesByKey.set(entry.key, { entry, isCompressed });
+            continue;
         }
-        seenKeys.add(entry.key);
+        if (existing.isCompressed && !isCompressed) {
+            continue;
+        }
+        if (!existing.isCompressed && isCompressed) {
+            entriesByKey.set(entry.key, { entry, isCompressed });
+            continue;
+        }
+        throw new Error(`[AudioRegistry] 发现重复 key: ${entry.key}`);
+    }
+
+    for (const { entry } of entriesByKey.values()) {
         entries.push(entry);
     }
 

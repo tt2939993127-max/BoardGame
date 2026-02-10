@@ -114,6 +114,25 @@ export const PALADIN_TOKENS: TokenDef[] = [
     },
 
     // ============================================
+    // passive 类型（被动标记）
+    // ============================================
+
+    /**
+     * 教会税升级 (Tithes Upgraded) - income 阶段额外 +1CP
+     * 升级后，每次 income 阶段获得 2CP 而非 1CP
+     */
+    {
+        id: TOKEN_IDS.TITHES_UPGRADED,
+        name: tokenText(TOKEN_IDS.TITHES_UPGRADED, 'name'),
+        icon: '💰',
+        colorTheme: 'from-emerald-500 to-green-600',
+        description: tokenText(TOKEN_IDS.TITHES_UPGRADED, 'description') as unknown as string[],
+        stackLimit: 1,
+        category: 'unique',
+        frameId: 'tithes-upgraded',
+    },
+
+    // ============================================
     // unique 类型（特殊触发）
     // ============================================
 
@@ -156,4 +175,5 @@ export const PALADIN_INITIAL_TOKENS: TokenState = {
     [TOKEN_IDS.PROTECT]: 0,
     [TOKEN_IDS.RETRIBUTION]: 0,
     [TOKEN_IDS.BLESSING_OF_DIVINITY]: 0,
+    [TOKEN_IDS.TITHES_UPGRADED]: 0,
 };

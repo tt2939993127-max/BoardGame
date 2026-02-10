@@ -1,7 +1,7 @@
 # 音效语义目录
 
 > 自动生成。`node scripts/audio/generate_audio_catalog.js`
-> 6825 条 → 531 组
+> 7337 条 → 533 组
 
 ## 查找流程
 
@@ -15,13 +15,13 @@
 | 分类 | 组 | 条 | 说明 |
 |------|----|----|------|
 | ambient | 10 | 455 | 环境（生存/制作/拾取/家具） |
-| bgm | 13 | 200 | BGM（空灵/奇幻/放克/休闲） |
+| bgm | 13 | 350 | BGM（空灵/奇幻/放克/休闲） |
 | card | 10 | 111 | 卡牌（翻/洗/抽/放/魔法牌） |
 | coins | 8 | 33 | 金币（掉落/奖励/收集） |
 | combat | 52 | 1104 | 战斗（剑/斧/拳/弓/盾/爆炸） |
 | cyberpunk | 19 | 357 | 赛博朋克（科幻UI/武器） |
 | dice | 6 | 29 | 骰子（投掷/碰撞/滚动） |
-| fantasy | 79 | 348 | 奇幻（弓箭/盾/治疗/火焰） |
+| fantasy | 80 | 530 | 奇幻（弓箭/盾/治疗/火焰） |
 | magic | 159 | 1737 | 魔法（施法/元素/光暗/召唤） |
 | misc | 1 | 3 | 杂项 |
 | monster | 69 | 896 | 怪物（咆哮/攻击/死亡） |
@@ -31,7 +31,7 @@
 | stinger | 8 | 22 | 过场（胜利/失败） |
 | system | 8 | 174 | 系统（移动/通知/庆祝） |
 | token | 8 | 35 | Token（放置/拾取） |
-| ui | 27 | 627 | UI（点击/弹窗/通知/信号） |
+| ui | 28 | 807 | UI（点击/弹窗/通知/信号） |
 
 ## ambient
 
@@ -55,7 +55,7 @@
 | bubblegum_rt | 5 | `bgm.*bubblegum_rt` | casual_bubblegum, casual_bubblegum_cut, ca... |
 | dance_class_rt | 5 | `bgm.*dance_class_rt` | casual_dance_class, casual_dance_class_cut... |
 | ethereal | 50 | `bgm.*ethereal` | cloud_cathedral_rt, enigmatic_badger_rt, e... |
-| fantasy | 50 | `bgm.*fantasy` | cabin_lunch_rt, corsair_rt, dragon_dance_r... |
+| fantasy | 200 | `bgm.*fantasy` | a_witch_rt, above_rt, black_doves_rt, cabi... |
 | field_day_rt | 5 | `bgm.*field_day_rt` | casual_field_day, casual_field_day_cut, ca... |
 | funk | 50 | `bgm.*funk` | big_shot_rt, dream_machine_rt, funk_big_sh... |
 | lizards_rt | 5 | `bgm.*lizards_rt` | casual_lizards, casual_lizards_cut, casual... |
@@ -234,6 +234,7 @@
 | fire_bow_buff | 1 | `fantasy.*fire_bow_buff` |  |
 | fire_bow_whoosh | 2 | `fantasy.*fire_bow_whoosh` |  |
 | fire_sword_buff | 3 | `fantasy.*fire_sword_buff` |  |
+| gothic_fantasy_sound_fx_pack_vol | 182 | `fantasy.*gothic_fantasy_sound_fx_pack_vol` | angel_dust, banish, beast_footstep, bell_o... |
 | ice_arrow_whoosh | 2 | `fantasy.*ice_arrow_whoosh` |  |
 | ice_bow_buff | 3 | `fantasy.*ice_bow_buff` |  |
 | items_misc | 53 | `fantasy.*items_misc` | black_smith_hammer, black_smith_tool, bush... |
@@ -632,6 +633,7 @@
 | dialog | 16 | `ui.*dialog` | dialog_choice, dialog_screen_appears, mous... |
 | enter_or_discover_new_territory_... | 10 | `ui.*enter_or_discover_new_territory_pop_up` | enter_or_discover_new_territory_pop_up |
 | experience_popup | 6 | `ui.*experience_popup` | experience_popup |
+| fantasy_ui_sound_fx_pack_vol | 180 | `ui.*fantasy_ui_sound_fx_pack_vol` | back_a, back_b, back_c, backwards_navigati... |
 | fillup | 12 | `ui.*fillup` | sfx_ui_fillup_futuristic, sfx_ui_fillup_ge... |
 | insufficient_resources_popup | 8 | `ui.*insufficient_resources_popup` | insufficient_resources_popup |
 | inventory | 102 | `ui.*inventory` | click_object_or_item, close_and_open_inven... |

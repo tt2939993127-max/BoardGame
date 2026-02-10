@@ -12,7 +12,7 @@ import { cellToNormalizedBounds } from '../../../core/ui/board-hit-test';
 import type { SummonerWarsCore, CellCoord } from '../domain/types';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import { CardSprite } from './CardSprite';
-import { getUnitSpriteConfig, getStructureSpriteConfig, getEventSpriteConfig } from './spriteHelpers';
+import { getUnitSpriteConfig, getStructureSpriteConfig } from './spriteHelpers';
 import type { AbilityModeState, DyingEntity } from './useGameEvents';
 import type { AnnihilateModeState } from './StatusBanners';
 
@@ -438,43 +438,22 @@ const UnitCell: React.FC<{
             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
           </svg>
         </button>
-        {/* 附加卡 - 叠在单位卡下方，露出名字 */}
-        {hasAttached && unit.attachedCards && unit.attachedCards.map((attachedCard, idx) => {
-          const eventSprite = getEventSpriteConfig(attachedCard);
-          return (
-            <div
-              key={attachedCard.id}
-              className="absolute left-0 right-0 cursor-pointer pointer-events-auto"
-              style={{
-                aspectRatio: '0.714',
-                [isMyUnit ? 'bottom' : 'top']: `-${8 + idx * 8}%`,
-                zIndex: -1 - idx,
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onMagnifyEventCard?.(attachedCard);
-              }}
-            >
-              <CardSprite
-                atlasId={eventSprite.atlasId}
-                frameIndex={eventSprite.frameIndex}
-                className={`rounded ${!isMyUnit ? 'rotate-180' : ''}`}
-              />
-            </div>
-          );
-        })}
-        {/* 附加标识 - 单位卡底部居中 */}
-        {hasAttached && (
+        {/* 附加卡名条 - 覆盖在单位卡底部（我方）/ 顶部（敌方），正 z-index 避免溢出裁切 */}
+        {hasAttached && unit.attachedCards && unit.attachedCards.map((attachedCard, idx) => (
           <div
-            className={`absolute ${isMyUnit ? 'bottom-0' : 'top-0'} left-1/2 -translate-x-1/2 ${isMyUnit ? 'translate-y-1/2' : '-translate-y-1/2'} bg-orange-500/90 text-white text-[0.5vw] px-[0.3vw] rounded-sm shadow z-20 pointer-events-auto cursor-pointer`}
+            key={attachedCard.id}
+            className={`absolute left-0 right-0 z-[5] cursor-pointer pointer-events-auto`}
+            style={{ [isMyUnit ? 'bottom' : 'top']: `${idx * 14}%` }}
             onClick={(e) => {
               e.stopPropagation();
-              if (unit.attachedCards?.[0]) props.onMagnifyEventCard?.(unit.attachedCards[0]);
+              props.onMagnifyEventCard?.(attachedCard);
             }}
           >
-            {t('ui.attached')}
+            <div className="bg-gradient-to-r from-amber-800/90 to-amber-700/90 text-white text-[0.45vw] text-center leading-tight py-[0.15vw] rounded-sm shadow-md border border-amber-500/30 truncate px-[0.3vw]">
+              {attachedCard.name}
+            </div>
           </div>
-        )}
+        ))}
       </div>
     </motion.div>
   );

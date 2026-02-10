@@ -15,11 +15,12 @@ import type {
     VpAwardedEvent,
     MinionCardDef,
 } from '../domain/types';
-import { getCardDef } from '../data/cards';
+import { getCardDef, getBaseDef } from '../data/cards';
 import {
     drawMadnessCards, grantExtraAction, destroyMinion,
-    returnMadnessCard, getMinionPower,
+    returnMadnessCard, getMinionPower, setPromptContinuation, buildMinionTargetOptions,
 } from '../domain/abilityHelpers';
+import { registerPromptContinuation } from '../domain/promptContinuation';
 
 /** 注册克苏鲁之仆派系所有能力 */
 export function registerCthulhuAbilities(): void {
@@ -174,25 +175,36 @@ function cthulhuSealIsBroken(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 腐化 onPlay：抽1张疯狂卡 + 消灭一个随从（MVP：自动选最弱对手随从） */
+/** 腐化 onPlay：抽1张疯狂卡 + 消灭一个随从 */
 function cthulhuCorruption(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'cthulhu_corruption', ctx.now);
     if (madnessEvt) events.push(madnessEvt);
-    // 找最弱的对手随从
-    let weakest: { uid: string; defId: string; baseIndex: number; ownerId: string; power: number } | undefined;
+    // 收集所有对手随从
+    const targets: { uid: string; defId: string; baseIndex: number; ownerId: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
             if (m.controller === ctx.playerId) continue;
-            const effectivePower = getMinionPower(ctx.state, m, i);
-            if (!weakest || effectivePower < weakest.power) {
-                weakest = { uid: m.uid, defId: m.defId, baseIndex: i, ownerId: m.owner, power: effectivePower };
-            }
+            const def = getCardDef(m.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? m.defId;
+            const power = getMinionPower(ctx.state, m, i);
+            const baseDef = getBaseDef(ctx.state.bases[i].defId);
+            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+            targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, ownerId: m.owner, label: `${name} (力量 ${power}) @ ${baseName}` });
         }
     }
-    if (weakest) {
-        events.push(destroyMinion(weakest.uid, weakest.defId, weakest.baseIndex, weakest.ownerId, 'cthulhu_corruption', ctx.now));
+    if (targets.length === 0) return { events };
+    if (targets.length === 1) {
+        events.push(destroyMinion(targets[0].uid, targets[0].defId, targets[0].baseIndex, targets[0].ownerId, 'cthulhu_corruption', ctx.now));
+        return { events };
     }
+    // 多目标：Prompt 选择
+    const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    events.push(setPromptContinuation({
+        abilityId: 'cthulhu_corruption',
+        playerId: ctx.playerId,
+        data: { promptConfig: { title: '选择要消灭的随从', options: buildMinionTargetOptions(options) } },
+    }, ctx.now));
     return { events };
 }
 
@@ -308,4 +320,22 @@ function cthulhuServitor(ctx: AbilityContext): AbilityResult {
     }
 
     return { events };
+}
+
+
+// ============================================================================
+// Prompt 继续函数
+// ============================================================================
+
+/** 注册克苏鲁之仆派系的 Prompt 继续函数 */
+export function registerCthulhuPromptContinuations(): void {
+    // 腐化：选择目标后消灭
+    registerPromptContinuation('cthulhu_corruption', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'cthulhu_corruption', ctx.now)];
+    });
 }

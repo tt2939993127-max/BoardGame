@@ -11,7 +11,10 @@ import type {
     BonusDieRolledEvent,
     DamageDealtEvent,
     PreventDamageEvent,
+    HealAppliedEvent,
+    CpChangedEvent,
 } from '../types';
+import { CP_MAX } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
 
@@ -88,9 +91,11 @@ function handleHolyLightRoll({ targetId, sourceAbilityId, state, timestamp, rand
     // 祈祷 -> CP
     if (prayCount > 0) {
         const cpAmount = prayCount * 2;
+        const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
+        const newCp = Math.min(currentCp + cpAmount, CP_MAX);
         events.push({
             type: 'CP_CHANGED',
-            payload: { playerId: targetId, delta: cpAmount, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + cpAmount },
+            payload: { playerId: targetId, delta: cpAmount, newValue: newCp },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 40,
         });
@@ -169,9 +174,11 @@ function handleHolyDefenseRoll({ targetId, attackerId, sourceAbilityId, state, t
     // 3. 获得 CP (Pray)
     if (prayCount > 0) {
         const cpAmount = prayCount * 1;
+        const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
+        const newCp = Math.min(currentCp + cpAmount, CP_MAX);
         events.push({
             type: 'CP_CHANGED',
-            payload: { playerId: targetId, delta: cpAmount, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + cpAmount },
+            payload: { playerId: targetId, delta: cpAmount, newValue: newCp },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 70,
         });
@@ -244,6 +251,153 @@ function handleGodsGrace({ targetId, state, timestamp, random }: CustomActionCon
 }
 
 /**
+ * 神恩 (Divine Favor)
+ * 投掷1骰：剑→抽2; 头盔→治愈3; 心→治愈4; 祈祷→3CP
+ */
+function handleDivineFavor({ targetId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+    if (!random) return [];
+    const events: DiceThroneEvent[] = [];
+    const value = random.d(6);
+    const face = getDieFace(value);
+
+    events.push({
+        type: 'BONUS_DIE_ROLLED',
+        payload: {
+            value,
+            face,
+            playerId: targetId,
+            targetPlayerId: targetId,
+            effectKey: 'bonusDie.effect.divineFavor',
+            effectParams: {},
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as BonusDieRolledEvent);
+
+    if (face === FACES.SWORD) {
+        // 剑 → 抽 2 张
+        events.push(...buildDrawEvents(state, targetId, 2, random, 'ABILITY_EFFECT', timestamp + 10));
+    } else if (face === FACES.HELM) {
+        // 头盔 → 治愈 3
+        const currentHp = state.players[targetId]?.resources[RESOURCE_IDS.HP] ?? 0;
+        events.push({
+            type: 'HEAL_APPLIED',
+            payload: { targetId, amount: 3, newHp: currentHp + 3, sourceAbilityId: 'paladin-divine-favor' },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 10,
+        } as HealAppliedEvent);
+    } else if (face === FACES.HEART) {
+        // 心 → 治愈 4
+        const currentHp = state.players[targetId]?.resources[RESOURCE_IDS.HP] ?? 0;
+        events.push({
+            type: 'HEAL_APPLIED',
+            payload: { targetId, amount: 4, newHp: currentHp + 4, sourceAbilityId: 'paladin-divine-favor' },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 10,
+        } as HealAppliedEvent);
+    } else if (face === FACES.PRAY) {
+        // 祈祷 → 3CP
+        const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
+        const newCp = Math.min(currentCp + 3, CP_MAX);
+        events.push({
+            type: 'CP_CHANGED',
+            payload: { playerId: targetId, delta: 3, newValue: newCp },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 10,
+        } as CpChangedEvent);
+    }
+    return events;
+}
+
+/**
+ * 赦免 (Absolution)
+ * 被攻击后投掷1骰防御，效果同神圣防御基础版（1骰简化版）
+ * 剑→1不可防御伤害; 头盔→防止1伤害; 心→防止2伤害; 祈祷→1CP
+ */
+function handleAbsolution({ targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+    if (!random) return [];
+    const events: DiceThroneEvent[] = [];
+    const value = random.d(6);
+    const face = getDieFace(value);
+
+    events.push({
+        type: 'BONUS_DIE_ROLLED',
+        payload: {
+            value,
+            face,
+            playerId: targetId,
+            targetPlayerId: targetId,
+            effectKey: 'bonusDie.effect.absolution',
+            effectParams: {},
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as BonusDieRolledEvent);
+
+    if (face === FACES.SWORD && attackerId) {
+        // 剑 → 对攻击者造成 1 不可防御伤害
+        const target = state.players[attackerId];
+        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+        const actualDamage = target ? Math.min(1, targetHp) : 0;
+        events.push({
+            type: 'DAMAGE_DEALT',
+            payload: { targetId: attackerId, amount: 1, actualDamage, sourceAbilityId, type: 'undefendable' },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 10,
+        } as DamageDealtEvent);
+    } else if (face === FACES.HELM) {
+        // 头盔 → 防止 1 伤害
+        events.push({
+            type: 'PREVENT_DAMAGE',
+            payload: { targetId, amount: 1, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 10,
+        } as PreventDamageEvent);
+    } else if (face === FACES.HEART) {
+        // 心 → 防止 2 伤害
+        events.push({
+            type: 'PREVENT_DAMAGE',
+            payload: { targetId, amount: 2, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 10,
+        } as PreventDamageEvent);
+    } else if (face === FACES.PRAY) {
+        // 祈祷 → 1 CP
+        const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
+        const newCp = Math.min(currentCp + 1, CP_MAX);
+        events.push({
+            type: 'CP_CHANGED',
+            payload: { playerId: targetId, delta: 1, newValue: newCp },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 10,
+        } as CpChangedEvent);
+    }
+    return events;
+}
+
+/**
+ * 教会税升级 (Upgrade Tithes)
+ * 升级被动收入：income 阶段额外获得 1CP（总计 2CP）
+ * 通过在玩家状态上标记 incomeBonus 实现
+ */
+function handleUpgradeTithes({ targetId, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    // 通过 TOKEN_GRANTED 事件标记教会税升级状态
+    // 使用一个特殊的 token 来跟踪被动升级
+    return [{
+        type: 'TOKEN_GRANTED',
+        payload: {
+            targetId,
+            tokenId: TOKEN_IDS.TITHES_UPGRADED,
+            amount: 1,
+            newTotal: 1,
+            sourceAbilityId: 'paladin-upgrade-tithes',
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as TokenGrantedEvent];
+}
+
+/**
  * 神圣祝福 (Blessing of Divinity) — 免疫致死伤害
  * 当受到致死伤害时，移除此标记，将 HP 设为 1 并回复 5 HP（总计 HP=6）
  */
@@ -307,6 +461,9 @@ export function registerPaladinCustomActions(): void {
     registerCustomActionHandler('paladin-holy-defense-3', handleHolyDefenseRoll3, { categories: ['dice', 'damage', 'defense'] });
 
     registerCustomActionHandler('paladin-gods-grace', handleGodsGrace, { categories: ['dice', 'resource', 'card'] });
+    registerCustomActionHandler('paladin-divine-favor', handleDivineFavor, { categories: ['dice', 'resource', 'card'] });
+    registerCustomActionHandler('paladin-absolution', handleAbsolution, { categories: ['dice', 'damage', 'defense'] });
+    registerCustomActionHandler('paladin-upgrade-tithes', handleUpgradeTithes, { categories: ['resource'] });
 
     registerCustomActionHandler('paladin-blessing-prevent', handleBlessingPrevent, { categories: ['token', 'defense'] });
 }

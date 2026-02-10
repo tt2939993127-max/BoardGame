@@ -16,6 +16,7 @@ import {
     createSetupWithHand,
     fixedRandom,
     cmd,
+    advanceTo,
     expectedHandSize,
 } from './test-utils';
 import { INITIAL_CP, HAND_LIMIT } from '../domain/types';
@@ -73,13 +74,11 @@ describe('卡牌系统', () => {
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'), // 手牌 7 (> HAND_LIMIT=6)
-                    cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
-                    cmd('ADVANCE_PHASE', '0'), // main2 -> discard
+                    ...advanceTo('discard'),
                     cmd('ADVANCE_PHASE', '0'), // discard -> 应被阻止
                 ],
                 expect: {
-                    errorAtStep: { step: 7, error: 'cannot_advance_phase' },
+                    expectError: { command: 'ADVANCE_PHASE', error: 'cannot_advance_phase' },
                     turnPhase: 'discard',
                     players: {
                         '0': { handSize: HAND_LIMIT + 1 },
@@ -91,18 +90,15 @@ describe('卡牌系统', () => {
 
         it('弃牌后手牌 <= 限制可推进', () => {
             const runner = createRunner(fixedRandom);
-            // 先抽 3 张到 7 张，进入弃牌阶段后弃 1 张到 6 张
             const result = runner.run({
                 name: '弃牌后可推进',
                 commands: [
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'), // 手牌 7
-                    cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
-                    cmd('ADVANCE_PHASE', '0'), // main2 -> discard
+                    ...advanceTo('discard'),
                     cmd('DISCARD_CARD', '0', { cardId: 'card-enlightenment' }), // 弃 1 张到 6
-                    cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (换人)
+                    cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (换人，自动推进到 main1)
                 ],
                 expect: {
                     turnPhase: 'main1',
@@ -124,9 +120,7 @@ describe('卡牌系统', () => {
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'),
                     cmd('DRAW_CARD', '0'), // 手牌 7
-                    cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
-                    cmd('ADVANCE_PHASE', '0'), // main2 -> discard
+                    ...advanceTo('discard'),
                     cmd('SELL_CARD', '0', { cardId: 'card-enlightenment' }), // 卖 1 张到 6
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep
                 ],
@@ -155,7 +149,7 @@ describe('卡牌系统', () => {
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 1, error: 'notEnoughCp' },
+                    expectError: { command: 'PLAY_UPGRADE_CARD', error: 'notEnoughCp' },
                     turnPhase: 'main1',
                 },
             });
@@ -171,7 +165,7 @@ describe('卡牌系统', () => {
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-3', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 1, error: 'upgradeCardSkipLevel' },
+                    expectError: { command: 'PLAY_UPGRADE_CARD', error: 'upgradeCardSkipLevel' },
                     turnPhase: 'main1',
                 },
             });
@@ -184,11 +178,11 @@ describe('卡牌系统', () => {
                 name: '投掷阶段升级被拒绝',
                 setup: createSetupWithHand(['card-meditation-2'], { cp: 10 }),
                 commands: [
-                    cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
+                    ...advanceTo('offensiveRoll'),
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    errorAtStep: { step: 2, error: 'wrongPhaseForUpgrade' },
+                    expectError: { command: 'PLAY_UPGRADE_CARD', error: 'wrongPhaseForUpgrade' },
                     turnPhase: 'offensiveRoll',
                 },
             });

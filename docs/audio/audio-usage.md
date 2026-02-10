@@ -1,6 +1,7 @@
 # 音频资源使用规范
 
 > 本文用于补齐“音频文件如何接入/压缩/注册”的完整流程，与图片资源规范保持一致。
+> 新增音频的全链路流程详见：`docs/audio/add-audio.md`
 
 ## 1. 目录与来源（强制）
 - **唯一音频资源目录**：`public/assets/common/audio/`
@@ -31,7 +32,7 @@ node scripts/audio/generate_common_audio_registry.js
 ```
 
 - 产出：`public/assets/common/audio/registry.json`
-- **注意**：生成脚本会自动忽略 `compressed/` 目录，并基于路径生成 key。
+- **注意**：生成脚本会优先使用 `compressed/` 变体；若同 key 同时存在原始与压缩版本，将自动保留压缩版本并跳过原始文件。
 
 ### 2.3 生成音频清单文档
 使用脚本：`scripts/audio/generate_audio_assets_md.js`
@@ -136,7 +137,44 @@ event.audioKey = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chi
 event.audioCategory = { group: 'ui', sub: 'click' };
 ```
 
-## 4. 质量检查清单
+## 4. BGM 选曲与分配规范（强制）
+
+### 4.1 核心原则
+- **游戏间 BGM 零重叠**：每首 BGM 只能分配给一个游戏，禁止跨游戏共用。测试会自动检查。
+- **语义匹配优先**：曲目名称/风格必须与游戏主题契合，不能为了凑数随意分配。
+- **混响时间（RT）参考**：RT 值越小节奏越紧凑（适合战斗），RT 值越大越空灵舒缓（适合策略/探索）。
+
+### 4.2 分组规则
+每个游戏的 BGM 分为 `normal`（普通阶段）和 `battle`（战斗阶段）两组：
+- **normal 组**：main 版本为主，可包含少量 intense 版本增加变化
+- **battle 组**：intense 版本为主，也可包含 main 版本（节奏本身够快的曲目）
+- 每组必须指定一个**默认曲目**（`bgmRules` 中的 `key` 字段）
+
+### 4.3 各游戏风格定位
+
+| 游戏 | 风格关键词 | 适合的曲目特征 | 不适合的曲目特征 |
+|------|-----------|---------------|----------------|
+| Summoner Wars | 军事策略、召唤魔法、棋盘战争 | 史诗/军事/魔法/吟游诗人、中等混响 | 纯休闲、过于空灵冥想、英雄冒险 |
+| DiceThrone | 英雄对决、骰子战斗、快节奏 | 英雄/冒险/战斗/命运、短混响高能量 | 渔村休闲、空灵冥想、缓慢沉思 |
+| SmashUp | 派对卡牌、轻松搞怪、多阵营混战 | 休闲/放克/派对/欢快 | 严肃史诗、黑暗沉重 |
+
+### 4.4 当前分配总览（需随配置同步更新）
+
+**SW（16 首）**：To The Wall(默认普通), Stone Chant(默认战斗), Corsair, Lonely Bard, Luminesce, Wind Chime, Elder Awakening, Feysong Fields + 各自 intense 版本
+
+**DT（16 首）**：Stormborn Destiny(默认普通), Dragon Dance(默认战斗), Hang Them, My Kingdom, Shields and Spears, Ogres, Nock!, Fireborn + 各自 intense 版本
+
+**SmashUp（17 首）**：Nobody Knows(默认普通), Move Your Feet(默认战斗), Tiki Party, Bubblegum, Field Day, Lizards, Sunset, Sunny Days, Big Shot + 各自 intense 版本
+
+### 4.5 新增/调整 BGM 检查清单
+1. 确认曲目语义与目标游戏风格匹配（参考 §4.3）
+2. 确认不与其他游戏重复（grep 全部 `audio.config.ts` 的 BGM key）
+3. 确认 registry 中存在该 key（`registry.json`）
+4. 更新 `bgm` 数组、`bgmGroups`、`bgmRules`（如改默认）
+5. 更新对应测试（BGM 数量断言、no-overlap 断言）
+6. 更新本文档 §4.4 的分配总览
+
+## 5. 质量检查清单
 - [ ] 音频文件仅存在于 `public/assets/common/audio/`
 - [ ] 已执行 `compress:audio`
 - [ ] 已重新生成 `registry.json`

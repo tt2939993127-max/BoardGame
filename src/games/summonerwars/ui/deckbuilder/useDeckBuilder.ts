@@ -16,10 +16,12 @@ import {
 } from '../../config/deckValidation';
 import {
     buildCardRegistry,
-    getCardPoolByFaction,
-    groupCardsByType,
 } from '../../config/cardRegistry';
 import {
+    createDeckByFactionId,
+    FACTION_CATALOG,
+    resolveFactionId,
+} from '../../config/factions';import {
     serializeDeck,
     deserializeDeck,
     type SerializedCustomDeck,
@@ -54,6 +56,7 @@ export interface UseDeckBuilderReturn {
     isLoading: boolean;
     editingDeckId: string | null;
     confirmedDeck: SerializedCustomDeck | null;
+    freeMode: boolean;
 
     // 召唤师操作
     selectSummoner: (summonerCard: UnitCard) => void;
@@ -64,6 +67,9 @@ export interface UseDeckBuilderReturn {
 
     // 阵营浏览
     selectFaction: (factionId: FactionId) => void;
+
+    // 自由组卡
+    toggleFreeMode: () => void;
 
     // 持久化
     saveDeck: (name: string) => Promise<void>;
@@ -90,6 +96,7 @@ const INITIAL_DECK: DeckDraft = {
     summoner: null,
     autoCards: [],
     manualCards: new Map(),
+    freeMode: true,
 };
 
 // ============================================================================
@@ -105,34 +112,49 @@ const INITIAL_DECK: DeckDraft = {
  * - 1个十生命城门（isStartingGate === true）
  * - 3个五生命城门（isGate === true && !isStartingGate）
  */
+/**
+ * 根据召唤师自动填充起始卡牌（起始单位、传奇事件、城门）
+ * 使用真实阵营预构筑数据
+ */
 function buildAutoCards(summoner: UnitCard): Card[] {
-    const factionId = summoner.faction as FactionId;
-    const pool = getCardPoolByFaction(factionId);
-    const groups = groupCardsByType(pool);
+    const factionId = resolveFactionId(summoner.faction);
     const autoCards: Card[] = [];
 
-    // 起始单位：从该阵营的普通单位中取前2个
-    const startingCommons = groups.commons.slice(0, 2);
-    autoCards.push(...startingCommons);
+    try {
+        const factionDeck = createDeckByFactionId(factionId);
 
-    // 史诗事件（legendary 类型）
-    const epicEvents = groups.events.filter(e => e.eventType === 'legendary');
-    autoCards.push(...epicEvents);
+        // 起始单位（来自预构筑配置的 startingUnits）
+        for (const { unit } of factionDeck.startingUnits) {
+            autoCards.push(unit);
+        }
 
-    // 城门：1个十生命起始城门 + 3个五生命城门
-    const startingGate = groups.structures.find(s => s.isGate && s.isStartingGate);
-    const normalGates = groups.structures.filter(s => s.isGate && !s.isStartingGate);
+        // 传奇事件（从牌组中筛选，去重）
+        const seenLegendary = new Set<string>();
+        for (const card of factionDeck.deck) {
+            if (card.cardType === 'event' && card.eventType === 'legendary') {
+                const baseId = card.id.replace(/-\d+$/, '');
+                if (!seenLegendary.has(baseId)) {
+                    seenLegendary.add(baseId);
+                    autoCards.push(card);
+                }
+            }
+        }
 
-    if (startingGate) {
-        autoCards.push(startingGate);
-    }
-    // 添加3个五生命城门
-    for (let i = 0; i < 3 && normalGates.length > 0; i++) {
-        autoCards.push({ ...normalGates[0], id: `${normalGates[0].id}-auto-${i}` });
+        // 起始城门（10HP）
+        autoCards.push(factionDeck.startingGate);
+
+        // 传送门（5HP，从牌组中筛选）
+        const portals = factionDeck.deck.filter(
+            c => c.cardType === 'structure' && c.isGate && !c.isStartingGate
+        );
+        autoCards.push(...portals);
+    } catch {
+        console.warn(`[buildAutoCards] 阵营 ${factionId} 数据不可用`);
     }
 
     return autoCards;
 }
+
 
 /**
  * 将 DeckDraft 转换为 API 请求体
@@ -144,6 +166,7 @@ function draftToPayload(draft: DeckDraft, name: string): CustomDeckPayload {
         summonerId: serialized.summonerId,
         summonerFaction: serialized.summonerFaction,
         cards: serialized.cards,
+        ...(serialized.freeMode ? { freeMode: true } : {}),
     };
 }
 
@@ -157,7 +180,11 @@ export function useDeckBuilder(): UseDeckBuilderReturn {
 
     // 核心状态
     const [currentDeck, setCurrentDeck] = useState<DeckDraft>(INITIAL_DECK);
-    const [selectedFactionId, setSelectedFactionId] = useState<FactionId | null>(null);
+    // 默认选中第一个可选阵营
+    const [selectedFactionId, setSelectedFactionId] = useState<FactionId | null>(() => {
+        const first = FACTION_CATALOG.find(f => f.selectable !== false);
+        return first ? first.id : null;
+    });
     const [savedDecks, setSavedDecks] = useState<SavedDeckSummary[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
@@ -211,16 +238,15 @@ export function useDeckBuilder(): UseDeckBuilderReturn {
             // 自动填充卡牌（起始单位、史诗事件、城门）
             const autoCards = buildAutoCards(summoner);
 
-            // 更换召唤师时，检查手动卡牌的符号匹配
-            // 不满足新召唤师符号匹配的卡牌需要移除
+            // 更换召唤师时，检查手动卡牌的符号匹配（自由组卡模式跳过）
             const summonerSymbols = summoner.deckSymbols;
             const newManualCards = new Map<string, { card: Card; count: number }>();
 
             prev.manualCards.forEach(({ card, count }, cardId) => {
-                if (getSymbolMatch(card, summonerSymbols)) {
+                if (prev.freeMode || getSymbolMatch(card, summonerSymbols)) {
                     newManualCards.set(cardId, { card, count });
                 }
-                // 不匹配的卡牌被静默移除
+                // 不匹配的卡牌被静默移除（非自由模式）
             });
 
             return {
@@ -246,12 +272,6 @@ export function useDeckBuilder(): UseDeckBuilderReturn {
             if (!check.allowed) {
                 result = { success: false, reason: check.reason };
                 return prev; // 不修改状态
-            }
-
-            // 符号匹配检查
-            if (prev.summoner && !getSymbolMatch(card, prev.summoner.deckSymbols)) {
-                result = { success: false, reason: '卡牌符号与召唤师不匹配' };
-                return prev;
             }
 
             const newMap = new Map(prev.manualCards);
@@ -294,6 +314,14 @@ export function useDeckBuilder(): UseDeckBuilderReturn {
 
     const selectFaction = useCallback((factionId: FactionId) => {
         setSelectedFactionId(factionId);
+    }, []);
+
+    // ========================================================================
+    // 自由组卡模式切换
+    // ========================================================================
+
+    const toggleFreeMode = useCallback(() => {
+        setCurrentDeck(prev => ({ ...prev, freeMode: !prev.freeMode }));
     }, []);
 
 
@@ -361,7 +389,7 @@ export function useDeckBuilder(): UseDeckBuilderReturn {
 
             // 自动选中召唤师所属阵营
             if (deck.summoner) {
-                setSelectedFactionId(deck.summoner.faction as FactionId);
+                setSelectedFactionId(resolveFactionId(deck.summoner.faction));
             }
         } finally {
             setIsLoading(false);
@@ -442,6 +470,7 @@ export function useDeckBuilder(): UseDeckBuilderReturn {
         isLoading,
         editingDeckId,
         confirmedDeck,
+        freeMode: currentDeck.freeMode ?? false,
 
         // 召唤师操作
         selectSummoner,
@@ -452,6 +481,9 @@ export function useDeckBuilder(): UseDeckBuilderReturn {
 
         // 阵营浏览
         selectFaction,
+
+        // 自由组卡
+        toggleFreeMode,
 
         // 持久化
         saveDeck,

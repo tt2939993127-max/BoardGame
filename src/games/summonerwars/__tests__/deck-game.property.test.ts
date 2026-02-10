@@ -22,7 +22,7 @@ import {
     type CardRegistry,
     type GroupedCards,
 } from '../config/cardRegistry';
-import { createDeckByFactionId, FACTION_CATALOG } from '../config/factions';
+import { createDeckByFactionId, FACTION_CATALOG, resolveFactionId } from '../config/factions';
 import type {
     Card,
     UnitCard,
@@ -93,7 +93,7 @@ function arbSerializedCustomDeck(): fc.Arbitrary<SerializedCustomDeck> {
             return fc.constant<SerializedCustomDeck>({
                 name: '测试牌组',
                 summonerId: summoner.id,
-                summonerFaction: (summoner.faction as FactionId) || 'necromancer',
+                summonerFaction: resolveFactionId(summoner.faction),
                 cards: [],
             });
         }
@@ -110,7 +110,7 @@ function arbSerializedCustomDeck(): fc.Arbitrary<SerializedCustomDeck> {
             for (const { cardIndex, count } of entries) {
                 const card = matchingCards[cardIndex];
                 const faction = ('faction' in card && card.faction)
-                    ? card.faction as FactionId
+                    ? resolveFactionId(card.faction as string)
                     : 'necromancer' as FactionId;
                 cardMap.set(card.id, { cardId: card.id, faction, count });
             }
@@ -118,7 +118,7 @@ function arbSerializedCustomDeck(): fc.Arbitrary<SerializedCustomDeck> {
             return {
                 name: '测试牌组',
                 summonerId: summoner.id,
-                summonerFaction: (summoner.faction as FactionId) || 'necromancer',
+                summonerFaction: resolveFactionId(summoner.faction),
                 cards: Array.from(cardMap.values()),
             };
         });

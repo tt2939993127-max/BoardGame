@@ -78,6 +78,9 @@ export const TOKEN_IDS = {
 
     /** 精准（圣骑士） - 攻击不可防御 */
     ACCURACY: 'accuracy',
+
+    /** 教会税升级（圣骑士） - income 阶段额外 +1CP */
+    TITHES_UPGRADED: 'tithes_upgraded',
 } as const;
 
 export type TokenId = (typeof TOKEN_IDS)[keyof typeof TOKEN_IDS];

@@ -130,6 +130,7 @@ export interface BoardUnit {
   attachedCards?: EventCard[]; // 附加的事件卡（如狱火铸剑）
   healingMode?: boolean; // 治疗模式（圣殿牧师：本次攻击转为治疗）
   wasAttackedThisTurn?: boolean; // 本回合是否已被攻击（庇护判定用）
+  tempAbilities?: string[]; // 临时技能（幻化复制，回合结束清除）
 }
 
 /** 战场上的建筑 */
@@ -407,7 +408,34 @@ export const SW_EVENTS = {
   CARD_RETRIEVED: 'sw:card_retrieved',
   // 治疗模式标记（圣殿牧师）
   HEALING_MODE_SET: 'sw:healing_mode_set',
+  // 技能复制（幻化）
+  ABILITIES_COPIED: 'sw:abilities_copied',
 } as const;
+
+// ============================================================================
+// 事件 Payload 类型约束
+// ============================================================================
+
+/**
+ * ABILITY_TRIGGERED 事件的 payload 类型约束
+ * 
+ * 所有 ABILITY_TRIGGERED 事件必须包含 sourcePosition，
+ * 否则 UI 层（useGameEvents）无法定位来源单位、无法触发交互。
+ */
+export interface AbilityTriggeredPayload {
+  abilityId: string;
+  sourceUnitId: string;
+  /** 来源单位位置 — 必填，UI 层依赖此字段定位单位 */
+  sourcePosition: CellCoord;
+  /** 技能名称（resolveAbilityEffects 头部事件携带） */
+  abilityName?: string;
+  /** 效果类型标识（如 preventMagicGain / extraMove） */
+  effectType?: string;
+  /** 自定义参数 */
+  params?: Record<string, unknown>;
+  /** 其他扩展字段 */
+  [key: string]: unknown;
+}
 
 // ============================================================================
 // 单位实例类型（用于技能系统）
@@ -440,6 +468,8 @@ export interface SerializedCustomDeck {
   summonerFaction: FactionId;
   /** 手动选择的卡牌列表 */
   cards: SerializedCardEntry[];
+  /** 自由组卡模式（跳过符号匹配限制） */
+  freeMode?: boolean;
 }
 
 /** 阵营选择事件 */

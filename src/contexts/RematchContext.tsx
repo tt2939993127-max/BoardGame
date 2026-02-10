@@ -4,7 +4,7 @@
  * 管理多人模式下的重赛投票状态（通过 socket）
  */
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { LobbyClient } from 'boardgame.io/client';
 import { matchSocket, type RematchVoteState } from '../services/matchSocket';
 import { GAME_SERVER_URL } from '../config/server';
@@ -170,12 +170,13 @@ export function RematchProvider({
         }
     }, [isMultiplayer]);
 
-    const value: RematchContextValue = {
+    // useMemo 包裹 Provider value，避免每次渲染创建新对象导致消费者重渲染
+    const value = useMemo<RematchContextValue>(() => ({
         state,
         vote,
         isConnected,
         registerReset,
-    };
+    }), [state, vote, isConnected, registerReset]);
 
     return (
         <RematchContext.Provider value={value}>

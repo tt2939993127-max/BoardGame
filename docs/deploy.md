@@ -40,7 +40,7 @@
 
 ```bash
 # 1. 下载生产配置文件
-curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/docker-compose.prod.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/docker-compose.prod.yml -o docker-compose.prod.yml
 
 # 2. 创建 .env（两种方式任选其一）
 
@@ -59,41 +59,47 @@ SMTP_PASS=xxx
 EOF
 
 # 3. 拉取镜像并启动
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### 更新部署
 
 ```bash
 # 拉取最新镜像并重启
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### 回滚到指定版本
 
 ```bash
-# 编辑 docker-compose.yml，将 image tag 改为指定版本
+# 编辑 docker-compose.prod.yml，将 image tag 改为指定版本
 # 例如：ghcr.io/zhuanggenhua/boardgame-web:v1.2.3
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### 使用部署脚本（推荐）
 
 ```bash
 # 首次部署 / 更新
-bash scripts/deploy/deploy-image.sh deploy
+bash scripts/deploy-image.sh deploy
+
+# 一键迁移（从 Git 部署切换到镜像部署）
+# 会自动停止旧容器、准备 .env、拉取镜像并启动
+# 执行时会提示是否登录 ghcr.io（私有镜像需登录）
+# 若缺少 .env/.env.server，会进入交互式生成（JWT_SECRET 可自动生成）
+bash scripts/deploy/deploy-migrate-image.sh
 
 # 回滚到指定版本
-bash scripts/deploy/deploy-image.sh rollback v1.2.3
+bash scripts/deploy-image.sh rollback v1.2.3
 
 # 查看状态
-bash scripts/deploy/deploy-image.sh status
+bash scripts/deploy-image.sh status
 
 # 查看日志
-bash scripts/deploy/deploy-image.sh logs [service]
+bash scripts/deploy-image.sh logs [service]
 ```
 
 ### CI 配置说明
@@ -106,7 +112,8 @@ bash scripts/deploy/deploy-image.sh logs [service]
   - `ghcr.io/zhuanggenhua/boardgame-web:latest`
 - **版本标签**：`latest`（main 分支）、`v1.2.3`（tag）、`sha-xxxxxx`（commit）
 
-> **注意**：首次使用需在 GitHub 仓库设置中启用 Packages 权限。
+> **注意**：镜像构建由 GitHub Actions 自动完成，服务器脚本只负责拉取镜像。
+> 私有镜像需要登录（脚本会提示是否登录 ghcr.io）。
 
 ### 从 Git 部署迁移到镜像部署
 
@@ -121,21 +128,21 @@ docker compose down
 cp .env /tmp/.env.bak
 
 # 3. 下载生产配置文件
-curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/docker-compose.prod.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/docker-compose.prod.yml -o docker-compose.prod.yml
 
 # 4. 恢复 .env
 cp /tmp/.env.bak .env
 
 # 5. 拉取镜像并启动
-docker compose pull
-docker compose up -d
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 
 # 6. 验证
 docker compose ps
 curl -I http://127.0.0.1/
 ```
 
-迁移后，更新只需 `docker compose pull && docker compose up -d`，无需 `git pull`。
+迁移后，更新只需 `docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d`，无需 `git pull`。
 
 ---
 
@@ -149,7 +156,7 @@ curl -I http://127.0.0.1/
 
 在根目录执行
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy/deploy-auto.sh -o deploy-auto.sh && bash deploy-auto.sh
+curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy-auto.sh -o deploy-auto.sh && bash deploy-auto.sh
 ```
 
 ## 快速更新脚本（已部署后使用）
@@ -158,7 +165,7 @@ curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts
 
 ```bash
 cd /home/admin/BoardGame
-bash scripts/deploy/deploy-quick.sh
+bash scripts/deploy-quick.sh
 ```
 
 ## 部署前本地自检（强烈建议）
@@ -404,22 +411,16 @@ sudo nginx -t && sudo systemctl enable --now nginx
 | `.env.example` | 开发环境模板 | ✔ | ✘ |
 | `.env.server` | 生产 .env 生成脚本 | ✘ | ✔ |
 
-**本地开发** `.env` 参考 `.env.example`：
+**本地开发**：直接复制 `.env.example` 即可。
+
+**生产环境（最小配置）**：只需密钥和域名，其余由 `docker-compose.prod.yml` 覆盖。
 
 ```bash
-# 端口
-VITE_DEV_PORT=5173
-GAME_SERVER_PORT=18000
-API_SERVER_PORT=18001
-
-# 数据库（本地开发用 localhost，Docker 自动覆盖为 mongodb）
-MONGO_URI=mongodb://localhost:27017/boardgame
-
-# JWT 密钥（生产环境必须修改）
 JWT_SECRET=your-secret-key
+WEB_ORIGINS=https://your-domain.com
 ```
 
-**服务器** `.env` 由 `.env.server` 脚本生成（只含密钥和域名，其余由 compose 覆盖）。
+推荐使用 `.env.server` 一键生成 `.env`（包含密钥与域名配置）。
 
 ## 单体代理说明
 

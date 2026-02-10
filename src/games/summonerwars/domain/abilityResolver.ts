@@ -10,6 +10,7 @@ import type {
   PlayerId, 
   CellCoord, 
   UnitInstance,
+  AbilityTriggeredPayload,
 } from './types';
 import { SW_EVENTS } from './types';
 import type { 
@@ -26,6 +27,23 @@ import { BOARD_ROWS, BOARD_COLS, getUnitAt, manhattanDistance } from './helpers'
 // ============================================================================
 // 效果解析上下文
 // ============================================================================
+
+/**
+ * 创建类型安全的 ABILITY_TRIGGERED 事件
+ * 
+ * 所有 ABILITY_TRIGGERED 事件必须通过此函数创建，
+ * 确保 payload 包含 sourcePosition（UI 层依赖此字段定位单位）。
+ */
+function createAbilityTriggeredEvent(
+  payload: AbilityTriggeredPayload,
+  timestamp: number,
+): GameEvent {
+  return {
+    type: SW_EVENTS.ABILITY_TRIGGERED,
+    payload,
+    timestamp,
+  };
+}
 
 /**
  * 效果解析上下文
@@ -507,15 +525,12 @@ export function resolveEffect(
 
     case 'preventMagicGain': {
       // 这个效果需要在伤害结算时检查，设置一个标记
-      events.push({
-        type: SW_EVENTS.ABILITY_TRIGGERED,
-        payload: {
-          abilityId: 'soulless',
-          effectType: 'preventMagicGain',
-          sourceUnitId: ctx.sourceUnit.cardId,
-        },
-        timestamp,
-      });
+      events.push(createAbilityTriggeredEvent({
+        abilityId: 'soulless',
+        effectType: 'preventMagicGain',
+        sourceUnitId: ctx.sourceUnit.cardId,
+        sourcePosition: ctx.sourcePosition,
+      }, timestamp));
       break;
     }
 
@@ -588,6 +603,17 @@ export function resolveEffect(
             timestamp,
           });
         }
+      } else if (effect.actionId === 'guidance_draw') {
+        // 指引：召唤阶段开始自动抓2张牌（无需玩家选择）
+        const guidancePlayer = ctx.state.players[ctx.ownerId];
+        const guidanceDraw = Math.min(2, guidancePlayer.deck.length);
+        if (guidanceDraw > 0) {
+          events.push({
+            type: SW_EVENTS.CARD_DRAWN,
+            payload: { playerId: ctx.ownerId, count: guidanceDraw, sourceAbilityId: 'guidance' },
+            timestamp,
+          });
+        }
       } else if (effect.actionId === 'divine_shield_check') {
         // 神圣护盾：被动效果，在攻击流程中由 execute.ts 处理
         // 此处不做任何事，仅作为占位
@@ -595,15 +621,12 @@ export function resolveEffect(
         // 治疗：beforeAttack 效果，在 DECLARE_ATTACK 中处理
         // 此处不做任何事，仅作为占位
       } else {
-        events.push({
-          type: SW_EVENTS.ABILITY_TRIGGERED,
-          payload: {
-            abilityId: effect.actionId,
-            params: effect.params,
-            sourceUnitId: ctx.sourceUnit.cardId,
-          },
-          timestamp,
-        });
+        events.push(createAbilityTriggeredEvent({
+          abilityId: effect.actionId,
+          params: effect.params,
+          sourceUnitId: ctx.sourceUnit.cardId,
+          sourcePosition: ctx.sourcePosition,
+        }, timestamp));
       }
       break;
     }
@@ -636,17 +659,14 @@ export function resolveEffect(
 
     case 'extraMove': {
       // 移动增强效果：在移动验证时由 helpers 检查，此处仅记录触发
-      events.push({
-        type: SW_EVENTS.ABILITY_TRIGGERED,
-        payload: {
-          abilityId,
-          effectType: 'extraMove',
-          value: effect.value,
-          canPassThrough: effect.canPassThrough,
-          sourceUnitId: ctx.sourceUnit.cardId,
-        },
-        timestamp,
-      });
+      events.push(createAbilityTriggeredEvent({
+        abilityId,
+        effectType: 'extraMove',
+        value: effect.value,
+        canPassThrough: effect.canPassThrough,
+        sourceUnitId: ctx.sourceUnit.cardId,
+        sourcePosition: ctx.sourcePosition,
+      }, timestamp));
       break;
     }
 
@@ -719,16 +739,12 @@ export function resolveAbilityEffects(
   const events: GameEvent[] = [];
   
   // 先触发技能激活事件
-  events.push({
-    type: SW_EVENTS.ABILITY_TRIGGERED,
-    payload: {
-      abilityId: ability.id,
-      abilityName: ability.name,
-      sourceUnitId: ctx.sourceUnit.cardId,
-      sourcePosition: ctx.sourcePosition,
-    },
-    timestamp: ctx.timestamp,
-  });
+  events.push(createAbilityTriggeredEvent({
+    abilityId: ability.id,
+    abilityName: ability.name,
+    sourceUnitId: ctx.sourceUnit.cardId,
+    sourcePosition: ctx.sourcePosition,
+  }, ctx.timestamp));
 
   // 解析效果
   for (const effect of ability.effects) {
@@ -746,7 +762,9 @@ export function resolveAbilityEffects(
  * 获取单位的所有技能
  */
 export function getUnitAbilities(unit: UnitInstance): AbilityDef[] {
-  const abilityIds = unit.card.abilities ?? [];
+  const baseIds = unit.card.abilities ?? [];
+  const tempIds = unit.tempAbilities ?? [];
+  const abilityIds = tempIds.length > 0 ? [...baseIds, ...tempIds] : baseIds;
   return abilityIds
     .map(id => abilityRegistry.get(id))
     .filter((def): def is AbilityDef => def !== undefined);

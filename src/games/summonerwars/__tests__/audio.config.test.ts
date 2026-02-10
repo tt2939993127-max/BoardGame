@@ -18,8 +18,8 @@ import {
 import { SW_EVENTS } from '../domain/types';
 import { abilityRegistry } from '../domain/abilities';
 
-const BGM_NORMAL_KEY = 'bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main';
-const BGM_BATTLE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main';
+const BGM_TO_THE_WALL_KEY = 'bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_main';
+const BGM_TO_THE_WALL_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.to_the_wall_rt_2.to_the_wall_intensity_2';
 const BGM_CORSAIR_KEY = 'bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main';
 const BGM_LONELY_BARD_KEY = 'bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main';
 const BGM_CORSAIR_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_intensity_2';
@@ -28,6 +28,12 @@ const BGM_LUMINESCE_KEY = 'bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ether
 const BGM_LUMINESCE_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_intensity_2';
 const BGM_WIND_CHIME_KEY = 'bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_main';
 const BGM_WIND_CHIME_INTENSE_KEY = 'bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_intensity_2';
+const BGM_ELDER_AWAKENING_KEY = 'bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_main';
+const BGM_ELDER_AWAKENING_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_intensity_2';
+const BGM_FEYSONG_KEY = 'bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_main';
+const BGM_FEYSONG_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_intensity_2';
+const BGM_STONE_CHANT_KEY = 'bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_main';
+const BGM_STONE_CHANT_INTENSE_KEY = 'bgm.fantasy.fantasy_music_pack_vol.stone_chant_rt_3.fantasy_vol8_stone_chant_intensity_2';
 const STINGER_WIN_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win';
 const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose';
 
@@ -256,16 +262,16 @@ describe('Summoner Wars 音效配置', () => {
         const rules = SUMMONER_WARS_AUDIO_CONFIG.bgmRules ?? [];
         const attackKey = rules.find(rule => rule.when({ ...mockContext, ctx: { currentPhase: 'attack' } }))?.key;
         const normalKey = rules.find(rule => rule.when({ ...mockContext, ctx: { currentPhase: 'summon' } }))?.key;
-        expect(attackKey).toBe(BGM_BATTLE_KEY);
-        expect(normalKey).toBe(BGM_NORMAL_KEY);
+        expect(attackKey).toBe(BGM_STONE_CHANT_KEY);
+        expect(normalKey).toBe(BGM_TO_THE_WALL_KEY);
     });
 
     it('应定义 BGM 分组', () => {
         const groups = SUMMONER_WARS_AUDIO_CONFIG.bgmGroups ?? {};
         expect(groups.normal).toBeDefined();
         expect(groups.battle).toBeDefined();
-        expect(groups.normal).toContain(BGM_NORMAL_KEY);
-        expect(groups.battle).toContain(BGM_BATTLE_KEY);
+        expect(groups.normal).toContain(BGM_TO_THE_WALL_KEY);
+        expect(groups.battle).toContain(BGM_STONE_CHANT_KEY);
     });
 
     it('游戏结束应触发胜负音效', () => {
@@ -283,8 +289,8 @@ describe('Summoner Wars 音效配置', () => {
 
     it('所有使用到的 key 必须存在于 registry', () => {
         const keys = [
-            BGM_NORMAL_KEY,
-            BGM_BATTLE_KEY,
+            BGM_TO_THE_WALL_KEY,
+            BGM_TO_THE_WALL_INTENSE_KEY,
             BGM_CORSAIR_KEY,
             BGM_LONELY_BARD_KEY,
             BGM_CORSAIR_INTENSE_KEY,
@@ -293,6 +299,12 @@ describe('Summoner Wars 音效配置', () => {
             BGM_LUMINESCE_INTENSE_KEY,
             BGM_WIND_CHIME_KEY,
             BGM_WIND_CHIME_INTENSE_KEY,
+            BGM_ELDER_AWAKENING_KEY,
+            BGM_ELDER_AWAKENING_INTENSE_KEY,
+            BGM_FEYSONG_KEY,
+            BGM_FEYSONG_INTENSE_KEY,
+            BGM_STONE_CHANT_KEY,
+            BGM_STONE_CHANT_INTENSE_KEY,
             STINGER_WIN_KEY,
             STINGER_LOSE_KEY,
             MAGIC_GAIN_KEY,

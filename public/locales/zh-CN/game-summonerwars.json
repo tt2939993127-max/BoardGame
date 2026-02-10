@@ -43,7 +43,10 @@
     "push": "推开",
     "pull": "拉近",
     "control": "控制",
-    "damage": "伤害"
+    "damage": "伤害",
+    "bloodRuneDamage": "自伤1点",
+    "bloodRuneCharge": "花1魔力充能",
+    "feedBeastSelfDestroy": "自毁"
   },
   "player": {
     "default1": "玩家1",
@@ -218,7 +221,10 @@
       "maxStandardEvents": "同名标准事件最多2张",
       "maxChampions": "同名冠军单位最多1个",
       "maxCommons": "同名普通单位最多4个"
-    }
+    },
+    "freeMode": "自由组卡",
+    "freeModeOn": "已开启",
+    "free": "自由"
   },
   "cardSelector": {
     "reviveUndead": "复活死灵：选择弃牌堆中的亡灵单位",
@@ -289,7 +295,11 @@
       },
       "healing": {
         "selectCards": "治疗：选择要弃除的手牌"
-      }
+      },
+      "illusion": "幻化：选择3格内的一个士兵复制其技能",
+      "bloodRune": "鲜血符文：选择自伤1点或消耗1魔力充能",
+      "iceShards": "寒冰碎屑：消耗1充能，对建筑相邻敌方造成1伤？",
+      "feedBeast": "喂养巨食兽：选择相邻友方单位移除，或自毁"
     },
     "beforeAttack": {
       "lifeDrain": "攻击前技能：吸取生命已就绪，选择攻击目标",

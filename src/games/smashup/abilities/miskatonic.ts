@@ -7,12 +7,14 @@
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
-import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
+import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionReturnedEvent, MinionCardDef } from '../domain/types';
 import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion, recoverCardsFromDiscard,
-    getMinionPower,
+    getMinionPower, setPromptContinuation, buildMinionTargetOptions,
 } from '../domain/abilityHelpers';
+import { registerPromptContinuation } from '../domain/promptContinuation';
+import { getCardDef, getBaseDef } from '../data/cards';
 
 /** 注册米斯卡塔尼克大学派系所有能力 */
 export function registerMiskatonicAbilities(): void {
@@ -218,31 +220,30 @@ function miskatonicTheLibrarian(ctx: AbilityContext): AbilityResult {
 
 /**
  * 教授 onPlay：返回本基地一个力量≤3的随从到手牌
- * MVP：自动选力量最高的对手随从（≤3）
  */
 function miskatonicProfessor(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
-
-    // 找本基地力量≤3的对手随从，选力量最高的
-    const targets = base.minions
-        .filter(m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) <= 3)
-        .sort((a, b) => getMinionPower(ctx.state, b, ctx.baseIndex) - getMinionPower(ctx.state, a, ctx.baseIndex));
-    const target = targets[0];
-    if (!target) return { events: [] };
-
-    const evt: MinionReturnedEvent = {
-        type: SU_EVENTS.MINION_RETURNED,
-        payload: {
-            minionUid: target.uid,
-            minionDefId: target.defId,
-            fromBaseIndex: ctx.baseIndex,
-            toPlayerId: target.owner,
-            reason: 'miskatonic_professor',
-        },
-        timestamp: ctx.now,
+    const targets = base.minions.filter(
+        m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) <= 3
+    );
+    if (targets.length === 0) return { events: [] };
+    if (targets.length === 1) {
+        return { events: [{ type: SU_EVENTS.MINION_RETURNED, payload: { minionUid: targets[0].uid, minionDefId: targets[0].defId, fromBaseIndex: ctx.baseIndex, toPlayerId: targets[0].owner, reason: 'miskatonic_professor' }, timestamp: ctx.now } as MinionReturnedEvent] };
+    }
+    const options = targets.map(t => {
+        const def = getCardDef(t.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? t.defId;
+        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
+        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
+    });
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'miskatonic_professor',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要返回手牌的力量≤3的随从', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
     };
-    return { events: [evt] };
 }
 
 // ============================================================================
@@ -251,10 +252,6 @@ function miskatonicProfessor(ctx: AbilityContext): AbilityResult {
 
 /**
  * 也许能行 onPlay：弃2张疯狂卡消灭一个随从
- * 
- * - 手中疯狂卡不足2张时无效果
- * - 只有一个可消灭目标时自动选择
- * - 多个目标时创建 Prompt（MVP：自动选最强对手随从）
  */
 function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
@@ -263,31 +260,37 @@ function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
     );
     if (madnessInHand.length < 2) return { events: [] };
 
-    // 找所有基地上的随从（可消灭任意随从，包括自己的）
-    const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; power: number }[] = [];
+    // 收集所有可消灭的随从
+    const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
-            allMinions.push({
-                uid: m.uid, defId: m.defId, baseIndex: i,
-                owner: m.owner, power: getMinionPower(ctx.state, m, i),
-            });
+            const def = getCardDef(m.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? m.defId;
+            const power = getMinionPower(ctx.state, m, i);
+            const baseDef = getBaseDef(ctx.state.bases[i].defId);
+            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+            allMinions.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, label: `${name} (力量 ${power}) @ ${baseName}` });
         }
     }
     if (allMinions.length === 0) return { events: [] };
-
-    // MVP：自动选最强的对手随从（优先对手，其次自己）
-    const opponentMinions = allMinions.filter(m => m.owner !== ctx.playerId);
-    const target = opponentMinions.length > 0
-        ? opponentMinions.sort((a, b) => b.power - a.power)[0]
-        : allMinions.sort((a, b) => b.power - a.power)[0];
-
-    const events: SmashUpEvent[] = [];
-    // 弃2张疯狂卡（返回疯狂牌库）
-    events.push(returnMadnessCard(ctx.playerId, madnessInHand[0].uid, 'miskatonic_it_might_just_work', ctx.now));
-    events.push(returnMadnessCard(ctx.playerId, madnessInHand[1].uid, 'miskatonic_it_might_just_work', ctx.now));
-    // 消灭目标随从
-    events.push(destroyMinion(target.uid, target.defId, target.baseIndex, target.owner, 'miskatonic_it_might_just_work', ctx.now));
-    return { events };
+    if (allMinions.length === 1) {
+        return {
+            events: [
+                returnMadnessCard(ctx.playerId, madnessInHand[0].uid, 'miskatonic_it_might_just_work', ctx.now),
+                returnMadnessCard(ctx.playerId, madnessInHand[1].uid, 'miskatonic_it_might_just_work', ctx.now),
+                destroyMinion(allMinions[0].uid, allMinions[0].defId, allMinions[0].baseIndex, allMinions[0].owner, 'miskatonic_it_might_just_work', ctx.now),
+            ],
+        };
+    }
+    // 多目标：Prompt 选择
+    const options = allMinions.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'miskatonic_it_might_just_work',
+            playerId: ctx.playerId,
+            data: { madnessUids: [madnessInHand[0].uid, madnessInHand[1].uid], promptConfig: { title: '选择要消灭的随从（弃2张疯狂卡）', options: buildMinionTargetOptions(options) } },
+        }, ctx.now)],
+    };
 }
 
 /**
@@ -336,8 +339,35 @@ function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
 
 /** 注册米斯卡塔尼克大学的 Prompt 继续函数 */
 export function registerMiskatonicPromptContinuations(): void {
-    // 目前 MVP 实现都是自动选择，暂无需要 Prompt 继续函数
-    // 后续实现完整 Prompt 选择时在此注册
+    // 教授：选择目标后返回手牌
+    registerPromptContinuation('miskatonic_professor', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        return [{
+            type: SU_EVENTS.MINION_RETURNED,
+            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'miskatonic_professor' },
+            timestamp: ctx.now,
+        }];
+    });
+
+    // 也许能行：选择目标后弃疯狂卡并消灭
+    registerPromptContinuation('miskatonic_it_might_just_work', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const data = ctx.data as { madnessUids: string[] };
+        const base = ctx.state.bases[baseIndex];
+        if (!base) return [];
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return [];
+        const events: SmashUpEvent[] = [];
+        for (const uid of data.madnessUids) {
+            events.push(returnMadnessCard(ctx.playerId, uid, 'miskatonic_it_might_just_work', ctx.now));
+        }
+        events.push(destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'miskatonic_it_might_just_work', ctx.now));
+        return events;
+    });
 }
 
 // ============================================================================
@@ -384,9 +414,9 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
         timestamp: ctx.now,
     });
     // 抽等量牌（从新牌库顶部抽）
-    const drawCount = Math.min(handCards.length, player.deck.length);
+    const drawCount = Math.min(handCards.length, newDeckUids.length);
     if (drawCount > 0) {
-        const drawnUids = player.deck.slice(0, drawCount).map(c => c.uid);
+        const drawnUids = newDeckUids.slice(0, drawCount);
         events.push({
             type: SU_EVENTS.CARDS_DRAWN,
             payload: { playerId: ctx.playerId, count: drawCount, cardUids: drawnUids },

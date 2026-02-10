@@ -36,7 +36,7 @@ function innsmouthTheDeepOnes(ctx: AbilityContext): AbilityResult {
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         for (const m of base.minions) {
-            if (m.controller === ctx.playerId && m.basePower <= 2) {
+            if (m.controller === ctx.playerId && getMinionPower(ctx.state, m, i) <= 2) {
                 events.push(addPowerCounter(m.uid, i, 1, 'innsmouth_the_deep_ones', ctx.now));
             }
         }

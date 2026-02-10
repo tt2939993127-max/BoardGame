@@ -22,7 +22,9 @@ import type {
     OngoingAttachedEvent,
     OngoingDetachedEvent,
     TalentUsedEvent,
+    CardToDeckTopEvent,
     CardToDeckBottomEvent,
+    CardTransferredEvent,
     CardRecoveredFromDiscardEvent,
     HandShuffledIntoDeckEvent,
     MinionReturnedEvent,
@@ -993,35 +995,123 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
-        case SU_EVENTS.CARD_TO_DECK_BOTTOM: {
-            const { cardUid, defId, ownerId } = (event as CardToDeckBottomEvent).payload;
+        case SU_EVENTS.CARD_TO_DECK_TOP: {
+            const { cardUid, defId, ownerId } = (event as CardToDeckTopEvent).payload;
             const owner = state.players[ownerId];
             if (!owner) return state;
-            // 从弃牌堆中移除该卡（如果存在），放入牌库底
-            const cardInDiscard = owner.discard.find(c => c.uid === cardUid);
-            if (cardInDiscard) {
-                const newDiscard = owner.discard.filter(c => c.uid !== cardUid);
-                return {
-                    ...state,
-                    players: {
-                        ...state.players,
-                        [ownerId]: {
-                            ...owner,
-                            discard: newDiscard,
-                            deck: [...owner.deck, cardInDiscard],
-                        },
-                    },
-                };
-            }
-            // 如果不在弃牌堆（可能还没进弃牌堆），创建卡牌实例放入牌库底
-            const newCard: CardInstance = { uid: cardUid, defId, type: 'minion', owner: ownerId };
+
+            let found: CardInstance | undefined;
+            const removeCard = (cards: CardInstance[]): CardInstance[] => {
+                const idx = cards.findIndex(c => c.uid === cardUid);
+                if (idx === -1) return cards;
+                if (!found) found = cards[idx];
+                return [...cards.slice(0, idx), ...cards.slice(idx + 1)];
+            };
+
+            const newHand = removeCard(owner.hand);
+            const newDeck = removeCard(owner.deck);
+            const newDiscard = removeCard(owner.discard);
+
+            const def = getCardDef(defId);
+            const card: CardInstance = found ?? {
+                uid: cardUid,
+                defId,
+                type: def?.type ?? 'minion',
+                owner: ownerId,
+            };
+
             return {
                 ...state,
                 players: {
                     ...state.players,
                     [ownerId]: {
                         ...owner,
-                        deck: [...owner.deck, newCard],
+                        hand: newHand,
+                        discard: newDiscard,
+                        deck: [card, ...newDeck],
+                    },
+                },
+            };
+        }
+
+        case SU_EVENTS.CARD_TO_DECK_BOTTOM: {
+            const { cardUid, defId, ownerId } = (event as CardToDeckBottomEvent).payload;
+            const owner = state.players[ownerId];
+            if (!owner) return state;
+
+            let found: CardInstance | undefined;
+            const removeCard = (cards: CardInstance[]): CardInstance[] => {
+                const idx = cards.findIndex(c => c.uid === cardUid);
+                if (idx === -1) return cards;
+                if (!found) found = cards[idx];
+                return [...cards.slice(0, idx), ...cards.slice(idx + 1)];
+            };
+
+            const newHand = removeCard(owner.hand);
+            const newDeck = removeCard(owner.deck);
+            const newDiscard = removeCard(owner.discard);
+
+            const def = getCardDef(defId);
+            const card: CardInstance = found ?? {
+                uid: cardUid,
+                defId,
+                type: def?.type ?? 'minion',
+                owner: ownerId,
+            };
+
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [ownerId]: {
+                        ...owner,
+                        hand: newHand,
+                        discard: newDiscard,
+                        deck: [...newDeck, card],
+                    },
+                },
+            };
+        }
+
+        case SU_EVENTS.CARD_TRANSFERRED: {
+            const { cardUid, defId, fromPlayerId, toPlayerId } = (event as CardTransferredEvent).payload;
+            const fromPlayer = state.players[fromPlayerId];
+            const toPlayer = state.players[toPlayerId];
+            if (!fromPlayer || !toPlayer) return state;
+
+            let found: CardInstance | undefined;
+            const removeCard = (cards: CardInstance[]): CardInstance[] => {
+                const idx = cards.findIndex(c => c.uid === cardUid);
+                if (idx === -1) return cards;
+                if (!found) found = cards[idx];
+                return [...cards.slice(0, idx), ...cards.slice(idx + 1)];
+            };
+
+            const fromHand = removeCard(fromPlayer.hand);
+            const fromDeck = removeCard(fromPlayer.deck);
+            const fromDiscard = removeCard(fromPlayer.discard);
+
+            const def = getCardDef(defId);
+            const card: CardInstance = found ?? {
+                uid: cardUid,
+                defId,
+                type: def?.type ?? 'minion',
+                owner: fromPlayerId,
+            };
+
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [fromPlayerId]: {
+                        ...fromPlayer,
+                        hand: fromHand,
+                        deck: fromDeck,
+                        discard: fromDiscard,
+                    },
+                    [toPlayerId]: {
+                        ...toPlayer,
+                        hand: [...toPlayer.hand, card],
                     },
                 },
             };

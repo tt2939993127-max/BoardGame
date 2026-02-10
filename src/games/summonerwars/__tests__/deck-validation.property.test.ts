@@ -276,19 +276,23 @@ describe('Property 1: 牌组验证完整性', () => {
 // ============================================================================
 
 describe('Property 3: 符号匹配正确性', () => {
-    it('卡牌与召唤师有交集符号时 getSymbolMatch 返回 true', () => {
+    it('有符号的普通事件卡与召唤师匹配结果等于交集判断', () => {
+        // 只测试普通事件（非传奇、非建筑、非召唤师），这些走纯交集逻辑
+        const standardEvents = allCards.filter(
+            (c): c is EventCard => c.cardType === 'event' && c.eventType !== 'legendary' && c.deckSymbols.length > 0,
+        );
+        if (standardEvents.length === 0) return;
+
         fc.assert(
             fc.property(
-                arbCard(),
+                fc.integer({ min: 0, max: standardEvents.length - 1 }),
                 arbSummonerCard(),
-                (card: Card, summoner: UnitCard) => {
+                (cardIdx: number, summoner: UnitCard) => {
+                    const card = standardEvents[cardIdx];
                     const result = getSymbolMatch(card, summoner.deckSymbols);
-
-                    // 手动计算交集
                     const hasIntersection = card.deckSymbols.some(
                         s => summoner.deckSymbols.includes(s),
                     );
-
                     expect(result).toBe(hasIntersection);
                 },
             ),
@@ -296,86 +300,119 @@ describe('Property 3: 符号匹配正确性', () => {
         );
     });
 
-    it('空符号列表的卡牌与任何召唤师都不匹配', () => {
-        fc.assert(
-            fc.property(arbDeckSymbols(), (summonerSymbols: string[]) => {
-                // 构造一个无符号的卡牌
-                const cardWithNoSymbols: Card = {
-                    id: 'test-no-symbols',
-                    cardType: 'event',
-                    name: '无符号事件',
-                    cost: 0,
-                    playPhase: 'any',
-                    effect: '测试',
-                    deckSymbols: [],
-                } as EventCard;
-
-                const result = getSymbolMatch(cardWithNoSymbols, summonerSymbols);
-                expect(result).toBe(false);
-            }),
-            { numRuns: 100 },
+    it('传奇事件无需符号匹配，始终返回 true', () => {
+        const legendaryEvents = allCards.filter(
+            (c): c is EventCard => c.cardType === 'event' && c.eventType === 'legendary',
         );
-    });
+        if (legendaryEvents.length === 0) return;
 
-    it('空召唤师符号列表与任何卡牌都不匹配', () => {
-        fc.assert(
-            fc.property(arbCard(), (card: Card) => {
-                const result = getSymbolMatch(card, []);
-                expect(result).toBe(false);
-            }),
-            { numRuns: 100 },
-        );
-    });
-
-    it('符号匹配是对称的：card ∩ summoner = summoner ∩ card', () => {
         fc.assert(
             fc.property(
+                fc.integer({ min: 0, max: legendaryEvents.length - 1 }),
                 arbDeckSymbols(),
-                arbDeckSymbols(),
-                (cardSymbols: string[], summonerSymbols: string[]) => {
-                    // 构造测试卡牌
-                    const testCard: Card = {
-                        id: 'test-symmetric',
-                        cardType: 'event',
-                        name: '对称测试',
-                        cost: 0,
-                        playPhase: 'any',
-                        effect: '测试',
-                        deckSymbols: cardSymbols,
-                    } as EventCard;
-
-                    const testSummonerCard: Card = {
-                        id: 'test-summoner-symmetric',
-                        cardType: 'event',
-                        name: '对称测试召唤师',
-                        cost: 0,
-                        playPhase: 'any',
-                        effect: '测试',
-                        deckSymbols: summonerSymbols,
-                    } as EventCard;
-
-                    // card 的符号与 summoner 的符号匹配 ⟺ summoner 的符号与 card 的符号匹配
-                    const forward = getSymbolMatch(testCard, summonerSymbols);
-                    const backward = getSymbolMatch(testSummonerCard, cardSymbols);
-                    expect(forward).toBe(backward);
+                (cardIdx: number, summonerSymbols: string[]) => {
+                    const card = legendaryEvents[cardIdx];
+                    expect(getSymbolMatch(card, summonerSymbols)).toBe(true);
                 },
             ),
             { numRuns: 100 },
         );
     });
 
-    it('注册表中的真实卡牌与同阵营召唤师应匹配（除传奇事件外）', () => {
-        // 传奇事件无符号，不参与匹配
+    it('建筑卡无需符号匹配，始终返回 true', () => {
+        if (structures.length === 0) return;
+
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: structures.length - 1 }),
+                arbDeckSymbols(),
+                (cardIdx: number, summonerSymbols: string[]) => {
+                    const card = structures[cardIdx];
+                    expect(getSymbolMatch(card, summonerSymbols)).toBe(true);
+                },
+            ),
+            { numRuns: 100 },
+        );
+    });
+
+    it('召唤师卡无需符号匹配，始终返回 true', () => {
+        fc.assert(
+            fc.property(arbSummonerCard(), arbDeckSymbols(), (summoner: UnitCard, symbols: string[]) => {
+                expect(getSymbolMatch(summoner, symbols)).toBe(true);
+            }),
+            { numRuns: 100 },
+        );
+    });
+
+    it('空 deckSymbols 的普通事件卡默认允许（返回 true）', () => {
+        fc.assert(
+            fc.property(arbDeckSymbols(), (summonerSymbols: string[]) => {
+                const cardWithNoSymbols: Card = {
+                    id: 'test-no-symbols',
+                    cardType: 'event',
+                    name: '无符号事件',
+                    eventType: 'common',
+                    cost: 0,
+                    playPhase: 'any',
+                    effect: '测试',
+                    deckSymbols: [],
+                } as EventCard;
+
+                // 空 deckSymbols 的卡牌默认允许
+                expect(getSymbolMatch(cardWithNoSymbols, summonerSymbols)).toBe(true);
+            }),
+            { numRuns: 100 },
+        );
+    });
+
+    it('符号匹配对称性：普通事件卡之间的交集判断是对称的', () => {
+        fc.assert(
+            fc.property(
+                arbDeckSymbols(),
+                arbDeckSymbols(),
+                (cardSymbols: string[], summonerSymbols: string[]) => {
+                    // 构造两张普通事件卡（非特殊类型，走纯交集逻辑）
+                    const makeCard = (id: string, symbols: string[]): EventCard => ({
+                        id,
+                        cardType: 'event',
+                        name: '测试',
+                        eventType: 'common',
+                        cost: 0,
+                        playPhase: 'any',
+                        effect: '测试',
+                        deckSymbols: symbols,
+                    } as EventCard);
+
+                    const cardA = makeCard('test-a', cardSymbols);
+                    const cardB = makeCard('test-b', summonerSymbols);
+
+                    // 当两张卡都有符号时，交集判断是对称的
+                    if (cardSymbols.length > 0 && summonerSymbols.length > 0) {
+                        const forward = getSymbolMatch(cardA, summonerSymbols);
+                        const backward = getSymbolMatch(cardB, cardSymbols);
+                        expect(forward).toBe(backward);
+                    }
+                },
+            ),
+            { numRuns: 100 },
+        );
+    });
+
+    it('注册表中有符号的卡牌与召唤师匹配结果应与手动计算一致', () => {
         fc.assert(
             fc.property(arbSummonerCard(), (summoner: UnitCard) => {
                 const summonerSymbols = summoner.deckSymbols;
 
-                // 获取注册表中所有有符号的卡牌
-                const cardsWithSymbols = allCards.filter(c => c.deckSymbols.length > 0);
+                // 只测试有符号的非特殊卡牌（排除召唤师/传奇事件/建筑，它们有特殊规则）
+                const testableCards = allCards.filter(c => {
+                    if (c.cardType === 'unit' && c.unitClass === 'summoner') return false;
+                    if (c.cardType === 'event' && (c as EventCard).eventType === 'legendary') return false;
+                    if (c.cardType === 'structure') return false;
+                    return c.deckSymbols.length > 0;
+                });
 
-                for (const card of cardsWithSymbols) {
+                for (const card of testableCards) {
                     const result = getSymbolMatch(card, summonerSymbols);
-                    // 有符号的卡牌与召唤师匹配结果应与手动计算一致
                     const expected = card.deckSymbols.some(s => summonerSymbols.includes(s));
                     expect(result).toBe(expected);
                 }

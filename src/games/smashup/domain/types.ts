@@ -359,7 +359,9 @@ export const SU_EVENTS = {
     ONGOING_ATTACHED: 'su:ongoing_attached',
     ONGOING_DETACHED: 'su:ongoing_detached',
     TALENT_USED: 'su:talent_used',
+    CARD_TO_DECK_TOP: 'su:card_to_deck_top',
     CARD_TO_DECK_BOTTOM: 'su:card_to_deck_bottom',
+    CARD_TRANSFERRED: 'su:card_transferred',
     CARD_RECOVERED_FROM_DISCARD: 'su:card_recovered_from_discard',
     HAND_SHUFFLED_INTO_DECK: 'su:hand_shuffled_into_deck',
     /** Prompt 继续：能力目标选择完成后的继续事件 */
@@ -494,7 +496,9 @@ export type SmashUpEvent =
     | OngoingAttachedEvent
     | OngoingDetachedEvent
     | TalentUsedEvent
+    | CardToDeckTopEvent
     | CardToDeckBottomEvent
+    | CardTransferredEvent
     | CardRecoveredFromDiscardEvent
     | HandShuffledIntoDeckEvent
     | PromptContinuationEvent
@@ -606,6 +610,27 @@ export interface CardToDeckBottomEvent extends GameEvent<typeof SU_EVENTS.CARD_T
         cardUid: string;
         defId: string;
         ownerId: PlayerId;
+        reason: string;
+    };
+}
+
+/** 卡牌放入牌库顶 */
+export interface CardToDeckTopEvent extends GameEvent<typeof SU_EVENTS.CARD_TO_DECK_TOP> {
+    payload: {
+        cardUid: string;
+        defId: string;
+        ownerId: PlayerId;
+        reason: string;
+    };
+}
+
+/** 卡牌在玩家之间转移（通常从对手牌库/手牌到自己手牌） */
+export interface CardTransferredEvent extends GameEvent<typeof SU_EVENTS.CARD_TRANSFERRED> {
+    payload: {
+        cardUid: string;
+        defId: string;
+        fromPlayerId: PlayerId;
+        toPlayerId: PlayerId;
         reason: string;
     };
 }

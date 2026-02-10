@@ -116,8 +116,53 @@ function robotHoverbot(ctx: AbilityContext): AbilityResult {
 
 /** 高速机器人 onPlay：额外打出力量≤2的随从 */
 function robotZapbot(ctx: AbilityContext): AbilityResult {
-    // MVP：直接给额外随从额度（实际应限制力量≤2，需要 Prompt 配合）
-    return { events: [grantExtraMinion(ctx.playerId, 'robot_zapbot', ctx.now)] };
+    const player = ctx.state.players[ctx.playerId];
+    const candidates: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
+
+    for (const card of player.hand) {
+        if (card.type !== 'minion' || card.uid === ctx.cardUid) continue;
+        const def = getCardDef(card.defId) as MinionCardDef | undefined;
+        if (!def || def.type !== 'minion') continue;
+        if (def.power > 2) continue;
+        for (let i = 0; i < ctx.state.bases.length; i++) {
+            const baseDef = getBaseDef(ctx.state.bases[i].defId);
+            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+            candidates.push({
+                uid: card.uid,
+                defId: card.defId,
+                baseIndex: i,
+                label: `${def.name ?? card.defId} (力量 ${def.power}) @ ${baseName}`,
+            });
+        }
+    }
+
+    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 1) {
+        const chosen = candidates[0];
+        const def = getCardDef(chosen.defId) as MinionCardDef | undefined;
+        if (!def) return { events: [] };
+        return {
+            events: [{
+                type: SU_EVENTS.MINION_PLAYED,
+                payload: {
+                    playerId: ctx.playerId,
+                    cardUid: chosen.uid,
+                    defId: chosen.defId,
+                    baseIndex: chosen.baseIndex,
+                    power: def.power,
+                },
+                timestamp: ctx.now,
+            }],
+        };
+    }
+
+    return {
+        events: [setPromptContinuation({
+            abilityId: 'robot_zapbot',
+            playerId: ctx.playerId,
+            data: { promptConfig: { title: '选择要额外打出的力量≤2的随从', options: buildMinionTargetOptions(candidates) } },
+        }, ctx.now)],
+    };
 }
 
 /** 技术中心 onPlay：选择一个基地，该基地上你每有一个随从就抽一张牌 */
@@ -208,6 +253,27 @@ export function registerRobotPromptContinuations(): void {
         return [{
             type: SU_EVENTS.CARDS_DRAWN,
             payload: { playerId: ctx.playerId, count: actualDraw, cardUids: drawnUids },
+            timestamp: ctx.now,
+        }];
+    });
+
+    // 高速机器人：选择要额外打出的力量≤2随从
+    registerPromptContinuation('robot_zapbot', (ctx) => {
+        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
+        const player = ctx.state.players[ctx.playerId];
+        const card = player.hand.find(c => c.uid === minionUid);
+        if (!card) return [];
+        const def = getCardDef(card.defId) as MinionCardDef | undefined;
+        if (!def || def.type !== 'minion') return [];
+        return [{
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: {
+                playerId: ctx.playerId,
+                cardUid: card.uid,
+                defId: card.defId,
+                baseIndex,
+                power: def.power,
+            },
             timestamp: ctx.now,
         }];
     });

@@ -33,6 +33,7 @@ import {
   getEntangleUnits,
   calculatePushPullPosition,
   getPlayerUnits,
+  getUnitAbilities,
   HAND_SIZE,
 } from './helpers';
 import { rollDice, countHits } from '../config/dice';
@@ -64,6 +65,74 @@ function getFuneralPyreChargeEvents(core: SummonerWarsCore, timestamp: number): 
     }
   }
   return events;
+}
+
+/**
+ * 后处理：自动补全死亡检测（支持连锁）
+ * 遍历事件列表，对每个 UNIT_DAMAGED 模拟累计伤害，
+ * 若致死且该单位尚无 UNIT_DESTROYED 事件，则自动注入 UNIT_DESTROYED + onUnitDestroyed 触发。
+ * 注入的事件也会被后续迭代处理，因此支持连锁死亡（A死亡触发伤害→B死亡→...）。
+ * 这样任何代码只需 push UNIT_DAMAGED，死亡处理全自动。
+ */
+function postProcessDeathChecks(
+  events: GameEvent[],
+  originalCore: SummonerWarsCore,
+): GameEvent[] {
+  // 预收集已有 UNIT_DESTROYED 的 cardId，避免重复注入
+  const destroyedCardIds = new Set<string>();
+  for (const e of events) {
+    if (e.type === SW_EVENTS.UNIT_DESTROYED) {
+      const cardId = (e.payload as Record<string, unknown>).cardId as string;
+      if (cardId) destroyedCardIds.add(cardId);
+    }
+  }
+
+  // 用 result 同时作为事件列表和处理队列
+  // 注入的事件插入当前位置之后，后续迭代自然处理（含连锁伤害）
+  const result: GameEvent[] = [...events];
+  let workingState = originalCore;
+  let idx = 0;
+  const maxEvents = events.length + 200; // 安全上限，防止无限循环
+
+  while (idx < result.length && result.length < maxEvents) {
+    const event = result[idx];
+
+    if (event.type === SW_EVENTS.UNIT_DAMAGED) {
+      const { position, damage } = event.payload as { position: CellCoord; damage: number };
+      const unit = workingState.board[position.row]?.[position.col]?.unit;
+
+      if (unit && !destroyedCardIds.has(unit.cardId)) {
+        const newDamage = unit.damage + damage;
+        if (newDamage >= getEffectiveLife(unit)) {
+          // 构造注入事件
+          const destroyEvent: GameEvent = {
+            type: SW_EVENTS.UNIT_DESTROYED,
+            payload: {
+              position,
+              cardId: unit.cardId,
+              cardName: unit.card.name,
+              owner: unit.owner,
+            },
+            timestamp: event.timestamp,
+          };
+          const triggerEvents = triggerAllUnitsAbilities('onUnitDestroyed', workingState, workingState.currentPlayer, {
+            victimUnit: unit,
+            victimPosition: position,
+            timestamp: event.timestamp,
+          });
+          // 插入到当前 UNIT_DAMAGED 之后，后续迭代自然处理连锁
+          result.splice(idx + 1, 0, destroyEvent, ...triggerEvents);
+          destroyedCardIds.add(unit.cardId);
+        }
+      }
+    }
+
+    // 推进工作状态，确保后续事件基于最新状态判断
+    workingState = reduceEvent(workingState, event);
+    idx++;
+  }
+
+  return result;
 }
 
 /** 获取阶段显示名称 */
@@ -178,12 +247,7 @@ export function executeCommand(
           if (newDist > wasDist) {
             events.push({
               type: SW_EVENTS.UNIT_DAMAGED,
-              payload: {
-                position: from, // 伤害发生在离开的位置（移动前）
-                damage: 1,
-                reason: 'entangle',
-                sourceUnitId: eu.cardId,
-              },
+              payload: { position: from, damage: 1, reason: 'entangle', sourceUnitId: eu.cardId },
               timestamp,
             });
           }
@@ -196,7 +260,7 @@ export function executeCommand(
         });
 
         // 冲锋加成：直线移动3+格时获得+1战力（通过 boosts 标记）
-        const unitAbilities = unit.card.abilities ?? [];
+        const unitAbilities = getUnitAbilities(unit);
         if (unitAbilities.includes('charge')) {
           const moveDist = manhattanDistance(from, to);
           if (moveDist >= 3 && (from.row === to.row || from.col === to.col)) {
@@ -212,7 +276,7 @@ export function executeCommand(
         if (unit.owner === playerId) {
           const grabbers = getPlayerUnits(core, playerId).filter(u =>
             u.cardId !== unit.cardId
-            && (u.card.abilities ?? []).includes('grab')
+            && getUnitAbilities(u).includes('grab')
             && manhattanDistance(u.position, from) === 1
           );
           for (const grabber of grabbers) {
@@ -259,7 +323,7 @@ export function executeCommand(
           if (!sourceUnit) {
             break;
           }
-          const sourceAbilities = sourceUnit.card.abilities ?? [];
+          const sourceAbilities = getUnitAbilities(sourceUnit);
           if (!sourceAbilities.includes(beforeAttack.abilityId)) {
             continue;
           }
@@ -468,7 +532,7 @@ export function executeCommand(
             for (let col = 0; col < BOARD_COLS; col++) {
               const shieldUnit = workingCore.board[row]?.[col]?.unit;
               if (shieldUnit && shieldUnit.owner === targetOwner
-                && (shieldUnit.card.abilities ?? []).includes('divine_shield')
+                && getUnitAbilities(shieldUnit).includes('divine_shield')
                 && manhattanDistance({ row, col }, target) <= 3) {
                 // 投掷2个骰子，计算 melee（❤️）数量
                 const shieldDice = rollDice(2, () => random.random());
@@ -509,7 +573,7 @@ export function executeCommand(
         });
 
         // 心灵捕获检查：攻击者有 mind_capture 且伤害足以消灭目标
-        const attackerAbilities = attackerUnit.card.abilities ?? [];
+        const attackerAbilities = getUnitAbilities(attackerUnit);
         const hasMindCapture = attackerAbilities.includes('mind_capture');
         
         if (hasMindCapture && hits > 0 && targetCell?.unit) {
@@ -726,6 +790,7 @@ export function executeCommand(
         
         const baseId = eventCard.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
         const isAttachment = baseId === 'necro-hellfire-blade';
+        const summoner = getSummoner(core, playerId);
         
         events.push({
           type: SW_EVENTS.EVENT_PLAYED,
@@ -755,12 +820,19 @@ export function executeCommand(
                 if (damageTarget) {
                   const damageUnit = getUnitAt(core, damageTarget);
                   const damageStructure = getStructureAt(core, damageTarget);
-                  if (damageUnit || damageStructure) {
+                  if (damageUnit) {
+                    events.push({
+                      type: SW_EVENTS.UNIT_DAMAGED,
+                      payload: { position: damageTarget, damage: 2, cardId: damageUnit.cardId, source: 'annihilate' },
+                      timestamp,
+                    });
+                  }
+                  if (damageStructure) {
                     events.push({
                       type: SW_EVENTS.UNIT_DAMAGED,
                       payload: {
                         position: damageTarget,
-                        cardId: damageUnit?.cardId ?? damageStructure?.cardId,
+                        cardId: damageStructure.cardId,
                         damage: 2, source: 'annihilate',
                       },
                       timestamp,
@@ -863,7 +935,7 @@ export function executeCommand(
                   };
                   if (!isValidCoord(nextPos)) break;
 
-                  const occupant = getUnitAt(core, nextPos);
+              const occupant = getUnitAt(core, nextPos);
                   if (occupant) {
                     // 穿过单位：对被穿过的单位造成1伤害
                     events.push({
@@ -1099,12 +1171,17 @@ export function executeCommand(
             // targets[0] = 目标位置（召唤师3格内的士兵或英雄）
             if (targets && targets.length > 0) {
               const cpTarget = getUnitAt(core, targets[0]);
+              const sourcePosition = summoner?.position ?? targets[0];
+              const sourceUnitId = summoner?.cardId ?? eventCard.id;
               if (cpTarget && cpTarget.owner === playerId
                 && cpTarget.card.unitClass !== 'summoner') {
                 events.push({
                   type: SW_EVENTS.ABILITY_TRIGGERED,
                   payload: {
                     abilityId: 'chant_of_power',
+                    abilityName: 'chant_of_power',
+                    sourceUnitId,
+                    sourcePosition,
                     targetPosition: targets[0],
                     targetUnitId: cpTarget.cardId,
                     grantedAbility: 'power_up',
@@ -1158,10 +1235,15 @@ export function executeCommand(
               const entTarget1 = getUnitAt(core, targets[0]);
               const entTarget2 = getUnitAt(core, targets[1]);
               if (entTarget1 && entTarget2) {
+                const sourcePosition = summoner?.position ?? targets[0];
+                const sourceUnitId = summoner?.cardId ?? eventCard.id;
                 events.push({
                   type: SW_EVENTS.ABILITY_TRIGGERED,
                   payload: {
                     abilityId: 'chant_of_entanglement',
+                    abilityName: 'chant_of_entanglement',
+                    sourceUnitId,
+                    sourcePosition,
                     targetUnitId1: entTarget1.cardId,
                     targetUnitId2: entTarget2.cardId,
                   },
@@ -1179,10 +1261,15 @@ export function executeCommand(
             if (targets && targets.length > 0) {
               const cwTarget = getUnitAt(core, targets[0]);
               if (cwTarget && cwTarget.owner === playerId) {
+                const sourcePosition = summoner?.position ?? targets[0];
+                const sourceUnitId = summoner?.cardId ?? eventCard.id;
                 events.push({
                   type: SW_EVENTS.ABILITY_TRIGGERED,
                   payload: {
                     abilityId: 'chant_of_weaving',
+                    abilityName: 'chant_of_weaving',
+                    sourceUnitId,
+                    sourcePosition,
                     targetUnitId: cwTarget.cardId,
                     targetPosition: targets[0],
                   },
@@ -1393,15 +1480,18 @@ export function executeCommand(
       console.warn('[SummonerWars] 未处理的命令:', command.type);
   }
 
-  // 后处理：扫描所有 UNIT_DESTROYED 事件，为殉葬火堆生成充能事件
-  const destroyCount = events.filter(e => e.type === SW_EVENTS.UNIT_DESTROYED).length;
+  // 后处理1：自动补全死亡检测（UNIT_DAMAGED → UNIT_DESTROYED）
+  const processedEvents = postProcessDeathChecks(events, core);
+
+  // 后处理2：扫描所有 UNIT_DESTROYED 事件，为殉葬火堆生成充能事件
+  const destroyCount = processedEvents.filter(e => e.type === SW_EVENTS.UNIT_DESTROYED).length;
   if (destroyCount > 0) {
     for (let i = 0; i < destroyCount; i++) {
-      events.push(...getFuneralPyreChargeEvents(core, timestamp));
+      processedEvents.push(...getFuneralPyreChargeEvents(core, timestamp));
     }
   }
 
-  return events;
+  return processedEvents;
 }
 
 // ============================================================================
@@ -1635,6 +1725,29 @@ function executeActivateAbility(
       break;
     }
 
+    case 'illusion': {
+      // 幻化：复制3格内一个士兵的所有技能，直到回合结束
+      const illusionTargetPos = payload.targetPosition as CellCoord | undefined;
+      if (!illusionTargetPos) break;
+      const illusionTarget = getUnitAt(core, illusionTargetPos);
+      if (!illusionTarget) break;
+      const copiedAbilities = getUnitAbilities(illusionTarget);
+      if (copiedAbilities.length > 0) {
+        events.push({
+          type: SW_EVENTS.ABILITIES_COPIED,
+          payload: {
+            sourceUnitId,
+            sourcePosition,
+            targetUnitId: illusionTarget.cardId,
+            targetPosition: illusionTargetPos,
+            copiedAbilities,
+          },
+          timestamp,
+        });
+      }
+      break;
+    }
+
     case 'telekinesis':
     case 'high_telekinesis': {
       // 念力/高阶念力：推拉目标1格
@@ -1646,7 +1759,7 @@ function executeActivateAbility(
       if (!pushPullTarget || pushPullTarget.card.unitClass === 'summoner') break;
       
       // 检查稳固免疫
-      if ((pushPullTarget.card.abilities ?? []).includes('stable')) break;
+      if (getUnitAbilities(pushPullTarget).includes('stable')) break;
       
       // 检查范围
       const maxRange = abilityId === 'high_telekinesis' ? 3 : 2;
@@ -1734,7 +1847,7 @@ function executeActivateAbility(
           payload: { position: sourcePosition, damage: 1, reason: 'blood_rune' },
           timestamp,
         });
-      } else if (brChoice === 'charge') {
+      } else {
         events.push({
           type: SW_EVENTS.MAGIC_CHANGED,
           payload: { playerId, delta: -1 },
@@ -1935,9 +2048,10 @@ function executeActivateAbility(
         for (let c = 0; c < BOARD_COLS; c++) {
           const structure = getStructureAt(core, { row: r, col: c });
           // 友方建筑 或 友方活体结构单位
+          const structureUnit = getUnitAt(core, { row: r, col: c });
           const isAllyStructure = (structure && structure.owner === playerId)
-            || (getUnitAt(core, { row: r, col: c })?.owner === playerId
-              && (getUnitAt(core, { row: r, col: c })?.card.abilities ?? []).includes('mobile_structure'));
+            || (structureUnit && structureUnit.owner === playerId
+              && getUnitAbilities(structureUnit).includes('mobile_structure'));
           if (!isAllyStructure) continue;
           const adjDirs = [
             { row: -1, col: 0 }, { row: 1, col: 0 },

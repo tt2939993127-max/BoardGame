@@ -340,17 +340,34 @@ export function executePipeline<
     }
 
     // 3. Core.execute -> 产生 Events
-    const events = domain.execute(currentState, command, random);
-    ctx.events = [...preCommandEvents, ...events] as GameEvent[];
-    allEvents.push(...events);
+    let events = domain.execute(currentState, command, random);
 
-    // 4. 逐个 Reduce events -> 更新 state.core
+    // 3.5. 后处理：状态检测，注入派生事件（类似万智牌 SBA）
+    if (domain.postProcess) {
+        events = domain.postProcess(currentState.core, events);
+    }
+
+    // 4. 逐个 Reduce events -> 更新 state.core（含事件拦截/替换）
     let core = currentState.core;
+    const appliedEvents: TEvent[] = [];
     for (const event of events) {
-        core = domain.reduce(core, event);
+        if (domain.interceptEvent) {
+            const result = domain.interceptEvent(core, event);
+            if (result === null) continue; // 事件被吞噬
+            const batch = Array.isArray(result) ? result : [result];
+            for (const ev of batch) {
+                core = domain.reduce(core, ev);
+                appliedEvents.push(ev);
+            }
+        } else {
+            core = domain.reduce(core, event);
+            appliedEvents.push(event);
+        }
     }
     currentState = { ...currentState, core };
     ctx.state = currentState;
+    ctx.events = [...preCommandEvents, ...appliedEvents] as GameEvent[];
+    allEvents.push(...appliedEvents);
 
     // 5. 执行 Systems.afterEvents hooks -> 更新 state.sys（多轮迭代）
     // 关键：每轮只传递上一轮产生的事件，避免旧事件重复触发（如 BONUS_DICE_SETTLED 导致二次推进）。

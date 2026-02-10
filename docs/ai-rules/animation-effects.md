@@ -1,0 +1,126 @@
+# 动画/动效完整规范
+
+> 本文档是 `AGENTS.md` 的补充，包含动效技术选型、Canvas 粒子引擎、特效组件的完整规范。
+> **触发条件**：开发/修改任何动画、特效、粒子效果时阅读。
+
+---
+
+## 动画/动效通用规范
+
+- **动画库已接入**：项目使用 **framer-motion**（`motion` / `AnimatePresence`）。
+- **通用动效组件**：`src/components/common/animations/` 下已有 `FlyingEffect`、`ShakeContainer`、`PulseGlow` 与 `variants`。
+- **优先复用原则**：新增动画优先复用/扩展上述组件或 framer-motion 变体，避免重复造轮子或引入平行动画库。
+- **性能友好（强制）**：
+  - **禁止 `transition-all` / `transition-colors`**：会导致 `border-color` 等不可合成属性触发主线程渲染。改用具体属性：`transition-[background-color]`、`transition-[opacity,transform]`。
+  - **优先合成属性**：`transform`、`opacity`、`filter`；**谨慎使用**：`background-color`、`box-shadow`、`border-*`。
+  - **transition 与 @keyframes 互斥**：同一元素禁止同时使用，应通过 `style.transition` 动态切换。
+- **毛玻璃策略**：`backdrop-filter` 尽量保持静态；需要动效时只动遮罩层 `opacity`，避免在动画过程中改变 blur 半径。
+- **通用动效 hooks**：延迟渲染/延迟 blur 优先复用 `useDeferredRender` / `useDelayedBackdropBlur`，避免各处重复实现。
+- **颜色/阴影替代**：若需高亮变化，优先采用"叠层 + opacity"而非直接动画颜色/阴影。
+- **Hover 颜色复用**：按钮 hover 颜色变化优先使用通用 `HoverOverlayLabel`（叠层 + opacity）模式，减少重复实现。
+
+---
+
+## 动效技术选型规范（强制）
+
+> **核心原则**：根据动效本质选择正确的技术，而非统一用一种方案硬做所有效果。
+
+| 动效类型 | 正确技术 | 判断标准 | 典型场景 |
+|----------|----------|----------|----------|
+| **粒子系统** | Canvas 2D（自研引擎） | 粒子特效（几十到几百级别）；双层绘制（辉光+核心） | 胜利彩带、召唤光粒子、爆炸碎片、烟尘扩散 |
+| **复杂矢量动画** | Canvas 2D **推荐** | 每帧重绘复杂路径（弧形/渐变/多层叠加） | 斜切刀光、气浪冲击波、复杂轨迹特效 |
+| **多阶段组合特效** | Canvas 2D **推荐** | 需要蓄力→爆发→持续→消散等多阶段节奏；需要 additive 混合/动态渐变/脉冲呼吸 | 召唤光柱、技能释放、大招特写 |
+| **形状动画** | framer-motion | 确定性形状变换（缩放/位移/旋转/裁切/透明度）；每次触发 1-3 个 DOM 节点 | 红闪脉冲、伤害数字飞出、简单冲击波 |
+| **UI 状态过渡** | framer-motion / CSS transition | 组件进出场、hover/press 反馈、布局动画 | 手牌展开、横幅切换、按钮反馈、阶段指示脉冲 |
+| **精确设计动效** | Lottie（未接入，需美术资源） | 设计师在 AE 中制作的复杂动画，需要逐帧精确控制 | 暂无，未来可用于技能释放特写 |
+
+**PixiJS 已评估不适用（2026-02-08）**：已移除，当前特效规模下 Canvas 2D 全面优于 PixiJS。详见 `docs/refactor/pixi-performance-findings.md`。
+
+**判断边界（快速自检）**：
+1. 需要每帧重绘复杂矢量路径（弧形/渐变）？→ 用 Canvas 2D 手写（如 SlashEffect）
+2. 需要粒子特效（爆炸/烟尘/彩带/光粒子）？→ 用 Canvas 粒子引擎（BurstParticles）
+3. 需要多阶段组合特效（蓄力/爆发/持续/消散）？→ 用 Canvas 2D（如 SummonEffect）
+4. 需要简单形状变换（1-3 个元素）？→ 用 framer-motion
+5. 需要 UI 组件进出场/状态切换？→ 用 framer-motion 或 CSS transition
+
+---
+
+## Canvas 粒子引擎使用规范
+
+- **引擎位置**：`src/components/common/animations/canvasParticleEngine.ts`
+- **双层绘制**：每个粒子有辉光层（半透明大圆）+ 核心层（高亮小圆），视觉质感和 FlyingEffect 一致
+- **预设驱动**：通过 `ParticlePreset` 配置粒子行为，`BURST_PRESETS` 提供常用预设
+- **生命周期**：粒子效果必须有明确的 `life` 配置，所有粒子消散后自动停止渲染循环
+- **现有组件**：`BurstParticles`（爆炸/召唤/烟尘）、`VictoryParticles`（胜利彩带）
+
+### 俯视角物理规范（强制）
+
+本项目游戏为**俯视角棋盘游戏**（召唤师战争/Smash Up 等），**棋盘层**特效必须遵循俯视角物理：
+  - **禁止重力下坠**：`gravity: 0`（或极小值模拟空气阻力），粒子不应往下掉
+  - **平面扩散**：`direction: 'none'`（径向）或指定方向，粒子在平面上扩散
+  - **减速停止**：`drag` 较大（0.92-0.96），模拟摩擦力快速停下
+  - **淡出+缩小**：`opacityDecay: true, sizeDecay: true`，粒子逐渐消散
+  - **例外**：火花（sparks）可保留轻微重力（0.5）模拟金属碰撞的物理感
+  - **适用范围**：棋盘格子内的特效（召唤/攻击/摧毁/碎裂/爆发粒子等）。错误示例：`gravity: 1.5` + `direction: 'top'` 是横版物理，不适用于俯视角。
+
+### UI 层特效物理规范
+
+全屏 UI 层的庆祝/装饰特效（如胜利彩带 `VictoryParticles`）**不受俯视角约束**，应使用符合直觉的物理模型（重力下落、向上喷射等），因为它们叠加在屏幕上而非棋盘内。
+- **判断标准**：特效挂载在棋盘格子/卡牌上 → 俯视角；特效挂载在全屏 overlay/结算页 → UI 层物理
+
+### Canvas 溢出规范（强制）
+
+特效 Canvas 天然超出挂载目标边界，**禁止用 `overflow: hidden` 裁切**。优先使用无溢出方案（Canvas 铺满父级，绘制基于 canvas 尺寸）；小元素挂载场景使用溢出放大方案（Canvas 比容器大 N 倍，居中偏移，容器设 `overflow: visible` + `pointer-events-none`）。详见 `docs/particle-engine.md` § Canvas 溢出规范。
+
+### Canvas transform 尺寸陷阱（强制）
+
+棋盘层 Canvas 特效获取容器尺寸时，**禁止使用 `getBoundingClientRect()`**（会返回经过父级 `transform: scale()` 缩放后的屏幕像素尺寸），**必须使用 `offsetWidth/offsetHeight`**（CSS 布局尺寸，不受 transform 影响）。已修复的组件：ConeBlast、SummonEffect、ShatterEffect、BurstParticles、SlashEffect、RiftSlash。例外：全屏 UI 层特效（如 VictoryParticles）和使用视口坐标的特效（如 FlyingEffect）不受此约束。
+
+### 棋盘特效容器与卡牌对齐规范（强制）
+
+棋盘格子内的特效容器应使用与卡牌相同的尺寸约束（`w-[85%]` + `aspectRatio: 1044/729`），通过 `EffectCellContainer`（`BoardEffects.tsx`）或等效方式实现，确保特效视觉范围与卡牌一致。召唤等需要大范围溢出的特效（如光柱）使用放大容器（5 倍格子大小），不走卡牌约束。`DestroyEffect` 内部也使用 `CARD_ASPECT_RATIO` + `CARD_WIDTH_RATIO` 常量保持一致。
+
+---
+
+## 特效组件 useEffect 依赖稳定性（强制）
+
+> 适用于所有特效组件：Canvas 粒子、framer-motion、DOM timer 驱动。
+
+动画循环/timer 由 useEffect 启动，**其依赖数组中的每一项都必须引用稳定**，否则父组件重渲染会导致 useEffect 重跑 → 动画重启/中断。
+- **回调 prop（`onComplete` 等）**：必须用 `useRef` 持有，禁止放入 useEffect 依赖。Canvas 组件和 DOM timer 组件（如 ImpactContainer/DamageFlash）同样适用。
+- **数组/对象 prop（`color` 等）**：`useMemo` 的依赖不能直接用数组/对象引用（浅比较会失败），必须用 `JSON.stringify` 做值比较。
+- **典型错误**：内联箭头函数/数组字面量作为 prop → 父组件重渲染 → useEffect 重跑 → 动画重启。
+
+### 条件渲染特效的生命周期管理（强制）
+
+当使用 `{isActive && <Effect />}` 条件渲染特效组件时：
+- **必须有关闭机制**：通过 `onComplete` 回调将 `isActive` 设回 `false`，否则 isActive 永远为 true，连续触发时组件不会卸载重挂载，效果只播一次。
+- **重触发模式**：`setIsActive(false)` → `requestAnimationFrame(() => setIsActive(true))`，确保 React 先卸载再重挂载。
+- **禁止用固定 timer 关闭**：不要用 `setTimeout(() => setIsActive(false), 100)` 硬编码关闭时间，必须由效果组件自身通过 `onComplete` 通知完成。
+- **典型错误**：缺少 onComplete → isActive 永远 true → 连续触发时组件不重挂载。
+
+---
+
+## 组合式特效架构（强制）
+
+打击感特效必须按职责拆分为两层：
+- **ImpactContainer（包裹层）**：作用于目标本身——震动（ShakeContainer）+ 钝帧（HitStopContainer）。ShakeContainer 在外层承载 className（背景/边框），HitStopContainer 在内层。
+- **DamageFlash（覆盖层）**：纯视觉 overlay——斜切（RiftSlash）+ 红脉冲（RedPulse）+ 伤害数字（DamageNumber），作为 ImpactContainer 的子元素。
+- **正确组合**：`<ImpactContainer><Target /><DamageFlash /></ImpactContainer>`
+- **禁止**：把震动和视觉效果混在同一个组件里；把 DamageFlash 放在 ImpactContainer 外面（会导致震动目标不一致）。
+
+---
+
+## 特效视觉质量规则（强制）
+
+- **禁止纯几何拼接**：特效禁止用 `stroke` 线段、V 形轮廓、横切线等几何图元拼凑，视觉效果生硬且缺乏能量感。
+- **正确做法**：优先使用粒子系统（streak/circle 喷射 + 自然衰减）或柔和径向渐变模拟气流/光晕；需要轨迹时用粒子拖尾而非画线。
+- **判断标准**：如果特效看起来像"线框图/几何示意图"而非"有能量感的自然效果"，说明方案有问题，必须换用粒子/渐变方案。
+
+---
+
+## 通用特效组件规范（强制）
+
+- **通用 vs 游戏特有**：除非特效包含游戏特有语义（如特定卡牌名称文字、游戏专属资源），否则必须实现为通用组件放在 `src/components/common/animations/`，游戏层通过 props 注入差异。
+- **现有通用特效清单**：新增特效前必须用 `grep` 搜索 `src/components/common/animations/` 确认是否已有可复用组件。完整清单与使用说明见 `docs/particle-engine.md`。
+- **预览页同步**：新增通用特效组件后，必须在 `src/pages/devtools/EffectPreview.tsx` 的 `EFFECT_CATEGORIES` 中注册预览区块。

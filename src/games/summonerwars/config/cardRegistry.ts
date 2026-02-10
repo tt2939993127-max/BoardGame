@@ -1,153 +1,113 @@
+/**
+ * 召唤师战争 - 卡牌注册表
+ *
+ * 从各阵营配置中聚合所有卡牌，提供按阵营查询和分组功能。
+ */
 
 import type { Card, UnitCard, EventCard, StructureCard } from '../domain/types';
 import { FACTION_CATALOG } from './factions';
+import { createDeckByFactionId } from './factions';
 
-// 用于 UI 开发的模拟数据
-const MOCK_CARDS: Card[] = [
-    // Necromancer
-    {
-        id: 'necro_summoner',
-        cardType: 'unit',
-        name: 'Ret-Talus',
-        unitClass: 'summoner',
-        faction: 'necromancer',
-        strength: 3,
-        life: 6,
-        cost: 0,
-        attackType: 'ranged',
-        attackRange: 3,
-        deckSymbols: ['skull'],
-        abilities: ['raise_dead']
-    } as UnitCard,
-    {
-        id: 'necro_champion_1',
-        cardType: 'unit',
-        name: 'Dragos',
-        unitClass: 'champion',
-        faction: 'necromancer',
-        strength: 3,
-        life: 5,
-        cost: 5,
-        attackType: 'melee',
-        attackRange: 1,
-        deckSymbols: ['skull'],
-    } as UnitCard,
-    {
-        id: 'necro_common_1',
-        cardType: 'unit',
-        name: 'Skeleton',
-        unitClass: 'common',
-        faction: 'necromancer',
-        strength: 1,
-        life: 1,
-        cost: 0,
-        attackType: 'melee',
-        attackRange: 1,
-        deckSymbols: ['skull'],
-    } as UnitCard,
-    {
-        id: 'necro_event_1',
-        cardType: 'event',
-        name: 'Raise Dead',
-        cost: 0,
-        playPhase: 'summon',
-        effect: 'Return a common unit from discard pile to play.',
-        deckSymbols: ['skull'],
-    } as EventCard,
-    {
-        id: 'necro_gate',
-        cardType: 'structure',
-        name: 'Gate',
-        cost: 0,
-        life: 5,
-        isGate: true,
-        deckSymbols: ['skull'],
-    } as StructureCard,
-
-    // Goblins
-    {
-        id: 'goblin_summoner',
-        cardType: 'unit',
-        name: 'Sneeks',
-        unitClass: 'summoner',
-        faction: 'goblin',
-        strength: 3,
-        life: 5,
-        cost: 0,
-        attackType: 'melee',
-        attackRange: 1,
-        deckSymbols: ['axe'],
-    } as UnitCard,
-    {
-        id: 'goblin_common_1',
-        cardType: 'unit',
-        name: 'Beast Rider',
-        unitClass: 'common',
-        faction: 'goblin',
-        strength: 2,
-        life: 2,
-        cost: 1,
-        attackType: 'melee',
-        attackRange: 1,
-        deckSymbols: ['axe'],
-    } as UnitCard,
-];
-
-// 辅助扩展卡牌用于测试
-const ALL_CARDS = [...MOCK_CARDS];
+// ============================================================================
+// 卡牌注册表（按阵营缓存所有唯一卡牌定义）
+// ============================================================================
 
 export type CardRegistry = Map<string, Card>;
+
+/** 每个阵营的唯一卡牌池（去重，不含副本后缀） */
+const factionCardPoolCache = new Map<string, Card[]>();
+
+/** 从阵营牌组中提取唯一卡牌定义（去除副本 ID 后缀） */
+function buildFactionCardPool(factionId: string): Card[] {
+  const cached = factionCardPoolCache.get(factionId);
+  if (cached) return cached;
+
+  try {
+    const deckData = createDeckByFactionId(factionId as Parameters<typeof createDeckByFactionId>[0]);
+    const seen = new Map<string, Card>();
+
+    // 召唤师
+    seen.set(deckData.summoner.id, deckData.summoner);
+
+    // 牌组中的卡牌（去除副本后缀 -0, -1, -2...）
+    // 起始单位是牌组中已有普通单位的副本，无需单独处理
+    for (const card of deckData.deck) {
+      const baseId = card.id.replace(/-\d+$/, '');
+      if (!seen.has(baseId)) {
+        seen.set(baseId, { ...card, id: baseId });
+      }
+    }
+
+    // 起始城门
+    const gateBaseId = deckData.startingGate.id.replace(/-\d+$/, '');
+    if (!seen.has(gateBaseId)) {
+      seen.set(gateBaseId, { ...deckData.startingGate, id: gateBaseId });
+    }
+
+    const pool = Array.from(seen.values());
+    factionCardPoolCache.set(factionId, pool);
+    return pool;
+  } catch {
+    // 阵营数据不可用时返回空
+    return [];
+  }
+}
+
+// ============================================================================
+// 公共 API
+// ============================================================================
 
 let registry: CardRegistry | null = null;
 
 export function buildCardRegistry(): CardRegistry {
-    if (registry) return registry;
-    registry = new Map();
-    // 在真实应用中，我们会在这里处理所有阵营。
-    // 目前使用模拟数据。
-    ALL_CARDS.forEach(card => registry!.set(card.id, card));
-    return registry;
+  if (registry) return registry;
+  registry = new Map();
+
+  for (const faction of FACTION_CATALOG) {
+    if (faction.selectable === false) continue;
+    const pool = buildFactionCardPool(faction.id);
+    for (const card of pool) {
+      registry.set(card.id, card);
+    }
+  }
+
+  return registry;
 }
 
+/** 获取指定阵营的卡牌池 */
 export function getCardPoolByFaction(factionId: string): Card[] {
-    // 在真实实现中，这将从完整注册表中过滤
-    // 目前我们返回模拟卡牌并按阵营过滤
-    return ALL_CARDS.filter(c => {
-        if ('faction' in c) return c.faction === factionId;
-        // 事件/建筑在领域类型中没有 'faction' 字段，但在配置中通常有
-        // 我们通过 ID 前缀来模拟此 UI 演示
-        return c.id.startsWith(factionId.substring(0, 4));
-    });
+  return buildFactionCardPool(factionId);
 }
 
 export interface GroupedCards {
-    summoners: UnitCard[];
-    champions: UnitCard[];
-    commons: UnitCard[];
-    events: EventCard[];
-    structures: StructureCard[];
+  summoners: UnitCard[];
+  champions: UnitCard[];
+  commons: UnitCard[];
+  events: EventCard[];
+  structures: StructureCard[];
 }
 
+/** 按类型分组卡牌 */
 export function groupCardsByType(cards: Card[]): GroupedCards {
-    const groups: GroupedCards = {
-        summoners: [],
-        champions: [],
-        commons: [],
-        events: [],
-        structures: [],
-    };
+  const groups: GroupedCards = {
+    summoners: [],
+    champions: [],
+    commons: [],
+    events: [],
+    structures: [],
+  };
 
-    cards.forEach(card => {
-        if (card.cardType === 'unit') {
-            if (card.unitClass === 'summoner') groups.summoners.push(card);
-            else if (card.unitClass === 'champion') groups.champions.push(card);
-            else groups.commons.push(card);
-        } else if (card.cardType === 'event') {
-            groups.events.push(card);
-        } else if (card.cardType === 'structure') {
-            groups.structures.push(card);
-        }
-    });
+  for (const card of cards) {
+    if (card.cardType === 'unit') {
+      if (card.unitClass === 'summoner') groups.summoners.push(card);
+      else if (card.unitClass === 'champion') groups.champions.push(card);
+      else groups.commons.push(card);
+    } else if (card.cardType === 'event') {
+      groups.events.push(card);
+    } else if (card.cardType === 'structure') {
+      groups.structures.push(card);
+    }
+  }
 
-    return groups;
+  return groups;
 }

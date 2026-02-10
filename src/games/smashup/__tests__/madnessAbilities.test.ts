@@ -198,7 +198,7 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
     });
 
     describe('cthulhu_corruption（腐化：疯狂卡+消灭最弱对手随从）', () => {
-        it('抽1张疯狂卡并消灭最弱对手随从', () => {
+        it('多个对手随从时创建 Prompt 选择目标', () => {
             const state = makeStateWithMadness({
                 players: {
                     '0': makePlayer('0', {
@@ -219,9 +219,35 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
             const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
 
+            // 多个对手随从时应创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            expect(promptEvents.length).toBe(1);
+            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('cthulhu_corruption');
+        });
+
+        it('单个对手随从时自动消灭', () => {
+            const state = makeStateWithMadness({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'cthulhu_corruption', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [{
+                    defId: 'b1', minions: [
+                        makeMinion('m1', 'test', '1', 2),
+                        makeMinion('m3', 'test', '0', 1), // 己方
+                    ], ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayAction(state, '0', 'a1');
+            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            expect(madnessEvents.length).toBe(1);
+
             const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
             expect(destroyEvents.length).toBe(1);
-            expect((destroyEvents[0] as any).payload.minionUid).toBe('m1'); // 力量2最弱
+            expect((destroyEvents[0] as any).payload.minionUid).toBe('m1');
         });
 
         it('无对手随从时只抽疯狂卡', () => {
@@ -246,7 +272,7 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
             expect(destroyEvents.length).toBe(0);
         });
 
-        it('考虑力量修正选择最弱随从', () => {
+        it('多个对手随从时创建 Prompt（考虑力量修正）', () => {
             const state = makeStateWithMadness({
                 players: {
                     '0': makePlayer('0', {
@@ -263,9 +289,10 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-            expect(destroyEvents.length).toBe(1);
-            expect((destroyEvents[0] as any).payload.minionUid).toBe('m1'); // 有效力量2 < 3
+            // 多个对手随从时应创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            expect(promptEvents.length).toBe(1);
+            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('cthulhu_corruption');
         });
 
         it('状态正确（reduce 验证）', () => {

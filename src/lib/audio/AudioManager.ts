@@ -349,7 +349,12 @@ class AudioManagerClass {
                 onload: () => {},
                 onloaderror: (_id, error) => {
                     console.error(`[Audio] load_bgm_failed key=${key} src=${formatSrcForLog(mergedDef.src)} error=${String(error)}`);
-                }
+                },
+                onplayerror: () => {
+                    // 浏览器自动播放策略阻止了播放，存为 pending 等待用户交互后重试
+                    this._pendingBgmKey = key;
+                    this.registerUnlockHandler();
+                },
             });
             this.bgms.set(key, howl);
         }

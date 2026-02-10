@@ -71,6 +71,9 @@ interface StatusBannersProps {
   // 回调
   onCancelAbility: () => void;
   onConfirmBeforeAttackCards: () => void;
+  onConfirmBloodRune: (choice: 'damage' | 'charge') => void;
+  onConfirmIceShards: () => void;
+  onConfirmFeedBeastSelfDestroy: () => void;
   onCancelBeforeAttack: () => void;
   onCancelBloodSummon: () => void;
   onContinueBloodSummon: () => void;
@@ -156,7 +159,8 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   abilityMode, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
   mindControlMode, stunMode, hypnoticLureMode,
   mindCaptureMode, afterAttackAbilityMode, telekinesisTargetMode,
-  onCancelAbility, onConfirmBeforeAttackCards, onCancelBeforeAttack, onCancelBloodSummon, onContinueBloodSummon,
+  onCancelAbility, onConfirmBeforeAttackCards, onConfirmBloodRune, onConfirmIceShards, onConfirmFeedBeastSelfDestroy,
+  onCancelBeforeAttack, onCancelBloodSummon, onContinueBloodSummon,
   onCancelAnnihilate, onConfirmAnnihilateTargets,
   onConfirmSoulTransfer, onSkipSoulTransfer, onSkipFuneralPyre,
   onConfirmMindControl, onCancelMindControl,
@@ -178,11 +182,32 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
           {abilityMode.abilityId === 'infection' && abilityMode.step === 'selectPosition' && t('statusBanners.ability.infection.selectPosition')}
           {abilityMode.abilityId === 'holy_arrow' && abilityMode.step === 'selectCards' && t('statusBanners.ability.holyArrow.selectCards')}
           {abilityMode.abilityId === 'healing' && abilityMode.step === 'selectCards' && t('statusBanners.ability.healing.selectCards')}
+          {abilityMode.abilityId === 'illusion' && t('statusBanners.ability.illusion')}
+          {abilityMode.abilityId === 'blood_rune' && t('statusBanners.ability.bloodRune')}
+          {abilityMode.abilityId === 'ice_shards' && t('statusBanners.ability.iceShards')}
+          {abilityMode.abilityId === 'feed_beast' && t('statusBanners.ability.feedBeast')}
         </span>
         {abilityMode.step === 'selectCards' && (
           <GameButton onClick={onConfirmBeforeAttackCards} variant="primary" size="sm">{t('actions.confirmDiscard')}</GameButton>
         )}
-        <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+        {abilityMode.abilityId === 'blood_rune' && (
+          <>
+            <GameButton onClick={() => onConfirmBloodRune('damage')} variant="secondary" size="sm">{t('actions.bloodRuneDamage')}</GameButton>
+            <GameButton onClick={() => onConfirmBloodRune('charge')} variant="primary" size="sm">{t('actions.bloodRuneCharge')}</GameButton>
+          </>
+        )}
+        {abilityMode.abilityId === 'ice_shards' && (
+          <>
+            <GameButton onClick={onConfirmIceShards} variant="primary" size="sm">{t('actions.confirm')}</GameButton>
+            <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
+          </>
+        )}
+        {abilityMode.abilityId === 'feed_beast' && (
+          <GameButton onClick={onConfirmFeedBeastSelfDestroy} variant="secondary" size="sm">{t('actions.feedBeastSelfDestroy')}</GameButton>
+        )}
+        {!['blood_rune', 'ice_shards', 'feed_beast'].includes(abilityMode.abilityId) && (
+          <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+        )}
       </div>
     );
   }

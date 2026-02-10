@@ -28,6 +28,21 @@ export const FACTION_IDS = {
   GOBLIN: 'goblin',
 } as const;
 
+/** 中文阵营名 → 阵营 ID 映射 */
+export const FACTION_NAME_TO_ID: Record<string, FactionId> = {
+  '堕落王国': 'necromancer',
+  '欺心巫族': 'trickster',
+  '先锋军团': 'paladin',
+  '洞穴地精': 'goblin',
+  '极地矮人': 'frost',
+  '炽原精灵': 'barbaric',
+};
+
+/** 将中文阵营名或阵营 ID 统一解析为 FactionId */
+export function resolveFactionId(factionNameOrId: string): FactionId {
+  return (FACTION_NAME_TO_ID[factionNameOrId] ?? factionNameOrId) as FactionId;
+}
+
 /** 阵营目录（用于选择界面） */
 export interface FactionCatalogEntry {
   id: FactionId;

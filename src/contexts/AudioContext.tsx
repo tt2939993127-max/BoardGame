@@ -69,16 +69,17 @@ interface AudioContextValue {
     setBgmSelectionsForGame: (gameId: string, selections: Record<string, string>) => void;
     setActiveBgmContext: (gameId: string | null, groupId: string | null) => void;
     switchBgm: () => void;
+    switchBgmPrev: () => void;
 }
 
 const AudioContext = createContext<AudioContextValue | null>(null);
 
 export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { token } = useAuth();
-    const [muted, setMuted] = useState(false);
-    const [masterVolume, setMasterVolumeState] = useState(1.0);
-    const [sfxVolume, setSfxVolumeState] = useState(1.0);
-    const [bgmVolume, setBgmVolumeState] = useState(0.6);
+    const [muted, setMuted] = useState(() => { AudioManager.initialize(); return AudioManager.muted; });
+    const [masterVolume, setMasterVolumeState] = useState(() => AudioManager.masterVolume);
+    const [sfxVolume, setSfxVolumeState] = useState(() => AudioManager.sfxVolume);
+    const [bgmVolume, setBgmVolumeState] = useState(() => AudioManager.bgmVolume);
     const [currentBgm, setCurrentBgmState] = useState<string | null>(null);
     const [playlist, setPlaylist] = useState<BgmDefinition[]>([]);
     const [bgmSelections, setBgmSelectionsState] = useState<BgmSelections>(() => readLocalBgmSelections());
@@ -89,14 +90,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const skipNextSyncRef = useRef(false);
     const lastSyncedRef = useRef<AudioSettings | null>(null);
 
-    // 初始化音频管理器
-    useEffect(() => {
-        AudioManager.initialize();
-        setMuted(AudioManager.muted);
-        setMasterVolumeState(AudioManager.masterVolume);
-        setSfxVolumeState(AudioManager.sfxVolume);
-        setBgmVolumeState(AudioManager.bgmVolume);
-    }, []);
+    // AudioManager 已在 useState 初始化时同步初始化（见上方 lazy initializer）
 
     // 监听 BGM 状态更新（事件驱动，避免轮询）
     useEffect(() => {
@@ -114,6 +108,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (!token) {
             hasRemoteSyncRef.current = false;
             lastSyncedRef.current = null;
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- sync reset to local selections on logout
             setBgmSelectionsState(readLocalBgmSelections());
             return;
         }
@@ -276,10 +271,11 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         AudioManager.stopBgm();
     }, []);
 
-    const switchBgm = useCallback(() => {
+    // 通用切换方向逻辑
+    const switchBgmByDirection = useCallback((direction: 1 | -1) => {
         if (playlist.length === 0) return;
         const currentIndex = playlist.findIndex(track => track.key === currentBgm);
-        const nextIndex = (currentIndex + 1) % playlist.length;
+        const nextIndex = (currentIndex + direction + playlist.length) % playlist.length;
         const nextKey = playlist[nextIndex]?.key;
         if (!nextKey) return;
 
@@ -316,6 +312,9 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
     }, [activeGameId, activeBgmGroup, currentBgm, playBgm, playlist]);
 
+    const switchBgm = useCallback(() => switchBgmByDirection(1), [switchBgmByDirection]);
+    const switchBgmPrev = useCallback(() => switchBgmByDirection(-1), [switchBgmByDirection]);
+
     const value = useMemo(() => ({
         muted,
         masterVolume,
@@ -338,6 +337,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setBgmSelectionsForGame,
         setActiveBgmContext,
         switchBgm,
+        switchBgmPrev,
     }), [
         muted,
         masterVolume,
@@ -360,6 +360,7 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setBgmSelectionsForGame,
         setActiveBgmContext,
         switchBgm,
+        switchBgmPrev,
     ]);
 
     return (

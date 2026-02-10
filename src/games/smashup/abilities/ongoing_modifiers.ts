@@ -84,9 +84,10 @@ function registerRobotModifiers(): void {
 // ============================================================================
 
 function registerGhostModifiers(): void {
-    // 不散阴魂：手牌≤2时 +3 力量（+ 不受影响，后者需要 ongoing 保护系统，暂不实现）
+    // 不散阴魂：附着此卡的随从在手牌≤2时 +3 力量
     registerPowerModifier('ghost_haunting', (ctx: PowerModifierContext) => {
-        if (ctx.minion.defId !== 'ghost_haunting') return 0;
+        const hasHaunting = ctx.minion.attachedActions.some(a => a.defId === 'ghost_haunting');
+        if (!hasHaunting) return 0;
         const player = ctx.state.players[ctx.minion.controller];
         if (!player) return 0;
         return player.hand.length <= 2 ? 3 : 0;

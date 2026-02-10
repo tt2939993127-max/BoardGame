@@ -1,14 +1,14 @@
 # Common Audio Asset Manifest
 
-Generated on: 2026/2/4 15:28:55
-Source: d:/gongzuo/web/BordGame/public/assets/common/audio
+Generated on: 2026/2/10 10:10:48
+Source: D:/gongzuo/web/BordGame/public/assets/common/audio
 Extensions: .ogg
-Total Files: 6965
+Total Files: 7337
 
 ## 📦 顶层分类统计
 
-- bgm: 200
-- sfx: 6765
+- bgm: 350
+- sfx: 6987
 
 ---
 
@@ -64,6 +64,56 @@ Total Files: 6965
 - `bgm/ethereal/Ethereal Music Pack/Wind Chime (RT 5.647)/compressed/Ethereal Wind Chime Intensity 1.ogg`
 - `bgm/ethereal/Ethereal Music Pack/Wind Chime (RT 5.647)/compressed/Ethereal Wind Chime Intensity 2.ogg`
 - `bgm/ethereal/Ethereal Music Pack/Wind Chime (RT 5.647)/compressed/Ethereal Wind Chime Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Nock! (RT 2.571)/compressed/Nock! Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Nock! (RT 2.571)/compressed/Nock! Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Nock! (RT 2.571)/compressed/Nock! Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Nock! (RT 2.571)/compressed/Nock! Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Nock! (RT 2.571)/compressed/Nock! Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Ogres (RT 1.875)/compressed/Ogres Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Ogres (RT 1.875)/compressed/Ogres Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Ogres (RT 1.875)/compressed/Ogres Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Ogres (RT 1.875)/compressed/Ogres Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Ogres (RT 1.875)/compressed/Ogres Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Plunder (RT 2.5)/compressed/Plunder Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Plunder (RT 2.5)/compressed/Plunder Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Plunder (RT 2.5)/compressed/Plunder cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Plunder (RT 2.5)/compressed/Plunder cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Plunder (RT 2.5)/compressed/Plunder main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Rockslides (RT 3)/compressed/Rockslides Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Rockslides (RT 3)/compressed/Rockslides Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Rockslides (RT 3)/compressed/Rockslides Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Rockslides (RT 3)/compressed/Rockslides Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Rockslides (RT 3)/compressed/Rockslides Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Royalty (RT 1.636)/compressed/Royalty Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Royalty (RT 1.636)/compressed/Royalty Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Royalty (RT 1.636)/compressed/Royalty Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Royalty (RT 1.636)/compressed/Royalty Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Royalty (RT 1.636)/compressed/Royalty Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Salamander (RT 2.4)/compressed/Salamander Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Salamander (RT 2.4)/compressed/Salamander Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Salamander (RT 2.4)/compressed/Salamander Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Salamander (RT 2.4)/compressed/Salamander Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Salamander (RT 2.4)/compressed/Salamander Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Sorcerer (RT 3.75)/compressed/Sorcerer Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Sorcerer (RT 3.75)/compressed/Sorcerer Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Sorcerer (RT 3.75)/compressed/Sorcerer Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Sorcerer (RT 3.75)/compressed/Sorcerer Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Sorcerer (RT 3.75)/compressed/Sorcerer Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/The Gathering (RT 3.6)/compressed/The Gathering Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/The Gathering (RT 3.6)/compressed/The Gathering Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/The Gathering (RT 3.6)/compressed/The Gathering Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/The Gathering (RT 3.6)/compressed/The Gathering Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/The Gathering (RT 3.6)/compressed/The Gathering Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/To The Wall (RT 2.667)/compressed/To The Wall Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/To The Wall (RT 2.667)/compressed/To The Wall Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/To The Wall (RT 2.667)/compressed/To The Wall Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/To The Wall (RT 2.667)/compressed/To The Wall Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/To The Wall (RT 2.667)/compressed/To The Wall Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Triumph (RT 3)/compressed/Triumph Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Triumph (RT 3)/compressed/Triumph Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Triumph (RT 3)/compressed/Triumph Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Triumph (RT 3)/compressed/Triumph Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 3/Triumph (RT 3)/compressed/Triumph Main.ogg`
 - `bgm/fantasy/Fantasy Music Pack Vol. 5/Cabin Lunch (RT 2.4)/compressed/Fantasy Vol5 Cabin Lunch Cut 30.ogg`
 - `bgm/fantasy/Fantasy Music Pack Vol. 5/Cabin Lunch (RT 2.4)/compressed/Fantasy Vol5 Cabin Lunch Cut 60.ogg`
 - `bgm/fantasy/Fantasy Music Pack Vol. 5/Cabin Lunch (RT 2.4)/compressed/Fantasy Vol5 Cabin Lunch Intensity 1.ogg`
@@ -114,6 +164,106 @@ Total Files: 6965
 - `bgm/fantasy/Fantasy Music Pack Vol. 5/The Mourning (RT 3.428)/compressed/Fantasy Vol5 The Mourning Intensity 1.ogg`
 - `bgm/fantasy/Fantasy Music Pack Vol. 5/The Mourning (RT 3.428)/compressed/Fantasy Vol5 The Mourning Intensity 2.ogg`
 - `bgm/fantasy/Fantasy Music Pack Vol. 5/The Mourning (RT 3.428)/compressed/Fantasy Vol5 The Mourning Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/A Witch (RT 3.619)/compressed/Fantasy Vol7 A Witch Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/A Witch (RT 3.619)/compressed/Fantasy Vol7 A Witch Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/A Witch (RT 3.619)/compressed/Fantasy Vol7 A Witch Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/A Witch (RT 3.619)/compressed/Fantasy Vol7 A Witch Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/A Witch (RT 3.619)/compressed/Fantasy Vol7 A Witch Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Above (RT 4.184)/compressed/Fantasy Vol7 Above Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Above (RT 4.184)/compressed/Fantasy Vol7 Above Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Above (RT 4.184)/compressed/Fantasy Vol7 Above Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Above (RT 4.184)/compressed/Fantasy Vol7 Above Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Above (RT 4.184)/compressed/Fantasy Vol7 Above Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Black Doves (RT 2.723)/compressed/Fantasy Vol7 Black Doves Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Black Doves (RT 2.723)/compressed/Fantasy Vol7 Black Doves Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Black Doves (RT 2.723)/compressed/Fantasy Vol7 Black Doves Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Black Doves (RT 2.723)/compressed/Fantasy Vol7 Black Doves Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Black Doves (RT 2.723)/compressed/Fantasy Vol7 Black Doves Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Denmark (RT 3.115)/compressed/Fantasy Vol7 Denmark Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Denmark (RT 3.115)/compressed/Fantasy Vol7 Denmark Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Denmark (RT 3.115)/compressed/Fantasy Vol7 Denmark Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Denmark (RT 3.115)/compressed/Fantasy Vol7 Denmark Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Denmark (RT 3.115)/compressed/Fantasy Vol7 Denmark Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Elder Awakening (RT 2.769)/compressed/Fantasy Vol7 Elder Awakening Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Elder Awakening (RT 2.769)/compressed/Fantasy Vol7 Elder Awakening Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Elder Awakening (RT 2.769)/compressed/Fantasy Vol7 Elder Awakening Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Elder Awakening (RT 2.769)/compressed/Fantasy Vol7 Elder Awakening Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Elder Awakening (RT 2.769)/compressed/Fantasy Vol7 Elder Awakening Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Enemy Grounds (RT 3.396)/compressed/Fantasy Vol7 Enemy Grounds Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Enemy Grounds (RT 3.396)/compressed/Fantasy Vol7 Enemy Grounds Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Enemy Grounds (RT 3.396)/compressed/Fantasy Vol7 Enemy Grounds Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Enemy Grounds (RT 3.396)/compressed/Fantasy Vol7 Enemy Grounds Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Enemy Grounds (RT 3.396)/compressed/Fantasy Vol7 Enemy Grounds Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Feysong Fields (RT 3.857)/compressed/Fantasy Vol7 Feysong Fields Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Feysong Fields (RT 3.857)/compressed/Fantasy Vol7 Feysong Fields Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Feysong Fields (RT 3.857)/compressed/Fantasy Vol7 Feysong Fields Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Feysong Fields (RT 3.857)/compressed/Fantasy Vol7 Feysong Fields Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Feysong Fields (RT 3.857)/compressed/Fantasy Vol7 Feysong Fields Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Mystwood Reverie (RT 4.186)/compressed/Fantasy Vol7 Mystwood Reverie Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Mystwood Reverie (RT 4.186)/compressed/Fantasy Vol7 Mystwood Reverie Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Mystwood Reverie (RT 4.186)/compressed/Fantasy Vol7 Mystwood Reverie Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Mystwood Reverie (RT 4.186)/compressed/Fantasy Vol7 Mystwood Reverie Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Mystwood Reverie (RT 4.186)/compressed/Fantasy Vol7 Mystwood Reverie Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Stormborn Destiny (RT 6.4)/compressed/Fantasy Vol7 Stormborn Destiny Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Stormborn Destiny (RT 6.4)/compressed/Fantasy Vol7 Stormborn Destiny Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Stormborn Destiny (RT 6.4)/compressed/Fantasy Vol7 Stormborn Destiny Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Stormborn Destiny (RT 6.4)/compressed/Fantasy Vol7 Stormborn Destiny Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Stormborn Destiny (RT 6.4)/compressed/Fantasy Vol7 Stormborn Destiny Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Tomb of Kings (RT 5.625)/compressed/Fantasy Vol7 Tomb of Kings Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Tomb of Kings (RT 5.625)/compressed/Fantasy Vol7 Tomb of Kings Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Tomb of Kings (RT 5.625)/compressed/Fantasy Vol7 Tomb of Kings Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Tomb of Kings (RT 5.625)/compressed/Fantasy Vol7 Tomb of Kings Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 7/Tomb of Kings (RT 5.625)/compressed/Fantasy Vol7 Tomb of Kings Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Curious Ranger (RT 2.666)/compressed/Fantasy Vol8 Curious Ranger Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Curious Ranger (RT 2.666)/compressed/Fantasy Vol8 Curious Ranger Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Curious Ranger (RT 2.666)/compressed/Fantasy Vol8 Curious Ranger Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Curious Ranger (RT 2.666)/compressed/Fantasy Vol8 Curious Ranger Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Curious Ranger (RT 2.666)/compressed/Fantasy Vol8 Curious Ranger Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Fireborn (RT 2.572)/compressed/Fantasy Vol8 Fireborn Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Fireborn (RT 2.572)/compressed/Fantasy Vol8 Fireborn Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Fireborn (RT 2.572)/compressed/Fantasy Vol8 Fireborn Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Fireborn (RT 2.572)/compressed/Fantasy Vol8 Fireborn Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Fireborn (RT 2.572)/compressed/Fantasy Vol8 Fireborn Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Grimlight (RT 2.4)/compressed/Fantasy Vol8 Grimlight Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Grimlight (RT 2.4)/compressed/Fantasy Vol8 Grimlight Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Grimlight (RT 2.4)/compressed/Fantasy Vol8 Grimlight Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Grimlight (RT 2.4)/compressed/Fantasy Vol8 Grimlight Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Grimlight (RT 2.4)/compressed/Fantasy Vol8 Grimlight Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Iron Sky (RT 3)/compressed/Fantasy Vol8 Iron Sky Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Iron Sky (RT 3)/compressed/Fantasy Vol8 Iron Sky Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Iron Sky (RT 3)/compressed/Fantasy Vol8 Iron Sky Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Iron Sky (RT 3)/compressed/Fantasy Vol8 Iron Sky Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Iron Sky (RT 3)/compressed/Fantasy Vol8 Iron Sky Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Loria (RT 4)/compressed/Fantasy Vol8 Loria Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Loria (RT 4)/compressed/Fantasy Vol8 Loria Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Loria (RT 4)/compressed/Fantasy Vol8 Loria Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Loria (RT 4)/compressed/Fantasy Vol8 Loria Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Loria (RT 4)/compressed/Fantasy Vol8 Loria Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Misty Halo (RT 3.75)/compressed/Fantasy Vol8 Misty Halo Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Misty Halo (RT 3.75)/compressed/Fantasy Vol8 Misty Halo Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Misty Halo (RT 3.75)/compressed/Fantasy Vol8 Misty Halo Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Misty Halo (RT 3.75)/compressed/Fantasy Vol8 Misty Halo Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Misty Halo (RT 3.75)/compressed/Fantasy Vol8 Misty Halo Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Moonveil (RT 5.625)/compressed/Fantasy Vol8 Moonveil Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Moonveil (RT 5.625)/compressed/Fantasy Vol8 Moonveil Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Moonveil (RT 5.625)/compressed/Fantasy Vol8 Moonveil Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Moonveil (RT 5.625)/compressed/Fantasy Vol8 Moonveil Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Moonveil (RT 5.625)/compressed/Fantasy Vol8 Moonveil Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Seraphis (RT 3.6)/compressed/Fantasy Vol8 Seraphis Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Seraphis (RT 3.6)/compressed/Fantasy Vol8 Seraphis Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Seraphis (RT 3.6)/compressed/Fantasy Vol8 Seraphis Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Seraphis (RT 3.6)/compressed/Fantasy Vol8 Seraphis Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Seraphis (RT 3.6)/compressed/Fantasy Vol8 Seraphis Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Stone Chant (RT 3)/compressed/Fantasy Vol8 Stone Chant Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Stone Chant (RT 3)/compressed/Fantasy Vol8 Stone Chant Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Stone Chant (RT 3)/compressed/Fantasy Vol8 Stone Chant Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Stone Chant (RT 3)/compressed/Fantasy Vol8 Stone Chant Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Stone Chant (RT 3)/compressed/Fantasy Vol8 Stone Chant Main.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Warden Road (RT 3.857)/compressed/Fantasy Vol8 Warden Road Cut 30.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Warden Road (RT 3.857)/compressed/Fantasy Vol8 Warden Road Cut 60.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Warden Road (RT 3.857)/compressed/Fantasy Vol8 Warden Road Intensity 1.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Warden Road (RT 3.857)/compressed/Fantasy Vol8 Warden Road Intensity 2.ogg`
+- `bgm/fantasy/Fantasy Music Pack Vol. 8/Warden Road (RT 3.857)/compressed/Fantasy Vol8 Warden Road Main.ogg`
 - `bgm/funk/Funk Music Pack/Big Shot (RT 4.025)/compressed/Funk Big Shot Cut 30.ogg`
 - `bgm/funk/Funk Music Pack/Big Shot (RT 4.025)/compressed/Funk Big Shot Cut 60.ogg`
 - `bgm/funk/Funk Music Pack/Big Shot (RT 4.025)/compressed/Funk Big Shot Intensity 1.ogg`
@@ -224,155 +374,12 @@ Total Files: 6965
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Eat/compressed/FOODEat_Character Eat 03_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Eat/compressed/FOODEat_Character Eat 04_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Eat/compressed/FOODEat_Character Eat 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Concrete/compressed/FEETHmn_Character Fall After Jump Concrete 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Concrete/compressed/FEETHmn_Character Fall After Jump Concrete 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Concrete/compressed/FEETHmn_Character Fall After Jump Concrete 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Concrete/compressed/FEETHmn_Character Fall After Jump Concrete 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Concrete/compressed/FEETHmn_Character Fall After Jump Concrete 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Forest/compressed/FEETHmn_Character Fall After Jump Forest 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Forest/compressed/FEETHmn_Character Fall After Jump Forest 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Forest/compressed/FEETHmn_Character Fall After Jump Forest 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Forest/compressed/FEETHmn_Character Fall After Jump Forest 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Forest/compressed/FEETHmn_Character Fall After Jump Forest 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Gravel/compressed/FEETHmn_Character Fall After Jump Gravel 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Gravel/compressed/FEETHmn_Character Fall After Jump Gravel 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Gravel/compressed/FEETHmn_Character Fall After Jump Gravel 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Gravel/compressed/FEETHmn_Character Fall After Jump Gravel 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Gravel/compressed/FEETHmn_Character Fall After Jump Gravel 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Water/compressed/FEETHmn_Character Fall After Jump Water 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Water/compressed/FEETHmn_Character Fall After Jump Water 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Water/compressed/FEETHmn_Character Fall After Jump Water 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Water/compressed/FEETHmn_Character Fall After Jump Water 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Water/compressed/FEETHmn_Character Fall After Jump Water 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Wood/compressed/FEETHmn_Character Fall After Jump Wood 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Wood/compressed/FEETHmn_Character Fall After Jump Wood 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Wood/compressed/FEETHmn_Character Fall After Jump Wood 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Wood/compressed/FEETHmn_Character Fall After Jump Wood 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Fall_After_Jump_Wood/compressed/FEETHmn_Character Fall After Jump Wood 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Forest/compressed/FEETHmn_Character Footstep Forest 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Forest/compressed/FEETHmn_Character Footstep Forest 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Forest/compressed/FEETHmn_Character Footstep Forest 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Forest/compressed/FEETHmn_Character Footstep Forest 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Forest/compressed/FEETHmn_Character Footstep Forest 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Water/compressed/FEETHmn_Character Footstep Water 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Water/compressed/FEETHmn_Character Footstep Water 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Water/compressed/FEETHmn_Character Footstep Water 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Water/compressed/FEETHmn_Character Footstep Water 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footstep_Water/compressed/FEETHmn_Character Footstep Water 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Concrete/compressed/FEETHmn_Character Footsteps Concrete 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Concrete/compressed/FEETHmn_Character Footsteps Concrete 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Concrete/compressed/FEETHmn_Character Footsteps Concrete 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Concrete/compressed/FEETHmn_Character Footsteps Concrete 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Concrete/compressed/FEETHmn_Character Footsteps Concrete 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Gravel/compressed/FEETHmn_Character Footsteps Gravel 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Gravel/compressed/FEETHmn_Character Footsteps Gravel 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Gravel/compressed/FEETHmn_Character Footsteps Gravel 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Gravel/compressed/FEETHmn_Character Footsteps Gravel 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Gravel/compressed/FEETHmn_Character Footsteps Gravel 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Wood/compressed/FEETHmn_Character Footsteps Wood 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Wood/compressed/FEETHmn_Character Footsteps Wood 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Wood/compressed/FEETHmn_Character Footsteps Wood 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Wood/compressed/FEETHmn_Character Footsteps Wood 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Footsteps/Character_Footsteps_Wood/compressed/FEETHmn_Character Footsteps Wood 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Go_To_Bed/compressed/CLOTHHndl_Character Go To Bed 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Go_To_Bed/compressed/CLOTHHndl_Character Go To Bed 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Metal_With_Fists/compressed/FGHTImpt_Character Hitting Metal With Fists 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Metal_With_Fists/compressed/FGHTImpt_Character Hitting Metal With Fists 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Metal_With_Fists/compressed/FGHTImpt_Character Hitting Metal With Fists 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Rock_With_Fists/compressed/FGHTImpt_Character Hitting Rock With Fists 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Rock_With_Fists/compressed/FGHTImpt_Character Hitting Rock With Fists 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Rock_With_Fists/compressed/FGHTImpt_Character Hitting Rock With Fists 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Tree_With_Fists/compressed/FGHTImpt_Character Hitting Tree With Fists 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Tree_With_Fists/compressed/FGHTImpt_Character Hitting Tree With Fists 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Tree_With_Fists/compressed/FGHTImpt_Character Hitting Tree With Fists 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_With_Fists/compressed/FGHTImpt_Character Hitting With Fists 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_With_Fists/compressed/FGHTImpt_Character Hitting With Fists 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_With_Fists/compressed/FGHTImpt_Character Hitting With Fists 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Wood_With_Fists/compressed/FGHTImpt_Character Hitting Wood With Fists 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Wood_With_Fists/compressed/FGHTImpt_Character Hitting Wood With Fists 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Hitting_Wood_With_Fists/compressed/FGHTImpt_Character Hitting Wood With Fists 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Jump_Into_The_Sea/compressed/WATRSplsh_Character Jump Into The Sea 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Jump_Into_The_Sea/compressed/WATRSplsh_Character Jump Into The Sea 02_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Level_Up/compressed/DSGNSynth_Character Level Up 01_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Level_Up/compressed/DSGNSynth_Character Level Up 02_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Level_Up/compressed/DSGNSynth_Character Level Up 03_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Level_Up/compressed/DSGNSynth_Character Level Up 04_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Level_Up/compressed/DSGNSynth_Character Level Up 05_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Level_Up/compressed/DSGNSynth_Character Level Up 06_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Open_Plan_Map/compressed/PAPRHndl_Character Open Plan Map 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Open_Plan_Map/compressed/PAPRHndl_Character Open Plan Map 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Open_Plan_Map/compressed/PAPRHndl_Character Open Plan Map 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Open_Plan_Map/compressed/PAPRHndl_Character Open Plan Map 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Punch_Whoosh/compressed/FGHTMisc_Character Punch Whoosh 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Punch_Whoosh/compressed/FGHTMisc_Character Punch Whoosh 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Punch_Whoosh/compressed/FGHTMisc_Character Punch Whoosh 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Punch_Whoosh/compressed/FGHTMisc_Character Punch Whoosh 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Search_In_A_Box/compressed/OBJCont_Search In A Box 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Search_In_A_Box/compressed/OBJCont_Search In A Box 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Search_In_A_Box/compressed/OBJCont_Search In A Box 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Search_In_Character/compressed/CLOTHMvmt_Character Search In Character 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Search_In_Character/compressed/CLOTHMvmt_Character Search In Character 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Search_In_Character/compressed/CLOTHMvmt_Character Search In Character 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Search_In_Character/compressed/CLOTHMvmt_Character Search In Character 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Start_Jump/compressed/MOVEHmn_Character Start Jump 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Start_Jump/compressed/MOVEHmn_Character Start Jump 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Start_Jump/compressed/MOVEHmn_Character Start Jump 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Start_Jump/compressed/MOVEHmn_Character Start Jump 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Start_Jump/compressed/MOVEHmn_Character Start Jump 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Damage/compressed/FGHTImpt_Character Take Damage 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Damage/compressed/FGHTImpt_Character Take Damage 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Damage/compressed/FGHTImpt_Character Take Damage 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Damage/compressed/FGHTImpt_Character Take Damage 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/HMNCough_Character Throat Swallow Pills 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/HMNCough_Character Throat Swallow Pills 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/OBJCont_Character Drop Pill Into Mouth 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/OBJCont_Character Drop Pill Into Mouth 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/OBJCont_Character Open Pills Bottle 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/OBJCont_Character Open Pills Bottle 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/OBJCont_Character Open Pills Bottle 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/OBJCont_Character Take Pills Full Sequence 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Take_Pills/compressed/OBJCont_Character Take Pills Full Sequence 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Use_Matches/Character_Light_Match_Sequence/compressed/OBJCont_Character Light Match Sequence 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Use_Matches/Character_Light_Match_Sequence/compressed/OBJCont_Character Light Match Sequence 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Use_Matches/Character_Light_Matches/compressed/FIREIgn_Character Light Matches 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Use_Matches/Character_Light_Matches/compressed/FIREIgn_Character Light Matches 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Use_Matches/Character_Search_In_Matchbox/compressed/OBJCont_Character Search In Matchbox 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Use_Matches/Character_Search_In_Matchbox/compressed/OBJCont_Character Search In Matchbox 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 06_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 07_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 08_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 09_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Effort_Or_Attack_Voice/compressed/VOXMale_Character Effort Or Attack Voice 10_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 06_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 07_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 08_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 09_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Character_Jump_Voice/compressed/VOXMale_Character Jump Voice 10_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 05_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 06_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 07_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 08_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 09_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Voices/Male/Chararter_Pain_Voice/compressed/VOXMale_Chararter Pain Voice 10_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Wear_clothes/compressed/CLOTHFlp_Character Wear Clothes 01_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Wear_clothes/compressed/CLOTHFlp_Character Wear Clothes 02_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Wear_clothes/compressed/CLOTHFlp_Character Wear Clothes 03_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Wear_clothes/compressed/CLOTHFlp_Character Wear Clothes 04_KRST.ogg`
-- `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Character/Character_Wear_clothes/compressed/CLOTHFlp_Character Wear Clothes 05_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Construction/Build_Object/compressed/DSGNSrce_Build Object 01_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Construction/Build_Object/compressed/DSGNSrce_Build Object 02_KRST.ogg`
 - `sfx/ambient/Khron Studio - Sound Of Survival Vol 1 ASSETS/Construction/Build_Object/compressed/DSGNSrce_Build Object 03_KRST.ogg`
@@ -2446,6 +2453,188 @@ Total Files: 6965
 - `sfx/dice/Decks and Cards Sound FX Pack/compressed/Single Die Roll 003.ogg`
 - `sfx/dice/Decks and Cards Sound FX Pack/compressed/Single Die Roll 004.ogg`
 - `sfx/dice/Decks and Cards Sound FX Pack/compressed/Single Die Roll 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Blade Of Destiny 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Blade Of Destiny 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Blade Of Destiny 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Blade Of Destiny 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Charmed Bolt Swoosh 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Charmed Bolt Swoosh 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Charmed Bolt Swoosh 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Charmed Bolt Swoosh 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Charmed Bolt Swoosh 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Execution 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Execution 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Execution 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Execution 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Execution 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Fate Shot 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Fate Shot 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Fate Shot 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Fate Shot 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Fate Shot 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Medieval Stomp 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Medieval Stomp 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Medieval Stomp 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Medieval Stomp 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Silver Crossbow 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Silver Crossbow 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Silver Crossbow 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Silver Crossbow 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Combat/compressed/Silver Crossbow 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Beast Footstep 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Beast Footstep 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Beast Footstep 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Beast Footstep 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Beast Footstep 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Gargoyle 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Gargoyle 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Gargoyle 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Gargoyle 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Bite 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Bite 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Bite 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Bite 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Bite 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Bite 006.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Feasting 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Feasting 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Feasting 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Feasting 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Ghoul Feasting 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Haunted Hall Dweller 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Haunted Hall Dweller 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Haunted Hall Dweller 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Haunted Hall Dweller 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Voice Of The Dead 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Voice Of The Dead 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Voice Of The Dead 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Voice Of The Dead 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Void Scream 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Void Scream 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Void Scream 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Attack 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Attack 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Attack 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Attack 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Death 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Death 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Death 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Idle 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Idle 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Idle 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Pain 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Pain 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Pain 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Creatures/compressed/Werewolf Pain 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Bell Of Ruin 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Bell Of Ruin 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Bell Of Ruin 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Clocktower 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Clocktower 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Clocktower 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Clocktower 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Clocktower 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Clocktower 006.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Eternal Sands Loop.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ether Bells 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ether Bells 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ether Bells 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ether Bells 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ether Bells 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ether Bells 006.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ghostly Bell 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ghostly Bell 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ghostly Bell 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ghostly Bell 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Ghostly Bell 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Vampire Castle Loop 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Vampire Castle Loop 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Vampire Castle Loop 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Void Loop 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Environment/compressed/Void Loop 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Drums Of Fate 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Drums Of Fate 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Drums Of Fate 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Eldritch Space 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Eldritch Space 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Eldritch Space 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Eldritch Space 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Eldritch Space 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Epitaph 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Epitaph 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Epitaph 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Epitaph 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Epitaph 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Gloom Choir 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Gloom Choir 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Gloom Choir 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Gloom Choir 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Gloom Choir 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Haze 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Haze 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Haze 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Moonlight 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Moonlight 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Moonlight 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Moonlight 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Moonlight 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mysterious Box 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mysterious Box 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mysterious Box 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mysterious Box 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mystic Bell 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mystic Bell 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mystic Bell 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mystic Bell 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Musical/compressed/Mystic Bell 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Angel Dust 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Angel Dust 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Angel Dust 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Angel Dust 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Banish 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Banish 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Banish 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Banish 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Dark Rift 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Dark Rift 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Dark Rift 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Dark Rift 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Disenchant 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Disenchant 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Disenchant 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Disenchant 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Fog Disappear 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Fog Disappear 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Fog Disappear 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Fog Disappear 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Funeral Wind 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Funeral Wind 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Funeral Wind 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Funeral Wind 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Hexproof 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Hexproof 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Hexproof 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Hexproof 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Hexproof 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Into The Darkness 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Into The Darkness 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Into The Darkness 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Into The Darkness 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Into The Darkness 005.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Intricate Craft 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Intricate Craft 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Intricate Craft 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Manaward Loop 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Manaward Loop 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Purifying Flame 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Purifying Flame 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Purifying Flame 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Purifying Flame 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Smite 001.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Smite 002.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Smite 003.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Smite 004.ogg`
+- `sfx/fantasy/Gothic Fantasy Sound FX Pack Vol. 1/Spells And Abilities/compressed/Veil Loop.ogg`
 - `sfx/fantasy/Medieval Fantasy Sound FX Pack Vol. 2/Ambience/Loops/compressed/Beach Loop.ogg`
 - `sfx/fantasy/Medieval Fantasy Sound FX Pack Vol. 2/Ambience/Loops/compressed/Castle Loop.ogg`
 - `sfx/fantasy/Medieval Fantasy Sound FX Pack Vol. 2/Ambience/Loops/compressed/Cave Loop.ogg`
@@ -4531,6 +4720,9 @@ Total Files: 6965
 - `sfx/magic/wind/44.Wind_Magic_Buff/compressed/Wind_Magic_Buff_01.ogg`
 - `sfx/magic/wind/44.Wind_Magic_Buff/compressed/Wind_Magic_Buff_02.ogg`
 - `sfx/magic/wind/44.Wind_Magic_Buff/compressed/Wind_Magic_Buff_03.ogg`
+- `sfx/misc/tictactoe/compressed/draw_line.ogg`
+- `sfx/misc/tictactoe/compressed/move.ogg`
+- `sfx/misc/tictactoe/compressed/win.ogg`
 - `sfx/monster/attack/monsters/compressed/Attack_HighInstensity_01_WithEcho.ogg`
 - `sfx/monster/attack/monsters/compressed/Attack_HighInstensity_02_WithEcho.ogg`
 - `sfx/monster/attack/monsters/compressed/Attack_HighInstensity_03_WithEcho.ogg`
@@ -6352,6 +6544,186 @@ Total Files: 6965
 - `sfx/token/Decks and Cards Sound FX Pack/compressed/Tokens Handling 001.ogg`
 - `sfx/token/Decks and Cards Sound FX Pack/compressed/Tokens Handling 002.ogg`
 - `sfx/token/Decks and Cards Sound FX Pack/compressed/Tokens Handling 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Backwards Navigation/compressed/Back C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Clicks/compressed/Clicks C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Hovers/compressed/Hovers C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Inventory/compressed/Inventory C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Notification C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Notifications & Pop-Ups/compressed/Popup C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Selects/compressed/Select C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Negative C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Positive C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Signals/compressed/Signal Update C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Toggles/compressed/Toggle C 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition A 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition A 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition A 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition A 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition A 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition B 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition B 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition B 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition B 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition B 005.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition C 001.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition C 002.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition C 003.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition C 004.ogg`
+- `sfx/ui/Fantasy UI Sound FX Pack Vol. 1/Transitions/compressed/Transition C 005.ogg`
 - `sfx/ui/click/Mini Games Sound Effects and Music Pack/compressed/SFX_Interact_Pop_1.ogg`
 - `sfx/ui/click/Mini Games Sound Effects and Music Pack/compressed/SFX_Interact_Pop_2.ogg`
 - `sfx/ui/click/Mini Games Sound Effects and Music Pack/compressed/SFX_Interact_Pop_3.ogg`

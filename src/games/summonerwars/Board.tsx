@@ -436,6 +436,35 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction.handleConfirmMindCapture(choice);
   }, [interaction]);
   const handleCancelAfterAttackAbility = useCallback(() => setAfterAttackAbilityMode(null), [setAfterAttackAbilityMode]);
+  // 鲜血符文选择回调
+  const handleConfirmBloodRune = useCallback((choice: 'damage' | 'charge') => {
+    if (!abilityMode || abilityMode.abilityId !== 'blood_rune') return;
+    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+      abilityId: 'blood_rune',
+      sourceUnitId: abilityMode.sourceUnitId,
+      choice,
+    });
+    setAbilityMode(null);
+  }, [abilityMode, moves, setAbilityMode]);
+  // 寒冰碎屑确认回调
+  const handleConfirmIceShards = useCallback(() => {
+    if (!abilityMode || abilityMode.abilityId !== 'ice_shards') return;
+    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+      abilityId: 'ice_shards',
+      sourceUnitId: abilityMode.sourceUnitId,
+    });
+    setAbilityMode(null);
+  }, [abilityMode, moves, setAbilityMode]);
+  // 喂养巨食兽自毁回调
+  const handleConfirmFeedBeastSelfDestroy = useCallback(() => {
+    if (!abilityMode || abilityMode.abilityId !== 'feed_beast') return;
+    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+      abilityId: 'feed_beast',
+      sourceUnitId: abilityMode.sourceUnitId,
+      choice: 'self_destroy',
+    });
+    setAbilityMode(null);
+  }, [abilityMode, moves, setAbilityMode]);
   const handleConfirmTelekinesis = useCallback((direction: 'push' | 'pull') => {
     interaction.handleConfirmTelekinesis(direction);
   }, [interaction]);
@@ -702,6 +731,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     telekinesisTargetMode={interaction.telekinesisTargetMode}
                     onCancelAbility={handleCancelAbility}
                     onConfirmBeforeAttackCards={interaction.handleConfirmBeforeAttackCards}
+                    onConfirmBloodRune={handleConfirmBloodRune}
+                    onConfirmIceShards={handleConfirmIceShards}
+                    onConfirmFeedBeastSelfDestroy={handleConfirmFeedBeastSelfDestroy}
                     onCancelBeforeAttack={handleCancelBeforeAttack}
                     onCancelBloodSummon={handleCancelBloodSummon}
                     onContinueBloodSummon={handleContinueBloodSummon}

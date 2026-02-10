@@ -241,7 +241,7 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
 // ============================================================================
 
 describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能行）', () => {
-    it('弃2张疯狂卡消灭最强对手随从', () => {
+    it('多个随从时创建 Prompt 选择目标', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -265,13 +265,39 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 2张疯狂卡返回
+        // 多个随从时应创建 Prompt（不直接消灭）
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('miskatonic_it_might_just_work');
+    });
+
+    it('单个随从时自动弃疯狂卡并消灭', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'miskatonic_it_might_just_work', 'action', '0'),
+                        makeCard('m1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('m2', MADNESS_CARD_DEF_ID, 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_test', ongoingActions: [],
+                minions: [
+                    makeMinion('target', 'test_target', '1', 5),
+                ],
+            }],
+        });
+
+        const events = execPlayAction(state, '0', 'a1');
+        // 单个随从时自动执行
         const returnEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_RETURNED);
         expect(returnEvents.length).toBe(2);
-        // 消灭最强对手随从（power=5）
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('strong');
+        expect((destroyEvents[0] as any).payload.minionUid).toBe('target');
     });
 
     it('手中疯狂卡不足2张时无效果', () => {
@@ -318,7 +344,7 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         expect(returnEvents.length).toBe(0);
     });
 
-    it('无对手随从时消灭自己最强随从', () => {
+    it('多个己方随从时创建 Prompt', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -340,11 +366,38 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
+        // 多个随从时应创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('miskatonic_it_might_just_work');
+    });
+
+    it('无对手随从时单个己方随从自动消灭', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a1', 'miskatonic_it_might_just_work', 'action', '0'),
+                        makeCard('m1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('m2', MADNESS_CARD_DEF_ID, 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_test', ongoingActions: [],
+                minions: [
+                    makeMinion('my_only', 'test', '0', 4),
+                ],
+            }],
+        });
+
+        const events = execPlayAction(state, '0', 'a1');
         const returnEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_RETURNED);
         expect(returnEvents.length).toBe(2);
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('my_strong');
+        expect((destroyEvents[0] as any).payload.minionUid).toBe('my_only');
     });
 
     it('状态正确（reduce 验证）', () => {

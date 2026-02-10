@@ -40,10 +40,12 @@ export const DeckBuilderDrawer: React.FC<DeckBuilderDrawerProps> = ({
         selectedFactionId,
         validationResult,
         savedDecks,
+        freeMode,
         selectSummoner,
         addCard,
         removeCard,
         selectFaction,
+        toggleFreeMode,
         saveDeck,
         loadDeck,
         deleteDeck,
@@ -129,6 +131,8 @@ export const DeckBuilderDrawer: React.FC<DeckBuilderDrawerProps> = ({
                                 currentDeck={currentDeck}
                                 validationResult={validationResult}
                                 savedDecks={savedDecks}
+                                freeMode={freeMode}
+                                onToggleFreeMode={toggleFreeMode}
                                 onRemoveCard={removeCard}
                                 onSave={saveDeck}
                                 onLoad={loadDeck}

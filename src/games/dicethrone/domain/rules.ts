@@ -734,9 +734,14 @@ export const isCardPlayableInResponseWindow = (
             
         case 'thenBreakpoint':
             // "然后" 断点响应窗口
-            // 目的：在技能效果的 "then" 连接词处插入响应时机
-            // 策略：允许 instant/roll 卡，因为是技能流程的关键断点
-            // TODO: 考虑限制为只有响应效果的卡牌才能响应
+            // 规则 §8.5：在技能效果的 "then" 连接词处，允许 instant/roll 卡和消耗性状态效果
+            // 限制：卡牌必须有至少一个可执行的效果 action（过滤无实际响应效果的卡牌）
+            if (card.timing !== 'instant' && card.timing !== 'roll') {
+                return false;
+            }
+            if (!hasAnyActionEffect(card)) {
+                return false;
+            }
             break;
     }
     
@@ -768,6 +773,15 @@ const hasAnyDiceEffect = (card: AbilityCard): boolean => {
         
         return false;
     });
+};
+
+/**
+ * 检查卡牌是否有任何可执行的效果 action
+ * 用于 thenBreakpoint 窗口过滤无实际响应效果的卡牌
+ */
+const hasAnyActionEffect = (card: AbilityCard): boolean => {
+    if (!card.effects || card.effects.length === 0) return false;
+    return card.effects.some(effect => !!effect.action);
 };
 
 /**

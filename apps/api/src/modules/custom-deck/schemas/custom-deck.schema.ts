@@ -35,6 +35,10 @@ export class CustomDeck {
     @Prop({ type: [Object], required: true })
     cards!: SerializedCardEntry[];
 
+    /** 自由组卡模式（跳过符号匹配限制） */
+    @Prop({ type: Boolean, default: false })
+    freeMode!: boolean;
+
     createdAt!: Date;
     updatedAt!: Date;
 }

@@ -48,7 +48,11 @@ export const createQueuedRandom = (values: number[]): RandomFn => {
 
 export const testSystems = diceThroneSystemsForTest as unknown as EngineSystem<DiceThroneCore>[];
 
-export const initialDeckSize = MONK_CARDS.length;
+// 牌库实际大小：升级卡 1 张，非升级卡 2 张（与 buildDeck 逻辑一致）
+export const initialDeckSize = MONK_CARDS.reduce(
+    (sum, card) => sum + (card.type === 'upgrade' ? 1 : 2),
+    0
+);
 export const expectedHandSize = 4;
 export const expectedDeckAfterDraw4 = initialDeckSize - expectedHandSize;
 export const expectedIncomeCp = Math.min(INITIAL_CP + 1, CP_MAX);
@@ -409,6 +413,57 @@ export function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpect
 
 export const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThroneExpectation): string[] => {
     return assertDiceThrone(state.core, expect);
+};
+
+// ============================================================================
+// 阶段推进 helper
+// ============================================================================
+
+/**
+ * 可通过 ADVANCE_PHASE 到达的阶段顺序（不含 setup/upkeep/income，它们由引擎自动推进）。
+ * createInitializedState 返回 main1，所以 advanceTo 从 main1 开始计算。
+ */
+const ADVANCEABLE_PHASES: TurnPhase[] = [
+    'main1',
+    'offensiveRoll',
+    // defensiveRoll 不在此列表中——它是 offensiveRoll 的条件分支，不是固定的下一阶段
+    'main2',
+    'discard',
+];
+
+/**
+ * 生成从 main1 推进到目标阶段的 ADVANCE_PHASE 命令序列。
+ *
+ * 使用场景：测试需要从初始化状态（main1）推进到某个阶段时，
+ * 用 `...advanceTo('offensiveRoll')` 替代手写 `cmd('ADVANCE_PHASE', '0')`。
+ *
+ * 注意：
+ * - 仅支持从 main1 开始的线性推进（main1 → offensiveRoll → main2 → discard）
+ * - defensiveRoll 需要通过攻击流程进入，不在此 helper 范围内
+ * - upkeep/income 由引擎自动推进，不需要手动 ADVANCE_PHASE
+ *
+ * @param target 目标阶段
+ * @param playerId 执行推进的玩家 ID（默认 '0'）
+ */
+export const advanceTo = (target: TurnPhase, playerId: PlayerId = '0'): CommandInput[] => {
+    if (target === 'main1') return []; // 已经在 main1
+
+    const startIdx = ADVANCEABLE_PHASES.indexOf('main1');
+    const targetIdx = ADVANCEABLE_PHASES.indexOf(target);
+
+    if (targetIdx === -1) {
+        throw new Error(
+            `advanceTo('${target}') 不支持：该阶段不在线性推进路径中。` +
+            `支持的目标：${ADVANCEABLE_PHASES.join(', ')}。` +
+            `defensiveRoll 需要通过攻击流程进入。`
+        );
+    }
+
+    const commands: CommandInput[] = [];
+    for (let i = startIdx; i < targetIdx; i++) {
+        commands.push(cmd('ADVANCE_PHASE', playerId));
+    }
+    return commands;
 };
 
 // ============================================================================

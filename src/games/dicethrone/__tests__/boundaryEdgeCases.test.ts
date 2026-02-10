@@ -23,7 +23,7 @@ import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import type { DiceThroneCore, DiceThroneEvent } from '../domain/types';
 import {
     createRunner, createInitializedState, createSetupWithHand,
-    fixedRandom, cmd,
+    fixedRandom, cmd, advanceTo,
 } from './test-utils';
 
 // ============================================================================
@@ -297,9 +297,7 @@ describe('手牌恰好等于上限', () => {
             commands: [
                 cmd('DRAW_CARD', '0'),
                 cmd('DRAW_CARD', '0'), // 手牌 6 = HAND_LIMIT
-                cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
-                cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
-                cmd('ADVANCE_PHASE', '0'), // main2 -> discard
+                ...advanceTo('discard'),
                 cmd('ADVANCE_PHASE', '0'), // discard -> 应可推进
             ],
             expect: {
@@ -321,13 +319,11 @@ describe('手牌恰好等于上限', () => {
                 cmd('DRAW_CARD', '0'),
                 cmd('DRAW_CARD', '0'),
                 cmd('DRAW_CARD', '0'), // 手牌 7 > HAND_LIMIT
-                cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
-                cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2
-                cmd('ADVANCE_PHASE', '0'), // main2 -> discard
+                ...advanceTo('discard'),
                 cmd('ADVANCE_PHASE', '0'), // discard -> 被阻止
             ],
             expect: {
-                errorAtStep: { step: 7, error: 'cannot_advance_phase' },
+                expectError: { command: 'ADVANCE_PHASE', error: 'cannot_advance_phase' },
                 turnPhase: 'discard',
                 players: {
                     '0': { handSize: HAND_LIMIT + 1 },
@@ -364,14 +360,14 @@ describe('掷骰次数上限', () => {
         const result = runner.run({
             name: '掷骰上限',
             commands: [
-                cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
+                ...advanceTo('offensiveRoll'),
                 cmd('ROLL_DICE', '0'),     // rollCount=1
                 cmd('ROLL_DICE', '0'),     // rollCount=2
                 cmd('ROLL_DICE', '0'),     // rollCount=3 = rollLimit
                 cmd('ROLL_DICE', '0'),     // 应被拒绝
             ],
             expect: {
-                errorAtStep: { step: 5, error: 'roll_limit_reached' },
+                expectError: { command: 'ROLL_DICE', error: 'roll_limit_reached' },
                 turnPhase: 'offensiveRoll',
                 roll: { count: 3, limit: 3 },
             },

@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 
 interface DebugContextType {
     playerID: string | null;
@@ -22,11 +22,10 @@ export const DebugProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
     }, [playerID]);
 
+    const value = useMemo(() => ({ playerID, setPlayerID }), [playerID, setPlayerID]);
+
     return (
-        <DebugContext.Provider value={{
-            playerID,
-            setPlayerID,
-        }}>
+        <DebugContext.Provider value={value}>
             {children}
         </DebugContext.Provider>
     );

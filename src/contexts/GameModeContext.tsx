@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo } from 'react';
 
 export type GameMode = 'local' | 'online' | 'tutorial';
 
@@ -14,11 +14,13 @@ export const GameModeProvider: React.FC<{ mode: GameMode; isSpectator?: boolean;
     const isMultiplayer = mode === 'online';
 
     // 关键：首帧同步写入，避免教程/本地在首轮命令前读取到未初始化的模式值。
-    if (typeof window !== 'undefined') {
+    // 使用 useLayoutEffect 确保 DOM 写入在渲染前完成，但不在渲染体中直接变更外部状态。
+    useLayoutEffect(() => {
+        if (typeof window === 'undefined') return;
         const holder = window as Window & { __BG_GAME_MODE__?: GameMode; __BG_IS_SPECTATOR__?: boolean };
         holder.__BG_GAME_MODE__ = mode;
         holder.__BG_IS_SPECTATOR__ = isSpectator;
-    }
+    }, [mode, isSpectator]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -35,8 +37,10 @@ export const GameModeProvider: React.FC<{ mode: GameMode; isSpectator?: boolean;
         };
     }, [mode, isSpectator, isMultiplayer]);
 
+    const value = useMemo(() => ({ mode, isMultiplayer, isSpectator }), [mode, isMultiplayer, isSpectator]);
+
     return (
-        <GameModeContext.Provider value={{ mode, isMultiplayer, isSpectator }}>
+        <GameModeContext.Provider value={value}>
             {children}
         </GameModeContext.Provider>
     );

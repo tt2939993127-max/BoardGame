@@ -29,14 +29,18 @@ const normalizeCardId = (cardId: string): string => (
   cardId.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '')
 );
 
+/** 召唤师战争卡牌宽高比（横向卡牌） */
+const SW_CARD_ASPECT_RATIO = 1044 / 729;
+const SW_PORTAL_ASPECT_RATIO = 1024 / 715;
+
 const buildPreviewRef = (card: Card): CardPreviewRef | null => {
   if (card.spriteIndex === undefined || card.spriteIndex === null) return null;
   const spriteAtlas = card.spriteAtlas ?? 'cards';
   if (spriteAtlas === 'portal') {
-    return { type: 'atlas', atlasId: 'sw:portal', index: card.spriteIndex };
+    return { type: 'atlas', atlasId: 'sw:portal', index: card.spriteIndex, aspectRatio: SW_PORTAL_ASPECT_RATIO };
   }
   const atlasId = resolveCardAtlasId(card, spriteAtlas as 'hero' | 'cards');
-  return { type: 'atlas', atlasId, index: card.spriteIndex };
+  return { type: 'atlas', atlasId, index: card.spriteIndex, aspectRatio: SW_CARD_ASPECT_RATIO };
 };
 
 const registerCard = (card: Card): void => {

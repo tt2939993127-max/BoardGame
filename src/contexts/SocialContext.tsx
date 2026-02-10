@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, type ReactNode, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { socialSocket, SOCIAL_EVENTS, type FriendStatusPayload, type FriendRequestPayload, type NewMessagePayload } from '../services/socialSocket';
 import { AUTH_API_URL } from '../config/server';
@@ -97,6 +97,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         }
 
         socialSocket.disconnect();
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync reset on logout; socket won't fire events after disconnect()
         setIsConnected(false);
         setFriends([]);
         setRequests([]);
@@ -146,6 +147,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         const cleanupMessage = socialSocket.on(SOCIAL_EVENTS.NEW_MESSAGE, handleNewMessage);
 
         // 若连接已存在，避免漏掉已发生的 connect 事件
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time sync with external socket state before listeners fire
         setIsConnected(socialSocket.connected);
 
         // 初始加载数据
@@ -163,84 +165,90 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         };
     }, [token, user, refreshFriends, refreshRequests, refreshConversations]);
 
-    const searchUsers = async (query: string): Promise<SearchUserResult[]> => {
+    const searchUsers = useCallback(async (query: string): Promise<SearchUserResult[]> => {
         const data = await authenticatedFetch(`/friends/search?q=${encodeURIComponent(query)}`);
         return data.users;
-    };
+    }, [authenticatedFetch]);
 
-    const sendFriendRequest = async (userId: string) => {
+    const sendFriendRequest = useCallback(async (userId: string) => {
         await authenticatedFetch('/friends/request', {
             method: 'POST',
             body: JSON.stringify({ userId }),
         });
-        // 乐观更新或刷新由socket处理，这里不需要做太多
-    };
+    }, [authenticatedFetch]);
 
-    const acceptFriendRequest = async (requestId: string) => {
+    const acceptFriendRequest = useCallback(async (requestId: string) => {
         await authenticatedFetch(`/friends/accept/${requestId}`, { method: 'POST' });
         await refreshRequests();
         await refreshFriends();
-    };
+    }, [authenticatedFetch, refreshRequests, refreshFriends]);
 
-    const rejectFriendRequest = async (requestId: string) => {
+    const rejectFriendRequest = useCallback(async (requestId: string) => {
         await authenticatedFetch(`/friends/reject/${requestId}`, { method: 'POST' });
         await refreshRequests();
-    };
+    }, [authenticatedFetch, refreshRequests]);
 
-    const deleteFriend = async (userId: string) => {
+    const deleteFriend = useCallback(async (userId: string) => {
         await authenticatedFetch(`/friends/${userId}`, { method: 'DELETE' });
         await refreshFriends();
-    };
+    }, [authenticatedFetch, refreshFriends]);
 
-    const sendMessage = async (toUserId: string, content: string, type: 'text' | 'invite' = 'text') => {
+    const sendMessage = useCallback(async (toUserId: string, content: string, type: 'text' | 'invite' = 'text') => {
         const data = await authenticatedFetch('/messages/send', {
             method: 'POST',
             body: JSON.stringify({ toUserId, content, type }),
         });
 
-        // 发送成功后立即刷新会话列表与该会话消息历史，避免“只看得到对方消息 / 刷新后自己消息丢失”。
-        // 临时策略：不做全局消息仓库，仅保证 ChatWindow 重新打开/刷新时能从服务端拿到完整历史。
+        // 发送成功后立即刷新会话列表与该会话消息历史
         await refreshConversations();
 
         // fire-and-forget：不阻塞 UI
         void authenticatedFetch(`/messages/${toUserId}`).catch(() => undefined);
 
         return data.message;
-    };
+    }, [authenticatedFetch, refreshConversations]);
 
-    const markAsRead = async (fromUserId: string) => {
+    const markAsRead = useCallback(async (fromUserId: string) => {
         await authenticatedFetch(`/messages/read/${fromUserId}`, { method: 'POST' });
         // 本地更新未读数
         setConversations(prev => prev.map(c =>
             c.userId === fromUserId ? { ...c, unreadCount: 0 } : c
         ));
-    };
+    }, [authenticatedFetch]);
 
-    const getMessages = async (userId: string, before?: string): Promise<Message[]> => {
+    const getMessages = useCallback(async (userId: string, before?: string): Promise<Message[]> => {
         const url = `/messages/${userId}${before ? `?before=${before}` : ''}`;
         const data = await authenticatedFetch(url);
         return data.messages;
-    };
+    }, [authenticatedFetch]);
+
+    // useMemo 包裹 Provider value，避免每次渲染创建新对象导致所有消费者重渲染
+    const value = useMemo(() => ({
+        friends,
+        requests,
+        conversations,
+        unreadTotal,
+        isConnected,
+        refreshFriends,
+        refreshRequests,
+        refreshConversations,
+        searchUsers,
+        sendFriendRequest,
+        acceptFriendRequest,
+        rejectFriendRequest,
+        deleteFriend,
+        sendMessage,
+        markAsRead,
+        getMessages,
+    }), [
+        friends, requests, conversations, unreadTotal, isConnected,
+        refreshFriends, refreshRequests, refreshConversations,
+        searchUsers, sendFriendRequest, acceptFriendRequest,
+        rejectFriendRequest, deleteFriend, sendMessage, markAsRead, getMessages,
+    ]);
 
     return (
-        <SocialContext.Provider value={{
-            friends,
-            requests,
-            conversations,
-            unreadTotal,
-            isConnected,
-            refreshFriends,
-            refreshRequests,
-            refreshConversations,
-            searchUsers,
-            sendFriendRequest,
-            acceptFriendRequest,
-            rejectFriendRequest,
-            deleteFriend,
-            sendMessage,
-            markAsRead,
-            getMessages,
-        }}>
+        <SocialContext.Provider value={value}>
             {children}
         </SocialContext.Provider>
     );

@@ -8,6 +8,7 @@
 
 import type { Card, UnitCard, FactionId, SerializedCustomDeck, SerializedCardEntry } from '../domain/types';
 import type { CardRegistry } from './cardRegistry';
+import { resolveFactionId } from './factions';
 import type { DeckDraft } from './deckValidation';
 
 // ============================================================================
@@ -48,8 +49,9 @@ export function serializeDeck(draft: DeckDraft): SerializedCustomDeck {
     return {
         name: draft.name,
         summonerId: draft.summoner.id,
-        summonerFaction: draft.summoner.faction as FactionId,
+        summonerFaction: resolveFactionId(draft.summoner.faction),
         cards,
+        ...(draft.freeMode ? { freeMode: true } : {}),
     };
 }
 
@@ -134,6 +136,7 @@ export function deserializeDeck(
             summoner: validSummoner,
             autoCards: [], // 由调用方根据召唤师信息填充
             manualCards,
+            ...(data.freeMode ? { freeMode: true } : {}),
         },
         warnings,
     };
@@ -152,10 +155,9 @@ export function deserializeDeck(
  */
 function extractFaction(card: Card): FactionId {
     if ('faction' in card && card.faction) {
-        return card.faction as FactionId;
+        return resolveFactionId(card.faction as string);
     }
     // 回退：从 ID 前缀推断（与 cardRegistry 中的模式一致）
-    // 这是一个临时方案，正式实现中事件/建筑卡应携带阵营信息
     // TODO: 当卡牌数据结构统一 faction 字段后，移除此回退逻辑
     return 'necromancer' as FactionId;
 }

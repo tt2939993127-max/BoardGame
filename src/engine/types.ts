@@ -358,6 +358,25 @@ export interface DomainCore<
     /** 应用事件，返回新状态（确定性 reducer，仅作用于 core） */
     reduce(state: TState, event: TEvent): TState;
 
+    /**
+     * 可选：execute 后、reduce 前的事件后处理（派生事件、状态检测）
+     * 
+     * 典型用途：类似万智牌 State-Based Actions（SBA），
+     * 扫描事件流自动注入派生事件（如伤害→死亡检测）。
+     * 支持连锁：注入的事件会被后续处理继续检测。
+     */
+    postProcess?(state: TState, events: TEvent[]): TEvent[];
+
+    /**
+     * 可选：reduce 前的单事件拦截/替换
+     * 
+     * 典型用途：替代效果（Replacement Effects），如「若你将受到伤害，改为…」。
+     * - 返回原事件：不拦截
+     * - 返回新事件/事件数组：替换
+     * - 返回 null：吞噬该事件
+     */
+    interceptEvent?(state: TState, event: TEvent): TEvent | TEvent[] | null;
+
     /** 玩家视图过滤（隐藏信息，仅作用于 core） */
     playerView?(state: TState, playerId: PlayerId): Partial<TState>;
 

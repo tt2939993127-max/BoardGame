@@ -88,7 +88,7 @@ function wizardNeophyte(ctx: AbilityContext): AbilityResult {
 function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     // 查看每个对手牌库顶
-    let bestCard: { uid: string; pid: string; isAction: boolean } | undefined;
+    let bestCard: { uid: string; defId: string; pid: string; isAction: boolean } | undefined;
     for (const pid of ctx.state.turnOrder) {
         if (pid === ctx.playerId) continue;
         const opponent = ctx.state.players[pid];
@@ -96,22 +96,23 @@ function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
         const topCard = opponent.deck[0];
         // MVP：优先选行动卡
         if (!bestCard || (topCard.type === 'action' && !bestCard.isAction)) {
-            bestCard = { uid: topCard.uid, pid, isAction: topCard.type === 'action' };
+            bestCard = { uid: topCard.uid, defId: topCard.defId, pid, isAction: topCard.type === 'action' };
         }
     }
     if (!bestCard) return { events: [] };
 
-    // 将对手牌库顶的卡放入自己手牌（用 CARDS_DRAWN 从对手牌库抽）
-    // 注意：这里需要一个特殊事件——从对手牌库取卡到自己手牌
-    // MVP：简化为从对手牌库顶抽1张给自己
-    const drawEvt: CardsDrawnEvent = {
-        type: SU_EVENTS.CARDS_DRAWN,
-        payload: { playerId: bestCard.pid, count: 1, cardUids: [bestCard.uid] },
+    // 将对手牌库顶的卡放入自己手牌
+    events.push({
+        type: SU_EVENTS.CARD_TRANSFERRED,
+        payload: {
+            cardUid: bestCard.uid,
+            defId: bestCard.defId,
+            fromPlayerId: bestCard.pid,
+            toPlayerId: ctx.playerId,
+            reason: 'wizard_mass_enchantment',
+        },
         timestamp: ctx.now,
-    };
-    // TODO: 需要 CARD_STOLEN 事件将卡从对手牌库移到自己手牌
-    // 当前 MVP：直接让对手抽到手牌（不完全正确，但不影响核心流程）
-    events.push(drawEvt);
+    });
     return { events };
 }
 
@@ -242,7 +243,14 @@ function wizardSacrifice(ctx: AbilityContext): AbilityResult {
     }
     if (!weakest) return { events: [] };
 
-    // 抽等量力量的牌
+
+    // 消灭该随从
+    events.push(destroyMinion(
+        weakest.uid, weakest.defId, weakest.baseIndex, weakest.ownerId,
+        'wizard_sacrifice', ctx.now
+    ));
+
+    // 抽等量力量的牌（在消灭后执行）
     const drawCount = weakest.power;
     if (drawCount > 0) {
         const player = ctx.state.players[ctx.playerId];
@@ -256,12 +264,6 @@ function wizardSacrifice(ctx: AbilityContext): AbilityResult {
             events.push(drawEvt);
         }
     }
-
-    // 消灭该随从
-    events.push(destroyMinion(
-        weakest.uid, weakest.defId, weakest.baseIndex, weakest.ownerId,
-        'wizard_sacrifice', ctx.now
-    ));
 
     return { events };
 }

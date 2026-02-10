@@ -43,6 +43,7 @@ export class CustomDeckService {
             summonerId: dto.summonerId,
             summonerFaction: dto.summonerFaction,
             cards: dto.cards,
+            freeMode: dto.freeMode ?? false,
         });
     }
 
@@ -91,6 +92,7 @@ export class CustomDeckService {
         if (dto.summonerId !== undefined) deck.summonerId = dto.summonerId;
         if (dto.summonerFaction !== undefined) deck.summonerFaction = dto.summonerFaction;
         if (dto.cards !== undefined) deck.cards = dto.cards;
+        if (dto.freeMode !== undefined) deck.freeMode = dto.freeMode;
 
         return deck.save();
     }

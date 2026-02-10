@@ -30,6 +30,7 @@ import {
   hasEnoughMagic,
   manhattanDistance,
   getSummoner,
+  getUnitAbilities,
 } from './helpers';
 import { getPhaseDisplayName } from './execute';
 
@@ -151,7 +152,7 @@ export function validateCommand(
       const unit = getUnitAt(core, from);
       if (!unit || unit.owner !== playerId) return { valid: false, error: '无法移动该单位' };
       if (unit.hasMoved) return { valid: false, error: '该单位本回合已移动' };
-      if ((unit.card.abilities ?? []).includes('immobile')) return { valid: false, error: '该单位不能移动（禁足）' };
+      if ((getUnitAbilities(unit)).includes('immobile')) return { valid: false, error: '该单位不能移动（禁足）' };
       if (!canMoveToEnhanced(core, from, to)) return { valid: false, error: '无法移动到目标位置' };
       return { valid: true };
     }
@@ -164,7 +165,7 @@ export function validateCommand(
       if (!attacker || attacker.owner !== playerId) return { valid: false, error: '无法使用该单位攻击' };
       if (attacker.hasAttacked) return { valid: false, error: '该单位本回合已攻击' };
       // 凶残单位可以作为额外攻击者（不计入3次限制）
-      const hasFerocity = (attacker.card.abilities ?? []).includes('ferocity');
+      const hasFerocity = getUnitAbilities(attacker).includes('ferocity');
       if (core.players[playerId].attackCount >= MAX_ATTACKS_PER_TURN && !hasFerocity) {
         return { valid: false, error: '本回合攻击次数已用完' };
       }
@@ -177,7 +178,7 @@ export function validateCommand(
         : [];
       let hasHealingBeforeAttack = false;
       if (beforeAttackList.length > 0) {
-        const attackerAbilities = attacker.card.abilities ?? [];
+        const attackerAbilities = getUnitAbilities(attacker);
         for (const beforeAttack of beforeAttackList) {
           if (!attackerAbilities.includes(beforeAttack.abilityId)) {
             return { valid: false, error: '该单位没有此技能' };
@@ -263,7 +264,7 @@ export function validateCommand(
       // 守卫检查：如果攻击者相邻有敌方守卫单位，必须攻击守卫单位
       const targetUnit = getUnitAt(core, targetPos);
       if (targetUnit) {
-        const targetHasGuardian = (targetUnit.card.abilities ?? []).includes('guardian');
+        const targetHasGuardian = getUnitAbilities(targetUnit).includes('guardian');
         if (!targetHasGuardian) {
           // 目标不是守卫，检查攻击者相邻是否有敌方守卫
           const adjDirs = [
@@ -275,7 +276,7 @@ export function validateCommand(
             if (adjPos.row < 0 || adjPos.row >= BOARD_ROWS || adjPos.col < 0 || adjPos.col >= BOARD_COLS) continue;
             const adjUnit = getUnitAt(core, adjPos);
             if (adjUnit && adjUnit.owner !== playerId
-              && (adjUnit.card.abilities ?? []).includes('guardian')
+              && getUnitAbilities(adjUnit).includes('guardian')
               && canAttackEnhanced(core, attackerPos, adjPos)) {
               return { valid: false, error: '相邻有守卫单位，必须攻击守卫单位' };
             }
@@ -375,7 +376,7 @@ function validateActivateAbility(
   
   if (!sourceUnit || !sourcePosition) return { valid: false, error: '技能源单位未找到' };
   if (sourceUnit.owner !== playerId) return { valid: false, error: '只能发动自己单位的技能' };
-  if (!sourceUnit.card.abilities?.includes(abilityId)) return { valid: false, error: '该单位没有此技能' };
+  if (!getUnitAbilities(sourceUnit).includes(abilityId)) return { valid: false, error: '该单位没有此技能' };
 
   switch (abilityId) {
     case 'revive_undead': {
@@ -482,6 +483,19 @@ function validateActivateAbility(
       if (vanishTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
       if (vanishTarget.card.cost !== 0) return { valid: false, error: '只能与费用为0的友方单位交换' };
       if (vanishTarget.cardId === sourceUnitId) return { valid: false, error: '不能与自己交换' };
+      return { valid: true };
+    }
+
+    case 'illusion': {
+      // 幻化：移动阶段开始时，复制3格内一个士兵的所有技能
+      if (core.phase !== 'move') return { valid: false, error: '幻化只能在移动阶段使用' };
+      const illusionTargetPos = payload.targetPosition as CellCoord | undefined;
+      if (!illusionTargetPos) return { valid: false, error: '必须选择目标士兵' };
+      const illusionTarget = getUnitAt(core, illusionTargetPos);
+      if (!illusionTarget) return { valid: false, error: '目标位置没有单位' };
+      if (illusionTarget.card.unitClass !== 'common') return { valid: false, error: '只能选择士兵' };
+      const illusionDist = manhattanDistance(sourcePosition, illusionTargetPos);
+      if (illusionDist > 3 || illusionDist === 0) return { valid: false, error: '目标必须在3格以内' };
       return { valid: true };
     }
 

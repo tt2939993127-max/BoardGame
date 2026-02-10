@@ -47,10 +47,23 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
         };
     }, [isHovered, updateAnchorRect]);
 
+    // 根据卡牌宽高比动态计算预览尺寸
+    // aspectRatio > 1 = 横向卡牌，aspectRatio < 1 = 竖向卡牌
+    const aspectRatio = 'aspectRatio' in previewRef ? previewRef.aspectRatio : undefined;
+    const previewSize = useMemo(() => {
+        const maxDim = 308; // 预览最大尺寸（像素）
+        const ar = aspectRatio ?? (192 / 308); // 默认竖向卡牌比例
+        if (ar >= 1) {
+            // 横向卡牌：宽度为最大值，高度按比例缩小
+            return { width: maxDim, height: Math.round(maxDim / ar) };
+        }
+        // 竖向卡牌：高度为最大值，宽度按比例缩小
+        return { width: Math.round(maxDim * ar), height: maxDim };
+    }, [aspectRatio]);
+
     const previewPosition = useMemo(() => {
         if (!anchorRect || typeof window === 'undefined') return null;
-        const previewWidth = 192;
-        const previewHeight = 308;
+        const { width: previewWidth, height: previewHeight } = previewSize;
         const gap = 12;
         const padding = 8;
         const { innerWidth, innerHeight } = window;
@@ -62,7 +75,7 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
         const rawTop = anchorRect.top + anchorRect.height / 2 - previewHeight / 2;
         const top = Math.min(Math.max(rawTop, padding), innerHeight - previewHeight - padding);
         return { left, top, placeRight };
-    }, [anchorRect]);
+    }, [anchorRect, previewSize]);
 
     return (
         <span className="relative inline-block">
@@ -97,8 +110,10 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
                     <CardPreview
                         previewRef={previewRef}
                         locale={locale}
-                        className="w-48 h-[308px] rounded-lg"
+                        className="rounded-lg"
                         style={{
+                            width: previewSize.width,
+                            height: previewSize.height,
                             backgroundRepeat: 'no-repeat',
                         }}
                     />

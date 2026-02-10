@@ -354,6 +354,51 @@ export function useGameEvents({
             });
           }
         }
+        // 幻化：移动阶段开始时自动进入目标选择模式
+        if (p.abilityId === 'illusion_copy') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'illusion',
+              step: 'selectUnit',
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
+        // 指引：召唤阶段开始时自动抓牌（已在 abilityResolver 中直接处理，无需 UI 交互）
+        // 鲜血符文：攻击阶段开始时进入选择模式
+        if (p.abilityId === 'blood_rune_choice') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'blood_rune',
+              step: 'selectUnit', // 复用 selectUnit 步骤表示等待选择
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
+        // 寒冰碎屑：建造阶段结束时进入确认模式
+        if (p.abilityId === 'ice_shards_damage') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'ice_shards',
+              step: 'selectUnit', // 复用表示等待确认
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
+        // 喂养巨食兽：攻击阶段结束时进入选择模式
+        if (p.abilityId === 'feed_beast_check') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'feed_beast',
+              step: 'selectUnit', // 选择相邻友方单位或自毁
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
       }
     }
   }, [G, core, myPlayerId, pushDestroyEffect, pushBoardEffect, triggerShake]);

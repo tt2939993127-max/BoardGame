@@ -82,9 +82,10 @@ const defaultRandom: RandomFn = {
 // ============================================================================
 
 describe('onDestroy 基础设施', () => {
-    it('消灭无 onDestroy 能力的随从不产生额外事件', () => {
+    it('消灭无 onDestroy 能力的随从不产生额外事件（单目标自动执行）', () => {
         // 侏儒 onPlay：消灭力量 < 己方随从数的随从
-        // 基地上预先有1个己方随从 → 打出后 1+1=2 → 消灭力量<2的随从
+        // 基地上预先有1个己方随从(力量3) → 打出后 1+1=2 → 消灭力量<2的随从
+        // m0a 力量3 >= 2 不符合，只有 m1 力量1 < 2 → 单目标自动执行
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -95,7 +96,7 @@ describe('onDestroy 基础设施', () => {
             bases: [{
                 defId: 'base_a',
                 minions: [
-                    makeMinion('m0a', 'test_ally', '0', 1),
+                    makeMinion('m0a', 'test_ally', '0', 3),
                     makeMinion('m1', 'test_minion', '1', 1),
                 ],
                 ongoingActions: [],
@@ -207,7 +208,8 @@ describe('robot_nukebot（核弹机器人 onDestroy）', () => {
 
     it('同基地只有自己人的随从时不产生额外消灭', () => {
         // 核弹属于玩家1，基地上除核弹外只有玩家1的随从
-        // 用 bear_cavalry_bear_necessities 行动卡消灭核弹（自动选力量最高的随从）
+        // bear_cavalry_bear_necessities 有2个对手目标（nukebot + m1a）→ 创建 Prompt
+        // 改为只有1个对手目标的场景来测试 nukebot onDestroy
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -219,7 +221,6 @@ describe('robot_nukebot（核弹机器人 onDestroy）', () => {
                 defId: 'base_a',
                 minions: [
                     makeMinion('nukebot', 'robot_nukebot', '1', 5),
-                    makeMinion('m1a', 'test_ally', '1', 2),
                 ],
                 ongoingActions: [],
             }],
@@ -231,14 +232,14 @@ describe('robot_nukebot（核弹机器人 onDestroy）', () => {
             payload: { cardUid: 'c1' },
         }, defaultRandom);
 
-        // bear_necessities 消灭力量最高的随从（核弹力量5）
+        // 单目标自动消灭核弹
         const nukebotDestroy = events.find(
             e => e.type === SU_EVENTS.MINION_DESTROYED && (e as any).payload.minionUid === 'nukebot'
         );
         expect(nukebotDestroy).toBeDefined();
 
         // 核弹属于玩家1，onDestroy 消灭"其他玩家"的随从
-        // 基地上只有 m1a（玩家1），没有其他玩家的随从 → 无额外消灭
+        // 基地上没有其他玩家的随从 → 无额外消灭
         const chainDestroys = events.filter(
             e => e.type === SU_EVENTS.MINION_DESTROYED && (e as any).payload.reason === 'robot_nukebot'
         );

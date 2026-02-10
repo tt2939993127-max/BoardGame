@@ -1,9 +1,24 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Card, UnitCard, EventCard, StructureCard } from '../../domain/types';
+import type { Card, UnitCard } from '../../domain/types';
 import { getCardPoolByFaction, groupCardsByType } from '../../config/cardRegistry';
 import { canAddCard, type DeckDraft } from '../../config/deckValidation';
+import { CardSprite } from '../CardSprite';
+import { MagnifyOverlay } from '../../../../components/common/overlays/MagnifyOverlay';
+import { resolveCardAtlasId, initSpriteAtlases } from '../cardAtlas';
+
+// 确保精灵图注册表已初始化（幂等）
+initSpriteAtlases();
+
+/** 解析卡牌的精灵图配置 */
+function resolveSprite(card: Card): { atlasId: string; frameIndex: number } {
+    const spriteAtlasType = card.spriteAtlas ?? (card.cardType === 'unit' && card.unitClass === 'summoner' ? 'hero' : 'cards');
+    const atlasId = spriteAtlasType === 'portal'
+        ? 'sw:portal'
+        : resolveCardAtlasId(card as { id: string; faction?: string }, spriteAtlasType as 'hero' | 'cards');
+    return { atlasId, frameIndex: card.spriteIndex ?? 0 };
+}
 
 interface CardPoolPanelProps {
     factionId: string | null;
@@ -14,6 +29,7 @@ interface CardPoolPanelProps {
 
 export const CardPoolPanel: React.FC<CardPoolPanelProps> = ({ factionId, currentDeck, onAddCard, onSelectSummoner }) => {
     const { t } = useTranslation('game-summonerwars');
+    const [magnifiedCard, setMagnifiedCard] = useState<{ atlasId: string; frameIndex: number; name: string } | null>(null);
 
     const cards = useMemo(() => {
         if (!factionId) return [];
@@ -21,6 +37,12 @@ export const CardPoolPanel: React.FC<CardPoolPanelProps> = ({ factionId, current
     }, [factionId]);
 
     const groups = useMemo(() => groupCardsByType(cards), [cards]);
+
+    /** 放大预览卡牌 */
+    const handleMagnify = useCallback((card: Card) => {
+        const sprite = resolveSprite(card);
+        setMagnifiedCard({ ...sprite, name: card.name });
+    }, []);
 
     if (!factionId) {
         return (
@@ -32,56 +54,77 @@ export const CardPoolPanel: React.FC<CardPoolPanelProps> = ({ factionId, current
 
     return (
         <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-[#1a1a1a] to-[#0f0f0f]">
-            {/* Summoners */}
+            {/* 召唤师 */}
             {groups.summoners.length > 0 && (
                 <CardSection
                     title={t('deckBuilder.summoners')}
                     cards={groups.summoners}
                     currentDeck={currentDeck}
                     onAdd={(c) => onSelectSummoner(c as UnitCard)}
+                    onMagnify={handleMagnify}
                     isSummonerSection
                 />
             )}
 
-            {/* Champions */}
+            {/* 冠军 */}
             {groups.champions.length > 0 && (
                 <CardSection
                     title={t('deckBuilder.champions')}
                     cards={groups.champions}
                     currentDeck={currentDeck}
                     onAdd={onAddCard}
+                    onMagnify={handleMagnify}
                 />
             )}
 
-            {/* Commons */}
+            {/* 普通单位 */}
             {groups.commons.length > 0 && (
                 <CardSection
                     title={t('deckBuilder.commons')}
                     cards={groups.commons}
                     currentDeck={currentDeck}
                     onAdd={onAddCard}
+                    onMagnify={handleMagnify}
                 />
             )}
 
-            {/* Events */}
+            {/* 事件 */}
             {groups.events.length > 0 && (
                 <CardSection
                     title={t('deckBuilder.events')}
                     cards={groups.events}
                     currentDeck={currentDeck}
                     onAdd={onAddCard}
+                    onMagnify={handleMagnify}
                 />
             )}
 
-            {/* Structures */}
+            {/* 建筑 */}
             {groups.structures.length > 0 && (
                 <CardSection
                     title={t('deckBuilder.structures')}
                     cards={groups.structures}
                     currentDeck={currentDeck}
                     onAdd={onAddCard}
+                    onMagnify={handleMagnify}
                 />
             )}
+
+            {/* 卡牌放大预览 */}
+            <MagnifyOverlay
+                isOpen={!!magnifiedCard}
+                onClose={() => setMagnifiedCard(null)}
+                containerClassName="max-h-[85vh] max-w-[90vw]"
+                closeLabel={t('actions.closePreview')}
+            >
+                {magnifiedCard && (
+                    <CardSprite
+                        atlasId={magnifiedCard.atlasId}
+                        frameIndex={magnifiedCard.frameIndex}
+                        className="h-[75vh] w-auto rounded-xl shadow-2xl"
+                    />
+                )}
+            </MagnifyOverlay>
         </div>
     );
 };
@@ -91,54 +134,63 @@ interface CardSectionProps {
     cards: Card[];
     currentDeck: DeckDraft;
     onAdd: (card: Card) => void;
+    onMagnify: (card: Card) => void;
     isSummonerSection?: boolean;
 }
 
-const CardSection: React.FC<CardSectionProps> = ({ title, cards, currentDeck, onAdd, isSummonerSection }) => {
+const CardSection: React.FC<CardSectionProps> = ({ title, cards, currentDeck, onAdd, onMagnify, isSummonerSection }) => {
     return (
-        <div className="mb-8">
-            <h3 className="text-amber-500/80 font-bold uppercase text-xs mb-3 flex items-center gap-2">
+        <div className="mb-5">
+            <h3 className="text-amber-500/80 font-bold uppercase text-xs mb-2 flex items-center gap-2">
                 <span className="w-1 h-1 bg-amber-500 rounded-full" />
                 {title}
             </h3>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                 {cards.map(card => {
                     const isSelectedSummoner = isSummonerSection && currentDeck.summoner?.id === card.id;
                     const check = canAddCard(currentDeck, card);
-                    const isDisabled = !check.allowed && !isSummonerSection; // 始终允许选择召唤师（如果是有效切换）
-
-                    // 获取 atlas ID 的临时方法
-                    const atlasId = card.cardType === 'unit' && card.unitClass === 'summoner'
-                        ? 'sw:necromancer:hero' // 模拟
-                        : 'sw:necromancer:cards'; // 模拟
+                    const isDisabled = !check.allowed && !isSummonerSection;
+                    const sprite = resolveSprite(card);
 
                     return (
                         <div
                             key={card.id}
-                            onClick={() => !isDisabled && onAdd(card)}
                             className={`
-                relative group aspect-[0.714] rounded-lg overflow-hidden border cursor-pointer transition-all duration-200
-                ${isSelectedSummoner ? 'border-amber-400 ring-2 ring-amber-400/50 scale-105 z-10' : ''}
-                ${isDisabled ? 'opacity-50 grayscale cursor-not-allowed border-white/5' : 'border-white/20 hover:border-amber-400/60 hover:scale-[1.02] hover:shadow-xl'}
-              `}
+                                relative group rounded-lg overflow-hidden border transition-all duration-200
+                                ${isSelectedSummoner ? 'border-amber-400 ring-2 ring-amber-400/50 scale-105 z-10' : ''}
+                                ${isDisabled ? 'opacity-50 grayscale border-white/5' : 'border-white/20 hover:border-amber-400/60 hover:shadow-xl'}
+                            `}
                         >
-                            {/* 卡牌图片占位符 / 精灵图 */}
-                            <div className="absolute inset-0 bg-[#2a2a2a] flex flex-col items-center justify-center p-2 text-center">
-                                <div className="text-[10px] text-white/50 uppercase mb-1">{card.cardType}</div>
-                                <div className="font-bold text-sm text-balance leading-tight">{card.name}</div>
-                                {'cost' in card && <div className="absolute top-1 right-1 bg-blue-600/80 text-white text-xs px-1 rounded">{card.cost}</div>}
-                                {'life' in card && <div className="absolute bottom-1 right-1 bg-red-600/80 text-white text-xs px-1 rounded">{card.life}</div>}
-                                {'strength' in card && <div className="absolute bottom-1 left-1 bg-orange-600/80 text-white text-xs px-1 rounded">⚔{card.strength}</div>}
+                            {/* 卡牌精灵图（点击添加/选择） */}
+                            <div
+                                onClick={() => !isDisabled && onAdd(card)}
+                                className={isDisabled ? 'cursor-default' : 'cursor-pointer'}
+                            >
+                                <CardSprite
+                                    atlasId={sprite.atlasId}
+                                    frameIndex={sprite.frameIndex}
+                                    className="w-full"
+                                />
                             </div>
 
-                            {/* 添加操作的覆盖层 */}
-                            {!isDisabled && !isSelectedSummoner && (
-                                <div className="absolute inset-0 bg-amber-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <div className="w-8 h-8 rounded-full bg-amber-500 text-black flex items-center justify-center font-bold shadow-lg transform scale-0 group-hover:scale-100 transition-transform">
-                                        +
-                                    </div>
-                                </div>
-                            )}
+                            {/* 卡牌名称（底部渐变遮罩） */}
+                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-1.5 pb-1 pt-4 pointer-events-none">
+                                <div className="font-bold text-xs text-white leading-tight truncate">{card.name}</div>
+                            </div>
+
+                            {/* 放大预览按钮（所有卡牌都可预览，包括禁用状态） */}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onMagnify(card); }}
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white/70 hover:bg-black/80 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                                title="放大预览"
+                            >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="11" cy="11" r="8" />
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                    <line x1="11" y1="8" x2="11" y2="14" />
+                                    <line x1="8" y1="11" x2="14" y2="11" />
+                                </svg>
+                            </button>
                         </div>
                     );
                 })}

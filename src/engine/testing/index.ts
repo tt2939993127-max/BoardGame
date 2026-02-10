@@ -5,6 +5,10 @@
  * - 与具体游戏解耦
  * - 通过 executePipeline 执行：确保 sys/core/Systems 行为一致
  * - 支持自定义断言/可视化
+ *
+ * 错误断言方式：
+ * - errorAtStep: 按绝对步骤索引匹配（旧 API，向后兼容）
+ * - expectError: 按命令类型匹配最后一条失败命令（推荐，不依赖步骤索引）
  */
 
 import type { Command, DomainCore, RandomFn, PlayerId, GameEvent, MatchState } from '../types';
@@ -16,8 +20,16 @@ import type { EngineSystem } from '../systems/types';
 // ============================================================================
 
 export interface StateExpectation {
-    /** 预期某步出现的错误 */
+    /** @deprecated 使用 expectError 替代。按绝对步骤索引匹配错误（脆弱：插入/删除命令会导致索引偏移） */
     errorAtStep?: { step: number; error: string };
+    /**
+     * 按命令类型匹配错误（推荐）。
+     * - command: 预期失败的命令类型
+     * - error: 预期的错误码
+     * 匹配规则：在所有失败步骤中，找到最后一条 command 类型匹配的失败，验证其 error。
+     * 如果不指定 command，则匹配最后一条失败命令。
+     */
+    expectError?: { command?: string; error: string };
 }
 
 export interface TestCase<TExpect extends StateExpectation = StateExpectation> {
@@ -26,13 +38,13 @@ export interface TestCase<TExpect extends StateExpectation = StateExpectation> {
     expect?: TExpect;
     /** 单测自定义初始化（优先级高于全局 setup） */
     setup?: (playerIds: PlayerId[], random: RandomFn) => MatchState<unknown>;
-    eventsAtStep?: Array<{ step: number; includes: string[] }>;
     skip?: boolean;
 }
 
 export interface StepLog {
     step: number;
     command: string;
+    commandType: string;
     playerId: string;
     success: boolean;
     error?: string;
@@ -139,6 +151,7 @@ export class GameTestRunner<
             const stepLog: StepLog = {
                 step: stepNum,
                 command: `${cmd.type}(${JSON.stringify(cmd.payload)})`,
+                commandType: cmd.type,
                 playerId: cmd.playerId,
                 success: result.success,
                 error: result.error,
@@ -172,6 +185,7 @@ export class GameTestRunner<
             assertionErrors = assertFn(state, testCase.expect);
         }
 
+        // errorAtStep 断言（旧 API，向后兼容）
         if (expectedErrors.length > 0) {
             for (const expected of expectedErrors) {
                 const actual = actualErrors.find(e => e.step === expected.step);
@@ -183,17 +197,32 @@ export class GameTestRunner<
             }
         }
 
-        if (testCase.eventsAtStep) {
-            for (const expectation of testCase.eventsAtStep) {
-                const stepLog = steps.find(step => step.step === expectation.step);
-                if (!stepLog) {
-                    assertionErrors.push(`未找到 Step ${expectation.step} 的事件记录`);
-                    continue;
-                }
-                for (const eventType of expectation.includes) {
-                    if (!stepLog.events.includes(eventType)) {
-                        assertionErrors.push(`Step ${expectation.step} 缺少事件: ${eventType}`);
+        // expectError 断言（新 API，按命令类型匹配）
+        if (testCase.expect?.expectError) {
+            const { command: expectedCmd, error: expectedError } = testCase.expect.expectError;
+            // 从失败步骤中找匹配的命令
+            const failedSteps = steps.filter(s => !s.success);
+            let matched: StepLog | undefined;
+            if (expectedCmd) {
+                // 找最后一条匹配命令类型的失败步骤
+                for (let i = failedSteps.length - 1; i >= 0; i--) {
+                    if (failedSteps[i].commandType === expectedCmd) {
+                        matched = failedSteps[i];
+                        break;
                     }
+                }
+                if (!matched) {
+                    assertionErrors.push(`预期命令 ${expectedCmd} 失败 (${expectedError})，但该命令未失败`);
+                } else if (matched.error !== expectedError) {
+                    assertionErrors.push(`命令 ${expectedCmd} 错误不匹配: 预期 "${expectedError}", 实际 "${matched.error}"`);
+                }
+            } else {
+                // 不指定命令类型时，匹配最后一条失败
+                const lastFailed = failedSteps[failedSteps.length - 1];
+                if (!lastFailed) {
+                    assertionErrors.push(`预期出错 (${expectedError})，但所有命令都成功了`);
+                } else if (lastFailed.error !== expectedError) {
+                    assertionErrors.push(`最后失败命令错误不匹配: 预期 "${expectedError}", 实际 "${lastFailed.error}"`);
                 }
             }
         }

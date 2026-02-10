@@ -35,9 +35,11 @@ import { SEO } from '../components/common/SEO';
 import { createUgcClientGame } from '../ugc/client/game';
 import { createUgcRemoteHostBoard } from '../ugc/client/board';
 import { LoadingScreen } from '../components/system/LoadingScreen';
+import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 
 
 export const MatchRoom = () => {
+    usePerformanceMonitor();
     const { playerID: debugPlayerID, setPlayerID } = useDebug();
     const { gameId, matchId } = useParams();
     const [searchParams] = useSearchParams();
@@ -220,8 +222,7 @@ export const MatchRoom = () => {
                     return;
                 }
                 // 如果是玩家0凭据（可能是同浏览器另一标签），不使用，继续自动加入
-                if (data?.playerID === '0') {
-                } else {
+                if (data?.playerID !== '0') {
                     // 其他情况默认跳过
                     return;
                 }
@@ -283,12 +284,12 @@ export const MatchRoom = () => {
                                     window.location.href = `/play/${gameId}/match/${matchId}?playerID=${data.playerID}`;
                                     return;
                                 }
-                            } catch { }
+                            } catch { /* parse error, ignore */ }
                         }
                         safeSetIsAutoJoining(false);
                     }
                 }
-            } catch (err) {
+            } catch {
                 if (cancelled) return;
                 // 出错也重试
                 retryCount++;
@@ -304,7 +305,7 @@ export const MatchRoom = () => {
                                 window.location.href = `/play/${gameId}/match/${matchId}?playerID=${data.playerID}`;
                                 return;
                             }
-                        } catch { }
+                        } catch { /* parse error, ignore */ }
                     }
                     safeSetIsAutoJoining(false);
                 }

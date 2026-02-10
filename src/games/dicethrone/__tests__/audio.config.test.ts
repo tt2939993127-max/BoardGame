@@ -99,14 +99,18 @@ describe('DiceThrone 音效配置', () => {
     });
 
     describe('BGM 配置', () => {
-        it('应有 11 首 BGM（5 normal + 3 normal intense + 1 battle + 2 battle intense）', () => {
-            expect(DICETHRONE_AUDIO_CONFIG.bgm).toHaveLength(11);
+        it('应有 16 首 BGM（4 normal + 12 battle）', () => {
+            expect(DICETHRONE_AUDIO_CONFIG.bgm).toHaveLength(16);
         });
 
-        it('BGM 不应与 SW 撞曲（禁止 Dragon Dance / Shields and Spears）', () => {
+        it('BGM 不应与 SW 撞曲（禁止 Corsair / Lonely Bard / Luminesce / Wind Chime / Elder Awakening / Feysong Fields）', () => {
             const keys = DICETHRONE_AUDIO_CONFIG.bgm!.map(b => b.key);
-            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main');
-            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main');
+            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main');
+            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main');
+            expect(keys).not.toContain('bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_main');
+            expect(keys).not.toContain('bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_main');
+            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_main');
+            expect(keys).not.toContain('bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_main');
         });
 
         it('应有 bgmGroups（normal + battle）', () => {

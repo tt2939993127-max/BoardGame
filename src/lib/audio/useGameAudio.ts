@@ -117,6 +117,11 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
     })();
 
     const runtimeContext: AudioRuntimeContext<G, Ctx, Meta> = { G, ctx, meta };
+    // 用 ref 持有 runtimeContext，避免 useCallback 依赖不稳定的对象引用
+    const runtimeContextRef = useRef(runtimeContext);
+    useEffect(() => {
+        runtimeContextRef.current = runtimeContext;
+    });
 
     const bgmDefinitionMap = useMemo(() => {
         return new Map((config.bgm ?? []).map((def) => [def.key, def]));
@@ -141,16 +146,17 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             };
         }
 
+        const currentRuntimeContext = runtimeContextRef.current;
         const allKeys = allBgm.map((def) => def.key);
         const fallbackGroup = resolveFallbackGroup();
-        const activeGroup = resolveBgmGroup(runtimeContext, config.bgmRules, fallbackGroup);
+        const activeGroup = resolveBgmGroup(currentRuntimeContext, config.bgmRules, fallbackGroup);
         const groupKeys = config.bgmGroups?.[activeGroup] ?? allKeys;
         const effectiveKeys = groupKeys.length > 0 ? groupKeys : allKeys;
         const playlist = effectiveKeys
             .map((key) => bgmDefinitionMap.get(key))
             .filter((entry): entry is BgmDefinition => !!entry);
         const fallbackKeyFromGroup = effectiveKeys.find((key) => allKeys.includes(key)) ?? allKeys[0] ?? null;
-        const resolvedKey = resolveBgmKey(runtimeContext, config.bgmRules, null);
+        const resolvedKey = resolveBgmKey(currentRuntimeContext, config.bgmRules, null);
         const safeFallbackKey = resolvedKey && effectiveKeys.includes(resolvedKey)
             ? resolvedKey
             : fallbackKeyFromGroup;
@@ -161,7 +167,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             : fallbackKeyFromGroup;
 
         return { activeGroup, playlist, targetKey };
-    }, [bgmDefinitionMap, bgmSelections, config.bgm, config.bgmGroups, config.bgmRules, gameId, resolveFallbackGroup, runtimeContext]);
+    }, [bgmDefinitionMap, bgmSelections, config.bgm, config.bgmGroups, config.bgmRules, gameId, resolveFallbackGroup]);
 
     useEffect(() => {
         let active = true;
@@ -219,7 +225,6 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
     }, [
         registryLoaded,
         config,
-        runtimeContext,
         setPlaylist,
         playBgm,
         stopBgm,
@@ -256,7 +261,6 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         registryLoaded,
         config.bgm,
         config.bgmRules,
-        runtimeContext,
         playBgm,
         stopBgm,
         resolveBgmPlan,
@@ -293,7 +297,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             }
             const key = resolveAudioKey(
                 event,
-                runtimeContext,
+                runtimeContextRef.current,
                 config,
                 (category) => AudioManager.resolveCategoryKey(category)
             );
@@ -301,31 +305,32 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 playSound(key);
             }
         }
-    }, [registryLoaded, eventEntriesVersion, config, runtimeContext]);
+    }, [registryLoaded, eventEntriesVersion, config]);
 
     useEffect(() => {
         if (!registryLoaded) return;
+        const currentRuntime = runtimeContextRef.current;
         if (!prevRuntimeRef.current) {
-            prevRuntimeRef.current = runtimeContext;
+            prevRuntimeRef.current = currentRuntime;
             return;
         }
 
         if (!config.stateTriggers || config.stateTriggers.length === 0) {
-            prevRuntimeRef.current = runtimeContext;
+            prevRuntimeRef.current = currentRuntime;
             return;
         }
 
         for (const trigger of config.stateTriggers) {
-            if (!trigger.condition(prevRuntimeRef.current, runtimeContext)) continue;
-            const resolvedKey = trigger.resolveSound?.(prevRuntimeRef.current, runtimeContext);
+            if (!trigger.condition(prevRuntimeRef.current, currentRuntime)) continue;
+            const resolvedKey = trigger.resolveSound?.(prevRuntimeRef.current, currentRuntime);
             const key = resolvedKey ?? trigger.sound;
             if (key) {
                 playSound(key);
             }
         }
 
-        prevRuntimeRef.current = runtimeContext;
-    }, [registryLoaded, config.stateTriggers, runtimeContext]);
+        prevRuntimeRef.current = currentRuntime;
+    }, [registryLoaded, config.stateTriggers, G, ctx]);
 
     useEffect(() => (
         () => {
