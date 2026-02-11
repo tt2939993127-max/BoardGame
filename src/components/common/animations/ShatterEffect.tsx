@@ -12,6 +12,16 @@
 
 import React, { useEffect, useRef, useCallback } from 'react';
 
+/** 直接传入图片源，跳过 DOM 截取（更可靠） */
+export interface ShatterImageSource {
+  /** 图片 URL */
+  url: string;
+  /** CSS background-size（如 '300% 600%'） */
+  bgSize: string;
+  /** CSS background-position（如 '50% 0%'） */
+  bgPosition: string;
+}
+
 export interface ShatterEffectProps {
   /** 是否激活 */
   active: boolean;
@@ -21,6 +31,11 @@ export interface ShatterEffectProps {
   cols?: number;
   /** 碎片网格行数（默认 2） */
   rows?: number;
+  /**
+   * 直接传入图片源（推荐）：跳过 DOM 截取，避免 CORS/异步问题
+   * 当提供此 prop 时，不再从 [data-shatter-target] 截取
+   */
+  imageSource?: ShatterImageSource;
   /** 动画开始回调（用于隐藏原内容） */
   onStart?: () => void;
   /** 完成回调 */
@@ -44,7 +59,40 @@ interface Shard {
 }
 
 
-/** 异步截取：加载背景图后绘制到离屏 Canvas */
+/**
+ * 从直接传入的图片源创建离屏 Canvas（无 DOM 截取，更可靠）
+ */
+function captureFromImageSource(
+  src: ShatterImageSource,
+  w: number, h: number,
+): Promise<HTMLCanvasElement | null> {
+  return new Promise((resolve) => {
+    if (w < 1 || h < 1) { resolve(null); return; }
+    const dpr = window.devicePixelRatio || 1;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = w * dpr;
+    offscreen.height = h * dpr;
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) { resolve(null); return; }
+    ctx.scale(dpr, dpr);
+
+    const img = new Image();
+    // 不设置 crossOrigin，避免 CORS 问题（我们只绘制不读取像素）
+    img.onload = () => {
+      const { drawW, drawH, drawX, drawY } = parseBgStyle(src.bgSize, src.bgPosition, w, h, img.naturalWidth, img.naturalHeight);
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      resolve(offscreen);
+    };
+    img.onerror = () => {
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(0, 0, w, h);
+      resolve(offscreen);
+    };
+    img.src = src.url;
+  });
+}
+
+/** 异步截取：加载背景图后绘制到离屏 Canvas（DOM 回退路径） */
 function captureElementAsync(el: HTMLElement): Promise<HTMLCanvasElement | null> {
   return new Promise((resolve) => {
     const rect = el.getBoundingClientRect();
@@ -69,43 +117,13 @@ function captureElementAsync(el: HTMLElement): Promise<HTMLCanvasElement | null>
       const urlMatch = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
       if (urlMatch) {
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        // 不设置 crossOrigin，避免 CORS 问题（我们只绘制不读取像素）
         img.onload = () => {
-          // 解析 background-size
-          let drawW = img.naturalWidth;
-          let drawH = img.naturalHeight;
-          if (bgSize) {
-            const parts = bgSize.split(/\s+/);
-            const parseVal = (v: string, ref: number, imgDim: number) => {
-              if (v === 'auto') return imgDim * (ref / imgDim);
-              if (v.endsWith('%')) return ref * parseFloat(v) / 100;
-              return parseFloat(v) || imgDim;
-            };
-            drawW = parseVal(parts[0], w, img.naturalWidth);
-            drawH = parts[1] ? parseVal(parts[1], h, img.naturalHeight) : drawH * (drawW / img.naturalWidth);
-          }
-
-          // 解析 background-position
-          let drawX = 0;
-          let drawY = 0;
-          if (bgPos) {
-            const posParts = bgPos.split(/\s+/);
-            const parsePosVal = (v: string, containerDim: number, imgDim: number) => {
-              if (v.endsWith('%')) {
-                const pct = parseFloat(v) / 100;
-                return (containerDim - imgDim) * pct;
-              }
-              return parseFloat(v) || 0;
-            };
-            drawX = parsePosVal(posParts[0], w, drawW);
-            drawY = posParts[1] ? parsePosVal(posParts[1], h, drawH) : 0;
-          }
-
+          const { drawW, drawH, drawX, drawY } = parseBgStyle(bgSize, bgPos, w, h, img.naturalWidth, img.naturalHeight);
           ctx.drawImage(img, drawX, drawY, drawW, drawH);
           resolve(offscreen);
         };
         img.onerror = () => {
-          // 图片加载失败，用纯色
           ctx.fillStyle = style.backgroundColor || '#475569';
           ctx.fillRect(0, 0, w, h);
           resolve(offscreen);
@@ -115,18 +133,57 @@ function captureElementAsync(el: HTMLElement): Promise<HTMLCanvasElement | null>
       }
     }
 
-    // 无背景图，用背景色
+    // 无背景图，用纯色
     ctx.fillStyle = style.backgroundColor || '#475569';
     ctx.fillRect(0, 0, w, h);
     resolve(offscreen);
   });
 }
 
+/** 解析 CSS background-size/position 为绘制参数 */
+function parseBgStyle(
+  bgSize: string, bgPos: string,
+  containerW: number, containerH: number,
+  imgNatW: number, imgNatH: number,
+): { drawW: number; drawH: number; drawX: number; drawY: number } {
+  let drawW = imgNatW;
+  let drawH = imgNatH;
+  if (bgSize) {
+    const parts = bgSize.split(/\s+/);
+    const parseVal = (v: string, ref: number, imgDim: number) => {
+      if (v === 'auto') return imgDim * (ref / imgDim);
+      if (v.endsWith('%')) return ref * parseFloat(v) / 100;
+      return parseFloat(v) || imgDim;
+    };
+    drawW = parseVal(parts[0], containerW, imgNatW);
+    drawH = parts[1] ? parseVal(parts[1], containerH, imgNatH) : drawH * (drawW / imgNatW);
+  }
+  let drawX = 0;
+  let drawY = 0;
+  if (bgPos) {
+    const posParts = bgPos.split(/\s+/);
+    const parsePosVal = (v: string, containerDim: number, imgDim: number) => {
+      if (v.endsWith('%')) {
+        const pct = parseFloat(v) / 100;
+        return (containerDim - imgDim) * pct;
+      }
+      return parseFloat(v) || 0;
+    };
+    drawX = parsePosVal(posParts[0], containerW, drawW);
+    drawY = posParts[1] ? parsePosVal(posParts[1], containerH, drawH) : 0;
+  }
+  return { drawW, drawH, drawX, drawY };
+}
+
+/** 安全超时（毫秒）：如果动画未启动，强制调用 onComplete 防止内存泄漏 */
+const SAFETY_TIMEOUT_MS = 4000;
+
 export const ShatterEffect: React.FC<ShatterEffectProps> = ({
   active,
   intensity = 'normal',
   cols: colsProp,
   rows: rowsProp,
+  imageSource,
   onStart,
   onComplete,
   className = '',
@@ -134,6 +191,8 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef(0);
+  const safetyTimerRef = useRef(0);
+  const animStartedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   const onStartRef = useRef(onStart);
   onCompleteRef.current = onComplete;
@@ -148,25 +207,40 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    // 找到父容器中的内容元素（ShatterEffect 的前一个兄弟或父元素）
     const parent = container.parentElement;
     if (!parent) return;
 
-    // 截取父容器内容（排除自身 canvas）
-    const contentEl = parent.querySelector('[data-shatter-target]') as HTMLElement
-      ?? parent.firstElementChild as HTMLElement;
-    if (!contentEl || contentEl === container) return;
+    // 优先使用直接传入的图片源（跳过 DOM 截取，更可靠）
+    const parentW = parent.offsetWidth;
+    const parentH = parent.offsetHeight;
+    let snapshot: HTMLCanvasElement | null = null;
 
-    const snapshot = await captureElementAsync(contentEl);
-    if (!snapshot) return;
+    if (imageSource) {
+      // 计算与卡牌相同的内容区域尺寸
+      const contentW = parentW * 0.85; // CARD_WIDTH_RATIO
+      const contentH = contentW * (1044 / 729); // CARD_ASPECT_RATIO
+      const effectiveH = Math.min(contentH, parentH);
+      const effectiveW = effectiveH < contentH ? effectiveH * (729 / 1044) : contentW;
+      snapshot = await captureFromImageSource(imageSource, Math.round(effectiveW), Math.round(effectiveH));
+    } else {
+      // 回退：从 DOM 截取
+      const contentEl = parent.querySelector('[data-shatter-target]') as HTMLElement
+        ?? parent.firstElementChild as HTMLElement;
+      if (!contentEl || contentEl === container) return;
+      snapshot = await captureElementAsync(contentEl);
+    }
+
+    if (!snapshot) {
+      // 截取失败，直接完成（防止 onComplete 永不调用）
+      onCompleteRef.current?.();
+      return;
+    }
 
     // 通知外部隐藏原内容
+    animStartedRef.current = true;
     onStartRef.current?.();
 
     const dpr = window.devicePixelRatio || 1;
-    // 使用 offsetWidth/offsetHeight 获取 CSS 布局尺寸（不受父级 transform scale 影响）
-    const parentW = parent.offsetWidth;
-    const parentH = parent.offsetHeight;
     
     // Canvas 覆盖区域要大于父容器，碎片可以飞出去
     const overflow = isStrong ? 120 : 80;
@@ -285,8 +359,18 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
 
   useEffect(() => {
     if (!active) return;
+    animStartedRef.current = false;
+    // 安全超时：如果异步截取卡住，强制完成
+    safetyTimerRef.current = window.setTimeout(() => {
+      if (!animStartedRef.current) {
+        onCompleteRef.current?.();
+      }
+    }, SAFETY_TIMEOUT_MS);
     render();
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      clearTimeout(safetyTimerRef.current);
+    };
   }, [active, render]);
 
   if (!active) return null;

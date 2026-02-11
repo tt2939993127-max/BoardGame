@@ -21,6 +21,7 @@
 - `ResourceSystem` - 资源定义/增减/边界/消耗检查
 - `AbilitySystem` - 技能定义/触发条件/效果（含可扩展条件注册表）
 - `StatusEffectSystem` - 状态效果/堆叠/持续时间
+- `FxSystem` (`src/engine/fx/`) - 视觉特效调度（Cue 注册表 + 事件总线 + 渲染层 + WebGL Shader 子系统），游戏侧通过 `fxSetup.ts` 注册渲染器。Shader 管线（`src/engine/fx/shader/`）提供 `ShaderCanvas` + `ShaderMaterial` + GLSL 噪声库，用于逐像素流体特效。
 
 ---
 

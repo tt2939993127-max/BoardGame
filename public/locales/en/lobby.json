@@ -163,6 +163,14 @@
       "local": "Local Match",
       "sandbox": "Sandbox"
     },
+    "error": {
+      "matchMissing": "Room not found or already deleted"
+    },
+    "ugc": {
+      "loading": "Loading UGC runtime…",
+      "loadFailed": "UGC runtime load failed: {{error}}",
+      "loadFailedShort": "UGC runtime load failed"
+    },
     "sandbox": {
       "initializing": "Initializing game sandbox..."
     },

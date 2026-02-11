@@ -87,7 +87,8 @@ describe('executeActionHook', () => {
         componentId: 'comp-1',
         componentType: 'hand-zone',
         foo: 1,
-      })
+      }),
+      undefined
     );
   });
 
@@ -114,7 +115,8 @@ describe('executeActionHook', () => {
       'PLAY_CARD',
       expect.objectContaining({
         selectedCardIds: ['card-1', 'card-2'],
-      })
+      }),
+      undefined
     );
   });
 

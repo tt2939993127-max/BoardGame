@@ -322,6 +322,10 @@ export interface PendingBonusDiceSettlement {
     thresholdEffect?: 'knockdown';
     /** 是否已完成重掷交互（准备结算） */
     readyToSettle: boolean;
+    /** 仅用于展示多骰结果（不触发伤害/状态结算） */
+    displayOnly?: boolean;
+    /** 是否显示总伤害（默认重投模式下为 true，displayOnly 下为 false） */
+    showTotal?: boolean;
 }
 
 export interface HeroState {
@@ -544,7 +548,7 @@ export interface PlayerReadyCommand extends Command<'PLAYER_READY'> {
 
 /** 跳过响应窗口命令 */
 export interface ResponsePassCommand extends Command<'RESPONSE_PASS'> {
-    payload: Record<string, never>;
+    payload: { forPlayerId?: PlayerId };
 }
 
 /** 修改骰子命令 */

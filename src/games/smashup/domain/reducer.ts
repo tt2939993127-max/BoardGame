@@ -40,6 +40,7 @@ import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE, MADNESS_CARD_DEF_ID, MADNES
 import { getMinionDef, getCardDef, getBaseDefIdsForFactions } from '../data/cards';
 import type { ActionCardDef } from './types';
 import { buildDeck, drawCards } from './utils';
+import { autoMulligan } from '../../../shared/mulligan';
 import { resolveOnPlay, resolveTalent, resolveOnDestroy } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
 import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
@@ -55,7 +56,7 @@ export function execute(
     command: SmashUpCommand,
     random: RandomFn
 ): SmashUpEvent[] {
-    const now = Date.now();
+    const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
     const core = state.core;
 
     // 系统命令（SYS_ 前缀）由引擎层处理，领域层不生成事件
@@ -255,6 +256,7 @@ function executeCommand(
 
                 const readiedPlayers: AllFactionsSelectedEvent['payload']['readiedPlayers'] = {};
                 let nextUid = core.nextUid;
+                const mulliganPlayers: PlayerId[] = [];
 
                 const selectedFactions = Object.values(tempSelections).flatMap((items) => items);
                 const basePool = getBaseDefIdsForFactions(selectedFactions);
@@ -289,9 +291,22 @@ function executeCommand(
                             random
                         );
 
+                        // 重抽检查：若手牌无随从则自动重抽一次（规则：若无随从可重抽一次，必须保留第二次）
+                        const mulliganResult = autoMulligan<CardInstance>(
+                            drawResult.hand,
+                            drawResult.deck,
+                            (h) => !h.some(c => c.type === 'minion'),
+                            STARTING_HAND_SIZE,
+                            random.shuffle,
+                        );
+
+                        if (mulliganResult.mulliganCount > 0) {
+                            mulliganPlayers.push(pid);
+                        }
+
                         readiedPlayers[pid] = {
-                            deck: drawResult.deck,
-                            hand: drawResult.hand,
+                            deck: mulliganResult.deck,
+                            hand: mulliganResult.hand,
                         };
                     }
                 }
@@ -303,6 +318,7 @@ function executeCommand(
                         nextUid,
                         bases: activeBases,
                         baseDeck,
+                        ...(mulliganPlayers.length > 0 ? { mulliganPlayers } : {}),
                     },
                     timestamp: now,
                 };

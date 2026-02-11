@@ -101,8 +101,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 > **开发/修改动画或特效时必须先阅读 `docs/ai-rules/animation-effects.md`**
 
-- 使用 **framer-motion** + **自研 Canvas 2D 粒子引擎**（`canvasParticleEngine.ts`）。
-- 粒子/复杂矢量/多阶段特效 → Canvas 2D；简单形状变换 → framer-motion；UI 过渡 → CSS transition。
+- 使用 **framer-motion** + **自研 Canvas 2D 粒子引擎**（`canvasParticleEngine.ts`）+ **WebGL Shader 管线**（`engine/fx/shader/`）。
+- 粒子/复杂矢量/多阶段特效 → Canvas 2D；流体/逐像素特效（旋涡/火焰等）→ WebGL Shader；简单形状变换 → framer-motion；UI 过渡 → CSS transition。
 - **禁止 `transition-all`**；优先 `transform/opacity`；`backdrop-filter` 保持静态。
 - **通用组件优先**：新增特效前搜索 `src/components/common/animations/`。
 - **棋盘层特效用俯视角物理**（`gravity: 0`，平面扩散）；全屏 UI 层不受约束。

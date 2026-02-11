@@ -10,6 +10,11 @@
     "draw": "摸牌阶段",
     "endTurn": "回合结束"
   },
+  "error": {
+    "tutorial_manifest_invalid": "教程配置无效",
+    "tutorial_command_blocked": "教程中禁止该操作",
+    "tutorial_step_locked": "当前步骤不能跳过"
+  },
   "ui": {
     "turn": "回合",
     "you": "你自己",

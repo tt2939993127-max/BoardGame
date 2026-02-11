@@ -371,7 +371,7 @@ describe('cthulhu_servitor（仆人 talent）', () => {
         expect(types).not.toContain(SU_EVENTS.DECK_RESHUFFLED);
     });
 
-    it('弃牌堆有多张行动卡时选第一张', () => {
+    it('弃牌堆有多张行动卡时创建 Prompt 选择', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -395,10 +395,13 @@ describe('cthulhu_servitor（仆人 talent）', () => {
             payload: { minionUid: 'm1', baseIndex: 0 },
         }, defaultRandom);
 
-        const reshuffleEvt = events.find(e => e.type === SU_EVENTS.DECK_RESHUFFLED)!;
-        const newDeckUids = (reshuffleEvt as any).payload.deckUids;
-        // MVP：选第一张行动卡 dis1
-        expect(newDeckUids[0]).toBe('dis1');
+        // 多张行动卡时应创建 Prompt（不自动选择）
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        const cont = (promptEvents[0] as any).payload.continuation;
+        expect(cont.abilityId).toBe('cthulhu_servitor');
+        // 应有2个选项（dis1 和 dis2，不包含 minion_c）
+        expect(cont.data.promptConfig.options.length).toBe(2);
     });
 });
 

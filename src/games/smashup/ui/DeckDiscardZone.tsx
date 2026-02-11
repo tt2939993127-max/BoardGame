@@ -46,9 +46,9 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn 
     };
 
     return (
-        <div data-tutorial-id="su-deck-discard">
-            {/* Deck Pile - Bottom Left */}
-            <div className="absolute bottom-4 left-[2vw] z-30 flex flex-col items-center pointer-events-auto group">
+        <div data-tutorial-id="su-deck-discard" className="absolute bottom-4 left-[2vw] right-[2vw] z-30 flex justify-between items-end pointer-events-none">
+            {/* Deck Pile - Left */}
+            <div className="flex flex-col items-center pointer-events-auto group">
                 <div className="relative w-[7.5vw] aspect-[0.714]">
                     {/* Consistent Stack Effect */}
                     <div className="absolute inset-0 bg-slate-700 rounded-sm border border-slate-600 shadow-sm translate-x-1 -translate-y-1 rotate-1" />
@@ -72,9 +72,9 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn 
                 </div>
             </div>
 
-            {/* Discard Pile - Bottom Right */}
+            {/* Discard Pile - Right */}
             <div
-                className="absolute bottom-4 right-[2vw] z-30 flex flex-col items-center pointer-events-auto group cursor-pointer"
+                className="flex flex-col items-center pointer-events-auto group cursor-pointer"
                 onClick={handleDiscardClick}
             >
                 <div className="relative w-[7.5vw] aspect-[0.714]">

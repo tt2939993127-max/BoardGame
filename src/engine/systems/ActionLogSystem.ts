@@ -54,7 +54,8 @@ export function createActionLogSystem<TCore>(
             },
         }),
 
-        afterEvents: ({ state, command, events }): HookResult<TCore> | void => {
+        afterEvents: ({ state, command, events, afterEventsRound }): HookResult<TCore> | void => {
+            if ((afterEventsRound ?? 0) !== 0) return;
             if (!shouldRecordCommand(command.type, normalizedAllowlist)) return;
             if (!formatEntry) return;
 

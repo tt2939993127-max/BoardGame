@@ -41,7 +41,7 @@ describe('ActionLogSystem', () => {
             commandAllowlist: ['ADVANCE_PHASE'],
             formatEntry: ({ command }): ActionLogEntry => ({
                 id: `${command.type}-${command.playerId}`,
-                timestamp: command.timestamp ?? Date.now(),
+                timestamp: command.timestamp ?? 0,
                 actorId: command.playerId,
                 kind: command.type,
                 segments: [{ type: 'text', text: '推进阶段' }],
@@ -53,7 +53,7 @@ describe('ActionLogSystem', () => {
             type: 'ADVANCE_PHASE',
             playerId: '0',
             payload: {},
-            timestamp: Date.now(),
+            timestamp: 1,
         };
 
         const result = system.afterEvents?.({

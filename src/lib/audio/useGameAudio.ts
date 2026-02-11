@@ -23,6 +23,10 @@ interface UseGameAudioOptions<G, Ctx = unknown, Meta extends Record<string, unkn
 // 追踪哪些音效加载失败，需要使用合成音
 const failedSounds = new Set<string>();
 
+// 全局节流：记录每个音效上次播放时间
+const lastPlayedTime = new Map<string, number>();
+const SFX_THROTTLE_MS = 80;
+
 function getLogEntrySignature(entry: unknown): string | null {
     if (!entry || typeof entry !== 'object') return null;
     const maybeEventStreamEntry = entry as { id?: number; event?: { type?: string; timestamp?: number } };
@@ -62,6 +66,14 @@ function findLastLogEntryIndex(entries: unknown[], signature: string): number {
  * @param key 音效键名
  */
 export function playSound(key: SoundKey): void {
+    // 节流：同一音效在 SFX_THROTTLE_MS 内只播放一次
+    const now = Date.now();
+    const lastPlayed = lastPlayedTime.get(key);
+    if (lastPlayed !== undefined && now - lastPlayed < SFX_THROTTLE_MS) {
+        return;
+    }
+    lastPlayedTime.set(key, now);
+
     // 如果已知该音效加载失败，直接使用合成音
     const synthKeys = getSynthSoundKeys();
     const isSynthKey = synthKeys.includes(key);
@@ -73,8 +85,9 @@ export function playSound(key: SoundKey): void {
     }
 
     const result = AudioManager.play(key);
-    // 如果播放失败（返回 null），标记并尝试合成音
-    if (result === null && isSynthKey) {
+    // 仅在音效确实加载失败时标记为永久失败并回退到合成音
+    // （因并发加载限制被跳过的不算失败）
+    if (result === null && isSynthKey && AudioManager.isFailed(key)) {
         failedSounds.add(key);
         playSynthSound(key);
     }
@@ -290,7 +303,14 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             lastLogSignatureRef.current = getLogEntrySignature(safeEntries[safeEntries.length - 1]);
         }
 
-        for (const entry of newEntries) {
+        // 批量事件过多时只对最近的几条播放音效，避免同时触发大量音频加载
+        const MAX_BATCH_SOUNDS = 5;
+        const audioEntries = newEntries.length > MAX_BATCH_SOUNDS
+            ? newEntries.slice(-MAX_BATCH_SOUNDS)
+            : newEntries;
+
+        const playedKeys = new Set<SoundKey>();
+        for (const entry of audioEntries) {
             const event = resolveAudioEvent(entry, config.eventSelector);
             if (!event) {
                 continue;
@@ -301,7 +321,8 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 config,
                 (category) => AudioManager.resolveCategoryKey(category)
             );
-            if (key) {
+            if (key && !playedKeys.has(key)) {
+                playedKeys.add(key);
                 playSound(key);
             }
         }

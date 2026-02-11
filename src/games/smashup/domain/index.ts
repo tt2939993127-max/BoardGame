@@ -212,10 +212,10 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         return getCurrentPlayerId(state.core);
     },
 
-    onPhaseExit({ state, from }): GameEvent[] | PhaseExitResult {
+    onPhaseExit({ state, from, command }): GameEvent[] | PhaseExitResult {
         const core = state.core;
         const pid = getCurrentPlayerId(core);
-        const now = Date.now();
+        const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
         if (from === 'endTurn') {
             // 切换到下一个玩家
@@ -311,10 +311,10 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         return [];
     },
 
-    onPhaseEnter({ state, from, to, random }): GameEvent[] {
+    onPhaseEnter({ state, from, to, random, command }): GameEvent[] {
         const core = state.core;
         const pid = getCurrentPlayerId(core);
-        const now = Date.now();
+        const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
         const events: GameEvent[] = [];
 
         if (to === 'startTurn') {

@@ -38,8 +38,8 @@ AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 - **本地同屏模式** — 同一设备上和朋友面对面对战
 - **交互式教程** — 内置 Tutorial 引擎，支持 AI 自动演示和分步引导
 - **社交系统** — 好友、聊天、对局邀请、战绩查看
+- **游戏工具** — 预览特效与音频，快速切图等，音频来自购买的素材包
 - **~~简易原型工具（搁置）~~** — 可视化游戏原型构建器，快速验证规则想法
-- **游戏工具** — 预览特效与音频，快速切图等
 - **国际化 (i18n)** — 中英双语支持
 - **管理后台** — 用户管理、房间监控、反馈处理、系统健康检查
 - **Docker 一键部署** — 同域 / Cloudflare Pages 分离部署均可
@@ -150,6 +150,8 @@ npm run dev:lite
 
 个人的省钱组合：windsurf 龟速版gpt + kiro 阉割版claude + 5天ed的反重力
 也是三个臭皮匠顶个诸葛亮:)，不过现在性价比最高的方案应该变成warp了
+
+> 小tip：使用规范驱动开发，claude写完后gpt立刻审核一遍，每次提交再审核一遍应该能大幅减少ai错误
 </details>
 
 
@@ -187,9 +189,16 @@ npm run build            # 构建前端
 npm run generate:manifests  # 重新生成游戏清单
 npm run generate:locales    # 生成卡牌多语言文件
 npm run compress:images     # 压缩图片资源
+npm run compress:audio      # 压缩音频资源（wav → ogg）
 npm run assets:manifest     # 生成资源清单
 npm run check:arch          # 架构检查
+
+# 音频注册表 & 资源上传（新增/修改音频文件后必须执行）
+node scripts/audio/generate_common_audio_registry.js  # 重新生成音频注册表
+npm run assets:upload    # 上传压缩资源到 R2（需配置 R2_* 环境变量）
 ```
+
+> **注意**：新增或修改音频文件后，需要依次执行 `compress:audio` → `generate_common_audio_registry.js` → `assets:upload`，否则远程 `registry.json` 缺少新 key 会导致音频无法播放。
 
 ## 🧪 测试
 
@@ -229,4 +238,4 @@ npm run test:e2e         # 端到端测试
 
 本项目代码基于 [MIT License](LICENSE) 开源。
 
-游戏素材（图片、音效等）来自对应桌游的官方图包，版权归原作者所有，仅供学习交流使用，不可商用。
+游戏图片素材来自对应桌游的官方图包和民间汉化，版权归原作者所有，仅供学习交流使用，不可商用。

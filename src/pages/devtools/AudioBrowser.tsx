@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Check } from 'lucide-react';
 import { AudioManager } from '../../lib/audio/AudioManager';
 import {
   loadCommonAudioRegistry,
@@ -166,7 +167,7 @@ const CategorySidebar: React.FC<{
 };
 
 // ============================================================================
-// 音频列表
+// 音频列表（紧凑版）
 // ============================================================================
 
 const AudioTable: React.FC<{
@@ -190,34 +191,32 @@ const AudioTable: React.FC<{
       <table className="w-full text-xs table-fixed">
         <thead className="sticky top-0 bg-slate-800 z-10">
           <tr className="text-slate-400 border-b border-slate-700">
-            <th className="text-left px-2 py-1.5 font-medium">名称</th>
-            <th className="text-left px-2 py-1.5 font-medium w-24">分类</th>
-            <th className="text-left px-2 py-1.5 font-medium w-14">类型</th>
-            <th className="px-2 py-1.5 w-14">操作</th>
+            <th className="text-left px-1.5 py-1 font-medium">名称</th>
+            <th className="text-left px-1.5 py-1 font-medium w-16">类型</th>
+            <th className="px-1.5 py-1 w-10">▶</th>
           </tr>
         </thead>
         <tbody>
           {entries.slice(0, 300).map((entry) => (
             <tr key={entry.key} className={`border-b border-slate-700/50 hover:bg-slate-700/30 ${playingKey === entry.key ? 'bg-indigo-900/20' : ''}`}>
               <td
-                className="px-2 py-1 cursor-pointer hover:text-indigo-300 truncate"
+                className="px-1.5 py-0.5 cursor-pointer hover:text-indigo-300 truncate"
                 title={entry.key}
                 onClick={() => copyKey(entry.key)}
               >
-                <span className="text-slate-200 text-[11px]">
-                  {copiedKey === entry.key ? <span className="text-emerald-400">已复制 ✓</span> : friendlyName(entry.key)}
+                <span className="text-slate-200 text-[11px] flex items-center gap-1">
+                  {copiedKey === entry.key ? <Check size={12} className="text-emerald-400" /> : friendlyName(entry.key)}
                 </span>
               </td>
-              <td className="px-2 py-1 text-slate-400 text-[10px] truncate">{entry.category?.sub ?? groupLabel(entry.category?.group ?? 'misc')}</td>
-              <td className="px-2 py-1">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${entry.type === 'bgm' ? 'bg-emerald-900 text-emerald-300' : 'bg-indigo-900 text-indigo-300'}`}>
+              <td className="px-1.5 py-0.5">
+                <span className={`px-1 py-0.5 rounded text-[10px] font-bold ${entry.type === 'bgm' ? 'bg-emerald-900 text-emerald-300' : 'bg-indigo-900 text-indigo-300'}`}>
                   {entry.type === 'bgm' ? '音乐' : '音效'}
                 </span>
               </td>
-              <td className="px-2 py-1 text-center">
+              <td className="px-1.5 py-0.5 text-center">
                 <button
                   onClick={() => playEntry(entry)}
-                  className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-[background-color]"
+                  className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-[background-color]"
                   title="试听"
                 >
                   {playingKey === entry.key ? '⏸' : '▶'}
@@ -238,6 +237,95 @@ const AudioTable: React.FC<{
 };
 
 // ============================================================================
+// 历史播放面板
+// ============================================================================
+
+interface HistoryItem {
+  entry: AudioRegistryEntry;
+  timestamp: number;
+}
+
+const HISTORY_STORAGE_KEY = 'audio-browser-history';
+const HISTORY_MAX = 30;
+
+function loadHistory(): HistoryItem[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as HistoryItem[];
+    return Array.isArray(parsed) ? parsed.slice(0, HISTORY_MAX) : [];
+  } catch { return []; }
+}
+
+function saveHistory(items: HistoryItem[]): void {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(items.slice(0, HISTORY_MAX)));
+  } catch { /* quota exceeded etc. */ }
+}
+
+const HistoryPanel: React.FC<{
+  history: HistoryItem[];
+  replayEntry: (entry: AudioRegistryEntry) => void;
+  playingKey: string | null;
+  friendlyName: (key: string) => string;
+  onClear: () => void;
+}> = ({ history, replayEntry, playingKey, friendlyName, onClear }) => {
+  return (
+    <div className="w-56 shrink-0 flex flex-col max-h-[calc(100vh-10rem)]">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">历史播放</div>
+        {history.length > 0 && (
+          <button
+            onClick={onClear}
+            className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            清空
+          </button>
+        )}
+      </div>
+      <div className="flex-1 overflow-y-auto rounded border border-slate-700 bg-slate-800/40">
+        {history.length === 0 ? (
+          <div className="text-center text-slate-500 text-xs py-6">播放音效后
+此处会记录历史</div>
+        ) : (
+          <div className="divide-y divide-slate-700/50">
+            {history.map((item, idx) => (
+              <div
+                key={`${item.entry.key}-${item.timestamp}-${idx}`}
+                className={`px-2 py-1.5 hover:bg-slate-700/30 flex items-center gap-1.5 ${
+                  playingKey === item.entry.key ? 'bg-indigo-900/20' : ''
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] text-slate-200 truncate" title={item.entry.key}>
+                    {friendlyName(item.entry.key)}
+                  </div>
+                  <div className="text-[9px] text-slate-500">
+                    {new Date(item.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </div>
+                </div>
+                <span className={`shrink-0 px-1 py-0.5 rounded text-[9px] font-bold ${
+                  item.entry.type === 'bgm' ? 'bg-emerald-900 text-emerald-300' : 'bg-indigo-900 text-indigo-300'
+                }`}>
+                  {item.entry.type === 'bgm' ? '乐' : '效'}
+                </span>
+                <button
+                  onClick={() => replayEntry(item.entry)}
+                  className="shrink-0 w-5 h-5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center transition-[background-color]"
+                  title="重新播放"
+                >
+                  {playingKey === item.entry.key ? '⏸' : '▶'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // 主页面
 // ============================================================================
 
@@ -251,7 +339,12 @@ const AudioBrowser: React.FC = () => {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [selectedSub, setSelectedSub] = useState<string | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
+  const playingRef = useRef<{ key: string; type: string } | null>(null);
   const [phraseMappings, setPhraseMappings] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
+  const [preloading, setPreloading] = useState(false);
+  const [preloadedCount, setPreloadedCount] = useState(0);
+  const preloadCancelledRef = useRef(false);
 
   // 加载完整短语中文映射表
   useEffect(() => {
@@ -343,13 +436,95 @@ const AudioBrowser: React.FC = () => {
     });
   }, [entries, typeFilter, selectedGroup, selectedSub, filter, friendlyName]);
 
+  /** 停止上一次播放 */
+  const stopPrevious = useCallback(() => {
+    const prev = playingRef.current;
+    if (!prev) return;
+    if (prev.type === 'bgm') {
+      AudioManager.stopBgm();
+    } else {
+      AudioManager.stopSfx(prev.key);
+    }
+    playingRef.current = null;
+  }, []);
+
+  /** 播放并记录历史（中间列表用） */
   const playEntry = useCallback((entry: AudioRegistryEntry) => {
+    stopPrevious();
     if (entry.type === 'bgm') {
       AudioManager.playBgm(entry.key);
     } else {
-      AudioManager.play(entry.key, undefined, () => setPlayingKey(null));
+      AudioManager.play(entry.key, undefined, () => {
+        setPlayingKey(null);
+        playingRef.current = null;
+      });
     }
     setPlayingKey(entry.key);
+    playingRef.current = { key: entry.key, type: entry.type };
+    setHistory((prev) => {
+      const deduped = prev.filter((h) => h.entry.key !== entry.key);
+      const next = [{ entry, timestamp: Date.now() }, ...deduped].slice(0, HISTORY_MAX);
+      saveHistory(next);
+      return next;
+    });
+  }, [stopPrevious]);
+
+  /** 仅播放不修改历史（历史面板用） */
+  const replayEntry = useCallback((entry: AudioRegistryEntry) => {
+    stopPrevious();
+    if (entry.type === 'bgm') {
+      AudioManager.playBgm(entry.key);
+    } else {
+      AudioManager.play(entry.key, undefined, () => {
+        setPlayingKey(null);
+        playingRef.current = null;
+      });
+    }
+    setPlayingKey(entry.key);
+    playingRef.current = { key: entry.key, type: entry.type };
+  }, [stopPrevious]);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    localStorage.removeItem(HISTORY_STORAGE_KEY);
+  }, []);
+
+  /** 预加载当前过滤结果中的所有音效 */
+  const preloadFiltered = useCallback(() => {
+    const sfxKeys = filtered.filter((e) => e.type === 'sfx').map((e) => e.key);
+    if (sfxKeys.length === 0) return;
+    setPreloading(true);
+    setPreloadedCount(0);
+    preloadCancelledRef.current = false;
+    // 分批预加载，避免一次性请求过多
+    const BATCH_SIZE = 20;
+    let loaded = 0;
+    const loadBatch = (startIdx: number) => {
+      if (preloadCancelledRef.current) {
+        setPreloading(false);
+        return;
+      }
+      const batch = sfxKeys.slice(startIdx, startIdx + BATCH_SIZE);
+      if (batch.length === 0) {
+        setPreloading(false);
+        return;
+      }
+      AudioManager.preloadKeys(batch);
+      loaded += batch.length;
+      setPreloadedCount(loaded);
+      // 延迟加载下一批，给浏览器喘息空间
+      if (startIdx + BATCH_SIZE < sfxKeys.length) {
+        setTimeout(() => loadBatch(startIdx + BATCH_SIZE), 100);
+      } else {
+        setPreloading(false);
+      }
+    };
+    loadBatch(0);
+  }, [filtered]);
+
+  /** 取消预加载 */
+  const cancelPreload = useCallback(() => {
+    preloadCancelledRef.current = true;
   }, []);
 
   return (
@@ -375,7 +550,7 @@ const AudioBrowser: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             {/* 左侧分类 */}
             <CategorySidebar
               categories={categories}
@@ -386,36 +561,54 @@ const AudioBrowser: React.FC = () => {
               totalCount={entries.length}
             />
 
-            {/* 右侧列表 */}
+            {/* 中间列表 */}
             <div className="flex-1 min-w-0">
               {/* 搜索栏 */}
-              <div className="flex gap-2 mb-3">
+              <div className="flex gap-2 mb-2">
                 <input
                   type="text"
                   placeholder="搜索键名 / 文件名..."
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500"
+                  className="flex-1 px-2 py-1 rounded bg-slate-800 border border-slate-600 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500"
                 />
                 <select
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value as 'all' | 'sfx' | 'bgm')}
-                  className="px-2 py-1.5 rounded bg-slate-800 border border-slate-600 text-sm text-slate-200 outline-none"
+                  className="px-2 py-1 rounded bg-slate-800 border border-slate-600 text-sm text-slate-200 outline-none"
                 >
-                  <option value="all">全部类型</option>
+                  <option value="all">全部</option>
                   <option value="sfx">音效</option>
                   <option value="bgm">音乐</option>
                 </select>
                 <button
                   onClick={() => AudioManager.stopBgm()}
-                  className="px-3 py-1.5 rounded bg-slate-600 hover:bg-slate-500 text-xs font-bold text-white transition-[background-color]"
+                  className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-500 text-[10px] font-bold text-white transition-[background-color]"
                 >
-                  停止 BGM
+                  停止BGM
                 </button>
+                {preloading ? (
+                  <button
+                    onClick={cancelPreload}
+                    className="px-2 py-1 rounded text-[10px] font-bold text-white bg-red-600 hover:bg-red-500 transition-[background-color]"
+                    title="取消预加载"
+                  >
+                    取消 ({preloadedCount}/{filtered.filter((e) => e.type === 'sfx').length})
+                  </button>
+                ) : (
+                  <button
+                    onClick={preloadFiltered}
+                    disabled={filtered.filter((e) => e.type === 'sfx').length === 0}
+                    className="px-2 py-1 rounded text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-[background-color]"
+                    title="预加载当前搜索结果中的所有音效，消除首次播放延迟"
+                  >
+                    预加载全部
+                  </button>
+                )}
               </div>
 
               {/* 结果统计 */}
-              <div className="text-xs text-slate-500 mb-2">
+              <div className="text-xs text-slate-500 mb-1">
                 {selectedGroup && (
                   <span>
                     {groupLabel(selectedGroup)}{selectedSub ? ` / ${selectedSub}` : ''} ·{' '}
@@ -426,6 +619,15 @@ const AudioBrowser: React.FC = () => {
 
               <AudioTable entries={filtered} playEntry={playEntry} playingKey={playingKey} friendlyName={friendlyName} />
             </div>
+
+            {/* 右侧历史播放 */}
+            <HistoryPanel
+              history={history}
+              replayEntry={replayEntry}
+              playingKey={playingKey}
+              friendlyName={friendlyName}
+              onClear={clearHistory}
+            />
           </div>
         )}
       </div>

@@ -100,12 +100,18 @@
       "No draw if deck is empty"
     ]
   },
+  "error": {
+    "tutorial_manifest_invalid": "Tutorial configuration is invalid",
+    "tutorial_command_blocked": "This action is blocked in the tutorial",
+    "tutorial_step_locked": "The current step cannot be skipped"
+  },
   "tutorial": {
     "title": "Summoner Wars Tutorial",
     "welcome": "Welcome to Summoner Wars! In this game, you will play as a powerful Summoner, commanding your army to conquer the battlefield.",
     "steps": {
       "setup": "Preparing the tutorial match...",
-      "welcome": "Welcome to Summoner Wars!\n\nThis is the battlefield — an 8×6 grid. Your units are at the bottom, your opponent's at the top.\n\nDestroy the enemy Summoner to win!",
+      "welcome": "Welcome to Summoner Wars!\n\nThis is the battlefield, an 8\u00d76 grid. Your units are at the bottom, your opponent at the top.\n\nDefeat the enemy Summoner to win!",
+      "mapControls": "🖱️ Map Controls:\n\nDrag: Hold left mouse button to pan\nZoom: Scroll mouse wheel to zoom in/out\n\nCurrent zoom level is shown in the top-left corner.",
       "summonerIntro": "This is your Summoner \"Ret-Talus\".\n\nHe has 12 Life, 2 Strength, and is a ranged attacker (range 3).\n\nHe's your most important unit — lose him and you lose the game!",
       "enemySummoner": "This is the enemy Summoner.\n\nDestroy them to win the game!",
       "gateIntro": "This is your Gate.\n\nGates are where you summon new units — you can only place units on empty spaces adjacent to your gates.\n\nProtect your gates, and build new portals to expand your summoning range.",
@@ -125,10 +131,10 @@
       "eventCardExplain": "You have a \"Hellfire Blade\" event card in your hand.\n\nEvent cards have phase restrictions — this one can only be cast during the Build phase.\n\nOnce cast, it attaches to a friendly common unit, granting +2 Strength, but the unit takes backlash damage after attacking.",
       "eventCardAction": "Click the \"Hellfire Blade\" event card in your hand, then select a friendly common unit on the board to attach it to.",
       "buildAction": "Event card played! Click \"End Phase\" to enter the Attack phase.",
-      "attackExplain": "Attack phase! Attack with up to 3 units.\n\nStrength = number of dice. Only matching attack type faces deal damage.\n\n⚠️ If you don't attack, your Summoner takes 1 penalty damage!",
+      "attackExplain": "Attack phase! Attack with up to 3 units.\n\nStrength = number of dice. Ranged units need \ud83c\udff9 hits, melee units need \u2694\ufe0f hits.\n\n\u26a0\ufe0f If you don't attack, your Summoner takes 1 penalty damage!",
       "meleeExplain": "⚔️ Melee units can only attack adjacent targets (up/down/left/right).\n\nMelee dice face ⚔️ = 1 damage.",
-      "rangedExplain": "🏹 Your Summoner is a ranged unit.\n\nRanged units can attack targets up to 3 spaces away in a straight line — dealing damage from a safe distance!",
-      "attackAction": "Click your unit to select it, then click an enemy target in range to attack!\n\nTry using your Summoner's ranged attack on an enemy unit.",
+      "rangedExplain": "🏹 Your Archer is a ranged unit.\n\nRanged units can attack targets up to 3 spaces away in a straight line, dealing damage from a safe distance!",
+      "attackAction": "Click your unit to select it, then click an enemy target within range to attack!\n\nTry using the Archer to ranged attack an enemy unit.",
       "attackResult": "Dice results determine hits. ✦ Special faces deal no damage by default (unless an ability says otherwise).\n\nWhen damage equals Life, the unit is destroyed. Destroying an enemy grants 1 Magic!",
       "endAttack": "You can attack with more units, or click \"End Phase\".",
       "magicExplain": "Magic phase: Discard cards to gain magic.\n\n1 discarded card = 1 Magic. Convert unneeded cards into resources!",

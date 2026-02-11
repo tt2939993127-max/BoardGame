@@ -28,6 +28,8 @@ import { abilityRegistry } from './domain/abilities';
 import { summonerWarsFlowHooks } from './domain/flowHooks';
 import { registerCardPreviewGetter } from '../../components/game/cardPreviewRegistry';
 import { getSummonerWarsCardPreviewMeta, getSummonerWarsCardPreviewRef } from './ui/cardPreviewHelper';
+import { registerCriticalImageResolver } from '../../core';
+import { summonerWarsCriticalImageResolver } from './criticalImageResolver';
 
 // ============================================================================
 // ActionLog 共享白名单 + 格式化
@@ -43,6 +45,8 @@ const ACTION_ALLOWLIST = [
     SW_COMMANDS.PLAY_EVENT,
     SW_COMMANDS.BLOOD_SUMMON_STEP,
     SW_COMMANDS.ACTIVATE_ABILITY,
+    SW_COMMANDS.FUNERAL_PYRE_HEAL,
+    FLOW_COMMANDS.ADVANCE_PHASE,
 ] as const;
 
 function formatSummonerWarsActionEntry({
@@ -54,7 +58,7 @@ function formatSummonerWarsActionEntry({
     state: MatchState<unknown>;
     events: GameEvent[];
 }): ActionLogEntry | null {
-    const timestamp = command.timestamp ?? Date.now();
+    const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
     const actorId = command.playerId;
     const formatCell = (cell?: { row: number; col: number }) => {
         if (!cell) return '未知';
@@ -402,6 +406,7 @@ export const SummonerWars = createGameAdapter({
         CHEAT_COMMANDS.SET_PHASE,
         CHEAT_COMMANDS.DEAL_CARD_BY_INDEX,
         CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX,
+        CHEAT_COMMANDS.DEAL_CARD_TO_DISCARD,
         CHEAT_COMMANDS.SET_STATE,
     ],
 });
@@ -413,6 +418,9 @@ export { formatSummonerWarsActionEntry };
 
 // 注册卡牌预览获取函数
 registerCardPreviewGetter('summonerwars', getSummonerWarsCardPreviewRef);
+
+// 注册关键图片解析器
+registerCriticalImageResolver('summonerwars', summonerWarsCriticalImageResolver);
 
 // 导出类型
 export type { SummonerWarsCore as SummonerWarsState } from './domain';

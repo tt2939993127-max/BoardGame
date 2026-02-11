@@ -130,6 +130,7 @@ const createGameFromRules = async (options: CreateGameFromRulesOptions): Promise
         minPlayers: minPlayers ?? DEFAULT_MIN_PLAYERS,
         maxPlayers: maxPlayers ?? DEFAULT_MAX_PLAYERS,
         commandTypes,
+        disableUndo: true,
     });
 };
 

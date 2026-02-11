@@ -36,6 +36,7 @@ import { createUgcClientGame } from '../ugc/client/game';
 import { createUgcRemoteHostBoard } from '../ugc/client/board';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
+import { CriticalImageGate } from '../components/game/framework';
 
 
 export const MatchRoom = () => {
@@ -44,7 +45,7 @@ export const MatchRoom = () => {
     const { gameId, matchId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { startTutorial, closeTutorial, isActive, currentStep } = useTutorial();
+    const { tutorial, startTutorial, closeTutorial, isActive, currentStep } = useTutorial();
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
@@ -58,17 +59,29 @@ export const MatchRoom = () => {
     const GameClient = useMemo(() => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
         const impl = GAME_IMPLEMENTATIONS[gameId];
+        const Board = impl.board;
+        const WrappedBoard: ComponentType<any> = (props) => (
+            <CriticalImageGate
+                gameId={gameId}
+                gameState={props?.G}
+                locale={i18n.language}
+                enabled={!isUgcGame}
+                loadingDescription={t('matchRoom.loadingResources')}
+            >
+                <Board {...props} />
+            </CriticalImageGate>
+        );
 
         // boardgame.io 的 SocketIO 传输会通过 socket.io（`/socket.io`）连接。
         // 开发环境依赖 Vite 代理将 `/socket.io` 转发到游戏服务端。
         return Client({
             game: impl.game,
-            board: impl.board,
+            board: WrappedBoard,
             debug: false,
             multiplayer: SocketIO({ server: GAME_SERVER_URL }),
             loading: () => <LoadingScreen title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} />
         });
-    }, [gameId]);
+    }, [gameId, i18n.language, isUgcGame, t]);
 
     const [ugcGameClient, setUgcGameClient] = useState<GameClientComponent | null>(null);
     const [ugcLoading, setUgcLoading] = useState(false);
@@ -104,7 +117,7 @@ export const MatchRoom = () => {
             })
             .catch((error) => {
                 if (cancelled) return;
-                const message = error instanceof Error ? error.message : 'UGC 运行态加载失败';
+                const message = error instanceof Error ? error.message : t('matchRoom.ugc.loadFailedShort');
                 setUgcError(message);
                 setUgcGameClient(null);
             })
@@ -116,19 +129,31 @@ export const MatchRoom = () => {
         return () => {
             cancelled = true;
         };
-    }, [gameId, isUgcGame, isTutorialRoute]);
+    }, [gameId, isUgcGame, isTutorialRoute, t]);
 
     const TutorialClient = useMemo(() => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
         const impl = GAME_IMPLEMENTATIONS[gameId];
+        const Board = impl.board;
+        const WrappedBoard: ComponentType<any> = (props) => (
+            <CriticalImageGate
+                gameId={gameId}
+                gameState={props?.G}
+                locale={i18n.language}
+                enabled={!isUgcGame}
+                loadingDescription={t('matchRoom.loadingResources')}
+            >
+                <Board {...props} />
+            </CriticalImageGate>
+        );
         return Client({
             game: impl.game,
-            board: impl.board,
+            board: WrappedBoard,
             debug: false,
             numPlayers: 2,
             loading: () => <LoadingScreen title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
         }) as React.ComponentType<{ playerID?: string | null }>;
-    }, [gameId]);
+    }, [gameId, i18n.language, isUgcGame, t]);
 
     const [isLeaving, setIsLeaving] = useState(false);
     const [isGameNamespaceReady, setIsGameNamespaceReady] = useState(true);
@@ -166,6 +191,7 @@ export const MatchRoom = () => {
             isActive = false;
         };
     }, [gameId, i18n]);
+
 
     // 从地址查询参数中获取 playerID
     const urlPlayerID = searchParams.get('playerID');
@@ -424,8 +450,12 @@ export const MatchRoom = () => {
         // 等待 i18n 命名空间加载完成，避免在 namespace 加载期间启动教程
         // （namespace 加载会导致 TutorialClient 卸载重挂载，重置 boardgame.io 状态）
         if (!isGameNamespaceReady) return;
+        const isTutorialReset = !isActive
+            && tutorial.manifestId === null
+            && tutorial.steps.length === 0
+            && lastTutorialStepIdRef.current !== 'finish';
         // 只有首次进入且当前未激活时才启动，避免结束后被再次拉起导致提示闪现
-        if (!isActive && !tutorialStartedRef.current) {
+        if (!isActive && (!tutorialStartedRef.current || isTutorialReset)) {
             const impl = gameId ? GAME_IMPLEMENTATIONS[gameId] : null;
             if (impl?.tutorial) {
                 console.warn(`[MatchRoom] startTutorial triggered isActive=${isActive} tutorialStarted=${tutorialStartedRef.current}`);
@@ -436,7 +466,7 @@ export const MatchRoom = () => {
                 return () => clearTimeout(timer);
             }
         }
-    }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady]);
+    }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady, tutorial.manifestId, tutorial.steps.length]);
 
     useEffect(() => {
         if (!isTutorialRoute) return;
@@ -715,11 +745,11 @@ export const MatchRoom = () => {
         if (last && last.key === key && now - last.timestamp < 3000) return;
         errorToastRef.current = { key, timestamp: now };
         toast.error(
-            { kind: 'text', text: matchStatus.error ?? '房间不存在或已被删除' },
+            { kind: 'text', text: matchStatus.error ?? t('matchRoom.error.matchMissing') },
             { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
             { dedupeKey: key }
         );
-    }, [gameId, matchId, shouldShowMatchError, toast]);
+    }, [gameId, matchId, shouldShowMatchError, t, toast]);
 
     if (!isGameNamespaceReady) {
         return <LoadingScreen description={t('matchRoom.loadingResources')} />;
@@ -790,10 +820,10 @@ export const MatchRoom = () => {
                     </GameModeProvider>
                 ) : (
                     isUgcGame && ugcLoading ? (
-                        <LoadingScreen fullScreen={false} description="UGC 运行态加载中…" />
+                        <LoadingScreen fullScreen={false} description={t('matchRoom.ugc.loading')} />
                     ) : isUgcGame && ugcError ? (
                         <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
-                            {`UGC 运行态加载失败: ${ugcError}`}
+                            {t('matchRoom.ugc.loadFailed', { error: ugcError })}
                         </div>
                     ) : ResolvedGameClient ? (
                         <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>

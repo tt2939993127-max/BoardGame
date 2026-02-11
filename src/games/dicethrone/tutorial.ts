@@ -1,12 +1,24 @@
 import type { TutorialManifest, TutorialEventMatcher } from '../../engine/types';
-import { CHEAT_COMMANDS } from '../../engine';
 import { TOKEN_IDS, STATUS_IDS } from './domain/ids';
 import { MONK_CARDS } from './heroes/monk/cards';
 
+// ============================================================================
+// 牌组配置
+// ============================================================================
+
+/** 玩家起手牌（教程流程顺序） */
 const TUTORIAL_STARTING_HAND = [
-    'card-inner-peace',
     'card-play-six',
+    'card-enlightenment',
+    'card-inner-peace',
     'card-meditation-2',
+];
+
+/** AI 起手牌（保证 card-palm-strike 在手中） */
+const AI_STARTING_HAND = [
+    'card-palm-strike',
+    'card-inner-peace',
+    'card-inner-peace',
     'card-boss-generous',
 ];
 
@@ -21,6 +33,11 @@ const buildTutorialDeck = (startingHand: string[]): string[] => {
 };
 
 const TUTORIAL_INITIAL_DECK = buildTutorialDeck(TUTORIAL_STARTING_HAND);
+const AI_TUTORIAL_DECK = buildTutorialDeck(AI_STARTING_HAND);
+
+// ============================================================================
+// 事件匹配器
+// ============================================================================
 
 const MATCH_PHASE_OFFENSIVE: TutorialEventMatcher = {
     type: 'SYS_PHASE_CHANGED',
@@ -37,13 +54,23 @@ const MATCH_PHASE_MAIN2: TutorialEventMatcher = {
     match: { to: 'main2' },
 };
 
+const MATCH_PHASE_MAIN1: TutorialEventMatcher = {
+    type: 'SYS_PHASE_CHANGED',
+    match: { to: 'main1' },
+};
+
+// ============================================================================
+// 教程定义
+// ============================================================================
+
 export const DiceThroneTutorial: TutorialManifest = {
     id: 'dicethrone-basic',
     randomPolicy: {
         mode: 'fixed',
-        values: [1],
+        values: [6],
     },
     steps: [
+        // ==== 段 A：初始化 + UI 介绍 ====
         {
             id: 'setup',
             content: 'game-dicethrone:tutorial.steps.setup',
@@ -52,6 +79,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             showMask: true,
             aiActions: [
                 { commandType: 'SELECT_CHARACTER', payload: { characterId: 'monk', initialDeckCardIds: TUTORIAL_INITIAL_DECK } },
+                { commandType: 'SELECT_CHARACTER', playerId: '1', payload: { characterId: 'monk', initialDeckCardIds: AI_TUTORIAL_DECK } },
                 { commandType: 'HOST_START_GAME', payload: {} },
             ],
             advanceOnEvents: [
@@ -67,62 +95,66 @@ export const DiceThroneTutorial: TutorialManifest = {
             position: 'center',
             requireAction: false,
             showMask: true,
+            infoStep: true,
         },
         {
             id: 'stats',
             content: 'game-dicethrone:tutorial.steps.stats',
             highlightTarget: 'player-stats',
             position: 'right',
-            requireAction: false,
+            infoStep: true,
         },
         {
             id: 'phases',
             content: 'game-dicethrone:tutorial.steps.phases',
             highlightTarget: 'phase-indicator',
             position: 'right',
-            requireAction: false,
+            infoStep: true,
         },
         {
             id: 'player-board',
             content: 'game-dicethrone:tutorial.steps.playerBoard',
             highlightTarget: 'player-board',
             position: 'right',
-            requireAction: false,
+            infoStep: true,
         },
         {
             id: 'tip-board',
             content: 'game-dicethrone:tutorial.steps.tipBoard',
             highlightTarget: 'tip-board',
             position: 'right',
-            requireAction: false,
+            infoStep: true,
         },
         {
             id: 'hand',
             content: 'game-dicethrone:tutorial.steps.hand',
             highlightTarget: 'hand-area',
             position: 'top',
-            requireAction: false,
+            infoStep: true,
         },
         {
             id: 'discard',
             content: 'game-dicethrone:tutorial.steps.discard',
             highlightTarget: 'discard-pile',
             position: 'left',
-            requireAction: false,
+            infoStep: true,
         },
         {
             id: 'status-tokens',
             content: 'game-dicethrone:tutorial.steps.statusTokens',
             highlightTarget: 'status-tokens',
             position: 'right',
-            requireAction: false,
+            infoStep: true,
         },
+
+        // ==== 段 B：首次攻击 (Turn 1, P0) ====
         {
             id: 'advance',
             content: 'game-dicethrone:tutorial.steps.advance',
             highlightTarget: 'advance-phase-button',
             position: 'left',
             requireAction: true,
+            allowedCommands: ['ADVANCE_PHASE'],
             advanceOnEvents: [
                 MATCH_PHASE_OFFENSIVE,
             ],
@@ -132,7 +164,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             content: 'game-dicethrone:tutorial.steps.dice',
             highlightTarget: 'dice-tray',
             position: 'left',
-            requireAction: false,
+            infoStep: true,
         },
         {
             id: 'dice-roll',
@@ -140,7 +172,19 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'dice-roll-button',
             position: 'left',
             requireAction: true,
+            allowedCommands: ['ROLL_DICE'],
             advanceOnEvents: [{ type: 'DICE_ROLLED' }],
+        },
+        {
+            id: 'play-six',
+            content: 'game-dicethrone:tutorial.steps.playSix',
+            highlightTarget: 'hand-area',
+            position: 'top',
+            requireAction: true,
+            allowedCommands: ['PLAY_CARD', 'MODIFY_DIE'],
+            advanceOnEvents: [
+                { type: 'DIE_MODIFIED' },
+            ],
         },
         {
             id: 'dice-confirm',
@@ -148,6 +192,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'dice-confirm-button',
             position: 'left',
             requireAction: true,
+            allowedCommands: ['CONFIRM_ROLL', 'CONFIRM_INTERACTION'],
             advanceOnEvents: [{ type: 'ROLL_CONFIRMED' }],
         },
         {
@@ -156,10 +201,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'ability-slots',
             position: 'left',
             requireAction: true,
-            aiActions: [
-                // 确保阶段在 offensiveRoll，否则 canSelectAbility 会为 false
-                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'offensiveRoll' } },
-            ],
+            allowedCommands: ['SELECT_ABILITY'],
             advanceOnEvents: [{ type: 'ABILITY_ACTIVATED' }],
         },
         {
@@ -171,118 +213,75 @@ export const DiceThroneTutorial: TutorialManifest = {
             advanceOnEvents: [MATCH_PHASE_DEFENSE, MATCH_PHASE_MAIN2],
         },
         {
-            id: 'taiji-setup',
-            content: 'game-dicethrone:tutorial.steps.taijiResponse',
-            highlightTarget: 'status-tokens',
-            position: 'right',
+            id: 'opponent-defense',
+            content: 'game-dicethrone:tutorial.steps.opponentDefense',
+            position: 'center',
             requireAction: false,
-            showMask: true,
             aiActions: [
-                { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.TAIJI, amount: 1 } },
-                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'defensiveRoll' } },
-                // 注入 pendingAttack 以确定防御方（rollerId）
-                { commandType: CHEAT_COMMANDS.MERGE_STATE, payload: { fields: {
-                    pendingAttack: {
-                        id: 'tutorial-taiji-attack',
-                        attackerId: '1',
-                        defenderId: '0',
-                        sourceAbilityId: 'dummy-attack',
-                        isDefendable: true,
-                        damageResolved: false,
-                    },
-                } } },
-                // 注入 pendingDamage 以触发 Token 响应窗口
-                { commandType: CHEAT_COMMANDS.MERGE_STATE, payload: { fields: {
-                    pendingDamage: {
-                        id: 'tutorial-taiji',
-                        sourcePlayerId: '0',
-                        targetPlayerId: '1',
-                        originalDamage: 2,
-                        currentDamage: 2,
-                        responseType: 'beforeDamageDealt',
-                        responderId: '0',
-                        isFullyEvaded: false,
-                    },
-                } } },
+                { commandType: 'ROLL_DICE', playerId: '1', payload: {} },
+                { commandType: 'CONFIRM_ROLL', playerId: '1', payload: {} },
+                { commandType: 'ADVANCE_PHASE', playerId: '0', payload: {} },
             ],
+            advanceOnEvents: [MATCH_PHASE_MAIN2],
+        },
+
+        // ==== 段 C：卡牌介绍 + AI 回合 ====
+        {
+            id: 'card-enlightenment',
+            content: 'game-dicethrone:tutorial.steps.cardEnlightenment',
+            highlightTarget: 'hand-area',
+            position: 'top',
+            infoStep: true,
         },
         {
-            id: 'taiji-response',
-            content: 'game-dicethrone:tutorial.steps.taijiResponse',
-            highlightTarget: 'status-tokens',
-            position: 'right',
+            id: 'ai-turn',
+            content: 'game-dicethrone:tutorial.steps.aiTurn',
+            position: 'center',
             requireAction: false,
-            showMask: true,
-            advanceOnEvents: [
-                { type: 'TOKEN_USED' },
-                { type: 'TOKEN_RESPONSE_REQUESTED' },
-                { type: 'TOKEN_RESPONSE_CLOSED' },
-            ],
-        },
-        {
-            id: 'evasive-setup',
-            content: 'game-dicethrone:tutorial.steps.evasiveResponse',
-            highlightTarget: 'status-tokens',
-            position: 'right',
-            requireAction: false,
-            showMask: true,
             aiActions: [
-                { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.EVASIVE, amount: 1 } },
-                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'defensiveRoll' } },
-                // 注入 pendingAttack 以确定防御方（rollerId）
-                { commandType: CHEAT_COMMANDS.MERGE_STATE, payload: { fields: {
-                    pendingAttack: {
-                        id: 'tutorial-evasive-attack',
-                        attackerId: '1',
-                        defenderId: '0',
-                        sourceAbilityId: 'dummy-attack',
-                        isDefendable: true,
-                        damageResolved: false,
-                    },
-                } } },
-                // 注入 pendingDamage 以触发 Token 响应窗口（防御方视角）
-                { commandType: CHEAT_COMMANDS.MERGE_STATE, payload: { fields: {
-                    pendingDamage: {
-                        id: 'tutorial-evasive',
-                        sourcePlayerId: '1',
-                        targetPlayerId: '0',
-                        originalDamage: 2,
-                        currentDamage: 2,
-                        responseType: 'beforeDamageReceived',
-                        responderId: '0',
-                        isFullyEvaded: false,
-                    },
-                } } },
-            ],
-        },
-        {
-            id: 'evasive-response',
-            content: 'game-dicethrone:tutorial.steps.evasiveResponse',
-            highlightTarget: 'status-tokens',
-            position: 'right',
-            requireAction: false,
-            showMask: true,
-            advanceOnEvents: [
-                { type: 'TOKEN_USED' },
-                { type: 'TOKEN_RESPONSE_CLOSED' },
-            ],
-        },
-        {
-            id: 'purify-setup',
-            content: 'game-dicethrone:tutorial.steps.purifySetup',
-            highlightTarget: 'status-tokens',
-            position: 'right',
-            requireAction: false,
-            showMask: true,
-            aiActions: [
-                { commandType: CHEAT_COMMANDS.SET_STATUS, payload: { playerId: '0', statusId: STATUS_IDS.KNOCKDOWN, amount: 1 } },
-                { commandType: CHEAT_COMMANDS.SET_TOKEN, payload: { playerId: '0', tokenId: TOKEN_IDS.PURIFY, amount: 1 } },
-                // 清理残留的响应窗口状态，避免干扰净化教程
-                { commandType: CHEAT_COMMANDS.MERGE_STATE, payload: { fields: { pendingDamage: undefined, pendingAttack: undefined } } },
-                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'main1' } },
+                // 结束 P0 当前回合 (main2 → discard → auto-chain → P1 main1)
+                { commandType: 'ADVANCE_PHASE', playerId: '0', payload: {} },
+                { commandType: 'ADVANCE_PHASE', playerId: '0', payload: {} },
+                // AI 在 main1 打出掌击（对 P0 施加击倒 + 触发卡牌特写）
+                { commandType: 'PLAY_CARD', playerId: '1', payload: { cardId: 'card-palm-strike' } },
+                // AI 推进到攻击掷骰
+                { commandType: 'ADVANCE_PHASE', playerId: '1', payload: {} },
+                // AI 掷骰 + 确认（全1 = 5拳 → 拳法-5, 8伤害）
+                { commandType: 'ROLL_DICE', playerId: '1', payload: {} },
+                { commandType: 'CONFIRM_ROLL', playerId: '1', payload: {} },
+                { commandType: 'SELECT_ABILITY', playerId: '1', payload: { abilityId: 'fist-technique-5' } },
+                // 进入防御（自动选中清修），P0 掷骰防御
+                { commandType: 'ADVANCE_PHASE', playerId: '1', payload: {} },
+                { commandType: 'ROLL_DICE', playerId: '0', payload: {} },
+                { commandType: 'CONFIRM_ROLL', playerId: '0', payload: {} },
+                // 结算攻击 → P1 main2
+                { commandType: 'ADVANCE_PHASE', playerId: '0', payload: {} },
+                // 结束 AI 回合 (main2 → discard → auto-chain → P0 main1)
+                { commandType: 'ADVANCE_PHASE', playerId: '1', payload: {} },
+                { commandType: 'ADVANCE_PHASE', playerId: '1', payload: {} },
             ],
             advanceOnEvents: [
-                { type: 'AI_CONSUMED', match: { stepId: 'purify-setup' } },
+                { type: 'SYS_TUTORIAL_AI_CONSUMED', match: { stepId: 'ai-turn' } },
+            ],
+        },
+
+        // ==== 段 D：净化教程（通过自然游戏流） ====
+        {
+            id: 'knockdown-explain',
+            content: 'game-dicethrone:tutorial.steps.knockdownExplain',
+            highlightTarget: 'status-tokens',
+            position: 'right',
+            infoStep: true,
+        },
+        {
+            id: 'enlightenment-play',
+            content: 'game-dicethrone:tutorial.steps.enlightenmentPlay',
+            highlightTarget: 'hand-area',
+            position: 'top',
+            requireAction: true,
+            allowedCommands: ['PLAY_CARD'],
+            advanceOnEvents: [
+                { type: 'CARD_PLAYED', match: { playerId: '0', cardId: 'card-enlightenment' } },
             ],
         },
         {
@@ -291,38 +290,22 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'status-tokens',
             position: 'right',
             requireAction: true,
-            showMask: true,
             allowManualSkip: false,
             advanceOnEvents: [
                 { type: 'TOKEN_USED', match: { playerId: '0', tokenId: TOKEN_IDS.PURIFY, effectType: 'removeDebuff' } },
                 { type: 'STATUS_REMOVED', match: { targetId: '0', statusId: STATUS_IDS.KNOCKDOWN } },
             ],
         },
+
+        // ==== 段 E：补充卡牌教学 ====
         {
             id: 'inner-peace',
             content: 'game-dicethrone:tutorial.steps.innerPeace',
             highlightTarget: 'hand-area',
             position: 'top',
             requireAction: true,
-            aiActions: [
-                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'main1' } },
-            ],
             advanceOnEvents: [
                 { type: 'CARD_PLAYED', match: { playerId: '0', cardId: 'card-inner-peace' } },
-            ],
-        },
-        {
-            id: 'play-six',
-            content: 'game-dicethrone:tutorial.steps.playSix',
-            highlightTarget: 'hand-area',
-            position: 'top',
-            requireAction: true,
-            aiActions: [
-                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'offensiveRoll' } },
-                { commandType: CHEAT_COMMANDS.SET_DICE, payload: { diceValues: [1, 1, 1, 1, 1] } },
-            ],
-            advanceOnEvents: [
-                { type: 'DIE_MODIFIED' },
             ],
         },
         {
@@ -331,34 +314,15 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'hand-area',
             position: 'top',
             requireAction: true,
-            aiActions: [
-                { commandType: CHEAT_COMMANDS.SET_PHASE, payload: { phase: 'main1' } },
-            ],
             advanceOnEvents: [
                 { type: 'ABILITY_REPLACED', match: { playerId: '0', oldAbilityId: 'meditation' } },
             ],
         },
         {
-            id: 'defense-roll',
-            content: 'game-dicethrone:tutorial.steps.defenseRoll',
-            highlightTarget: 'dice-tray',
-            position: 'left',
-            requireAction: false,
-            advanceOnEvents: [{ type: 'DICE_ROLLED' }],
-        },
-        {
-            id: 'defense-end',
-            content: 'game-dicethrone:tutorial.steps.defenseEnd',
-            highlightTarget: 'advance-phase-button',
-            position: 'left',
-            requireAction: false,
-            advanceOnEvents: [MATCH_PHASE_MAIN2],
-        },
-        {
             id: 'finish',
             content: 'game-dicethrone:tutorial.steps.finish',
             position: 'center',
-            requireAction: false,
+            infoStep: true,
         },
     ],
 };

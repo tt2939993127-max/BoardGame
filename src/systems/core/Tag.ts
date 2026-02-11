@@ -70,7 +70,7 @@ export class TagManager {
   addTag(
     entityId: string,
     tagId: string,
-    options?: { stacks?: number; duration?: number; source?: string }
+    options?: { stacks?: number; duration?: number; source?: string; addedAt?: number }
   ): TagInstance {
     let tags = this.entityTags.get(entityId);
     if (!tags) {
@@ -104,7 +104,7 @@ export class TagManager {
         stacks,
         duration: options?.duration,
         source: options?.source,
-        addedAt: Date.now(),
+        addedAt: options?.addedAt,
       };
       tags.set(tagId, instance);
       this.notifyChange({
@@ -183,7 +183,8 @@ export class TagManager {
     const tags = this.entityTags.get(entityId);
     if (!tags) return [];
 
-    const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+    const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp('^' + escaped.replace(/\\\*/g, '.*') + '$');
     const result: TagInstance[] = [];
     
     for (const instance of tags.values()) {

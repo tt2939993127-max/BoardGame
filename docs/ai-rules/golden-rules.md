@@ -76,3 +76,33 @@
 - **拖拽回弹规范（DiceThrone）**：手牌拖拽回弹必须统一由外层 `motionValue` 控制；当 `onDragEnd` 丢失时由 `window` 兜底结束，并用 `animate(x/y → 0)` 手动回弹。禁止混用 `dragSnapToOrigin` 与手动回弹，避免二次写入导致回弹后跳位。
 - **Hover 事件驱动原则**：禁止用 `whileHover` 处理"元素会移动到鼠标下"的场景（如卡牌回弹），否则会导致假 hover。应用 `onHoverStart/onHoverEnd` + 显式状态驱动，确保只有"鼠标进入元素"而非"元素移到鼠标下"才触发 hover。
 - **拖拽回弹规则**：当需要回弹到原位时，**不要**关闭 `drag`，否则 `dragSnapToOrigin` 不会执行；应保持 `drag={true}` 并用 `dragListener` 控制是否可拖。
+
+---
+
+## AudioContext 异步解锁规范（强制）
+
+> **`ctx.resume()` 是异步的，禁止在调用后立即同步检查 context 状态并依据结果决定是否播放。**
+
+- **问题**：`AudioContext.resume()` 返回 Promise，调用后 `ctx.state` 可能仍为 `'suspended'`，导致紧跟其后的 `if (ctx.state === 'suspended')` 误判。这会导致“概率性”音频不播放——有时 resume 快则正常，有时慢则失败。
+- **典型错误模式**：
+  ```typescript
+  // ❌ 错误：resume 是异步的，下一行 ctx.state 可能仍为 'suspended'
+  ctx.resume();
+  if (ctx.state === 'suspended') {
+      // 误判为“仍未解锁”，跳过播放
+      pendingKey = key;
+      return;
+  }
+  howl.play();
+
+  // ✅ 正确：等待 resume 完成后再播放
+  ctx.resume().then(() => {
+      howl.play();
+  });
+  ```
+- **HTML5 Audio vs WebAudio**：BGM 使用 `html5: true` 走浏览器原生 `<audio>`，**不依赖 WebAudio context 状态**。禁止用 `isContextSuspended()` 阻止 HTML5 Audio 播放。若浏览器自动播放策略拦截，由 Howler 的 `onplayerror` 捕获并重试。
+- **规则总结**：
+  1. 禁止在 `ctx.resume()` 之后同步检查 `ctx.state` 并据此跳过播放
+  2. 用户手势解锁处理中，必须 `await ctx.resume()` 或 `.then()` 后再播放
+  3. BGM（`html5: true`）不受 WebAudio context 状态影响，不应用 `isContextSuspended()` 拦截
+  4. 单独创建的 AudioContext（如 SynthAudio）也必须等待 resume 完成后再播放

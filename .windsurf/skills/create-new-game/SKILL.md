@@ -36,6 +36,7 @@ src/games/<gameId>/
   thumbnail.tsx        # 缩略图组件
   tutorial.ts          # 教学配置（占位）
   audio.config.ts      # 音频配置（占位）
+  criticalImageResolver.ts  # 关键图片预加载（若有精灵图）
   domain/
     index.ts           # 领域内核入口
     types.ts           # 核心状态/命令/事件类型
@@ -642,8 +643,63 @@ UI 侧使用 `TutorialSelectionGate`（框架组件）或自定义选择组件�
 参考 smashup/audio.config.ts：
 - 定义 `GameAudioConfig` 包含 BGM 列表和事件音效解析
 - 音效 key 来自 `public/assets/common/audio/registry.json`
+- `criticalSounds` 列表：列出进入游戏后立即需要的高频音效（5-15 个），消除首次播放延迟
 
-### 6.4 debug-config（可选）
+### 6.4 关键图片预加载（若游戏有精灵图/图集）
+
+当游戏使用精灵图集（如卡牌图集、角色图集）时，需要实现关键图片解析器，防止首屏渲染闪烁。
+
+**创建 `criticalImageResolver.ts`**：
+
+```ts
+import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
+import type { <GameId>Core } from './domain/types';
+import type { MatchState } from '../../engine/types';
+
+export const <gameId>CriticalImageResolver: CriticalImageResolver = (
+    gameState: unknown,
+): CriticalImageResolverResult => {
+    const state = gameState as MatchState<<GameId>Core>;
+    const core = state?.core;
+
+    // 无状态时（刚进入对局）
+    if (!core) {
+        return {
+            critical: ['<gameId>/images/base-atlas'],  // 必须立即加载的图集
+            warm: [],  // 后台预取的图集
+        };
+    }
+
+    // 根据游戏阶段/玩家选择动态决定关键资源
+    // 例如：阵营选择阶段 → 预加载所有阵营头像
+    //       游戏进行中 → 预加载已选阵营的卡牌图集
+    
+    return {
+        critical: [...selectedAtlasPaths],
+        warm: [...unselectedAtlasPaths],
+    };
+};
+```
+
+**在 `game.ts` 末尾注册**：
+
+```ts
+import { registerCriticalImageResolver } from '../../core';
+import { <gameId>CriticalImageResolver } from './criticalImageResolver';
+
+registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
+```
+
+**两阶段预加载策略**：
+- **关键图片（critical）**：阻塞渲染，10 秒超时后放行
+- **暖图片（warm）**：后台异步加载，不阻塞
+
+**参考实现**：
+- `src/games/smashup/criticalImageResolver.ts` — 按派系图集分组
+- `src/games/summonerwars/criticalImageResolver.ts` — 按阵营 + 游戏阶段动态解析
+- `src/games/dicethrone/criticalImageResolver.ts` — 按角色动态解析
+
+### 6.5 debug-config（可选）
 
 若需要调试面板，创建 `debug-config.tsx` 提供游戏专属调试选项。
 
@@ -656,13 +712,13 @@ UI 侧使用 `TutorialSelectionGate`（框架组件）或自定义选择组件�
 - 面板内状态复制/赋值需校验 JSON，失败给出明确提示。
 - 重要调试动作尽量提供快捷按钮（如“清零/满值/切换阶段”）。
 
-### 6.5 缩略图
+### 6.6 缩略图
 
 1. 用户提供图片后放入 `public/assets/<gameId>/thumbnails/`
 2. 运行 `npm run compress:images -- public/assets/<gameId>/thumbnails`
 3. `manifest.ts` 中 `thumbnailPath` 已配置
 
-### 6.6 最终验证
+### 6.7 最终验证
 
 ```bash
 npm run generate:manifests          # 清单生成成功

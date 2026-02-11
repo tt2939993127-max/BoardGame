@@ -8,7 +8,7 @@
  * - 先到 15 VP 胜出
  */
 
-import type { Command, GameEvent, GameOverResult, PlayerId } from '../../../engine/types';
+import type { Command, GameEvent, GameOverResult, PlayerId, PromptMultiConfig } from '../../../engine/types';
 import type { CardPreviewRef } from '../../../systems/CardSystem/types';
 import { SMASHUP_FACTION_IDS } from './ids';
 
@@ -247,6 +247,7 @@ export interface PromptConfig {
     description?: string;
     options: PromptOption[];
     sourceId?: string;
+    multi?: PromptMultiConfig;
 }
 
 export interface PromptOption {
@@ -527,6 +528,8 @@ export interface AllFactionsSelectedEvent extends GameEvent<typeof SU_EVENTS.ALL
         bases?: BaseInPlay[];
         /** 按派系筛选后的基地牌库 */
         baseDeck?: string[];
+        /** 触发了自动重抽 (mulligan) 的玩家列表（规则：若无随从可重抽一次） */
+        mulliganPlayers?: PlayerId[];
     };
 }
 

@@ -160,11 +160,17 @@ function deepMerge(
 // 创建 Cheat 系统
 // ============================================================================
 
+export interface CheatSystemConfig {
+    /** 用于测试或特殊环境的开发模式覆盖（默认使用 import.meta.env.DEV） */
+    devOverride?: boolean;
+}
+
 export function createCheatSystem<TCore>(
-    modifier?: CheatResourceModifier<TCore>
+    modifier?: CheatResourceModifier<TCore>,
+    config: CheatSystemConfig = {}
 ): EngineSystem<TCore> {
-    const isDev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
-    const isClient = typeof (typeof globalThis !== 'undefined' ? (globalThis as { window?: unknown }).window : undefined) !== 'undefined';
+    const isDev = config.devOverride
+        ?? (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
     return {
         id: SYSTEM_IDS.CHEAT,
         name: 'Cheat 系统',
@@ -172,7 +178,7 @@ export function createCheatSystem<TCore>(
 
         beforeCommand: ({ state, command }): HookResult<TCore> | void => {
             // 仅在开发模式下生效
-            if (isClient && !isDev) {
+            if (!isDev) {
                 if (command.type.startsWith('SYS_CHEAT_')) {
                     return { halt: true, error: '作弊命令仅在开发模式下可用' };
                 }

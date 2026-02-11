@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { User } from 'lucide-react';
 import { EnergyBar } from './EnergyBar';
 
 export interface PlayerInfoProps {
@@ -36,7 +37,7 @@ export const PlayerInfo: React.FC<PlayerInfoProps> = ({
           <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center">
-            <span className="text-xl">{isOpponent ? '👤' : '🧙'}</span>
+            <User size={24} className={isOpponent ? 'text-slate-400' : 'text-purple-400'} />
           </div>
         )}
         {isCurrentTurn && (

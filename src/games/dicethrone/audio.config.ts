@@ -162,11 +162,11 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         }
 
         if (type === 'SYS_PHASE_CHANGED') {
-            return 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
+            return 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
         }
 
         if (type === 'TURN_CHANGED') {
-            return 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
+            return 'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003';
         }
 
         if (type.startsWith('BONUS_')) {

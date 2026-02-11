@@ -331,8 +331,10 @@ const FloatingTextInner: React.FC<{
 
     const popScale = isCritical ? 1.8 : 1.3;
     const holdScale = isCritical ? 1.15 : 1.0;
-    const floatDistance = 50;
-    const driftX = 20;
+    // 使用 vw 相对值，使飘字运动距离自适应视口尺寸（在 1920px 下与原 50/20px 一致）
+    const vw = typeof window !== 'undefined' ? window.innerWidth / 100 : 19.2;
+    const floatDistance = Math.round(2.6 * vw);
+    const driftX = Math.round(1 * vw);
 
     React.useEffect(() => {
         const run = async () => {

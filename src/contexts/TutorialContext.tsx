@@ -19,6 +19,7 @@ interface TutorialController {
     next: (reason?: TutorialNextReason) => void;
     close: () => void;
     consumeAi: (stepId?: string) => void;
+    animationComplete: () => void;
     dispatchCommand: (commandType: string, payload?: unknown) => void;
 }
 
@@ -27,10 +28,14 @@ interface TutorialContextType {
     currentStep: TutorialStepSnapshot | null;
     isActive: boolean;
     isLastStep: boolean;
+    /** 是否正在等待动画完成 */
+    isPendingAnimation: boolean;
     startTutorial: (manifest: TutorialManifest) => void;
     nextStep: (reason?: TutorialNextReason) => void;
     closeTutorial: () => void;
     consumeAi: (stepId?: string) => void;
+    /** 动画完成回调：通知教程系统动画已播放完毕，可以推进到下一步 */
+    animationComplete: () => void;
     bindMoves: (moves: Record<string, unknown>) => void;
     syncTutorialState: (tutorial: TutorialState) => void;
 }
@@ -51,6 +56,7 @@ const buildTutorialController = (moves: Record<string, unknown>): TutorialContro
         next: (reason) => dispatchCommand(TUTORIAL_COMMANDS.NEXT, { reason }),
         close: () => dispatchCommand(TUTORIAL_COMMANDS.CLOSE, {}),
         consumeAi: (stepId) => dispatchCommand(TUTORIAL_COMMANDS.AI_CONSUMED, { stepId }),
+        animationComplete: () => dispatchCommand(TUTORIAL_COMMANDS.ANIMATION_COMPLETE, {}),
     };
 };
 
@@ -116,6 +122,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         controllerRef.current?.consumeAi(stepId);
     }, []);
 
+    const animationComplete = useCallback(() => {
+        controllerRef.current?.animationComplete();
+    }, []);
+
     // AI 动作执行 effect
     // 使用 ref 管理 timer，避免 tutorial 对象频繁变化导致 timer 被 React effect cleanup 取消
     const aiTimerRef = useRef<number | undefined>(undefined);
@@ -172,14 +182,16 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             currentStep,
             isActive: tutorial.active,
             isLastStep: tutorial.active && tutorial.stepIndex >= tutorial.steps.length - 1,
+            isPendingAnimation: tutorial.active && !!tutorial.pendingAnimationAdvance,
             startTutorial,
             nextStep,
             closeTutorial,
             consumeAi,
+            animationComplete,
             bindMoves,
             syncTutorialState,
         };
-    }, [tutorial, bindMoves, closeTutorial, consumeAi, nextStep, startTutorial, syncTutorialState]);
+    }, [tutorial, bindMoves, closeTutorial, consumeAi, animationComplete, nextStep, startTutorial, syncTutorialState]);
 
     return (
         <TutorialContext.Provider value={value}>
@@ -201,7 +213,7 @@ export const useTutorialBridge = (tutorial: TutorialState, moves: Record<string,
     const lastSyncSignatureRef = useRef<string | null>(null);
     useEffect(() => {
         if (!context) return;
-        const signature = `${tutorial.active}-${tutorial.stepIndex}-${tutorial.step?.id ?? ''}-${tutorial.steps?.length ?? 0}-${tutorial.aiActions?.length ?? 0}`;
+        const signature = `${tutorial.active}-${tutorial.stepIndex}-${tutorial.step?.id ?? ''}-${tutorial.steps?.length ?? 0}-${tutorial.aiActions?.length ?? 0}-${tutorial.pendingAnimationAdvance ?? false}`;
         if (lastSyncSignatureRef.current === signature) return;
         lastSyncSignatureRef.current = signature;
         context.syncTutorialState(tutorial);

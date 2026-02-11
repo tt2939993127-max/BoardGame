@@ -15,7 +15,7 @@ import type {
     BonusDieInfo,
     PendingBonusDiceSettlement,
 } from '../types';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
 import { registerChoiceEffectHandler } from '../choiceEffects';
 import { resourceSystem } from '../resourceSystem';
 
@@ -282,15 +282,17 @@ const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: numbe
  * 造成 1x [火] 伤害。
  * 获得 1x [灵魂] 烈焰精通。
  */
-const resolveMagmaArmor = (ctx: CustomActionContext, dice: number): DiceThroneEvent[] => {
+const resolveMagmaArmor = (ctx: CustomActionContext, diceCount: number): DiceThroneEvent[] => {
     if (!ctx.random) return [];
     const events: DiceThroneEvent[] = [];
+    const diceInfo: BonusDieInfo[] = [];
     let fmCount = 0;
     let dmgCount = 0;
 
-    for (let i = 0; i < dice; i++) {
+    for (let i = 0; i < diceCount; i++) {
         const roll = ctx.random.d(6);
         const face = getDieFace(roll);
+        diceInfo.push({ index: i, value: roll, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: { value: roll, face, playerId: ctx.attackerId, targetPlayerId: ctx.attackerId, effectKey: `bonusDie.effect.magmaArmor.${roll}` },
@@ -309,7 +311,7 @@ const resolveMagmaArmor = (ctx: CustomActionContext, dice: number): DiceThroneEv
             type: 'TOKEN_GRANTED',
             payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: fmCount, newTotal: Math.min(currentFM + fmCount, limit), sourceAbilityId: ctx.sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + dice
+            timestamp: ctx.timestamp + diceCount
         } as TokenGrantedEvent);
     }
     if (dmgCount > 0) {
@@ -317,9 +319,15 @@ const resolveMagmaArmor = (ctx: CustomActionContext, dice: number): DiceThroneEv
             type: 'DAMAGE_DEALT',
             payload: { targetId: ctx.targetId, amount: dmgCount, actualDamage: dmgCount, sourceAbilityId: ctx.sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + dice + 0.1
+            timestamp: ctx.timestamp + diceCount + 0.1
         } as DamageDealtEvent);
     }
+
+    // 多骰展示
+    if (diceCount > 1) {
+        events.push(createDisplayOnlySettlement(ctx.sourceAbilityId, ctx.attackerId, ctx.attackerId, diceInfo, ctx.timestamp));
+    }
+
     return events;
 };
 
@@ -401,6 +409,7 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
             maxRerollCount: config.maxRerollCount,
             rerollEffectKey: config.rerollEffectKey,
             readyToSettle: false,
+            showTotal: false,
         };
         events.push({ type: 'BONUS_DICE_REROLL_REQUESTED', payload: { settlement }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp } as BonusDiceRerollRequestedEvent);
     } else {

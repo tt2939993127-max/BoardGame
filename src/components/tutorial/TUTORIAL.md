@@ -18,6 +18,8 @@ export interface TutorialStep {
     requireAction?: boolean; // 是否需要用户执行特定操作才能继续
     aiMove?: number;     // 智能方自动落子的索引。设置后，该步骤不显示气泡，智能方动作完成后自动进入下一步。
     showMask?: boolean;  // 是否开启暗色焦点遮罩。重要步骤建议开启，默认关闭（极简气泡）。
+    infoStep?: boolean;  // 纯说明步骤：自动禁止所有游戏命令，防止用户在阅读教程时误操作。
+    waitForAnimation?: boolean; // 等待动画完成后才推进到下一步（如召唤/攻击动画）。
 }
 ```
 
@@ -81,6 +83,21 @@ export interface TutorialStep {
 4. **Hooks 限制**：
    修改 `TutorialOverlay` 时，严格遵守 React Hooks 规则：所有 Hooks 必须在任何 `return null` 之前调用。
 
+5. **`overflow: hidden` 容器与 `scrollIntoView`**：
+   当高亮目标在 `overflow: hidden` 容器（如基于 CSS transform 平移的地图组件）内时，`TutorialOverlay` 会自动跳过 `scrollIntoView` 调用。这类容器通过 transform 自行管理可见性，`scrollIntoView` 会产生意外的 `scrollTop` 偏移，与 transform 定位冲突。如果你的游戏使用了类似的 transform 容器，无需额外处理——该逻辑已在 `TutorialOverlay` 中通用解决。
+
+6. **命令限制优先级**：
+   教程系统按以下优先级检查命令限制：
+   - `allowedCommands`：白名单模式，只允许列表中的命令
+   - `infoStep: true`：纯说明步骤，阻止所有非系统命令
+   
+   **注意**：系统命令（`SYS_` 前缀）始终不受限制，包括 CHEAT 命令和教程控制命令。
+
+7. **动画等待**：
+   对于有视觉效果的操作步骤（如召唤、攻击），设置 `waitForAnimation: true` 可以让教程等待动画播放完毕后才推进到下一步。
+   
+   游戏层需要在动画完成时调用 `tutorialAnimationComplete()`（从 `useTutorial()` 获取）。
+
 ---
 
-*最后更新：2026-01-20*
+*最后更新：2026-02-10*

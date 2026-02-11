@@ -60,7 +60,10 @@ import {
 // 辅助函数
 // ============================================================================
 
-const now = () => Date.now();
+const resolveTimestamp = (command?: DiceThroneCommand): number => {
+    return typeof command?.timestamp === 'number' ? command.timestamp : 0;
+};
+
 type GameModeHost = { __BG_GAME_MODE__?: string };
 const getGameMode = () => (
     typeof globalThis !== 'undefined'
@@ -112,7 +115,7 @@ export function execute(
 ): DiceThroneEvent[] {
     const state = matchState.core;
     const events: DiceThroneEvent[] = [];
-    const timestamp = now();
+    const timestamp = resolveTimestamp(command);
 
     // 系统命令由系统层处理（如 CheatSystem），领域层不生成事件
     if (command.type.startsWith('SYS_')) {
@@ -816,7 +819,8 @@ export function execute(
                 playerId,
                 amount,
                 random,
-                pendingDamage.responseType
+                pendingDamage.responseType,
+                timestamp
             );
             events.push(...tokenEvents);
 
@@ -858,7 +862,7 @@ export function execute(
                     currentDamage: 0,
                     isFullyEvaded: true,
                 };
-                const closeEvents = finalizeTokenResponse(updatedPendingDamage, stateAfterToken);
+                const closeEvents = finalizeTokenResponse(updatedPendingDamage, stateAfterToken, timestamp);
                 events.push(...closeEvents);
             }
             break;
@@ -882,14 +886,14 @@ export function execute(
                         responseType: 'beforeDamageReceived',
                         responderId: pendingDamage.targetPlayerId,
                     };
-                    const tokenResponseEvent = createTokenResponseRequestedEvent(newPendingDamage);
+                    const tokenResponseEvent = createTokenResponseRequestedEvent(newPendingDamage, timestamp);
                     events.push(tokenResponseEvent);
                     break;
                 }
             }
             
             // 关闭响应窗口，应用最终伤害
-            const closeEvents = finalizeTokenResponse(pendingDamage, state);
+            const closeEvents = finalizeTokenResponse(pendingDamage, state, timestamp);
             events.push(...closeEvents);
             break;
         }
@@ -920,7 +924,7 @@ export function execute(
             }
             
             // 消耗净化 Token
-            const { events: tokenEvents } = processTokenUsage(state, tokenDef, playerId, 1);
+            const { events: tokenEvents } = processTokenUsage(state, tokenDef, playerId, 1, undefined, undefined, timestamp);
             events.push(...tokenEvents);
             
             // 移除负面状态
@@ -1043,6 +1047,11 @@ export function execute(
                 timestamp,
             } as import('./types').BonusDiceSettledEvent);
             
+            // displayOnly 模式：仅展示骰子结果，伤害/状态已由 custom action 处理
+            if (settlement.displayOnly) {
+                break;
+            }
+
             // 应用伤害
             const target = state.players[settlement.targetId];
             const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;

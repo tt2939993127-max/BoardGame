@@ -137,7 +137,7 @@ export class GameTestRunner<
                 type: cmd.type,
                 playerId: cmd.playerId,
                 payload: cmd.payload,
-                timestamp: Date.now(),
+                timestamp: stepNum,
             } as TCommand;
 
             const result = executePipeline(

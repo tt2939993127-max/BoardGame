@@ -96,18 +96,21 @@ export const loadCardAtlasConfig = async (
     const localizedPath = locale ? getLocalizedAssetPath(atlasJsonPath, locale) : basePath;
     const candidates = localizedPath !== basePath ? [localizedPath, basePath] : [basePath];
 
-    for (const url of candidates) {
-        try {
-            const response = await fetch(url);
-            if (!response.ok) continue;
-            const data: unknown = await response.json();
-            if (isCardAtlasConfig(data)) return data;
-        } catch {
-            // 忽略单个路径错误，继续尝试下一候选
+    // 有 defaultGrid 时跳过 JSON fetch，直接从图片尺寸生成均匀网格配置，避免 404 控制台噪音
+    if (!defaultGrid) {
+        for (const url of candidates) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) continue;
+                const data: unknown = await response.json();
+                if (isCardAtlasConfig(data)) return data;
+            } catch {
+                // 忽略单个路径错误，继续尝试下一候选
+            }
         }
     }
 
-    // JSON 不存在，尝试使用默认网格配置
+    // 使用默认网格配置从图片尺寸生成
     if (defaultGrid) {
         try {
             // 尝试加载压缩版图片获取尺寸（优先 webp）

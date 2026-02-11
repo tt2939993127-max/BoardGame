@@ -21,6 +21,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 function createPaladinState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
     faction0: 'paladin',
@@ -96,7 +98,7 @@ function executeAndReduce(
   payload: Record<string, unknown>
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -235,7 +237,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
         discardCardIds: ['discard-same'],
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('同名');
@@ -263,7 +265,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
         discardCardIds: [],
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
   });
@@ -296,7 +298,7 @@ describe('瓦伦蒂娜 - 指引 (guidance) 边界测试', () => {
         sourceUnitId: 'test-valentina',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('空');
@@ -323,7 +325,7 @@ describe('瓦伦蒂娜 - 指引 (guidance) 边界测试', () => {
         sourceUnitId: 'test-valentina',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('召唤阶段');

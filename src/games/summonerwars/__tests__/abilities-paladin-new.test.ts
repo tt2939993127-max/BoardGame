@@ -30,6 +30,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 /**
  * 创建可控骰子结果的随机函数
  * values 数组中每个值映射到骰面：
@@ -154,7 +156,7 @@ function executeAndReduce(
   random?: RandomFn
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, random ?? createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -751,7 +753,7 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
       type: SW_COMMANDS.DECLARE_ATTACK,
       payload: { attacker: { row: 4, col: 2 }, target: { row: 4, col: 3 } },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('友方');
@@ -903,7 +905,7 @@ describe('圣洁审判事件卡', () => {
         cardName: '友方单位',
         owner: '0' as PlayerId,
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
 
     const newState = SummonerWarsDomain.reduce(state, destroyEvent);
@@ -947,7 +949,7 @@ describe('圣洁审判事件卡', () => {
         cardName: '友方单位',
         owner: '0' as PlayerId,
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
 
     const newState = SummonerWarsDomain.reduce(state, destroyEvent);
@@ -989,7 +991,7 @@ describe('圣洁审判事件卡', () => {
         eventCardId: 'paladin-holy-judgment-0',
         charges: 0,
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
 
     const newState = SummonerWarsDomain.reduce(state, chargeEvent);
@@ -1254,7 +1256,7 @@ describe('圣灵庇护事件卡', () => {
     const turnEvent: GameEvent = {
       type: SW_EVENTS.TURN_CHANGED,
       payload: { from: '1' as PlayerId, to: '0' as PlayerId },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
 
     const newState = SummonerWarsDomain.reduce(state, turnEvent);
@@ -1316,7 +1318,7 @@ describe('重燃希望事件卡', () => {
       type: SW_COMMANDS.SUMMON_UNIT,
       payload: { cardId: 'summon-unit', position: { row: 4, col: 4 } },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     // 城门相邻位置 (4,4) 应该有效
     expect(result.valid).toBe(true);
@@ -1357,7 +1359,7 @@ describe('重燃希望事件卡', () => {
       type: SW_COMMANDS.SUMMON_UNIT,
       payload: { cardId: 'summon-unit', position: { row: 3, col: 2 } },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(true);
   });
@@ -1394,7 +1396,7 @@ describe('重燃希望事件卡', () => {
       type: SW_COMMANDS.SUMMON_UNIT,
       payload: { cardId: 'summon-unit', position: { row: 4, col: 4 } },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('召唤阶段');

@@ -17,7 +17,10 @@
     "notYourTurn": "不是你的回合",
     "invalidCell": "无效的格子位置",
     "cellOccupied": "格子已被占用",
-    "unknownCommand": "未知命令"
+    "unknownCommand": "未知命令",
+    "tutorial_manifest_invalid": "教程配置无效",
+    "tutorial_command_blocked": "教程中禁止该操作",
+    "tutorial_step_locked": "当前步骤不能跳过"
   },
   "tutorial": {
     "steps": {

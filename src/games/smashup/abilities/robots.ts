@@ -114,54 +114,10 @@ function robotHoverbot(ctx: AbilityContext): AbilityResult {
     return { events: [] };
 }
 
-/** 高速机器人 onPlay：额外打出力量≤2的随从 */
+/** 高速机器人 onPlay：获得 1 个额外随从额度（规则上限制力量≤2，后续由出牌校验/UI 限制） */
 function robotZapbot(ctx: AbilityContext): AbilityResult {
-    const player = ctx.state.players[ctx.playerId];
-    const candidates: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
-
-    for (const card of player.hand) {
-        if (card.type !== 'minion' || card.uid === ctx.cardUid) continue;
-        const def = getCardDef(card.defId) as MinionCardDef | undefined;
-        if (!def || def.type !== 'minion') continue;
-        if (def.power > 2) continue;
-        for (let i = 0; i < ctx.state.bases.length; i++) {
-            const baseDef = getBaseDef(ctx.state.bases[i].defId);
-            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
-            candidates.push({
-                uid: card.uid,
-                defId: card.defId,
-                baseIndex: i,
-                label: `${def.name ?? card.defId} (力量 ${def.power}) @ ${baseName}`,
-            });
-        }
-    }
-
-    if (candidates.length === 0) return { events: [] };
-    if (candidates.length === 1) {
-        const chosen = candidates[0];
-        const def = getCardDef(chosen.defId) as MinionCardDef | undefined;
-        if (!def) return { events: [] };
-        return {
-            events: [{
-                type: SU_EVENTS.MINION_PLAYED,
-                payload: {
-                    playerId: ctx.playerId,
-                    cardUid: chosen.uid,
-                    defId: chosen.defId,
-                    baseIndex: chosen.baseIndex,
-                    power: def.power,
-                },
-                timestamp: ctx.now,
-            }],
-        };
-    }
-
     return {
-        events: [setPromptContinuation({
-            abilityId: 'robot_zapbot',
-            playerId: ctx.playerId,
-            data: { promptConfig: { title: '选择要额外打出的力量≤2的随从', options: buildMinionTargetOptions(candidates) } },
-        }, ctx.now)],
+        events: [grantExtraMinion(ctx.playerId, 'robot_zapbot', ctx.now)],
     };
 }
 

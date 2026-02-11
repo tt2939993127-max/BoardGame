@@ -14,15 +14,15 @@ import type { BoardProps } from 'boardgame.io/react';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import type { MatchState } from '../../engine/types';
-import type { SmashUpCore, BaseInPlay, CardInstance, MinionOnBase } from './domain/types';
+import type { SmashUpCore, BaseInPlay, CardInstance, MinionOnBase, ActionCardDef } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { getTotalEffectivePowerOnBase } from './domain/ongoingModifiers';
 import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText } from './data/cards';
-import type { ActionCardDef } from './domain/types';
 import { useGameAudio, playDeniedSound } from '../../lib/audio/useGameAudio';
 import { CardPreview, registerCardAtlasSource } from '../../components/common/media/CardPreview';
 import { AnimatePresence, motion } from 'framer-motion';
+import { CheckCircle } from 'lucide-react';
 import { loadCardAtlasConfig } from './ui/cardAtlas';
 import { SMASHUP_ATLAS_IDS } from './domain/ids';
 import { SMASH_UP_MANIFEST } from './manifest';
@@ -84,9 +84,9 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
 
     const [selectedCardUid, setSelectedCardUid] = useState<string | null>(null);
+    const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | null>(null);
     const [discardSelection, setDiscardSelection] = useState<Set<string>>(new Set());
     const autoAdvancePhaseRef = useRef<string | null>(null);
-    const needDiscard = isMyTurn && phase === 'draw' && myPlayer && myPlayer.hand.length > HAND_LIMIT;
     const discardCount = needDiscard ? myPlayer!.hand.length - HAND_LIMIT : 0;
 
     // 事件流消费 → 动画驱动
@@ -123,10 +123,6 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
         if (tutorialStep.allowedCommands && tutorialStep.allowedCommands.length > 0) {
             return tutorialStep.allowedCommands.includes(commandType);
         }
-        // 有 blockedCommands 黑名单时，阻止黑名单内的命令
-        if (tutorialStep.blockedCommands && tutorialStep.blockedCommands.length > 0) {
-            return !tutorialStep.blockedCommands.includes(commandType);
-        }
         return true;
     }, [isTutorialActive, tutorialStep]);
 
@@ -149,28 +145,8 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
 
     // --- State Management ---
     useEffect(() => {
-        if (isMyTurn && phase === 'draw' && myPlayer && myPlayer.hand.length <= HAND_LIMIT) {
-            moves['ADVANCE_PHASE']?.();
-        }
-    }, [isMyTurn, phase, myPlayer?.hand.length]);
-
-    useEffect(() => {
-        if (!isMyTurn) {
-            autoAdvancePhaseRef.current = null;
-            return;
-        }
-        const shouldAutoAdvance = phase === 'startTurn' || phase === 'scoreBases' || phase === 'endTurn';
-        if (!shouldAutoAdvance) {
-            autoAdvancePhaseRef.current = null;
-            return;
-        }
-        if (autoAdvancePhaseRef.current === phase) return;
-        autoAdvancePhaseRef.current = phase;
-        moves['ADVANCE_PHASE']?.();
-    }, [isMyTurn, phase, moves]);
-
-    useEffect(() => {
         setSelectedCardUid(null);
+        setSelectedCardMode(null);
         setDiscardSelection(new Set());
     }, [phase, currentPid]);
 
@@ -203,6 +179,17 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
         }
         moves[SU_COMMANDS.PLAY_MINION]?.({ cardUid, baseIndex });
         setSelectedCardUid(null);
+        setSelectedCardMode(null);
+    }, [moves, isTutorialCommandAllowed]);
+
+    const handlePlayOngoingAction = useCallback((cardUid: string, baseIndex: number) => {
+        if (!isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION)) {
+            playDeniedSound();
+            return;
+        }
+        moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid, targetBaseIndex: baseIndex });
+        setSelectedCardUid(null);
+        setSelectedCardMode(null);
     }, [moves, isTutorialCommandAllowed]);
 
     // VIEWING STATE
@@ -211,17 +198,21 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     const handleBaseClick = useCallback((index: number) => {
         const base = core.bases[index];
         if (selectedCardUid) {
-            handlePlayMinion(selectedCardUid, index);
+            if (selectedCardMode === 'ongoing') {
+                handlePlayOngoingAction(selectedCardUid, index);
+            } else {
+                handlePlayMinion(selectedCardUid, index);
+            }
         } else {
             setViewingCard({ defId: base.defId, type: 'base' });
         }
-    }, [selectedCardUid, handlePlayMinion, core.bases]);
+    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
         // Validation for play phase / turn
         if (!isMyTurn || phase !== 'playCards') {
             playDeniedSound();
-            toast(t('ui.invalid_play'), { icon: '🚫' });
+            toast(t('ui.invalid_play'));
             return;
         }
 
@@ -234,11 +225,30 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
 
         // Normal play logic
         if (card.type === 'action') {
-            moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid: card.uid });
+            // ongoing 行动卡需要选择基地
+            const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
+            if (cardDef?.subtype === 'ongoing') {
+                // 进入/退出部署模式，等待点击基地
+                if (selectedCardUid === card.uid) {
+                    setSelectedCardUid(null);
+                    setSelectedCardMode(null);
+                } else {
+                    setSelectedCardUid(card.uid);
+                    setSelectedCardMode('ongoing');
+                }
+            } else {
+                moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid: card.uid });
+            }
         } else {
-            setSelectedCardUid(curr => curr === card.uid ? null : card.uid);
+            if (selectedCardUid === card.uid) {
+                setSelectedCardUid(null);
+                setSelectedCardMode(null);
+            } else {
+                setSelectedCardUid(card.uid);
+                setSelectedCardMode('minion');
+            }
         }
-    }, [isMyTurn, phase, moves, isTutorialCommandAllowed]);
+    }, [isMyTurn, phase, moves, isTutorialCommandAllowed, selectedCardUid]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
         setViewingCard({ defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' });
@@ -371,7 +381,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
             </div>
 
             {/* --- FINISH TURN BUTTON: Fixed Position (Right Edge) --- */}
-            <div className="fixed right-[8vw] bottom-[28vh] z-50 flex pointer-events-none" data-tutorial-id="su-end-turn-btn">
+            <div className="fixed right-[8vw] bottom-[28vh] z-50 flex pointer-events-none w-24 h-24" data-tutorial-id="su-end-turn-btn">
                 <AnimatePresence>
                     {isMyTurn && phase === 'playCards' && (
                         <motion.div
@@ -602,17 +612,42 @@ const BaseZone: React.FC<{
         minionsByController[m.controller].push(m);
     });
 
-    const actionsByOwner: Record<string, typeof base.ongoingActions> = {};
-    base.ongoingActions?.forEach(oa => {
-        if (!actionsByOwner[oa.ownerId]) actionsByOwner[oa.ownerId] = [];
-        actionsByOwner[oa.ownerId].push(oa);
-    });
 
     return (
         <div className="relative flex flex-col items-center group/base mx-[1vw]">
 
+            {/* --- ONGOING EFFECTS STRIP (tabs plugged into the top of the base card) --- */}
+            {base.ongoingActions && base.ongoingActions.length > 0 && (
+                <div className="flex items-end justify-center gap-[0.4vw] w-full mb-[-0.8vw] z-10 flex-wrap">
+                    {base.ongoingActions.map((oa) => {
+                        const actionDef = getCardDef(oa.defId);
+                        const actionName = resolveCardName(actionDef, i18n.language) || oa.defId;
+                        const pConf = PLAYER_CONFIG[parseInt(oa.ownerId) % PLAYER_CONFIG.length];
+                        return (
+                            <motion.div
+                                key={oa.uid}
+                                onClick={(e) => { e.stopPropagation(); onViewAction(oa.defId); }}
+                                className={`
+                                    relative w-[5.5vw] h-[2.4vw] bg-white rounded-t-md shadow-md cursor-pointer
+                                    border-t-[0.2vw] border-x-[0.15vw] ${pConf.border}
+                                    flex items-start justify-center pt-[0.3vw] overflow-hidden
+                                    hover:z-30 hover:-translate-y-[0.4vw] transition-transform
+                                `}
+                                initial={{ y: 10, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                            >
+                                {/* Color Strip at top */}
+                                <div className={`absolute top-0 inset-x-0 h-[0.35vw] ${pConf.bg}`} />
+                                <span className="text-[0.55vw] font-bold uppercase tracking-tight text-slate-700 px-1 truncate leading-tight mt-[0.15vw]">
+                                    {actionName}
+                                </span>
+                            </motion.div>
+                        );
+                    })}
+                </div>
+            )}
+
             {/* --- BASE CARD --- */}
-            {/* z-20 ensures it sits on top of the 'tucked' persistent effects */}
             <div
                 onClick={onClick}
                 className={`
@@ -691,7 +726,6 @@ const BaseZone: React.FC<{
             <div className="flex items-start justify-center gap-[0.5vw] w-full pt-[0.5vw]">
                 {turnOrder.map(pid => {
                     const minions = minionsByController[pid] || [];
-                    const actions = actionsByOwner[pid] || [];
 
                     // Calc Power
                     const total = minions.reduce((sum, m) => sum + m.basePower + m.powerModifier, 0);
@@ -702,46 +736,6 @@ const BaseZone: React.FC<{
 
                     return (
                         <div key={pid} className="flex flex-col items-center min-w-[5.5vw] relative">
-
-                            {/* --- PERSISTENT EFFECTS (Bucket/Tucked) --- */}
-                            {/* 
-                                Positioned absolute relative to the top of column? 
-                                No, simply rendered before minions with negative margin to tuck under base.
-                                Since Base is z-20 and we are z-0 (default), negative margin pulls it under.
-                            */}
-                            {actions.length > 0 ? (
-                                <div className="flex flex-col items-center mb-1 -mt-[2vw] z-0 space-y-[-1.2vw]">
-                                    {actions.map((oa) => {
-                                        const actionDef = getCardDef(oa.defId);
-                                        const actionName = resolveCardName(actionDef, i18n.language) || oa.defId;
-                                        return (
-                                            <motion.div
-                                                key={oa.uid}
-                                                onClick={() => onViewAction(oa.defId)}
-                                                className={`
-                                                    relative w-[5vw] h-[2vw] bg-white rounded-t-md shadow-md cursor-pointer border-t-[0.15vw] border-x-[0.15vw] ${pConf.border}
-                                                    flex items-center justify-center overflow-hidden hover:z-30 hover:-translate-y-2 transition-transform
-                                                `}
-                                                initial={{ y: 0, opacity: 0 }}
-                                                animate={{ y: 0, opacity: 1 }}
-                                            >
-                                                {/* Background Strip */}
-                                                <div className={`absolute top-0 inset-x-0 h-[0.3vw] ${pConf.bg}`} />
-                                                <span className="text-[0.55vw] font-bold uppercase tracking-tight text-slate-700 px-1 truncate mt-1">
-                                                    {actionName}
-                                                </span>
-                                            </motion.div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                /* Spacer to prevent layout jump if other columns have effects? 
-                                   Actually, we want them tucked, so no spacer needed usually. 
-                                   But if we want perfect alignment? 
-                                   Let's keep it natural flow.
-                                */
-                                null
-                            )}
 
                             {/* --- MINIONS --- */}
                             {minions.length > 0 ? (
@@ -990,7 +984,7 @@ const MeFirstOverlay: React.FC<{
                                 className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 ${conf.bg} ${isCurrent ? 'ring-2 ring-amber-400 scale-125' : isPassed ? 'opacity-40' : ''
                                     }`}
                             >
-                                {isPassed ? '✓' : pid === playerID ? t('ui.you_badge') : pid}
+                                {isPassed ? <CheckCircle size={12} strokeWidth={3} /> : pid === playerID ? t('ui.you_badge') : pid}
                             </div>
                         );
                     })}

@@ -75,7 +75,7 @@ export interface GameContext {
   /**
    * 解析目标引用，返回实体 ID 列表
    */
-  resolveTargets(ref: TargetRef, sourceId: string): string[];
+  resolveTargets(ref: TargetRef): string[];
 
   // --------------------------------------------------------------------------
   // 自定义操作（游戏扩展点）

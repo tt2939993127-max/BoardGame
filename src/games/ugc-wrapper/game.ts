@@ -66,5 +66,6 @@ export const createUgcGame = async (options: UgcGameOptions): Promise<Game> => {
         systems,
         minPlayers: options.minPlayers ?? DEFAULT_MIN_PLAYERS,
         maxPlayers: options.maxPlayers ?? DEFAULT_MAX_PLAYERS,
+        disableUndo: true,
     });
 };

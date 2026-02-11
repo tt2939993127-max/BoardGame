@@ -1,0 +1,72 @@
+{
+  "feedback": {
+    "title": "Feedback",
+    "count": "{{count}} items",
+    "refresh": "Refresh",
+    "polling": "Updating...",
+    "bulkDelete": "Delete ({{count}})",
+    "filters": {
+      "status": "Status",
+      "type": "Type",
+      "all": "All"
+    },
+    "status": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "type": {
+      "bug": "Bug",
+      "suggestion": "Suggestion",
+      "other": "Other"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "table": {
+      "empty": "No feedback found",
+      "selectAll": "Select all",
+      "content": "Content",
+      "type": "Type",
+      "severity": "Severity",
+      "status": "Status",
+      "submitter": "Submitted by",
+      "time": "Time",
+      "selectItem": "Select feedback {{id}}",
+      "id": "ID: {{id}}"
+    },
+    "messages": {
+      "fetchFailed": "Failed to fetch feedback",
+      "updateSuccess": "Status updated",
+      "updateFailed": "Failed to update status",
+      "deleteSuccess": "Deleted",
+      "deleteFailed": "Delete failed",
+      "bulkDeleteSuccess": "Bulk delete succeeded",
+      "bulkDeleteFailed": "Bulk delete failed"
+    },
+    "confirm": {
+      "delete": "Delete this feedback?",
+      "bulkDelete": "Delete {{count}} selected items?"
+    },
+    "actions": {
+      "reopen": "Reopen",
+      "resolve": "Mark resolved",
+      "delete": "Delete"
+    },
+    "content": {
+      "onlyImage": "(Image only)",
+      "empty": "(No content)",
+      "screenshotAlt": "Screenshot"
+    },
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{count}} minutes ago",
+      "hoursAgo": "{{count}} hours ago",
+      "daysAgo": "{{count}} days ago"
+    }
+  }
+}

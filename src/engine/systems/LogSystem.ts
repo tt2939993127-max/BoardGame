@@ -46,31 +46,44 @@ export function createLogSystem<TCore>(
             },
         }),
 
-        beforeCommand: ({ state, command }): HookResult<TCore> | void => {
-            if (!logCommands) return;
-
-            const entry: LogEntry = {
-                timestamp: Date.now(),
-                type: 'command',
-                data: command,
+        afterEvents: ({ state, events, command, afterEventsRound }): HookResult<TCore> | void => {
+            let newState = state;
+            let touched = false;
+            const round = afterEventsRound ?? 0;
+            const getFallbackTimestamp = () => {
+                const entries = newState.sys.log.entries;
+                const last = entries[entries.length - 1];
+                return (last?.timestamp ?? 0) + 1;
             };
 
-            return { state: appendLogEntry(state, entry, maxEntries) };
-        },
-
-        afterEvents: ({ state, events }): HookResult<TCore> | void => {
-            if (!logEvents || events.length === 0) return;
-
-            let newState = state;
-            for (const event of events) {
+            if (logCommands && round === 0) {
+                const commandTimestamp = typeof command.timestamp === 'number'
+                    ? command.timestamp
+                    : (events[0]?.timestamp ?? getFallbackTimestamp());
                 const entry: LogEntry = {
-                    timestamp: Date.now(),
-                    type: 'event',
-                    data: event,
+                    timestamp: commandTimestamp,
+                    type: 'command',
+                    data: command,
                 };
                 newState = appendLogEntry(newState, entry, maxEntries);
+                touched = true;
             }
 
+            if (logEvents && events.length > 0) {
+                for (const event of events) {
+                    const entry: LogEntry = {
+                        timestamp: typeof event.timestamp === 'number'
+                            ? event.timestamp
+                            : getFallbackTimestamp(),
+                        type: 'event',
+                        data: event,
+                    };
+                    newState = appendLogEntry(newState, entry, maxEntries);
+                    touched = true;
+                }
+            }
+
+            if (!touched) return;
             return { state: newState };
         },
     };

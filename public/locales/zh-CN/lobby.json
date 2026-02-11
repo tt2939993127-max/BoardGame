@@ -163,6 +163,14 @@
       "local": "本地模式",
       "sandbox": "沙盒模式"
     },
+    "error": {
+      "matchMissing": "房间不存在或已被删除"
+    },
+    "ugc": {
+      "loading": "UGC 运行态加载中…",
+      "loadFailed": "UGC 运行态加载失败: {{error}}",
+      "loadFailedShort": "UGC 运行态加载失败"
+    },
     "sandbox": {
       "initializing": "正在初始化沙盒..."
     },

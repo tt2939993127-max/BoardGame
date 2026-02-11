@@ -36,6 +36,7 @@ const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinge
 const SELECTION_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
 const POSITIVE_SIGNAL_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
 const UPDATE_CHIME_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
+const TURN_NOTIFY_KEY = 'ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_001';
 const PROMPT_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_spring_a';
 
 const MINION_PLAY_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
@@ -45,8 +46,8 @@ const CARD_DISCARD_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001';
 const CARD_SHUFFLE_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_shuffle_fast_001';
 const CARD_SCROLL_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001';
 
-const MOVE_KEY = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.armor_movement_h';
-const MINION_DESTROY_KEY = 'combat.general.fight_fury_vol_2.body_hitting_the_ground_with_blood.fghtbf_body_hitting_the_ground_with_blood_01_krst';
+const MOVE_KEY = 'card.handling.mini_games_sound_effects_and_music_pack.card.sfx_card_play_1';
+const MINION_DESTROY_KEY = 'puzzle.16.tiny_pop_01';
 const POWER_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
 const POWER_LOSE_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
 const TALENT_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_arcane_ripple_001';
@@ -222,7 +223,7 @@ const EVENT_SOUND_MAP: Record<string, string> = {
     [SU_EVENTS.VP_AWARDED]: POSITIVE_SIGNAL_KEY,
     [SU_EVENTS.CARDS_DRAWN]: CARD_DRAW_KEY,
     [SU_EVENTS.CARDS_DISCARDED]: CARD_DISCARD_KEY,
-    [SU_EVENTS.TURN_STARTED]: POSITIVE_SIGNAL_KEY,
+    [SU_EVENTS.TURN_STARTED]: TURN_NOTIFY_KEY,
     [SU_EVENTS.TURN_ENDED]: UPDATE_CHIME_KEY,
     [SU_EVENTS.BASE_REPLACED]: UPDATE_CHIME_KEY,
     [SU_EVENTS.DECK_RESHUFFLED]: CARD_SHUFFLE_KEY,
@@ -234,7 +235,9 @@ const EVENT_SOUND_MAP: Record<string, string> = {
     [SU_EVENTS.ONGOING_ATTACHED]: ACTION_PLAY_KEY,
     [SU_EVENTS.ONGOING_DETACHED]: CARD_DISCARD_KEY,
     [SU_EVENTS.TALENT_USED]: TALENT_KEY,
+    [SU_EVENTS.CARD_TO_DECK_TOP]: CARD_SCROLL_KEY,
     [SU_EVENTS.CARD_TO_DECK_BOTTOM]: CARD_SCROLL_KEY,
+    [SU_EVENTS.CARD_TRANSFERRED]: CARD_SCROLL_KEY,
     [SU_EVENTS.CARD_RECOVERED_FROM_DISCARD]: CARD_DRAW_KEY,
     [SU_EVENTS.HAND_SHUFFLED_INTO_DECK]: CARD_SHUFFLE_KEY,
     [SU_EVENTS.PROMPT_CONTINUATION]: PROMPT_KEY,

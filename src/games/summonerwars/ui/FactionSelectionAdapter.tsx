@@ -11,6 +11,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
 import clsx from 'clsx';
@@ -592,7 +593,7 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
             animate={{ scale: 1 }}
             className="w-[clamp(16px,1vw,22px)] h-[clamp(16px,1vw,22px)] rounded-full bg-emerald-500 flex items-center justify-center"
           >
-            <span className="text-[clamp(8px,0.55vw,12px)] font-bold text-white">✓</span>
+            <Check size={12} className="text-white" strokeWidth={3} />
           </motion.div>
         )}
       </div>

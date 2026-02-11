@@ -61,7 +61,7 @@ export const DiscardPileOverlay: React.FC<DiscardPileOverlayProps> = ({
   if (reversed.length === 0) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/80 backdrop-blur-sm"
         onClick={onClose}
       >
         <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl text-center max-w-sm mx-4">
@@ -77,7 +77,7 @@ export const DiscardPileOverlay: React.FC<DiscardPileOverlayProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[9000] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm"
       onClick={onClose}
       data-testid="sw-discard-pile-overlay"
     >
@@ -106,7 +106,10 @@ export const DiscardPileOverlay: React.FC<DiscardPileOverlayProps> = ({
               <div
                 key={`${card.id}-${idx}`}
                 className="flex-shrink-0 snap-center cursor-pointer relative group transition-transform duration-200 hover:scale-105 hover:z-10"
-                onClick={() => onMagnify?.(card)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onMagnify?.(card);
+                }}
               >
                 <div className="rounded-lg shadow-2xl group-hover:ring-2 group-hover:ring-white/50 transition-all duration-200">
                   <CardSprite

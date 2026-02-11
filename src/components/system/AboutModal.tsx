@@ -336,7 +336,7 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
 
     const baseCount = sponsors.length;
     const baseHeight = baseCount * ROW_HEIGHT;
-    const loopEnabled = !sponsorHasMore && baseCount > 0;
+    const loopEnabled = !sponsorHasMore && baseCount > 0 && baseHeight > containerHeight;
     const totalCount = loopEnabled ? baseCount * 2 : baseCount;
     const totalHeight = loopEnabled ? baseHeight * 2 : baseHeight;
     const visibleCount = containerHeight > 0

@@ -7,7 +7,7 @@ import { FACTION_METADATA } from './factionMeta';
 import type { PlayerId } from '../../../engine/types';
 import { getFactionCards, resolveCardName, resolveCardText, getCardDef, getBaseDef } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import { X, Check, Search, Layers, ZoomIn } from 'lucide-react';
+import { X, Check, Search, Layers, ZoomIn, Pencil, Lock } from 'lucide-react';
 
 interface Props {
     core: SmashUpCore;
@@ -77,9 +77,9 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                 <motion.div
                                     animate={{ rotate: [0, -2, 2, 0] }}
                                     transition={{ repeat: Infinity, duration: 2 }}
-                                    className="absolute -right-2 -top-2 text-2xl"
+                                    className="absolute -right-2 -top-2 bg-amber-500 rounded-full p-1.5 shadow-lg"
                                 >
-                                    鉁忥笍
+                                    <Pencil size={16} className="text-white" strokeWidth={3} />
                                 </motion.div>
                             </motion.div>
                         ) : (
@@ -156,7 +156,9 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                             {/* Taken Status */}
                                             {isTaken && (
                                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center p-2 text-center z-30">
-                                                    <span className="text-2xl mb-1">馃敀</span>
+                                                    <div className="mb-2 p-2 bg-slate-700 rounded-full">
+                                                        <Lock size={24} className="text-white" strokeWidth={2.5} />
+                                                    </div>
                                                     <span className="font-black text-white text-xs uppercase tracking-tight">
                                                         {t('ui.player_taken', { id: ownerId })}
                                                     </span>

@@ -26,6 +26,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 function createTricksterState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
     faction0: 'trickster',
@@ -120,7 +122,7 @@ function executeAndReduce(
   payload: Record<string, unknown>
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -265,7 +267,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
         choice: 'invalid',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
   });
@@ -410,7 +412,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
         direction: 'push',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('召唤师');
@@ -445,7 +447,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
         direction: 'push',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('2格');
@@ -522,7 +524,7 @@ describe('卡拉 - 高阶念力 (high_telekinesis) ACTIVATE_ABILITY', () => {
         direction: 'push',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('3格');
@@ -594,7 +596,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('友方');
@@ -629,7 +631,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('士兵');
@@ -663,7 +665,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
         targetPosition: { row: 0, col: 2 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('3格');
@@ -744,7 +746,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('士兵');
@@ -779,7 +781,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
         targetPosition: { row: 1, col: 2 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('3格');
@@ -813,7 +815,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('移动阶段');
@@ -835,7 +837,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
     const turnEvent: GameEvent = {
       type: SW_EVENTS.TURN_CHANGED,
       payload: { nextPlayer: '1' },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
     const newState = SummonerWarsDomain.reduce(state, turnEvent);
 

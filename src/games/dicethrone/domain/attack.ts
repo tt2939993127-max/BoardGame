@@ -13,12 +13,11 @@ import type {
 import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { getPlayerAbilityEffects } from './abilityLookup';
 
-const now = () => Date.now();
-
 const createPreDefenseResolvedEvent = (
     attackerId: string,
     defenderId: string,
-    sourceAbilityId?: string
+    sourceAbilityId: string | undefined,
+    timestamp: number
 ): AttackPreDefenseResolvedEvent => ({
     type: 'ATTACK_PRE_DEFENSE_RESOLVED',
     payload: {
@@ -27,16 +26,19 @@ const createPreDefenseResolvedEvent = (
         sourceAbilityId,
     },
     sourceCommandType: 'ABILITY_EFFECT',
-    timestamp: now(),
+    timestamp,
 });
 
-export const resolveOffensivePreDefenseEffects = (state: DiceThroneCore): DiceThroneEvent[] => {
+export const resolveOffensivePreDefenseEffects = (
+    state: DiceThroneCore,
+    timestamp: number = 0
+): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
     if (!pending || pending.preDefenseResolved) return [];
 
     const { attackerId, defenderId, sourceAbilityId } = pending;
     if (!sourceAbilityId) {
-        return [createPreDefenseResolvedEvent(attackerId, defenderId)];
+        return [createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId, timestamp)];
     }
 
     const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
@@ -46,20 +48,22 @@ export const resolveOffensivePreDefenseEffects = (state: DiceThroneCore): DiceTh
         sourceAbilityId,
         state,
         damageDealt: 0,
+        timestamp,
     };
 
     const events: DiceThroneEvent[] = [];
     // preDefense 效果现在统一通过效果系统处理（包括 choice 效果）
     events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx));
 
-    events.push(createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId));
+    events.push(createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId, timestamp));
     return events;
 };
 
 export const resolveAttack = (
     state: DiceThroneCore,
     random: RandomFn,
-    options?: { includePreDefense?: boolean; skipTokenResponse?: boolean }
+    options?: { includePreDefense?: boolean; skipTokenResponse?: boolean },
+    timestamp: number = 0
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
     if (!pending) {
@@ -68,7 +72,7 @@ export const resolveAttack = (
 
     const events: DiceThroneEvent[] = [];
     if (options?.includePreDefense) {
-        const preDefenseEvents = resolveOffensivePreDefenseEffects(state);
+        const preDefenseEvents = resolveOffensivePreDefenseEffects(state, timestamp);
         events.push(...preDefenseEvents);
 
         const hasChoice = preDefenseEvents.some((event) => event.type === 'CHOICE_REQUESTED');
@@ -87,6 +91,7 @@ export const resolveAttack = (
             sourceAbilityId: defenseAbilityId,
             state,
             damageDealt: 0,
+            timestamp,
         };
 
         events.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
@@ -102,6 +107,7 @@ export const resolveAttack = (
             sourceAbilityId,
             state,
             damageDealt: 0,
+            timestamp,
         };
 
         // withDamage 时机的效果（包括 rollDie 和 damage）统一通过效果系统处理
@@ -132,7 +138,7 @@ export const resolveAttack = (
             totalDamage,
         },
         sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: now(),
+        timestamp,
     };
     events.push(resolvedEvent);
 
@@ -145,7 +151,8 @@ export const resolveAttack = (
  */
 export const resolvePostDamageEffects = (
     state: DiceThroneCore,
-    random: RandomFn
+    random: RandomFn,
+    timestamp: number = 0
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
     if (!pending) {
@@ -168,6 +175,7 @@ export const resolvePostDamageEffects = (
             sourceAbilityId,
             state,
             damageDealt, // 使用实际造成的伤害值
+            timestamp,
         };
 
         events.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
@@ -184,7 +192,7 @@ export const resolvePostDamageEffects = (
             totalDamage: damageDealt, // 使用实际造成的伤害值
         },
         sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: now(),
+        timestamp,
     };
     events.push(resolvedEvent);
 

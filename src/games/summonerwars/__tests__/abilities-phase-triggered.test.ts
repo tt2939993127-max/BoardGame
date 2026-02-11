@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
-import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, PlayerId, StructureInstance } from '../domain/types';
+import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, PlayerId, BoardStructure } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
 import { createInitializedCore } from './test-helpers';
 import { resolveAbilityEffects } from '../domain/abilityResolver';
@@ -28,6 +28,8 @@ function createTestRandom(): RandomFn {
     range: (min: number, max: number) => Math.floor((min + max) / 2),
   };
 }
+
+const fixedTimestamp = 1000;
 
 function placeUnit(
   state: SummonerWarsCore,
@@ -64,8 +66,20 @@ function placeStructure(
   id = `wall-${pos.row}-${pos.col}`
 ): void {
   state.board[pos.row][pos.col].structure = {
-    id, name: '城墙', owner, life: 3, damage: 0, isGate: false,
-  } as StructureInstance;
+    cardId: id,
+    card: {
+      id,
+      cardType: 'structure',
+      name: '城墙',
+      cost: 0,
+      life: 3,
+      isGate: false,
+      deckSymbols: [],
+    },
+    owner,
+    position: pos,
+    damage: 0,
+  } as BoardStructure;
 }
 
 function makeValentina(id: string): UnitCard {
@@ -126,7 +140,7 @@ function executeAndReduce(
   payload: Record<string, unknown>
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -168,7 +182,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
       sourceUnit: unit,
       sourcePosition: { row: 4, col: 2 },
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     // 应有 ABILITY_TRIGGERED + CARD_DRAWN 事件
@@ -328,7 +342,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: { abilityId: 'blood_rune', sourceUnitId: 'test-brolf', choice: 'charge' },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
       playerId: '0',
     });
     expect(result.valid).toBe(false);
@@ -356,7 +370,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
       sourceUnit: unit,
       sourcePosition: { row: 4, col: 2 },
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     // 应有 ABILITY_TRIGGERED 事件（包含 sourcePosition 供 UI 定位）
@@ -440,7 +454,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: { abilityId: 'ice_shards', sourceUnitId: 'test-jamud' },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
       playerId: '0',
     });
     expect(result.valid).toBe(false);
@@ -469,7 +483,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
       sourceUnit: unit,
       sourcePosition: { row: 3, col: 2 },
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     const triggerEvents = events.filter(e => e.type === SW_EVENTS.ABILITY_TRIGGERED);
@@ -577,7 +591,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: { abilityId: 'feed_beast', sourceUnitId: 'test-beast', targetPosition: { row: 2, col: 2 } },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
       playerId: '0',
     });
     expect(result.valid).toBe(false);
@@ -605,7 +619,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
       sourceUnit: unit,
       sourcePosition: { row: 4, col: 2 },
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     const triggerEvents = events.filter(e => e.type === SW_EVENTS.ABILITY_TRIGGERED);

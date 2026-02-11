@@ -18,6 +18,13 @@ const logDev = (...args: unknown[]) => {
     }
 };
 
+const resolveTimestamp = (command?: Command, events?: GameEvent[]): number => {
+    if (command && typeof command.timestamp === 'number') return command.timestamp;
+    const eventTimestamp = events?.find((event) => typeof event.timestamp === 'number')?.timestamp;
+    if (typeof eventTimestamp === 'number') return eventTimestamp;
+    return 0;
+};
+
 // ============================================================================
 // 命令 / 事件
 // ============================================================================
@@ -157,8 +164,11 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
 
         setup: (): Partial<{ phase: string }> => ({ phase: hooks.initialPhase }),
 
-        beforeCommand: ({ state, command, random }): HookResult<TCore> | void => {
+        beforeCommand: ({ state, command, random, playerIds }): HookResult<TCore> | void => {
             if (command.type !== FLOW_COMMANDS.ADVANCE_PHASE) return;
+            if (!playerIds.includes(command.playerId)) {
+                return { halt: true, error: 'player_mismatch' };
+            }
 
             const from = getCurrentPhase(state) || hooks.initialPhase;
             logDev(`[FlowSystem][beforeCommand] ADVANCE_PHASE from=${from} playerId=${command.playerId}`);
@@ -212,7 +222,7 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             const phaseChanged: PhaseChangedEvent = {
                 type: FLOW_EVENTS.PHASE_CHANGED,
                 payload: { from, to, activePlayerId },
-                timestamp: Date.now(),
+                timestamp: resolveTimestamp(command),
             };
 
             // 进入阶段钩子
@@ -227,12 +237,16 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             };
         },
 
-        afterEvents: ({ state, events, random }): HookResult<TCore> | void => {
+        afterEvents: ({ state, events, random, playerIds }): HookResult<TCore> | void => {
             // 检查是否需要自动继续流程
             if (!hooks.onAutoContinueCheck) return;
 
             const result = hooks.onAutoContinueCheck({ state, events, random });
             if (!result?.autoContinue) return;
+
+            if (!playerIds.includes(result.playerId)) {
+                return;
+            }
 
             // 自动继续：执行与 ADVANCE_PHASE 相同的逻辑
             const from = getCurrentPhase(state) || hooks.initialPhase;
@@ -294,7 +308,7 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             const phaseChanged: PhaseChangedEvent = {
                 type: FLOW_EVENTS.PHASE_CHANGED,
                 payload: { from, to, activePlayerId },
-                timestamp: Date.now(),
+                timestamp: resolveTimestamp(undefined, events),
             };
 
             // 进入阶段钩子

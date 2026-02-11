@@ -30,8 +30,11 @@ export function registerGhostAbilities(): void {
     registerAbility('ghost_spirit', 'onPlay', ghostSpirit);
 
     // === ongoing 效果注册 ===
-    // ghost_incorporeal: 不受其他玩家卡牌影响（ongoing protection）
-    registerProtection('ghost_haunting', 'affect', ghostIncorporealChecker);
+    // ghost_incorporeal: 打出到随从上，持续：该随从不受其他玩家卡牌影响
+    registerProtection('ghost_incorporeal', 'affect', ghostIncorporealChecker);
+    // ghost_haunting: 持续：手牌≤2时，本随从不受其他玩家卡牌影响
+    registerProtection('ghost_haunting', 'affect', ghostHauntingChecker);
+
     // ghost_make_contact: 控制对手随从（special 能力）
     registerAbility('ghost_make_contact', 'onPlay', ghostMakeContact);
 }
@@ -116,11 +119,22 @@ function ghostGhostlyArrival(ctx: AbilityContext): AbilityResult {
  * 实现：检查目标随从是否附着了 ghost_haunting，且攻击者不是随从控制者。
  */
 function ghostIncorporealChecker(ctx: ProtectionCheckContext): boolean {
-    // 检查目标随从是否附着了 ghost_haunting
-    const hasHaunting = ctx.targetMinion.attachedActions.some(a => a.defId === 'ghost_haunting');
-    if (!hasHaunting) return false;
+    // 检查目标随从是否附着了 ghost_incorporeal
+    const hasIncorporeal = ctx.targetMinion.attachedActions.some(a => a.defId === 'ghost_incorporeal');
+    if (!hasIncorporeal) return false;
     // 只保护不受其他玩家影响
     return ctx.sourcePlayerId !== ctx.targetMinion.controller;
+}
+
+/**
+ * ghost_haunting 保护检查：手牌≤2时，不散阴魂本随从不受其他玩家卡牌影响
+ */
+function ghostHauntingChecker(ctx: ProtectionCheckContext): boolean {
+    if (ctx.targetMinion.defId !== 'ghost_haunting') return false;
+    if (ctx.sourcePlayerId === ctx.targetMinion.controller) return false;
+    const player = ctx.state.players[ctx.targetMinion.controller];
+    if (!player) return false;
+    return player.hand.length <= 2;
 }
 
 /**

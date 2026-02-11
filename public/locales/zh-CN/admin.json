@@ -1,0 +1,72 @@
+{
+  "feedback": {
+    "title": "反馈管理",
+    "count": "{{count}} 条",
+    "refresh": "刷新",
+    "polling": "更新中...",
+    "bulkDelete": "删除 ({{count}})",
+    "filters": {
+      "status": "状态",
+      "type": "类型",
+      "all": "全部"
+    },
+    "status": {
+      "open": "待处理",
+      "in_progress": "处理中",
+      "resolved": "已解决",
+      "closed": "已关闭"
+    },
+    "type": {
+      "bug": "Bug",
+      "suggestion": "建议",
+      "other": "其他"
+    },
+    "severity": {
+      "critical": "严重",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "table": {
+      "empty": "暂无相关反馈",
+      "selectAll": "全选",
+      "content": "内容",
+      "type": "类型",
+      "severity": "严重度",
+      "status": "状态",
+      "submitter": "提交者",
+      "time": "时间",
+      "selectItem": "选择反馈 {{id}}",
+      "id": "ID: {{id}}"
+    },
+    "messages": {
+      "fetchFailed": "获取反馈列表失败",
+      "updateSuccess": "状态已更新",
+      "updateFailed": "更新状态失败",
+      "deleteSuccess": "已删除",
+      "deleteFailed": "删除失败",
+      "bulkDeleteSuccess": "批量删除成功",
+      "bulkDeleteFailed": "批量删除失败"
+    },
+    "confirm": {
+      "delete": "确定删除这条反馈？",
+      "bulkDelete": "确定删除选中的 {{count}} 条反馈？"
+    },
+    "actions": {
+      "reopen": "重新打开",
+      "resolve": "标记已解决",
+      "delete": "删除"
+    },
+    "content": {
+      "onlyImage": "（仅图片）",
+      "empty": "（无内容）",
+      "screenshotAlt": "截图"
+    },
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前"
+    }
+  }
+}

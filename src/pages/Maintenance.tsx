@@ -1,15 +1,17 @@
 
 
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Hammer, ArrowLeft } from 'lucide-react';
 import { SEO } from '../components/common/SEO';
 
 export const MaintenancePage = () => {
     const navigate = useNavigate();
+    const { t } = useTranslation('common');
 
     return (
         <div className="min-h-screen bg-parchment-base-bg text-parchment-base-text font-serif flex flex-col items-center justify-center p-6 relative overflow-hidden">
-            <SEO title="System Maintenance" description="We are currently upgrading our systems." />
+            <SEO title={t('maintenance.seoTitle')} description={t('maintenance.seoDescription')} />
 
             {/* Background Texture/Effect */}
             <div className="absolute inset-0 opacity-5 pointer-events-none"
@@ -28,20 +30,20 @@ export const MaintenancePage = () => {
 
                 {/* Typography */}
                 <h1 className="text-3xl md:text-4xl font-bold text-parchment-brown mb-3 tracking-wide">
-                    System Maintenance
+                    {t('maintenance.title')}
                 </h1>
 
                 <h2 className="text-lg font-bold mb-6 text-parchment-light-text flex items-center gap-2 justify-center">
                     <span className="h-[1px] w-8 bg-parchment-light-text/50"></span>
-                    工匠正在修缮大厅
+                    {t('maintenance.subtitle')}
                     <span className="h-[1px] w-8 bg-parchment-light-text/50"></span>
                 </h2>
 
                 <p className="text-parchment-base-text/80 mb-8 max-w-md leading-relaxed">
-                    我们正在进行必要的维护升级，以确保更稳定的魔法连接。请稍事休息，再战不迟。
+                    {t('maintenance.description')}
                     <br />
                     <span className="text-sm italic text-parchment-light-text mt-2 block">
-                        Our scribes are rewriting the scrolls. Please check back soon.
+                        {t('maintenance.note')}
                     </span>
                 </p>
 
@@ -52,14 +54,14 @@ export const MaintenancePage = () => {
                 >
                     <span className="flex items-center gap-2">
                         <ArrowLeft size={16} />
-                        尝试返回大厅 Return Home
+                        {t('maintenance.backHome')}
                     </span>
                 </button>
             </div>
 
             {/* Footer / Decor */}
             <div className="absolute bottom-6 text-parchment-light-text/30 text-[10px] tracking-[0.2em] uppercase">
-                Status: 503 Service Unavailable
+                {t('maintenance.status')}
             </div>
         </div>
     );

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Check } from 'lucide-react';
 import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
@@ -479,7 +480,7 @@ export const SelectableStatusBadge = ({
             )}
             {isSelected && (
                 <div className="absolute -top-[0.3vw] -right-[0.3vw] w-[1vw] h-[1vw] bg-green-500 rounded-full flex items-center justify-center z-30">
-                    <span className="text-[0.6vw] text-white font-bold">✓</span>
+                    <Check size={12} className="text-white" strokeWidth={3} />
                 </div>
             )}
             <InfoTooltip

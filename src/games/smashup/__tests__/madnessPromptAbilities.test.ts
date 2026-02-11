@@ -97,7 +97,7 @@ function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
 // ============================================================================
 
 describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => {
-    it('弃掉所有疯狂卡，每张 = 抽1牌 + 额外行动', () => {
+    it('多张疑狂卡时创建多选 Prompt', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -119,17 +119,15 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 3张疯狂卡返回
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_RETURNED);
-        expect(returnEvents.length).toBe(3);
-        // 抽3张牌
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.count).toBe(3);
-        // 3个额外行动
-        const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-        expect(limitEvents.length).toBe(3);
-        expect(limitEvents.every(e => (e as any).payload.limitType === 'action')).toBe(true);
+        // 多张疑狂卡时应创建 Prompt（不直接弃牌）
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        const cont = (promptEvents[0] as any).payload.continuation;
+        expect(cont.abilityId).toBe('cthulhu_madness_unleashed');
+        // 应有3个选项（每张疑狂卡一个）
+        expect(cont.data.promptConfig.options.length).toBe(3);
+        // 应支持多选
+        expect(cont.data.promptConfig.multi).toEqual({ min: 1, max: 3 });
     });
 
     it('手中无疯狂卡时无效果', () => {
@@ -176,7 +174,7 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         expect(limitEvents.length).toBe(1);
     });
 
-    it('牌库不足时按实际数量抽牌（但额外行动仍按疯狂卡数量）', () => {
+    it('多张疑狂卡+牌库不足时也创建 Prompt', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -193,16 +191,15 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_RETURNED);
-        expect(returnEvents.length).toBe(3);
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.count).toBe(1); // 只能抽1张
-        const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-        expect(limitEvents.length).toBe(3); // 额外行动仍是3个
+        // 多张疑狂卡时应创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        const cont = (promptEvents[0] as any).payload.continuation;
+        expect(cont.abilityId).toBe('cthulhu_madness_unleashed');
+        expect(cont.data.promptConfig.options.length).toBe(3);
     });
 
-    it('状态正确（reduce 验证）', () => {
+    it('状态正确（reduce 验证）- 多张疑狂卡产生 PROMPT_CONTINUATION', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -224,14 +221,14 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
 
         const events = execPlayAction(state, '0', 'a1');
         const newState = applyEvents(state, events);
-        // 手牌：疯狂卡被弃掉，抽了2张牌 = d1 + d2
-        expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(0);
-        expect(newState.players['0'].hand.some(c => c.uid === 'd1')).toBe(true);
-        expect(newState.players['0'].hand.some(c => c.uid === 'd2')).toBe(true);
-        // 行动额度 = 1(原) + 2(额外) = 3
-        expect(newState.players['0'].actionLimit).toBe(3);
-        // 疯狂牌库增加2张（返回的）
-        expect(newState.madnessDeck!.length).toBe(MADNESS_DECK_SIZE + 2);
+        // 多张疑狂卡时应有 PROMPT_CONTINUATION 事件
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        expect(promptEvents.length).toBe(1);
+        // 状态中应设置 pendingPromptContinuation
+        expect(newState.pendingPromptContinuation).toBeDefined();
+        expect(newState.pendingPromptContinuation!.abilityId).toBe('cthulhu_madness_unleashed');
+        // 手牌中疑狂卡仍在（等待 Prompt 解决）
+        expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(2);
     });
 });
 

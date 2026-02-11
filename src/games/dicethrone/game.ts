@@ -172,7 +172,6 @@ const applyEvents = (core: DiceThroneCore, events: DiceThroneEvent[]): DiceThron
     return events.reduce((current, event) => reduce(current, event), core);
 };
 
-const now = () => Date.now();
 type GameModeHost = { __BG_GAME_MODE__?: string };
 const getGameMode = () => (
     typeof globalThis !== 'undefined'
@@ -266,7 +265,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
     onPhaseExit: ({ state, from, to, command, random }): PhaseExitResult | GameEvent[] | void => {
         const core = state.core;
         const events: GameEvent[] = [];
-        const timestamp = now();
+        const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
         // ========== setup 阶段退出：初始化所有玩家角色数据 ==========
         if (from === 'setup') {
@@ -370,7 +369,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // 处理进攻方的 preDefense 效果
-                const preDefenseEvents = resolveOffensivePreDefenseEffects(core);
+                const preDefenseEvents = resolveOffensivePreDefenseEffects(core, timestamp);
                 events.push(...preDefenseEvents);
 
                 const hasChoice = preDefenseEvents.some((event) => event.type === 'CHOICE_REQUESTED');
@@ -389,7 +388,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // 攻击不可防御，直接结算
-                const attackEvents = resolveAttack(coreAfterPreDefense, random, { includePreDefense: false });
+                const attackEvents = resolveAttack(coreAfterPreDefense, random, { includePreDefense: false }, timestamp);
                 events.push(...attackEvents);
 
                 const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
@@ -422,7 +421,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 // 如果伤害已通过 Token 响应结算，只执行 postDamage 效果
                 if (core.pendingAttack.damageResolved) {
                     // 执行 postDamage 效果（如击倒）并生成 ATTACK_RESOLVED 事件
-                    const postDamageEvents = resolvePostDamageEffects(core, random);
+                    const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
                     events.push(...postDamageEvents);
 
                     // 检查晕眩（daze）额外攻击
@@ -438,7 +437,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
                 
                 // 直接结算攻击
-                const attackEvents = resolveAttack(core, random);
+                const attackEvents = resolveAttack(core, random, undefined, timestamp);
                 events.push(...attackEvents);
 
                 const hasAttackChoice = attackEvents.some((event) => event.type === 'CHOICE_REQUESTED');
@@ -533,7 +532,7 @@ const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
     onPhaseEnter: ({ state, from, to, command, random }): GameEvent[] | void => {
         const core = state.core;
         const events: GameEvent[] = [];
-        const timestamp = now();
+        const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
         // ========== 进入 upkeep 阶段：结算维持阶段触发的状态效果 ==========
         // 规则 §3.1：结算所有在"维持阶段"触发的状态效果或被动能力
@@ -779,7 +778,7 @@ function formatDiceThroneActionEntry({
     events: GameEvent[];
 }): ActionLogEntry | null {
     const core = (state as MatchState<DiceThroneCore>).core;
-    const timestamp = command.timestamp ?? Date.now();
+    const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
     if (command.type === 'PLAY_CARD' || command.type === 'PLAY_UPGRADE_CARD') {
         const cardId = (command.payload as { cardId: string }).cardId;
@@ -949,6 +948,11 @@ export default DiceThroneGame;
 import { registerCardPreviewGetter } from '../../components/game/cardPreviewRegistry';
 import { getDiceThroneCardPreviewRef } from './ui/cardPreviewHelper';
 registerCardPreviewGetter('dicethrone', getDiceThroneCardPreviewRef);
+
+// 注册关键图片解析器
+import { registerCriticalImageResolver } from '../../core';
+import { diceThroneCriticalImageResolver } from './criticalImageResolver';
+registerCriticalImageResolver('dicethrone', diceThroneCriticalImageResolver);
 
 // 导出类型（兼容）
 export type { DiceThroneCore } from './domain';

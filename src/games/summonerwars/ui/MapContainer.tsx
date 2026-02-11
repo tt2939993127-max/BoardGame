@@ -184,7 +184,6 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   // 教程禁用交互时，若没有 panToTarget 则重置地图到默认位置和缩放
   useEffect(() => {
     if (interactionDisabled && !panToTarget) {
-      console.log(`[MapContainer] reset effect: interactionDisabled=${interactionDisabled}, panToTarget=${panToTarget}`);
       setIsAnimating(true);
       setScale(initialScale);
       setPosition({ x: 0, y: 0 });
@@ -198,31 +197,29 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
   useEffect(() => {
-    if (!panToTarget || !contentRef.current || !containerRef.current) {
-      console.log(`[MapContainer] panToTarget effect skipped: panToTarget=${panToTarget}, contentRef=${!!contentRef.current}, containerRef=${!!containerRef.current}`);
-      return;
-    }
-    console.log(`[MapContainer] panToTarget effect triggered: target=${panToTarget}, panToScale=${panToScale}`);
+    if (!panToTarget || !contentRef.current || !containerRef.current) return;
+    // Wait for container/content to be measured by ResizeObserver before calculating pan position.
+    // Without valid sizes, clampPosition won't clamp and the map can fly off to wrong coordinates.
+    // The effect will re-run when sizes become available (clampPosition dep changes).
+    if (!containerSize.width || !containerSize.height || !contentSize.width || !contentSize.height) return;
     // 延迟一帧确保 DOM 已更新（教程步骤切换后元素可能刚挂载）
     const rafId = requestAnimationFrame(() => {
       const el = contentRef.current?.querySelector(`[data-tutorial-id="${panToTarget}"]`);
-      if (!el || !contentRef.current || !containerRef.current) {
-        console.log(`[MapContainer] rAF: element not found for target=${panToTarget}`);
-        return;
-      }
+      if (!el || !contentRef.current || !containerRef.current) return;
 
       const contentEl = contentRef.current;
       const contentW = contentEl.offsetWidth;
       const contentH = contentEl.offsetHeight;
-      if (!contentW || !contentH) {
-        console.log(`[MapContainer] rAF: content size is 0`);
-        return;
-      }
+      if (!contentW || !contentH) return;
 
       const currentScale = scaleRef.current;
       const targetScale = panToScale != null
         ? Math.max(minScale, Math.min(maxScale, panToScale))
         : currentScale;
+
+      // Reset any scroll offset caused by external scrollIntoView before measuring
+      containerRef.current.scrollTop = 0;
+      containerRef.current.scrollLeft = 0;
 
       // 临时重置 transform 为无偏移状态来测量目标的真实 CSS 布局位置
       const savedTransform = contentEl.style.transform;
@@ -248,7 +245,6 @@ export const MapContainer: React.FC<MapContainerProps> = ({
       const targetTy = (contentCenterY - targetCenterY) * targetScale;
 
       const clamped = clampPosition(targetTx, targetTy, targetScale);
-      console.log(`[MapContainer] rAF: targetCenter=(${targetCenterX.toFixed(1)}, ${targetCenterY.toFixed(1)}), contentCenter=(${contentCenterX.toFixed(1)}, ${contentCenterY.toFixed(1)}), targetTx=${targetTx.toFixed(1)}, targetTy=${targetTy.toFixed(1)}, clamped=(${clamped.x.toFixed(1)}, ${clamped.y.toFixed(1)}), targetScale=${targetScale}, currentScale=${currentScale}`);
       setIsAnimating(true);
       if (targetScale !== currentScale) setScale(targetScale);
       setPosition(clamped);

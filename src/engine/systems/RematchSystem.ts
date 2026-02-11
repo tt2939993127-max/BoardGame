@@ -46,8 +46,11 @@ export function createRematchSystem<TCore>(
             },
         }),
 
-        beforeCommand: ({ state, command }): HookResult<TCore> | void => {
+        beforeCommand: ({ state, command, playerIds }): HookResult<TCore> | void => {
             if (command.type === REMATCH_COMMANDS.VOTE_REMATCH) {
+                if (!playerIds.includes(command.playerId)) {
+                    return { halt: true, error: 'player_mismatch' };
+                }
                 return handleVoteRematch(state, command.playerId, allowToggle);
             }
         },

@@ -798,7 +798,7 @@ export function triggerAllUnitsAbilities(
   additionalCtx?: Partial<AbilityContext>
 ): GameEvent[] {
   const events: GameEvent[] = [];
-  const timestamp = Date.now();
+  const timestamp = typeof additionalCtx?.timestamp === 'number' ? additionalCtx.timestamp : 0;
 
   for (let row = 0; row < BOARD_ROWS; row++) {
     for (let col = 0; col < BOARD_COLS; col++) {
@@ -854,12 +854,13 @@ export function calculateEffectiveStrength(
 
   for (const ability of abilities) {
     if (ability.trigger === 'onDamageCalculation' || ability.trigger === 'passive') {
+      const timestamp = 0;
       const ctx: AbilityContext = {
         state,
         sourceUnit: unit,
         sourcePosition: unit.position,
         ownerId: unit.owner,
-        timestamp: Date.now(),
+        timestamp,
       };
 
       // 检查条件

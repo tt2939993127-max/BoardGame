@@ -114,6 +114,10 @@ export class CharacterSelectionSystem {
     createInitialState(playerIds: PlayerId[]): CharacterSelectionState {
         const selectedCharacters: Record<PlayerId, string> = {};
         const readyPlayers: Record<PlayerId, boolean> = {};
+        const configuredHostId = this.config.initialHostId;
+        const resolvedHostId = playerIds.includes(configuredHostId)
+            ? configuredHostId
+            : (playerIds[0] ?? configuredHostId);
 
         for (const pid of playerIds) {
             selectedCharacters[pid] = 'unselected';
@@ -123,7 +127,7 @@ export class CharacterSelectionSystem {
         return {
             selectedCharacters,
             readyPlayers,
-            hostPlayerId: this.config.initialHostId,
+            hostPlayerId: resolvedHostId,
             hostStarted: false,
         };
     }
@@ -180,6 +184,10 @@ export class CharacterSelectionSystem {
             return { valid: false, error: 'character_selection_not_initialized' };
         }
 
+        if (!Object.prototype.hasOwnProperty.call(selection.selectedCharacters, command.playerId)) {
+            return { valid: false, error: 'player_mismatch' };
+        }
+
         // 必须在 setup 阶段
         const currentPhase = state.sys.phase ?? state.sys.flow?.currentPhase;
         if (currentPhase !== this.config.setupPhaseName) {
@@ -201,6 +209,10 @@ export class CharacterSelectionSystem {
         const selection = state.sys.characterSelection;
         if (!selection) {
             return { valid: false, error: 'character_selection_not_initialized' };
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(selection.selectedCharacters, command.playerId)) {
+            return { valid: false, error: 'player_mismatch' };
         }
 
         // 必须在 setup 阶段
@@ -225,6 +237,10 @@ export class CharacterSelectionSystem {
         const selection = state.sys.characterSelection;
         if (!selection) {
             return { valid: false, error: 'character_selection_not_initialized' };
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(selection.selectedCharacters, command.playerId)) {
+            return { valid: false, error: 'player_mismatch' };
         }
 
         // 必须在 setup 阶段

@@ -18,6 +18,8 @@ import type { SummonerWarsCore, BoardUnit, UnitCard, GamePhase } from '../domain
 import type { RandomFn } from '../../../engine/types';
 import { createInitializedCore } from './test-helpers';
 
+const fixedTimestamp = 1000;
+
 // ============================================================================
 // 辅助
 // ============================================================================
@@ -130,7 +132,7 @@ describe('阶段触发技能集成测试 - ABILITY_TRIGGERED 事件 payload 完�
         sourceUnit: unit,
         sourcePosition: { row: testRow, col: testCol },
         ownerId: '0',
-        timestamp: Date.now(),
+        timestamp: fixedTimestamp,
       });
 
       // 所有 ABILITY_TRIGGERED 事件都必须包含 sourcePosition
@@ -273,7 +275,7 @@ describe('全量技能 ABILITY_TRIGGERED 事件 sourcePosition 守卫', () => {
         victimUnit: enemyUnit,
         victimPosition: { row: enemyRow, col: enemyCol },
         diceResults: ['melee', 'melee', 'ranged'],
-        timestamp: Date.now(),
+        timestamp: fixedTimestamp,
       });
 
       // 检查所有 ABILITY_TRIGGERED 事件

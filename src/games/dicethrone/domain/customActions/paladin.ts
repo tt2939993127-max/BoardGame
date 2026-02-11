@@ -13,10 +13,11 @@ import type {
     PreventDamageEvent,
     HealAppliedEvent,
     CpChangedEvent,
+    BonusDieInfo,
 } from '../types';
 import { CP_MAX } from '../types';
 import { buildDrawEvents } from '../deckEvents';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
 
 // ============================================================================
 // 圣骑士技能处理器
@@ -28,6 +29,7 @@ import { registerCustomActionHandler, type CustomActionContext } from '../effect
 function handleHolyLightRoll({ targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext, diceCount: number): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
 
     // 投掷
     const rollResults: { value: number; face: string }[] = [];
@@ -35,6 +37,7 @@ function handleHolyLightRoll({ targetId, sourceAbilityId, state, timestamp, rand
         const value = random.d(6);
         const face = getDieFace(value);
         rollResults.push({ value, face });
+        dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: {
@@ -101,6 +104,11 @@ function handleHolyLightRoll({ targetId, sourceAbilityId, state, timestamp, rand
         });
     }
 
+    // 多骰展示
+    if (diceCount > 1) {
+        events.push(createDisplayOnlySettlement(sourceAbilityId, targetId, targetId, dice, timestamp));
+    }
+
     return events;
 }
 
@@ -118,6 +126,7 @@ function handleHolyLightRoll3(ctx: CustomActionContext): DiceThroneEvent[] {
 function handleHolyDefenseRoll({ targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext, diceCount: number, isLevel3: boolean): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
 
     // 投掷
     const rollResults: { value: number; face: string }[] = [];
@@ -125,6 +134,7 @@ function handleHolyDefenseRoll({ targetId, attackerId, sourceAbilityId, state, t
         const value = random.d(6);
         const face = getDieFace(value);
         rollResults.push({ value, face });
+        dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: {
@@ -197,6 +207,9 @@ function handleHolyDefenseRoll({ targetId, attackerId, sourceAbilityId, state, t
             } as TokenGrantedEvent);
         }
     }
+
+    // 多骰展示
+    events.push(createDisplayOnlySettlement(sourceAbilityId, targetId, targetId, dice, timestamp));
 
     return events;
 }

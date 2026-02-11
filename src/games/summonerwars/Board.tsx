@@ -39,7 +39,9 @@ import { HandArea } from './ui/HandArea';
 import { MagnifyOverlay } from '../../components/common/overlays/MagnifyOverlay';
 import { DiceResultOverlay } from './ui/DiceResultOverlay';
 import { DestroyEffectsLayer, useDestroyEffects } from './ui/DestroyEffect';
-import { BoardEffectsLayer, useBoardEffects, useScreenShake } from './ui/BoardEffects';
+import { useScreenShake } from './ui/BoardEffects';
+import { useFxBus, FxLayer } from '../../engine/fx';
+import { summonerWarsFxRegistry, SW_FX } from './ui/fxSetup';
 import type { Card, BoardUnit, BoardStructure, CellCoord, UnitCard, EventCard, PlayerId } from './domain/types';
 import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
 import { DiscardPileOverlay } from './ui/DiscardPileOverlay';
@@ -103,7 +105,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 教学系统集成
   useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
-  const { isActive: isTutorialActive, currentStep: tutorialStep } = useTutorial();
+  const {
+    isActive: isTutorialActive,
+    currentStep: tutorialStep,
+    isPendingAnimation: isTutorialPendingAnimation,
+    animationComplete: tutorialAnimationComplete,
+  } = useTutorial();
 
   // 教程纯信息步骤时禁止地图拖拽/缩放（防止蓝色高亮框与元素脱节）
   // 有 allowedCommands 或 advanceOnEvents 的步骤需要用户与地图交互，不禁用
@@ -113,9 +120,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     && !(tutorialStep.advanceOnEvents && tutorialStep.advanceOnEvents.length > 0);
 
   // 教程自动平移：当高亮目标在地图内部时，传给 MapContainer 让其自动居中并放大
-  // 地图内部的 tutorial-id：sw-my-summoner, sw-enemy-summoner, sw-my-gate（在 BoardGrid 内）
+  // 地图内部的 tutorial-id：sw-my-summoner, sw-enemy-summoner, sw-my-gate, sw-start-archer（在 BoardGrid 内）
   const MAP_INTERNAL_TARGETS = useMemo(() => new Set([
-    'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate',
+    'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
   ]), []);
   const mapPanTarget = useMemo(() => {
     if (!isTutorialActive || !tutorialStep?.highlightTarget) return null;
@@ -178,6 +185,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     shouldFlipView ? { row: BOARD_ROWS - 1 - coord.row, col: BOARD_COLS - 1 - coord.col } : coord
   ), [shouldFlipView]);
 
+  // 稳定的 getCellPosition 回调（用于特效层，避免内联函数导致子组件重新渲染）
+  const getCellPositionWithView = useCallback((row: number, col: number) => {
+    const vc = shouldFlipView
+      ? { row: BOARD_ROWS - 1 - row, col: BOARD_COLS - 1 - col }
+      : { row, col };
+    return getCellPosition(vc.row, vc.col, currentGrid);
+  }, [shouldFlipView, currentGrid]);
+
   const myMagic = core.players[myPlayerId]?.magic ?? 0;
   const opponentMagic = core.players[opponentPlayerId]?.magic ?? 0;
   const myDeckCount = core.players[myPlayerId]?.deck?.length ?? 0;
@@ -209,8 +224,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 摧毁效果
   const { effects: destroyEffects, pushEffect: pushDestroyEffect, removeEffect: removeDestroyEffect } = useDestroyEffects();
-  // 棋盘特效
-  const { effects: boardEffects, pushEffect: pushBoardEffect, removeEffect: removeBoardEffect } = useBoardEffects();
+  // FX 系统（替代原 useBoardEffects）
+  const fxBus = useFxBus(summonerWarsFxRegistry);
   // 全屏震动
   const { shakeStyle, triggerShake } = useScreenShake();
 
@@ -220,9 +235,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const pendingRangedDamagesRef = useRef<Array<{ position: CellCoord; damage: number }>>([]);
   // 远程攻击气浪到达后是否需要震动
   const pendingRangedShakeRef = useRef(false);
-  // 用 ref 持有 boardEffects 以便在回调中查找效果类型（避免闭包过期）
-  const boardEffectsRef = useRef(boardEffects);
-  boardEffectsRef.current = boardEffects;
   const destroyingCells = useMemo(() => {
     const next = new Set<string>();
     destroyEffects.forEach(effect => {
@@ -236,7 +248,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     attacker: CellCoord; target: CellCoord; hits: number;
   } | null>(null);
 
-  // 事件流消费 Hook
+  // 事件流消费 Hook（回调函数在 hook 内部通过 ref 稳定化，无需外部包装）
   const {
     diceResult,
     dyingEntities,
@@ -248,9 +260,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     clearPendingAttack, flushPendingDestroys,
   } = useGameEvents({
     G, core, myPlayerId,
-    pushDestroyEffect: (data) => pushDestroyEffect(data),
-    pushBoardEffect: (data) => pushBoardEffect(data as Parameters<typeof pushBoardEffect>[0]),
-    triggerShake: (intensity, type) => triggerShake(intensity as 'normal' | 'strong', type as 'impact' | 'hit'),
+    pushDestroyEffect,
+    fxBus,
+    triggerShake,
     onDestroySound: (type, isGate) => {
       playSound(type === 'structure' ? resolveStructureDestroySound(!!isGate) : COMBAT_UNIT_DESTROY_KEY);
     },
@@ -291,14 +303,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         pendingRangedShakeRef.current = attackSnapshot.hits >= 3;
         // 远程攻击音：气浪发射时播放
         playSound(resolveRangedAttackSound());
-        pushBoardEffect({ type: 'shockwave', position: attackSnapshot.target, sourcePosition: attackSnapshot.attacker, intensity: hitIntensity, attackType: attackSnapshot.attackType });
-        // 伤害特效和 flushPendingDestroys 由 handleBoardEffectComplete 在气浪完成时触发
+        fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: attackSnapshot.target, intensity: hitIntensity }, { attackType: attackSnapshot.attackType, source: attackSnapshot.attacker });
+        // 伤害特效和 flushPendingDestroys 由 handleFxComplete 在气浪完成时触发
       }, 180);
     } else {
       // 近战攻击：启动卡牌本体碰撞动画
       setAttackAnimState({ attacker: pending.attacker, target: pending.target, hits: pending.hits });
     }
-  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, pushBoardEffect]);
+  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, fxBus]);
 
   // 近战攻击命中回调（卡牌冲到目标时触发，播放伤害特效 + 音效）
   const handleAttackHit = useCallback(() => {
@@ -309,15 +321,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     // 近战攻击音：冲到目标时播放
     const attackerUnit = core.board[pending.attacker.row]?.[pending.attacker.col]?.unit;
     playSound(resolveMeleeAttackSound(attackerUnit?.card.unitClass));
-    pushBoardEffect({ type: 'shockwave', position: pending.target, sourcePosition: pending.attacker, intensity: hitIntensity, attackType: pending.attackType });
+    fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: pending.target, intensity: hitIntensity }, { attackType: pending.attackType, source: pending.attacker });
     for (const dmg of pending.damages) {
       // 受伤音：受击特效触发时播放
       const dmgSound = resolveDamageSound(dmg.damage);
       if (dmgSound) playSound(dmgSound);
-      pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
+      fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage });
     }
     if (pending.hits >= 3) triggerShake('normal', 'hit');
-  }, [pendingAttackRef, pushBoardEffect, triggerShake, core.board]);
+  }, [pendingAttackRef, fxBus, triggerShake, core.board]);
 
   // 近战攻击回弹完成回调（卡牌回到原位后触发，flush 摧毁效果）
   const handleAttackReturn = useCallback(() => {
@@ -326,24 +338,26 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     setAttackAnimState(null);
   }, [clearPendingAttack, flushPendingDestroys]);
 
-  // 棋盘特效完成回调：远程气浪到达目标时播放伤害特效 + flush 摧毁
-  const handleBoardEffectComplete = useCallback((id: string) => {
-    const effect = boardEffectsRef.current.find(e => e.id === id);
-    if (waitingForShockwaveRef.current && effect?.type === 'shockwave') {
+  // FX 特效完成回调：远程气浪到达目标时播放伤害特效 + flush 摧毁
+  const handleFxComplete = useCallback((id: string, cue: string) => {
+    if (waitingForShockwaveRef.current && cue === SW_FX.COMBAT_SHOCKWAVE) {
       waitingForShockwaveRef.current = false;
       // 气浪到达目标：播放伤害特效 + 受伤音
       for (const dmg of pendingRangedDamagesRef.current) {
         const dmgSound = resolveDamageSound(dmg.damage);
         if (dmgSound) playSound(dmgSound);
-        pushBoardEffect({ type: 'damage', position: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal', damageAmount: dmg.damage });
+        fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage });
       }
       if (pendingRangedShakeRef.current) triggerShake('normal', 'hit');
       pendingRangedDamagesRef.current = [];
       pendingRangedShakeRef.current = false;
       flushPendingDestroys();
     }
-    removeBoardEffect(id);
-  }, [removeBoardEffect, flushPendingDestroys, pushBoardEffect, triggerShake]);
+    // 召唤/攻击动画完成时，通知教程系统
+    if (isTutorialPendingAnimation && (cue === SW_FX.SUMMON || cue === SW_FX.COMBAT_SHOCKWAVE)) {
+      tutorialAnimationComplete();
+    }
+  }, [flushPendingDestroys, fxBus, triggerShake, isTutorialPendingAnimation, tutorialAnimationComplete]);
 
   // 卡牌放大
   const handleMagnifyCard = useCallback((card: Card) => {
@@ -584,20 +598,22 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                       {/* 摧毁效果层 */}
                       <DestroyEffectsLayer
                         effects={destroyEffects}
-                        getCellPosition={(row, col) => {
-                          const vc = toViewCoord({ row, col });
-                          return getCellPosition(vc.row, vc.col, currentGrid);
-                        }}
+                        getCellPosition={getCellPositionWithView}
                         onEffectComplete={removeDestroyEffect}
                       />
-                      {/* 棋盘特效层 */}
-                      <BoardEffectsLayer
-                        effects={boardEffects}
-                        getCellPosition={(row, col) => {
-                          const vc = toViewCoord({ row, col });
-                          return getCellPosition(vc.row, vc.col, currentGrid);
+                      {/* 召唤暗角遮罩 */}
+                      <div
+                        className="absolute inset-0 z-10 pointer-events-none transition-opacity duration-300"
+                        style={{
+                          background: 'radial-gradient(circle, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.5) 60%, rgba(0,0,0,0.7) 100%)',
+                          opacity: fxBus.activeEffects.some(e => e.cue === SW_FX.SUMMON) ? 1 : 0,
                         }}
-                        onEffectComplete={handleBoardEffectComplete}
+                      />
+                      {/* FX 特效层 */}
+                      <FxLayer
+                        bus={fxBus}
+                        getCellPosition={getCellPositionWithView}
+                        onEffectComplete={handleFxComplete}
                       />
                     </div>
                   </div>

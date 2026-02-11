@@ -100,12 +100,14 @@ export function createPendingDamage(
     targetPlayerId: PlayerId,
     damage: number,
     responseType: 'beforeDamageDealt' | 'beforeDamageReceived',
-    sourceAbilityId?: string
+    sourceAbilityId: string | undefined,
+    timestamp: number = 0
 ): PendingDamage {
     const responderId = responseType === 'beforeDamageDealt' ? sourcePlayerId : targetPlayerId;
+    const normalizedSource = sourceAbilityId ?? 'none';
     
     return {
-        id: `damage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: `damage-${timestamp}-${sourcePlayerId}-${targetPlayerId}-${normalizedSource}-${damage}`,
         sourcePlayerId,
         targetPlayerId,
         originalDamage: damage,
@@ -121,13 +123,14 @@ export function createPendingDamage(
  * 生成 Token 响应请求事件
  */
 export function createTokenResponseRequestedEvent(
-    pendingDamage: PendingDamage
+    pendingDamage: PendingDamage,
+    timestamp: number = 0
 ): TokenResponseRequestedEvent {
     return {
         type: 'TOKEN_RESPONSE_REQUESTED',
         payload: { pendingDamage },
         sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: Date.now(),
+        timestamp,
     };
 }
 
@@ -248,7 +251,8 @@ export function processTokenUsage(
     playerId: PlayerId,
     amount: number,
     random?: RandomFn,
-    responseType?: 'beforeDamageDealt' | 'beforeDamageReceived'
+    responseType?: 'beforeDamageDealt' | 'beforeDamageReceived',
+    timestamp: number = 0
 ): { events: DiceThroneEvent[]; result: TokenEffectResult; newTokenAmount: number } {
     const events: DiceThroneEvent[] = [];
     const player = state.players[playerId];
@@ -308,7 +312,7 @@ export function processTokenUsage(
             evasionRoll: result.rollResult,
         },
         sourceCommandType: 'USE_TOKEN',
-        timestamp: Date.now(),
+        timestamp,
     };
     events.push(event);
     
@@ -325,10 +329,10 @@ export function processTokenUsage(
  */
 export function finalizeTokenResponse(
     pendingDamage: PendingDamage,
-    state: DiceThroneCore
+    state: DiceThroneCore,
+    timestamp: number = 0
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
-    const timestamp = Date.now();
     
     // 生成响应关闭事件
     const closeEvent: TokenResponseClosedEvent = {

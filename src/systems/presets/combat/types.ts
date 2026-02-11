@@ -6,7 +6,7 @@
  */
 
 import type { EffectAction } from '../../TokenSystem/types';
-import type { TriggerCondition, EffectCondition } from './conditions.ts';
+import type { TriggerCondition, EffectCondition } from './conditions';
 
 // ============================================================================
 // 效果触发时机（战斗类游戏预设）

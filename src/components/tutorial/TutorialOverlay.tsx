@@ -1,6 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTutorial } from '../../contexts/TutorialContext';
+import { playSound } from '../../lib/audio/useGameAudio';
+
+/** Check if an element is inside an overflow:hidden ancestor (before the viewport root). */
+function hasOverflowHiddenAncestor(el: Element): boolean {
+    let parent = el.parentElement;
+    while (parent && parent !== document.documentElement) {
+        const overflow = getComputedStyle(parent).overflow;
+        if (overflow === 'hidden') return true;
+        parent = parent.parentElement;
+    }
+    return false;
+}
 
 export const TutorialOverlay: React.FC = () => {
     const { isActive, currentStep, nextStep, isLastStep } = useTutorial();
@@ -9,74 +21,198 @@ export const TutorialOverlay: React.FC = () => {
         : undefined;
     const namespaces = stepNamespace ? ['tutorial', stepNamespace] : ['tutorial'];
     const { t } = useTranslation(namespaces);
-    const stepPosition = currentStep?.position;
     const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
     const lastStepIdRef = useRef<string | null>(null);
     const hasAutoScrolledRef = useRef(false);
+    const [positionedStepId, setPositionedStepId] = useState<string | null>(null);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    const [viewport, setViewport] = useState(() => ({
+        width: typeof window !== 'undefined' ? window.innerWidth : 0,
+        height: typeof window !== 'undefined' ? window.innerHeight : 0,
+    }));
 
-    // 更新高亮位置
+    const [tooltipStyles, setTooltipStyles] = useState<{
+        style: React.CSSProperties,
+        arrowClass: string
+    }>({ style: {}, arrowClass: '' });
+
+    // 响应窗口尺寸变化，确保遮罩与提示框重新计算
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const handleResize = () => {
+            setViewport((prev) => {
+                const next = { width: window.innerWidth, height: window.innerHeight };
+                if (prev.width === next.width && prev.height === next.height) return prev;
+                return next;
+            });
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // 统一布局 effect：找元素 + 算位置在同一个回调里完成，不会有过期数据
     useEffect(() => {
         if (!isActive || !currentStep) return;
 
-        if (lastStepIdRef.current !== currentStep.id) {
-            lastStepIdRef.current = currentStep.id;
+        const stepId = currentStep.id;
+        const highlightTarget = currentStep.highlightTarget;
+        const position = currentStep.position;
+        const viewportWidth = viewport.width || window.innerWidth;
+        const viewportHeight = viewport.height || window.innerHeight;
+
+        if (lastStepIdRef.current !== stepId) {
+            lastStepIdRef.current = stepId;
             hasAutoScrolledRef.current = false;
+            setTargetRect(null);
+            setPositionedStepId(null);
         }
 
         let resizeObserver: ResizeObserver | null = null;
         let rafId: number | null = null;
 
-        const updateRect = () => {
-            if (currentStep.highlightTarget) {
-                const el = document.querySelector(`[data-tutorial-id="${currentStep.highlightTarget}"]`) ||
-                    document.getElementById(currentStep.highlightTarget);
+        /** 从 DOMRect 直接算出提示框位置，和 targetRect 一起原子更新 */
+        const applyLayout = (rect: DOMRect | null) => {
+            // 1. 更新高亮区域
+            setTargetRect(prev => {
+                if (!rect) return null;
+                if (prev && Math.abs(prev.top - rect.top) < 0.5 && Math.abs(prev.left - rect.left) < 0.5
+                    && Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5) {
+                    return prev;
+                }
+                return rect;
+            });
 
+            // 2. 计算提示框位置
+            const isCenterPosition = position === 'center';
+            if (!rect || isCenterPosition) {
+                setTooltipStyles({
+                    style: { position: 'fixed', bottom: '10%', left: '50%', transform: 'translateX(-50%)', zIndex: 100 },
+                    arrowClass: 'hidden'
+                });
+                setPositionedStepId(stepId);
+                return;
+            }
+
+            const padding = 12;
+            const tooltipWidth = 280;
+            // 用实际 DOM 尺寸，首次渲染前 fallback 到估算值
+            const measured = tooltipRef.current?.getBoundingClientRect();
+            const tooltipHeight = measured ? measured.height : 160;
+            const actualTooltipWidth = measured ? measured.width : tooltipWidth;
+
+            const spaceRight = viewportWidth - rect.right;
+            const spaceLeft = rect.left;
+            const spaceBottom = viewportHeight - rect.bottom;
+
+            let pos: 'right' | 'left' | 'bottom' | 'top';
+            if (position) {
+                pos = position;
+            } else if (spaceRight > tooltipWidth + 20) {
+                pos = 'right';
+            } else if (spaceLeft > tooltipWidth + 20) {
+                pos = 'left';
+            } else if (spaceBottom > tooltipHeight + 20) {
+                pos = 'bottom';
+            } else {
+                pos = 'top';
+            }
+
+            const styles: React.CSSProperties = { position: 'fixed', zIndex: 100 };
+            let arrow = '';
+            switch (pos) {
+                case 'right':
+                    styles.left = rect.right + padding;
+                    styles.top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+                    arrow = '-left-[6px] top-[40px] border-b border-l';
+                    break;
+                case 'left':
+                    styles.left = rect.left - actualTooltipWidth - padding;
+                    styles.top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
+                    arrow = '-right-[6px] top-[40px] border-t border-r';
+                    break;
+                case 'bottom':
+                    styles.top = rect.bottom + padding;
+                    styles.left = rect.left + (rect.width / 2) - (actualTooltipWidth / 2);
+                    arrow = '-top-[6px] left-1/2 -translate-x-1/2 border-t border-l';
+                    break;
+                case 'top':
+                    styles.top = rect.top - tooltipHeight - padding;
+                    styles.left = rect.left + (rect.width / 2) - (actualTooltipWidth / 2);
+                    arrow = '-bottom-[6px] left-1/2 -translate-x-1/2 border-b border-r';
+                    break;
+            }
+
+            // 防遮挡：确保 tooltip 不覆盖高亮目标区域
+            if (typeof styles.top === 'number') {
+                const tooltipBottom = styles.top + tooltipHeight;
+                const tooltipTop = styles.top;
+                if (pos === 'top' && tooltipBottom > rect.top - padding) {
+                    // tooltip 底部侵入目标区域，往上推
+                    styles.top = rect.top - tooltipHeight - padding;
+                }
+                if (pos === 'bottom' && tooltipTop < rect.bottom + padding) {
+                    styles.top = rect.bottom + padding;
+                }
+            }
+
+            const arrowBase = 'bg-white w-4 h-4 absolute rotate-45 border-gray-100 z-0';
+            const safeMargin = 8;
+            // 视口边界约束（上下都限制，防止全屏高亮目标把 tooltip 推到屏幕外）
+            if (typeof styles.top === 'number') {
+                const maxTop = viewportHeight - tooltipHeight - safeMargin;
+                styles.top = Math.max(safeMargin, Math.min(styles.top as number, maxTop));
+            }
+            if (typeof styles.left === 'number') {
+                styles.left = Math.max(safeMargin, Math.min(styles.left as number, viewportWidth - actualTooltipWidth - safeMargin));
+            }
+            const topValue = typeof styles.top === 'number' ? styles.top : safeMargin;
+            styles.maxHeight = viewportHeight - topValue - safeMargin;
+
+            setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
+            setPositionedStepId(stepId);
+        };
+
+        const updateLayout = () => {
+            if (highlightTarget) {
+                const el = document.querySelector(`[data-tutorial-id="${highlightTarget}"]`) ||
+                    document.getElementById(highlightTarget);
                 if (el) {
                     const rect = el.getBoundingClientRect();
-                    setTargetRect(prev => {
-                        // 只在位置/尺寸实际变化时更新，避免无意义的重渲染
-                        if (prev && Math.abs(prev.top - rect.top) < 0.5 && Math.abs(prev.left - rect.left) < 0.5
-                            && Math.abs(prev.width - rect.width) < 0.5 && Math.abs(prev.height - rect.height) < 0.5) {
-                            return prev;
-                        }
-                        return rect;
-                    });
-
+                    applyLayout(rect);
                     if (!hasAutoScrolledRef.current) {
-                        // 使用宽松的视口检测（允许边缘溢出 50px），避免对底部手牌区等
-                        // 故意贴边/微溢出的元素触发 scrollIntoView 导致布局抖动
                         const tolerance = 50;
-                        const inView = rect.top >= -tolerance
-                            && rect.left >= -tolerance
-                            && rect.bottom <= window.innerHeight + tolerance
-                            && rect.right <= window.innerWidth + tolerance;
-                        if (!inView) {
+                        const inView = rect.top >= -tolerance && rect.left >= -tolerance
+                            && rect.bottom <= viewportHeight + tolerance
+                            && rect.right <= viewportWidth + tolerance;
+                        // Only scrollIntoView if the element is NOT inside an overflow:hidden
+                        // ancestor. Those containers (e.g. transform-based map panning) manage
+                        // their own visibility; scrollIntoView would produce an unwanted
+                        // scrollTop offset that conflicts with CSS transform positioning.
+                        if (!inView && !hasOverflowHiddenAncestor(el)) {
                             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }
                         hasAutoScrolledRef.current = true;
                     }
-
                     if (!resizeObserver) {
-                        resizeObserver = new ResizeObserver(() => updateRect());
+                        resizeObserver = new ResizeObserver(() => updateLayout());
                         resizeObserver.observe(el);
                     }
                 } else {
-                    setTargetRect(null);
+                    applyLayout(null);
                 }
             } else {
-                setTargetRect(null);
+                applyLayout(null);
             }
         };
 
-        // rAF 轮询：持续追踪高亮目标位置（应对地图 transform 动画等场景）
-        // 降频到约 10fps 避免每帧强制布局计算导致的微抖动
+        // rAF 轮询（~10fps）：追踪元素位置变化（transform 动画等）
         let lastPollTime = 0;
-        const POLL_INTERVAL = 100; // ms
+        const POLL_INTERVAL = 100;
         const poll = () => {
             const now = performance.now();
             if (now - lastPollTime >= POLL_INTERVAL) {
                 lastPollTime = now;
-                updateRect();
+                updateLayout();
             }
             rafId = requestAnimationFrame(poll);
         };
@@ -86,113 +222,21 @@ export const TutorialOverlay: React.FC = () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             resizeObserver?.disconnect();
         };
-    }, [isActive, currentStep]);
+    }, [currentStep, isActive, viewport.height, viewport.width]);
 
-    // 提示框位置和箭头样式的状态
-    const [tooltipStyles, setTooltipStyles] = useState<{
-        style: React.CSSProperties,
-        arrowClass: string
-    }>({ style: {}, arrowClass: '' });
-
-    // 根据目标矩形计算布局
-    useEffect(() => {
-        const isCenterPosition = stepPosition === 'center';
-        if (!targetRect || isCenterPosition) {
-            // 默认：底部居中
-            setTooltipStyles({
-                style: {
-                    position: 'fixed',
-                    bottom: '10%',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 100
-                },
-                arrowClass: 'hidden'
-            });
-            return;
-        }
-
-        const padding = 12; // 目标与提示框间距
-        const tooltipWidth = 280; // 估计宽度
-        const tooltipHeight = 160; // 估计高度
-
-        // 优先级逻辑：右 -> 左 -> 下 -> 上
-        const spaceRight = window.innerWidth - targetRect.right;
-        const spaceLeft = targetRect.left;
-        const spaceBottom = window.innerHeight - targetRect.bottom;
-
-        let pos: 'right' | 'left' | 'bottom' | 'top';
-
-        if (stepPosition) {
-            pos = stepPosition;
-        } else if (spaceRight > tooltipWidth + 20) {
-            pos = 'right';
-        } else if (spaceLeft > tooltipWidth + 20) {
-            pos = 'left';
-        } else if (spaceBottom > tooltipHeight + 20) {
-            pos = 'bottom';
-        } else {
-            pos = 'top';
-        }
-
-        // 计算具体坐标
-        const styles: React.CSSProperties = {
-            position: 'fixed',
-            zIndex: 100,
-        };
-        let arrow = '';
-
-        switch (pos) {
-            case 'right':
-                styles.left = targetRect.right + padding;
-                styles.top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 3);
-                arrow = '-left-[6px] top-[40px] border-b border-l'; // 左箭头指向右侧
-                break;
-            case 'left':
-                styles.left = targetRect.left - tooltipWidth - padding;
-                styles.top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 3);
-                arrow = '-right-[6px] top-[40px] border-t border-r'; // 右箭头指向左侧
-                break;
-            case 'bottom':
-                styles.top = targetRect.bottom + padding;
-                styles.left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
-                arrow = '-top-[6px] left-1/2 -translate-x-1/2 border-t border-l'; // 上箭头指向下侧
-                break;
-            case 'top':
-                styles.top = targetRect.top - tooltipHeight - padding;
-                styles.left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
-                arrow = '-bottom-[6px] left-1/2 -translate-x-1/2 border-b border-r'; // 下箭头指向上侧
-                break;
-        }
-
-        // 为旋转的方形箭头添加通用基础类
-        const arrowBase = "bg-white w-4 h-4 absolute rotate-45 border-gray-100 z-0";
-
-        // 视口边界约束：确保提示框不会溢出视口
-        const safeMargin = 8;
-        if (typeof styles.top === 'number') {
-            // 不依赖估算高度，直接确保 top 不会太低
-            // 提示框有 max-height: calc(100vh - top - margin) 的 CSS 约束
-            styles.top = Math.max(safeMargin, Math.min(styles.top as number, window.innerHeight - safeMargin - 120));
-        }
-        if (typeof styles.left === 'number') {
-            styles.left = Math.max(safeMargin, Math.min(styles.left as number, window.innerWidth - tooltipWidth - safeMargin));
-        }
-
-        // 计算提示框最大高度，确保不溢出视口底部
-        const topValue = typeof styles.top === 'number' ? styles.top : safeMargin;
-        styles.maxHeight = window.innerHeight - topValue - safeMargin;
-        setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
-
-    }, [targetRect, stepPosition]);
-
-    if (!isActive || !currentStep) return null;
+    if (!isActive || !currentStep) {
+        return null;
+    }
 
     // 在智能回合期间不显示遮罩层 - 让智能方静默移动
-    if (currentStep.aiActions && currentStep.aiActions.length > 0) return null;
+    if (currentStep.aiActions && currentStep.aiActions.length > 0) {
+        return null;
+    }
 
     // 矢量路径用于带孔洞的遮罩
-    let maskPath = `M0 0 h${window.innerWidth} v${window.innerHeight} h-${window.innerWidth} z`;
+    const viewportWidth = viewport.width || window.innerWidth;
+    const viewportHeight = viewport.height || window.innerHeight;
+    let maskPath = `M0 0 h${viewportWidth} v${viewportHeight} h-${viewportWidth} z`;
     if (targetRect) {
         // 逆时针矩形用于创建挖空效果（偶奇填充规则）
         const { left, top, right, bottom } = targetRect;
@@ -236,24 +280,28 @@ export const TutorialOverlay: React.FC = () => {
 
             {/* 提示框弹窗 - requireAction 时不拦截点击，让用户与游戏 UI 交互 */}
             <div
-                className={`${currentStep.requireAction ? 'pointer-events-none' : 'pointer-events-auto'} flex flex-col items-center absolute`}
-                style={{ ...tooltipStyles.style, overflow: 'hidden' }}
+                ref={tooltipRef}
+                className={`${currentStep.requireAction ? 'pointer-events-none' : 'pointer-events-auto'} flex flex-col items-center absolute transition-opacity duration-150`}
+                style={{ ...tooltipStyles.style, opacity: positionedStepId === currentStep.id ? 1 : 0 }}
             >
                 {/* 样式三角箭头 */}
                 <div className={`absolute w-0 h-0 border-solid ${tooltipStyles.arrowClass}`} />
 
                 {/* 内容卡片 */}
-                <div className="bg-[#fcfbf9] rounded-sm shadow-[0_8px_30px_rgba(67,52,34,0.12)] p-5 border border-[#e5e0d0] max-w-sm w-72 animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col" style={{ maxHeight: 'inherit', overflow: 'hidden' }}>
+                <div className="bg-[#fcfbf9] rounded-sm shadow-[0_8px_30px_rgba(67,52,34,0.12)] p-5 border border-[#e5e0d0] max-w-sm w-72 animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col" style={{ maxHeight: 'inherit' }}>
                     {/* 装饰性边角（右上）*/}
                     <div className="absolute top-1.5 right-1.5 w-2 h-2 border-t border-r border-[#c0a080] opacity-40" />
 
-                    <div className="text-[#433422] font-bold text-lg mb-4 leading-relaxed text-left overflow-y-auto flex-1 min-h-0">
+                    <div className="text-[#433422] font-bold text-lg mb-4 leading-relaxed text-left overflow-y-auto flex-1 min-h-0 whitespace-pre-line">
                         {t(currentStep.content)}
                     </div>
 
                     {!currentStep.requireAction && (
                         <button
-                            onClick={() => nextStep('manual')}
+                            onClick={() => {
+                                playSound('ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.buttons.tab_switching_button.uiclick_tab_switching_button_01_krst_none');
+                                nextStep('manual');
+                            }}
                             className="w-full py-2 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center text-center relative z-10 pointer-events-auto"
                         >
                             {isLastStep ? t('overlay.finish') : t('overlay.next')}

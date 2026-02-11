@@ -136,7 +136,8 @@ export class ConditionRegistry {
     this.register('always', () => true);
 
     this.register('attribute', (cond: AttributeCondition, ctx) => {
-      const entityId = cond.entityId ?? ctx.defaultEntityId ?? '';
+      const entityId = cond.entityId ?? ctx.defaultEntityId;
+      if (!entityId) return false;
       const value = ctx.getAttribute(entityId, cond.attrId);
       switch (cond.op) {
         case '<': return value < cond.value;
@@ -148,13 +149,15 @@ export class ConditionRegistry {
     });
 
     this.register('hasTag', (cond: HasTagCondition, ctx) => {
-      const entityId = cond.entityId ?? ctx.defaultEntityId ?? '';
+      const entityId = cond.entityId ?? ctx.defaultEntityId;
+      if (!entityId) return false;
       const stacks = ctx.getTagStacks(entityId, cond.tagId);
       return stacks >= (cond.minStacks ?? 1);
     });
 
     this.register('hasAnyTagMatching', (cond: HasAnyTagMatchingCondition, ctx) => {
-      const entityId = cond.entityId ?? ctx.defaultEntityId ?? '';
+      const entityId = cond.entityId ?? ctx.defaultEntityId;
+      if (!entityId) return false;
       return ctx.hasAnyTagMatching(entityId, cond.pattern);
     });
 

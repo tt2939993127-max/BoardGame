@@ -140,7 +140,7 @@ export function createSeededRandom(seed: string): RandomFn {
         x ^= x >> 17;
         x ^= y ^ (y >> 26);
         s1 = x;
-        return ((x + y) >>> 0) / 0xffffffff;
+        return ((x + y) >>> 0) / 0x100000000;
     };
 
     return {

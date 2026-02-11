@@ -39,7 +39,7 @@ const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinge
 
 const MAGIC_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
 const MAGIC_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
-const SUMMON_KEY = 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a';
+const SUMMON_KEY = 'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_06_krst';
 const MOVE_FALLBACK_KEY = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.armor_movement_h';
 const FACTION_MOVE_KEYS: Record<string, string[]> = {
     necromancer: [

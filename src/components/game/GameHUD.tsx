@@ -182,6 +182,10 @@ export const GameHUD = ({
     }, [isChatPanelOpen]);
 
     useEffect(() => {
+        setUnreadChatCount(0);
+    }, [matchId]);
+
+    useEffect(() => {
         if (!isOnline || !matchId) return;
 
         matchSocket.joinChat(matchId);

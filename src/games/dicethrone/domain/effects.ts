@@ -25,6 +25,8 @@ import type {
     DamageShieldGrantedEvent,
     PreventDamageEvent,
     CpChangedEvent,
+    BonusDieInfo,
+    BonusDiceRerollRequestedEvent,
 } from './types';
 import { CP_MAX } from './types';
 import { buildDrawEvents } from './deckEvents';
@@ -47,6 +49,8 @@ export interface EffectContext {
     damageDealt: number;
     /** 额外伤害累加器（用于 rollDie 的 bonusDamage 累加） */
     accumulatedBonusDamage?: number;
+    /** 事件时间戳（来自命令或阶段推进） */
+    timestamp?: number;
 }
 
 // ============================================================================
@@ -162,6 +166,43 @@ export function getCustomActionMeta(actionId: string): CustomActionMeta | undefi
 export function isCustomActionCategory(actionId: string, category: CustomActionCategory): boolean {
     const meta = customActionRegistry.get(actionId)?.meta;
     return meta?.categories.includes(category) ?? false;
+}
+
+// ============================================================================
+// 多骰展示辅助函数
+// ============================================================================
+
+/**
+ * 创建仅用于展示的多骰结算事件
+ * 伤害/治疗/状态已由 custom action 处理，此事件仅触发 UI 展示多骰结果
+ */
+export function createDisplayOnlySettlement(
+    sourceAbilityId: string,
+    actingPlayerId: PlayerId,
+    targetId: PlayerId,
+    dice: BonusDieInfo[],
+    timestamp: number,
+): BonusDiceRerollRequestedEvent {
+    return {
+        type: 'BONUS_DICE_REROLL_REQUESTED',
+        payload: {
+            settlement: {
+                id: `${sourceAbilityId}-display-${timestamp}`,
+                sourceAbilityId,
+                attackerId: actingPlayerId,
+                targetId,
+                dice,
+                rerollCostTokenId: '',
+                rerollCostAmount: 0,
+                rerollCount: 0,
+                maxRerollCount: 0,
+                readyToSettle: false,
+                displayOnly: true,
+            },
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as BonusDiceRerollRequestedEvent;
 }
 
 // ============================================================================
@@ -294,7 +335,7 @@ function resolveEffectAction(
     sfxKey?: string
 ): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
-    const timestamp = Date.now();
+    const timestamp = ctx.timestamp ?? 0;
     const { attackerId, defenderId, sourceAbilityId, state } = ctx;
     const targetId = action.target === 'self' ? attackerId : defenderId;
 
@@ -332,9 +373,10 @@ function resolveEffectAction(
                     targetId,
                     totalValue,
                     responseType,
-                    sourceAbilityId
+                    sourceAbilityId,
+                    timestamp
                 );
-                const tokenResponseEvent = createTokenResponseRequestedEvent(pendingDamage);
+                const tokenResponseEvent = createTokenResponseRequestedEvent(pendingDamage, timestamp);
                 events.push(tokenResponseEvent);
                 // 不在这里生成 DAMAGE_DEALT，等待 Token 响应完成后再生成
                 break;
@@ -470,6 +512,7 @@ function resolveEffectAction(
             // 投掷骰子效果：投掷并根据结果触发条件效果
             if (!random || !action.conditionalEffects) break;
             const diceCount = action.diceCount ?? 1;
+            const rollDice: BonusDieInfo[] = [];
             if (sourceAbilityId === 'taiji-combo') {
                 const abilityLevel = state.players[attackerId]?.abilityLevels?.['taiji-combo'] ?? 'unknown';
                 console.log(
@@ -480,6 +523,7 @@ function resolveEffectAction(
             for (let i = 0; i < diceCount; i++) {
                 const value = random.d(6);
                 const face = getDieFace(value);
+                rollDice.push({ index: i, value, face });
 
                 // 查找匹配的条件效果
                 const matchedEffect = action.conditionalEffects.find(e => e.face === face);
@@ -505,6 +549,11 @@ function resolveEffectAction(
                 if (matchedEffect) {
                     events.push(...resolveConditionalEffect(matchedEffect, ctx, targetId, sourceAbilityId, timestamp, sfxKey));
                 }
+            }
+
+            // 多骰展示
+            if (diceCount > 1) {
+                events.push(createDisplayOnlySettlement(sourceAbilityId, targetId, targetId, rollDice, timestamp));
             }
             break;
         }

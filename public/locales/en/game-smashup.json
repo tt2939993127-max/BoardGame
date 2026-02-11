@@ -10,6 +10,11 @@
     "draw": "Draw",
     "endTurn": "End"
   },
+  "error": {
+    "tutorial_manifest_invalid": "Tutorial configuration is invalid",
+    "tutorial_command_blocked": "This action is blocked in the tutorial",
+    "tutorial_step_locked": "The current step cannot be skipped"
+  },
   "ui": {
     "turn": "Turn",
     "you": "YOU",

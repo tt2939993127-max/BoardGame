@@ -66,6 +66,16 @@
     "backHome": "Return Home",
     "footer": "BordGame System"
   },
+  "maintenance": {
+    "seoTitle": "System Maintenance",
+    "seoDescription": "We are currently upgrading our systems. Please check back soon.",
+    "title": "System Maintenance",
+    "subtitle": "The hall is under repair",
+    "description": "We are performing essential upgrades to ensure a more stable magic connection. Please take a short break and return later.",
+    "note": "Our scribes are rewriting the scrolls. Please check back soon.",
+    "backHome": "Try returning home",
+    "status": "Status: 503 Service Unavailable"
+  },
   "game_names": {
     "tictactoe": "Tic-Tac-Toe",
     "dicethrone": "Dice Throne",

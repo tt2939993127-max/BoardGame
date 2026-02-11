@@ -27,6 +27,7 @@ import { ConeBlast } from '../../components/common/animations/ConeBlast';
 import { DamageFlash } from '../../components/common/animations/DamageFlash';
 import { RiftSlash, useRiftSlash, RIFT_PRESETS } from '../../components/common/animations/RiftSlash';
 import { ShatterEffect } from '../../components/common/animations/ShatterEffect';
+import { VortexShaderEffect } from '../../components/common/animations/VortexShaderEffect';
 import { getOptimizedImageUrls } from '../../core/AssetLoader';
 import { getSpriteAtlasStyle, CARDS_ATLAS } from '../../games/summonerwars/ui/cardAtlas';
 import {
@@ -714,6 +715,45 @@ const SummonCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true 
   );
 };
 
+/** 充能旋涡 */
+const VortexCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
+  const [active, setActive] = useState(false);
+  const [isStrong, setIsStrong] = useState(false);
+  const [colorTheme, setColorTheme] = useState<'blue' | 'purple' | 'green'>('blue');
+  const { stats, startMeasure } = usePerfCounter();
+
+  const trigger = useCallback((strong: boolean, clr: 'blue' | 'purple' | 'green') => {
+    setIsStrong(strong);
+    setColorTheme(clr);
+    setActive(false);
+    requestAnimationFrame(() => setActive(true));
+    const stop = startMeasure();
+    setTimeout(stop, 1500);
+  }, [startMeasure]);
+
+  return (
+    <EffectCard title="充能旋涡" icon="🌀" desc="WebGL Shader：极坐标螺旋扭曲 + FBM 噪声 + 三阶段动画" stats={stats}
+      buttons={<>
+        <TriggerButton label="普通（蓝）" onClick={() => trigger(false, 'blue')} color="bg-blue-700 hover:bg-blue-600" />
+        <TriggerButton label="强力（蓝）" onClick={() => trigger(true, 'blue')} color="bg-blue-700 hover:bg-blue-600" />
+        <TriggerButton label="紫" onClick={() => trigger(false, 'purple')} color="bg-purple-700 hover:bg-purple-600" />
+        <TriggerButton label="绿" onClick={() => trigger(false, 'green')} color="bg-emerald-700 hover:bg-emerald-600" />
+      </>}
+    >
+      <div className="absolute inset-0" style={{ background: 'radial-gradient(circle, #1e293b 0%, #0f172a 100%)' }}>
+        {useRealCards && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-12 rounded border border-slate-600/50">
+            <CardSprite className="absolute inset-0 rounded" />
+          </div>
+        )}
+        {active && (
+          <VortexShaderEffect active intensity={isStrong ? 'strong' : 'normal'} color={colorTheme} onComplete={() => setActive(false)} />
+        )}
+      </div>
+    </EffectCard>
+  );
+};
+
 /** 锥形气浪 */
 const ConeBlastCard: React.FC<{ useRealCards?: boolean }> = ({ useRealCards = true }) => {
   const [active, setActive] = useState(false);
@@ -916,6 +956,7 @@ const EFFECT_GROUPS: EffectGroup[] = [
       { id: 'shatter', label: '碎裂消散', icon: '💀', component: ShatterCard, usageDesc: '召唤师战争·单位/建筑死亡碎裂' },
       { id: 'victory', label: '胜利彩带', icon: '🎉', component: VictoryCard, usageDesc: '通用·对局胜利结算' },
       { id: 'summon', label: '召唤特效', icon: '🔮', component: SummonCard, usageDesc: '召唤师战争·召唤单位入场' },
+      { id: 'vortex', label: '充能旋涡', icon: '🌀', component: VortexCard, usageDesc: '召唤师战争·单位充能' },
     ],
   },
   {

@@ -31,6 +31,7 @@
     "compress:audio": "node scripts/audio/compress_audio.js",
     "audio:catalog": "node scripts/audio/generate_audio_catalog.js",
     "atlas:scan": "node scripts/assets/atlas_grid_scan.js",
+    "i18n:check": "tsx scripts/verify/i18n-check.ts",
     "test:game": "vitest run src/games",
     "test:tictactoe": "vitest run src/games/tictactoe",
     "test:dicethrone": "vitest run src/games/dicethrone",
@@ -42,7 +43,9 @@
     "init:admin": "tsx scripts/db/init_admin.ts",
     "check:arch": "node scripts/infra/check-architecture.cjs",
     "typecheck": "tsc --noEmit",
-    "assets:upload": "node scripts/assets/upload-to-r2.js"
+"assets:upload": "node scripts/assets/upload-to-r2.js",
+    "assets:check": "node scripts/assets/upload-to-r2.js --check",
+    "assets:sync": "node scripts/assets/upload-to-r2.js --sync"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.975.0",

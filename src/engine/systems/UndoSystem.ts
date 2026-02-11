@@ -58,6 +58,8 @@ export const UNDO_COMMANDS = {
     CANCEL_UNDO: 'SYS_CANCEL_UNDO',
 } as const;
 
+const UNDO_COMMAND_SET = new Set<string>(Object.values(UNDO_COMMANDS));
+
 const IS_SERVER = typeof (typeof globalThis !== 'undefined' ? (globalThis as { window?: unknown }).window : undefined) === 'undefined';
 
 function logUndoServer(label: string, data: Record<string, unknown>): void {
@@ -98,9 +100,13 @@ export function createUndoSystem<TCore>(
             },
         }),
 
-        beforeCommand: ({ state, command }): HookResult<TCore> | void => {
+        beforeCommand: ({ state, command, playerIds }): HookResult<TCore> | void => {
             pendingSnapshot = null;
             shouldClearPendingRequest = false;
+
+            if (UNDO_COMMAND_SET.has(command.type) && !playerIds.includes(command.playerId)) {
+                return { halt: true, error: 'player_mismatch' };
+            }
 
             // 处理撤销相关命令
             if (command.type === UNDO_COMMANDS.REQUEST_UNDO) {
@@ -130,7 +136,7 @@ export function createUndoSystem<TCore>(
 
             // 最正确方案：由具体游戏提供白名单。
             // 不提供时保持兼容（对所有非系统命令快照），但这会导致 UI 高频动作也可能进入快照。
-            if (!isCommandAllowlisted(type, normalizedAllowlist, { fallbackToAllowAll: true })) {
+            if (!isCommandAllowlisted(type, normalizedAllowlist, { fallbackToAllowAll: false })) {
                 return;
             }
 
@@ -173,6 +179,46 @@ export function createUndoSystem<TCore>(
 // 撤销处理函数
 // ============================================================================
 
+function deepCloneSnapshot<T>(value: T, seen = new Map<object, unknown>()): T {
+    if (value === null || typeof value !== 'object') return value;
+    if (seen.has(value as object)) return seen.get(value as object) as T;
+
+    if (Array.isArray(value)) {
+        const cloned = value.map((item) => deepCloneSnapshot(item, seen));
+        seen.set(value as object, cloned);
+        return cloned as T;
+    }
+
+    if (value instanceof Date) {
+        return new Date(value.getTime()) as T;
+    }
+
+    if (value instanceof Map) {
+        const cloned = new Map();
+        seen.set(value as object, cloned);
+        value.forEach((entryValue, entryKey) => {
+            cloned.set(deepCloneSnapshot(entryKey, seen), deepCloneSnapshot(entryValue, seen));
+        });
+        return cloned as T;
+    }
+
+    if (value instanceof Set) {
+        const cloned = new Set();
+        seen.set(value as object, cloned);
+        value.forEach((entryValue) => {
+            cloned.add(deepCloneSnapshot(entryValue, seen));
+        });
+        return cloned as T;
+    }
+
+    const cloned: Record<string, unknown> = {};
+    seen.set(value as object, cloned);
+    Object.entries(value as Record<string, unknown>).forEach(([key, entryValue]) => {
+        cloned[key] = deepCloneSnapshot(entryValue, seen);
+    });
+    return cloned as T;
+}
+
 function createSnapshot<TCore>(
     state: MatchState<TCore>
 ): MatchState<TCore> {
@@ -205,7 +251,7 @@ function createSnapshot<TCore>(
         },
     };
 
-    return JSON.parse(JSON.stringify(stateToSave)) as MatchState<TCore>;
+    return deepCloneSnapshot(stateToSave) as MatchState<TCore>;
 }
 
 function appendSnapshot<TCore>(

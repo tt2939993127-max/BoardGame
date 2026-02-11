@@ -149,7 +149,7 @@ describe('FlowSystem', () => {
         const system = createFlowSystem<TestCore>({
             hooks: buildHooks({
                 onPhaseEnter: () => [
-                    { type: 'SOME_DOMAIN_EVENT', payload: {}, timestamp: Date.now() },
+                    { type: 'SOME_DOMAIN_EVENT', payload: {}, timestamp: 1 },
                 ],
             }),
         });

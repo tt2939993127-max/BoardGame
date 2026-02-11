@@ -37,11 +37,11 @@ function triggerPhaseAbilities(
   core: SummonerWarsCore,
   playerId: PlayerId,
   trigger: 'onPhaseStart' | 'onPhaseEnd',
-  abilityIds: string[]
+  abilityIds: string[],
+  timestamp: number
 ): GameEvent[] {
   if (abilityIds.length === 0) return [];
   const events: GameEvent[] = [];
-  const timestamp = Date.now();
 
   for (let row = 0; row < core.board.length; row++) {
     for (let col = 0; col < core.board[row].length; col++) {
@@ -108,10 +108,11 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
   /**
    * 离开阶段时的副作用
    */
-  onPhaseExit: ({ state, from }): PhaseExitResult => {
+  onPhaseExit: ({ state, from, command }): PhaseExitResult => {
     const events: GameEvent[] = [];
     const core = state.core;
     const playerId = core.currentPlayer;
+    const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
     // 攻击阶段结束：检查不活动惩罚
     if (from === 'attack') {
@@ -126,7 +127,7 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
               damage: 1, 
               reason: 'inaction' 
             },
-            timestamp: Date.now(),
+            timestamp,
           });
         }
       }
@@ -142,18 +143,18 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
         events.push({
           type: SW_EVENTS.CARD_DRAWN,
           payload: { playerId, count: actualDraw },
-          timestamp: Date.now(),
+          timestamp,
         });
       }
       
       // 触发回合结束技能（如血腥狂怒衰减）
-      events.push(...triggerAllUnitsAbilities('onTurnEnd', core, playerId));
+      events.push(...triggerAllUnitsAbilities('onTurnEnd', core, playerId, { timestamp }));
     }
 
     // 阶段结束技能触发（按阶段筛选）
     const phaseEndAbilities = PHASE_END_ABILITIES[from as GamePhase] ?? [];
     if (phaseEndAbilities.length > 0) {
-      events.push(...triggerPhaseAbilities(core, playerId, 'onPhaseEnd', phaseEndAbilities));
+      events.push(...triggerPhaseAbilities(core, playerId, 'onPhaseEnd', phaseEndAbilities, timestamp));
     }
 
     return { events };
@@ -162,19 +163,20 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
   /**
    * 进入阶段时的副作用
    */
-  onPhaseEnter: ({ state, from, to }): GameEvent[] => {
+  onPhaseEnter: ({ state, from, to, command }): GameEvent[] => {
     const events: GameEvent[] = [];
     const core = state.core;
     const playerId = core.currentPlayer;
     const nextPlayer = playerId === '0' ? '1' : '0';
     const phaseStartPlayer = from === 'draw' && to === 'summon' ? nextPlayer : playerId;
+    const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
     // 从抽牌阶段进入召唤阶段 = 新回合开始
     if (from === 'draw' && to === 'summon') {
       events.push({
         type: SW_EVENTS.TURN_CHANGED,
         payload: { from: playerId, to: nextPlayer },
-        timestamp: Date.now(),
+        timestamp,
       });
       
       // 弃置当前玩家的所有主动事件
@@ -191,25 +193,25 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
           events.push({
             type: SW_EVENTS.FUNERAL_PYRE_CHARGED,
             payload: { playerId, eventCardId: activeEvent.id, charges: (activeEvent.charges ?? 0) - 1 },
-            timestamp: Date.now(),
+            timestamp,
           });
           continue;
         }
         events.push({
           type: SW_EVENTS.ACTIVE_EVENT_DISCARDED,
           payload: { playerId, cardId: activeEvent.id },
-          timestamp: Date.now(),
+          timestamp,
         });
       }
 
       // 新回合开始技能
-      events.push(...triggerAllUnitsAbilities('onTurnStart', core, nextPlayer));
+      events.push(...triggerAllUnitsAbilities('onTurnStart', core, nextPlayer, { timestamp }));
     }
 
     // 阶段开始技能触发（按阶段筛选）
     const phaseStartAbilities = PHASE_START_ABILITIES[to as GamePhase] ?? [];
     if (phaseStartAbilities.length > 0) {
-      events.push(...triggerPhaseAbilities(core, phaseStartPlayer, 'onPhaseStart', phaseStartAbilities));
+      events.push(...triggerPhaseAbilities(core, phaseStartPlayer, 'onPhaseStart', phaseStartAbilities, timestamp));
     }
 
     return events;

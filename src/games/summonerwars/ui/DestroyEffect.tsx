@@ -9,6 +9,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShatterEffect } from '../../../components/common/animations/ShatterEffect';
+import type { ShatterImageSource } from '../../../components/common/animations/ShatterEffect';
 import { getSpriteAtlasSource, getSpriteAtlasStyle } from './cardAtlas';
 
 export interface DestroyEffectData {
@@ -51,6 +52,15 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
     ? getSpriteAtlasStyle(effect.frameIndex, spriteSource.config)
     : undefined;
 
+  // 构建直接图片源（跳过 DOM 截取，更可靠）
+  const imageSource: ShatterImageSource | undefined = spriteSource && spriteStyle
+    ? {
+        url: spriteSource.image,
+        bgSize: spriteStyle.backgroundSize as string,
+        bgPosition: spriteStyle.backgroundPosition as string,
+      }
+    : undefined;
+
   return (
     <motion.div
       className="absolute pointer-events-none flex items-center justify-center"
@@ -85,6 +95,7 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
             <ShatterEffect
               active
               intensity={isStructure ? 'strong' : 'normal'}
+              imageSource={imageSource}
               onStart={() => setCardHidden(true)}
               onComplete={() => onComplete(effect.id)}
             />

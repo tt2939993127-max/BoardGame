@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Check } from 'lucide-react';
 import type { PendingInteraction, HeroState } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import { SelectableEffectsContainer, type StatusAtlases } from './statusEffects';
@@ -142,7 +143,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                                 {playerLabel}
                                             </span>
                                             {isSelected && (
-                                                <span className="ml-2 text-green-400">✓</span>
+                                                <Check size={16} className="ml-2 text-green-400" strokeWidth={3} />
                                             )}
                                         </div>
                                         {/* 显示玩家的状态效果（仅供参考） */}
@@ -232,7 +233,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                                 {playerLabel}
                                             </span>
                                             {isSelected && (
-                                                <span className="ml-2 text-green-400">✓</span>
+                                                <Check size={16} className="ml-2 text-green-400" strokeWidth={3} />
                                             )}
                                         </div>
                                     </div>

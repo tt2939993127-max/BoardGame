@@ -124,11 +124,11 @@ describe('幽灵 ongoing 能力', () => {
         registerGhostAbilities();
     });
 
-    describe('ghost_haunting: 不散阴魂保护', () => {
-        test('附着 ghost_haunting 的随从不受对手影响', () => {
+    describe('ghost_incorporeal: 幽灵化保护', () => {
+        test('附着 ghost_incorporeal 的随从不受对手影响', () => {
             const minion = makeMinion({
                 defId: 'ghost_a', uid: 'g-1', controller: '0',
-                attachedActions: [{ uid: 'gh-1', defId: 'ghost_haunting', ownerId: '0' }],
+                attachedActions: [{ uid: 'gi-1', defId: 'ghost_incorporeal', ownerId: '0' }],
             });
             const base = makeBase({ minions: [minion] });
             const state = makeState([base]);
@@ -147,7 +147,7 @@ describe('幽灵 ongoing 能力', () => {
         test('自己不受保护限制', () => {
             const minion = makeMinion({
                 defId: 'ghost_a', uid: 'g-1', controller: '0',
-                attachedActions: [{ uid: 'gh-1', defId: 'ghost_haunting', ownerId: '0' }],
+                attachedActions: [{ uid: 'gi-1', defId: 'ghost_incorporeal', ownerId: '0' }],
             });
             const base = makeBase({ minions: [minion] });
             const state = makeState([base]);

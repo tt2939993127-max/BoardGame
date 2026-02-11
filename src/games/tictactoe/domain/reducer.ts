@@ -24,7 +24,7 @@ export function execute(
 ): TicTacToeEvent[] {
     const core = state.core;
     const events: TicTacToeEvent[] = [];
-    const now = Date.now();
+    const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
     switch (command.type) {
         case 'CLICK_CELL': {

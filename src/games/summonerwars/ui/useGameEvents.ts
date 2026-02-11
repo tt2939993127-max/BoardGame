@@ -13,6 +13,8 @@ import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem
 import type { DestroyEffectData } from './DestroyEffect';
 import type { DiceFace } from '../config/dice';
 import { getDestroySpriteConfig } from './spriteHelpers';
+import type { FxBus } from '../../../engine/fx';
+import { SW_FX } from './fxSetup';
 
 // ============================================================================
 // 类型定义
@@ -129,7 +131,7 @@ interface UseGameEventsParams {
   core: SummonerWarsCore;
   myPlayerId: string;
   pushDestroyEffect: (data: Omit<DestroyEffectData, 'id'>) => void;
-  pushBoardEffect: (data: { type: string; position: CellCoord; sourcePosition?: CellCoord; intensity?: string; damageAmount?: number; attackType?: 'melee' | 'ranged' }) => void;
+  fxBus: FxBus;
   triggerShake: (intensity: string, type: string) => void;
   /** 摧毁特效触发时的音效回调 */
   onDestroySound?: (type: 'unit' | 'structure', isGate?: boolean) => void;
@@ -141,7 +143,7 @@ interface UseGameEventsParams {
 
 export function useGameEvents({
   G, core, myPlayerId,
-  pushDestroyEffect, pushBoardEffect, triggerShake, onDestroySound,
+  pushDestroyEffect, fxBus, triggerShake, onDestroySound,
 }: UseGameEventsParams) {
   // 骰子结果状态
   const [diceResult, setDiceResult] = useState<DiceResultState | null>(null);
@@ -166,7 +168,16 @@ export function useGameEvents({
 
   // 待延迟播放的摧毁效果（含 isGate 标记用于音效区分）
   const pendingDestroyRef = useRef<(DestroyEffectData & { isGate?: boolean })[]>([]);
-  // 摧毁音效回调 ref（避免 useCallback 依赖变化）
+
+  // ============================================================================
+  // 回调函数稳定化（避免 useLayoutEffect 因回调引用变化而重复执行）
+  // ============================================================================
+  const pushDestroyEffectRef = useRef(pushDestroyEffect);
+  pushDestroyEffectRef.current = pushDestroyEffect;
+  const fxBusRef = useRef(fxBus);
+  fxBusRef.current = fxBus;
+  const triggerShakeRef = useRef(triggerShake);
+  triggerShakeRef.current = triggerShake;
   const onDestroySoundRef = useRef(onDestroySound);
   onDestroySoundRef.current = onDestroySound;
 
@@ -227,8 +238,8 @@ export function useGameEvents({
       if (event.type === SW_EVENTS.UNIT_SUMMONED) {
         const p = event.payload as { position: CellCoord; card: { unitClass?: string } };
         const intensity = p.card?.unitClass === 'champion' ? 'strong' : 'normal';
-        pushBoardEffect({ type: 'summon', position: p.position, intensity });
-        triggerShake(intensity, 'impact');
+        fxBusRef.current.push(SW_FX.SUMMON, { cell: p.position, intensity });
+        triggerShakeRef.current(intensity, 'impact');
       }
 
       // 攻击事件 - 显示骰子，效果队列化
@@ -257,10 +268,10 @@ export function useGameEvents({
         if (pendingAttackRef.current) {
           pendingAttackRef.current.damages.push({ position: p.position, damage: p.damage });
         } else {
-          pushBoardEffect({
-            type: 'damage', position: p.position,
-            intensity: p.damage >= 3 ? 'strong' : 'normal', damageAmount: p.damage,
-          });
+          fxBusRef.current.push(SW_FX.COMBAT_DAMAGE, {
+            cell: p.position,
+            intensity: p.damage >= 3 ? 'strong' : 'normal',
+          }, { damageAmount: p.damage });
         }
       }
 
@@ -274,11 +285,11 @@ export function useGameEvents({
         handleDestroyEvent(event.payload as Record<string, unknown>, 'structure');
       }
 
-      // 充能事件 - 充能动画反馈
+      // 充能事件 - 旋涡动画反馈
       if (event.type === SW_EVENTS.UNIT_CHARGED) {
         const p = event.payload as { position: CellCoord; delta: number; sourceAbilityId?: string };
         if (p.delta > 0) {
-          pushBoardEffect({ type: 'summon', position: p.position, intensity: 'normal' });
+          fxBusRef.current.push(SW_FX.CHARGE_VORTEX, { cell: p.position, intensity: 'normal' });
         }
       }
 
@@ -401,7 +412,9 @@ export function useGameEvents({
         }
       }
     }
-  }, [G, core, myPlayerId, pushDestroyEffect, pushBoardEffect, triggerShake]);
+  // 依赖数组不包含回调函数，回调通过 ref 访问，避免因回调引用变化导致 effect 重复执行
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [G, core, myPlayerId]);
 
   /** 查找被摧毁的卡牌（弃牌堆/手牌兜底） */
   const resolveDestroyedCard = (owner: PlayerId, cardId?: string) => {
@@ -458,7 +471,7 @@ export function useGameEvents({
         ]));
       }
     } else {
-      pushDestroyEffect({ position, cardName, type, atlasId, frameIndex });
+      pushDestroyEffectRef.current({ position, cardName, type, atlasId, frameIndex });
       // 非延迟摧毁：立即播放音效
       onDestroySoundRef.current?.(type, isGate);
     }
@@ -479,7 +492,7 @@ export function useGameEvents({
   const flushPendingDestroys = useCallback(() => {
     if (pendingDestroyRef.current.length > 0) {
       for (const effect of pendingDestroyRef.current) {
-        pushDestroyEffect({
+        pushDestroyEffectRef.current({
           position: effect.position, cardName: effect.cardName, type: effect.type,
           atlasId: effect.atlasId, frameIndex: effect.frameIndex,
         });
@@ -489,7 +502,7 @@ export function useGameEvents({
       pendingDestroyRef.current = [];
       setDyingEntities([]);
     }
-  }, [pushDestroyEffect]);
+  }, []);
 
   return {
     diceResult,

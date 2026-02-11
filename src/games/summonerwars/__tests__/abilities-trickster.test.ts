@@ -38,6 +38,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 /** 创建欺心巫族 vs 亡灵法师的测试状态 */
 function createTricksterState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
@@ -156,7 +158,7 @@ function executeAndReduce(
   random?: RandomFn
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, random ?? createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -760,7 +762,7 @@ describe('控制权转移 (CONTROL_TRANSFERRED)', () => {
         targetPosition: { row: 4, col: 2 },
         newOwner: '0' as PlayerId,
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     const unit = newState.board[4][2].unit;
@@ -790,7 +792,7 @@ describe('推拉事件 (UNIT_PUSHED / UNIT_PULLED)', () => {
         targetPosition: { row: 4, col: 2 },
         newPosition: { row: 4, col: 3 },
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     expect(newState.board[4][2].unit).toBeUndefined();
@@ -820,7 +822,7 @@ describe('推拉事件 (UNIT_PUSHED / UNIT_PULLED)', () => {
         targetPosition: { row: 4, col: 2 },
         // 无 newPosition
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     expect(newState.board[4][2].unit?.cardId).toBe('test-pushed');

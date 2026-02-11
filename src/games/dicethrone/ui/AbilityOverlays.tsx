@@ -277,10 +277,10 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                             data-ability-slot={slot.id}
                             onMouseDown={(e) => handleMouseDown(e, slot.id, 'move')}
                             className={`
-                            absolute transition-none rounded-lg
+                            absolute transition-all duration-200 rounded-lg
                             ${isEditing ? 'pointer-events-auto cursor-move border border-amber-500/30' : 'pointer-events-auto cursor-pointer group'}
                             ${isEditing && editingId === slot.id ? 'border-2 border-green-500 z-50 bg-green-500/10' : ''}
-                            ${canClick ? 'hover:scale-[1.02] hover:z-30' : ''}
+                            ${canClick ? 'hover:border-2 hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.5)] hover:z-30' : ''}
                             ${isActivating ? 'animate-ability-activate z-50' : ''}
                         `}
                             style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}

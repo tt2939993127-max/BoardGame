@@ -35,6 +35,8 @@ const formatSrcForLog = (src: string | string[]) => (
     Array.isArray(src) ? src.join('|') : src
 );
 
+const MAX_CONCURRENT_LOADS = 4;
+
 const extractNameFromSrc = (src: string): string => {
     const fileName = src.split('/').pop() ?? src;
     return fileName.replace(/\.[^.]+$/, '');
@@ -63,6 +65,7 @@ class AudioManagerClass {
     private _userGestureObserved: boolean = false;
     private _unlockListenerAttached: boolean = false;
     private _pendingBgmKey: string | null = null;
+    private _loadingCount: number = 0;
 
     private getAudioContext(): AudioContext | null {
         return (Howler as unknown as { ctx?: AudioContext }).ctx ?? null;
@@ -81,7 +84,8 @@ class AudioManagerClass {
             return;
         }
         if (ctx.state !== 'suspended') return;
-        if (!this._userGestureObserved && typeof window !== 'undefined') return;
+        // 不再用 _userGestureObserved 守卫：始终尝试 resume，
+        // 浏览器会在非用户手势上下文中自动拒绝（无害）
         ctx.resume()
             .then(() => {
                 this._userGestureObserved = true;
@@ -95,16 +99,39 @@ class AudioManagerClass {
         if (this._unlockListenerAttached) return;
         if (typeof window === 'undefined') return;
         this._unlockListenerAttached = true;
+
+        const cleanup = () => {
+            window.removeEventListener('pointerdown', handler);
+            window.removeEventListener('keydown', handler);
+            window.removeEventListener('touchstart', handler);
+        };
+
         const handler = () => {
+            cleanup();
             this._unlockListenerAttached = false;
             this._userGestureObserved = true;
-            this.resumeContextIfNeeded();
+
+            const ctx = this.getAudioContext();
             const pendingKey = this._pendingBgmKey;
             this._pendingBgmKey = null;
-            if (pendingKey) {
-                this.playBgm(pendingKey);
+
+            // 等待 ctx.resume() 真正完成后再播放 BGM，
+            // 避免 playBgm 检查 isContextSuspended() 时 context 仍处于 suspended
+            const afterResume = () => {
+                if (pendingKey) {
+                    this.playBgm(pendingKey);
+                }
+            };
+
+            if (ctx && ctx.state === 'suspended') {
+                ctx.resume()
+                    .then(afterResume)
+                    .catch(afterResume);
+            } else {
+                afterResume();
             }
         };
+
         window.addEventListener('pointerdown', handler, { once: true });
         window.addEventListener('keydown', handler, { once: true });
         window.addEventListener('touchstart', handler, { once: true });
@@ -226,6 +253,37 @@ class AudioManagerClass {
             this._bgmVolume = parseFloat(savedBgmVolume);
         }
         this._initialized = true;
+
+        // 尽早注册用户手势监听，确保首次交互即可解锁 AudioContext
+        this.registerUnlockHandler();
+    }
+
+    /**
+     * 从 localStorage 重新读取设置并应用到内存状态。
+     * 用于登出时还原游客本地偏好（因为远程同步 apply 只改内存，不写 localStorage）。
+     */
+    restoreLocalSettings(): void {
+        const savedMuted = localStorage.getItem('audio_muted');
+        const savedMasterVolume = localStorage.getItem('audio_master_volume');
+        const savedSfxVolume = localStorage.getItem('audio_sfx_volume');
+        const savedBgmVolume = localStorage.getItem('audio_bgm_volume');
+
+        this._muted = savedMuted === 'true';
+        Howler.mute(this._muted);
+
+        if (savedMasterVolume !== null) {
+            this._masterVolume = parseFloat(savedMasterVolume);
+        } else {
+            this._masterVolume = 1.0;
+        }
+        Howler.volume(this._masterVolume);
+
+        this._sfxVolume = savedSfxVolume !== null ? parseFloat(savedSfxVolume) : 1.0;
+        this._bgmVolume = savedBgmVolume !== null ? parseFloat(savedBgmVolume) : 0.6;
+
+        if (this._currentBgm) {
+            this.bgms.get(this._currentBgm)?.volume(this._bgmVolume);
+        }
     }
 
     /**
@@ -288,25 +346,36 @@ class AudioManagerClass {
         if (this.failedKeys.has(key)) return null;
         let howl = this.sounds.get(key);
         if (!howl) {
+            // 限制同时进行的按需加载数，防止浏览器连接拥堵导致延迟
+            if (this._loadingCount >= MAX_CONCURRENT_LOADS) {
+                return null;
+            }
             const definition = this.soundDefinitions.get(key) ?? this.resolveRegistrySoundDefinition(key);
             if (!definition) {
                 console.warn(`[Audio] missing_sfx key=${key} registryCount=${this.registryEntries.size} definedCount=${this.soundDefinitions.size}`);
                 return null;
             }
             this.soundDefinitions.set(key, definition);
+            this._loadingCount++;
             howl = new Howl({
                 src: Array.isArray(definition.src) ? definition.src : [definition.src],
                 volume: (definition.volume ?? 1.0) * this._sfxVolume,
                 loop: definition.loop ?? false,
                 sprite: definition.sprite,
                 preload: true,
-                onload: () => {},
+                onload: () => {
+                    this._loadingCount = Math.max(0, this._loadingCount - 1);
+                },
                 onloaderror: (_id, error) => {
+                    this._loadingCount = Math.max(0, this._loadingCount - 1);
                     console.error(`[Audio] load_sfx_failed key=${key} src=${formatSrcForLog(definition.src)} error=${String(error)}`);
                     this.failedKeys.add(key);
                 }
             });
             this.sounds.set(key, howl);
+        } else if (howl.state() === 'loading') {
+            // 音频仍在加载中，不再重复入队，避免加载完成后延迟播放过时的音效
+            return null;
         }
         this.resumeContextIfNeeded();
         const soundId = howl.play(spriteKey);
@@ -359,11 +428,10 @@ class AudioManagerClass {
             this.bgms.set(key, howl);
         }
 
-        if (this.isContextSuspended()) {
-            this._pendingBgmKey = key;
-            this.registerUnlockHandler();
-            return;
-        }
+        // BGM 使用 html5: true，走浏览器原生 <audio>，不依赖 WebAudio context。
+        // 不再用 isContextSuspended() 阻止播放；
+        // 若浏览器自动播放策略阻止了 HTML5 Audio，由 onplayerror 捕获并重试。
+        this.resumeContextIfNeeded();
 
         const isSameBgm = this._currentBgm === key;
         if (isSameBgm && howl.playing()) return;
@@ -378,17 +446,6 @@ class AudioManagerClass {
                 prevHowl?.unload();
                 this.bgms.delete(prevBgm);
             }, 1000);
-        }
-
-        this.resumeContextIfNeeded();
-        if (this.isContextSuspended()) {
-            howl.once('unlock', () => {
-                if (this._currentBgm !== key) return;
-                this.resumeContextIfNeeded();
-                howl.volume(0);
-                const playId = howl.play();
-                howl.fade(0, this._bgmVolume, 1000, playId);
-            });
         }
 
         howl.volume(0);
@@ -414,33 +471,42 @@ class AudioManagerClass {
 
     /**
      * 设置主音量
+     * @param persist 是否写入 localStorage（远程同步 apply 时传 false，避免污染游客本地偏好）
      */
-    setMasterVolume(volume: number): void {
+    setMasterVolume(volume: number, persist = true): void {
         this._masterVolume = Math.max(0, Math.min(1, volume));
         Howler.volume(this._masterVolume);
-        localStorage.setItem('audio_master_volume', String(this._masterVolume));
+        if (persist) {
+            localStorage.setItem('audio_master_volume', String(this._masterVolume));
+        }
     }
 
     /**
      * 设置音效音量
+     * @param persist 是否写入 localStorage
      */
-    setSfxVolume(volume: number): void {
+    setSfxVolume(volume: number, persist = true): void {
         this._sfxVolume = Math.max(0, Math.min(1, volume));
         for (const howl of this.sounds.values()) {
             howl.volume(this._sfxVolume);
         }
-        localStorage.setItem('audio_sfx_volume', String(this._sfxVolume));
+        if (persist) {
+            localStorage.setItem('audio_sfx_volume', String(this._sfxVolume));
+        }
     }
 
     /**
      * 设置 BGM 音量
+     * @param persist 是否写入 localStorage
      */
-    setBgmVolume(volume: number): void {
+    setBgmVolume(volume: number, persist = true): void {
         this._bgmVolume = Math.max(0, Math.min(1, volume));
         if (this._currentBgm) {
             this.bgms.get(this._currentBgm)?.volume(this._bgmVolume);
         }
-        localStorage.setItem('audio_bgm_volume', String(this._bgmVolume));
+        if (persist) {
+            localStorage.setItem('audio_bgm_volume', String(this._bgmVolume));
+        }
     }
 
     /**
@@ -452,10 +518,19 @@ class AudioManagerClass {
     get bgmVolume(): number { return this._bgmVolume; }
     get currentBgm(): string | null { return this._currentBgm; }
 
-    setMuted(muted: boolean): void {
+    isFailed(key: SoundKey): boolean {
+        return this.failedKeys.has(key);
+    }
+
+    /**
+     * @param persist 是否写入 localStorage（远程同步 apply 时传 false，避免污染游客本地偏好）
+     */
+    setMuted(muted: boolean, persist = true): void {
         this._muted = muted;
         Howler.mute(muted);
-        localStorage.setItem('audio_muted', String(muted));
+        if (persist) {
+            localStorage.setItem('audio_muted', String(muted));
+        }
     }
 
     onBgmChange(listener: (currentBgm: string | null) => void): () => void {
@@ -491,6 +566,13 @@ class AudioManagerClass {
         }
     }
 
+    /**
+     * 停止指定音效（不影响 BGM）
+     */
+    stopSfx(key: SoundKey): void {
+        this.sounds.get(key)?.stop();
+    }
+
     stopAll(): void {
         Howler.stop();
         if (this._currentBgm !== null) {
@@ -505,6 +587,7 @@ class AudioManagerClass {
         for (const howl of this.bgms.values()) howl.unload();
         this.sounds.clear();
         this.bgms.clear();
+        this._loadingCount = 0;
         this._pendingBgmKey = null;
         if (this._currentBgm !== null) {
             this._currentBgm = null;

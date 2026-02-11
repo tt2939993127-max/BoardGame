@@ -39,6 +39,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 /** 创建洞穴地精 vs 亡灵法师的测试状态 */
 function createGoblinState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
@@ -184,7 +186,7 @@ function executeAndReduce(
   payload: Record<string, unknown>
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -272,7 +274,7 @@ describe('部落抓附手 - 禁足 (immobile)', () => {
       type: SW_COMMANDS.MOVE_UNIT,
       payload: { from: { row: 4, col: 2 }, to: { row: 4, col: 3 } },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('禁足');
@@ -509,7 +511,7 @@ describe('部落投石手 - 凶残 (ferocity)', () => {
       type: SW_COMMANDS.DECLARE_ATTACK,
       payload: { attacker: { row: 4, col: 2 }, target: { row: 4, col: 4 } },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(true);
   });
@@ -540,7 +542,7 @@ describe('部落投石手 - 凶残 (ferocity)', () => {
       type: SW_COMMANDS.DECLARE_ATTACK,
       payload: { attacker: { row: 4, col: 2 }, target: { row: 4, col: 3 } },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
   });
@@ -613,7 +615,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('0');
@@ -647,7 +649,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('友方');
@@ -739,7 +741,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
         choice: 'charge',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('魔力');
@@ -947,7 +949,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
         targetPosition: { row: 2, col: 2 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('相邻');
@@ -981,7 +983,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('友方');
@@ -1009,7 +1011,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
         choice: 'self_destroy',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
   });
@@ -1400,7 +1402,7 @@ describe('部落抓附手 - 抓附 (grab)', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('空');
@@ -1447,7 +1449,7 @@ describe('洞穴地精事件卡 - 不屈不挠', () => {
         cardName: '0费友方',
         owner: '0' as PlayerId,
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     // 单位应从棋盘移除
@@ -1490,7 +1492,7 @@ describe('洞穴地精事件卡 - 不屈不挠', () => {
         cardName: '布拉夫',
         owner: '0' as PlayerId,
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     // 冠军不应返回手牌
@@ -1531,7 +1533,7 @@ describe('洞穴地精事件卡 - 不屈不挠', () => {
         owner: '0' as PlayerId,
         reason: 'feed_beast',
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     // 自毁不应返回手牌
@@ -1561,7 +1563,7 @@ describe('洞穴地精事件卡 - 不屈不挠', () => {
         cardName: '0费友方',
         owner: '0' as PlayerId,
       },
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
 
     // 不应返回手牌

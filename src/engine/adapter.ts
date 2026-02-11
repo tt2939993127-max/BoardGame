@@ -160,12 +160,15 @@ export function createGameAdapter<
     TCommand extends Command = Command,
     TEvent extends GameEvent = GameEvent
 >(config: AdapterConfig<TCore, TCommand, TEvent>): Game<MatchState<TCore>> {
-    const { domain, systems, systemsConfig, commandTypes } = config;
+    const { domain, systems, systemsConfig, commandTypes, disableUndo } = config;
     const undoCommandTypes = new Set<string>(Object.values(UNDO_COMMANDS));
+    const systemCommands = disableUndo
+        ? ALL_SYSTEM_COMMANDS.filter((command) => !undoCommandTypes.has(command))
+        : ALL_SYSTEM_COMMANDS;
 
     // 自动合并系统命令到 commandTypes（游戏无需手动添加）
     const mergedCommandTypes = commandTypes?.length
-        ? [...new Set([...commandTypes, ...ALL_SYSTEM_COMMANDS])]
+        ? [...new Set([...commandTypes, ...systemCommands])]
         : undefined;
 
     // 生成通用 move 处理器
@@ -222,12 +225,22 @@ export function createGameAdapter<
                 : '';
 
             const isUndoCommand = undoCommandTypes.has(commandType);
+            if (disableUndo && isUndoCommand) {
+                return;
+            }
+
+            const resolveCommandTimestamp = (): number => {
+                const entries = (G as MatchState<TCore>).sys?.log?.entries ?? [];
+                const last = entries[entries.length - 1];
+                const lastTimestamp = typeof last?.timestamp === 'number' ? last.timestamp : -1;
+                return lastTimestamp + 1;
+            };
 
             const command: Command = {
                 type: commandType,
                 playerId: normalizedPlayerId,
                 payload,
-                timestamp: Date.now(),
+                timestamp: resolveCommandTimestamp(),
                 skipValidation: shouldSkipValidation,
             };
 

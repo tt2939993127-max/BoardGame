@@ -8,4 +8,5 @@ export const I18N_NAMESPACES = [
     'tutorial',
     'auth',
     'review',
+    'admin',
 ] as const;

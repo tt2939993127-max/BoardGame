@@ -126,8 +126,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.welcome',
             highlightTarget: 'su-base-area',
             position: 'bottom',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // 2: 记分板介绍 — 高亮记分板，介绍 VP 追踪
@@ -136,8 +135,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.scoreboard',
             highlightTarget: 'su-scoreboard',
             position: 'left',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // 3: 手牌介绍 — 高亮手牌区，介绍卡牌类型（随从和行动）
@@ -146,8 +144,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.handIntro',
             highlightTarget: 'su-hand-area',
             position: 'top',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // 4: 回合追踪器 — 高亮回合追踪器，介绍阶段流程
@@ -156,8 +153,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.turnTracker',
             highlightTarget: 'su-turn-tracker',
             position: 'right',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // 5: 结束按钮 — 高亮结束回合按钮，介绍其功能
@@ -166,8 +162,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.endTurnBtn',
             highlightTarget: 'su-end-turn-btn',
             position: 'left',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // ================================================================
@@ -180,8 +175,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.playCardsExplain',
             highlightTarget: 'su-hand-area',
             position: 'top',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // 7: 打出随从 — 玩家必须打出一张随从卡
@@ -226,8 +220,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             id: 'baseScoring',
             content: 'game-smashup:tutorial.steps.baseScoring',
             position: 'center',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // 11: VP 奖励说明 — 高亮记分板，介绍 1st/2nd/3rd 排名奖励
@@ -236,15 +229,12 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.vpAwards',
             highlightTarget: 'su-scoreboard',
             position: 'left',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
-        // 12: 记分阶段自动推进 — 进入此步骤时 blockedCommands 被清除，
+        // 12: 记分阶段自动推进 — 此步骤不设 infoStep，
         // FlowSystem.onAutoContinueCheck 自动推进 scoreBases → draw → endTurn → ...
-        // 使用 advanceOnEvents 监听 PHASE_CHANGED(draw) 来在抽牌阶段到来时推进到下一步。
-        // 但由于 draw 也会自动推进，整个链条会一口气跑完。
-        // 所以这里不阻塞，让链条跑完，步骤仅作为过渡信息展示。
+        // 整个链条会一口气跑完，步骤仅作为过渡信息展示。
         {
             id: 'scoringPhase',
             content: 'game-smashup:tutorial.steps.scoringPhase',
@@ -259,8 +249,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             content: 'game-smashup:tutorial.steps.drawExplain',
             highlightTarget: 'su-deck-discard',
             position: 'top',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // 14: 手牌上限说明 — 介绍 10 张上限 + 弃牌规则
@@ -268,8 +257,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             id: 'handLimit',
             content: 'game-smashup:tutorial.steps.handLimit',
             position: 'center',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
         // ================================================================
@@ -281,11 +269,10 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             id: 'endDraw',
             content: 'game-smashup:tutorial.steps.endDraw',
             position: 'center',
-            requireAction: false,
-            blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+            infoStep: true,
         },
 
-        // 16: 对手回合 — AI 自动执行对手的完整回合
+        // 16: 对手回合
         // P1 的回合流程：playCards → scoreBases(auto) → draw → endTurn(auto) → startTurn(P0)
         // 多轮 afterEvents 会自动推进整个链条，只需一次 ADVANCE_PHASE
         {

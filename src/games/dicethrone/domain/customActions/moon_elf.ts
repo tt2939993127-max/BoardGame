@@ -117,7 +117,7 @@ function handleExplodingArrowResolve1(context: CustomActionContext): DiceThroneE
     const face = getDieFace(value);
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: `bonusDie.effect.${face}` },
+        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
@@ -140,7 +140,7 @@ function handleExplodingArrowResolve2(context: CustomActionContext): DiceThroneE
     const face = getDieFace(value);
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: `bonusDie.effect.${face}` },
+        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
@@ -162,7 +162,7 @@ function handleExplodingArrowResolve3(context: CustomActionContext): DiceThroneE
     const face = getDieFace(value);
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: `bonusDie.effect.${face}` },
+        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
@@ -282,7 +282,7 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
     const face = getDieFace(value);
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: `bonusDie.effect.${face}` },
+        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.moonShadowStrike', effectParams: { value } },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
@@ -346,7 +346,7 @@ function handleBlindedCheck(context: CustomActionContext): DiceThroneEvent[] {
     const face = getDieFace(value);
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: attackerId, effectKey: `bonusDie.effect.blinded` },
+        payload: { value, face, playerId: attackerId, targetPlayerId: attackerId, effectKey: 'bonusDie.effect.blinded' },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);

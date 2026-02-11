@@ -38,7 +38,8 @@ describe('ManifestGameThumbnail', () => {
         const manifest = buildManifest({ thumbnailPath: 'demo/thumbnails/cover' });
         const html = renderToStaticMarkup(<ManifestGameThumbnail manifest={manifest} />);
         expect(html).toContain('<picture>');
-        expect(html).toContain('src="/assets/demo/thumbnails/cover.webp"');
+        // 优化图片会自动指向 compressed/ 目录（avif/webp）
+        expect(html).toContain('src="/assets/demo/thumbnails/compressed/cover.webp"');
         expect(html).toContain('image/avif');
     });
 });

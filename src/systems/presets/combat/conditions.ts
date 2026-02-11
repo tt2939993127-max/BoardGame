@@ -161,7 +161,10 @@ export type Condition =
     | DiceSetCondition
     | DiceStraightCondition
     | PhaseCondition
-    | AllSymbolsPresentCondition;
+    | AllSymbolsPresentCondition
+    | RollSumCondition
+    | DiceCountCondition
+    | ThreeOfAKindCondition;
 
 /**
  * 技能触发条件
@@ -355,7 +358,7 @@ export const evaluatePhase: ConditionEvaluator<PhaseCondition> = (condition, ctx
     if (ctx.currentPhase !== condition.phaseId) return false;
     if (condition.diceCount !== undefined) {
         const diceValues = ctx.diceValues as number[] | undefined;
-        if (diceValues && diceValues.length < condition.diceCount) return false;
+        if (!diceValues || diceValues.length < condition.diceCount) return false;
     }
     return true;
 };

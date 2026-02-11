@@ -12,6 +12,7 @@ import type {
     DiceTrigger,
     IDiceSystem,
 } from './types';
+import type { RandomFn } from '../../engine/types';
 
 /**
  * 骰子系统实现
@@ -57,13 +58,13 @@ class DiceSystemImpl implements IDiceSystem {
     /**
      * 创建骰子实例
      */
-    createDie(definitionId: string, options: CreateDieOptions): Die {
+    createDie(definitionId: string, options: CreateDieOptions, random?: RandomFn): Die {
         const definition = this.definitions.get(definitionId);
         if (!definition) {
             throw new Error(`DiceSystem: Unknown definition '${definitionId}'`);
         }
 
-        const value = options.initialValue ?? this.randomValue(definition.sides);
+        const value = options.initialValue ?? this.randomValue(definition.sides, random);
         const face = this.getFaceByValue(definitionId, value);
         const symbols = face?.symbols ?? [];
 
@@ -80,7 +81,7 @@ class DiceSystemImpl implements IDiceSystem {
     /**
      * 掷单个骰子（返回新骰子，不修改原骰子）
      */
-    rollDie(die: Die): Die {
+    rollDie(die: Die, random?: RandomFn): Die {
         if (die.isKept) {
             return die; // 锁定的骰子不重掷
         }
@@ -91,7 +92,7 @@ class DiceSystemImpl implements IDiceSystem {
             return die;
         }
 
-        const value = this.randomValue(definition.sides);
+        const value = this.randomValue(definition.sides, random);
         const face = this.getFaceByValue(die.definitionId, value);
         const symbols = face?.symbols ?? [];
 
@@ -106,8 +107,8 @@ class DiceSystemImpl implements IDiceSystem {
     /**
      * 批量掷骰（返回掷骰结果）
      */
-    rollDice(dice: Die[]): RollResult {
-        const rolledDice = dice.map(die => this.rollDie(die));
+    rollDice(dice: Die[], random?: RandomFn): RollResult {
+        const rolledDice = dice.map(die => this.rollDie(die, random));
         const stats = this.calculateStats(rolledDice);
         return { dice: rolledDice, stats };
     }
@@ -191,7 +192,10 @@ class DiceSystemImpl implements IDiceSystem {
     /**
      * 生成随机点数 (1 到 sides)
      */
-    private randomValue(sides: number): number {
+    private randomValue(sides: number, random?: RandomFn): number {
+        if (random) {
+            return random.d(sides);
+        }
         return Math.floor(Math.random() * sides) + 1;
     }
 

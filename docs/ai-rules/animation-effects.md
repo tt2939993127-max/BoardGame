@@ -30,6 +30,7 @@
 | **粒子系统** | Canvas 2D（自研引擎） | 粒子特效（几十到几百级别）；双层绘制（辉光+核心） | 胜利彩带、召唤光粒子、爆炸碎片、烟尘扩散 |
 | **复杂矢量动画** | Canvas 2D **推荐** | 每帧重绘复杂路径（弧形/渐变/多层叠加） | 斜切刀光、气浪冲击波、复杂轨迹特效 |
 | **多阶段组合特效** | Canvas 2D **推荐** | 需要蓄力→爆发→持续→消散等多阶段节奏；需要 additive 混合/动态渐变/脉冲呼吸 | 召唤光柱、技能释放、大招特写 |
+| **流体/逐像素特效** | WebGL Shader（`ShaderCanvas`） | 需要连续旋臂/密度渐变/噪声纹理等逐像素计算的流体效果；Canvas 2D 无法实现 | 旋涡、火焰、能量护盾、溶解 |
 | **形状动画** | framer-motion | 确定性形状变换（缩放/位移/旋转/裁切/透明度）；每次触发 1-3 个 DOM 节点 | 红闪脉冲、伤害数字飞出、简单冲击波 |
 | **UI 状态过渡** | framer-motion / CSS transition | 组件进出场、hover/press 反馈、布局动画 | 手牌展开、横幅切换、按钮反馈、阶段指示脉冲 |
 | **精确设计动效** | Lottie（未接入，需美术资源） | 设计师在 AE 中制作的复杂动画，需要逐帧精确控制 | 暂无，未来可用于技能释放特写 |
@@ -40,8 +41,9 @@
 1. 需要每帧重绘复杂矢量路径（弧形/渐变）？→ 用 Canvas 2D 手写（如 SlashEffect）
 2. 需要粒子特效（爆炸/烟尘/彩带/光粒子）？→ 用 Canvas 粒子引擎（BurstParticles）
 3. 需要多阶段组合特效（蓄力/爆发/持续/消散）？→ 用 Canvas 2D（如 SummonEffect）
-4. 需要简单形状变换（1-3 个元素）？→ 用 framer-motion
-5. 需要 UI 组件进出场/状态切换？→ 用 framer-motion 或 CSS transition
+4. 需要连续流体效果（旋涡/火焰/护盾/溶解）？→ 用 WebGL Shader（`ShaderCanvas`）
+5. 需要简单形状变换（1-3 个元素）？→ 用 framer-motion
+6. 需要 UI 组件进出场/状态切换？→ 用 framer-motion 或 CSS transition
 
 ---
 
@@ -78,7 +80,57 @@
 
 ### 棋盘特效容器与卡牌对齐规范（强制）
 
-棋盘格子内的特效容器应使用与卡牌相同的尺寸约束（`w-[85%]` + `aspectRatio: 1044/729`），通过 `EffectCellContainer`（`BoardEffects.tsx`）或等效方式实现，确保特效视觉范围与卡牌一致。召唤等需要大范围溢出的特效（如光柱）使用放大容器（5 倍格子大小），不走卡牌约束。`DestroyEffect` 内部也使用 `CARD_ASPECT_RATIO` + `CARD_WIDTH_RATIO` 常量保持一致。
+棋盘格子内的特效容器应使用与卡牌相同的尺寸约束（`w-[85%]` + `aspectRatio: 1044/729`）。召唤等需要大范围溢出的特效（如光柱）使用放大容器（5 倍格子大小），不走卡牌约束。`DestroyEffect` 内部也使用 `CARD_ASPECT_RATIO` + `CARD_WIDTH_RATIO` 常量保持一致。
+
+---
+
+## 引擎级 FX 系统（强制）
+
+棋盘特效调度已迁移至引擎级 FX 系统（`src/engine/fx/`），提供 cue-based 的注册、调度与渲染框架。
+
+### 核心概念
+- **FxCue**：点分层级标识符（如 `fx.summon`、`fx.combat.shockwave`），支持通配符（`fx.combat.*`）
+- **FxRegistry**：Cue → FxRenderer 映射，精确匹配优先于通配符
+- **FxBus**（`useFxBus` hook）：push 事件触发特效，内置并发上限、防抖、安全超时
+- **FxLayer**：通用渲染层组件，查注册表获取 renderer 并渲染
+- **FxRenderer**：适配器组件，将 FxEvent 参数映射为底层动画组件 props
+
+### 新增特效流程
+1. 在 `src/components/common/animations/` 实现底层动画组件（如已有则复用）
+2. 在游戏侧 `fxSetup.ts` 中创建 FxRenderer 适配器，并注册到 registry
+3. 在事件消费处（`useGameEvents.ts` 或 `Board.tsx`）调用 `fxBus.push(cue, ctx, params)`
+4. 在 `EffectPreview.tsx` 添加预览
+
+### 文件分布
+- `src/engine/fx/` — 引擎层（types / FxRegistry / useFxBus / FxLayer）
+- `src/engine/fx/shader/` — WebGL Shader 子系统（ShaderCanvas / ShaderMaterial / GLSL 库 / 预设 shader）
+- `src/games/<gameId>/ui/fxSetup.ts` — 游戏侧注册表 + 渲染器适配器
+- `src/components/common/animations/` — 底层动画组件（Canvas 2D + Shader 版本共存）
+
+---
+
+## WebGL Shader 特效系统
+
+FX 系统支持 WebGL shader 管线，用于逐像素计算的流体特效。与 Canvas 2D 粒子系统共存，按需使用。
+
+### 核心组件
+- **`ShaderCanvas`**（`src/engine/fx/shader/ShaderCanvas.tsx`）：管理 WebGL context + fullscreen quad，接受 fragment shader + uniforms + duration，自动处理 DPI/RAF/生命周期。自动注入 `uTime`、`uResolution`、`uProgress` 三个内置 uniform。
+- **`ShaderMaterial`**（`ShaderMaterial.ts`）：shader 编译、program 链接、类型安全的 uniform setter（带 location 缓存）。
+- **GLSL 噪声库**（`glsl/noise.glsl.ts`）：Simplex 2D 噪声 + FBM，以 TS 字符串导出，在 shader 中拼接使用。
+
+### Shader 预设
+- `vortex.frag.ts` — 流体旋涡（极坐标螺旋扭曲 + 双层 FBM + 三阶段动画 + 颜色映射）
+- 后续可扩展：火焰、能量护盾、溶解等
+
+### 新增 Shader 特效流程
+1. 在 `src/engine/fx/shader/glsl/` 中复用或新增 GLSL 工具函数
+2. 在 `src/engine/fx/shader/shaders/` 中创建 `.frag.ts`，拼接 noise 库 + 主 shader 代码
+3. 在 `src/components/common/animations/` 创建包装组件（如 `VortexShaderEffect`），内部使用 `ShaderCanvas`
+4. 在游戏侧 `fxSetup.ts` 注册到 FxRegistry
+5. 颜色值从 0-255 归一化到 0-1 后传入 uniform（GLSL 标准）
+
+### 降级策略
+若浏览器不支持 WebGL，`ShaderCanvas` 自动触发 `onComplete`，效果静默跳过。调用方可搭配 Canvas 2D 版本做回退。
 
 ---
 

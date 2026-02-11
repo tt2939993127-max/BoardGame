@@ -174,10 +174,21 @@ event.audioCategory = { group: 'ui', sub: 'click' };
 5. 更新对应测试（BGM 数量断言、no-overlap 断言）
 6. 更新本文档 §4.4 的分配总览
 
-## 5. 质量检查清单
+## 5. 运行时 AudioContext 规范（强制）
+
+> 详细代码示例见 `docs/ai-rules/golden-rules.md` § AudioContext 异步解锁规范
+
+- **禁止在 `ctx.resume()` 后同步检查 context 状态并据此跳过播放**。`resume()` 是异步的，必须等待完成。
+- **BGM 使用 `html5: true`**，禁止用 WebAudio 的 `isContextSuspended()` 来阻止 HTML5 Audio 播放。
+- **用户手势解锁处理器**必须在 `ctx.resume().then()` 回调中播放音频，而非同步调用。
+- **单独的 AudioContext**（如 `SynthAudio.ts`）也需遵守同样规则。
+
+## 6. 质量检查清单
 - [ ] 音频文件仅存在于 `public/assets/common/audio/`
 - [ ] 已执行 `compress:audio`
 - [ ] 已重新生成 `registry.json`
 - [ ] 已更新 `common-audio-assets.md`
 - [ ] 代码中不出现 `compressed/`
 - [ ] 游戏层 `audio.config.ts` 不含 `basePath/sounds`
+- [ ] 音频播放代码不在 `ctx.resume()` 后同步检查 context 状态
+- [ ] BGM 播放不用 `isContextSuspended()` 拦截

@@ -163,6 +163,7 @@ const ALLOWED_COMMANDS_DURING_RESPONSE = [
     'RESPONSE_PASS',      // 跳过响应
     'PLAY_CARD',          // 打出卡牌（响应卡）
     'SYS_PROMPT_RESPOND', // Prompt 响应命令
+    'SYS_PROMPT_TIMEOUT', // Prompt 超时命令
     'USE_TOKEN',          // Token 响应
     'SKIP_TOKEN_RESPONSE', // 跳过 Token 响应
     // 卡牌交互相关命令
@@ -176,13 +177,49 @@ const ALLOWED_COMMANDS_DURING_RESPONSE = [
     'su:play_action',     // 大杀四方：Me First! 响应打出特殊行动卡
 ];
 
+const resolveCommandTimestamp = (command: { timestamp?: number }): number =>
+    typeof command.timestamp === 'number' ? command.timestamp : 0;
+
+const resolveEventTimestamp = (event: GameEvent): number =>
+    typeof event.timestamp === 'number' ? event.timestamp : 0;
+
+function skipToNextRespondableResponder<TCore>(
+    state: MatchState<TCore>,
+    window: ResponseWindowState['current'] | undefined,
+    hasRespondableContent?: ResponseWindowSystemConfig['hasRespondableContent']
+): ResponseWindowState['current'] | undefined {
+    if (!window || !hasRespondableContent) return window;
+
+    const originalIndex = window.currentResponderIndex;
+    let index = originalIndex;
+    let passedPlayers = window.passedPlayers;
+
+    while (index < window.responderQueue.length) {
+        const playerId = window.responderQueue[index];
+        if (hasRespondableContent(state.core as unknown, playerId, window.windowType, window.sourceId)) {
+            if (index === originalIndex) return window;
+            return {
+                ...window,
+                currentResponderIndex: index,
+                passedPlayers,
+            };
+        }
+        passedPlayers = [...passedPlayers, playerId];
+        index += 1;
+    }
+
+    return undefined;
+}
+
 // ============================================================================
 // 创建响应窗口系统
 // ============================================================================
 
 export function createResponseWindowSystem<TCore>(
-    _config: ResponseWindowSystemConfig = {}
+    config: ResponseWindowSystemConfig = {}
 ): EngineSystem<TCore> {
+    const { hasRespondableContent } = config;
+
     return {
         id: SYSTEM_IDS.RESPONSE_WINDOW,
         name: '响应窗口系统',
@@ -194,12 +231,16 @@ export function createResponseWindowSystem<TCore>(
             },
         }),
 
-        beforeCommand: ({ state, command }): HookResult<TCore> | void => {
+        beforeCommand: ({ state, command, playerIds }): HookResult<TCore> | void => {
             const currentWindow = state.sys.responseWindow?.current;
             
             // 没有响应窗口，不干预
             if (!currentWindow) {
                 return;
+            }
+
+            if (!playerIds.includes(command.playerId)) {
+                return { halt: true, error: 'player_mismatch' };
             }
 
             const currentResponderId = getCurrentResponderId(currentWindow);
@@ -209,8 +250,12 @@ export function createResponseWindowSystem<TCore>(
                 if (currentWindow.pendingInteractionId) {
                     return { halt: true, error: '交互处理中，无法跳过响应' };
                 }
-                // 支持代替离线玩家 pass（跳过）：如果 payload 中有 forPlayerId，则使用它
+                // 支持代替离线玩家 pass（仅本地/教程允许）
                 const payload = command.payload as { forPlayerId?: PlayerId } | undefined;
+                const wantsProxyPass = !!payload?.forPlayerId && payload.forPlayerId !== command.playerId;
+                if (wantsProxyPass && !command.skipValidation) {
+                    return { halt: true, error: '不能代替他人跳过响应' };
+                }
                 const targetPlayerId = payload?.forPlayerId ?? command.playerId;
                 
                 // 验证目标玩家是当前响应者
@@ -219,8 +264,13 @@ export function createResponseWindowSystem<TCore>(
                 }
 
                 // 移动到下一个响应者
-                const nextWindow = advanceToNextResponder(currentWindow, targetPlayerId);
+                const nextWindow = skipToNextRespondableResponder(
+                    state,
+                    advanceToNextResponder(currentWindow, targetPlayerId),
+                    hasRespondableContent
+                );
                 const events: GameEvent[] = [];
+                const cmdTimestamp = resolveCommandTimestamp(command);
                 
                 if (nextWindow) {
                     // 还有下一个响应者
@@ -232,7 +282,7 @@ export function createResponseWindowSystem<TCore>(
                             previousResponderId: currentResponderId,
                             nextResponderId: getCurrentResponderId(nextWindow),
                         },
-                        timestamp: Date.now(),
+                        timestamp: cmdTimestamp,
                     });
                     return { halt: false, state: newState, events };
                 } else {
@@ -244,7 +294,7 @@ export function createResponseWindowSystem<TCore>(
                             windowId: currentWindow.id,
                             allPassed: true,
                         },
-                        timestamp: Date.now(),
+                        timestamp: cmdTimestamp,
                     });
                     return { halt: false, state: newState, events };
                 }
@@ -275,6 +325,7 @@ export function createResponseWindowSystem<TCore>(
             const additionalEvents: GameEvent[] = [];
             
             for (const event of events) {
+                const eventTimestamp = resolveEventTimestamp(event);
                 // 处理响应窗口打开事件
                 if (event.type === RESPONSE_WINDOW_EVENTS.OPENED) {
                     const payload = event.payload as {
@@ -292,7 +343,20 @@ export function createResponseWindowSystem<TCore>(
                     );
                     
                     if (window) {
-                        newState = openResponseWindow(newState, window);
+                        const nextWindow = skipToNextRespondableResponder(newState, window, hasRespondableContent);
+                        if (nextWindow) {
+                            newState = openResponseWindow(newState, nextWindow);
+                        } else {
+                            newState = closeResponseWindow(newState);
+                            additionalEvents.push({
+                                type: RESPONSE_WINDOW_EVENTS.CLOSED,
+                                payload: {
+                                    windowId: payload.windowId,
+                                    allPassed: true,
+                                },
+                                timestamp: eventTimestamp,
+                            });
+                        }
                     }
                 }
                 
@@ -339,7 +403,11 @@ export function createResponseWindowSystem<TCore>(
                             const currentResponderId = getCurrentResponderId(unlockedWindow);
                             
                             // 推进到下一个响应者
-                            const nextWindow = advanceToNextResponder(unlockedWindow, currentResponderId!);
+                            const nextWindow = skipToNextRespondableResponder(
+                                newState,
+                                advanceToNextResponder(unlockedWindow, currentResponderId!),
+                                hasRespondableContent
+                            );
                             
                             if (nextWindow) {
                                 newState = openResponseWindow(newState, nextWindow);
@@ -350,7 +418,7 @@ export function createResponseWindowSystem<TCore>(
                                         previousResponderId: currentResponderId,
                                         nextResponderId: getCurrentResponderId(nextWindow),
                                     },
-                                    timestamp: Date.now(),
+                                    timestamp: eventTimestamp,
                                 });
                             } else {
                                 // 所有人都已响应，关闭窗口
@@ -361,7 +429,7 @@ export function createResponseWindowSystem<TCore>(
                                         windowId: currentWindow.id,
                                         allPassed: false,
                                     },
-                                    timestamp: Date.now(),
+                                    timestamp: eventTimestamp,
                                 });
                             }
                         }
@@ -380,7 +448,11 @@ export function createResponseWindowSystem<TCore>(
                         
                         // 只有当前响应者打牌才推进
                         if (cardPayload.playerId === currentResponderId) {
-                            const nextWindow = advanceToNextResponder(currentWindow, currentResponderId);
+                            const nextWindow = skipToNextRespondableResponder(
+                                newState,
+                                advanceToNextResponder(currentWindow, currentResponderId),
+                                hasRespondableContent
+                            );
                             
                             if (nextWindow) {
                                 newState = openResponseWindow(newState, nextWindow);
@@ -391,7 +463,7 @@ export function createResponseWindowSystem<TCore>(
                                         previousResponderId: currentResponderId,
                                         nextResponderId: getCurrentResponderId(nextWindow),
                                     },
-                                    timestamp: Date.now(),
+                                    timestamp: eventTimestamp,
                                 });
                             } else {
                                 // 所有人都已响应，关闭窗口
@@ -402,7 +474,7 @@ export function createResponseWindowSystem<TCore>(
                                         windowId: currentWindow.id,
                                         allPassed: false, // 有人打牌了
                                     },
-                                    timestamp: Date.now(),
+                                    timestamp: eventTimestamp,
                                 });
                             }
                         }

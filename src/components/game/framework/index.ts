@@ -17,6 +17,8 @@ export { CharacterSelectionSkeleton } from './CharacterSelectionSkeleton';
 export type { CharacterSelectionSkeletonProps } from './CharacterSelectionSkeleton';
 export { TutorialSelectionGate } from './TutorialSelectionGate';
 export type { TutorialSelectionGateProps } from './TutorialSelectionGate';
+export { CriticalImageGate } from './CriticalImageGate';
+export type { CriticalImageGateProps } from './CriticalImageGate';
 
 // 棋盘布局组件
 export { BoardLayoutEditor } from './BoardLayoutEditor';

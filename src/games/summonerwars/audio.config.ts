@@ -30,7 +30,7 @@ const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinge
 
 const MAGIC_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
 const MAGIC_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
-const SUMMON_KEY = 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a';
+const SUMMON_KEY = 'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_06_krst';
 const MOVE_FALLBACK_KEY = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.armor_movement_h';
 const FACTION_MOVE_KEYS: Record<string, string[]> = {
     necromancer: [
@@ -341,7 +341,8 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
         if (type === SW_EVENTS.FACTION_SELECTED) return SELECTION_KEY;
         if (type === SW_EVENTS.PLAYER_READY) return POSITIVE_SIGNAL_KEY;
         if (type === SW_EVENTS.HOST_STARTED || type === SW_EVENTS.GAME_INITIALIZED) return UPDATE_CHIME_KEY;
-        if (type === SW_EVENTS.PHASE_CHANGED || type === SW_EVENTS.TURN_CHANGED) return UPDATE_CHIME_KEY;
+if (type === SW_EVENTS.PHASE_CHANGED) return 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_001';
+        if (type === SW_EVENTS.TURN_CHANGED) return 'fantasy.medieval_fantasy_sound_fx_pack_vol.items_misc.warhorn_d';
 
         if (type === SW_EVENTS.UNIT_SUMMONED) return SUMMON_KEY;
         if (type === SW_EVENTS.UNIT_MOVED) {
@@ -391,6 +392,11 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
 
         if (type === SW_EVENTS.DAMAGE_REDUCED) return STRUCTURE_DAMAGE_KEY;
         if (type === SW_EVENTS.EXTRA_ATTACK_GRANTED) return POSITIVE_SIGNAL_KEY;
+        if (type === SW_EVENTS.STRENGTH_MODIFIED) {
+            const delta = (event as AudioEvent & { payload?: { delta?: number } }).payload?.delta ?? 0;
+            return delta >= 0 ? UNIT_CHARGE_KEY : MAGIC_SPEND_KEY;
+        }
+        if (type === SW_EVENTS.ABILITIES_COPIED) return MAGIC_SHOCK_KEY;
 
         if (type === SW_EVENTS.UNIT_PUSHED || type === SW_EVENTS.UNIT_PULLED || type === SW_EVENTS.UNITS_SWAPPED) {
             return pickRandomSoundKey('summonerwars.move_swing', MOVE_SWING_KEYS, { minGap: 1 });

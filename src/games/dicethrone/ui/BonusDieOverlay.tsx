@@ -46,6 +46,8 @@ interface BonusDieOverlayProps {
     rerollCostAmount?: number;
     /** 重掷消耗 Token ID（用于显示名称） */
     rerollCostTokenId?: string;
+    /** 仅展示模式（无重掷，仅显示骰子结果） */
+    displayOnly?: boolean;
 }
 
 export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
@@ -64,9 +66,10 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     showTotal = false,
     rerollCostAmount,
     rerollCostTokenId,
+    displayOnly,
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const isRerollMode = Boolean(bonusDice && bonusDice.length > 0 && onReroll);
+    const isRerollMode = Boolean(bonusDice && bonusDice.length > 0 && (onReroll || displayOnly));
     const costAmount = rerollCostAmount ?? 1;
     const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : t('tokens.taiji.name');
 
@@ -92,9 +95,11 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                         animate={{ opacity: 1, y: 0 }}
                         className="text-white text-[2vw] font-bold text-center mb-[1vw]"
                     >
-                        {canReroll
-                            ? t('bonusDie.selectToReroll', { cost: costAmount, token: tokenName })
-                            : t('bonusDie.noTokenToReroll', { token: tokenName })}
+                        {displayOnly
+                            ? t('bonusDie.diceResult')
+                            : canReroll
+                                ? t('bonusDie.selectToReroll', { cost: costAmount, token: tokenName })
+                                : t('bonusDie.noTokenToReroll', { token: tokenName })}
                     </motion.div>
 
                     {/* 骰子列表 */}

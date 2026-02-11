@@ -69,7 +69,30 @@ export interface GameAssets {
     audio?: Record<string, string>;
     /** 精灵图集 */
     sprites?: SpriteAtlasDefinition[];
+    /** 关键图片路径列表（相对于 /assets/），进入对局前必须加载完成 */
+    criticalImages?: string[];
+    /** 暖加载图片路径列表（相对于 /assets/），进入对局后后台预取 */
+    warmImages?: string[];
 }
+
+/**
+ * 关键图片解析器返回值
+ * 解析器基于对局状态动态生成关键/暖图片列表，与静态清单合并
+ */
+export interface CriticalImageResolverResult {
+    critical: string[];
+    warm: string[];
+}
+
+/**
+ * 关键图片解析器函数签名
+ * @param gameState 当前对局状态（由各游戏自行断言类型）
+ * @param locale 可选的语言代码
+ */
+export type CriticalImageResolver = (
+    gameState: unknown,
+    locale?: string,
+) => CriticalImageResolverResult;
 
 // ============================================================================
 // 工具类型

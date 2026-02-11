@@ -26,6 +26,8 @@ function createTestRandom(randomValue = 0.5): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 /** 打印棋盘状态 */
 function printBoard(core: SummonerWarsCore) {
   console.log(`\n回合 ${core.turnNumber} | 阶段: ${core.phase} | 当前玩家: ${core.currentPlayer}`);
@@ -68,7 +70,7 @@ function executeCommand(
   }
   
   // 执行命令
-  const events = SummonerWarsDomain.execute(state, { type, playerId, payload, timestamp: Date.now() }, random);
+  const events = SummonerWarsDomain.execute(state, { type, playerId, payload, timestamp: fixedTimestamp }, random);
   
   // 应用事件
   let newCore = core;

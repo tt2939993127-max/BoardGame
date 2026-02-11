@@ -36,10 +36,11 @@ function formatTicTacToeActionEntry({
     const { cellId } = command.payload as { cellId: number };
     const row = Math.floor(cellId / 3) + 1;
     const col = (cellId % 3) + 1;
+    const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
     return {
-        id: `${command.type}-${command.playerId}-${command.timestamp ?? Date.now()}`,
-        timestamp: command.timestamp ?? Date.now(),
+        id: `${command.type}-${command.playerId}-${timestamp}`,
+        timestamp,
         actorId: command.playerId,
         kind: command.type,
         segments: [{ type: 'text', text: `落子：${row},${col}` }],

@@ -9,6 +9,7 @@ import { GameHUD } from '../components/game/GameHUD';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { useState } from 'react';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
+import { CriticalImageGate } from '../components/game/framework';
 
 export const LocalMatchRoom = () => {
     usePerformanceMonitor();
@@ -31,19 +32,31 @@ export const LocalMatchRoom = () => {
             .catch(() => setIsGameNamespaceReady(true));
     }, [gameId, i18n]);
 
+
     const LocalClient = useMemo(() => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
         const impl = GAME_IMPLEMENTATIONS[gameId];
+        const Board = impl.board;
+        const WrappedBoard: React.ComponentType<any> = (props) => (
+            <CriticalImageGate
+                gameId={gameId}
+                gameState={props?.G}
+                locale={i18n.language}
+                loadingDescription={t('matchRoom.loadingResources')}
+            >
+                <Board {...props} />
+            </CriticalImageGate>
+        );
         const gameWithSeed = { ...impl.game, seed: gameSeed };
         console.log('[LocalMatch] 创建游戏，种子:', gameSeed);
         return Client({
             game: gameWithSeed,
-            board: impl.board,
+            board: WrappedBoard,
             debug: false,
             numPlayers: 2,
             loading: () => <LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />
         }) as React.ComponentType<{ playerID?: string | null }>;
-    }, [gameId, gameSeed]);
+    }, [gameId, gameSeed, i18n.language, t]);
 
     if (!gameConfig) {
         return <div className="text-white">{t('matchRoom.noGame')}</div>;

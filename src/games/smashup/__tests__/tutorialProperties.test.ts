@@ -15,27 +15,27 @@ import { resolve } from 'path';
 import { resetUidCounter, arbMinimalGameState } from './properties/arbitraries';
 
 // ============================================================================
-// Property 1: UI 介绍步骤阻止阶段推进
+// Property 1: UI 介绍步骤使用 infoStep 阻止所有命令
 // ============================================================================
 
-describe('Property 1: UI introduction steps block phase advancement', () => {
+describe('Property 1: UI introduction steps use infoStep to block all commands', () => {
     /**
      * **Validates: Requirements 2.6**
      *
      * 对于所有 requireAction: false 且非 setup/finish 的步骤，
-     * blockedCommands 必须包含 ADVANCE_PHASE。
+     * 必须设置 infoStep: true 来阻止所有游戏命令。
      */
-    it('所有 UI 介绍步骤的 blockedCommands 包含 ADVANCE_PHASE', () => {
+    it('所有 UI 介绍步骤设置了 infoStep: true', () => {
         // 筛选出 UI 介绍步骤：requireAction=false 且非 setup/finish/scoringPhase(有 aiActions)
         const uiSteps = SMASH_UP_TUTORIAL.steps.filter(s =>
-            s.requireAction === false &&
+            !s.requireAction &&
             s.id !== 'setup' &&
             s.id !== 'finish' &&
             s.id !== 'summary' &&
             s.id !== 'talentIntro' &&
             s.id !== 'turnCycle' &&
-            s.id !== 'scoringPhase' && // 依赖 FlowSystem 自动推进，不需要 blockedCommands
-            !s.aiActions // 有 aiActions 的步骤（如 opponentTurn）不需要 blockedCommands
+            s.id !== 'scoringPhase' && // 依赖 FlowSystem 自动推进，不需要 infoStep
+            !s.aiActions // 有 aiActions 的步骤（如 opponentTurn）不能设 infoStep
         );
 
         // 确保至少有一些 UI 介绍步骤
@@ -46,8 +46,7 @@ describe('Property 1: UI introduction steps block phase advancement', () => {
                 fc.integer({ min: 0, max: uiSteps.length - 1 }),
                 (idx) => {
                     const step = uiSteps[idx];
-                    expect(step.blockedCommands).toBeDefined();
-                    expect(step.blockedCommands).toContain(FLOW_COMMANDS.ADVANCE_PHASE);
+                    expect(step.infoStep).toBe(true);
                 }
             ),
             { numRuns: 100 }

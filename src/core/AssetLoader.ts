@@ -5,7 +5,8 @@
  * 所有游戏资源路径相对于资源基址（默认 /assets/）。
  */
 
-import type { GameAssets, SpriteAtlasDefinition } from './types';
+import type { GameAssets, SpriteAtlasDefinition, CriticalImageResolverResult } from './types';
+import { resolveCriticalImages } from './CriticalImageResolverRegistry';
 
 // ============================================================================
 // 资源路径常量
@@ -162,6 +163,119 @@ export async function preloadGameAssets(gameId: string): Promise<void> {
     console.log(`[AssetLoader] 游戏 ${gameId} 资源预加载完成`);
 }
 
+/** 关键图片超时（ms） */
+const CRITICAL_PRELOAD_TIMEOUT_MS = 10_000;
+const SUPPORT_DETECTION_TIMEOUT_MS = 200;
+
+// 最小化格式探测图片
+const AVIF_TEST_DATA =
+    'data:image/avif;base64,AAAAIGZ0eXBhdmlmAAAAAG1pZjFhdmlmAAAAAG1ldGEAAA';
+const WEBP_TEST_DATA =
+    'data:image/webp;base64,UklGRiIAAABXRUJQVlA4TAYAAAAvAAAAAAfQ//73v/+BiOh/AAA=';
+
+let avifSupportPromise: Promise<boolean> | null = null;
+let webpSupportPromise: Promise<boolean> | null = null;
+
+const detectImageSupport = (dataUrl: string): Promise<boolean> => {
+    if (typeof Image === 'undefined') return Promise.resolve(false);
+    return new Promise((resolve) => {
+        let done = false;
+        const img = new Image();
+        const finish = (supported: boolean) => {
+            if (done) return;
+            done = true;
+            resolve(supported);
+        };
+        const timer = setTimeout(() => finish(false), SUPPORT_DETECTION_TIMEOUT_MS);
+        img.onload = () => {
+            clearTimeout(timer);
+            finish(true);
+        };
+        img.onerror = () => {
+            clearTimeout(timer);
+            finish(false);
+        };
+        img.src = dataUrl;
+    });
+};
+
+const supportsAvif = () => {
+    avifSupportPromise ??= detectImageSupport(AVIF_TEST_DATA);
+    return avifSupportPromise;
+};
+
+const supportsWebp = () => {
+    webpSupportPromise ??= detectImageSupport(WEBP_TEST_DATA);
+    return webpSupportPromise;
+};
+
+/**
+ * 预加载关键图片（第一阶段：阻塞门禁）
+ *
+ * 合并静态清单（GameAssets.criticalImages）与动态解析器输出，
+ * 等待所有关键图片加载完成或 10s 超时后放行。
+ * 单张图片加载失败不阻塞其他图片。
+ *
+ * @returns 暖加载图片路径列表（可传给 preloadWarmImages）
+ */
+export async function preloadCriticalImages(
+    gameId: string,
+    gameState?: unknown,
+    locale?: string,
+): Promise<string[]> {
+    const assets = gameAssetsRegistry.get(gameId);
+    const staticCritical = assets?.criticalImages ?? [];
+    const staticWarm = assets?.warmImages ?? [];
+
+    let resolved: CriticalImageResolverResult = { critical: [], warm: [] };
+    if (gameState !== undefined) {
+        resolved = resolveCriticalImages(gameId, gameState, locale);
+    }
+
+    // 合并去重
+    const criticalPaths = [...new Set([...staticCritical, ...resolved.critical])];
+    const warmPaths = [...new Set([...staticWarm, ...resolved.warm])];
+
+    if (criticalPaths.length === 0) {
+        return warmPaths;
+    }
+
+    const promises = criticalPaths
+        .filter(Boolean)
+        .map((p) => preloadOptimizedImage(p));
+
+    // Promise.allSettled + 5s 超时竞争
+    await Promise.race([
+        Promise.allSettled(promises),
+        new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),
+    ]);
+
+    console.log(`[AssetLoader] 游戏 ${gameId} 关键图片预加载完成 (${criticalPaths.length} 张)`);
+    return warmPaths;
+}
+
+/**
+ * 预加载暖图片（第二阶段：后台预取）
+ *
+ * 在空闲时执行，不阻塞主线程。
+ */
+export function preloadWarmImages(paths: string[]): void {
+    if (paths.length === 0) return;
+
+    const doPreload = () => {
+        for (const p of paths) {
+            if (!p) continue;
+            preloadOptimizedImage(p); // fire-and-forget
+        }
+    };
+
+    if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(() => doPreload(), { timeout: 3000 });
+    } else {
+        setTimeout(doPreload, 200);
+    }
+}
+
 /**
  * 清除游戏资源缓存
  */
@@ -201,6 +315,46 @@ async function preloadImage(src: string): Promise<void> {
         };
         img.src = src;
     });
+}
+
+async function preloadImageWithResult(src: string): Promise<boolean> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            preloadedImages.set(src, img);
+            resolve(true);
+        };
+        img.onerror = () => {
+            console.warn(`[AssetLoader] 图片加载失败: ${src}`);
+            resolve(false);
+        };
+        img.src = src;
+    });
+}
+
+async function preloadOptimizedImage(src: string): Promise<void> {
+    const { avif, webp } = getOptimizedImageUrls(src);
+    if (!avif && !webp) return;
+    if (avif === webp) {
+        if (preloadedImages.has(avif)) return;
+        await preloadImage(avif);
+        return;
+    }
+
+    const preferAvif = await supportsAvif();
+    let primary = avif;
+    let fallback = webp;
+    if (!preferAvif) {
+        const preferWebp = await supportsWebp();
+        primary = preferWebp ? webp : avif;
+        fallback = preferWebp ? avif : webp;
+    }
+
+    if (preloadedImages.has(primary)) return;
+    const ok = await preloadImageWithResult(primary);
+    if (!ok && fallback && !preloadedImages.has(fallback)) {
+        await preloadImageWithResult(fallback);
+    }
 }
 
 async function preloadAudioFile(src: string): Promise<void> {

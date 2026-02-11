@@ -8,15 +8,13 @@
 import type { RandomFn } from '../../../engine/types';
 import type { DiceThroneCore, DiceThroneEvent, DeckShuffledEvent, CardDrawnEvent } from './types';
 
-const now = () => Date.now();
-
 export function buildDrawEvents(
     state: DiceThroneCore,
     playerId: string,
     count: number,
     random: RandomFn,
     sourceCommandType: string,
-    timestamp: number = now()
+    timestamp: number = 0
 ): DiceThroneEvent[] {
     if (count <= 0) return [];
 

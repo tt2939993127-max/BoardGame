@@ -33,6 +33,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 /** 创建先锋军团 vs 亡灵法师的测试状态 */
 function createPaladinState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
@@ -169,7 +171,7 @@ function executeAndReduce(
   payload: Record<string, unknown>
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -419,7 +421,7 @@ describe('城塞骑士 - 守卫 (guardian)', () => {
       type: SW_COMMANDS.DECLARE_ATTACK,
       payload: { attacker: { row: 4, col: 2 }, target: { row: 3, col: 2 } },
       playerId: '1',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('守卫');
@@ -450,7 +452,7 @@ describe('城塞骑士 - 守卫 (guardian)', () => {
       type: SW_COMMANDS.DECLARE_ATTACK,
       payload: { attacker: { row: 4, col: 2 }, target: { row: 4, col: 3 } },
       playerId: '1',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(true);
   });
@@ -490,7 +492,7 @@ describe('城塞骑士 - 守卫 (guardian)', () => {
       type: SW_COMMANDS.DECLARE_ATTACK,
       payload: { attacker: { row: 4, col: 0 }, target: { row: 4, col: 1 } },
       playerId: '1',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(true);
   });
@@ -654,7 +656,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
         targetCardId: 'fortress-warrior-discard',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('城塞');
@@ -692,7 +694,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
         targetCardId: 'temple-priest-discard',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('城塞');
@@ -783,7 +785,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
         sourceUnitId: 'test-valentina',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('召唤阶段');
@@ -890,7 +892,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
         discardCardIds: ['ally-1', 'ally-2'],
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('同名');
@@ -921,7 +923,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
         discardCardIds: ['archer-in-hand'],
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('同名');
@@ -949,7 +951,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
         discardCardIds: ['some-card'],
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('攻击阶段');

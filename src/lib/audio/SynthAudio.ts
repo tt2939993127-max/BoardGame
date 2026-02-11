@@ -41,47 +41,53 @@ export function playSynthSound(key: string): void {
     console.log(`[SynthAudio] Playing synthesis for: ${key}`);
 
     const ctx = getAudioContext();
+
+    const doPlay = () => {
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+
+        // 根据类型选择波形
+        switch (preset.type) {
+            case 'fanfare':
+                oscillator.type = 'triangle'; // 柔和的波形
+                break;
+            case 'buzz':
+                oscillator.type = 'sawtooth';
+                break;
+            case 'pop':
+            case 'soft-pop':
+            default:
+                oscillator.type = 'sine';
+        }
+
+        const now = ctx.currentTime;
+        const volume = preset.volume ?? 0.3;
+
+        // 优化的包络线，避免“卡嗒”声
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(volume, now + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + preset.duration);
+
+        oscillator.frequency.setValueAtTime(preset.frequency, now);
+
+        // 仅保留胜利音效的滑音，使其更有节奏感
+        if (preset.type === 'fanfare') {
+            oscillator.frequency.exponentialRampToValueAtTime(preset.frequency * 1.5, now + preset.duration);
+        }
+
+        oscillator.start(now);
+        oscillator.stop(now + preset.duration);
+    };
+
+    // 等待 resume 完成后再播放，避免 context 仍处于 suspended 时创建 oscillator
     if (ctx.state === 'suspended') {
-        ctx.resume();
+        ctx.resume().then(doPlay).catch(() => {});
+    } else {
+        doPlay();
     }
-
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-
-    // 根据类型选择波形
-    switch (preset.type) {
-        case 'fanfare':
-            oscillator.type = 'triangle'; // 柔和的波形
-            break;
-        case 'buzz':
-            oscillator.type = 'sawtooth';
-            break;
-        case 'pop':
-        case 'soft-pop':
-        default:
-            oscillator.type = 'sine';
-    }
-
-    const now = ctx.currentTime;
-    const volume = preset.volume ?? 0.3;
-
-    // 优化的包络线，避免“卡嗒”声
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(volume, now + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + preset.duration);
-
-    oscillator.frequency.setValueAtTime(preset.frequency, now);
-
-    // 仅保留胜利音效的滑音，使其更有节奏感
-    if (preset.type === 'fanfare') {
-        oscillator.frequency.exponentialRampToValueAtTime(preset.frequency * 1.5, now + preset.duration);
-    }
-
-    oscillator.start(now);
-    oscillator.stop(now + preset.duration);
 }
 
 /**

@@ -14,6 +14,9 @@ export {
     clearGameAssetsCache,
     setAssetsBaseUrl,
     getAssetsBaseUrl,
+    // 两阶段预加载 API
+    preloadCriticalImages,
+    preloadWarmImages,
     // 便捷工具 API
     assetsPath,
     getOptimizedImageUrls,
@@ -24,3 +27,7 @@ export {
     buildOptimizedImageSet,
     getDirectAssetPath,
 } from './AssetLoader';
+export {
+    registerCriticalImageResolver,
+    resolveCriticalImages,
+} from './CriticalImageResolverRegistry';

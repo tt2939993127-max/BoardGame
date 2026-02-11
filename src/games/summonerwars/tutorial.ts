@@ -26,7 +26,11 @@ const MATCH_PHASE_DRAW = { type: FLOW_EVENTS.PHASE_CHANGED, match: { to: 'draw' 
 
 const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
   id: 'summonerwars-basic',
-  randomPolicy: { mode: 'fixed', values: [1] },
+  // 骠子使用 random() * 6 取索引: 0-2=melee, 3-4=ranged, 5=special
+  // sequence 模式: random() 返回 (value-1)/1000000
+  // 要让索引=4（ranged），需要 floor(random()*6)=4，即 random() ≈ 0.75-0.83
+  // value = 750001 → random() = 750000/1000000 = 0.75 → floor(0.75*6) = 4 → ranged
+  randomPolicy: { mode: 'sequence', values: [750001] },
   steps: [
     // ================================================================
     // 第一部分：初始化 + 逐步介绍界面元素
@@ -58,18 +62,25 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.welcome',
       highlightTarget: 'sw-map-area',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
-    // 2: 你的召唤师 — 高亮己方召唤师
+    // 2: 地图操作提示
+    {
+      id: 'map-controls',
+      content: 'game-summonerwars:tutorial.steps.mapControls',
+      highlightTarget: 'sw-map-area',
+      position: 'right',
+      infoStep: true,
+    },
+
+    // 3: 你的召唤师 — 高亮己方召唤师
     {
       id: 'summoner-intro',
       content: 'game-summonerwars:tutorial.steps.summonerIntro',
       highlightTarget: 'sw-my-summoner',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 3: 敌方召唤师 — 高亮敌方召唤师
@@ -78,8 +89,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.enemySummoner',
       highlightTarget: 'sw-enemy-summoner',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 4: 城门 — 高亮己方城门
@@ -88,8 +98,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.gateIntro',
       highlightTarget: 'sw-my-gate',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 5: 手牌区 — 高亮手牌
@@ -98,8 +107,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.handIntro',
       highlightTarget: 'sw-hand-area',
       position: 'top',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 6: 卡牌属性 — 高亮第一张手牌
@@ -108,8 +116,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.cardAnatomy',
       highlightTarget: 'sw-first-hand-card',
       position: 'top',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 7: 魔力条 — 高亮玩家信息栏
@@ -118,8 +125,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.magicIntro',
       highlightTarget: 'sw-player-bar',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 8: 阶段指示器 — 高亮阶段追踪器
@@ -128,8 +134,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.phaseIntro',
       highlightTarget: 'sw-phase-tracker',
       position: 'left',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // ================================================================
@@ -142,8 +147,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.summonExplain',
       highlightTarget: 'sw-action-banner',
       position: 'bottom',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 10: 召唤操作 — 高亮手牌区
@@ -155,31 +159,30 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       requireAction: true,
       allowedCommands: [SW_COMMANDS.SUMMON_UNIT],
       advanceOnEvents: [{ type: SW_EVENTS.UNIT_SUMMONED }],
+      waitForAnimation: true,
     },
 
-    // 11: 召唤师技能说明 — 高亮己方召唤师
+    // 11: 召唤师技能说明 — 高亮召唤师（地图自动平移缩放）
     {
       id: 'ability-explain',
       content: 'game-summonerwars:tutorial.steps.abilityExplain',
       highlightTarget: 'sw-my-summoner',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
-    // 12: 使用技能 — 高亮弃牌堆
+    // 12: 使用技能
     {
       id: 'ability-action',
       content: 'game-summonerwars:tutorial.steps.abilityAction',
-      highlightTarget: 'sw-discard-pile',
-      position: 'left',
+      position: 'center',
       requireAction: true,
       allowedCommands: [SW_COMMANDS.ACTIVATE_ABILITY],
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
       advanceOnEvents: [
         { type: SW_EVENTS.ABILITY_TRIGGERED, match: { abilityId: 'revive_undead' } },
         { type: SW_EVENTS.UNIT_SUMMONED },
       ],
+      waitForAnimation: true,
     },
 
     // 13: 结束召唤阶段 — 高亮结束按钮
@@ -203,8 +206,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.moveExplain',
       highlightTarget: 'sw-phase-tracker',
       position: 'left',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 15: 移动操作 — 高亮棋盘
@@ -239,8 +241,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.buildExplain',
       highlightTarget: 'sw-my-gate',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 18: 事件卡说明 — 高亮手牌区
@@ -249,8 +250,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.eventCardExplain',
       highlightTarget: 'sw-hand-area',
       position: 'top',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 19: 施放事件卡操作 — 高亮手牌区
@@ -261,7 +261,6 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       position: 'top',
       requireAction: true,
       allowedCommands: [SW_COMMANDS.PLAY_EVENT],
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
       advanceOnEvents: [{ type: SW_EVENTS.EVENT_PLAYED }],
     },
 
@@ -286,8 +285,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.attackExplain',
       highlightTarget: 'sw-phase-tracker',
       position: 'left',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 22: 近战说明 — 高亮棋盘（近战单位在棋盘上）
@@ -296,18 +294,16 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.meleeExplain',
       highlightTarget: 'sw-map-area',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
-    // 23: 远程说明 — 高亮己方召唤师（远程单位）
+    // 23: 远程说明 — 高亮起始弓箭手（远程单位）
     {
       id: 'ranged-explain',
       content: 'game-summonerwars:tutorial.steps.rangedExplain',
-      highlightTarget: 'sw-my-summoner',
+      highlightTarget: 'sw-start-archer',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 24: 攻击操作
@@ -317,29 +313,19 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       highlightTarget: 'sw-map-area',
       position: 'right',
       requireAction: true,
-      allowedCommands: [SW_COMMANDS.SELECT_UNIT, SW_COMMANDS.DECLARE_ATTACK],
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      allowedCommands: [SW_COMMANDS.SELECT_UNIT, SW_COMMANDS.DECLARE_ATTACK, SW_COMMANDS.CONFIRM_ATTACK],
       advanceOnEvents: [{ type: SW_EVENTS.UNIT_ATTACKED }],
+      waitForAnimation: true,
     },
 
-    // 25: 攻击结果 — 高亮敌方召唤师
-    {
-      id: 'attack-result',
-      content: 'game-summonerwars:tutorial.steps.attackResult',
-      highlightTarget: 'sw-enemy-summoner',
-      position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
-    },
-
-    // 26: 结束攻击阶段
+    // 25: 结束攻击阶段
     {
       id: 'end-attack',
       content: 'game-summonerwars:tutorial.steps.endAttack',
       highlightTarget: 'sw-end-phase-btn',
       position: 'left',
       requireAction: true,
-      allowedCommands: [SW_COMMANDS.DECLARE_ATTACK, FLOW_COMMANDS.ADVANCE_PHASE],
+      allowedCommands: [SW_COMMANDS.SELECT_UNIT, SW_COMMANDS.DECLARE_ATTACK, SW_COMMANDS.CONFIRM_ATTACK, FLOW_COMMANDS.ADVANCE_PHASE],
       advanceOnEvents: [MATCH_PHASE_MAGIC],
     },
 
@@ -353,16 +339,15 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.magicExplain',
       highlightTarget: 'sw-hand-area',
       position: 'top',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
-    // 28: 魔力操作
+    // 26: 魔力操作 — 高亮手牌区，提示框在上方避免遮挡弃牌按钮
     {
       id: 'magic-action',
       content: 'game-summonerwars:tutorial.steps.magicAction',
-      highlightTarget: 'sw-end-phase-btn',
-      position: 'left',
+      highlightTarget: 'sw-hand-area',
+      position: 'top',
       requireAction: true,
       allowedCommands: [SW_COMMANDS.DISCARD_FOR_MAGIC, FLOW_COMMANDS.ADVANCE_PHASE],
       advanceOnEvents: [MATCH_PHASE_DRAW],
@@ -378,8 +363,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       content: 'game-summonerwars:tutorial.steps.drawExplain',
       highlightTarget: 'sw-deck-draw',
       position: 'right',
-      requireAction: false,
-      blockedCommands: [FLOW_COMMANDS.ADVANCE_PHASE],
+      infoStep: true,
     },
 
     // 30: 结束抽牌阶段

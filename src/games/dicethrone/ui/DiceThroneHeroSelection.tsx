@@ -6,6 +6,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
 import { getLocalizedAssetPath } from '../../../core';
@@ -263,7 +264,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
                                     {readyPlayers[pid as PlayerId] && (
                                         <div className="w-[1.2vw] h-[1.2vw] rounded-full bg-emerald-500 flex items-center justify-center text-white">
-                                            <span className="text-[0.7vw] font-bold">✓</span>
+                                            <Check size={14} className="text-white" strokeWidth={3} />
                                         </div>
                                     )}
                                 </motion.div>

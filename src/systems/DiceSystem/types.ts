@@ -7,6 +7,8 @@
  * - 骰子池/袋抽取（Zombie Dice）
  */
 
+import type { RandomFn } from '../../engine/types';
+
 // ============================================================================
 // 骰子定义（模板）
 // ============================================================================
@@ -227,13 +229,13 @@ export interface IDiceSystem {
     getAllDefinitions(): DiceDefinition[];
     
     /** 创建骰子实例 */
-    createDie(definitionId: string, options: CreateDieOptions): Die;
+    createDie(definitionId: string, options: CreateDieOptions, random?: RandomFn): Die;
     
     /** 掷单个骰子 */
-    rollDie(die: Die): Die;
+    rollDie(die: Die, random?: RandomFn): Die;
     
     /** 批量掷骰（支持保留） */
-    rollDice(dice: Die[]): RollResult;
+    rollDice(dice: Die[], random?: RandomFn): RollResult;
     
     /** 计算统计信息 */
     calculateStats(dice: Die[]): RollStats;

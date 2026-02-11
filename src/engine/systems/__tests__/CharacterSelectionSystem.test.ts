@@ -32,6 +32,14 @@ describe('CharacterSelectionSystem', () => {
 
             expect(state.hostPlayerId).toBe('1');
         });
+
+        it('initialHostId 不在玩家列表时回退到首位玩家', () => {
+            const system = new CharacterSelectionSystem({ initialHostId: '2' });
+            const playerIds = ['0', '1'];
+            const state = system.createInitialState(playerIds);
+
+            expect(state.hostPlayerId).toBe('0');
+        });
     });
 
     describe('isEveryoneReady', () => {
@@ -119,6 +127,29 @@ describe('CharacterSelectionSystem', () => {
             expect(result?.valid).toBe(true);
         });
 
+        it('SELECT_CHARACTER 需要合法玩家', () => {
+            const system = new CharacterSelectionSystem();
+            const hooks = system.getHooks();
+
+            const state = {
+                sys: {
+                    characterSelection: system.createInitialState(['0', '1']),
+                    flow: { currentPhase: 'setup' },
+                },
+            };
+
+            const command = {
+                type: CHARACTER_SELECTION_COMMANDS.SELECT_CHARACTER,
+                playerId: '2',
+                payload: { characterId: 'monk' },
+                sourceCommandType: CHARACTER_SELECTION_COMMANDS.SELECT_CHARACTER,
+            };
+
+            const result = hooks.beforeCommand?.(state, command);
+            expect(result?.valid).toBe(false);
+            expect(result?.error).toBe('player_mismatch');
+        });
+
         it('PLAYER_READY 需要先选角', () => {
             const system = new CharacterSelectionSystem();
             const hooks = system.getHooks();
@@ -146,6 +177,29 @@ describe('CharacterSelectionSystem', () => {
             state.sys.characterSelection!.selectedCharacters['1'] = 'monk';
             result = hooks.beforeCommand?.(state, command);
             expect(result?.valid).toBe(true);
+        });
+
+        it('PLAYER_READY 需要合法玩家', () => {
+            const system = new CharacterSelectionSystem();
+            const hooks = system.getHooks();
+
+            const state = {
+                sys: {
+                    characterSelection: system.createInitialState(['0', '1']),
+                    flow: { currentPhase: 'setup' },
+                },
+            };
+
+            const command = {
+                type: CHARACTER_SELECTION_COMMANDS.PLAYER_READY,
+                playerId: '2',
+                payload: {},
+                sourceCommandType: CHARACTER_SELECTION_COMMANDS.PLAYER_READY,
+            };
+
+            const result = hooks.beforeCommand?.(state, command);
+            expect(result?.valid).toBe(false);
+            expect(result?.error).toBe('player_mismatch');
         });
 
         it('HOST_START_GAME 只能由房主执行', () => {
@@ -176,6 +230,29 @@ describe('CharacterSelectionSystem', () => {
             result = hooks.beforeCommand?.(state, command);
             expect(result?.valid).toBe(true);
         });
+
+        it('HOST_START_GAME 需要合法玩家', () => {
+            const system = new CharacterSelectionSystem();
+            const hooks = system.getHooks();
+
+            const state = {
+                sys: {
+                    characterSelection: system.createInitialState(['0', '1']),
+                    flow: { currentPhase: 'setup' },
+                },
+            };
+
+            const command = {
+                type: CHARACTER_SELECTION_COMMANDS.HOST_START_GAME,
+                playerId: '2',
+                payload: {},
+                sourceCommandType: CHARACTER_SELECTION_COMMANDS.HOST_START_GAME,
+            };
+
+            const result = hooks.beforeCommand?.(state, command);
+            expect(result?.valid).toBe(false);
+            expect(result?.error).toBe('player_mismatch');
+        });
     });
 
     describe('事件处理', () => {
@@ -195,6 +272,7 @@ describe('CharacterSelectionSystem', () => {
                     playerId: '0',
                     characterId: 'monk',
                 },
+                timestamp: 0,
                 sourceCommandType: CHARACTER_SELECTION_COMMANDS.SELECT_CHARACTER,
             };
 
@@ -217,6 +295,7 @@ describe('CharacterSelectionSystem', () => {
                 payload: {
                     playerId: '1',
                 },
+                timestamp: 0,
                 sourceCommandType: CHARACTER_SELECTION_COMMANDS.PLAYER_READY,
             };
 
@@ -239,6 +318,7 @@ describe('CharacterSelectionSystem', () => {
                 payload: {
                     playerId: '0',
                 },
+                timestamp: 0,
                 sourceCommandType: CHARACTER_SELECTION_COMMANDS.HOST_START_GAME,
             };
 

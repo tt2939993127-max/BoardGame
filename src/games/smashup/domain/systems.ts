@@ -6,7 +6,7 @@
  * 2. SYS_PROMPT_RESOLVED → 调用继续函数生成后续领域事件
  */
 
-import type { GameEvent, PromptOption as EnginePromptOption } from '../../../engine/types';
+import type { GameEvent, PromptOption as EnginePromptOption, PromptMultiConfig } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { PROMPT_EVENTS, queuePrompt, createPrompt } from '../../../engine/systems/PromptSystem';
 import type { SmashUpCore, PromptContinuationEvent } from './types';
@@ -41,19 +41,23 @@ export function createSmashUpPromptBridge(): EngineSystem<SmashUpCore> {
                     const payload = (event as PromptContinuationEvent).payload;
                     if (payload.action === 'set' && payload.continuation) {
                         const cont = payload.continuation;
+                        const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
                         // 从 continuation.data 中提取 prompt 配置
                         const promptConfig = cont.data?.promptConfig as {
                             title: string;
                             options: EnginePromptOption[];
+                            multi?: PromptMultiConfig;
                         } | undefined;
 
                         if (promptConfig) {
                             const prompt = createPrompt(
-                                `su-${cont.abilityId}-${Date.now()}`,
+                                `su-${cont.abilityId}-${eventTimestamp}`,
                                 cont.playerId,
                                 promptConfig.title,
                                 promptConfig.options,
                                 cont.abilityId, // sourceId
+                                undefined,
+                                promptConfig.multi
                             );
                             newState = queuePrompt(newState, prompt);
                         }
@@ -65,10 +69,11 @@ export function createSmashUpPromptBridge(): EngineSystem<SmashUpCore> {
                     const payload = event.payload as {
                         promptId: string;
                         playerId: string;
-                        optionId: string;
+                        optionId: string | null;
                         value: unknown;
                         sourceId?: string;
                     };
+                    const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
 
                     const continuation = newState.core.pendingPromptContinuation;
                     if (continuation && payload.sourceId === continuation.abilityId) {
@@ -80,12 +85,12 @@ export function createSmashUpPromptBridge(): EngineSystem<SmashUpCore> {
                                 selectedValue: payload.value,
                                 data: continuation.data,
                                 random,
-                                now: Date.now(),
+                                now: eventTimestamp,
                             });
                             nextEvents.push(...continuationEvents);
                         }
                         // 清除继续上下文
-                        nextEvents.push(clearPromptContinuation(Date.now()));
+                        nextEvents.push(clearPromptContinuation(eventTimestamp));
                     }
                 }
             }

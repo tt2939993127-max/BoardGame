@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
+import { Check } from 'lucide-react';
 import { GameButton } from './components/GameButton';
 import type { Die, TurnPhase, PendingInteraction } from '../types';
 import { Dice3D } from './Dice3D';
@@ -93,9 +94,10 @@ export const DiceTray = ({
         <div
             className={`
             flex flex-col items-center p-[0.6vw] rounded-[1.5vw] gap-[0.5vw] w-[5.8vw] shrink-0 relative transition-all duration-300
+            border-t-[0.12vw] border-l-[0.1vw] border-b-[0.2vw] border-r-[0.12vw]
             ${isInteractionMode
-                ? 'bg-slate-950 border-[0.2vw] border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)]'
-                : 'bg-gradient-to-b from-[#1a1e36] via-[#0d0e1a] to-[#05060a] border-t-[0.12vw] border-l-[0.1vw] border-indigo-300/30 border-b-[0.2vw] border-r-[0.12vw] border-black/80 shadow-[inset_0_5px_12px_rgba(0,0,0,0.9),0_15px_30px_rgba(0,0,0,0.4)]'}
+                ? 'bg-slate-950 border-transparent ring-[0.2vw] ring-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)]'
+                : 'bg-gradient-to-b from-[#1a1e36] via-[#0d0e1a] to-[#05060a] border-indigo-300/30 border-black/80 shadow-[inset_0_5px_12px_rgba(0,0,0,0.9),0_15px_30px_rgba(0,0,0,0.4)]'}
         `}
             data-tutorial-id="dice-tray"
         >
@@ -171,7 +173,7 @@ export const DiceTray = ({
                                     {/* 选中标记 */}
                                     {selected && !showAdjustButtons && !showAnyModeButtons && (
                                         <div className="absolute -top-[0.3vw] -right-[0.3vw] w-[1vw] h-[1vw] bg-amber-500 rounded-full flex items-center justify-center z-30">
-                                            <span className="text-[0.6vw] text-white font-bold">✓</span>
+                                            <Check size={12} className="text-white" strokeWidth={3} />
                                         </div>
                                     )}
                                 </div>
@@ -290,30 +292,6 @@ export const DiceActions = ({
         }
     }, [rollConfirmed, rollCount, canInteract, isRolling, currentPhase]);
 
-    // 交互模式按钮样式
-    if (isInteractionMode) {
-        return (
-            <div className="w-[10.2vw] grid grid-cols-2 gap-[0.6vw]">
-                <GameButton
-                    onClick={handleRollClick}
-                    variant="secondary"
-                    size="sm"
-                    className="!text-[0.75vw] !py-[0.8vw]"
-                >
-                    {t('common.cancel')}
-                </GameButton>
-                <GameButton
-                    onClick={handleConfirmClick}
-                    disabled={!canConfirm}
-                    variant="primary"
-                    size="sm"
-                    className="!text-[0.75vw] !py-[0.8vw]"
-                >
-                    {t('common.confirm')}
-                </GameButton>
-            </div>
-        );
-    }
     const renderRollDots = () => {
         const dots = [];
         for (let i = 0; i < rollLimit; i++) {
@@ -335,36 +313,63 @@ export const DiceActions = ({
         );
     };
 
+    // 左按钮：交互模式为「取消」，正常模式为「投掷」
+    const leftDisabled = isInteractionMode
+        ? false
+        : (!canInteract || rollConfirmed || rollCount >= rollLimit);
+    const leftVariant = isInteractionMode
+        ? 'secondary' as const
+        : (isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit ? 'primary' as const : 'secondary' as const);
+
+    // 右按钮：交互模式为「确认交互」，正常模式为「确认掷骰」
+    const rightDisabled = isInteractionMode
+        ? !canConfirm
+        : (rollConfirmed || rollCount === 0 || !canInteract || isRolling);
+    const rightVariant = isInteractionMode
+        ? 'primary' as const
+        : (rollConfirmed ? 'glass' as const : 'secondary' as const);
+
     return (
         <div className="w-[10.2vw] grid grid-cols-2 gap-[0.4vw] items-stretch h-[2.5vw]">
             <GameButton
                 onClick={handleRollClick}
-                disabled={!canInteract || rollConfirmed || (rollCount >= rollLimit)}
-                variant={isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit ? 'primary' : 'secondary'}
+                disabled={leftDisabled}
+                variant={leftVariant}
                 size="sm"
-                clickSoundKey={null}
-                className={`!px-[0.5vw] !py-0 flex items-center justify-between h-full whitespace-nowrap overflow-hidden !rounded-[0.5vw] ${isRolling ? 'animate-pulse' : ''}`}
-                data-tutorial-id="dice-roll-button"
+                clickSoundKey={isInteractionMode ? undefined : null}
+                className={clsx(
+                    "!px-[0.5vw] !py-0 flex items-center justify-between h-full whitespace-nowrap overflow-hidden !rounded-[0.5vw]",
+                    !isInteractionMode && isRolling && 'animate-pulse'
+                )}
+                data-tutorial-id={isInteractionMode ? undefined : 'dice-roll-button'}
             >
-                <div className="truncate flex-1 text-center font-black !text-[0.7vw] tracking-tighter">
-                    {isRolling ? t('dice.rolling', '投掷中...') : t('dice.roll_action', '投掷')}
-                </div>
-                {!isRolling && renderRollDots()}
+                {isInteractionMode ? (
+                    <span className="flex-1 text-center font-black !text-[0.75vw]">{t('common.cancel')}</span>
+                ) : (
+                    <>
+                        <div className="truncate flex-1 text-center font-black !text-[0.7vw] tracking-tighter">
+                            {isRolling ? t('dice.rolling', '投掷中...') : t('dice.roll_action', '投掷')}
+                        </div>
+                        {!isRolling && renderRollDots()}
+                    </>
+                )}
             </GameButton>
 
             <GameButton
                 onClick={handleConfirmClick}
-                disabled={rollConfirmed || rollCount === 0 || !canInteract || isRolling}
-                variant={rollConfirmed ? 'glass' : 'secondary'}
-                clickSoundKey={null}
+                disabled={rightDisabled}
+                variant={rightVariant}
+                size="sm"
+                clickSoundKey={isInteractionMode ? undefined : null}
                 className={clsx(
                     "flex items-center justify-center h-full whitespace-nowrap overflow-hidden font-black !text-[0.7vw] !rounded-[0.5vw] !py-0",
-                    rollConfirmed ? "!text-white/60" : ""
+                    !isInteractionMode && rollConfirmed && '!text-white/60'
                 )}
-                size="sm"
-                data-tutorial-id="dice-confirm-button"
+                data-tutorial-id={isInteractionMode ? undefined : 'dice-confirm-button'}
             >
-                {rollConfirmed ? t('dice.confirmed', '已确认') : t('dice.confirm', '确认')}
+                {isInteractionMode
+                    ? t('common.confirm')
+                    : (rollConfirmed ? t('dice.confirmed', '已确认') : t('dice.confirm', '确认'))}
             </GameButton>
         </div>
     );

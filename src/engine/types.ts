@@ -85,6 +85,16 @@ export interface PromptOption<T = unknown> {
 }
 
 /**
+ * Prompt 多选配置
+ */
+export interface PromptMultiConfig {
+    /** 最少选择数量（不传视为 1；需要允许空选时显式传 0） */
+    min?: number;
+    /** 最多选择数量（不传视为不限制） */
+    max?: number;
+}
+
+/**
  * Prompt 系统状态
  */
 export interface PromptState<T = unknown> {
@@ -96,6 +106,8 @@ export interface PromptState<T = unknown> {
         options: PromptOption<T>[];
         sourceId?: string;
         timeout?: number;
+        /** 多选配置（存在则表示多选） */
+        multi?: PromptMultiConfig;
     };
     /** prompt 队列 */
     queue: PromptState<T>['current'][];
@@ -242,11 +254,19 @@ export interface TutorialStepSnapshot {
     requireAction?: boolean;
     showMask?: boolean;
     allowedCommands?: string[];
-    blockedCommands?: string[];
     advanceOnEvents?: TutorialEventMatcher[];
     randomPolicy?: TutorialRandomPolicy;
     aiActions?: TutorialAiAction[];
     allowManualSkip?: boolean;
+    /** 是否等待动画完成后才推进到下一步 */
+    waitForAnimation?: boolean;
+    /**
+     * 纯说明步骤模式：自动禁止所有游戏命令（除了系统命令）
+     * 
+     * 设置为 true 时，等同于 `allowedCommands: []`，但更语义化。
+     * 优先级：allowedCommands > infoStep
+     */
+    infoStep?: boolean;
 }
 
 export interface TutorialManifest {
@@ -254,6 +274,16 @@ export interface TutorialManifest {
     steps: TutorialStepSnapshot[];
     allowManualSkip?: boolean;
     randomPolicy?: TutorialRandomPolicy;
+    /**
+     * 步骤前置条件校验器（通用防卡住机制）
+     *
+     * 引擎在两个时机调用：
+     * 1. 进入新步骤时 — 返回 false 则跳过该步骤
+     * 2. 每次命令执行后 — 返回 false 则自动推进到下一步
+     *
+     * 注意：函数不可序列化，不会存入 TutorialState。
+     */
+    stepValidator?: (state: MatchState<unknown>, step: TutorialStepSnapshot) => boolean;
 }
 
 export interface TutorialState {
@@ -266,11 +296,14 @@ export interface TutorialState {
     manifestAllowManualSkip?: boolean;
     manifestRandomPolicy?: TutorialRandomPolicy;
     allowedCommands?: string[];
-    blockedCommands?: string[];
     advanceOnEvents?: TutorialEventMatcher[];
     randomPolicy?: TutorialRandomPolicy;
     aiActions?: TutorialAiAction[];
     allowManualSkip?: boolean;
+    /** 是否等待动画完成后才推进到下一步 */
+    waitForAnimation?: boolean;
+    /** 动画等待：事件已匹配，正在等待动画完成 */
+    pendingAnimationAdvance?: boolean;
 }
 
 export const DEFAULT_TUTORIAL_STATE: TutorialState = {

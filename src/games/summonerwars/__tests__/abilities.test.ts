@@ -34,6 +34,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 /** 创建测试用的游戏状态 */
 function createTestState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom());
@@ -271,7 +273,7 @@ describe('条件评估', () => {
       sourceUnit: summoner,
       sourcePosition: summonerPos,
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
     
     expect(evaluateCondition({ type: 'always' }, ctx)).toBe(true);
@@ -287,7 +289,7 @@ describe('条件评估', () => {
       sourceUnit: summoner,
       sourcePosition: summonerPos,
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
     
     // 无充能
@@ -466,7 +468,7 @@ describe('效果解析', () => {
       sourceUnit: summoner,
       sourcePosition: summonerPos,
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
     
     const damageEffect = { type: 'damage' as const, target: 'self' as const, value: 2 };
@@ -488,7 +490,7 @@ describe('效果解析', () => {
       sourceUnit: summoner,
       sourcePosition: summonerPos,
       ownerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
     
     const chargeEffect = { type: 'addCharge' as const, target: 'self' as const, value: 3 };
@@ -512,7 +514,7 @@ describe('效果解析', () => {
       sourcePosition: summonerPos,
       ownerId: '0',
       victimPosition: victimPos,
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     };
 
     const effect = { type: 'summonFromDiscard' as const, cardType: 'plagueZombie' as const, position: 'victim' as const };

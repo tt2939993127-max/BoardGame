@@ -4,7 +4,7 @@
  * 统一的选择/提示协议，替代各游戏自造 pendingChoice
  */
 
-import type { MatchState, PlayerId, PromptOption, PromptState, GameEvent } from '../types';
+import type { MatchState, PlayerId, PromptOption, PromptState, GameEvent, PromptMultiConfig } from '../types';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
 
@@ -49,7 +49,8 @@ export function createPrompt<T>(
     title: string,
     options: PromptOption<T>[],
     sourceId?: string,
-    timeout?: number
+    timeout?: number,
+    multi?: PromptMultiConfig
 ): PromptState<T>['current'] {
     return {
         id,
@@ -58,8 +59,12 @@ export function createPrompt<T>(
         options,
         sourceId,
         timeout,
+        multi,
     };
 }
+
+const resolveCommandTimestamp = (command: { timestamp?: number }): number =>
+    typeof command.timestamp === 'number' ? command.timestamp : 0;
 
 /**
  * 将 Prompt 加入队列
@@ -142,13 +147,15 @@ export function createPromptSystem<TCore>(
         beforeCommand: ({ state, command }): HookResult<TCore> | void => {
             // 处理 Prompt 响应命令
             if (command.type === PROMPT_COMMANDS.RESPOND) {
-                return handlePromptResponse(state, command.playerId, command.payload as { optionId: string });
+                const ts = resolveCommandTimestamp(command);
+                return handlePromptResponse(state, command.playerId, command.payload as { optionId?: string; optionIds?: string[] }, ts);
             }
             if (command.type === PROMPT_COMMANDS.TIMEOUT) {
-                return handlePromptTimeout(state);
+                const ts = resolveCommandTimestamp(command);
+                return handlePromptTimeout(state, ts);
             }
 
-            // 如果有 Prompt 待处理，阻止其他命令
+            // 如果当前玩家有 Prompt 待处理，阻止其执行非 Prompt 命令
             if (state.sys.prompt.current && state.sys.prompt.current.playerId === command.playerId) {
                 // 允许 Prompt 相关命令
                 if (!command.type.startsWith('SYS_PROMPT_')) {
@@ -181,7 +188,8 @@ export function createPromptSystem<TCore>(
 function handlePromptResponse<TCore>(
     state: MatchState<TCore>,
     playerId: PlayerId,
-    payload: { optionId: string }
+    payload: { optionId?: string; optionIds?: string[] },
+    timestamp: number
 ): HookResult<TCore> {
     const { current } = state.sys.prompt;
 
@@ -193,13 +201,49 @@ function handlePromptResponse<TCore>(
         return { halt: true, error: '不是你的选择回合' };
     }
 
-    const selectedOption = current.options.find(o => o.id === payload.optionId);
-    if (!selectedOption) {
-        return { halt: true, error: '无效的选择' };
-    }
+    const isMulti = !!current.multi;
+    let selectedOptions: PromptOption[] = [];
+    let selectedOptionIds: string[] = [];
 
-    if (selectedOption.disabled) {
-        return { halt: true, error: '该选项不可用' };
+    if (isMulti) {
+        const optionIds = Array.isArray(payload.optionIds)
+            ? payload.optionIds
+            : typeof payload.optionId === 'string'
+                ? [payload.optionId]
+                : [];
+        const uniqueIds = Array.from(new Set(optionIds)).filter(id => typeof id === 'string');
+        const optionsById = new Map(current.options.map(o => [o.id, o]));
+        const invalidId = uniqueIds.find(id => !optionsById.has(id));
+        if (invalidId) {
+            return { halt: true, error: '无效的选择' };
+        }
+        const disabledId = uniqueIds.find(id => optionsById.get(id)?.disabled);
+        if (disabledId) {
+            return { halt: true, error: '该选项不可用' };
+        }
+        const minSelections = current.multi?.min ?? 1;
+        const maxSelections = current.multi?.max;
+        if (uniqueIds.length < minSelections) {
+            return { halt: true, error: `至少选择 ${minSelections} 项` };
+        }
+        if (maxSelections !== undefined && uniqueIds.length > maxSelections) {
+            return { halt: true, error: `最多选择 ${maxSelections} 项` };
+        }
+        selectedOptionIds = uniqueIds;
+        selectedOptions = uniqueIds.map(id => optionsById.get(id)!)
+    } else {
+        if (typeof payload.optionId !== 'string') {
+            return { halt: true, error: '无效的选择' };
+        }
+        const selectedOption = current.options.find(o => o.id === payload.optionId);
+        if (!selectedOption) {
+            return { halt: true, error: '无效的选择' };
+        }
+        if (selectedOption.disabled) {
+            return { halt: true, error: '该选项不可用' };
+        }
+        selectedOptionIds = [selectedOption.id];
+        selectedOptions = [selectedOption];
     }
 
     // 解决 Prompt 并弹出下一个
@@ -211,11 +255,12 @@ function handlePromptResponse<TCore>(
         payload: {
             promptId: current.id,
             playerId,
-            optionId: payload.optionId,
-            value: selectedOption.value,
+            optionId: selectedOptionIds.length > 0 ? selectedOptionIds[0] : null,
+            optionIds: isMulti ? selectedOptionIds : undefined,
+            value: isMulti ? selectedOptions.map(option => option.value) : selectedOptions[0]?.value,
             sourceId: current.sourceId,
         },
-        timestamp: Date.now(),
+        timestamp,
     };
 
     return {
@@ -225,7 +270,7 @@ function handlePromptResponse<TCore>(
     };
 }
 
-function handlePromptTimeout<TCore>(state: MatchState<TCore>): HookResult<TCore> {
+function handlePromptTimeout<TCore>(state: MatchState<TCore>, timestamp: number): HookResult<TCore> {
     const { current } = state.sys.prompt;
 
     if (!current) {
@@ -242,7 +287,7 @@ function handlePromptTimeout<TCore>(state: MatchState<TCore>): HookResult<TCore>
             promptId: current.id,
             playerId: current.playerId,
         },
-        timestamp: Date.now(),
+        timestamp,
     };
 
     return {

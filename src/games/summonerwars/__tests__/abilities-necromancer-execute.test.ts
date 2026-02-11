@@ -30,6 +30,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 function createNecroState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
     faction0: 'necromancer',
@@ -145,7 +147,7 @@ function executeAndReduce(
   random?: RandomFn
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, random ?? createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -228,7 +230,7 @@ describe('古尔-达斯 - 复活死灵 (revive_undead) execute 流程', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
   });
@@ -410,7 +412,7 @@ describe('吸取生命 (life_drain) execute 流程', () => {
         targetUnitId: 'test-far-victim',
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('2格');
@@ -478,7 +480,7 @@ describe('感染 (infection) execute 流程', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
   });
@@ -547,7 +549,7 @@ describe('灵魂转移 (soul_transfer) execute 流程', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('空');

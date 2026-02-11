@@ -12,9 +12,10 @@ import type {
     StatusAppliedEvent,
     BonusDieRolledEvent,
     DamageShieldGrantedEvent,
+    BonusDieInfo,
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
 
 // ============================================================================
 // 野蛮人技能处理器
@@ -27,16 +28,17 @@ import { registerCustomActionHandler, type CustomActionContext } from '../effect
 function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
 
     // 投掷3个骰子
     let swordCount = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
         const face = getDieFace(value);
-        // 野蛮人骰子：1-3 = sword
         if (value <= 3) {
             swordCount++;
         }
+        dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: {
@@ -65,6 +67,9 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
             timestamp,
         } as DamageDealtEvent);
     }
+
+    // 多骰展示
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp));
 
     return events;
 }
@@ -206,15 +211,16 @@ function handleEnergeticRoll({ targetId, attackerId, sourceAbilityId, state, tim
 function handleLuckyRollHeal({ attackerId, sourceAbilityId, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
 
     let heartCount = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
         const face = getDieFace(value);
-        // 野蛮人骰子：4-5 = heart
         if (value === 4 || value === 5) {
             heartCount++;
         }
+        dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: {
@@ -239,6 +245,9 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, timestamp, random }:
         timestamp,
     } as HealAppliedEvent);
 
+    // 多骰展示
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, attackerId, dice, timestamp));
+
     return events;
 }
 
@@ -250,15 +259,16 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, timestamp, random }:
 function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
 
     let swordCount = 0;
     for (let i = 0; i < 5; i++) {
         const value = random.d(6);
         const face = getDieFace(value);
-        // 野蛮人骰子：1-3 = sword
         if (value <= 3) {
             swordCount++;
         }
+        dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
             payload: {
@@ -274,9 +284,18 @@ function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId
         } as BonusDieRolledEvent);
     }
 
-    // 增加伤害到当前攻击（累加到上下文）
+    // 直接造成剑骰面数量的伤害（修复：原 accumulatedBonusDamage 无法跨上下文传递）
     if (swordCount > 0) {
-        ctx.accumulatedBonusDamage = (ctx.accumulatedBonusDamage ?? 0) + swordCount;
+        const target = state.players[targetId];
+        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+        const actualDamage = target ? Math.min(swordCount, targetHp) : 0;
+        ctx.damageDealt += actualDamage;
+        events.push({
+            type: 'DAMAGE_DEALT',
+            payload: { targetId, amount: swordCount, actualDamage, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DamageDealtEvent);
     }
 
     // 对对手施加脑震荡
@@ -293,6 +312,9 @@ function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as StatusAppliedEvent);
+
+    // 多骰展示
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp));
 
     return events;
 }

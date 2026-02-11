@@ -108,7 +108,15 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (!token) {
             hasRemoteSyncRef.current = false;
             lastSyncedRef.current = null;
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- sync reset to local selections on logout
+            // 登出时从 localStorage 还原游客自己的本地偏好
+            // （远程同步 apply 时使用 persist=false，不会覆盖 localStorage，
+            //   所以这里读到的一定是游客自己的设置）
+            AudioManager.restoreLocalSettings();
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- sync reset local state on logout
+            setMuted(AudioManager.muted);
+            setMasterVolumeState(AudioManager.masterVolume);
+            setSfxVolumeState(AudioManager.sfxVolume);
+            setBgmVolumeState(AudioManager.bgmVolume);
             setBgmSelectionsState(readLocalBgmSelections());
             return;
         }
@@ -140,10 +148,12 @@ export const AudioProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                     const shouldSyncSelections = remoteSelections === undefined
                         && Object.keys(fallbackSelections).length > 0;
                     skipNextSyncRef.current = !shouldSyncSelections;
-                    AudioManager.setMuted(remoteSettings.muted);
-                    AudioManager.setMasterVolume(remoteSettings.masterVolume);
-                    AudioManager.setSfxVolume(remoteSettings.sfxVolume);
-                    AudioManager.setBgmVolume(remoteSettings.bgmVolume);
+                    // persist=false: 只改内存状态，不写 localStorage，
+                    // 避免服务端设置污染游客的本地偏好
+                    AudioManager.setMuted(remoteSettings.muted, false);
+                    AudioManager.setMasterVolume(remoteSettings.masterVolume, false);
+                    AudioManager.setSfxVolume(remoteSettings.sfxVolume, false);
+                    AudioManager.setBgmVolume(remoteSettings.bgmVolume, false);
                     setMuted(remoteSettings.muted);
                     setMasterVolumeState(remoteSettings.masterVolume);
                     setSfxVolumeState(remoteSettings.sfxVolume);

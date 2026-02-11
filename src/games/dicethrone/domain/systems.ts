@@ -37,6 +37,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 // 处理 CHOICE_REQUESTED 事件 -> 创建 Prompt
                 if (dtEvent.type === 'CHOICE_REQUESTED') {
                     const payload = (dtEvent as ChoiceRequestedEvent).payload;
+                    const eventTimestamp = typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0;
                     
                     // 将 DiceThrone 的选择选项转换为 PromptOption
                     const promptOptions: PromptOption<{
@@ -58,7 +59,7 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     });
                     
                     const prompt = createPrompt(
-                        `choice-${payload.sourceAbilityId}-${Date.now()}`,
+                        `choice-${payload.sourceAbilityId}-${eventTimestamp}`,
                         payload.playerId,
                         payload.titleKey,
                         promptOptions,
@@ -95,11 +96,12 @@ export function handlePromptResolved(
     event: GameEvent
 ): ChoiceResolvedEvent | null {
     if (event.type !== PROMPT_EVENTS.RESOLVED) return null;
+    const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
     
     const payload = event.payload as {
         promptId: string;
         playerId: string;
-        optionId: string;
+        optionId: string | null;
         value: { statusId?: string; tokenId?: string; value: number; customId?: string };
         sourceId?: string;
     };
@@ -115,6 +117,6 @@ export function handlePromptResolved(
             sourceAbilityId: payload.sourceId,
         },
         sourceCommandType: 'RESOLVE_CHOICE',
-        timestamp: Date.now(),
+        timestamp: eventTimestamp,
     };
 }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { LobbyClient } from 'boardgame.io/client';
 import { motion, useMotionValue } from 'framer-motion';
+import { CheckCircle, Clipboard, X, Edit } from 'lucide-react';
 import { useDebug } from '../contexts/DebugContext';
 import { useGameMode } from '../contexts/GameModeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -382,8 +383,8 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                                 }`}
                                             >
                                                 {copySuccess
-                                                    ? `✓ ${t('debug.state.copied')}`
-                                                    : `📋 ${t('debug.state.copy')}`}
+                                                    ? <><CheckCircle size={12} className="inline" /> {t('debug.state.copied')}</>
+                                                    : <><Clipboard size={12} className="inline" /> {t('debug.state.copy')}</>}
                                             </button>
                                             <button
                                                 data-testid="debug-state-toggle-input"
@@ -395,8 +396,8 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                                 }`}
                                             >
                                                 {showStateInput
-                                                    ? `✕ ${t('debug.state.cancelAssign')}`
-                                                    : `📝 ${t('debug.state.assign')}`}
+                                                    ? <><X size={12} className="inline" /> {t('debug.state.cancelAssign')}</>
+                                                    : <><Edit size={12} className="inline" /> {t('debug.state.assign')}</>}
                                             </button>
                                         </div>
                                     </div>
@@ -422,17 +423,19 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                                             console.error('粘贴失败:', err);
                                                         }
                                                     }}
-                                                    className="flex-1 px-2 py-1.5 bg-gray-500 text-white rounded text-[10px] font-bold hover:bg-gray-600"
+                                                    className="flex-1 px-2 py-1.5 bg-gray-500 text-white rounded text-[10px] font-bold hover:bg-gray-600 flex items-center justify-center gap-1"
                                                 >
-                                                    {`📋 ${t('debug.state.pasteFromClipboard')}`}
+                                                    <Clipboard size={12} />
+                                                    {t('debug.state.pasteFromClipboard')}
                                                 </button>
                                                 <button
                                                     data-testid="debug-state-apply"
                                                     onClick={handleApplyState}
                                                     disabled={!stateInput.trim()}
-                                                    className="flex-1 px-2 py-1.5 bg-blue-500 text-white rounded text-[10px] font-bold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="flex-1 px-2 py-1.5 bg-blue-500 text-white rounded text-[10px] font-bold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
                                                 >
-                                                    {`✓ ${t('debug.state.apply')}`}
+                                                    <CheckCircle size={12} />
+                                                    {t('debug.state.apply')}
                                                 </button>
                                             </div>
                                             {applyError && (

@@ -388,7 +388,7 @@ describe('忍者派系能力（第6批）', () => {
 // ============================================================================
 
 describe('巫师派系能力（第6批）', () => {
-    it('wizard_mass_enchantment: 从对手牌库顶取一张卡', () => {
+    it('wizard_mass_enchantment: 从对手牌库顶取一张卡（CARD_TRANSFERRED）', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -401,9 +401,10 @@ describe('巫师派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.cardUids).toContain('d1');
+        const transferEvents = events.filter(e => e.type === SU_EVENTS.CARD_TRANSFERRED);
+        expect(transferEvents.length).toBe(1);
+        expect((transferEvents[0] as any).payload.cardUid).toBe('d1');
+        expect((transferEvents[0] as any).payload.toPlayerId).toBe('0');
     });
 
     it('wizard_mass_enchantment: 对手牌库为空时无事件', () => {

@@ -3,6 +3,7 @@
  */
 
 import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState } from '../../engine/types';
+import type { EngineSystem } from '../../engine/systems/types';
 import {
     createGameAdapter,
     createFlowSystem,
@@ -16,6 +17,7 @@ import {
     createTutorialSystem,
     createUndoSystem,
     CHEAT_COMMANDS,
+    FLOW_COMMANDS,
 } from '../../engine';
 import { PROMPT_COMMANDS } from '../../engine/systems/PromptSystem';
 import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type SmashUpEvent } from './domain';
@@ -25,6 +27,8 @@ import { createSmashUpPromptBridge } from './domain/systems';
 import { smashUpCheatModifier } from './cheatModifier';
 import { registerCardPreviewGetter } from '../../components/game/cardPreviewRegistry';
 import { getSmashUpCardPreviewMeta, getSmashUpCardPreviewRef } from './ui/cardPreviewHelper';
+import { registerCriticalImageResolver } from '../../core';
+import { smashUpCriticalImageResolver } from './criticalImageResolver';
 import { getCardDef, getBaseDef } from './data/cards';
 import type { SmashUpCore as Core } from './domain/types';
 
@@ -41,6 +45,7 @@ const ACTION_ALLOWLIST = [
     SU_COMMANDS.PLAY_ACTION,
     SU_COMMANDS.USE_TALENT,
     SU_COMMANDS.DISCARD_TO_LIMIT,
+    FLOW_COMMANDS.ADVANCE_PHASE,
 ] as const;
 
 /** 构建卡牌片段（支持 hover 预览） */
@@ -76,7 +81,7 @@ function formatSmashUpActionEntry({
     state: MatchState<unknown>;
     events: GameEvent[];
 }): ActionLogEntry | null {
-    const timestamp = command.timestamp ?? Date.now();
+    const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
     const actorId = command.playerId;
 
     switch (command.type) {
@@ -155,7 +160,7 @@ function findBaseByIndex(state: MatchState<Core>, baseIndex: number): string | u
 // 系统组装（展开 createDefaultSystems，替换 ActionLogSystem 为带配置版本）
 // ============================================================================
 
-const systems = [
+const systems: EngineSystem<SmashUpCore>[] = [
     createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
     createLogSystem(),
     createActionLogSystem<SmashUpCore>({
@@ -194,3 +199,4 @@ export default SmashUp;
 // 卡牌预览注册（放文件末尾，避免 Vite SSR 函数提升陷阱）
 // ============================================================================
 registerCardPreviewGetter('smashup', getSmashUpCardPreviewRef);
+registerCriticalImageResolver('smashup', smashUpCriticalImageResolver);

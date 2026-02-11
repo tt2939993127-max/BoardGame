@@ -360,7 +360,12 @@ const UnitCell: React.FC<{
       ref={scope}
       className="absolute flex items-center justify-center cursor-pointer pointer-events-auto"
       data-testid={`sw-unit-${row}-${col}`}
-      data-tutorial-id={unit.card.unitClass === 'summoner' && unit.owner === myPlayerId ? 'sw-my-summoner' : unit.card.unitClass === 'summoner' && unit.owner !== myPlayerId ? 'sw-enemy-summoner' : undefined}
+      data-tutorial-id={
+        unit.card.unitClass === 'summoner' && unit.owner === myPlayerId ? 'sw-my-summoner'
+        : unit.card.unitClass === 'summoner' && unit.owner !== myPlayerId ? 'sw-enemy-summoner'
+        : unit.card.attackType === 'ranged' && unit.card.unitClass !== 'summoner' && unit.owner === myPlayerId ? 'sw-start-archer'
+        : undefined
+      }
       data-owner={unit.owner}
       data-unit-class={unit.card.unitClass}
       data-unit-name={unit.card.name}

@@ -164,7 +164,7 @@ export function executeCommand(
   const core = state.core;
   const playerId = core.currentPlayer;
   const payload = command.payload as Record<string, unknown>;
-  const timestamp = command.timestamp ?? Date.now();
+  const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
   switch (command.type) {
     case SW_COMMANDS.SELECT_UNIT: {
