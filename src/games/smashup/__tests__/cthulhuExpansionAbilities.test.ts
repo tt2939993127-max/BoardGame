@@ -22,6 +22,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {

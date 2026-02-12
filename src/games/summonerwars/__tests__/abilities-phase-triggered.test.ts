@@ -71,6 +71,7 @@ function placeStructure(
       id,
       cardType: 'structure',
       name: '城墙',
+      faction: 'frost',
       cost: 0,
       life: 3,
       isGate: false,
@@ -85,7 +86,7 @@ function placeStructure(
 function makeValentina(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '瓦伦蒂娜', unitClass: 'champion',
-    faction: '先锋军团', strength: 3, life: 7, cost: 5,
+    faction: 'paladin', strength: 3, life: 7, cost: 5,
     attackType: 'melee', attackRange: 1,
     abilities: ['guidance', 'fortress_elite'], deckSymbols: [],
   };
@@ -94,7 +95,7 @@ function makeValentina(id: string): UnitCard {
 function makeBrolf(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '布拉夫', unitClass: 'champion',
-    faction: '洞穴地精', strength: 3, life: 8, cost: 6,
+    faction: 'goblin', strength: 3, life: 8, cost: 6,
     attackType: 'melee', attackRange: 1,
     abilities: ['blood_rune', 'power_boost'], deckSymbols: [],
   };
@@ -103,7 +104,7 @@ function makeBrolf(id: string): UnitCard {
 function makeJamud(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '贾穆德', unitClass: 'champion',
-    faction: '极地矮人', strength: 3, life: 8, cost: 6,
+    faction: 'frost', strength: 3, life: 8, cost: 6,
     attackType: 'melee', attackRange: 1,
     abilities: ['imposing', 'ice_shards'], deckSymbols: [],
   };
@@ -112,24 +113,25 @@ function makeJamud(id: string): UnitCard {
 function makeFeedBeast(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '巨食兽', unitClass: 'champion',
-    faction: '洞穴地精', strength: 5, life: 9, cost: 7,
+    faction: 'goblin', strength: 5, life: 9, cost: 7,
     attackType: 'melee', attackRange: 1,
     abilities: ['feed_beast'], deckSymbols: [],
   };
 }
 
-function makeAlly(id: string): UnitCard {
+function makeAlly(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '友方士兵', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 1,
+    faction: 'paladin', strength: 2, life: 3, cost: 1,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
+    ...overrides,
   };
 }
 
 function makeEnemy(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'necromancer', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
   };
 }
@@ -515,7 +517,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
 
     placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-ally',
-      card: makeAlly('test-ally'),
+      card: makeAlly('test-ally', { faction: 'goblin' }),
       owner: '0',
     });
 
@@ -580,7 +582,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
 
     placeUnit(state, { row: 2, col: 2 }, {
       cardId: 'test-far-ally',
-      card: makeAlly('test-far-ally'),
+      card: makeAlly('test-far-ally', { faction: 'goblin' }),
       owner: '0',
     });
 

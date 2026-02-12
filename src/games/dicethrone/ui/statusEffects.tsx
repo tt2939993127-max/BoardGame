@@ -6,16 +6,19 @@ import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
 
-import { STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../domain/ids';
+import { STATUS_IDS } from '../domain/ids';
+import { CHARACTER_DATA_MAP } from '../domain/characters';
 
-
-
-// Hardcoded paths for now, could be dynamic or from ASSETS
-const STATUS_ATLAS_PATHS: Record<string, string> = {
-    [DICETHRONE_STATUS_ATLAS_IDS.MONK]: 'dicethrone/images/monk/status-icons-atlas.json',
-    [DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN]: 'dicethrone/images/barbarian/status-icons-atlas.json',
-    [DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER]: 'dicethrone/images/pyromancer/status-icons-atlas.json',
-};
+// 从 CharacterData 自动收集图集路径（Single Source of Truth）
+const STATUS_ATLAS_PATHS: Record<string, string> = (() => {
+    const paths: Record<string, string> = {};
+    for (const data of Object.values(CHARACTER_DATA_MAP)) {
+        if (!paths[data.statusAtlasId]) {
+            paths[data.statusAtlasId] = data.statusAtlasPath;
+        }
+    }
+    return paths;
+})();
 
 type StatusIconAtlasFrame = { x: number; y: number; w: number; h: number };
 export type StatusIconAtlasConfig = {

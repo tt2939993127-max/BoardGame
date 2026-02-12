@@ -3,7 +3,7 @@
  * 使用战斗预设技能系统
  */
 
-import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../../systems/presets/combat';
+import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
 import { TOKEN_IDS, STATUS_IDS, DICE_FACE_IDS } from '../../domain/ids';
 
 // 游戏特定条件注册已移至 ../conditions.ts，由 domain/index.ts 统一调用

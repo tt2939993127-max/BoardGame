@@ -2,6 +2,7 @@
   "name": "斗地主预览",
   "description": "UGC 预览模式斗地主原型",
   "tags": ["斗地主", "预览", "UGC"],
+  "commandTypes": ["BID", "CALL_LANDLORD", "PASS", "PLAY_CARD"],
   "schemas": [
     {
       "id": "player",
@@ -638,9 +639,9 @@
     {
       "id": "player-top-left",
       "type": "player-area",
-      "anchor": { "x": 0.5, "y": 0 },
-      "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": -392, "y": 20 },
+      "anchor": { "x": 0.15, "y": 0.08 },
+      "pivot": { "x": 0, "y": 0 },
+      "offset": { "x": 0, "y": 0 },
       "width": 200,
       "height": 70,
       "data": {
@@ -657,9 +658,9 @@
     {
       "id": "player-top-right",
       "type": "player-area",
-      "anchor": { "x": 0.5, "y": 0 },
-      "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": 392, "y": 20 },
+      "anchor": { "x": 0.85, "y": 0.08 },
+      "pivot": { "x": 1, "y": 0 },
+      "offset": { "x": 0, "y": 0 },
       "width": 200,
       "height": 70,
       "data": {
@@ -676,11 +677,11 @@
     {
       "id": "player-bottom",
       "type": "player-area",
-      "anchor": { "x": 0.5, "y": 0 },
-      "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": -392, "y": 440 },
-      "width": 200,
-      "height": 120,
+      "anchor": { "x": 0.08, "y": 0.88 },
+      "pivot": { "x": 0, "y": 1 },
+      "offset": { "x": 0, "y": 0 },
+      "width": 220,
+      "height": 100,
       "data": {
         "name": "玩家一信息",
         "bindSchema": "player",
@@ -695,11 +696,11 @@
     {
       "id": "phase-hud",
       "type": "phase-hud",
-      "anchor": { "x": 0.5, "y": 0 },
+      "anchor": { "x": 0.5, "y": 0.12 },
       "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": 0, "y": 90 },
-      "width": 584,
-      "height": 100,
+      "offset": { "x": 0, "y": 0 },
+      "width": 500,
+      "height": 80,
       "data": {
         "name": "阶段提示",
         "showFrame": false,
@@ -722,31 +723,13 @@
       }
     },
     {
-      "id": "play-zone",
-      "type": "play-zone",
-      "anchor": { "x": 0.5, "y": 0 },
-      "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": 0, "y": 290 },
-      "width": 584,
-      "height": 90,
-      "data": {
-        "name": "桌面出牌",
-        "showFrame": false,
-        "bindSchema": "card",
-        "filterCode": "(card) => card.zone === 'table'",
-        "renderFaceMode": "front",
-        "layoutCode": "(index, total) => ({ marginLeft: index === 0 ? 0 : -18 })",
-        "allowActionHooks": false
-      }
-    },
-    {
       "id": "landlord-zone",
       "type": "play-zone",
-      "anchor": { "x": 0.5, "y": 0 },
-      "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": 0, "y": 200 },
-      "width": 200,
-      "height": 80,
+      "anchor": { "x": 0.5, "y": 0.28 },
+      "pivot": { "x": 0.5, "y": 0.5 },
+      "offset": { "x": 0, "y": 0 },
+      "width": 220,
+      "height": 90,
       "data": {
         "name": "底牌展示",
         "showFrame": false,
@@ -758,46 +741,30 @@
       }
     },
     {
-      "id": "hand-bottom",
-      "type": "hand-zone",
-      "anchor": { "x": 0.5, "y": 0 },
-      "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": 0, "y": 440 },
-      "width": 584,
-      "height": 120,
+      "id": "play-zone",
+      "type": "play-zone",
+      "anchor": { "x": 0.5, "y": 0.48 },
+      "pivot": { "x": 0.5, "y": 0.5 },
+      "offset": { "x": 0, "y": 0 },
+      "width": 600,
+      "height": 100,
       "data": {
-        "name": "玩家一手牌",
+        "name": "桌面出牌",
         "showFrame": false,
         "bindSchema": "card",
-        "bindEntity": "ownerId",
-        "zoneField": "zone",
-        "zoneValue": "hand",
-        "targetPlayerRef": "index",
-        "targetPlayerIndex": 0,
-        "playerIds": ["player-1", "player-2", "player-3"],
-        "currentPlayerId": "player-1",
+        "filterCode": "(card) => card.zone === 'table'",
         "renderFaceMode": "front",
-        "interactionMode": "click",
-        "sortCode": "(a, b) => (b.rankValue ?? 0) - (a.rankValue ?? 0)",
-        "layoutCode": "(index, total) => ({ marginLeft: index === 0 ? 0 : -24 })",
-        "selectEffectCode": "(isSelected) => ({ transform: isSelected ? 'translateY(-12px)' : 'translateY(0px)', boxShadow: isSelected ? '0 6px 12px rgba(0,0,0,0.35)' : 'none' })",
-        "actions": [
-          {
-            "id": "play-cards",
-            "label": "出牌",
-            "scope": "current-player",
-            "hookCode": "(payload) => {\n  const selectedCardIds = Array.isArray(payload.context?.selectedCardIds) ? payload.context.selectedCardIds : [];\n  if (!selectedCardIds.length) {\n    throw new Error('未选择卡牌');\n  }\n  return { type: 'PLAY_CARD', payload: { componentId: payload.context.componentId, cardIds: selectedCardIds } };\n}"
-          }
-        ]
+        "layoutCode": "(index, total) => ({ marginLeft: index === 0 ? 0 : -18 })",
+        "allowActionHooks": false
       }
     },
     {
       "id": "action-bar",
       "type": "action-bar",
-      "anchor": { "x": 0.5, "y": 0 },
-      "pivot": { "x": 0.5, "y": 0 },
-      "offset": { "x": 0, "y": 390 },
-      "width": 584,
+      "anchor": { "x": 0.5, "y": 0.65 },
+      "pivot": { "x": 0.5, "y": 0.5 },
+      "offset": { "x": 0, "y": 0 },
+      "width": 500,
       "height": 50,
       "data": {
         "name": "操作栏",
@@ -829,6 +796,40 @@
             "scope": "current-player",
             "variant": "ghost",
             "hookCode": "(payload) => ({ type: 'PASS', payload: { componentId: payload.context.componentId } })"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hand-bottom",
+      "type": "hand-zone",
+      "anchor": { "x": 0.5, "y": 0.92 },
+      "pivot": { "x": 0.5, "y": 1 },
+      "offset": { "x": 0, "y": 0 },
+      "width": 750,
+      "height": 130,
+      "data": {
+        "name": "玩家一手牌",
+        "showFrame": false,
+        "bindSchema": "card",
+        "bindEntity": "ownerId",
+        "zoneField": "zone",
+        "zoneValue": "hand",
+        "targetPlayerRef": "index",
+        "targetPlayerIndex": 0,
+        "playerIds": ["player-1", "player-2", "player-3"],
+        "currentPlayerId": "player-1",
+        "renderFaceMode": "front",
+        "interactionMode": "click",
+        "sortCode": "(a, b) => (b.rankValue ?? 0) - (a.rankValue ?? 0)",
+        "layoutCode": "(index, total) => ({ marginLeft: index === 0 ? 0 : -24 })",
+        "selectEffectCode": "(isSelected) => ({ transform: isSelected ? 'translateY(-12px)' : 'translateY(0px)', boxShadow: isSelected ? '0 6px 12px rgba(0,0,0,0.35)' : 'none' })",
+        "actions": [
+          {
+            "id": "play-cards",
+            "label": "出牌",
+            "scope": "current-player",
+            "hookCode": "(payload) => {\n  const selectedCardIds = Array.isArray(payload.context?.selectedCardIds) ? payload.context.selectedCardIds : [];\n  if (!selectedCardIds.length) {\n    throw new Error('未选择卡牌');\n  }\n  return { type: 'PLAY_CARD', payload: { componentId: payload.context.componentId, cardIds: selectedCardIds } };\n}"
           }
         ]
       }

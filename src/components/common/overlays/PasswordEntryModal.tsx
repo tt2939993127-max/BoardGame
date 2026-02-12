@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence } from 'framer-motion';
 import { ModalBase } from './ModalBase';
+import { UI_Z_INDEX } from '../../../core';
 
 interface PasswordEntryModalProps {
     open: boolean;
@@ -30,8 +31,10 @@ export const PasswordEntryModal = ({
                 <ModalBase
                     onClose={onClose}
                     closeOnBackdrop={closeOnBackdrop}
-                    overlayClassName="z-[60] bg-[#2b2114]/30"
-                    containerClassName="z-[61] p-4 sm:p-6"
+                    overlayClassName="bg-[#2b2114]/30"
+                    overlayStyle={{ zIndex: UI_Z_INDEX.modalOverlay }}
+                    containerClassName="p-4 sm:p-6"
+                    containerStyle={{ zIndex: UI_Z_INDEX.modalContent }}
                 >
                     <div className="bg-parchment-card-bg border border-parchment-card-border/50 shadow-parchment-card-hover rounded-sm p-6 w-full max-w-[20rem] sm:max-w-sm text-center font-serif pointer-events-auto">
                         <div className="text-xs sm:text-sm text-parchment-light-text font-bold uppercase tracking-wider mb-2">

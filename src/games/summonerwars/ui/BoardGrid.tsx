@@ -15,10 +15,21 @@ import { CardSprite } from './CardSprite';
 import { getUnitSpriteConfig, getStructureSpriteConfig } from './spriteHelpers';
 import type { AbilityModeState, DyingEntity } from './useGameEvents';
 import type { AnnihilateModeState } from './StatusBanners';
+import { AbilityReadyIndicator } from './AbilityReadyIndicator';
+import { BuffIcons, getBuffGlowStyle, BuffDetailsPanel } from './BuffIcons';
+import { abilityRegistry } from '../domain/abilities';
 
 // ============================================================================
 // 辅助函数
 // ============================================================================
+
+const BOARD_GRID_Z = {
+  attachedLabel: 5,
+  overlay: 10,
+  magnifyButton: 20,
+  dyingEntity: 35,
+  attacker: 50,
+} as const;
 
 /** 计算格子位置（百分比） */
 export function getCellPosition(row: number, col: number, grid: GridConfig) {
@@ -53,6 +64,7 @@ interface BoardGridProps {
   validAbilityPositions: CellCoord[];
   validAbilityUnits: CellCoord[];
   actionableUnitPositions: CellCoord[];
+  abilityReadyPositions: CellCoord[];
   bloodSummonHighlights: CellCoord[];
   annihilateHighlights: CellCoord[];
   annihilateMode: AnnihilateModeState | null;
@@ -60,6 +72,15 @@ interface BoardGridProps {
   // 欺心巫族事件卡高亮
   mindControlHighlights: CellCoord[];
   mindControlSelectedTargets: CellCoord[];
+  // 交缠颂歌高亮
+  entanglementHighlights: CellCoord[];
+  entanglementSelectedTargets: CellCoord[];
+  // 潜行高亮
+  sneakHighlights: CellCoord[];
+  // 冰川位移高亮
+  glacialShiftHighlights: CellCoord[];
+  // 撤退高亮
+  withdrawHighlights: CellCoord[];
   stunHighlights: CellCoord[];
   hypnoticLureHighlights: CellCoord[];
   // 攻击后技能高亮（念力/高阶念力/读心传念）
@@ -145,6 +166,50 @@ const GridLayer: React.FC<{
   </div>
 );
 
+/**
+ * 计算卡牌本体的目标高亮样式
+ * 当格子处于各种事件/技能选择高亮时，给卡牌加 ring + glow，让用户能直观看到哪些单位可选
+ */
+function getCardTargetHighlight(row: number, col: number, props: BoardGridProps): string {
+  const isAnnihilateSelected = props.annihilateMode?.selectedTargets.some(p => p.row === row && p.col === col);
+  const isAnnihilateTarget = props.annihilateHighlights.some(p => p.row === row && p.col === col);
+  if (isAnnihilateSelected) return 'ring-2 ring-purple-400 shadow-[0_0_12px_rgba(192,132,252,0.7)]';
+  if (isAnnihilateTarget) return 'ring-2 ring-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.6)] animate-pulse';
+
+  const isMindControlSelected = props.mindControlSelectedTargets.some(p => p.row === row && p.col === col);
+  const isMindControlTarget = props.mindControlHighlights.some(p => p.row === row && p.col === col);
+  if (isMindControlSelected) return 'ring-2 ring-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.7)]';
+  if (isMindControlTarget) return 'ring-2 ring-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.6)] animate-pulse';
+
+  const isEntanglementSelected = props.entanglementSelectedTargets.some(p => p.row === row && p.col === col);
+  const isEntanglementTarget = props.entanglementHighlights.some(p => p.row === row && p.col === col);
+  if (isEntanglementSelected) return 'ring-2 ring-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]';
+  if (isEntanglementTarget) return 'ring-2 ring-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)] animate-pulse';
+
+  if (props.sneakHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.6)] animate-pulse';
+  if (props.glacialShiftHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.6)] animate-pulse';
+  if (props.withdrawHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)] animate-pulse';
+  if (props.stunHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.6)] animate-pulse';
+  if (props.hypnoticLureHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-pink-400 shadow-[0_0_10px_rgba(244,114,182,0.6)] animate-pulse';
+  if (props.afterAttackAbilityHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.6)] animate-pulse';
+  if (props.bloodSummonHighlights.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)] animate-pulse';
+  if (props.validEventTargets.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-orange-400 shadow-[0_0_10px_rgba(251,146,60,0.6)] animate-pulse';
+  if (props.validAttackPositions.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-red-400 shadow-[0_0_10px_rgba(248,113,113,0.6)]';
+  if (props.abilityMode?.step === 'selectUnit' && props.validAbilityUnits.some(p => p.row === row && p.col === col))
+    return 'ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)] animate-pulse';
+
+  return '';
+}
+
 /** 计算格子高亮样式 */
 function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGridProps): string {
   const { row, col } = gameCoord;
@@ -161,6 +226,11 @@ function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGr
   // 欺心巫族事件卡高亮
   const isMindControlSelected = props.mindControlSelectedTargets.some(p => p.row === row && p.col === col);
   const isMindControlTarget = props.mindControlHighlights.some(p => p.row === row && p.col === col);
+  const isEntanglementSelected = props.entanglementSelectedTargets.some(p => p.row === row && p.col === col);
+  const isEntanglementTarget = props.entanglementHighlights.some(p => p.row === row && p.col === col);
+  const isSneakTarget = props.sneakHighlights.some(p => p.row === row && p.col === col);
+  const isGlacialShiftTarget = props.glacialShiftHighlights.some(p => p.row === row && p.col === col);
+  const isWithdrawTarget = props.withdrawHighlights.some(p => p.row === row && p.col === col);
   const isStunTarget = props.stunHighlights.some(p => p.row === row && p.col === col);
   const isHypnoticLureTarget = props.hypnoticLureHighlights.some(p => p.row === row && p.col === col);
   const isAfterAttackAbilityTarget = props.afterAttackAbilityHighlights.some(p => p.row === row && p.col === col);
@@ -169,6 +239,11 @@ function getCellStyle(gameCoord: CellCoord, _isSelected: boolean, props: BoardGr
   if (isAnnihilateTarget) return 'border-purple-500 bg-purple-500/30 border-2 animate-pulse';
   if (isMindControlSelected) return 'border-cyan-400 bg-cyan-400/50 border-2 ring-2 ring-cyan-300';
   if (isMindControlTarget) return 'border-cyan-500 bg-cyan-500/30 border-2 animate-pulse';
+  if (isEntanglementSelected) return 'border-emerald-400 bg-emerald-400/50 border-2 ring-2 ring-emerald-300';
+  if (isEntanglementTarget) return 'border-emerald-500 bg-emerald-500/30 border-2 animate-pulse';
+  if (isSneakTarget) return 'border-lime-400 bg-lime-400/30 border-2 animate-pulse';
+  if (isGlacialShiftTarget) return 'border-sky-400 bg-sky-400/30 border-2 animate-pulse';
+  if (isWithdrawTarget) return 'border-amber-400 bg-amber-400/30 border-2 animate-pulse';
   if (isStunTarget) return 'border-yellow-400 bg-yellow-400/30 border-2 animate-pulse';
   if (isHypnoticLureTarget) return 'border-pink-400 bg-pink-400/30 border-2 animate-pulse';
   if (isAfterAttackAbilityTarget) return 'border-teal-400 bg-teal-400/30 border-2 animate-pulse';
@@ -269,7 +344,7 @@ const DyingEntityCell: React.FC<{
       top: `${pos.top}%`,
       width: `${pos.width}%`,
       height: `${pos.height}%`,
-      zIndex: 35,
+      zIndex: BOARD_GRID_Z.dyingEntity,
     }}
   >
     <div className="relative w-[85%] shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] rounded-lg">
@@ -306,6 +381,8 @@ const UnitCell: React.FC<{
   const isUnitSelected = core.selectedUnit?.row === row && core.selectedUnit?.col === col;
   const damageRatio = damage / life;
   const hasAttached = (unit.attachedCards?.length ?? 0) > 0;
+  // 卡牌目标高亮（除灭/心灵操控/攻击等模式下让卡牌本体发光）
+  const cardHighlight = getCardTargetHighlight(row, col, props);
 
   const isAttacker = props.attackAnimState
     && props.attackAnimState.attacker.row === row
@@ -374,7 +451,7 @@ const UnitCell: React.FC<{
       style={{
         left: `${pos.left}%`, top: `${pos.top}%`,
         width: `${pos.width}%`, height: `${pos.height}%`,
-        zIndex: isAttacker ? 50 : undefined,
+        zIndex: isAttacker ? BOARD_GRID_Z.attacker : undefined,
       }}
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
       initial={isNew ? { opacity: 0, scale: 1.1 } : false}
@@ -384,13 +461,22 @@ const UnitCell: React.FC<{
       } : { duration: 0 }}
     >
       <div
-        className={`relative w-[85%] group transition-[background-color,box-shadow] duration-200 ${isUnitSelected
-          ? 'ring-2 ring-amber-400 shadow-[0_15px_30px_rgba(0,0,0,0.6),0_0_12px_rgba(251,191,36,0.6)] rounded-lg scale-105 z-10 -translate-y-[5%]'
-          : isMyUnit && props.actionableUnitPositions.some(p => p.row === row && p.col === col)
-            ? 'ring-2 ring-green-400 shadow-[0_10px_20px_rgba(0,0,0,0.4),0_0_10px_rgba(74,222,128,0.5)] rounded-lg'
-            : 'hover:ring-1 hover:ring-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_20px_40px_rgba(0,0,0,0.5)] rounded-lg'
-          }`}
+        className={`relative w-[85%] group transition-[background-color,box-shadow] duration-200 rounded-lg ${
+          isUnitSelected
+            ? 'ring-2 ring-amber-400 shadow-[0_15px_30px_rgba(0,0,0,0.6),0_0_12px_rgba(251,191,36,0.6)] scale-105 -translate-y-[5%]'
+            : cardHighlight
+              ? cardHighlight
+              : isMyUnit && props.actionableUnitPositions.some(p => p.row === row && p.col === col)
+                ? 'ring-2 ring-green-400 shadow-[0_10px_20px_rgba(0,0,0,0.4),0_0_10px_rgba(74,222,128,0.5)]'
+                : 'hover:ring-1 hover:ring-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_20px_40px_rgba(0,0,0,0.5)]'
+        } ${getBuffGlowStyle(unit, core.players[unit.owner]?.activeEvents ?? [])}`}
+        style={isUnitSelected ? { zIndex: BOARD_GRID_Z.overlay } : undefined}
       >
+        {/* 技能准备就绪指示器（青色波纹） */}
+        {isMyUnit && props.abilityReadyPositions.some(p => p.row === row && p.col === col) && !isUnitSelected && (
+          <AbilityReadyIndicator />
+        )}
+        
         <CardSprite
           atlasId={spriteConfig.atlasId}
           frameIndex={spriteConfig.frameIndex}
@@ -410,7 +496,10 @@ const UnitCell: React.FC<{
           />
         )}
         {/* 悬停显示生命值 */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+        <div
+          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+          style={{ zIndex: BOARD_GRID_Z.overlay }}
+        >
           <span className={`text-[1vw] font-bold px-[0.4vw] py-[0.1vw] rounded ${damage > 0 ? 'bg-red-900/80 text-red-200' : 'bg-black/60 text-white'}`}>
             {life - damage}/{life}
           </span>
@@ -423,7 +512,10 @@ const UnitCell: React.FC<{
             rows.push(Array.from({ length: Math.min(5, boosts - i) }, (_, j) => i + j));
           }
           return (
-            <div className={`absolute ${isMyUnit ? 'top-[3%] right-[3%] items-end' : 'bottom-[3%] left-[3%] items-start'} flex flex-col gap-[2%] z-10 pointer-events-none`}>
+            <div
+              className={`absolute ${isMyUnit ? 'top-[3%] right-[3%] items-end' : 'bottom-[3%] left-[3%] items-start'} flex flex-col gap-[2%] pointer-events-none`}
+              style={{ zIndex: BOARD_GRID_Z.overlay }}
+            >
               {rows.map((r, ri) => (
                 <div key={ri} className="flex gap-[3%]">
                   {r.map(idx => (
@@ -437,28 +529,57 @@ const UnitCell: React.FC<{
         {/* 放大镜按钮 */}
         <button
           onClick={(e) => { e.stopPropagation(); props.onMagnifyUnit(unit); }}
-          className="absolute top-[0.2vw] left-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-20"
+          className="absolute top-[0.2vw] left-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20"
+          style={{ zIndex: BOARD_GRID_Z.magnifyButton }}
         >
           <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
           </svg>
         </button>
+        
+        {/* Buff 图标区域 - 左下角（我方）/ 右上角（敌方） */}
+        <BuffIcons
+          unit={unit}
+          isMyUnit={isMyUnit}
+          activeEvents={core.players[unit.owner]?.activeEvents ?? []}
+          myPlayerId={myPlayerId}
+        />
+        
+        {/* Buff 详细信息悬停面板 */}
+        <div className="absolute top-full left-0 mt-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
+          <BuffDetailsPanel
+            unit={unit}
+            activeEvents={core.players[unit.owner]?.activeEvents ?? []}
+            getAbilityName={(abilityId) => abilityRegistry.get(abilityId)?.name ?? abilityId}
+          />
+        </div>
+        
         {/* 附加卡名条 - 覆盖在单位卡底部（我方）/ 顶部（敌方），正 z-index 避免溢出裁切 */}
-        {hasAttached && unit.attachedCards && unit.attachedCards.map((attachedCard, idx) => (
-          <div
-            key={attachedCard.id}
-            className={`absolute left-0 right-0 z-[5] cursor-pointer pointer-events-auto`}
-            style={{ [isMyUnit ? 'bottom' : 'top']: `${idx * 14}%` }}
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onMagnifyEventCard?.(attachedCard);
-            }}
-          >
-            <div className="bg-gradient-to-r from-amber-800/90 to-amber-700/90 text-white text-[0.45vw] text-center leading-tight py-[0.15vw] rounded-sm shadow-md border border-amber-500/30 truncate px-[0.3vw]">
-              {attachedCard.name}
+        {hasAttached && unit.attachedCards && unit.attachedCards.map((attachedCard, idx) => {
+          const baseId = attachedCard.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+          const isHellfireBlade = baseId === 'necro-hellfire-blade';
+          
+          return (
+            <div
+              key={attachedCard.id}
+              className="absolute left-0 right-0 cursor-pointer pointer-events-auto"
+              style={{ zIndex: BOARD_GRID_Z.attachedLabel, [isMyUnit ? 'bottom' : 'top']: `${idx * 14}%` }}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onMagnifyEventCard?.(attachedCard);
+              }}
+            >
+              <div className={`text-white text-[0.45vw] text-center leading-tight py-[0.15vw] rounded-sm shadow-md border truncate px-[0.3vw] flex items-center justify-center gap-1 ${
+                isHellfireBlade
+                  ? 'bg-gradient-to-r from-orange-800/95 to-red-700/95 border-orange-500/40'
+                  : 'bg-gradient-to-r from-amber-800/90 to-amber-700/90 border-amber-500/30'
+              }`}>
+                <span>{attachedCard.name}</span>
+                {isHellfireBlade && <span className="text-orange-200 font-bold">+2⚔️</span>}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </motion.div>
   );
@@ -481,6 +602,8 @@ const StructureCell: React.FC<{
   const isNew = props.newUnitIds?.has(structure.cardId) ?? false;
   const damage = structure.damage;
   const life = structure.card.life;
+  // 卡牌目标高亮（冰川位移/攻击等模式下让建筑本体发光）
+  const cardHighlight = getCardTargetHighlight(row, col, props);
 
   return (
     <div
@@ -499,7 +622,10 @@ const StructureCell: React.FC<{
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
     >
       <motion.div
-        className="relative w-[85%] group shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_20px_40px_rgba(0,0,0,0.5)] transition-shadow rounded-lg"
+        className={`relative w-[85%] group transition-shadow rounded-lg ${cardHighlight
+          ? cardHighlight
+          : 'shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_20px_40px_rgba(0,0,0,0.5)]'
+        }`}
         initial={isNew ? { opacity: 0, scale: 1.1 } : false}
         animate={{ y: 0, opacity: 1, scale: 1 }}
         transition={{ type: 'spring', stiffness: 100, damping: 20 }}
@@ -526,7 +652,10 @@ const StructureCell: React.FC<{
           );
         })()}
         {/* 悬停显示生命值 */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+        <div
+          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+          style={{ zIndex: BOARD_GRID_Z.overlay }}
+        >
           <span className={`text-[1vw] font-bold px-[0.4vw] py-[0.1vw] rounded ${damage > 0 ? 'bg-red-900/80 text-red-200' : 'bg-black/60 text-white'}`}>
             {life - damage}/{life}
           </span>
@@ -534,7 +663,8 @@ const StructureCell: React.FC<{
         {/* 放大镜按钮 */}
         <button
           onClick={(e) => { e.stopPropagation(); props.onMagnifyStructure(structure); }}
-          className="absolute top-[0.2vw] left-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-20"
+          className="absolute top-[0.2vw] left-[0.2vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20"
+          style={{ zIndex: BOARD_GRID_Z.magnifyButton }}
         >
           <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />

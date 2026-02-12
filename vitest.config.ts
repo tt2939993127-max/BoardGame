@@ -26,7 +26,6 @@ export default defineConfig({
             'src/shared/**/__tests__/**/*.test.{ts,tsx}',
             'src/games/**/__tests__/**/*.test.{ts,tsx}',
             'src/engine/**/__tests__/**/*.test.{ts,tsx}',
-            'src/systems/**/__tests__/**/*.test.{ts,tsx}',
             'src/server/**/__tests__/**/*.test.{ts,tsx}',
             'src/ugc/**/__tests__/**/*.test.{ts,tsx}',
             'src/pages/**/__tests__/**/*.test.{ts,tsx}',

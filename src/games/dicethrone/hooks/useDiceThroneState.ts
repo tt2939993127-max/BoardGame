@@ -6,8 +6,9 @@
  */
 
 import { useMemo } from 'react';
-import type { PlayerId, MatchState, PromptState, ResponseWindowState } from '../../../engine/types';
-import type { HeroState, Die, TurnPhase, PendingAttack } from '../types';
+import type { PlayerId, MatchState, ResponseWindowState } from '../../../engine/types';
+import { asSimpleChoice, type SimpleChoiceData } from '../../../engine/systems/InteractionSystem';
+import type { HeroState, Die, TurnPhase, PendingAttack, PendingInteraction } from '../types';
 import type { DiceThroneCore } from '../domain';
 import { getAvailableAbilityIds, getDefensiveAbilityIds } from '../domain/rules';
 
@@ -34,7 +35,7 @@ type EngineState = MatchState<DiceThroneCore>;
  */
 export function getFocusPlayerId(state: EngineState): PlayerId {
     const { core, sys } = state;
-    const turnPhase = (sys.phase ?? core.turnPhase) as TurnPhase;
+    const turnPhase = sys.phase as TurnPhase;
     
     // 1. 响应窗口的当前响应者
     if (sys.responseWindow?.current) {
@@ -47,14 +48,15 @@ export function getFocusPlayerId(state: EngineState): PlayerId {
         return core.pendingDamage.responderId;
     }
     
-    // 3. 交互（骰子修改等）的所有者
-    if (core.pendingInteraction) {
-        return core.pendingInteraction.playerId;
+    // 3. 交互（骰子修改等）的所有者（从 sys.interaction 读取）
+    const cardInteraction = sys.interaction.current;
+    if (cardInteraction?.kind === 'dt:card-interaction') {
+        return (cardInteraction.data as PendingInteraction).playerId;
     }
     
-    // 4. Prompt（选择）的目标玩家
-    if (sys.prompt.current) {
-        return sys.prompt.current.playerId;
+    // 4. 交互（选择）的目标玩家
+    if (sys.interaction.current) {
+        return sys.interaction.current.playerId;
     }
     
     // 5. 防御阶段的防御方（掷骰者）
@@ -96,8 +98,8 @@ export interface DiceThroneStateAccess {
     activatingAbilityId?: string;
     lastEffectSourceByPlayerId?: Record<PlayerId, string | undefined>;
     
-    // 选择/提示
-    prompt: PromptState['current'] | undefined;
+    // 选择/提示（通过 asSimpleChoice 展平）
+    prompt: (SimpleChoiceData & { id: string; playerId: PlayerId }) | undefined;
     
     // 响应窗口
     responseWindow: ResponseWindowState['current'] | undefined;
@@ -123,8 +125,8 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
     return useMemo(() => {
         const { core, sys } = G;
         
-        // 从 sys.phase 读取阶段（单一权威），回退到 core.turnPhase
-        const turnPhase = (sys.phase ?? core.turnPhase) as TurnPhase;
+        // 从 sys.phase 读取阶段（单一权威）
+        const turnPhase = sys.phase as TurnPhase;
         
         // 计算焦点玩家（统一的操作权判断）
         const focusPlayerId = getFocusPlayerId(G);
@@ -142,7 +144,7 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
         const availableAbilityIds = isPreRollDefenseSelection
             ? getDefensiveAbilityIds(core, rollerId)
             : isRollPhase
-                ? getAvailableAbilityIds(core, rollerId)
+                ? getAvailableAbilityIds(core, rollerId, turnPhase)
                 : [];
         
         return {
@@ -165,7 +167,7 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
             activatingAbilityId: core.activatingAbilityId,
             lastEffectSourceByPlayerId: core.lastEffectSourceByPlayerId,
             
-            prompt: sys.prompt.current,
+            prompt: asSimpleChoice(sys.interaction.current),
             
             responseWindow: sys.responseWindow?.current,
             

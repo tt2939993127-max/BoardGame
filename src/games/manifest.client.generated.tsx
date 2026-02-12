@@ -3,37 +3,39 @@
 import type { GameClientManifestEntry } from './manifest.client.types';
 import { ManifestGameThumbnail } from '../components/lobby/thumbnails';
 
-import manifest0 from './assetslicer/manifest';
+import manifest0 from './archview/manifest';
 
-import manifest1 from './audiobrowser/manifest';
+import manifest1 from './assetslicer/manifest';
 
-import manifest2 from './dicethrone/manifest';
-import Game2 from './dicethrone/game';
-import Board2 from './dicethrone/Board';
-import Tutorial2 from './dicethrone/tutorial';
-import Thumbnail2 from './dicethrone/thumbnail';
+import manifest2 from './audiobrowser/manifest';
 
-import manifest3 from './fxpreview/manifest';
+import manifest3 from './dicethrone/manifest';
+import Game3 from './dicethrone/game';
+import Board3 from './dicethrone/Board';
+import Tutorial3 from './dicethrone/tutorial';
+import Thumbnail3 from './dicethrone/thumbnail';
 
-import manifest4 from './smashup/manifest';
-import Game4 from './smashup/game';
-import Board4 from './smashup/Board';
-import Tutorial4 from './smashup/tutorial';
-import Thumbnail4 from './smashup/thumbnail';
+import manifest4 from './fxpreview/manifest';
 
-import manifest5 from './summonerwars/manifest';
-import Game5 from './summonerwars/game';
-import Board5 from './summonerwars/Board';
-import Tutorial5 from './summonerwars/tutorial';
-import Thumbnail5 from './summonerwars/thumbnail';
+import manifest5 from './smashup/manifest';
+import Game5 from './smashup/game';
+import Board5 from './smashup/Board';
+import Tutorial5 from './smashup/tutorial';
+import Thumbnail5 from './smashup/thumbnail';
 
-import manifest6 from './tictactoe/manifest';
-import Game6 from './tictactoe/game';
-import Board6 from './tictactoe/Board';
-import Tutorial6 from './tictactoe/tutorial';
-import Thumbnail6 from './tictactoe/thumbnail';
+import manifest6 from './summonerwars/manifest';
+import Game6 from './summonerwars/game';
+import Board6 from './summonerwars/Board';
+import Tutorial6 from './summonerwars/tutorial';
+import Thumbnail6 from './summonerwars/thumbnail';
 
-import manifest7 from './ugcbuilder/manifest';
+import manifest7 from './tictactoe/manifest';
+import Game7 from './tictactoe/game';
+import Board7 from './tictactoe/Board';
+import Tutorial7 from './tictactoe/tutorial';
+import Thumbnail7 from './tictactoe/thumbnail';
+
+import manifest8 from './ugcbuilder/manifest';
 
 const entry0: GameClientManifestEntry = {
     manifest: manifest0,
@@ -47,23 +49,20 @@ const entry1: GameClientManifestEntry = {
 
 const entry2: GameClientManifestEntry = {
     manifest: manifest2,
-    game: Game2,
-    board: Board2,
-    tutorial: Tutorial2,
-    thumbnail: <Thumbnail2 />,
+    thumbnail: <ManifestGameThumbnail manifest={manifest2} />,
 };
 
 const entry3: GameClientManifestEntry = {
     manifest: manifest3,
-    thumbnail: <ManifestGameThumbnail manifest={manifest3} />,
+    game: Game3,
+    board: Board3,
+    tutorial: Tutorial3,
+    thumbnail: <Thumbnail3 />,
 };
 
 const entry4: GameClientManifestEntry = {
     manifest: manifest4,
-    game: Game4,
-    board: Board4,
-    tutorial: Tutorial4,
-    thumbnail: <Thumbnail4 />,
+    thumbnail: <ManifestGameThumbnail manifest={manifest4} />,
 };
 
 const entry5: GameClientManifestEntry = {
@@ -84,7 +83,15 @@ const entry6: GameClientManifestEntry = {
 
 const entry7: GameClientManifestEntry = {
     manifest: manifest7,
-    thumbnail: <ManifestGameThumbnail manifest={manifest7} />,
+    game: Game7,
+    board: Board7,
+    tutorial: Tutorial7,
+    thumbnail: <Thumbnail7 />,
+};
+
+const entry8: GameClientManifestEntry = {
+    manifest: manifest8,
+    thumbnail: <ManifestGameThumbnail manifest={manifest8} />,
 };
 
 export const GAME_CLIENT_MANIFEST: GameClientManifestEntry[] = [
@@ -96,6 +103,7 @@ export const GAME_CLIENT_MANIFEST: GameClientManifestEntry[] = [
     entry5,
     entry6,
     entry7,
+    entry8,
 ];
 
 export const GAME_CLIENT_MANIFEST_BY_ID: Record<string, GameClientManifestEntry> = Object.fromEntries(

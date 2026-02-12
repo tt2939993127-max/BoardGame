@@ -9,10 +9,14 @@ export {
   usePromptContext 
 } from './BuilderContext';
 
+export { useBuilderActions } from './useBuilderActions';
+
 export type { 
-  BuilderState, 
+  BuilderState,
+  BuilderAction,
   RenderComponent, 
   LayoutComponent,
+  LayoutGroup,
   PromptContext,
   ComponentContext,
   RequirementEntry,

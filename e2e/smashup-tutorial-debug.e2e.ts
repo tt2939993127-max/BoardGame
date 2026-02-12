@@ -2,21 +2,8 @@
  * SmashUp 教学调试 - 专注 opponentTurn 步骤
  * 通过注入浏览器端日志收集器来追踪事件流
  */
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
-
-const setEnglishLocale = async (context: BrowserContext) => {
-    await context.addInitScript(() => { localStorage.setItem('i18nextLng', 'en'); });
-};
-const disableAudio = async (context: BrowserContext) => {
-    await context.addInitScript(() => {
-        localStorage.setItem('audio_muted', 'true');
-        localStorage.setItem('audio_master_volume', '0');
-        (window as Window & { __BG_DISABLE_AUDIO__?: boolean }).__BG_DISABLE_AUDIO__ = true;
-    });
-};
-const blockAudioRequests = async (context: BrowserContext) => {
-    await context.route(/\.(mp3|ogg|webm|wav)(\?.*)?$/i, route => route.abort());
-};
+import { test, expect, type Page } from '@playwright/test';
+import { setEnglishLocale, disableAudio, blockAudioRequests } from './helpers/common';
 
 const waitForStep = async (page: Page, stepId: string, timeout = 30000) => {
     await expect(page.locator(`[data-tutorial-step="${stepId}"]`)).toBeVisible({ timeout });
@@ -38,13 +25,14 @@ test.describe('SmashUp Tutorial Debug', () => {
         await disableAudio(context);
         await blockAudioRequests(context);
 
-        // 收集浏览器控制台日志
         const consoleLogs: string[] = [];
-        page.on('console', msg => {
+        page.on('console', (msg) => {
             const text = msg.text();
-            if (text.includes('FlowSystem') || text.includes('TutorialSystem') ||
+            if (
+                text.includes('FlowSystem') || text.includes('TutorialSystem') ||
                 text.includes('TURN_') || text.includes('autoContinue') ||
-                text.includes('tutorial') || text.includes('ADVANCE_PHASE')) {
+                text.includes('tutorial') || text.includes('ADVANCE_PHASE')
+            ) {
                 consoleLogs.push(`[${msg.type()}] ${text}`);
             }
         });
@@ -88,7 +76,7 @@ test.describe('SmashUp Tutorial Debug', () => {
                 await bases.first().click({ force: true });
                 await page.waitForTimeout(500);
             }
-            if (!await page.locator('[data-tutorial-step="playAction"]').isVisible({ timeout: 1000 }).catch(() => false)) break;
+            if (!(await page.locator('[data-tutorial-step="playAction"]').isVisible({ timeout: 1000 }).catch(() => false))) break;
         }
 
         // endPlayCards
@@ -112,27 +100,21 @@ test.describe('SmashUp Tutorial Debug', () => {
         await clickNext(page);
         await waitForStep(page, 'endDraw', 10000);
 
-        // 清空之前的日志，只关注 endDraw → opponentTurn → talentIntro 的事件流
         consoleLogs.length = 0;
         console.log('\n=== 点击 endDraw 的 Next，进入 opponentTurn ===\n');
-
         await clickNext(page);
 
-        // 等待 talentIntro 或超时
         const found = await page.locator('[data-tutorial-step="talentIntro"]')
             .isVisible({ timeout: 45000 }).catch(() => false);
 
         console.log(`\n=== talentIntro 是否出现: ${found} ===`);
         console.log(`=== 收集到 ${consoleLogs.length} 条日志 ===\n`);
-        consoleLogs.forEach(l => console.log(l));
+        consoleLogs.forEach((l) => console.log(l));
 
-        // 如果没找到 talentIntro，检查当前教学状态
         if (!found) {
             const tutorialState = await page.evaluate(() => {
-                // 尝试从 DOM 获取当前教学步骤
                 const stepEl = document.querySelector('[data-tutorial-step]');
                 const stepId = stepEl?.getAttribute('data-tutorial-step') ?? 'none';
-                // 检查是否有遮罩
                 const mask = document.querySelector('[data-tutorial-mask]');
                 return {
                     currentStepId: stepId,

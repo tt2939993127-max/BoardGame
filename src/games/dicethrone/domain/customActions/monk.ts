@@ -2,7 +2,7 @@
  * 僧侣 (Monk) 专属 Custom Action 处理器
  */
 
-import { getActiveDice, getFaceCounts, getDieFace, getTokenStackLimit } from '../rules';
+import { getActiveDice, getFaceCounts, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { TOKEN_IDS, DICE_FACE_IDS } from '../ids';
 import type {
@@ -94,7 +94,7 @@ function handleOneThrowFortuneCp({ targetId, state, timestamp, random }: CustomA
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
+    const face = getPlayerDieFace(state, targetId, dieValue) ?? '';
     const cpGain = Math.ceil(dieValue / 2);
     events.push({
         type: 'BONUS_DIE_ROLLED',
@@ -117,7 +117,7 @@ function handleEnlightenmentRoll({ targetId, sourceAbilityId, state, timestamp, 
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
+    const face = getPlayerDieFace(state, targetId, dieValue) ?? '';
     const isLotus = face === DICE_FACE_IDS.LOTUS;
     events.push({
         type: 'BONUS_DIE_ROLLED',
@@ -211,7 +211,7 @@ const createThunderStrikeRollDamageEvents = (
     // 投掷奖励骰
     for (let i = 0; i < config.diceCount; i++) {
         const value = random.d(6);
-        const face = getDieFace(value);
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
         dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',

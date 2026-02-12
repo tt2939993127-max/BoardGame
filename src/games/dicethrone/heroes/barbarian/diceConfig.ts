@@ -2,7 +2,7 @@
  * Barbarian 狂战士骰子定义
  */
 
-import type { DiceDefinition } from '../../../../systems/DiceSystem/types';
+import type { DiceDefinition } from '../../../../engine/primitives';
 import { BARBARIAN_DICE_FACE_IDS } from '../../domain/ids';
 
 /**

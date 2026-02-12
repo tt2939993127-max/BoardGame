@@ -64,15 +64,18 @@ type ManifestGameThumbnailProps = {
 
 export const ManifestGameThumbnail = ({ manifest }: ManifestGameThumbnailProps) => {
     const { t } = useTranslation('lobby');
+
     if (!manifest.thumbnailPath) {
         return <DefaultGameThumbnail titleKey={manifest.titleKey} icon={manifest.icon} />;
     }
     const title = t(manifest.titleKey);
     return (
-        <OptimizedImage
-            src={manifest.thumbnailPath}
-            alt={title}
-            className="w-full h-full object-cover"
-        />
+        <div className="w-full h-full relative overflow-hidden bg-parchment-cream">
+            <OptimizedImage
+                src={manifest.thumbnailPath}
+                alt={title}
+                className="absolute inset-0 w-full h-full object-cover"
+            />
+        </div>
     );
 };

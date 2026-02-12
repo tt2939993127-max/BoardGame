@@ -1,5 +1,5 @@
-import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
-import { TOKEN_IDS, STATUS_IDS } from '../../domain/ids';
+import type { TokenDef, TokenState } from '../../domain/tokenTypes';
+import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
 
 export const SHADOW_THIEF_TOKENS: TokenDef[] = [
     {
@@ -16,7 +16,9 @@ export const SHADOW_THIEF_TOKENS: TokenDef[] = [
             actions: [
                 { type: 'custom', customActionId: 'shadow_thief-sneak-prevent', target: 'self' }
             ]
-        }
+        },
+        frameId: 'shadow-soul',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.SHADOW_THIEF,
     },
     {
         id: TOKEN_IDS.SNEAK_ATTACK,
@@ -33,7 +35,9 @@ export const SHADOW_THIEF_TOKENS: TokenDef[] = [
                 type: 'modifyDamageDealt',
                 value: 0, // 实际逻辑在 shadow_thief-sneak-attack-use custom action 中
             }
-        }
+        },
+        frameId: 'sneak-attack',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.SHADOW_THIEF,
     },
     // 中毒状态效果定义（暗影刺客引入）
     {
@@ -48,7 +52,9 @@ export const SHADOW_THIEF_TOKENS: TokenDef[] = [
             timing: 'onTurnStart',
             removable: true,
             actions: [{ type: 'damage', target: 'self', value: 1 }],
-        }
+        },
+        frameId: 'poison',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.SHADOW_THIEF,
     },
 ];
 

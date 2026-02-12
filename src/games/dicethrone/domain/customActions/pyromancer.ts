@@ -2,7 +2,7 @@
  * 烈焰术士 (Pyromancer) 专属 Custom Action 处理器
  */
 
-import { getActiveDice, getFaceCounts, getDieFace } from '../rules';
+import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { STATUS_IDS, TOKEN_IDS, PYROMANCER_DICE_FACE_IDS } from '../ids';
 import type {
@@ -139,7 +139,7 @@ const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
 
     // 基础烈焰连击 II 逻辑 (可能包含奖励骰或不同固定值)
     const roll = ctx.random.d(6);
-    const face = getDieFace(roll);
+    const face = getPlayerDieFace(ctx.state, ctx.attackerId, roll) ?? '';
     const events: DiceThroneEvent[] = [{
         type: 'BONUS_DIE_ROLLED',
         payload: { value: roll, face, playerId: ctx.attackerId, targetPlayerId: ctx.targetId, effectKey: `bonusDie.effect.pyrohotstreak2.${roll}` },
@@ -148,10 +148,10 @@ const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
     } as BonusDieRolledEvent];
 
     let dmg = 0;
-    if (roll <= 3) dmg = 2;
-    else if (roll === 4) dmg = 3;
-    else if (roll === 5) dmg = 4;
-    else if (roll === 6) {
+    if (face === PYROMANCER_DICE_FACE_IDS.FIRE) dmg = 2;
+    else if (face === PYROMANCER_DICE_FACE_IDS.MAGMA) dmg = 3;
+    else if (face === PYROMANCER_DICE_FACE_IDS.FIERY_SOUL) dmg = 4;
+    else if (face === PYROMANCER_DICE_FACE_IDS.METEOR) {
         dmg = 5;
         events.push({
             type: 'STATUS_APPLIED',
@@ -291,7 +291,7 @@ const resolveMagmaArmor = (ctx: CustomActionContext, diceCount: number): DiceThr
 
     for (let i = 0; i < diceCount; i++) {
         const roll = ctx.random.d(6);
-        const face = getDieFace(roll);
+        const face = getPlayerDieFace(ctx.state, ctx.attackerId, roll) ?? '';
         diceInfo.push({ index: i, value: roll, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -337,7 +337,7 @@ const resolveMagmaArmor = (ctx: CustomActionContext, diceCount: number): DiceThr
 const resolveInfernalEmbrace = (ctx: CustomActionContext): DiceThroneEvent[] => {
     if (!ctx.random) return [];
     const roll = ctx.random.d(6);
-    const face = getDieFace(roll);
+    const face = getPlayerDieFace(ctx.state, ctx.attackerId, roll) ?? '';
     const events: DiceThroneEvent[] = [{
         type: 'BONUS_DIE_ROLLED',
         payload: { value: roll, face, playerId: ctx.attackerId, targetPlayerId: ctx.attackerId, effectKey: `bonusDie.effect.infernalEmbrace.${roll}` },
@@ -345,7 +345,7 @@ const resolveInfernalEmbrace = (ctx: CustomActionContext): DiceThroneEvent[] => 
         timestamp: ctx.timestamp
     } as BonusDieRolledEvent];
 
-    if (roll === 5) {
+    if (face === PYROMANCER_DICE_FACE_IDS.METEOR) {
         const currentFM = getFireMasteryCount(ctx);
         const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
         events.push({
@@ -383,7 +383,7 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
 
     for (let i = 0; i < config.diceCount; i++) {
         const value = ctx.random.d(6);
-        const face = getDieFace(value);
+        const face = getPlayerDieFace(ctx.state, ctx.attackerId, value) ?? '';
         dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -433,6 +433,47 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
     return events;
 };
 
+/**
+ * 烈焰赤红 (Red Hot)：每个烈焰精通增加 1 点伤害到当前攻击
+ * 作为 withDamage timing 使用，通过 pendingAttack.bonusDamage 增加
+ */
+const resolveDmgPerFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
+    const fmCount = getFireMasteryCount(ctx);
+    if (fmCount <= 0) return [];
+    if (ctx.state.pendingAttack && ctx.state.pendingAttack.attackerId === ctx.attackerId) {
+        ctx.state.pendingAttack.bonusDamage = (ctx.state.pendingAttack.bonusDamage ?? 0) + fmCount;
+    }
+    return [];
+};
+
+/**
+ * 升温 (Turning Up The Heat)：弹出选择框，询问是否花费 2CP 获得 1 烈焰精通
+ * 选择确认后由 choiceEffectHandler 'pyro-spend-cp-for-fm-confirmed' 处理
+ */
+const resolveSpendCpForFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
+    const player = ctx.state.players[ctx.attackerId];
+    const currentCp = player?.resources[RESOURCE_IDS.CP] ?? 0;
+    if (currentCp < 2) return [];
+    const currentFM = getFireMasteryCount(ctx);
+    const limit = player?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
+    if (currentFM >= limit) return [];
+
+    return [{
+        type: 'CHOICE_REQUESTED',
+        payload: {
+            playerId: ctx.attackerId,
+            sourceAbilityId: ctx.sourceAbilityId,
+            titleKey: 'choices.pyroSpendCpForFM.title',
+            options: [
+                { value: 1, customId: 'pyro-spend-cp-for-fm-confirmed', tokenId: TOKEN_IDS.FIRE_MASTERY, labelKey: 'choices.pyroSpendCpForFM.pay' },
+                { value: 0, customId: 'pyro-spend-cp-for-fm-skip', labelKey: 'choices.pyroSpendCpForFM.skip' },
+            ],
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp: ctx.timestamp,
+    } as any];
+};
+
 const resolveIncreaseFMLimit = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const currentLimit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
     return [{
@@ -473,6 +514,9 @@ export function registerPyromancerCustomActions(): void {
     registerCustomActionHandler('pyro-increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
 
     registerCustomActionHandler('pyro-infernal-embrace', resolveInfernalEmbrace, { categories: ['resource', 'other'] });
+
+    registerCustomActionHandler('pyro-details-dmg-per-fm', resolveDmgPerFM, { categories: ['damage'] });
+    registerCustomActionHandler('pyro-spend-cp-for-fm', resolveSpendCpForFM, { categories: ['resource', 'choice'] });
 
     registerCustomActionHandler('pyro-blast-2-roll', (ctx) => createPyroBlastRollEvents(ctx, { diceCount: 2, dieEffectKey: 'bonusDie.effect.pyroBlast2Die', rerollEffectKey: 'bonusDie.effect.pyroBlast2Reroll' }), { categories: ['dice', 'other'] });
     registerCustomActionHandler('pyro-blast-3-roll', (ctx) => createPyroBlastRollEvents(ctx, { diceCount: 2, maxRerollCount: 1, dieEffectKey: 'bonusDie.effect.pyroBlast3Die', rerollEffectKey: 'bonusDie.effect.pyroBlast3Reroll' }), { categories: ['dice', 'other'] });

@@ -8,7 +8,7 @@
  * - 行动卡逻辑 (Moon Shadow Strike / Volley / Watch Out)
  */
 
-import { getActiveDice, getFaceCounts, getDieFace } from '../rules';
+import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { STATUS_IDS, TOKEN_IDS, MOON_ELF_DICE_FACE_IDS } from '../ids';
 import type {
@@ -109,12 +109,12 @@ function handleLongbowBonusCheck3(context: CustomActionContext): DiceThroneEvent
  * 爆裂箭 I：投掷1骰，造成骰值伤害
  */
 function handleExplodingArrowResolve1(context: CustomActionContext): DiceThroneEvent[] {
-    const { targetId, attackerId, sourceAbilityId, timestamp, random } = context;
+    const { targetId, attackerId, sourceAbilityId, state, timestamp, random } = context;
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
 
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, attackerId, value) ?? '';
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
@@ -132,12 +132,12 @@ function handleExplodingArrowResolve1(context: CustomActionContext): DiceThroneE
  * 爆裂箭 II：投掷1骰，造成骰值+1伤害
  */
 function handleExplodingArrowResolve2(context: CustomActionContext): DiceThroneEvent[] {
-    const { targetId, attackerId, sourceAbilityId, timestamp, random } = context;
+    const { targetId, attackerId, sourceAbilityId, state, timestamp, random } = context;
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
 
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, attackerId, value) ?? '';
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
@@ -159,7 +159,7 @@ function handleExplodingArrowResolve3(context: CustomActionContext): DiceThroneE
     const events: DiceThroneEvent[] = [];
 
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, attackerId, value) ?? '';
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
@@ -269,9 +269,9 @@ function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEven
 
 /**
  * 月影突袭 (Moon Shadow Strike)：投掷1骰判定
- * - 1-3：抽1张牌
- * - 4-5：施加缠绕
- * - 6：施加致盲 + 锁定
+ * - 弓(BOW)：抽1张牌
+ * - 足(FOOT)：施加缠绕
+ * - 月(MOON)：施加致盲 + 锁定
  */
 function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[] {
     const { targetId, attackerId, sourceAbilityId, state, timestamp, random } = context;
@@ -279,7 +279,7 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
     const events: DiceThroneEvent[] = [];
 
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, attackerId, value) ?? '';
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.moonShadowStrike', effectParams: { value } },
@@ -287,14 +287,14 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
         timestamp,
     } as BonusDieRolledEvent);
 
-    if (value <= 3) {
+    if (face === FACE.BOW) {
         // 抽1张牌
         events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp));
-    } else if (value <= 5) {
+    } else if (face === FACE.FOOT) {
         // 施加缠绕
         events.push(applyStatus(targetId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
-    } else {
-        // 6：施加致盲 + 锁定
+    } else if (face === FACE.MOON) {
+        // 施加致盲 + 锁定
         events.push(applyStatus(targetId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp));
         events.push(applyStatus(targetId, STATUS_IDS.TARGETED, 1, sourceAbilityId, state, timestamp));
     }
@@ -343,7 +343,7 @@ function handleBlindedCheck(context: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
 
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, attackerId, value) ?? '';
     events.push({
         type: 'BONUS_DIE_ROLLED',
         payload: { value, face, playerId: attackerId, targetPlayerId: attackerId, effectKey: 'bonusDie.effect.blinded' },

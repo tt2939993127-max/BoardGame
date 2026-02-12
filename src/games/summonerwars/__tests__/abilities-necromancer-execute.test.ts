@@ -71,7 +71,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeSummoner(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '古尔-达斯', unitClass: 'summoner',
-    faction: '堕落王国', strength: 2, life: 13, cost: 0,
+    faction: 'necromancer', strength: 2, life: 13, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['revive_undead', 'rage'], deckSymbols: [],
   };
@@ -80,7 +80,7 @@ function makeSummoner(id: string): UnitCard {
 function makeUndeadWarrior(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '亡灵战士', unitClass: 'common',
-    faction: '堕落王国', strength: 2, life: 4, cost: 2,
+    faction: 'necromancer', strength: 2, life: 4, cost: 2,
     attackType: 'melee', attackRange: 1,
     abilities: ['blood_rage', 'power_boost', 'blood_rage_decay'], deckSymbols: [],
   };
@@ -89,7 +89,7 @@ function makeUndeadWarrior(id: string): UnitCard {
 function makePlagueZombie(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '疫病体', unitClass: 'common',
-    faction: '堕落王国', strength: 1, life: 1, cost: 0,
+    faction: 'necromancer', strength: 1, life: 1, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['soulless', 'infection'], deckSymbols: [],
   };
@@ -98,7 +98,7 @@ function makePlagueZombie(id: string): UnitCard {
 function makeCultist(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '地狱火教徒', unitClass: 'common',
-    faction: '堕落王国', strength: 1, life: 1, cost: 0,
+    faction: 'necromancer', strength: 1, life: 1, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['sacrifice'], deckSymbols: [],
   };
@@ -107,7 +107,7 @@ function makeCultist(id: string): UnitCard {
 function makeFireSacrifice(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '火祭召唤师', unitClass: 'champion',
-    faction: '堕落王国', strength: 3, life: 7, cost: 5,
+    faction: 'necromancer', strength: 3, life: 7, cost: 5,
     attackType: 'melee', attackRange: 1,
     abilities: ['fire_sacrifice_summon'], deckSymbols: [],
   };
@@ -116,7 +116,7 @@ function makeFireSacrifice(id: string): UnitCard {
 function makeLifeDrainer(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '吸取者', unitClass: 'champion',
-    faction: '堕落王国', strength: 2, life: 8, cost: 6,
+    faction: 'necromancer', strength: 2, life: 8, cost: 6,
     attackType: 'melee', attackRange: 1,
     abilities: ['life_drain'], deckSymbols: [],
   };
@@ -125,7 +125,7 @@ function makeLifeDrainer(id: string): UnitCard {
 function makeSoulArcher(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '亡灵弓箭手', unitClass: 'common',
-    faction: '堕落王国', strength: 1, life: 3, cost: 1,
+    faction: 'necromancer', strength: 1, life: 3, cost: 1,
     attackType: 'ranged', attackRange: 3,
     abilities: ['soul_transfer'], deckSymbols: [],
   };
@@ -134,7 +134,7 @@ function makeSoulArcher(id: string): UnitCard {
 function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'goblin', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -620,7 +620,7 @@ describe('亡灵战士 - 血腥狂怒 onUnitDestroyed 充能', () => {
       // 友方攻击者（非亡灵战士）
       placeUnit(state, { row: 4, col: 2 }, {
         cardId: 'test-attacker',
-        card: makeEnemy('test-attacker', { strength: 5, faction: '堕落王国' }),
+        card: makeEnemy('test-attacker', { strength: 5, faction: 'necromancer' }),
         owner: '0',
       });
 

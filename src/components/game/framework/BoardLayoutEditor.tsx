@@ -81,8 +81,6 @@ export const BoardLayoutEditor: React.FC<BoardLayoutEditorProps> = ({
     if (!naturalWidth || !naturalHeight) return;
     const ratio = naturalWidth / naturalHeight;
     setImageAspectRatio(ratio);
-    // TODO: 对齐坐标系后移除日志
-    console.log(`[LayoutEditor] backgroundImage size=${naturalWidth}x${naturalHeight} ratio=${ratio.toFixed(4)}`);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -90,9 +88,6 @@ export const BoardLayoutEditor: React.FC<BoardLayoutEditorProps> = ({
     setIsSaving(true);
     setSaveHint(null);
     try {
-      const grid = config.grid;
-      // TODO: 调试布局保存后移除日志
-      console.log(`[LayoutEditor] save rows=${grid?.rows ?? 'none'} cols=${grid?.cols ?? 'none'} bounds=${grid?.bounds ? `${grid.bounds.x},${grid.bounds.y},${grid.bounds.width},${grid.bounds.height}` : 'none'} gapX=${grid?.gapX ?? 0} gapY=${grid?.gapY ?? 0}`);
       const result = await onSave(config);
       const relativePath = typeof result === 'object' && result && 'relativePath' in result
         ? String((result as { relativePath?: string }).relativePath || '')
@@ -209,8 +204,6 @@ export const BoardLayoutEditor: React.FC<BoardLayoutEditorProps> = ({
         bounds: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
         ...updates,
       };
-      // TODO: 调试布局保存后移除日志
-      console.log(`[LayoutEditor] updateGrid rows=${nextGrid.rows} cols=${nextGrid.cols} bounds=${nextGrid.bounds.x},${nextGrid.bounds.y},${nextGrid.bounds.width},${nextGrid.bounds.height} gapX=${nextGrid.gapX ?? 0} gapY=${nextGrid.gapY ?? 0}`);
       return {
         ...prev,
         grid: nextGrid,

@@ -36,7 +36,9 @@
     "confirmDiscard": "确认弃牌",
     "confirmSelection": "确认选择",
     "confirmMove": "确认移动",
-    "confirmControl": "确认控制",
+    "withdrawCharge": "消耗充能",
+    "withdrawMagic": "消耗1魔力",
+    "confirmControl": "控制",
     "continue": "继续",
     "finish": "完成",
     "skip": "跳过",
@@ -46,7 +48,9 @@
     "damage": "伤害",
     "bloodRuneDamage": "自伤1点",
     "bloodRuneCharge": "花1魔力充能",
-    "feedBeastSelfDestroy": "自毁"
+    "feedBeastSelfDestroy": "自毁",
+    "chargeSelf": "充能自身",
+    "attachToSoldier": "附加到士兵"
   },
   "player": {
     "default1": "玩家1",
@@ -155,6 +159,61 @@
     "magic": "魔力",
     "draw": "抽牌"
   },
+  "actionLog": {
+    "playerLabel": "玩家{{playerId}}",
+    "positionUnknown": "未知",
+    "position": "{{row}},{{col}}",
+    "summonUnit": "召唤单位：",
+    "moveUnit": "移动：",
+    "attackDeclared": "发动攻击",
+    "attackHits": "命中 {{hits}}",
+    "attackUnit": "攻击：",
+    "buildStructure": "建造建筑：",
+    "endPhase": "结束阶段{{phase}}",
+    "advancePhase": "推进阶段：{{phase}}",
+    "discardForMagic": "弃牌换魔力：",
+    "none": "无",
+    "cardSeparator": "、",
+    "playEvent": "打出事件：",
+    "bloodSummon": "血契召唤：",
+    "funeralPyreSkip": "殉葬火堆：跳过治疗",
+    "funeralPyreHeal": "殉葬火堆治疗：",
+    "activateAbility": "发动技能：{{abilityName}}",
+    "activateAbilitySource": " 来源：",
+    "activateAbilityTarget": " 目标：",
+    "activateAbilityTargetPosition": " 目标位置：{{position}}",
+    "unitSummoned": "召唤单位：",
+    "unitSummonedFromDiscard": "（来自弃牌堆）",
+    "unitMoved": "移动单位：",
+    "unitDamaged": "受到 {{amount}} 点伤害：",
+    "unitHealed": "回复 {{amount}} 点生命：",
+    "unitDestroyed": "单位被摧毁：",
+    "unitCharged": "充能 {{amount}}：",
+    "unitChargeTotal": "（当前 {{total}}）",
+    "sourceAbility": "（来源技能：{{abilityName}}）",
+    "structureBuilt": "建造建筑：",
+    "structureDamaged": "建筑受到 {{amount}} 点伤害：",
+    "structureHealed": "建筑回复 {{amount}} 点生命：",
+    "structureDestroyed": "建筑被摧毁：",
+    "magicChanged": "{{player}} 魔力 {{delta}}",
+    "cardDrawn": "{{player}} 抽{{count}}张牌",
+    "cardDiscarded": "{{player}} 弃牌：",
+    "abilityTriggered": "触发技能：{{abilityName}}",
+    "strengthModified": "战力倍率×{{multiplier}}：",
+    "damageReduced": "减伤 {{amount}}：",
+    "unitPushed": "推开：",
+    "unitPulled": "拉近：",
+    "unitsSwapped": "交换位置：",
+    "controlTransferred": "控制权转移给{{player}}：",
+    "controlTransferredTemporary": "（临时）",
+    "eventAttached": "附加事件：",
+    "funeralPyreCharged": "殉葬火堆充能 {{amount}}：",
+    "funeralPyreChargeSet": "殉葬火堆充能设为 {{total}}：",
+    "abilitiesCopied": "技能复制：",
+    "unitAttached": "单位附加：",
+    "healingModeSet": "进入治疗模式：",
+    "hypnoticLureMarked": "催眠引诱标记："
+  },
   "hint": {
     "factionSelect": "选择阵营并准备开始",
     "summon": "从手牌召唤单位到城门旁",
@@ -235,6 +294,7 @@
   "cardSelector": {
     "reviveUndead": "复活死灵：选择弃牌堆中的亡灵单位",
     "infection": "感染：选择弃牌堆中的疫病体",
+    "fortressPower": "城塞之力：选择弃牌堆中的城塞单位",
     "default": "选择卡牌",
     "empty": "没有符合条件的卡牌"
   },
@@ -305,7 +365,13 @@
       "illusion": "幻化：选择3格内的一个士兵复制其技能",
       "bloodRune": "鲜血符文：选择自伤1点或消耗1魔力充能",
       "iceShards": "寒冰碎屑：消耗1充能，对建筑相邻敌方造成1伤？",
-      "feedBeast": "喂养巨食兽：选择相邻友方单位移除，或自毁"
+      "feedBeast": "喂养巨食兽：选择相邻友方单位移除，或自毁",
+      "spiritBond": "祖灵交流：选择3格内目标转移充能，或充能自身",
+      "ancestralBond": "祖灵羁绊：选择3格内友方单位转移充能",
+      "structureShift": "结构变换：选择3格内友方建筑",
+      "frostAxe": "冰霜战斧：充能自身，或消耗充能附加友方士兵",
+      "frostAxeSelectTarget": "冰霜战斧：选择3格内友方士兵",
+      "vanish": "神出鬼没：选择一个0费友方单位交换位置"
     },
     "beforeAttack": {
       "lifeDrain": "攻击前技能：吸取生命已就绪，选择攻击目标",
@@ -331,6 +397,21 @@
     "mindControl": {
       "message": "心灵操控：选择召唤师2格内的敌方单位（已选 {{count}} 个）"
     },
+    "entanglement": {
+      "message": "交缠颂歌：选择召唤师3格内的两个友方士兵（已选 {{count}} 个）"
+    },
+    "sneak": {
+      "selectUnit": "潜行：选择0费友方单位推拉1格（已录 {{count}} 个）",
+      "selectDirection": "潜行：选择移动方向"
+    },
+    "glacialShift": {
+      "selectBuilding": "冰川位移：选择召唤师3格内友方建筑（已录 {{count}}/3）",
+      "selectDestination": "冰川位移：选择目标位置（1-2格空格）"
+    },
+    "withdraw": {
+      "selectCost": "撤退：选择消耗类型",
+      "selectPosition": "撤退：选择移动目标位置（1-2格空格）"
+    },
     "hypnoticLure": {
       "message": "催眠引诱：选择一个敌方单位"
     },
@@ -354,7 +435,15 @@
     "fireSacrificeSummon": "🔥 火祀召唤（消灭友方单位并移动）",
     "lifeDrain": "💀 吸取生命（消灭友方，战力翻倍）",
     "holyArrow": "✨ 圣光箭（弃牌换魔力与战力）",
-    "healing": "✨ 治疗（弃牌转换为治疗攻击）"
+    "healing": "✨ 治疗（弃牌转换为治疗攻击）",
+    "prepare": "⚡ 预备（充能代替移动）",
+    "fortressPower": "🏰 城塞之力（从弃牌堆拿取城塞单位）",
+    "structureShift": "🛠️ 结构变换（移动3格内友方建筑）",
+    "ancestralBond": "🔗 祖灵羁绊（充能3格内友方单位）",
+    "spiritBondSelf": "✨ 祖灵交流（充能自身）",
+    "spiritBondTransfer": "➡️ 祖灵交流（转移充能）",
+    "withdraw": "🏃 撤退（消耗充能/魔力移动）",
+    "vanish": "👻 神出鬼没（与0费友方交换位置）"
   },
   "status": {
     "yourTurn": "你的回合",

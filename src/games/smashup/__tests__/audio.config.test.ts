@@ -31,6 +31,7 @@ const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinge
 const SELECTION_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
 const POSITIVE_SIGNAL_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
 const UPDATE_CHIME_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
+const TURN_NOTIFY_KEY = 'ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_001';
 const PROMPT_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_spring_a';
 
 const MINION_PLAY_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
@@ -289,47 +290,50 @@ const mockContext = {
     meta: { currentPlayerId: '0' },
 } as any;
 
+const resolveKey = (event: AudioEvent): string | undefined => {
+    const resolver = SMASHUP_AUDIO_CONFIG.feedbackResolver;
+    if (!resolver) throw new Error('feedbackResolver 未定义');
+    return resolver(event, mockContext)?.key;
+};
+
 describe('Smash Up 音效配置', () => {
     it('应解析基础事件音效', () => {
-        const resolver = SMASHUP_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
-
-        expect(resolver({ type: SU_EVENTS.FACTION_SELECTED } as AudioEvent, mockContext)).toBe(SELECTION_KEY);
-        expect(resolver({ type: SU_EVENTS.ALL_FACTIONS_SELECTED } as AudioEvent, mockContext)).toBe(UPDATE_CHIME_KEY);
-        const zombieMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'zombie_lord' } } as AudioEvent, mockContext);
-        const zombieAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'zombie_grave_robbing' } } as AudioEvent, mockContext);
-        const wizardMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'wizard_archmage' } } as AudioEvent, mockContext);
-        const wizardAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'wizard_summon' } } as AudioEvent, mockContext);
-        const dinoMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'dino_king_rex' } } as AudioEvent, mockContext);
-        const dinoAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'dino_howl' } } as AudioEvent, mockContext);
-        const alienMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'alien_supreme_overlord' } } as AudioEvent, mockContext);
-        const alienAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'alien_disintegrate' } } as AudioEvent, mockContext);
-        const pirateMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'pirate_king' } } as AudioEvent, mockContext);
-        const pirateAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'pirate_dinghy' } } as AudioEvent, mockContext);
-        const ninjaMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'ninja_master' } } as AudioEvent, mockContext);
-        const ninjaAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'ninja_smoke_bomb' } } as AudioEvent, mockContext);
-        const robotMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'robot_nukebot' } } as AudioEvent, mockContext);
-        const robotAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'robot_tech_center' } } as AudioEvent, mockContext);
-        const ghostMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'ghost_spectre' } } as AudioEvent, mockContext);
-        const ghostAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'ghost_seance' } } as AudioEvent, mockContext);
-        const tricksterMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'trickster_leprechaun' } } as AudioEvent, mockContext);
-        const tricksterAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'trickster_enshrouding_mist' } } as AudioEvent, mockContext);
-        const steampunkMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'steampunk_steam_queen' } } as AudioEvent, mockContext);
-        const steampunkAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'steampunk_ornate_dome' } } as AudioEvent, mockContext);
-        const killerPlantMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'killer_plant_venus_man_trap' } } as AudioEvent, mockContext);
-        const killerPlantAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'killer_plant_budding' } } as AudioEvent, mockContext);
-        const bearCavalryMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'bear_cavalry_general_ivan' } } as AudioEvent, mockContext);
-        const bearCavalryAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'bear_cavalry_bear_hug' } } as AudioEvent, mockContext);
-        const cthulhuMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'cthulhu_star_spawn' } } as AudioEvent, mockContext);
-        const cthulhuAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'cthulhu_altar' } } as AudioEvent, mockContext);
-        const elderThingMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'elder_thing_elder_thing' } } as AudioEvent, mockContext);
-        const elderThingAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'elder_thing_power_of_madness' } } as AudioEvent, mockContext);
-        const innsmouthMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'innsmouth_the_locals' } } as AudioEvent, mockContext);
-        const innsmouthAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'innsmouth_mysteries_of_the_deep' } } as AudioEvent, mockContext);
-        const miskatonicMinion = resolver({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'miskatonic_the_librarian' } } as AudioEvent, mockContext);
-        const miskatonicAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'miskatonic_book_of_iter_the_unseen' } } as AudioEvent, mockContext);
-        const madnessAction = resolver({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'special_madness' } } as AudioEvent, mockContext);
-        const talentUsed = resolver({ type: SU_EVENTS.TALENT_USED, payload: { defId: 'wizard_archmage' } } as AudioEvent, mockContext);
+        expect(resolveKey({ type: SU_EVENTS.FACTION_SELECTED } as AudioEvent)).toBe(SELECTION_KEY);
+        expect(resolveKey({ type: SU_EVENTS.ALL_FACTIONS_SELECTED } as AudioEvent)).toBe(TURN_NOTIFY_KEY);
+        const zombieMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'zombie_lord' } } as AudioEvent);
+        const zombieAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'zombie_grave_robbing' } } as AudioEvent);
+        const wizardMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'wizard_archmage' } } as AudioEvent);
+        const wizardAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'wizard_summon' } } as AudioEvent);
+        const dinoMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'dino_king_rex' } } as AudioEvent);
+        const dinoAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'dino_howl' } } as AudioEvent);
+        const alienMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'alien_supreme_overlord' } } as AudioEvent);
+        const alienAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'alien_disintegrate' } } as AudioEvent);
+        const pirateMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'pirate_king' } } as AudioEvent);
+        const pirateAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'pirate_dinghy' } } as AudioEvent);
+        const ninjaMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'ninja_master' } } as AudioEvent);
+        const ninjaAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'ninja_smoke_bomb' } } as AudioEvent);
+        const robotMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'robot_nukebot' } } as AudioEvent);
+        const robotAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'robot_tech_center' } } as AudioEvent);
+        const ghostMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'ghost_spectre' } } as AudioEvent);
+        const ghostAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'ghost_seance' } } as AudioEvent);
+        const tricksterMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'trickster_leprechaun' } } as AudioEvent);
+        const tricksterAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'trickster_enshrouding_mist' } } as AudioEvent);
+        const steampunkMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'steampunk_steam_queen' } } as AudioEvent);
+        const steampunkAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'steampunk_ornate_dome' } } as AudioEvent);
+        const killerPlantMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'killer_plant_venus_man_trap' } } as AudioEvent);
+        const killerPlantAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'killer_plant_budding' } } as AudioEvent);
+        const bearCavalryMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'bear_cavalry_general_ivan' } } as AudioEvent);
+        const bearCavalryAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'bear_cavalry_bear_hug' } } as AudioEvent);
+        const cthulhuMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'cthulhu_star_spawn' } } as AudioEvent);
+        const cthulhuAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'cthulhu_altar' } } as AudioEvent);
+        const elderThingMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'elder_thing_elder_thing' } } as AudioEvent);
+        const elderThingAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'elder_thing_power_of_madness' } } as AudioEvent);
+        const innsmouthMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'innsmouth_the_locals' } } as AudioEvent);
+        const innsmouthAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'innsmouth_mysteries_of_the_deep' } } as AudioEvent);
+        const miskatonicMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'miskatonic_the_librarian' } } as AudioEvent);
+        const miskatonicAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'miskatonic_book_of_iter_the_unseen' } } as AudioEvent);
+        const madnessAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'special_madness' } } as AudioEvent);
+        const talentUsed = resolveKey({ type: SU_EVENTS.TALENT_USED, payload: { defId: 'wizard_archmage' } } as AudioEvent);
 
         expect(ZOMBIE_MINION_KEYS).toContain(zombieMinion);
         expect(ZOMBIE_ACTION_KEYS).toContain(zombieAction);
@@ -365,17 +369,17 @@ describe('Smash Up 音效配置', () => {
         expect(MISKATONIC_ACTION_KEYS).toContain(miskatonicAction);
         expect(madnessAction).toBe(MADNESS_KEY);
         expect(WIZARD_MINION_KEYS).toContain(talentUsed);
-        expect(resolver({ type: SU_EVENTS.CARDS_DRAWN } as AudioEvent, mockContext)).toBe(CARD_DRAW_KEY);
-        expect(resolver({ type: SU_EVENTS.CARDS_DISCARDED } as AudioEvent, mockContext)).toBe(CARD_DISCARD_KEY);
-        expect(resolver({ type: SU_EVENTS.DECK_RESHUFFLED } as AudioEvent, mockContext)).toBe(CARD_SHUFFLE_KEY);
-        expect(resolver({ type: SU_EVENTS.MINION_RETURNED } as AudioEvent, mockContext)).toBe(CARD_SCROLL_KEY);
-        expect(resolver({ type: SU_EVENTS.MINION_DESTROYED } as AudioEvent, mockContext)).toBe(MINION_DESTROY_KEY);
-        expect(resolver({ type: SU_EVENTS.MINION_MOVED } as AudioEvent, mockContext)).toBe(MOVE_KEY);
-        expect(resolver({ type: SU_EVENTS.POWER_COUNTER_ADDED } as AudioEvent, mockContext)).toBe(POWER_GAIN_KEY);
-        expect(resolver({ type: SU_EVENTS.POWER_COUNTER_REMOVED } as AudioEvent, mockContext)).toBe(POWER_LOSE_KEY);
-        expect(resolver({ type: SU_EVENTS.MADNESS_DRAWN } as AudioEvent, mockContext)).toBe(MADNESS_KEY);
-        expect(resolver({ type: SU_EVENTS.MADNESS_RETURNED } as AudioEvent, mockContext)).toBe(MADNESS_KEY);
-        expect(resolver({ type: SU_EVENTS.PROMPT_CONTINUATION } as AudioEvent, mockContext)).toBe(PROMPT_KEY);
+        expect(resolveKey({ type: SU_EVENTS.CARDS_DRAWN } as AudioEvent)).toBe(CARD_DRAW_KEY);
+        expect(resolveKey({ type: SU_EVENTS.CARDS_DISCARDED } as AudioEvent)).toBe(CARD_DISCARD_KEY);
+        expect(resolveKey({ type: SU_EVENTS.DECK_RESHUFFLED } as AudioEvent)).toBe(CARD_SHUFFLE_KEY);
+        expect(resolveKey({ type: SU_EVENTS.MINION_RETURNED } as AudioEvent)).toBe(CARD_SCROLL_KEY);
+        expect(resolveKey({ type: SU_EVENTS.MINION_DESTROYED } as AudioEvent)).toBe(MINION_DESTROY_KEY);
+        expect(resolveKey({ type: SU_EVENTS.MINION_MOVED } as AudioEvent)).toBe(MOVE_KEY);
+        expect(resolveKey({ type: SU_EVENTS.POWER_COUNTER_ADDED } as AudioEvent)).toBe(POWER_GAIN_KEY);
+        expect(resolveKey({ type: SU_EVENTS.POWER_COUNTER_REMOVED } as AudioEvent)).toBe(POWER_LOSE_KEY);
+        expect(resolveKey({ type: SU_EVENTS.MADNESS_DRAWN } as AudioEvent)).toBe(MADNESS_KEY);
+        expect(resolveKey({ type: SU_EVENTS.MADNESS_RETURNED } as AudioEvent)).toBe(MADNESS_KEY);
+        expect(resolveKey({ type: SU_EVENTS.CHOICE_REQUESTED } as AudioEvent)).toBe(PROMPT_KEY);
     });
 
     it('应按阶段切换 BGM', () => {

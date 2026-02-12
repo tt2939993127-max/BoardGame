@@ -21,7 +21,7 @@
 
 **配置文件**：`src/games/dicethrone/audio.config.ts`
 - 使用 `GameAudioConfig` 类型定义音效配置
-- 包含 `sounds`（音效资源）、`eventSoundMap`（事件映射）、`eventSoundResolver`（动态解析）三层结构
+- 包含 `sounds`（音效资源）、`feedbackResolver`（事件解析，返回 `{ key, timing }`）等结构
 - 支持通过 `sfxKey` 在卡牌/技能定义中指定自定义音效
 
 **技能定义**：`src/games/dicethrone/monk/abilities.ts`
@@ -30,9 +30,9 @@
 - 当前仅部分技能有自定义音效
 
 **音效触发流程**：
-1. 游戏事件触发 → `eventSoundMap` 查找默认音效
-2. 若事件需要动态解析 → `eventSoundResolver` 处理
-3. 若技能/卡牌有 `sfxKey` → 使用自定义音效，否则使用默认音效
+1. 游戏事件触发 → `feedbackResolver` 解析，返回 `{ key, timing }` 或 `null`
+2. `timing: 'immediate'` 立即播放；`timing: 'on-impact'` 写入 `DeferredSoundMap`
+3. 动画冲击帧调用 `playDeferredSound(eventId)` 消费；技能/卡牌 `sfxKey` 由 resolver 选择
 
 ### 设计决策
 
@@ -377,8 +377,7 @@ interface SoundConfig {
 interface GameAudioConfig {
   basePath: string;                          // 资源基础路径
   sounds: Record<string, SoundConfig>;       // 音效资源映射
-  eventSoundMap: Record<string, string>;     // 事件到音效的静态映射
-  eventSoundResolver?: (event, context) => string | null | undefined;  // 动态解析
+  feedbackResolver: (event, context) => EventSoundResult | null;  // 事件解析
   // ... 其他字段 ...
 }
 ```
@@ -388,7 +387,7 @@ interface GameAudioConfig {
 现有类型定义已支持 `sfxKey` 字段，无需修改：
 
 ```typescript
-// src/systems/presets/combat.ts（无需修改）
+// src/games/dicethrone/domain/combat/types.ts（无需修改）
 interface AbilityDef {
   id: string;
   name: string;
@@ -483,14 +482,16 @@ try {
 
 **处理策略**：
 1. **开发时检测**：通过配置完整性测试在构建时发现问题
-2. **运行时降级**：eventSoundResolver 返回 undefined，触发默认音效
+2. **运行时降级**：feedbackResolver 返回 null，触发默认音效
 3. **用户体验**：使用默认技能音效，不影响游戏体验
 
 **实现要点**：
 ```typescript
-// eventSoundResolver 中的降级逻辑（已有机制）
+// feedbackResolver 中的降级逻辑（示例）
 const explicitKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
-return explicitKey ?? 'ability_activate';  // 降级到默认音效
+return explicitKey
+  ? { key: explicitKey, timing: 'immediate' }
+  : { key: 'ability_activate', timing: 'immediate' };
 ```
 
 ### 音效配置格式错误
@@ -520,7 +521,7 @@ if (safeVolume !== config.volume) {
 **单元测试**：
 - 验证特定音效配置的正确性（如 CP 音效路径、技能音效键）
 - 测试边界情况（如音量边界值、空 sfxKey）
-- 测试集成点（如 eventSoundResolver 的分支逻辑）
+- 测试集成点（如 feedbackResolver 的分支逻辑）
 
 **属性测试**：
 - 验证所有音效配置的通用属性（如音量范围、路径有效性）
@@ -551,16 +552,16 @@ describe('DiceThrone Audio Config', () => {
     });
 
     it('should resolve CP_CHANGED event based on delta', () => {
-      const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
+      const resolver = DICETHRONE_AUDIO_CONFIG.feedbackResolver;
       const mockContext = { G: {}, ctx: {}, meta: {} };
       
       // CP 增加
       const gainEvent = { type: 'CP_CHANGED', payload: { delta: 2 } };
-      expect(resolver(gainEvent, mockContext)).toBe('cp_gain');
+      expect(resolver(gainEvent, mockContext)?.key).toBe('cp_gain');
       
       // CP 减少
       const spendEvent = { type: 'CP_CHANGED', payload: { delta: -1 } };
-      expect(resolver(spendEvent, mockContext)).toBe('cp_spend');
+      expect(resolver(spendEvent, mockContext)?.key).toBe('cp_spend');
     });
   });
 
@@ -591,7 +592,7 @@ describe('DiceThrone Audio Config', () => {
     });
 
     it('should use default sound for abilities without sfxKey', () => {
-      const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
+      const resolver = DICETHRONE_AUDIO_CONFIG.feedbackResolver;
       const mockContext = {
         G: { /* mock game state */ },
         ctx: {},
@@ -604,7 +605,7 @@ describe('DiceThrone Audio Config', () => {
         payload: { playerId: 'player1', abilityId: 'fist-technique' }
       };
       
-      expect(resolver(event, mockContext)).toBe('ability_activate');
+      expect(resolver(event, mockContext)?.key).toBe('ability_activate');
     });
   });
 });
@@ -627,7 +628,7 @@ describe('DiceThrone Audio Config - Property Tests', () => {
    * Feature: dicethrone-audio-optimization, Property 1
    */
   it('should resolve correct sound for any CP change event', () => {
-    const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
+    const resolver = DICETHRONE_AUDIO_CONFIG.feedbackResolver;
     const mockContext = { G: {}, ctx: {}, meta: {} };
     
     // 测试多个随机 delta 值
@@ -642,7 +643,7 @@ describe('DiceThrone Audio Config - Property Tests', () => {
     testCases.forEach(({ delta, expected }) => {
       const event = { type: 'CP_CHANGED', payload: { delta } };
       const result = resolver(event, mockContext);
-      expect(result).toBe(expected);
+      expect(result?.key).toBe(expected);
     });
     
     // 验证音效资源路径
@@ -655,7 +656,7 @@ describe('DiceThrone Audio Config - Property Tests', () => {
    * Feature: dicethrone-audio-optimization, Property 2
    */
   it('should resolve correct sound for any Monk ability activation', () => {
-    const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
+    const resolver = DICETHRONE_AUDIO_CONFIG.feedbackResolver;
     
     MONK_ABILITIES.forEach(ability => {
       const mockContext = {
@@ -680,12 +681,12 @@ describe('DiceThrone Audio Config - Property Tests', () => {
       
       if (ability.sfxKey) {
         // 有自定义音效的技能应返回自定义键
-        expect(result).toBe(ability.sfxKey);
+        expect(result?.key).toBe(ability.sfxKey);
         // 验证该音效在配置中存在
         expect(DICETHRONE_AUDIO_CONFIG.sounds[ability.sfxKey]).toBeDefined();
       } else {
         // 没有自定义音效的技能应返回默认音效
-        expect(result).toBe('ability_activate');
+        expect(result?.key).toBe('ability_activate');
       }
     });
   });
@@ -917,7 +918,7 @@ describe('DiceThrone Audio Config - Property Tests', () => {
 3. 根据游戏阶段切换音效风格
 
 **实现方式**：
-- 扩展 `eventSoundResolver` 逻辑
+- 扩展 `feedbackResolver` 逻辑
 - 增加音效变体配置（如 `attack_hit_light/medium/heavy`）
 - 在事件 payload 中传递更多上下文信息
 

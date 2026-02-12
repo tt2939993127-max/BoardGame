@@ -61,7 +61,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeJacob(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '雅各布', unitClass: 'champion',
-    faction: '先锋军团', strength: 2, life: 7, cost: 5,
+    faction: 'paladin', strength: 2, life: 7, cost: 5,
     attackType: 'ranged', attackRange: 3,
     abilities: ['holy_arrow', 'radiant_shot'], deckSymbols: [],
   };
@@ -70,7 +70,7 @@ function makeJacob(id: string): UnitCard {
 function makeValentina(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '瓦伦蒂娜', unitClass: 'summoner',
-    faction: '先锋军团', strength: 2, life: 14, cost: 0,
+    faction: 'paladin', strength: 2, life: 14, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['fortress_elite', 'guidance'], deckSymbols: [],
   };
@@ -79,7 +79,7 @@ function makeValentina(id: string): UnitCard {
 function makeAllyUnit(id: string, name: string): UnitCard {
   return {
     id, cardType: 'unit', name, unitClass: 'common',
-    faction: '先锋军团', strength: 1, life: 3, cost: 1,
+    faction: 'paladin', strength: 1, life: 3, cost: 1,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
   };
 }
@@ -87,7 +87,7 @@ function makeAllyUnit(id: string, name: string): UnitCard {
 function makeEnemy(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'necromancer', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
   };
 }

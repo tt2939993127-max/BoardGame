@@ -33,6 +33,9 @@ import {
     type HitStopConfig
 } from '../../../components/common/animations';
 import { RESOURCE_IDS } from '../domain/resources';
+import { playSound } from '../../../lib/audio/useGameAudio';
+import { playDeferredSound } from '../../../lib/audio/DeferredSoundMap';
+
 
 /**
  * 动画效果配置
@@ -65,6 +68,8 @@ export interface AnimationEffectsConfig {
         color?: string;
         /** 效果强度（伤害/治疗量），影响尾迹粒子密度 */
         intensity?: number;
+        /** 飞行体到达目标（冲击帧）时触发的回调，用于同步播放音效/震屏等 */
+        onImpact?: () => void;
     }) => void;
     /** 触发对手震动效果的函数（可选） */
     triggerOpponentShake?: () => void;
@@ -98,7 +103,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         triggerSelfImpact,
         locale,
         statusIconAtlas,
-        damageStreamEntry
+        damageStreamEntry,
     } = config;
 
     // 首次挂载标记：跳过初始渲染的"变化"，避免刷新后历史状态被当成新变化触发动画
@@ -144,9 +149,12 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 intensity: damage,
                 startPos: getEffectStartPos(opponentId),
                 endPos: getElementCenter(refs.opponentHp.current),
+                onImpact: () => {
+                    playDeferredSound(damageStreamEntry.id);
+                    triggerOpponentShake?.();
+                    triggerHitStop?.(getHitStopPresetByDamage(damage));
+                },
             });
-            triggerOpponentShake?.();
-            triggerHitStop?.(getHitStopPresetByDamage(damage));
             return;
         }
 
@@ -157,8 +165,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 intensity: damage,
                 startPos: getEffectStartPos(currentPlayerId),
                 endPos: getElementCenter(refs.selfHp.current),
+                onImpact: () => {
+                    playDeferredSound(damageStreamEntry.id);
+                    triggerSelfImpact?.(damage);
+                },
             });
-            triggerSelfImpact?.(damage);
         }
     }, [
         damageStreamEntry,
@@ -184,7 +195,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         const prevHealth = prevOpponentHealthRef.current;
 
         if (mountedRef.current) {
-            // 检测 HP 下降（受到伤害）
+            // 检测 HP 下降（受到伤害）— fallback 路径（无事件流时），无 DeferredSound 可消费
             if (!damageStreamEntry && prevHealth !== undefined && currentHealth < prevHealth) {
                 const damage = prevHealth - currentHealth;
                 pushFlyingEffect({
@@ -193,9 +204,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                     intensity: damage,
                     startPos: getEffectStartPos(opponentId),
                     endPos: getElementCenter(refs.opponentHp.current),
+                    onImpact: () => {
+                        triggerOpponentShake?.();
+                        triggerHitStop?.(getHitStopPresetByDamage(damage));
+                    },
                 });
-                triggerOpponentShake?.();
-                triggerHitStop?.(getHitStopPresetByDamage(damage));
             }
 
             // 检测 HP 上升（治疗）
@@ -233,7 +246,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         const prevHealth = prevPlayerHealthRef.current;
 
         if (mountedRef.current) {
-            // 检测 HP 下降（受到伤害）
+            // 检测 HP 下降（受到伤害）— fallback 路径
             if (!damageStreamEntry && prevHealth !== undefined && currentHealth < prevHealth) {
                 const damage = prevHealth - currentHealth;
                 pushFlyingEffect({
@@ -242,8 +255,10 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                     intensity: damage,
                     startPos: getEffectStartPos(currentPlayerId),
                     endPos: getElementCenter(refs.selfHp.current),
+                    onImpact: () => {
+                        triggerSelfImpact?.(damage);
+                    },
                 });
-                triggerSelfImpact?.(damage);
             }
 
             // 检测 HP 上升（治疗）
@@ -296,6 +311,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(opponentId),
                         endPos: getElementCenter(refs.opponentBuff.current),
+                        onImpact: () => { /* 状态音效由 DeferredSoundMap 消费，状态变化路径无事件 ID */ },
                     });
                 }
             });
@@ -314,6 +330,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.opponentBuff.current),
                         endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
+                    onImpact: () => { /* 状态移除音效由 DeferredSoundMap 消费 */ },
                     });
                 }
             });
@@ -345,6 +362,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(currentPlayerId),
                         endPos: getElementCenter(refs.selfBuff.current),
+                        onImpact: () => { },
                     });
                 }
             });
@@ -362,6 +380,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.selfBuff.current),
                         endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
+                    onImpact: () => { },
                     });
                 }
             });
@@ -394,6 +413,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(opponentId),
                         endPos: getElementCenter(refs.opponentBuff.current),
+                        onImpact: () => { },
                     });
                 }
             });
@@ -411,6 +431,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.opponentBuff.current),
                         endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
+                        onImpact: () => { },
                     });
                 }
             });
@@ -441,6 +462,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(currentPlayerId),
                         endPos: getElementCenter(refs.selfBuff.current),
+                        onImpact: () => { },
                     });
                 }
             });
@@ -458,6 +480,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.selfBuff.current),
                         endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
+                        onImpact: () => { },
                     });
                 }
             });

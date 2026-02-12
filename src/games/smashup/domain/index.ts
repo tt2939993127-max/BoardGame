@@ -5,6 +5,7 @@
  */
 
 import type { DomainCore, GameEvent, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
+import { processDestroyTriggers, processMoveTriggers } from './reducer';
 import type { FlowHooks } from '../../../engine/systems/FlowSystem';
 import type {
     SmashUpCommand,
@@ -28,14 +29,15 @@ import {
     VP_TO_WIN,
     getCurrentPlayerId,
 } from './types';
-import { getEffectivePower, getTotalEffectivePowerOnBase } from './ongoingModifiers';
+import { getEffectivePower, getTotalEffectivePowerOnBase, getEffectiveBreakpoint } from './ongoingModifiers';
+import { fireTriggers, interceptEvent as ongoingInterceptEvent } from './ongoingEffects';
 import { validate } from './commands';
 import { execute, reduce } from './reducer';
 import { getAllBaseDefIds, getBaseDef } from '../data/cards';
 import { drawCards } from './utils';
 import { countMadnessCards, madnessVpPenalty } from './abilityHelpers';
 import { triggerAllBaseAbilities, triggerBaseAbility } from './baseAbilities';
-import { openMeFirstWindow, setPromptContinuation, buildBaseTargetOptions } from './abilityHelpers';
+import { openMeFirstWindow, requestChoice, buildBaseTargetOptions } from './abilityHelpers';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import { registerPromptContinuation } from './promptContinuation';
 
@@ -53,8 +55,16 @@ function scoreOneBase(
     baseIndex: number,
     baseDeck: string[],
     pid: PlayerId,
-    now: number
+    now: number,
+    random?: RandomFn
 ): { events: SmashUpEvent[]; newBaseDeck: string[] } {
+    // 默认 random（确定性回退，计分中大多数 trigger 不需要随机）
+    const rng: RandomFn = random ?? {
+        random: () => 0.5,
+        d: () => 1,
+        range: (min: number) => min,
+        shuffle: <T>(arr: T[]) => [...arr],
+    };
     const events: SmashUpEvent[] = [];
     const base = core.bases[baseIndex];
     const baseDef = getBaseDef(base.defId)!;
@@ -69,7 +79,18 @@ function scoreOneBase(
     };
     events.push(...triggerBaseAbility(base.defId, 'beforeScoring', beforeCtx));
 
-    // 计算排名（使用有效力量，含持续修正）
+    // 触发 ongoing beforeScoring（如 pirate_king 移动到该基地、cthulhu_chosen +2力量）
+    const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
+        state: core,
+        timing: 'beforeScoring',
+        playerId: pid,
+        baseIndex,
+        random: rng,
+        now,
+    });
+    events.push(...beforeScoringEvents);
+
+    // 计算排名
     const playerPowers = new Map<PlayerId, number>();
     for (const m of base.minions) {
         const prev = playerPowers.get(m.controller) ?? 0;
@@ -112,6 +133,17 @@ function scoreOneBase(
     };
     events.push(...triggerBaseAbility(base.defId, 'afterScoring', afterCtx));
 
+    // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
+    const afterScoringEvents = fireTriggers(core, 'afterScoring', {
+        state: core,
+        timing: 'afterScoring',
+        playerId: pid,
+        baseIndex,
+        random: rng,
+        now,
+    });
+    events.push(...afterScoringEvents);
+
     // 替换基地
     let newBaseDeck = baseDeck;
     if (newBaseDeck.length > 0) {
@@ -135,7 +167,7 @@ function scoreOneBase(
 export function registerMultiBaseScoringContinuation(): void {
     registerPromptContinuation('multi_base_scoring', (ctx) => {
         const { baseIndex } = ctx.selectedValue as { baseIndex: number };
-        const { events } = scoreOneBase(ctx.state, baseIndex, ctx.state.baseDeck, ctx.playerId, ctx.now);
+        const { events } = scoreOneBase(ctx.state, baseIndex, ctx.state.baseDeck, ctx.playerId, ctx.now, ctx.random);
         return events;
     });
 }
@@ -145,7 +177,7 @@ export function registerMultiBaseScoringContinuation(): void {
 // ============================================================================
 
 function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
-    let nextUid = 1;
+    const nextUid = 1;
 
     const players: Record<PlayerId, PlayerState> = {};
     const playerSelections: Record<PlayerId, string[]> = {};
@@ -160,7 +192,7 @@ function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
             minionLimit: 1,
             actionsPlayed: 0,
             actionLimit: 1,
-            factions: [] as any,
+            factions: ['', ''],  // 占位，待 ALL_FACTIONS_SELECTED 事件填充
         };
         playerSelections[pid] = [];
     }
@@ -212,12 +244,23 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         return getCurrentPlayerId(state.core);
     },
 
-    onPhaseExit({ state, from, command }): GameEvent[] | PhaseExitResult {
+    onPhaseExit({ state, from, command, random }): GameEvent[] | PhaseExitResult {
         const core = state.core;
         const pid = getCurrentPlayerId(core);
         const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
         if (from === 'endTurn') {
+            const events: SmashUpEvent[] = [];
+
+            // 触发 ongoing 效果 onTurnEnd（如 dunwich_horror 回合结束消灭自身）
+            const onTurnEndEvents = fireTriggers(core, 'onTurnEnd', {
+                state: core,
+                playerId: pid,
+                random,
+                now,
+            });
+            events.push(...onTurnEndEvents);
+
             // 切换到下一个玩家
             const nextIndex = (core.currentPlayerIndex + 1) % core.turnOrder.length;
             const evt: TurnEndedEvent = {
@@ -225,7 +268,8 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 payload: { playerId: pid, nextPlayerIndex: nextIndex },
                 timestamp: now,
             };
-            return [evt];
+            events.push(evt);
+            return events;
         }
 
         if (from === 'scoreBases') {
@@ -239,7 +283,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 const baseDef = getBaseDef(base.defId);
                 if (!baseDef) continue;
                 const totalPower = getTotalEffectivePowerOnBase(core, base, i);
-                if (totalPower >= baseDef.breakpoint) {
+                if (totalPower >= getEffectiveBreakpoint(core, i)) {
                     eligibleBases.push({ baseIndex: i, defId: base.defId, totalPower });
                 }
             }
@@ -249,8 +293,8 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 return events;
             }
 
-            // Property 14: 2+ 基地达标 → 通过 PromptSystem 让当前玩家选择计分顺序
-            if (eligibleBases.length >= 2 && !core.pendingPromptContinuation) {
+            // Property 14: 2+ 基地达标 → 通过 InteractionSystem(simple-choice) 让当前玩家选择计分顺序
+            if (eligibleBases.length >= 2 && !state.sys.interaction.current) {
                 const candidates = eligibleBases.map(eb => {
                     const baseDef = getBaseDef(eb.defId);
                     return {
@@ -260,22 +304,20 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 });
 
                 const promptEvents: GameEvent[] = [
-                    setPromptContinuation(
+                    requestChoice(
                         {
                             abilityId: 'multi_base_scoring',
                             playerId: pid,
-                            data: {
-                                promptConfig: {
-                                    title: '选择先记分的基地',
-                                    options: buildBaseTargetOptions(candidates),
-                                },
+                            promptConfig: {
+                                title: '选择先记分的基地',
+                                options: buildBaseTargetOptions(candidates),
                             },
                         },
                         now
                     ),
                 ];
 
-                // halt=true：不切换阶段，等待 Prompt 解决后再继续
+                // halt=true：不切换阶段，等待交互解决后再继续
                 return { events: promptEvents, halt: true } as PhaseExitResult;
             }
 
@@ -292,14 +334,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     const baseDef = getBaseDef(base.defId);
                     if (!baseDef) continue;
                     const totalPower = getTotalEffectivePowerOnBase(core, base, baseIndex);
-                    if (totalPower >= baseDef.breakpoint) {
+                    if (totalPower >= getEffectiveBreakpoint(core, baseIndex)) {
                         foundIndex = baseIndex;
                         break;
                     }
                 }
                 if (foundIndex === null) break;
 
-                const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now);
+                const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random);
                 events.push(...result.events);
                 currentBaseDeck = result.newBaseDeck;
                 remainingBaseIndices = remainingBaseIndices.filter((index) => index !== foundIndex);
@@ -340,6 +382,15 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // 触发基地 onTurnStart 能力（如更衣室：有随从则抽牌）
             const baseEvents = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now);
             events.push(...baseEvents);
+
+            // 触发 ongoing 效果 onTurnStart
+            const onTurnStartEvents = fireTriggers(core, 'onTurnStart', {
+                state: core,
+                playerId: nextPlayerId,
+                random,
+                now,
+            });
+            events.push(...onTurnStartEvents);
         }
 
         if (to === 'scoreBases') {
@@ -351,7 +402,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 const baseDef = getBaseDef(base.defId);
                 if (!baseDef) continue;
                 const totalPower = getTotalEffectivePowerOnBase(core, base, i);
-                if (totalPower >= baseDef.breakpoint) {
+                if (totalPower >= getEffectiveBreakpoint(core, i)) {
                     hasEligibleBase = true;
                     break;
                 }
@@ -421,8 +472,8 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 // 响应窗口仍然打开，不自动推进
                 return undefined;
             }
-            // Property 14: 有待处理的 Prompt 时不自动推进（等待玩家选择计分顺序）
-            if (state.sys.prompt.current || core.pendingPromptContinuation) {
+            // Property 14: 有待处理的 Interaction 时不自动推进（等待玩家选择计分顺序）
+            if (state.sys.interaction.current) {
                 return undefined;
             }
             // 响应窗口已关闭且无 Prompt，自动推进
@@ -462,8 +513,14 @@ function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore
             };
         }
     }
-    return { players: filtered };
+    // 过滤 pendingReveal：非查看者隐藏卡牌内容
+    let filteredReveal = state.pendingReveal;
+    if (filteredReveal && filteredReveal.viewerPlayerId !== playerId) {
+        filteredReveal = { ...filteredReveal, cards: [] };
+    }
+    return { players: filtered, pendingReveal: filteredReveal };
 }
+
 
 // ============================================================================
 // isGameOver
@@ -487,7 +544,15 @@ function isGameOver(state: SmashUpCore): GameOverResult | undefined {
     if (scores[sorted[0]] > scores[sorted[1]]) {
         return { winner: sorted[0], scores };
     }
-    // 平局：继续游戏（规则：平局继续直到打破）
+    // 平局：疯狂卡较少者胜（克苏鲁扩展规则）
+    if (state.madnessDeck !== undefined) {
+        const madnessA = countMadnessCards(state.players[sorted[0]]);
+        const madnessB = countMadnessCards(state.players[sorted[1]]);
+        if (madnessA !== madnessB) {
+            return { winner: madnessA < madnessB ? sorted[0] : sorted[1], scores };
+        }
+    }
+    // 仍然平局：继续游戏
     return undefined;
 }
 
@@ -507,6 +572,39 @@ function getScores(state: SmashUpCore): Record<PlayerId, number> {
 }
 
 // ============================================================================
+// 事件拦截：替代效果（Replacement Effects）
+// ============================================================================
+
+/** 将领域层拦截器注册表委托给引擎 interceptEvent 钩子 */
+function domainInterceptEvent(
+    state: SmashUpCore,
+    event: SmashUpEvent
+): SmashUpEvent | SmashUpEvent[] | null {
+    const result = ongoingInterceptEvent(state, event);
+    if (result !== undefined) return result;
+    return event; // 无拦截器匹配，返回原事件
+}
+
+// ============================================================================
+// 系统事件后处理：Prompt bridge 等系统产生的领域事件需要触发 ongoing trigger
+// ============================================================================
+
+function postProcessSystemEvents(
+    state: SmashUpCore,
+    events: SmashUpEvent[],
+    random: RandomFn
+): SmashUpEvent[] {
+    // 提取时间戳（取第一个事件的 timestamp）
+    const now = events.length > 0 && typeof events[0].timestamp === 'number' ? events[0].timestamp : 0;
+    // 当前玩家作为 trigger 的 sourcePlayerId
+    const pid = getCurrentPlayerId(state);
+
+    // 依次执行保护过滤 + trigger 后处理
+    const afterDestroy = processDestroyTriggers(events, state, pid, random, now);
+    return processMoveTriggers(afterDestroy, state, pid, random, now);
+}
+
+// ============================================================================
 // 领域内核导出
 // ============================================================================
 
@@ -516,6 +614,8 @@ export const SmashUpDomain: DomainCore<SmashUpCore, SmashUpCommand, SmashUpEvent
     validate,
     execute,
     reduce,
+    interceptEvent: domainInterceptEvent,
+    postProcessSystemEvents,
     playerView,
     isGameOver,
 };

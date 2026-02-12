@@ -1,5 +1,5 @@
 import type { AbilityCard } from '../types';
-import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { CardPreviewRef } from '../../../core';
 
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
 

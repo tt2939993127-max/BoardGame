@@ -12,3 +12,9 @@ export { useResourceTray } from './useResourceTray';
 export type { UseResourceTrayConfig } from './useResourceTray';
 
 export { useDragCard } from './useDragCard';
+
+export { useAutoSkipPhase } from './useAutoSkipPhase';
+export type { UseAutoSkipPhaseConfig } from './useAutoSkipPhase';
+
+export { useVisualSequenceGate } from './useVisualSequenceGate';
+export type { UseVisualSequenceGateReturn } from './useVisualSequenceGate';

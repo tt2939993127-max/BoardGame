@@ -123,9 +123,13 @@
         @apply absolute bottom-0 left-1/2 w-0 h-[1.5px] bg-current transition-all duration-300 group-hover:w-full group-hover:left-0 pointer-events-none;
     }
 
-    .ugc-preview-container,
-    .ugc-preview-container .bgio-client,
-    .ugc-preview-container .bgio-client>* {
+    /* boardgame.io 客户端容器全高撑开（所有游戏通用，修复高度链断裂导致底部黑边） */
+    .bgio-client,
+    .bgio-client>* {
+        @apply w-full h-full;
+    }
+
+    .ugc-preview-container {
         @apply w-full h-full;
     }
 
@@ -147,6 +151,35 @@
     100% {
         transform: translateX(100%) skewX(-20deg);
     }
+}
+
+/* 图片占位 shimmer（水平扫光，用于 OptimizedImage / CardPreview） */
+@keyframes img-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Atlas 精灵图占位 shimmer（伪元素覆盖层，不影响 sprite backgroundImage） */
+.atlas-shimmer {
+    position: relative;
+}
+
+.atlas-shimmer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-color: rgba(255, 255, 255, 0.08);
+    background-image: linear-gradient(100deg, rgba(255, 255, 255, 0.08) 40%, rgba(255, 255, 255, 0.22) 50%, rgba(255, 255, 255, 0.08) 60%);
+    background-size: 200% 100%;
+    animation: img-shimmer 1.5s linear infinite;
+    z-index: 1;
 }
 
 /* 钝帧冻结：暂停所有子元素的 CSS 动画和过渡 */

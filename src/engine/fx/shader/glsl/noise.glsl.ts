@@ -7,6 +7,10 @@
  * - snoise(vec2) — Simplex 2D 噪声（基于 Stefan Gustavson 算法）
  * - fbm(vec2)    — 分形布朗运动（5 层）
  * - fbm3(vec2)   — 分形布朗运动（3 层，更轻量）
+ * - hash21(vec2)  — 2D → 1D 伪随机哈希（星场等）
+ * - hash22(vec2)  — 2D → 2D 伪随机哈希
+ * - starField(vec2, float, float) — 程序化星场
+ * - domainWarp(vec2, float) — FBM 域弯曲
  *
  * 适用于 WebGL 1.0 (mediump float)。
  */
@@ -89,5 +93,41 @@ float fbm3(vec2 p) {
     amplitude *= 0.5;
   }
   return value;
+}
+
+// ---- Hash Functions (pseudo-random) ----
+
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+vec2 hash22(vec2 p) {
+  float n = hash21(p);
+  return vec2(n, hash21(p + n));
+}
+
+// ---- Star Field ----
+
+/** 程序化星场：网格分区 + 随机偏移亮点 + 闪烁 */
+float starField(vec2 uv, float density, float time) {
+  vec2 gv = fract(uv * density) - 0.5;
+  vec2 id = floor(uv * density);
+  vec2 offset = hash22(id) - 0.5;
+  float d = length(gv - offset * 0.7);
+  float brightness = hash21(id + 100.0);
+  float star = smoothstep(0.04, 0.0, d) * step(0.82, brightness);
+  // twinkle
+  star *= 0.6 + 0.4 * sin(time * (1.5 + brightness * 4.0) + brightness * 6.28);
+  return star;
+}
+
+// ---- Domain Warping ----
+
+vec2 domainWarp(vec2 p, float strength) {
+  float wx = fbm3(p + vec2(0.0, 0.0));
+  float wy = fbm3(p + vec2(5.2, 1.3));
+  return p + vec2(wx, wy) * strength;
 }
 `;

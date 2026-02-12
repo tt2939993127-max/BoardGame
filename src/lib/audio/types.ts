@@ -48,6 +48,15 @@ export interface BgmDefinition {
 
 export type BgmGroupId = 'normal' | 'battle' | (string & {});
 
+/** 音效播放时机 */
+export type AudioTiming = 'immediate' | 'on-impact';
+
+/** feedbackResolver 的返回值：显式声明 key + timing */
+export interface EventSoundResult {
+    key: SoundKey;
+    timing: AudioTiming;
+}
+
 export interface AudioEvent {
     type: string;
     /** 事件级音效 key（优先级最高） */
@@ -57,6 +66,17 @@ export interface AudioEvent {
     sfxKey?: SoundKey;
     [key: string]: unknown;
 }
+
+/**
+ * 统一反馈解析器：每个事件必须显式声明 key + timing
+ * - 返回 { key, timing: 'immediate' }：框架立即播放
+ * - 返回 { key, timing: 'on-impact' }：框架写入 DeferredSoundMap，由动画层消费
+ * - 返回 null：无音效
+ */
+export type FeedbackResolver = (
+    event: AudioEvent,
+    context: AudioRuntimeContext
+) => EventSoundResult | null | undefined;
 
 export interface AudioRuntimeContext<
     G = unknown,
@@ -98,10 +118,12 @@ export interface GameAudioConfig {
     bgm?: BgmDefinition[];
     // BGM 分组（用于按阶段切换）
     bgmGroups?: Record<BgmGroupId, SoundKey[]>;
-    // 事件类型 -> 音效 key
-    eventSoundMap?: Record<string, SoundKey>;
-    // 事件解析（用于复杂逻辑）
-    eventSoundResolver?: (event: AudioEvent, context: AudioRuntimeContext) => SoundKey | null | undefined;
+    /**
+     * 统一反馈解析器（必传）
+     * 每个事件必须显式返回 { key, timing } 或 null。
+     * 不允许裸字符串——编译期强制声明播放时机。
+     */
+    feedbackResolver: FeedbackResolver;
     // BGM 规则
     bgmRules?: Array<BgmRule>;
     // 状态触发器
@@ -114,6 +136,11 @@ export interface GameAudioConfig {
      * 消除首次播放延迟。建议只放 5-15 个"第一回合就会触发"的高频音效。
      */
     criticalSounds?: SoundKey[];
+    /**
+     * 上下文预加载音效（选派系/卡组后增量预热）
+     * 用于派系/卡组等可预测但不适合全量预加载的音效。
+     */
+    contextualPreloadKeys?: (context: AudioRuntimeContext) => SoundKey[];
 }
 
 // 音频上下文状态

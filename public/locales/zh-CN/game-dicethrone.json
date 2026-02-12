@@ -167,6 +167,37 @@
       ]
     }
   },
+  "actionLog": {
+    "playerLabel": "玩家{{playerId}}",
+    "playCard": "打出卡牌",
+    "playUpgradeCard": "打出升级卡",
+    "advancePhase": "推进阶段：{{phase}}",
+    "abilityActivated": "发动技能：{{abilityName}}",
+    "abilityActivatedDefense": "发动防御技能：{{abilityName}}",
+    "damageTaken": "受到 {{amount}} 点伤害",
+    "damageDealt": "造成 {{amount}} 点伤害",
+    "damageOriginal": "（原始 {{amount}}）",
+    "healApplied": "为{{targetLabel}}回复 {{amount}} 点生命",
+    "statusApplied": "对{{targetLabel}}施加状态 {{statusLabel}}",
+    "statusAppliedDelta": "（+{{stacks}}，当前 {{total}}）",
+    "statusRemoved": "对{{targetLabel}}移除状态 {{statusLabel}}",
+    "statusRemovedDelta": "（-{{stacks}}）",
+    "tokenGranted": "为{{targetLabel}}获得 {{tokenLabel}} x{{amount}}",
+    "tokenTotal": "（当前 {{total}}）",
+    "tokenConsumed": "消耗 {{tokenLabel}} x{{amount}}",
+    "tokenRemaining": "（剩余 {{total}}）",
+    "tokenUsed": "使用 {{tokenLabel}}（{{effectLabel}}）",
+    "tokenModifier": "（调整 {{amount}}）",
+    "tokenEvasion": "（掷骰 {{value}}，{{result}}）",
+    "tokenEvasionSuccess": "成功",
+    "tokenEvasionFail": "失败",
+    "tokenEffect": {
+      "damageBoost": "增伤",
+      "damageReduction": "减伤",
+      "evasionAttempt": "闪避判定",
+      "removeDebuff": "净化"
+    }
+  },
   "purify": {
     "title": "使用净化",
     "desc": "选择要移除的负面状态效果",
@@ -324,8 +355,8 @@
       "infernalEmbrace.2": "抽 1 张牌",
       "infernalEmbrace.3": "抽 1 张牌",
       "infernalEmbrace.4": "抽 1 张牌",
-      "infernalEmbrace.5": "烈焰精通满额!",
-      "infernalEmbrace.6": "抽 1 张牌",
+      "infernalEmbrace.5": "抽 1 张牌",
+      "infernalEmbrace.6": "烈焰精通满额!",
       "pyroBlast2Die": "炎爆术!",
       "pyroBlast2Reroll": "重投!",
       "pyroBlast3Die": "炎爆术!",
@@ -421,6 +452,11 @@
     "lotusPalmUnblockable": {
       "title": "是否花费2个太极标记令此次攻击不可防御？",
       "pay2": "花费2太极：不可防御",
+      "skip": "不花费"
+    },
+    "pyroSpendCpForFM": {
+      "title": "是否花费2CP获得1烈焰精通？",
+      "pay": "花费2CP：获得1烈焰精通",
       "skip": "不花费"
     }
   },

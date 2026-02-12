@@ -24,7 +24,7 @@
  * ```
  */
 
-import type { FxCue, FxRenderer, FxRendererOptions, FxRegistryEntry } from './types';
+import type { FxCue, FxRenderer, FxRendererOptions, FxRegistryEntry, FeedbackPack } from './types';
 
 // ============================================================================
 // 默认选项
@@ -53,12 +53,14 @@ export class FxRegistry {
    * @param cue - Cue 标识符，支持尾部通配符（如 'fx.combat.*'）
    * @param renderer - 渲染器组件
    * @param options - 可选配置
+   * @param feedback - 反馈包（音效 + 震动），注册时声明，运行时自动触发
    */
-  register(cue: FxCue, renderer: FxRenderer, options?: FxRendererOptions): void {
+  register(cue: FxCue, renderer: FxRenderer, options?: FxRendererOptions, feedback?: FeedbackPack): void {
     const entry: FxRegistryEntry = {
       cue,
       renderer,
       options: { ...DEFAULT_OPTIONS, ...options },
+      feedback,
     };
 
     if (cue.endsWith('.*')) {

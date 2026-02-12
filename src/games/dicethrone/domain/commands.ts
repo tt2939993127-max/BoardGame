@@ -1,877 +1,245 @@
 /**
- * DiceThrone 命令验证
- * 从 game.ts 各 move 的校验逻辑抽取
+ * DiceThrone 命令类型定义
  */
 
-import type { ValidationResult, PlayerId } from '../../../engine/types';
-import type {
-    DiceThroneCore,
-    DiceThroneCommand,
-    RollDiceCommand,
-    ToggleDieLockCommand,
-    ConfirmRollCommand,
-    SelectAbilityCommand,
-    DrawCardCommand,
-    DiscardCardCommand,
-    SellCardCommand,
-    UndoSellCardCommand,
-    ReorderCardToEndCommand,
-    PlayCardCommand,
-    PlayUpgradeCardCommand,
-    ResolveChoiceCommand,
-    AdvancePhaseCommand,
-    SelectCharacterCommand,
-    HostStartGameCommand,
-    PlayerReadyCommand,
-    ResponsePassCommand,
-    ModifyDieCommand,
-    RerollDieCommand,
-    RemoveStatusCommand,
-    TransferStatusCommand,
-    ConfirmInteractionCommand,
-    CancelInteractionCommand,
-    UseTokenCommand,
-    SkipTokenResponseCommand,
-    UsePurifyCommand,
-    PayToRemoveKnockdownCommand,
-    RerollBonusDieCommand,
-    SkipBonusDiceRerollCommand,
-} from './types';
-import {
-    getRollerId,
-    isMoveAllowed,
-    canAdvancePhase,
-    checkPlayCard,
-    checkPlayUpgradeCard,
-    getAvailableAbilityIds,
-} from './rules';
-import { RESOURCE_IDS } from './resources';
-import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
+import type { Command, PlayerId } from '../../../engine/types';
+import type { SelectableCharacterId } from './core-types';
+import type { PayToRemoveKnockdownCommandType } from './ids';
 
 // ============================================================================
-// 验证函数
+// 命令定义
 // ============================================================================
 
-const ok = (): ValidationResult => ({ valid: true });
-const fail = (error: string): ValidationResult => ({ valid: false, error });
-
-const isCommandType = <TType extends DiceThroneCommand['type']>(
-    command: DiceThroneCommand,
-    type: TType
-): command is Extract<DiceThroneCommand, { type: TType }> => command.type === type;
-
-/**
- * 验证掷骰命令
- */
-const validateRollDice = (
-    state: DiceThroneCore,
-    _cmd: RollDiceCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (state.turnPhase !== 'offensiveRoll' && state.turnPhase !== 'defensiveRoll') {
-        return fail('invalid_phase');
-    }
-
-    const rollerId = getRollerId(state);
-    if (!isMoveAllowed(playerId, rollerId)) {
-        return fail('player_mismatch');
-    }
-
-    if (state.rollCount >= state.rollLimit) {
-        return fail('roll_limit_reached');
-    }
-
-    // 防御阶段必须先选择防御技能才能掷骰（规则 §3.6 步骤 2→3）
-    if (state.turnPhase === 'defensiveRoll' && state.pendingAttack && !state.pendingAttack.defenseAbilityId) {
-        return fail('defense_ability_not_selected');
-    }
-
-    return ok();
+/** 掷骰命令 */
+export interface RollDiceCommand extends Command<'ROLL_DICE'> {
+    payload: Record<string, never>;
 }
 
-/**
- * 验证选择角色命令
- */
-const validateSelectCharacter = (
-    state: DiceThroneCore,
-    cmd: SelectCharacterCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (state.turnPhase !== 'setup') {
-        return fail('invalid_phase');
-    }
+/** 锁定/解锁骰子命令 */
+export interface ToggleDieLockCommand extends Command<'TOGGLE_DIE_LOCK'> {
+    payload: {
+        dieId: number;
+    };
+}
 
-    if (!state.players[playerId]) {
-        return fail('player_not_found');
-    }
+/** 确认骰子结果命令 */
+export interface ConfirmRollCommand extends Command<'CONFIRM_ROLL'> {
+    payload: Record<string, never>;
+}
 
-    if (!cmd.payload.characterId) {
-        return fail('invalid_character');
-    }
+/** 选择技能命令 */
+export interface SelectAbilityCommand extends Command<'SELECT_ABILITY'> {
+    payload: {
+        abilityId: string;
+    };
+}
 
-    return ok();
-};
+/** 抽牌命令 */
+export interface DrawCardCommand extends Command<'DRAW_CARD'> {
+    payload: Record<string, never>;
+}
 
-/**
- * 验证房主开始命令
- */
-const validateHostStartGame = (
-    state: DiceThroneCore,
-    _cmd: HostStartGameCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (state.turnPhase !== 'setup') {
-        return fail('invalid_phase');
-    }
+/** 弃牌命令 */
+export interface DiscardCardCommand extends Command<'DISCARD_CARD'> {
+    payload: {
+        cardId: string;
+    };
+}
 
-    if (!isMoveAllowed(playerId, state.hostPlayerId)) {
-        return fail('player_mismatch');
-    }
+/** 售卖卡牌命令 */
+export interface SellCardCommand extends Command<'SELL_CARD'> {
+    payload: {
+        cardId: string;
+    };
+}
 
-    return ok();
-};
+/** 撤回售卖命令 */
+export interface UndoSellCardCommand extends Command<'UNDO_SELL_CARD'> {
+    payload: Record<string, never>;
+}
 
-/**
- * 验证玩家准备命令
- */
-const validatePlayerReady = (
-    state: DiceThroneCore,
-    _cmd: PlayerReadyCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (state.turnPhase !== 'setup') {
-        return fail('invalid_phase');
-    }
+/** 重排卡牌到末尾命令 */
+export interface ReorderCardToEndCommand extends Command<'REORDER_CARD_TO_END'> {
+    payload: {
+        cardId: string;
+    };
+}
 
-    // 必须已选角才能准备
-    const char = state.selectedCharacters[playerId];
-    if (!char || char === 'unselected') {
-        return fail('character_not_selected');
-    }
+/** 打出卡牌命令 */
+export interface PlayCardCommand extends Command<'PLAY_CARD'> {
+    payload: {
+        cardId: string;
+    };
+}
 
-    return ok();
-};
+/** 打出升级卡命令 */
+export interface PlayUpgradeCardCommand extends Command<'PLAY_UPGRADE_CARD'> {
+    payload: {
+        cardId: string;
+        targetAbilityId: string;
+    };
+}
 
-/**
- * 验证锁定骰子命令
- */
-const validateToggleDieLock = (
-    state: DiceThroneCore,
-    cmd: ToggleDieLockCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (state.turnPhase !== 'offensiveRoll') {
-        return fail('invalid_phase');
-    }
-    
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    if (state.rollConfirmed) {
-        return fail('roll_already_confirmed');
-    }
-    
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
-    if (!die) {
-        return fail('die_not_found');
-    }
-    
-    return ok();
-};
+/** 解决选择命令 */
+export interface ResolveChoiceCommand extends Command<'RESOLVE_CHOICE'> {
+    payload: {
+        statusId: string;
+    };
+}
 
-/**
- * 验证确认骰子命令
- */
-const validateConfirmRoll = (
-    state: DiceThroneCore,
-    _cmd: ConfirmRollCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (state.turnPhase !== 'offensiveRoll' && state.turnPhase !== 'defensiveRoll') {
-        return fail('invalid_phase');
-    }
-    
-    const rollerId = getRollerId(state);
-    if (!isMoveAllowed(playerId, rollerId)) {
-        return fail('player_mismatch');
-    }
-    
-    if (state.rollCount === 0) {
-        return fail('no_roll_yet');
-    }
-    
-    return ok();
-};
+/** 推进阶段命令 */
+export interface AdvancePhaseCommand extends Command<'ADVANCE_PHASE'> {
+    payload: Record<string, never>;
+}
 
-/**
- * 验证选择技能命令
- */
-const validateSelectAbility = (
-    state: DiceThroneCore,
-    cmd: SelectAbilityCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    const { abilityId } = cmd.payload;
-    
-    if (state.turnPhase === 'defensiveRoll') {
-        if (!state.pendingAttack) {
-            return fail('no_pending_attack');
-        }
-        if (!isMoveAllowed(playerId, state.pendingAttack.defenderId)) {
-            return fail('player_mismatch');
-        }
+/** 选择角色命令 */
+export interface SelectCharacterCommand extends Command<'SELECT_CHARACTER'> {
+    payload: {
+        characterId: SelectableCharacterId;
+        /** 初始牌库顺序（教程/回放用，可选） */
+        initialDeckCardIds?: string[];
+    };
+}
 
-        // 防御阶段分两步：
-        // 1. 掷骰前选择防御技能（规则 §3.6 步骤 2）：只需验证玩家拥有该防御技能
-        // 2. 掷骰后确认骰面后的技能激活：用 getAvailableAbilityIds 检查骰面
-        if (!state.pendingAttack.defenseAbilityId && state.rollCount === 0) {
-            // 掷骰前选择：验证玩家拥有该防御技能（不检查骰面）
-            const defender = state.players[state.pendingAttack.defenderId];
-            if (!defender) return fail('player_not_found');
-            const hasAbility = defender.abilities.some(a => {
-                if (a.type !== 'defensive') return false;
-                if (a.id === abilityId) return true;
-                return a.variants?.some(v => v.id === abilityId) ?? false;
-            });
-            if (!hasAbility) {
-                return fail('ability_not_available');
-            }
-            return ok();
-        }
+/** 房主开始命令 */
+export interface HostStartGameCommand extends Command<'HOST_START_GAME'> {
+    payload: Record<string, never>;
+}
 
-        // 掷骰后选择：实时计算可用技能（派生状态）
-        const availableAbilityIds = getAvailableAbilityIds(state, state.pendingAttack.defenderId);
-        if (!availableAbilityIds.includes(abilityId)) {
-            return fail('ability_not_available');
-        }
-        return ok();
-    }
-    
-    if (state.turnPhase !== 'offensiveRoll') {
-        return fail('invalid_phase');
-    }
-    
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    if (!state.rollConfirmed) {
-        return fail('roll_not_confirmed');
-    }
-    
-    // 实时计算可用技能（派生状态）
-    const availableAbilityIds = getAvailableAbilityIds(state, state.activePlayerId);
-    if (!availableAbilityIds.includes(abilityId)) {
-        return fail('ability_not_available');
-    }
-    
-    return ok();
-};
+/** 玩家准备命令 */
+export interface PlayerReadyCommand extends Command<'PLAYER_READY'> {
+    payload: Record<string, never>;
+}
 
-/**
- * 验证抽牌命令
- */
-const validateDrawCard = (
-    state: DiceThroneCore,
-    _cmd: DrawCardCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    const player = state.players[state.activePlayerId];
-    if (!player) {
-        return fail('player_not_found');
-    }
+/** 跳过响应窗口命令 */
+export interface ResponsePassCommand extends Command<'RESPONSE_PASS'> {
+    payload: { forPlayerId?: PlayerId };
+}
 
-    // 允许牌库为空但弃牌堆不为空：会在 execute 层触发洗牌事件
-    if (player.deck.length === 0 && player.discard.length === 0) {
-        return fail('deck_empty');
-    }
-    
-    return ok();
-};
+/** 修改骰子命令 */
+export interface ModifyDieCommand extends Command<'MODIFY_DIE'> {
+    payload: {
+        /** 骰子 ID */
+        dieId: number;
+        /** 新数值 */
+        newValue: number;
+    };
+}
 
-/**
- * 验证弃牌命令
- */
-const validateDiscardCard = (
-    state: DiceThroneCore,
-    cmd: DiscardCardCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    const player = state.players[state.activePlayerId];
-    if (!player) {
-        return fail('player_not_found');
-    }
-    
-    const card = player.hand.find(c => c.id === cmd.payload.cardId);
-    if (!card) {
-        return fail('card_not_in_hand');
-    }
-    
-    return ok();
-};
+/** 重掷骰子命令 */
+export interface RerollDieCommand extends Command<'REROLL_DIE'> {
+    payload: {
+        /** 骰子 ID */
+        dieId: number;
+    };
+}
 
-/**
- * 验证售卖卡牌命令
- */
-const validateSellCard = (
-    state: DiceThroneCore,
-    cmd: SellCardCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    // 售卖仅限当前回合玩家，且仅在主要阶段与弃牌阶段
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    if (state.turnPhase !== 'main1' && state.turnPhase !== 'main2' && state.turnPhase !== 'discard') {
-        return fail('invalid_phase');
-    }
-    
-    const player = state.players[state.activePlayerId];
-    if (!player) {
-        return fail('player_not_found');
-    }
-    
-    const card = player.hand.find(c => c.id === cmd.payload.cardId);
-    if (!card) {
-        return fail('card_not_in_hand');
-    }
-    
-    return ok();
-};
+/** 移除状态效果命令 */
+export interface RemoveStatusCommand extends Command<'REMOVE_STATUS'> {
+    payload: {
+        /** 目标玩家 ID */
+        targetPlayerId: PlayerId;
+        /** 状态 ID（可选，不提供则移除所有） */
+        statusId?: string;
+    };
+}
 
-/**
- * 验证撤回售卖命令
- */
-const validateUndoSellCard = (
-    state: DiceThroneCore,
-    _cmd: UndoSellCardCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    // 撤回售卖仅限当前回合玩家，且仅在主要阶段与弃牌阶段
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    if (state.turnPhase !== 'main1' && state.turnPhase !== 'main2' && state.turnPhase !== 'discard') {
-        return fail('invalid_phase');
-    }
-    
-    if (!state.lastSoldCardId) {
-        return fail('no_card_to_undo');
-    }
-    
-    const player = state.players[state.activePlayerId];
-    if (!player) {
-        return fail('player_not_found');
-    }
-    
-    const card = player.discard.find(c => c.id === state.lastSoldCardId);
-    if (!card) {
-        return fail('card_not_in_discard');
-    }
-    
-    return ok();
-};
+/** 转移状态效果命令 */
+export interface TransferStatusCommand extends Command<'TRANSFER_STATUS'> {
+    payload: {
+        /** 源玩家 ID */
+        fromPlayerId: PlayerId;
+        /** 目标玩家 ID */
+        toPlayerId: PlayerId;
+        /** 状态 ID */
+        statusId: string;
+    };
+}
 
-/**
- * 验证重排卡牌命令
- */
-const validateReorderCardToEnd = (
-    state: DiceThroneCore,
-    cmd: ReorderCardToEndCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    const player = state.players[state.activePlayerId];
-    if (!player) {
-        return fail('player_not_found');
-    }
-    
-    const cardIndex = player.hand.findIndex(c => c.id === cmd.payload.cardId);
-    if (cardIndex === -1) {
-        return fail('card_not_in_hand');
-    }
-    
-    return ok();
-};
+/** 确认交互命令 */
+export interface ConfirmInteractionCommand extends Command<'CONFIRM_INTERACTION'> {
+    payload: {
+        /** 交互 ID */
+        interactionId: string;
+        /** 选中的骰子 ID 列表（用于 selectDie 类型交互的批量重掷） */
+        selectedDiceIds?: number[];
+    };
+}
 
-/**
- * 验证打出卡牌命令
- */
-const validatePlayCard = (
-    state: DiceThroneCore,
-    cmd: PlayCardCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    const actingPlayerId = playerId;
+/** 取消交互命令 */
+export interface CancelInteractionCommand extends Command<'CANCEL_INTERACTION'> {
+    payload: Record<string, never>;
+}
 
-    const player = state.players[actingPlayerId];
-    if (!player) {
-        console.warn('[validatePlayCard] 验证失败 - 玩家不存在:', { playerId: actingPlayerId });
-        return fail('player_not_found');
-    }
-    
-    const card = player.hand.find(c => c.id === cmd.payload.cardId);
-    if (!card) {
-        console.warn('[validatePlayCard] 验证失败 - 卡牌不在手牌中:', {
-            playerId: actingPlayerId,
-            cardId: cmd.payload.cardId,
-            handCardIds: player.hand.map(c => c.id),
-        });
-        return fail('card_not_in_hand');
-    }
+/** 使用 Token 命令 */
+export interface UseTokenCommand extends Command<'USE_TOKEN'> {
+    payload: {
+        /** Token ID（taiji / evasive） */
+        tokenId: string;
+        /** 消耗数量（太极可选择数量，闪避固定为 1） */
+        amount: number;
+    };
+}
 
-    // 主要阶段牌：仅允许当前回合玩家
-    if (card.timing === 'main' && !isMoveAllowed(playerId, state.activePlayerId)) {
-        console.warn('[validatePlayCard] 验证失败 - 主要阶段牌只能由当前玩家打出:', {
-            playerId,
-            activePlayerId: state.activePlayerId,
-            cardTiming: card.timing,
-        });
-        return fail('player_mismatch');
-    }
+/** 跳过 Token 响应命令 */
+export interface SkipTokenResponseCommand extends Command<'SKIP_TOKEN_RESPONSE'> {
+    payload: Record<string, never>;
+}
 
-    // 使用 checkPlayCard 获取详细原因（阶段/CP 校验等）
-    const checkResult = checkPlayCard(state, actingPlayerId, card);
-    if (!checkResult.ok) {
-        console.warn('[validatePlayCard] 验证失败 - checkPlayCard 返回错误:', {
-            playerId: actingPlayerId,
-            cardId: card.id,
-            cardType: card.type,
-            cardTiming: card.timing,
-            cpCost: card.cpCost,
-            playerCP: player.resources[RESOURCE_IDS.CP] ?? 0,
-            currentPhase: state.turnPhase,
-            reason: checkResult.reason,
-        });
-        return fail(checkResult.reason);
-    }
-    
-    return ok();
-};
+/** 使用净化 Token 命令（独立于伤害流程） */
+export interface UsePurifyCommand extends Command<'USE_PURIFY'> {
+    payload: {
+        /** 要移除的负面状态 ID */
+        statusId: string;
+    };
+}
 
-/**
- * 验证打出升级卡命令
- */
-const validatePlayUpgradeCard = (
-    state: DiceThroneCore,
-    cmd: PlayUpgradeCardCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    const player = state.players[state.activePlayerId];
-    if (!player) {
-        return fail('player_not_found');
-    }
-    
-    const card = player.hand.find(c => c.id === cmd.payload.cardId);
-    if (!card) {
-        return fail('card_not_in_hand');
-    }
-    
-    // 使用 checkPlayUpgradeCard 获取详细原因
-    const checkResult = checkPlayUpgradeCard(state, playerId, card, cmd.payload.targetAbilityId);
-    if (!checkResult.ok) {
-        return fail(checkResult.reason);
-    }
-    
-    return ok();
-};
+/** 花费 CP 移除击倒命令 */
+export interface PayToRemoveKnockdownCommand extends Command<PayToRemoveKnockdownCommandType> {
+    payload: Record<string, never>;
+}
 
-/**
- * 验证解决选择命令
- * 注意：pendingChoice 已迁移到 sys.prompt，这里仅做基础验证
- */
-const validateResolveChoice = (
-    _state: DiceThroneCore,
-    _cmd: ResolveChoiceCommand,
-    _playerId: PlayerId
-): ValidationResult => {
-    // 实际验证需在 pipeline 层通过 sys.prompt 进行
-    return ok();
-};
+/** 重掷奖励骰命令 */
+export interface RerollBonusDieCommand extends Command<'REROLL_BONUS_DIE'> {
+    payload: {
+        /** 要重掷的骰子索引（0-based） */
+        dieIndex: number;
+    };
+}
 
-/**
- * 验证推进阶段命令
- */
-const validateAdvancePhase = (
-    state: DiceThroneCore,
-    _cmd: AdvancePhaseCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    // 防御阶段由防御方结束，其他阶段由 activePlayer 推进
-    const allowedPlayerId = state.turnPhase === 'defensiveRoll'
-        ? getRollerId(state)
-        : state.activePlayerId;
-    
-    if (!isMoveAllowed(playerId, allowedPlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    if (!canAdvancePhase(state)) {
-        return fail('cannot_advance_phase');
-    }
-    
-    return ok();
-};
+/** 跳过奖励骰重掷命令 */
+export interface SkipBonusDiceRerollCommand extends Command<'SKIP_BONUS_DICE_REROLL'> {
+    payload: Record<string, never>;
+}
 
-/**
- * 验证跳过响应窗口命令
- * 注意：实际验证由 ResponseWindowSystem 在 beforeCommand hook 中处理
- */
-const validateResponsePass = (
-    _state: DiceThroneCore,
-    _cmd: ResponsePassCommand,
-    _playerId: PlayerId
-): ValidationResult => {
-    // 实际验证由系统层处理
-    return ok();
-};
-
-/**
- * 验证修改骰子命令
- */
-const validateModifyDie = (
-    state: DiceThroneCore,
-    cmd: ModifyDieCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    // 检查是否有待处理的交互
-    if (!state.pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (state.pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    // 检查骰子是否存在
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
-    if (!die) {
-        return fail('die_not_found');
-    }
-    // 检查新值是否在范围内
-    if (cmd.payload.newValue < 1 || cmd.payload.newValue > 6) {
-        return fail('invalid_die_value');
-    }
-    return ok();
-};
-
-/**
- * 验证重掷骰子命令
- */
-const validateRerollDie = (
-    state: DiceThroneCore,
-    cmd: RerollDieCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (state.pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
-    if (!die) {
-        return fail('die_not_found');
-    }
-    return ok();
-};
-
-/**
- * 验证移除状态效果命令
- */
-const validateRemoveStatus = (
-    state: DiceThroneCore,
-    _cmd: RemoveStatusCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (state.pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    return ok();
-};
-
-/**
- * 验证转移状态效果命令
- */
-const validateTransferStatus = (
-    state: DiceThroneCore,
-    _cmd: TransferStatusCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (state.pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    return ok();
-};
-
-/**
- * 验证确认交互命令
- */
-const validateConfirmInteraction = (
-    state: DiceThroneCore,
-    cmd: ConfirmInteractionCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (state.pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    if (state.pendingInteraction.id !== cmd.payload.interactionId) {
-        return fail('interaction_id_mismatch');
-    }
-    return ok();
-};
-
-/**
- * 验证取消交互命令
- */
-const validateCancelInteraction = (
-    state: DiceThroneCore,
-    _cmd: CancelInteractionCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (state.pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    return ok();
-};
-
-/**
- * 验证使用 Token 命令（伤害响应窗口）
- */
-const validateUseToken = (
-    state: DiceThroneCore,
-    cmd: UseTokenCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingDamage) {
-        return fail('no_pending_damage');
-    }
-    if (!isMoveAllowed(playerId, state.pendingDamage.responderId)) {
-        return fail('player_mismatch');
-    }
-
-    const tokenDef = state.tokenDefinitions.find(t => t.id === cmd.payload.tokenId);
-    if (!tokenDef) {
-        return fail('unknown_token');
-    }
-
-    const p = state.players[playerId];
-    const currentAmount = p?.tokens[cmd.payload.tokenId] ?? 0;
-    if (currentAmount <= 0) {
-        return fail('no_token');
-    }
-
-    if (cmd.payload.amount <= 0) {
-        return fail('invalid_amount');
-    }
-
-    return ok();
-};
-
-/**
- * 验证跳过 Token 响应命令
- */
-const validateSkipTokenResponse = (
-    state: DiceThroneCore,
-    _cmd: SkipTokenResponseCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingDamage) {
-        return fail('no_pending_damage');
-    }
-    if (!isMoveAllowed(playerId, state.pendingDamage.responderId)) {
-        return fail('player_mismatch');
-    }
-    return ok();
-};
-
-/**
- * 验证使用净化 Token 命令（独立于伤害流程）
- */
-const validateUsePurify = (
-    state: DiceThroneCore,
-    cmd: UsePurifyCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    const p = state.players[playerId];
-    if (!p) {
-        return fail('player_not_found');
-    }
-    const amount = p.tokens[TOKEN_IDS.PURIFY] ?? 0;
-    if (amount <= 0) {
-        return fail('no_token');
-    }
-    const stacks = p.statusEffects[cmd.payload.statusId] ?? 0;
-    if (stacks <= 0) {
-        return fail('no_status');
-    }
-    return ok();
-};
-
-/**
- * 验证花费 CP 移除击倒命令
- * 规则：攻击掷骰阶段前可花费 2CP 移除击倒标记
- */
-const validatePayToRemoveKnockdown = (
-    state: DiceThroneCore,
-    _cmd: PayToRemoveKnockdownCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    // 只能在自己回合的主要阶段使用（offensiveRoll 前）
-    if (state.turnPhase !== 'upkeep' && state.turnPhase !== 'income' && state.turnPhase !== 'main1') {
-        return fail('invalid_phase');
-    }
-    
-    if (!isMoveAllowed(playerId, state.activePlayerId)) {
-        return fail('player_mismatch');
-    }
-    
-    const p = state.players[playerId];
-    if (!p) {
-        return fail('player_not_found');
-    }
-    
-    // 检查是否有击倒状态
-    const knockdownStacks = p.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
-    if (knockdownStacks <= 0) {
-        return fail('no_knockdown');
-    }
-    
-    // 检查 CP 是否足够
-    const cp = p.resources[RESOURCE_IDS.CP] ?? 0;
-    if (cp < 2) {
-        return fail('not_enough_cp');
-    }
-    
-    return ok();
-};
-
-/**
- * 验证重掷奖励骰命令
- */
-const validateRerollBonusDie = (
-    state: DiceThroneCore,
-    cmd: RerollBonusDieCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingBonusDiceSettlement) {
-        return fail('no_pending_bonus_dice');
-    }
-    if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
-        return fail('player_mismatch');
-    }
-    const { rerollCount, maxRerollCount } = state.pendingBonusDiceSettlement;
-    if (maxRerollCount !== undefined && rerollCount >= maxRerollCount) {
-        return fail('bonus_reroll_limit_reached');
-    }
-    // 检查 Token 是否足够
-    const p = state.players[playerId];
-    const tokenId = state.pendingBonusDiceSettlement.rerollCostTokenId;
-    const costAmount = state.pendingBonusDiceSettlement.rerollCostAmount;
-    const currentAmount = p?.tokens?.[tokenId] ?? 0;
-    if (currentAmount < costAmount) {
-        return fail('not_enough_token');
-    }
-    // 检查骰子索引是否有效
-    const dieIndex = cmd.payload.dieIndex;
-    const die = state.pendingBonusDiceSettlement.dice.find(d => d.index === dieIndex);
-    if (!die) {
-        return fail('invalid_die_index');
-    }
-    return ok();
-};
-
-/**
- * 验证跳过奖励骰重掷命令
- */
-const validateSkipBonusDiceReroll = (
-    state: DiceThroneCore,
-    _cmd: SkipBonusDiceRerollCommand,
-    playerId: PlayerId
-): ValidationResult => {
-    if (!state.pendingBonusDiceSettlement) {
-        return fail('no_pending_bonus_dice');
-    }
-    if (!isMoveAllowed(playerId, state.pendingBonusDiceSettlement.attackerId)) {
-        return fail('player_mismatch');
-    }
-    return ok();
-};
-
-// ============================================================================
-// 主验证入口
-// ============================================================================
-
-/**
- * 验证命令
- */
-export const validateCommand = (
-    state: DiceThroneCore,
-    command: DiceThroneCommand
-): ValidationResult => {
-    if (command.type.startsWith('SYS_')) {
-        return ok();
-    }
-
-    const playerId = command.playerId;
-    if (isCommandType(command, 'ROLL_DICE')) return validateRollDice(state, command, playerId);
-    if (isCommandType(command, 'TOGGLE_DIE_LOCK')) return validateToggleDieLock(state, command, playerId);
-    if (isCommandType(command, 'CONFIRM_ROLL')) return validateConfirmRoll(state, command, playerId);
-    if (isCommandType(command, 'SELECT_ABILITY')) return validateSelectAbility(state, command, playerId);
-    if (isCommandType(command, 'DRAW_CARD')) return validateDrawCard(state, command, playerId);
-    if (isCommandType(command, 'DISCARD_CARD')) return validateDiscardCard(state, command, playerId);
-    if (isCommandType(command, 'SELL_CARD')) return validateSellCard(state, command, playerId);
-    if (isCommandType(command, 'UNDO_SELL_CARD')) return validateUndoSellCard(state, command, playerId);
-    if (isCommandType(command, 'REORDER_CARD_TO_END')) return validateReorderCardToEnd(state, command, playerId);
-    if (isCommandType(command, 'PLAY_CARD')) return validatePlayCard(state, command, playerId);
-    if (isCommandType(command, 'PLAY_UPGRADE_CARD')) return validatePlayUpgradeCard(state, command, playerId);
-    if (isCommandType(command, 'RESOLVE_CHOICE')) return validateResolveChoice(state, command, playerId);
-    if (isCommandType(command, 'ADVANCE_PHASE')) return validateAdvancePhase(state, command, playerId);
-    if (isCommandType(command, 'SELECT_CHARACTER')) return validateSelectCharacter(state, command, playerId);
-    if (isCommandType(command, 'HOST_START_GAME')) return validateHostStartGame(state, command, playerId);
-    if (isCommandType(command, 'PLAYER_READY')) return validatePlayerReady(state, command, playerId);
-    if (isCommandType(command, 'RESPONSE_PASS')) return validateResponsePass(state, command, playerId);
-    if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDie(state, command, playerId);
-    if (isCommandType(command, 'REROLL_DIE')) return validateRerollDie(state, command, playerId);
-    if (isCommandType(command, 'REMOVE_STATUS')) return validateRemoveStatus(state, command, playerId);
-    if (isCommandType(command, 'TRANSFER_STATUS')) return validateTransferStatus(state, command, playerId);
-    if (isCommandType(command, 'CONFIRM_INTERACTION')) return validateConfirmInteraction(state, command, playerId);
-    if (isCommandType(command, 'CANCEL_INTERACTION')) return validateCancelInteraction(state, command, playerId);
-    if (isCommandType(command, 'USE_TOKEN')) return validateUseToken(state, command, playerId);
-    if (isCommandType(command, 'SKIP_TOKEN_RESPONSE')) return validateSkipTokenResponse(state, command, playerId);
-    if (isCommandType(command, 'USE_PURIFY')) return validateUsePurify(state, command, playerId);
-    if (isCommandType(command, DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN)) {
-        return validatePayToRemoveKnockdown(state, command, playerId);
-    }
-    if (isCommandType(command, 'REROLL_BONUS_DIE')) return validateRerollBonusDie(state, command, playerId);
-    if (isCommandType(command, 'SKIP_BONUS_DICE_REROLL')) return validateSkipBonusDiceReroll(state, command, playerId);
-
-    const _exhaustive: never = command;
-    return fail(`unknown_command: ${(_exhaustive as DiceThroneCommand).type}`);
-};
+/** 所有 DiceThrone 命令 */
+export type DiceThroneCommand =
+    | RollDiceCommand
+    | ToggleDieLockCommand
+    | ConfirmRollCommand
+    | SelectAbilityCommand
+    | DrawCardCommand
+    | DiscardCardCommand
+    | SellCardCommand
+    | UndoSellCardCommand
+    | ReorderCardToEndCommand
+    | PlayCardCommand
+    | PlayUpgradeCardCommand
+    | ResolveChoiceCommand
+    | AdvancePhaseCommand
+    | SelectCharacterCommand
+    | HostStartGameCommand
+    | PlayerReadyCommand
+    | ResponsePassCommand
+    | ModifyDieCommand
+    | RerollDieCommand
+    | RemoveStatusCommand
+    | TransferStatusCommand
+    | ConfirmInteractionCommand
+    | CancelInteractionCommand
+    | UseTokenCommand
+    | SkipTokenResponseCommand
+    | UsePurifyCommand
+    | PayToRemoveKnockdownCommand
+    | RerollBonusDieCommand
+    | SkipBonusDiceRerollCommand;

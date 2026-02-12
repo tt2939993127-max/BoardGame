@@ -18,6 +18,14 @@ src/
 │   ├── types.ts                 # 核心类型定义（MatchState、Command、Event）
 │   ├── adapter.ts               # Boardgame.io 适配器工厂
 │   ├── pipeline.ts              # Command/Event 执行管线
+│   ├── primitives/              # 引擎原语工具库
+│   │   ├── expression.ts
+│   │   ├── condition.ts
+│   │   ├── target.ts
+│   │   ├── effects.ts
+│   │   ├── zones.ts
+│   │   ├── dice.ts
+│   │   └── resources.ts
 │   └── systems/                 # 系统层
 │       ├── types.ts             # 系统接口定义
 │       ├── UndoSystem.ts        # 撤销系统（取代旧 UndoManager）
@@ -25,9 +33,6 @@ src/
 │       ├── LogSystem.ts         # 事件日志系统
 │       └── index.ts             # 系统注册与导出
 ├── core/                        # 保留，逐步迁移到 engine/
-├── systems/                     # 保留，逐步演进
-│   ├── AbilitySystem.ts         # 演进为可选引擎系统
-│   └── StatusEffectSystem.ts    # 状态效果系统
 └── games/
     └── <gameId>/
         ├── manifest.ts          # 游戏清单（现有）
@@ -97,7 +102,7 @@ src/
 - UndoSystem（已替代旧 UndoManager）
 - PromptSystem（替换各游戏自造 `pendingChoice`）
 - LogSystem（统一事件日志，支撑回放/审计/调试）
-- Ability/Effect System（演进 `src/systems/AbilitySystem`，为骰子/卡牌类复用）
+- Ability/Effect（由游戏层实现，复用 `src/engine/primitives/`）
 
 ## 统一状态形状：`G.sys` + `G.core`
 标准化所有游戏的 Boardgame.io `G`：
@@ -164,7 +169,7 @@ src/games/dicethrone/domain/
 ├── types.ts          # DiceThroneCore, Command variants, Event variants
 ├── commands.ts       # validate 逻辑（从 isMoveAllowed + 各 move 校验抽取）
 ├── reducer.ts        # reduce(state, event) 确定性状态变更
-├── effects.ts        # 技能效果执行（复用 AbilitySystem 但走 event 驱动）
+├── effects.ts        # 技能效果执行（结合 primitives，事件驱动）
 ├── rules.ts          # 共享规则（canPlayCard, getAvailableAbilities 等）
 ├── view.ts           # playerView（隐藏对手手牌）
 └── index.ts          # DomainCore 导出
@@ -240,7 +245,7 @@ G.sys.prompt.current = {
 ## AbilitySystem 演进路径
 
 ### 现状
-`src/systems/AbilitySystem.ts` 通过 `GameContext` 直接修改状态：
+旧 AbilitySystem（已移除）通过 `GameContext` 直接修改状态：
 
 ```typescript
 applyDamage(targetId, amount); // 直接 mutate G.players[targetId].health

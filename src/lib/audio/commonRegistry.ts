@@ -63,6 +63,7 @@ export const buildCommonAudioConfig = (registry: AudioRegistryPayload): GameAudi
         basePath: COMMON_AUDIO_BASE_PATH,
         sounds,
         bgm,
+        feedbackResolver: () => null,
     };
 };
 

@@ -1,18 +1,20 @@
 /**
  * 大杀四方 - 恐龙派系能力
  *
- * 主题：高力量、消灭低力量随从、力量增强
+ * 主题：高力量、消灭低力量随从、力量增�?
  */
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, addPowerCounter, getMinionPower, setPromptContinuation, buildMinionTargetOptions, buildBaseTargetOptions } from '../domain/abilityHelpers';
+import { destroyMinion, addPowerCounter, getMinionPower, requestChoice, buildMinionTargetOptions } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionOnBase } from '../domain/types';
 import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getCardDef, getBaseDef } from '../data/cards';
 import type { MinionCardDef } from '../domain/types';
+import { registerProtection } from '../domain/ongoingEffects';
+import type { ProtectionCheckContext } from '../domain/ongoingEffects';
 
-/** 注册恐龙派系所有能力 */
+/** 注册恐龙派系所有能�?*/
 export function registerDinosaurAbilities(): void {
     registerAbility('dino_laser_triceratops', 'onPlay', dinoLaserTriceratops);
     registerAbility('dino_wild_stuffing', 'onPlay', dinoWildStuffing);
@@ -21,10 +23,17 @@ export function registerDinosaurAbilities(): void {
     registerAbility('dino_natural_selection', 'onPlay', dinoNaturalSelection);
     registerAbility('dino_wild_rampage', 'onPlay', dinoWildRampage);
     registerAbility('dino_survival_of_the_fittest', 'onPlay', dinoSurvivalOfTheFittest);
+
+    // === ongoing 效果注册 ===
+    // 利齿钢爪：保护附着随从不被其他玩家消灭/影响
+    registerProtection('dino_tooth_and_claw', 'destroy', dinoToothAndClawChecker);
+    registerProtection('dino_tooth_and_claw', 'affect', dinoToothAndClawChecker);
+    // 升级：保护附着随从不被消灭�?2力量�?ongoingModifiers 中注册）
+    registerProtection('dino_upgrade', 'destroy', dinoUpgradeChecker);
 }
 
 
-/** 激光三角龙 onPlay：消灭本基地一个力量≤2的随从 */
+/** 激光三角龙 onPlay：消灭本基地一个力量≤2的随�?*/
 function dinoLaserTriceratops(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
@@ -32,13 +41,7 @@ function dinoLaserTriceratops(ctx: AbilityContext): AbilityResult {
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) <= 2
     );
     if (targets.length === 0) return { events: [] };
-    // 单目标自动消灭
-    if (targets.length === 1) {
-        return {
-            events: [destroyMinion(targets[0].uid, targets[0].defId, ctx.baseIndex, targets[0].owner, 'dino_laser_triceratops', ctx.now)],
-        };
-    }
-    // 多目标：Prompt 选择
+    // Prompt 选择
     const options = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
         const name = def?.name ?? t.defId;
@@ -47,11 +50,11 @@ function dinoLaserTriceratops(ctx: AbilityContext): AbilityResult {
     });
     return {
         events: [
-            setPromptContinuation(
+            requestChoice(
                 {
                     abilityId: 'dino_laser_triceratops',
                     playerId: ctx.playerId,
-                    data: { promptConfig: { title: '选择要消灭的力量≤2的随从', options: buildMinionTargetOptions(options) } },
+                    promptConfig: { title: '选择要消灭的力量≤2的随从', options: buildMinionTargetOptions(options) },
                 },
                 ctx.now
             ),
@@ -59,9 +62,9 @@ function dinoLaserTriceratops(ctx: AbilityContext): AbilityResult {
     };
 }
 
-/** 野蛮践踏 onPlay：消灭一个力量≤3的随从（任意基地） */
+/** 野蛮践踏 onPlay：消灭一个力量≤3的随从（任意基地�?*/
 function dinoWildStuffing(ctx: AbilityContext): AbilityResult {
-    // 收集所有基地上力量≤3的对手随从
+    // 收集所有基地上力量�?的对手随�?
     const targets: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
@@ -76,23 +79,17 @@ function dinoWildStuffing(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [] };
-    // 单目标自动消灭
-    if (targets.length === 1) {
-        return {
-            events: [destroyMinion(targets[0].uid, targets[0].defId, targets[0].baseIndex, targets[0].owner, 'dino_wild_stuffing', ctx.now)],
-        };
-    }
-    // 多目标：Prompt 选择
-    const options = targets.map((t, i) => ({
+    // Prompt 选择
+    const options = targets.map((t) => ({
         uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label,
     }));
     return {
         events: [
-            setPromptContinuation(
+            requestChoice(
                 {
                     abilityId: 'dino_wild_stuffing',
                     playerId: ctx.playerId,
-                    data: { promptConfig: { title: '选择要消灭的力量≤3的随从', options: buildMinionTargetOptions(options) } },
+                    promptConfig: { title: '选择要消灭的力量≤2的随从', options: buildMinionTargetOptions(options) },
                 },
                 ctx.now
             ),
@@ -100,9 +97,9 @@ function dinoWildStuffing(ctx: AbilityContext): AbilityResult {
     };
 }
 
-/** 机能强化 onPlay：一个随从+4力量 */
+/** 机能强化 onPlay：一个随�?4力量 */
 function dinoAugmentation(ctx: AbilityContext): AbilityResult {
-    // 收集所有己方随从
+    // 收集所有己方随�?
     const myMinions: { uid: string; defId: string; baseIndex: number; power: number }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
@@ -112,11 +109,7 @@ function dinoAugmentation(ctx: AbilityContext): AbilityResult {
         }
     }
     if (myMinions.length === 0) return { events: [] };
-    // 单目标自动加力量
-    if (myMinions.length === 1) {
-        return { events: [addPowerCounter(myMinions[0].uid, myMinions[0].baseIndex, 4, 'dino_augmentation', ctx.now)] };
-    }
-    // 多目标：Prompt 选择
+    // Prompt 选择
     const options = myMinions.map(entry => {
         const def = getCardDef(entry.defId) as MinionCardDef | undefined;
         const name = def?.name ?? entry.defId;
@@ -126,11 +119,11 @@ function dinoAugmentation(ctx: AbilityContext): AbilityResult {
     });
     return {
         events: [
-            setPromptContinuation(
+            requestChoice(
                 {
                     abilityId: 'dino_augmentation',
                     playerId: ctx.playerId,
-                    data: { promptConfig: { title: '选择一个随从获得+4力量', options: buildMinionTargetOptions(options) } },
+                    promptConfig: { title: '选择一个随从获得+4力量', options: buildMinionTargetOptions(options) },
                 },
                 ctx.now
             ),
@@ -138,7 +131,7 @@ function dinoAugmentation(ctx: AbilityContext): AbilityResult {
     };
 }
 
-/** 咆哮 onPlay：你的全部随从+1力量 */
+/** 咆哮 onPlay：你的全部随�?1力量 */
 function dinoHowl(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
@@ -151,9 +144,9 @@ function dinoHowl(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 物竞天择 onPlay：选择你的一个随从，消灭该基地一个力量低于它的随从 */
+/** 物竞天择 onPlay：选择你的一个随从，消灭该基地一个力量低于它的随�?*/
 function dinoNaturalSelection(ctx: AbilityContext): AbilityResult {
-    // 收集所有基地上可作为"参照"的己方随从
+    // 收集所有基地上可作�?参照"的己方随�?
     const myMinions: { minion: MinionOnBase; baseIndex: number; power: number }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
@@ -172,14 +165,8 @@ function dinoNaturalSelection(ctx: AbilityContext): AbilityResult {
 
     if (myMinions.length === 0) return { events: [] };
 
-    // 只有一个己方随从可选时，跳过第一步选择，直接进入目标选择
-    if (myMinions.length === 1) {
-        const chosen = myMinions[0];
-        return selectDestroyTarget(ctx, chosen.minion, chosen.baseIndex, chosen.power);
-    }
-
-    // 多个己方随从可选：创建 Prompt 让玩家选择参照随从
-    const options = myMinions.map((entry, i) => {
+    // Prompt 让玩家选择参照随从
+    const options = myMinions.map((entry) => {
         const def = getCardDef(entry.minion.defId) as MinionCardDef | undefined;
         const name = def?.name ?? entry.minion.defId;
         return {
@@ -192,73 +179,15 @@ function dinoNaturalSelection(ctx: AbilityContext): AbilityResult {
 
     return {
         events: [
-            setPromptContinuation(
+            requestChoice(
                 {
                     abilityId: 'dino_natural_selection_choose_mine',
                     playerId: ctx.playerId,
-                    data: {
-                        promptConfig: {
+                    promptConfig: {
                             title: '选择你的一个随从作为参照',
                             options: buildMinionTargetOptions(options),
                         },
-                    },
-                },
-                ctx.now
-            ),
-        ],
-    };
-}
-
-/** 物竞天择第二步：根据选定的己方随从，选择要消灭的目标 */
-function selectDestroyTarget(
-    ctx: AbilityContext,
-    myMinion: MinionOnBase,
-    baseIndex: number,
-    myPower: number,
-): AbilityResult {
-    const base = ctx.state.bases[baseIndex];
-    // 收集该基地上力量低于己方随从的所有其他随从（不限敌我）
-    const targets: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
-    for (const m of base.minions) {
-        if (m.uid === myMinion.uid) continue;
-        const power = getMinionPower(ctx.state, m, baseIndex);
-        if (power < myPower) {
-            const def = getCardDef(m.defId) as MinionCardDef | undefined;
-            const name = def?.name ?? m.defId;
-            targets.push({
-                uid: m.uid,
-                defId: m.defId,
-                baseIndex,
-                label: `${name} (力量 ${power})`,
-            });
-        }
-    }
-
-    if (targets.length === 0) return { events: [] };
-
-    // 只有一个目标时自动消灭
-    if (targets.length === 1) {
-        const t = targets[0];
-        const owner = base.minions.find(m => m.uid === t.uid)?.owner ?? ctx.playerId;
-        return {
-            events: [destroyMinion(t.uid, t.defId, baseIndex, owner, 'dino_natural_selection', ctx.now)],
-        };
-    }
-
-    // 多个目标：创建 Prompt 让玩家选择
-    return {
-        events: [
-            setPromptContinuation(
-                {
-                    abilityId: 'dino_natural_selection_choose_target',
-                    playerId: ctx.playerId,
-                    data: {
-                        baseIndex,
-                        promptConfig: {
-                            title: '选择要消灭的随从',
-                            options: buildMinionTargetOptions(targets),
-                        },
-                    },
+                        continuationContext: {},
                 },
                 ctx.now
             ),
@@ -268,7 +197,7 @@ function selectDestroyTarget(
 
 /** 注册恐龙派系的 Prompt 继续函数 */
 export function registerDinosaurPromptContinuations(): void {
-    // 激光三角龙：选择目标后消灭
+    // 激光三角龙：选择目标后消�?
     registerPromptContinuation('dino_laser_triceratops', (ctx) => {
         const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
         const base = ctx.state.bases[baseIndex];
@@ -278,7 +207,7 @@ export function registerDinosaurPromptContinuations(): void {
         return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'dino_laser_triceratops', ctx.now)];
     });
 
-    // 野蛮践踏：选择目标后消灭
+    // 野蛮践踏：选择目标后消�?
     registerPromptContinuation('dino_wild_stuffing', (ctx) => {
         const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
         const base = ctx.state.bases[baseIndex];
@@ -324,33 +253,24 @@ export function registerDinosaurPromptContinuations(): void {
 
         if (targets.length === 0) return [];
 
-        // 只有一个目标时自动消灭
-        if (targets.length === 1) {
-            const t = targets[0];
-            const owner = base.minions.find(m => m.uid === t.uid)?.owner ?? ctx.playerId;
-            return [destroyMinion(t.uid, t.defId, baseIndex, owner, 'dino_natural_selection', ctx.now)];
-        }
-
-        // 多个目标：创建第二步 Prompt
+        // Prompt 第二步选择
         return [
-            setPromptContinuation(
+            requestChoice(
                 {
                     abilityId: 'dino_natural_selection_choose_target',
                     playerId: ctx.playerId,
-                    data: {
-                        baseIndex,
-                        promptConfig: {
+                    promptConfig: {
                             title: '选择要消灭的随从',
                             options: buildMinionTargetOptions(targets),
                         },
-                    },
+                        continuationContext: { baseIndex, },
                 },
                 ctx.now
             ),
         ];
     });
 
-    // 物竞天择第二步：选择目标后消灭
+    // 物竞天择第二步：选择目标后消�?
     registerPromptContinuation('dino_natural_selection_choose_target', (ctx) => {
         const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
         const base = ctx.state.bases[baseIndex];
@@ -376,7 +296,7 @@ function dinoWildRampage(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 适者生存 onPlay：消灭所有拥有最低力量的随从 */
+/** 适者生�?onPlay：消灭所有拥有最低力量的随从 */
 function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
     let minPower = Infinity;
     for (let i = 0; i < ctx.state.bases.length; i++) {
@@ -397,8 +317,19 @@ function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-// 暴龙雷克斯：无能力（纯力量7）
+// 暴龙雷克斯：无能力（纯力�?�?
 // dino_armor_stego (ongoing) - 已通过 ongoingModifiers 系统实现力量修正
 // dino_war_raptor (ongoing) - 已通过 ongoingModifiers 系统实现力量修正
-// TODO: dino_tooth_and_claw (ongoing) - 保护随从（需要 ongoing 效果系统）
-// TODO: dino_upgrade (ongoing) - +2力量且不能被消灭（需要 ongoing 效果系统）
+// dino_tooth_and_claw (ongoing) - 已通过 ongoingEffects 保护系统实现
+// dino_upgrade (ongoing) - 已通过 ongoingEffects 保护 + ongoingModifiers 力量修正实现
+
+/** 利齿钢爪保护检查：附着了此卡的随从不受其他玩家消灭/影响 */
+function dinoToothAndClawChecker(ctx: ProtectionCheckContext): boolean {
+    if (ctx.sourcePlayerId === ctx.targetMinion.controller) return false;
+    return ctx.targetMinion.attachedActions.some(a => a.defId === 'dino_tooth_and_claw');
+}
+
+/** 升级保护检查：附着了此卡的随从不可被消�?*/
+function dinoUpgradeChecker(ctx: ProtectionCheckContext): boolean {
+    return ctx.targetMinion.attachedActions.some(a => a.defId === 'dino_upgrade');
+}

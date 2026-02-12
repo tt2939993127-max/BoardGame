@@ -121,6 +121,11 @@
       "description": "Quickly create board game prototypes. Supports card design, rule config, and AI-assisted generation.",
       "players": "Solo Tool"
     },
+    "archview": {
+      "title": "Architecture View",
+      "description": "Interactive node-edge diagram showing the platform's layered architecture and module dependencies.",
+      "players": "Solo Tool"
+    },
     "summonerwars": {
       "title": "Summoner Wars",
       "description": "A tactical card game where you command a faction of warriors on a battlefield grid. Summon units, cast spells, and destroy the enemy Summoner to win.",

@@ -6,6 +6,8 @@
 import type { CSSProperties } from 'react';
 import { getOptimizedImageUrls } from '../../../core/AssetLoader';
 import { registerCardAtlasSource } from '../../../components/common/media/CardPreview';
+import type { FactionId } from '../domain/types';
+import { resolveFactionId } from '../config/factions';
 
 /** 精灵图配置（支持不规则帧尺寸） */
 export interface SpriteAtlasConfig {
@@ -185,14 +187,14 @@ export const DICE_FACE_SPRITE_MAP = {
 
 // ========== 阵营名 → 目录名映射 ==========
 
-/** 中文阵营名 → 资源目录名 */
-const FACTION_DIR_MAP: Record<string, string> = {
-  '堕落王国': 'Necromancer',
-  '欺心巫族': 'Trickster',
-  '先锋军团': 'Paladin',
-  '洞穴地精': 'Goblin',
-  '极地矮人': 'Frost',
-  '炽原精灵': 'Barbaric',
+/** 阵营 ID → 资源目录名（核心使用 FactionId，兼容旧中文输入） */
+const FACTION_DIR_MAP: Record<FactionId, string> = {
+  necromancer: 'Necromancer',
+  trickster: 'Trickster',
+  paladin: 'Paladin',
+  goblin: 'Goblin',
+  frost: 'Frost',
+  barbaric: 'Barbaric',
 };
 
 /** 所有阵营目录名列表 */
@@ -200,29 +202,30 @@ const ALL_FACTION_DIRS = ['Necromancer', 'Trickster', 'Paladin', 'Goblin', 'Fros
 
 /**
  * 根据阵营名获取精灵图 atlas ID
- * @param faction 中文阵营名（如 '堕落王国'）
+ * @param faction 阵营 ID（如 'necromancer'，兼容旧中文）
  * @param atlasType 'hero' | 'cards'
  */
-export function getFactionAtlasId(faction: string, atlasType: 'hero' | 'cards'): string {
-  const dir = FACTION_DIR_MAP[faction] ?? 'Necromancer';
+export function getFactionAtlasId(faction: FactionId | string, atlasType: 'hero' | 'cards'): string {
+  const factionId = resolveFactionId(faction);
+  const dir = FACTION_DIR_MAP[factionId] ?? 'Necromancer';
   return `sw:${dir.toLowerCase()}:${atlasType}`;
 }
 
 /** 根据卡牌 ID 前缀推断阵营 */
-const CARD_ID_PREFIX_MAP: Record<string, string> = {
-  'necro': '堕落王国',
-  'trick': '欺心巫族',
-  'paladin': '先锋军团',
-  'goblin': '洞穴地精',
-  'frost': '极地矮人',
-  'barb': '炽原精灵',
+const CARD_ID_PREFIX_MAP: Record<string, FactionId> = {
+  necro: 'necromancer',
+  trick: 'trickster',
+  paladin: 'paladin',
+  goblin: 'goblin',
+  frost: 'frost',
+  barb: 'barbaric',
 };
 
 /**
  * 根据卡牌数据解析精灵图 atlas ID
  * 优先使用 faction 字段（UnitCard），回退到 ID 前缀推断
  */
-export function resolveCardAtlasId(card: { id: string; faction?: string }, atlasType: 'hero' | 'cards'): string {
+export function resolveCardAtlasId(card: { id: string; faction?: FactionId | string }, atlasType: 'hero' | 'cards'): string {
   if (card.faction) {
     return getFactionAtlasId(card.faction, atlasType);
   }
@@ -231,7 +234,7 @@ export function resolveCardAtlasId(card: { id: string; faction?: string }, atlas
       return getFactionAtlasId(faction, atlasType);
     }
   }
-  return getFactionAtlasId('堕落王国', atlasType);
+  return getFactionAtlasId('necromancer', atlasType);
 }
 
 /** 初始化精灵图注册（所有阵营） */

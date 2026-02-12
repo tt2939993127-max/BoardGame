@@ -10,7 +10,7 @@ import * as fc from 'fast-check';
 import { clearRegistry, resolveAbility } from '../../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../../domain/baseAbilities';
 import { initAllAbilities, resetAbilityInit } from '../../abilities';
-import { clearOngoingEffectRegistry } from '../../domain/ongoingEffects';
+import { clearOngoingEffectRegistry, isOperationRestricted, isMinionProtected } from '../../domain/ongoingEffects';
 import { execute, reduce } from '../../domain/reducer';
 import { validate } from '../../domain/commands';
 import {
@@ -24,7 +24,7 @@ import type {
 } from '../../domain/types';
 import type { MatchState, RandomFn } from '../../../../engine/types';
 import { ALL_FACTIONS } from './arbitraries';
-import { getFactionCards, getCardDef, getBaseDef } from '../../data/cards';
+import { getFactionCards, getCardDef, getBaseDef, getAllBaseDefIds } from '../../data/cards';
 import { madnessVpPenalty } from '../../domain/abilityHelpers';
 import { buildDeck } from '../../domain/utils';
 import { getTotalEffectivePowerOnBase } from '../../domain/ongoingModifiers';
@@ -1221,5 +1221,321 @@ describe('Property 15: 记分循环完整性', () => {
         expect(state.bases.length).toBe(0);
         expect(state.players['0'].vp).toBe(4);
         expect(state.players['1'].vp).toBe(2);
+    });
+});
+
+// ============================================================================
+// Property 20: 基地限制一致性
+// ============================================================================
+
+/**
+ * 收集所有在 BaseCardDef 上声明了 restrictions 的基地 defId。
+ * 这些限制由 isOperationRestricted 的 "层 1" 数据驱动分支自动解析。
+ */
+const basesWithRestrictions: { defId: string; rType: 'play_minion' | 'play_action'; maxPower?: number; extraPlayMax?: number }[] = [];
+for (const defId of getAllBaseDefIds()) {
+    const def = getBaseDef(defId);
+    if (!def?.restrictions) continue;
+    for (const r of def.restrictions) {
+        basesWithRestrictions.push({
+            defId,
+            rType: r.type,
+            maxPower: r.condition?.maxPower,
+            extraPlayMax: r.condition?.extraPlayMinionPowerMax,
+        });
+    }
+}
+
+describe('Property 20: 基地限制一致性', () => {
+    test('声明了 restrictions 的基地至少 1 个', () => {
+        expect(basesWithRestrictions.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('无条件 play_minion 限制始终生效', () => {
+        const unconditional = basesWithRestrictions.filter(
+            r => r.rType === 'play_minion' && r.maxPower === undefined && r.extraPlayMax === undefined,
+        );
+        // 如 castle_of_ice：禁止一切随从
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: Math.max(unconditional.length - 1, 0) }),
+                fc.integer({ min: 1, max: 10 }),
+                (idx, basePower) => {
+                    fc.pre(unconditional.length > 0);
+                    const { defId } = unconditional[idx];
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase(defId)],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower });
+                    expect(restricted).toBe(true);
+                },
+            ),
+            { numRuns: 20 },
+        );
+    });
+
+    test('maxPower 条件限制：力量 <= maxPower 被限制，> maxPower 不被限制', () => {
+        const maxPowerBases = basesWithRestrictions.filter(r => r.maxPower !== undefined);
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: Math.max(maxPowerBases.length - 1, 0) }),
+                fc.integer({ min: 1, max: 20 }),
+                (idx, basePower) => {
+                    fc.pre(maxPowerBases.length > 0);
+                    const { defId, maxPower } = maxPowerBases[idx];
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase(defId)],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower });
+                    if (basePower <= maxPower!) {
+                        expect(restricted).toBe(true);
+                    } else {
+                        expect(restricted).toBe(false);
+                    }
+                },
+            ),
+            { numRuns: 30 },
+        );
+    });
+
+    test('extraPlayMinionPowerMax 条件限制：额外出牌时力量 > limit 被限制', () => {
+        const extraPlayBases = basesWithRestrictions.filter(r => r.extraPlayMax !== undefined);
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: Math.max(extraPlayBases.length - 1, 0) }),
+                fc.integer({ min: 1, max: 10 }),
+                fc.integer({ min: 0, max: 3 }),
+                (idx, basePower, minionsPlayed) => {
+                    fc.pre(extraPlayBases.length > 0);
+                    const { defId, extraPlayMax } = extraPlayBases[idx];
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.ALIENS, SMASHUP_FACTION_IDS.NINJAS], {
+                                minionsPlayed,
+                            }),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.GHOSTS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase(defId)],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower });
+                    if (minionsPlayed >= 1 && basePower > extraPlayMax!) {
+                        // 额外出牌且力量超限 → 应被限制
+                        expect(restricted).toBe(true);
+                    } else {
+                        // 首次出牌或力量不超限 → 不被限制
+                        expect(restricted).toBe(false);
+                    }
+                },
+            ),
+            { numRuns: 30 },
+        );
+    });
+
+    test('无条件 play_action 限制始终生效', () => {
+        const actionRestricted = basesWithRestrictions.filter(r => r.rType === 'play_action');
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: Math.max(actionRestricted.length - 1, 0) }),
+                (idx) => {
+                    fc.pre(actionRestricted.length > 0);
+                    const { defId } = actionRestricted[idx];
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase(defId)],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    const restricted = isOperationRestricted(state, 0, '0', 'play_action');
+                    expect(restricted).toBe(true);
+                },
+            ),
+            { numRuns: 10 },
+        );
+    });
+
+    test('无 restrictions 声明的基地不触发数据驱动限制', () => {
+        const basesWithoutRestrictions = getAllBaseDefIds().filter(id => {
+            const def = getBaseDef(id);
+            return !def?.restrictions || def.restrictions.length === 0;
+        });
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: Math.max(basesWithoutRestrictions.length - 1, 0) }),
+                fc.integer({ min: 1, max: 10 }),
+                (idx, basePower) => {
+                    fc.pre(basesWithoutRestrictions.length > 0);
+                    const defId = basesWithoutRestrictions[idx];
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase(defId)],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    // 无数据驱动限制 → play_minion 和 play_action 都不应被限制
+                    expect(isOperationRestricted(state, 0, '0', 'play_minion', { basePower })).toBe(false);
+                    expect(isOperationRestricted(state, 0, '0', 'play_action')).toBe(false);
+                },
+            ),
+            { numRuns: 30 },
+        );
+    });
+});
+
+// ============================================================================
+// Property 21: 保护机制一致性
+// ============================================================================
+
+describe('Property 21: 保护机制一致性', () => {
+    // ── 美丽城堡：力量 >= 5 的随从免疫 destroy/move/affect ──
+    test('美丽城堡：力量 >= 5 的随从受 destroy 保护', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 12 }),
+                fc.integer({ min: 0, max: 5 }),
+                (basePower, modifier) => {
+                    const effectivePower = basePower + modifier;
+                    const minion = makeMinion('m-1', 'test_minion', '0', basePower);
+                    minion.powerModifier = modifier;
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase('base_beautiful_castle', { minions: [minion] })],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    const protectedDestroy = isMinionProtected(state, minion, 0, '1', 'destroy');
+                    const protectedMove = isMinionProtected(state, minion, 0, '1', 'move');
+                    const protectedAffect = isMinionProtected(state, minion, 0, '1', 'affect');
+                    if (effectivePower >= 5) {
+                        expect(protectedDestroy).toBe(true);
+                        expect(protectedMove).toBe(true);
+                        expect(protectedAffect).toBe(true);
+                    } else {
+                        expect(protectedDestroy).toBe(false);
+                        expect(protectedMove).toBe(false);
+                        expect(protectedAffect).toBe(false);
+                    }
+                },
+            ),
+            { numRuns: 30 },
+        );
+    });
+
+    test('美丽城堡：不在美丽城堡上的随从不受保护', () => {
+        const minion = makeMinion('m-1', 'test_minion', '0', 8);
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [
+                makeBase('base_other', { minions: [minion] }),
+                makeBase('base_beautiful_castle'),
+            ],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        // 随从在 index 0（非美丽城堡），即使力量 >= 5 也不受保护
+        expect(isMinionProtected(state, minion, 0, '1', 'destroy')).toBe(false);
+    });
+
+    // ── 小马乐园：同一控制者 >= 2 随从时免疫 destroy ──
+    test('小马乐园：同一控制者 >= 2 随从时免疫消灭', () => {
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 1, max: 5 }),
+                (minionCount) => {
+                    const minions = Array.from({ length: minionCount }, (_, i) =>
+                        makeMinion(`m-${i}`, `test_${i}`, '0', 2),
+                    );
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase('base_pony_paradise', { minions })],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    const protectedResult = isMinionProtected(state, minions[0], 0, '1', 'destroy');
+                    if (minionCount >= 2) {
+                        expect(protectedResult).toBe(true);
+                    } else {
+                        expect(protectedResult).toBe(false);
+                    }
+                },
+            ),
+            { numRuns: 20 },
+        );
+    });
+
+    test('小马乐园：不同控制者的随从不互相提供保护', () => {
+        const p0Minion = makeMinion('m-0', 'test_0', '0', 3);
+        const p1Minion = makeMinion('m-1', 'test_1', '1', 3);
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [makeBase('base_pony_paradise', { minions: [p0Minion, p1Minion] })],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        // 每个控制者只有 1 个随从 → 均不受保护
+        expect(isMinionProtected(state, p0Minion, 0, '1', 'destroy')).toBe(false);
+        expect(isMinionProtected(state, p1Minion, 0, '0', 'destroy')).toBe(false);
+    });
+
+    // ── 非保护类基地上不触发保护 ──
+    test('普通基地上的随从不受任何保护', () => {
+        const normalBaseIds = getAllBaseDefIds().filter(
+            id => id !== 'base_beautiful_castle' && id !== 'base_pony_paradise' && id !== 'base_house_of_nine_lives',
+        );
+        fc.assert(
+            fc.property(
+                fc.integer({ min: 0, max: Math.max(normalBaseIds.length - 1, 0) }),
+                fc.integer({ min: 1, max: 10 }),
+                (idx, power) => {
+                    fc.pre(normalBaseIds.length > 0);
+                    const defId = normalBaseIds[idx];
+                    const minion = makeMinion('m-1', 'test', '0', power);
+                    const state: SmashUpCore = {
+                        players: {
+                            '0': makePlayer('0', [SMASHUP_FACTION_IDS.GHOSTS, SMASHUP_FACTION_IDS.NINJAS]),
+                            '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                        },
+                        turnOrder: ['0', '1'], currentPlayerIndex: 0,
+                        bases: [makeBase(defId, { minions: [minion] })],
+                        baseDeck: [], turnNumber: 1, nextUid: 100,
+                    };
+                    expect(isMinionProtected(state, minion, 0, '1', 'destroy')).toBe(false);
+                    expect(isMinionProtected(state, minion, 0, '1', 'move')).toBe(false);
+                    expect(isMinionProtected(state, minion, 0, '1', 'affect')).toBe(false);
+                },
+            ),
+            { numRuns: 30 },
+        );
     });
 });

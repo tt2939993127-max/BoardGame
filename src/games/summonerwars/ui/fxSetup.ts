@@ -13,8 +13,8 @@
  */
 
 import React, { useRef, useCallback } from 'react';
-import { FxRegistry, type FxRendererProps } from '../../../engine/fx';
-import { SummonEffect } from '../../../components/common/animations/SummonEffect';
+import { FxRegistry, type FxRendererProps, type FeedbackPack } from '../../../engine/fx';
+import { SummonHybridEffect } from '../../../components/common/animations/SummonHybridEffect';
 import { VortexShaderEffect } from '../../../components/common/animations/VortexShaderEffect';
 import { ConeBlast } from '../../../components/common/animations/ConeBlast';
 import { DamageFlash } from '../../../components/common/animations/DamageFlash';
@@ -79,14 +79,16 @@ function useStableComplete(onComplete: () => void): () => void {
  * params:
  * - color?: 'blue' | 'gold' (默认根据 intensity 自动选择)
  */
-const SummonRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete }) => {
+const SummonRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact }) => {
+  // Hooks 必须在所有条件分支之前调用
+  const stableComplete = useStableComplete(onComplete);
+
   const cell = event.ctx.cell;
-  if (!cell) { onComplete(); return null; }
+  if (!cell) { stableComplete(); return null; }
 
   const pos = getCellPosition(cell.row, cell.col);
-  const isStrong = event.ctx.intensity === 'strong';
-  const color = (event.params?.color as 'blue' | 'gold') ?? (isStrong ? 'gold' : 'blue');
-  const stableComplete = useStableComplete(onComplete);
+  // 召唤光柱统一蓝色，与传送门视觉一致
+  const color = (event.params?.color as 'blue' | 'gold') ?? 'blue';
 
   const scale = 7.5;
   const box = scaledCellBox(pos, scale);
@@ -95,11 +97,12 @@ const SummonRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onC
     className: 'absolute pointer-events-none z-30',
     style: box,
   },
-    React.createElement(SummonEffect, {
+    React.createElement(SummonHybridEffect, {
       active: true,
       intensity: event.ctx.intensity ?? 'normal',
       color,
       originY: 0.5,
+      onImpact,
       onComplete: stableComplete,
     }),
   );
@@ -109,12 +112,14 @@ const SummonRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onC
 // 渲染器：充能旋涡
 // ============================================================================
 
-const ChargeVortexRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete }) => {
+const ChargeVortexRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact: _onImpact }) => {
+  // Hooks 必须在所有条件分支之前调用
+  const stableComplete = useStableComplete(onComplete);
+
   const cell = event.ctx.cell;
-  if (!cell) { onComplete(); return null; }
+  if (!cell) { stableComplete(); return null; }
 
   const pos = getCellPosition(cell.row, cell.col);
-  const stableComplete = useStableComplete(onComplete);
 
   const scale = 4;
   const box = scaledCellBox(pos, scale);
@@ -141,13 +146,15 @@ const ChargeVortexRenderer: React.FC<FxRendererProps> = ({ event, getCellPositio
  * - source: { row, col }        — 攻击来源坐标
  * - damageAmount?: number
  */
-const ShockwaveRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete }) => {
+const ShockwaveRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact: _onImpact }) => {
+  // Hooks 必须在所有条件分支之前调用
+  const stableComplete = useStableComplete(onComplete);
+
   const cell = event.ctx.cell;
   const source = event.params?.source as { row: number; col: number } | undefined;
-  if (!cell || !source) { onComplete(); return null; }
+  if (!cell || !source) { stableComplete(); return null; }
 
   const isRanged = event.params?.attackType === 'ranged';
-  const stableComplete = useStableComplete(onComplete);
 
   if (!isRanged) {
     // 近战：目标位置播放受击反馈
@@ -209,14 +216,16 @@ const ShockwaveRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, 
  * params:
  * - damageAmount?: number
  */
-const DamageRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete }) => {
+const DamageRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact: _onImpact }) => {
+  // Hooks 必须在所有条件分支之前调用
+  const stableComplete = useStableComplete(onComplete);
+
   const cell = event.ctx.cell;
-  if (!cell) { onComplete(); return null; }
+  if (!cell) { stableComplete(); return null; }
 
   const pos = getCellPosition(cell.row, cell.col);
   const isStrong = event.ctx.intensity === 'strong';
   const dmg = (event.params?.damageAmount as number) ?? (isStrong ? 3 : 1);
-  const stableComplete = useStableComplete(onComplete);
 
   return React.createElement('div', {
     className: 'absolute pointer-events-none flex items-center justify-center z-30',
@@ -245,6 +254,42 @@ const DamageRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onC
 };
 
 // ============================================================================
+// 反馈包常量
+// ============================================================================
+
+/** 召唤音效 key（来自通用音频注册表） */
+const SUMMON_SOUND_KEY = 'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_06_krst';
+
+// 攻击音效（用于预览模式的 fallback）
+const MELEE_ATTACK_FALLBACK_KEY = 'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1';
+const RANGED_ATTACK_FALLBACK_KEY = 'combat.general.mini_games_sound_effects_and_music_pack.bow.sfx_weapon_bow_shoot_1';
+
+/** 召唤光柱反馈：爆发瞬间播放音效 + 震动（强度跟随 event.ctx.intensity 动态覆盖） */
+const SUMMON_FEEDBACK: FeedbackPack = {
+  sound: {
+    key: SUMMON_SOUND_KEY,
+    timing: 'on-impact',
+  },
+  shake: { intensity: 'normal', type: 'impact', timing: 'on-impact' },
+};
+
+/** 攻击气浪反馈：冲击瞬间播放音效（从 DeferredSoundMap 取，预览模式 fallback 到固定 key）+ 震动 */
+const COMBAT_SHOCKWAVE_FEEDBACK: FeedbackPack = {
+  sound: { 
+    timing: 'on-impact', 
+    source: 'deferred',
+    fallbackKey: MELEE_ATTACK_FALLBACK_KEY, // 预览模式使用近战音效作为 fallback
+  },
+  shake: { intensity: 'normal', type: 'hit', timing: 'on-impact' },
+};
+
+/** 受伤闪光反馈：冲击瞬间播放音效（从 DeferredSoundMap 取）+ 震动 */
+const COMBAT_DAMAGE_FEEDBACK: FeedbackPack = {
+  sound: { timing: 'on-impact', source: 'deferred' },
+  shake: { intensity: 'normal', type: 'hit', timing: 'on-impact' },
+};
+
+// ============================================================================
 // 注册表工厂
 // ============================================================================
 
@@ -252,9 +297,10 @@ const DamageRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onC
 function createRegistry(): FxRegistry {
   const registry = new FxRegistry();
 
+  // 召唤光柱：震动强度跟随 event.ctx.intensity 动态覆盖（normal/strong）
   registry.register(SW_FX.SUMMON, SummonRenderer, {
     timeoutMs: 4000,
-  });
+  }, SUMMON_FEEDBACK);
 
   registry.register(SW_FX.CHARGE_VORTEX, ChargeVortexRenderer, {
     timeoutMs: 3000,
@@ -262,11 +308,11 @@ function createRegistry(): FxRegistry {
 
   registry.register(SW_FX.COMBAT_SHOCKWAVE, ShockwaveRenderer, {
     timeoutMs: 3000,
-  });
+  }, COMBAT_SHOCKWAVE_FEEDBACK);
 
   registry.register(SW_FX.COMBAT_DAMAGE, DamageRenderer, {
     timeoutMs: 3000,
-  });
+  }, COMBAT_DAMAGE_FEEDBACK);
 
   return registry;
 }

@@ -58,7 +58,7 @@ function reduce(core: SummonerWarsCore, event: GameEvent): SummonerWarsCore {
 
 function makeUnitCard(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
-    id, cardType: 'unit', name: `测试-${id}`, unitClass: 'common', faction: 'test',
+    id, cardType: 'unit', name: `测试-${id}`, unitClass: 'common', faction: 'necromancer',
     strength: 2, life: 3, cost: 1, attackType: 'melee', attackRange: 1,
     deckSymbols: [], ...overrides,
   };
@@ -67,7 +67,7 @@ function makeUnitCard(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makeStructureCard(id: string, overrides?: Partial<StructureCard>): StructureCard {
   return {
     id, cardType: 'structure', name: `建筑-${id}`, cost: 0, life: 5,
-    isGate: false, deckSymbols: [],
+    faction: 'necromancer', isGate: false, deckSymbols: [],
     ...overrides,
   } as StructureCard;
 }

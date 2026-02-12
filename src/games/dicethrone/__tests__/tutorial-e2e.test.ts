@@ -55,7 +55,7 @@ describe('教程端到端测试（TutorialSystem 活跃）', () => {
             const desc = label ? ` [${label}]` : '';
             throw new Error(
                 `Command ${type} (p${playerId})${desc} failed: ${result.error}\n` +
-                `  phase=${state.core.turnPhase} sysPhase=${state.sys.phase} active=${state.core.activePlayerId}\n` +
+                `  phase=${state.sys.phase} active=${state.core.activePlayerId}\n` +
                 `  tutorialStep=${t.step?.id ?? 'none'} stepIndex=${t.stepIndex} active=${t.active}`
             );
         }
@@ -91,7 +91,7 @@ describe('教程端到端测试（TutorialSystem 活跃）', () => {
             if (!result.success) {
                 throw new Error(
                     `AI action[${i}] ${action.commandType} (p${pid}) in step [${label}] failed: ${result.error}\n` +
-                    `  phase=${s.core.turnPhase} sysPhase=${s.sys.phase} active=${s.core.activePlayerId}\n` +
+                    `  phase=${s.sys.phase} active=${s.core.activePlayerId}\n` +
                     `  tutorialStep=${s.sys.tutorial.step?.id ?? 'none'} stepIndex=${s.sys.tutorial.stepIndex}`
                 );
             }
@@ -127,7 +127,7 @@ describe('教程端到端测试（TutorialSystem 活跃）', () => {
         // ============================================================
         const setupStep = manifest.steps[0];
         s = consumeAiActions(s, 'setup', setupStep.aiActions!, 'A: setup');
-        expect(s.core.turnPhase).toBe('main1');
+        expect(s.sys.phase).toBe('main1');
         expect(s.core.activePlayerId).toBe('0');
 
         // 介绍步骤：手动跳过
@@ -146,7 +146,7 @@ describe('教程端到端测试（TutorialSystem 活跃）', () => {
         expect(cpBefore).toBe(INITIAL_CP);
 
         s = exec(s, 'ADVANCE_PHASE', '0', {}, 'B: main1→offensive');
-        expect(s.core.turnPhase).toBe('offensiveRoll');
+        expect(s.sys.phase).toBe('offensiveRoll');
         expect(s.sys.tutorial.step?.id).toBe('dice-tray');
 
         s = nextStep(s, 'B: skip dice-tray');
@@ -158,8 +158,10 @@ describe('教程端到端测试（TutorialSystem 活跃）', () => {
         s = exec(s, 'PLAY_CARD', '0', { cardId: 'card-play-six' }, 'B: play-six');
         // card-play-six cpCost=1 → CP 应从 INITIAL_CP 减到 INITIAL_CP-1
         expect(s.core.players['0'].resources[RESOURCE_IDS.CP]).toBe(INITIAL_CP - 1);
-        expect(s.core.pendingInteraction).toBeDefined();
-        const interactionId = s.core.pendingInteraction!.id;
+        const sysCurrentInteraction = s.sys.interaction.current;
+        expect(sysCurrentInteraction).toBeDefined();
+        expect(sysCurrentInteraction?.kind).toBe('dt:card-interaction');
+        const interactionId = (sysCurrentInteraction!.data as { id: string }).id;
         s = exec(s, 'MODIFY_DIE', '0', { dieId: 0, newValue: 6 }, 'B: modify-die');
         s = exec(s, 'CONFIRM_INTERACTION', '0', { interactionId }, 'B: confirm-interaction');
         expect(s.sys.tutorial.step?.id).toBe('dice-confirm');
@@ -171,13 +173,13 @@ describe('教程端到端测试（TutorialSystem 活跃）', () => {
         expect(s.sys.tutorial.step?.id).toBe('resolve-attack');
 
         s = exec(s, 'ADVANCE_PHASE', '0', {}, 'B: offensive→defensive');
-        expect(s.core.turnPhase).toBe('defensiveRoll');
+        expect(s.sys.phase).toBe('defensiveRoll');
         expect(s.sys.tutorial.step?.id).toBe('opponent-defense');
 
         // opponent-defense: AI 防御掷骰
         const opponentDefenseStep = s.sys.tutorial.step!;
         s = consumeAiActions(s, 'opponent-defense', opponentDefenseStep.aiActions!, 'B: opponent-defense');
-        expect(s.core.turnPhase).toBe('main2');
+        expect(s.sys.phase).toBe('main2');
         expect(s.sys.tutorial.step?.id).toBe('card-enlightenment');
 
         // ============================================================
@@ -189,7 +191,7 @@ describe('教程端到端测试（TutorialSystem 活跃）', () => {
         // AI 完整回合：结束P0回合 → AI打掌击+攻击 → AI结束 → P0 main1
         const aiTurnStep = s.sys.tutorial.step!;
         s = consumeAiActions(s, 'ai-turn', aiTurnStep.aiActions!, 'C: ai-turn');
-        expect(s.core.turnPhase).toBe('main1');
+        expect(s.sys.phase).toBe('main1');
         expect(s.core.activePlayerId).toBe('0');
         expect(s.core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN]).toBe(1);
         expect(s.sys.tutorial.step?.id).toBe('knockdown-explain');

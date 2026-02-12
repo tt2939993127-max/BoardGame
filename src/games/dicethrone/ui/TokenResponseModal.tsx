@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { GameModal } from './components/GameModal';
 import { GameButton } from './components/GameButton';
 import type { PendingDamage, HeroState, TokenResponsePhase } from '../domain/types';
-import type { TokenDef } from '../../../systems/TokenSystem';
+import type { TokenDef } from '../domain/tokenTypes';
 import clsx from 'clsx';
 import { type StatusAtlases, TOKEN_META, getStatusEffectIconNode } from './statusEffects';
 

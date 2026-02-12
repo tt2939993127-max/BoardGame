@@ -4,8 +4,9 @@
  */
 import type { AudioEvent, GameAudioConfig } from '../../lib/audio/types';
 import { pickRandomSoundKey } from '../../lib/audio/audioUtils';
-import type { GamePhase } from './domain/types';
+import type { GamePhase, SmashUpCore } from './domain/types';
 import { SU_EVENTS } from './domain/types';
+import { SMASHUP_FACTION_IDS } from './domain/ids';
 
 type SmashUpAudioCtx = {
     currentPhase: GamePhase;
@@ -214,9 +215,37 @@ const MISKATONIC_ACTION_KEYS = [
     'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_003',
 ];
 
+const FACTION_SFX_KEYS: Record<string, string[]> = {
+    [SMASHUP_FACTION_IDS.ZOMBIES]: [...ZOMBIE_MINION_KEYS, ...ZOMBIE_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.WIZARDS]: [...WIZARD_MINION_KEYS, ...WIZARD_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.DINOSAURS]: [...DINO_MINION_KEYS, ...DINO_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.ALIENS]: [...ALIEN_MINION_KEYS, ...ALIEN_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.PIRATES]: [...PIRATE_MINION_KEYS, ...PIRATE_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.NINJAS]: [...NINJA_MINION_KEYS, ...NINJA_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.ROBOTS]: [...ROBOT_MINION_KEYS, ...ROBOT_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.GHOSTS]: [...GHOST_MINION_KEYS, ...GHOST_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.TRICKSTERS]: [...TRICKSTER_MINION_KEYS, ...TRICKSTER_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.STEAMPUNKS]: [...STEAMPUNK_MINION_KEYS, ...STEAMPUNK_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.KILLER_PLANTS]: [...KILLER_PLANT_MINION_KEYS, ...KILLER_PLANT_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.BEAR_CAVALRY]: [...BEAR_CAVALRY_MINION_KEYS, ...BEAR_CAVALRY_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.MINIONS_OF_CTHULHU]: [...CTHULHU_MINION_KEYS, ...CTHULHU_ACTION_KEYS, MADNESS_KEY],
+    [SMASHUP_FACTION_IDS.ELDER_THINGS]: [...ELDER_THING_MINION_KEYS, ...ELDER_THING_ACTION_KEYS, MADNESS_KEY],
+    [SMASHUP_FACTION_IDS.INNSMOUTH]: [...INNSMOUTH_MINION_KEYS, ...INNSMOUTH_ACTION_KEYS, MADNESS_KEY],
+    [SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY]: [...MISKATONIC_MINION_KEYS, ...MISKATONIC_ACTION_KEYS, MADNESS_KEY],
+};
+
+const collectFactionPreloadKeys = (factionIds: string[]): string[] => {
+    const keys = new Set<string>();
+    for (const factionId of factionIds) {
+        const list = FACTION_SFX_KEYS[factionId];
+        if (list) list.forEach(key => keys.add(key));
+    }
+    return Array.from(keys);
+};
+
 const EVENT_SOUND_MAP: Record<string, string> = {
     [SU_EVENTS.FACTION_SELECTED]: SELECTION_KEY,
-    [SU_EVENTS.ALL_FACTIONS_SELECTED]: UPDATE_CHIME_KEY,
+    [SU_EVENTS.ALL_FACTIONS_SELECTED]: TURN_NOTIFY_KEY,
     [SU_EVENTS.MINION_PLAYED]: MINION_PLAY_KEY,
     [SU_EVENTS.ACTION_PLAYED]: ACTION_PLAY_KEY,
     [SU_EVENTS.BASE_SCORED]: POSITIVE_SIGNAL_KEY,
@@ -240,7 +269,7 @@ const EVENT_SOUND_MAP: Record<string, string> = {
     [SU_EVENTS.CARD_TRANSFERRED]: CARD_SCROLL_KEY,
     [SU_EVENTS.CARD_RECOVERED_FROM_DISCARD]: CARD_DRAW_KEY,
     [SU_EVENTS.HAND_SHUFFLED_INTO_DECK]: CARD_SHUFFLE_KEY,
-    [SU_EVENTS.PROMPT_CONTINUATION]: PROMPT_KEY,
+    [SU_EVENTS.CHOICE_REQUESTED]: PROMPT_KEY,
     [SU_EVENTS.MADNESS_DRAWN]: MADNESS_KEY,
     [SU_EVENTS.MADNESS_RETURNED]: MADNESS_KEY,
 };
@@ -336,6 +365,8 @@ const resolveSmashUpSound = (event: AudioEvent): string | null => {
     }
     return EVENT_SOUND_MAP[type] ?? null;
 };
+
+import type { EventSoundResult } from '../../lib/audio/types';
 
 export const SMASHUP_AUDIO_CONFIG: GameAudioConfig = {
     criticalSounds: [
@@ -490,7 +521,10 @@ export const SMASHUP_AUDIO_CONFIG: GameAudioConfig = {
             BGM_FIELD_DAY_INTENSE_KEY,
         ],
     },
-    eventSoundResolver: (event) => resolveSmashUpSound(event),
+    feedbackResolver: (event): EventSoundResult | null => {
+        const key = resolveSmashUpSound(event);
+        return key ? { key, timing: 'immediate' } : null;
+    },
     bgmRules: [
         {
             when: (context) => {
@@ -520,4 +554,20 @@ export const SMASHUP_AUDIO_CONFIG: GameAudioConfig = {
             },
         },
     ],
+    contextualPreloadKeys: (context) => {
+        const core = context.G as SmashUpCore | undefined;
+        if (!core) return [];
+        const selected = new Set<string>();
+        if (core.factionSelection) {
+            for (const list of Object.values(core.factionSelection.playerSelections)) {
+                list?.forEach((faction) => selected.add(faction));
+            }
+        } else {
+            for (const player of Object.values(core.players ?? {})) {
+                player.factions?.forEach((faction) => selected.add(faction));
+            }
+        }
+        if (selected.size === 0) return [];
+        return collectFactionPreloadKeys(Array.from(selected));
+    },
 };

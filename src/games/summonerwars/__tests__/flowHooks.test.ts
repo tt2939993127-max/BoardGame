@@ -32,7 +32,7 @@ function createTestRandom(): RandomFn {
 
 function makeUnitCard(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
-    id, cardType: 'unit', name: `测试单位-${id}`, unitClass: 'common', faction: 'test',
+    id, cardType: 'unit', name: `测试单位-${id}`, unitClass: 'common', faction: 'necromancer',
     strength: 2, life: 3, cost: 1, attackType: 'melee', attackRange: 1,
     deckSymbols: [], ...overrides,
   };
@@ -45,7 +45,7 @@ function makeSummonerCard(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makeEventCard(id: string, overrides?: Partial<EventCard>): EventCard {
   return {
     id, cardType: 'event', name: `测试事件-${id}`, cost: 0, playPhase: 'any',
-    effect: '测试', deckSymbols: [], ...overrides,
+    effect: '测试', deckSymbols: [], faction: 'necromancer', ...overrides,
   };
 }
 
@@ -98,21 +98,22 @@ function wrapState(core: SummonerWarsCore): MatchState<SummonerWarsCore> {
       tutorial: { stepIndex: 0, completed: false },
       rematch: { votes: {} },
     },
-  } as MatchState<SummonerWarsCore>;
+  } as unknown as MatchState<SummonerWarsCore>;
 }
 
 /** 放置单位到棋盘 */
 function placeUnit(core: SummonerWarsCore, row: number, col: number, unit: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }): void {
+  const { card, owner, cardId, ...rest } = unit;
   core.board[row][col].unit = {
-    cardId: unit.card.id,
-    card: unit.card,
-    owner: unit.owner,
+    cardId: cardId ?? card.id,
+    card,
+    owner,
     position: { row, col },
     damage: 0,
     boosts: 0,
     hasMoved: false,
     hasAttacked: false,
-    ...unit,
+    ...rest,
   };
 }
 
@@ -283,7 +284,8 @@ describe('FlowHooks - onPhaseExit', () => {
 
       const drawEvents = (result.events ?? []).filter(e => e.type === SW_EVENTS.CARD_DRAWN);
       expect(drawEvents.length).toBe(1);
-      expect(drawEvents[0].payload.count).toBe(2); // min(4, 2)
+      const payload = (drawEvents[0] as GameEvent).payload as { count?: number };
+      expect(payload.count).toBe(2); // min(4, 2)
     });
 
     it('牌库为空 → 不抽牌', () => {
@@ -444,12 +446,14 @@ describe('FlowHooks - onPhaseEnter', () => {
       // 普通事件弃置
       const discarded = events.filter(e => e.type === SW_EVENTS.ACTIVE_EVENT_DISCARDED);
       expect(discarded.length).toBe(1);
-      expect(discarded[0].payload.cardId).toBe('some-event-0-1');
+      const discardedPayload = (discarded[0] as GameEvent).payload as { cardId?: string };
+      expect(discardedPayload.cardId).toBe('some-event-0-1');
 
       // 圣洁审判扣充能
       const charged = events.filter(e => e.type === SW_EVENTS.FUNERAL_PYRE_CHARGED);
       expect(charged.length).toBe(1);
-      expect(charged[0].payload.charges).toBe(1); // 2 - 1
+      const chargedPayload = (charged[0] as GameEvent).payload as { charges?: number };
+      expect(chargedPayload.charges).toBe(1); // 2 - 1
     });
 
     it('无主动事件时只产生 TURN_CHANGED', () => {

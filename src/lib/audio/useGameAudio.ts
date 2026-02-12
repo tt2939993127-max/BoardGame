@@ -7,7 +7,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioManager } from './AudioManager';
 import { playSynthSound, getSynthSoundKeys } from './SynthAudio';
 import type { AudioRuntimeContext, BgmDefinition, BgmGroupId, GameAudioConfig, SoundKey } from './types';
-import { resolveAudioEvent, resolveAudioKey, resolveBgmGroup, resolveBgmKey } from './audioRouting';
+import { resolveAudioEvent, resolveFeedback, resolveBgmGroup, resolveBgmKey } from './audioRouting';
+import { deferredSounds } from './DeferredSoundMap';
 import { useAudio } from '../../contexts/AudioContext';
 import { COMMON_AUDIO_BASE_PATH, loadCommonAudioRegistry } from './commonRegistry';
 
@@ -66,10 +67,13 @@ function findLastLogEntryIndex(entries: unknown[], signature: string): number {
  * @param key 音效键名
  */
 export function playSound(key: SoundKey): void {
+    console.log('[playSound] 调用:', key);
+    
     // 节流：同一音效在 SFX_THROTTLE_MS 内只播放一次
     const now = Date.now();
     const lastPlayed = lastPlayedTime.get(key);
     if (lastPlayed !== undefined && now - lastPlayed < SFX_THROTTLE_MS) {
+        console.log('[playSound] 节流跳过:', key, '距上次', now - lastPlayed, 'ms');
         return;
     }
     lastPlayedTime.set(key, now);
@@ -78,6 +82,7 @@ export function playSound(key: SoundKey): void {
     const synthKeys = getSynthSoundKeys();
     const isSynthKey = synthKeys.includes(key);
     if (failedSounds.has(key)) {
+        console.log('[playSound] 已知失败，使用合成音:', key);
         if (isSynthKey) {
             playSynthSound(key);
         }
@@ -85,9 +90,12 @@ export function playSound(key: SoundKey): void {
     }
 
     const result = AudioManager.play(key);
+    console.log('[playSound] AudioManager.play 结果:', result);
+    
     // 仅在音效确实加载失败时标记为永久失败并回退到合成音
     // （因并发加载限制被跳过的不算失败）
     if (result === null && isSynthKey && AudioManager.isFailed(key)) {
+        console.log('[playSound] 加载失败，标记并使用合成音:', key);
         failedSounds.add(key);
         playSynthSound(key);
     }
@@ -121,6 +129,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
     const lastLogSignatureRef = useRef<string | null>(null);
     const currentBgmKeyRef = useRef<string | null>(null);
     const currentBgmGroupRef = useRef<BgmGroupId | null>(null);
+    const contextualPreloadRef = useRef<Set<SoundKey>>(new Set());
     const { setPlaylist, playBgm, stopBgm, bgmSelections, setActiveBgmContext } = useAudio();
     const [registryLoaded, setRegistryLoaded] = useState(false);
     const eventEntriesVersion = (() => {
@@ -135,6 +144,18 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
     useEffect(() => {
         runtimeContextRef.current = runtimeContext;
     });
+
+    const contextualPreloadKeys = useMemo(() => {
+        if (!config.contextualPreloadKeys) return [] as SoundKey[];
+        const keys = config.contextualPreloadKeys(runtimeContext);
+        if (!keys || keys.length === 0) return [] as SoundKey[];
+        return keys.filter((key): key is SoundKey => !!key);
+    }, [config.contextualPreloadKeys, G, ctx, meta]);
+
+    const contextualPreloadSignature = useMemo(() => {
+        if (contextualPreloadKeys.length === 0) return '';
+        return Array.from(new Set(contextualPreloadKeys)).sort().join('|');
+    }, [contextualPreloadKeys]);
 
     const bgmDefinitionMap = useMemo(() => {
         return new Map((config.bgm ?? []).map((def) => [def.key, def]));
@@ -248,6 +269,18 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
     ]);
 
     useEffect(() => {
+        if (!registryLoaded || !initializedRef.current) return;
+        if (contextualPreloadKeys.length === 0) return;
+
+        const uniqueKeys = Array.from(new Set(contextualPreloadKeys));
+        const pending = uniqueKeys.filter((key) => !contextualPreloadRef.current.has(key));
+        if (pending.length === 0) return;
+
+        pending.forEach((key) => contextualPreloadRef.current.add(key));
+        AudioManager.preloadKeys(pending);
+    }, [registryLoaded, contextualPreloadSignature, contextualPreloadKeys.length]);
+
+    useEffect(() => {
         if (!initializedRef.current || !registryLoaded) return;
         if (!config.bgm || config.bgm.length === 0) return;
 
@@ -315,13 +348,24 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             if (!event) {
                 continue;
             }
-            const key = resolveAudioKey(
+            const result = resolveFeedback(
                 event,
                 runtimeContextRef.current,
                 config,
                 (category) => AudioManager.resolveCategoryKey(category)
             );
-            if (key && !playedKeys.has(key)) {
+            if (!result) continue;
+            const { key, timing } = result;
+            if (timing === 'on-impact') {
+                // 延迟播放：写入 DeferredSoundMap，由动画层在冲击帧消费
+                const entryId = (entry as { id?: number }).id;
+                if (typeof entryId === 'number') {
+                    deferredSounds.set(entryId, key);
+                }
+                continue;
+            }
+            // immediate：立即播放（去重）
+            if (!playedKeys.has(key)) {
                 playedKeys.add(key);
                 playSound(key);
             }

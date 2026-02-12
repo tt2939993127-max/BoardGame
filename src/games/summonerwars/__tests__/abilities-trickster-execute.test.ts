@@ -66,7 +66,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeSummoner(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '泰珂露', unitClass: 'summoner',
-    faction: '欺心巫族', strength: 3, life: 13, cost: 0,
+    faction: 'trickster', strength: 3, life: 13, cost: 0,
     attackType: 'ranged', attackRange: 3,
     abilities: ['mind_capture'], deckSymbols: [],
   };
@@ -75,7 +75,7 @@ function makeSummoner(id: string): UnitCard {
 function makeTelekinetic(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '掷术师', unitClass: 'common',
-    faction: '欺心巫族', strength: 1, life: 4, cost: 1,
+    faction: 'trickster', strength: 1, life: 4, cost: 1,
     attackType: 'ranged', attackRange: 3,
     abilities: ['evasion', 'rebound', 'telekinesis'], deckSymbols: [],
   };
@@ -84,7 +84,7 @@ function makeTelekinetic(id: string): UnitCard {
 function makeKara(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '卡拉', unitClass: 'champion',
-    faction: '欺心巫族', strength: 4, life: 8, cost: 7,
+    faction: 'trickster', strength: 4, life: 8, cost: 7,
     attackType: 'ranged', attackRange: 3,
     abilities: ['high_telekinesis', 'stable', 'mind_transmission'], deckSymbols: [],
   };
@@ -93,7 +93,7 @@ function makeKara(id: string): UnitCard {
 function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'necromancer', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -102,7 +102,7 @@ function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makeAllyCommon(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '友方士兵', unitClass: 'common',
-    faction: '欺心巫族', strength: 2, life: 3, cost: 1,
+    faction: 'trickster', strength: 2, life: 3, cost: 1,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
   };
 }
@@ -110,7 +110,7 @@ function makeAllyCommon(id: string): UnitCard {
 function makeMindWitch(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '心灵女巫', unitClass: 'common',
-    faction: '欺心巫族', strength: 1, life: 3, cost: 1,
+    faction: 'trickster', strength: 1, life: 3, cost: 1,
     attackType: 'ranged', attackRange: 3,
     abilities: ['illusion'], deckSymbols: [],
   };

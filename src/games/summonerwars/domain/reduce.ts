@@ -25,7 +25,7 @@ import {
   removeFromHand,
   removeFromDiscard,
   discardFromHand,
-} from '../../../systems/CardSystem';
+} from '../../../engine/primitives';
 import { createDeckByFactionId } from '../config/factions';
 import { buildGameDeckFromCustom } from '../config/deckBuilder';
 
@@ -133,11 +133,10 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       const { from, to } = payload as { from: CellCoord; to: CellCoord };
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       const unit = newBoard[from.row][from.col].unit;
-      if (unit) {
-        newBoard[from.row][from.col].unit = undefined;
-        newBoard[to.row][to.col].unit = { ...unit, position: to, hasMoved: true };
-      }
-      const pid = unit?.owner as PlayerId;
+      if (!unit) return { ...core, board: newBoard };
+      newBoard[from.row][from.col].unit = undefined;
+      newBoard[to.row][to.col].unit = { ...unit, position: to, hasMoved: true };
+      const pid = unit.owner as PlayerId;
       return {
         ...core, board: newBoard, selectedUnit: undefined,
         players: { ...core.players, [pid]: { ...core.players[pid], moveCount: core.players[pid].moveCount + 1 } },
@@ -175,57 +174,19 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     }
 
     case SW_EVENTS.UNIT_DAMAGED: {
-      const { position, damage, skipMagicReward } = payload as { position: CellCoord; damage: number; skipMagicReward?: boolean };
+      const { position, damage } = payload as { position: CellCoord; damage: number };
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
-      const cell = newBoard[position.row][position.col];
+      const cell = newBoard[position.row]?.[position.col];
+      if (!cell) return core;
       
       if (cell.unit) {
         const newDamage = cell.unit.damage + damage;
-        const life = getEffectiveLife(cell.unit);
-        if (newDamage >= life) {
-          const destroyedOwner = cell.unit.owner;
-          const attackingPlayer = destroyedOwner === '0' ? '1' : '0';
-          const destroyedCard = cell.unit.card;
-          const ownerPlayer = core.players[destroyedOwner as PlayerId];
-          cell.unit = undefined;
-          const magicDelta = skipMagicReward ? 0 : 1;
-          return {
-            ...core, board: newBoard,
-            players: {
-              ...core.players,
-              [destroyedOwner]: { ...ownerPlayer, discard: [...ownerPlayer.discard, destroyedCard] },
-              [attackingPlayer]: {
-                ...core.players[attackingPlayer as PlayerId],
-                magic: clampMagic(core.players[attackingPlayer as PlayerId].magic + magicDelta),
-              },
-            },
-          };
-        } else {
-          cell.unit = { ...cell.unit, damage: newDamage, wasAttackedThisTurn: true };
-        }
+        cell.unit = { ...cell.unit, damage: newDamage, wasAttackedThisTurn: true };
       } else if (cell.structure) {
         const newDamage = cell.structure.damage + damage;
-        const life = cell.structure.card.life;
-        if (newDamage >= life) {
-          const destroyedOwner = cell.structure.owner;
-          const attackingPlayer = destroyedOwner === '0' ? '1' : '0';
-          const destroyedCard = cell.structure.card;
-          const ownerPlayer = core.players[destroyedOwner as PlayerId];
-          cell.structure = undefined;
-          return {
-            ...core, board: newBoard,
-            players: {
-              ...core.players,
-              [destroyedOwner]: { ...ownerPlayer, discard: [...ownerPlayer.discard, destroyedCard] },
-              [attackingPlayer]: {
-                ...core.players[attackingPlayer as PlayerId],
-                magic: clampMagic(core.players[attackingPlayer as PlayerId].magic + 1),
-              },
-            },
-          };
-        } else {
-          cell.structure = { ...cell.structure, damage: newDamage };
-        }
+        cell.structure = { ...cell.structure, damage: newDamage };
+      } else {
+        return core;
       }
       return { ...core, board: newBoard };
     }
@@ -265,21 +226,43 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
           ...core.players,
           [to]: { ...core.players[to], moveCount: 0, attackCount: 0, hasAttackedEnemy: false },
         },
+        // 清空技能使用次数追踪
+        abilityUsageCount: {},
       };
     }
 
     // ========== 技能系统事件 ==========
 
     case SW_EVENTS.UNIT_DESTROYED: {
-      const { position, owner: destroyedOwner, reason } = payload as {
-        position: CellCoord; cardId: string; cardName: string; owner: PlayerId; reason?: string;
+      const { position, owner: destroyedOwner, reason, killerPlayerId, skipMagicReward } = payload as {
+        position: CellCoord; cardId: string; cardName: string; owner: PlayerId; reason?: string; killerPlayerId?: PlayerId; skipMagicReward?: boolean;
       };
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
-      const cell = newBoard[position.row]?.[position.col];
-      if (cell?.unit) {
-        const destroyedCard = cell.unit.card;
-        const actualOwner = destroyedOwner ?? cell.unit.owner;
+      let cell = newBoard[position.row]?.[position.col];
+      let foundUnit = cell?.unit;
+
+      if (!foundUnit) {
+        for (let row = 0; row < newBoard.length; row++) {
+          for (let col = 0; col < newBoard[row].length; col++) {
+            const unit = newBoard[row]?.[col]?.unit;
+            if (unit && unit.cardId === (payload as { cardId: string }).cardId) {
+              foundUnit = unit;
+              cell = newBoard[row][col];
+              break;
+            }
+          }
+          if (foundUnit) break;
+        }
+      }
+
+      if (foundUnit && cell) {
+        const destroyedCard = foundUnit.card;
+        const attachedUnitCards = (foundUnit.attachedUnits ?? []).map(au => au.card);
+        const actualOwner = destroyedOwner ?? foundUnit.owner;
         const ownerPlayer = core.players[actualOwner as PlayerId];
+        const rewardPlayerId = killerPlayerId && killerPlayerId !== actualOwner && !skipMagicReward
+          ? killerPlayerId
+          : undefined;
 
         // 不屈不挠检查：友方士兵被消灭时返回手牌（非自毁原因）
         const hasRelentless = ownerPlayer.activeEvents.some(ev => {
@@ -317,13 +300,37 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
             };
             if (hasRelentless && isCommon && !isSelfDestruct) {
               return {
-                ...core, board: newBoard,
-                players: { ...core.players, [actualOwner]: { ...ownerWithUpdatedEvents, hand: [...ownerWithUpdatedEvents.hand, destroyedCard] } },
+                ...core,
+                board: newBoard,
+                players: {
+                  ...core.players,
+                  [actualOwner]: { ...ownerWithUpdatedEvents, hand: [...ownerWithUpdatedEvents.hand, destroyedCard], discard: [...ownerWithUpdatedEvents.discard, ...attachedUnitCards] },
+                  ...(rewardPlayerId
+                    ? {
+                      [rewardPlayerId]: {
+                        ...core.players[rewardPlayerId],
+                        magic: clampMagic(core.players[rewardPlayerId].magic + 1),
+                      },
+                    }
+                    : {}),
+                },
               };
             }
             return {
-              ...core, board: newBoard,
-              players: { ...core.players, [actualOwner]: { ...ownerWithUpdatedEvents, discard: [...ownerWithUpdatedEvents.discard, destroyedCard] } },
+              ...core,
+              board: newBoard,
+              players: {
+                ...core.players,
+                [actualOwner]: { ...ownerWithUpdatedEvents, discard: [...ownerWithUpdatedEvents.discard, destroyedCard, ...attachedUnitCards] },
+                ...(rewardPlayerId
+                  ? {
+                    [rewardPlayerId]: {
+                      ...core.players[rewardPlayerId],
+                      magic: clampMagic(core.players[rewardPlayerId].magic + 1),
+                    },
+                  }
+                  : {}),
+              },
             };
           }
         }
@@ -333,17 +340,72 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         if (hasRelentless && isCommon && !isSelfDestruct) {
           // 返回手牌而非弃牌堆
           return {
-            ...core, board: newBoard,
-            players: { ...core.players, [actualOwner]: { ...ownerWithEvents, hand: [...ownerWithEvents.hand, destroyedCard] } },
+            ...core,
+            board: newBoard,
+            players: {
+              ...core.players,
+              [actualOwner]: { ...ownerWithEvents, hand: [...ownerWithEvents.hand, destroyedCard], discard: [...ownerWithEvents.discard, ...attachedUnitCards] },
+              ...(rewardPlayerId
+                ? {
+                  [rewardPlayerId]: {
+                    ...core.players[rewardPlayerId],
+                    magic: clampMagic(core.players[rewardPlayerId].magic + 1),
+                  },
+                }
+                : {}),
+            },
           };
         }
-
         return {
-          ...core, board: newBoard,
-          players: { ...core.players, [actualOwner]: { ...ownerWithEvents, discard: [...ownerWithEvents.discard, destroyedCard] } },
+          ...core,
+          board: newBoard,
+          players: {
+            ...core.players,
+            [actualOwner]: { ...ownerWithEvents, discard: [...ownerWithEvents.discard, destroyedCard, ...attachedUnitCards] },
+            ...(rewardPlayerId
+              ? {
+                [rewardPlayerId]: {
+                  ...core.players[rewardPlayerId],
+                  magic: clampMagic(core.players[rewardPlayerId].magic + 1),
+                },
+              }
+              : {}),
+          },
         };
       }
       return { ...core, board: newBoard };
+    }
+
+    case SW_EVENTS.STRUCTURE_DESTROYED: {
+      const { position, owner, killerPlayerId, skipMagicReward } = payload as {
+        position: CellCoord; cardId: string; owner: PlayerId; killerPlayerId?: PlayerId; skipMagicReward?: boolean;
+      };
+      const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const cell = newBoard[position.row]?.[position.col];
+      if (!cell?.structure) return { ...core, board: newBoard };
+      const destroyedCard = cell.structure.card;
+      const actualOwner = owner ?? cell.structure.owner;
+      const ownerPlayer = core.players[actualOwner as PlayerId];
+      cell.structure = undefined;
+      const rewardPlayerId = killerPlayerId && killerPlayerId !== actualOwner && !skipMagicReward
+        ? killerPlayerId
+        : undefined;
+      return {
+        ...core,
+        board: newBoard,
+        players: {
+          ...core.players,
+          [actualOwner]: { ...ownerPlayer, discard: [...ownerPlayer.discard, destroyedCard] },
+          ...(rewardPlayerId
+            ? {
+              [rewardPlayerId]: {
+                ...core.players[rewardPlayerId],
+                magic: clampMagic(core.players[rewardPlayerId].magic + 1),
+              },
+            }
+            : {}),
+        },
+      };
     }
 
     case SW_EVENTS.UNIT_HEALED: {
@@ -405,7 +467,22 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       return { ...core, board: newBoard };
     }
 
-    case SW_EVENTS.ABILITY_TRIGGERED:
+    case SW_EVENTS.ABILITY_TRIGGERED: {
+      // 记录技能使用次数（用于限制每回合使用次数）
+      const abilityPayload = event.payload as { abilityId?: string; sourceUnitId?: string };
+      if (abilityPayload.abilityId && abilityPayload.sourceUnitId) {
+        const usageKey = `${abilityPayload.sourceUnitId}:${abilityPayload.abilityId}`;
+        return {
+          ...core,
+          abilityUsageCount: {
+            ...core.abilityUsageCount,
+            [usageKey]: (core.abilityUsageCount[usageKey] ?? 0) + 1,
+          },
+        };
+      }
+      return core;
+    }
+
     case SW_EVENTS.STRENGTH_MODIFIED:
     case SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED:
     case SW_EVENTS.SOUL_TRANSFER_REQUESTED:
@@ -415,6 +492,25 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     case SW_EVENTS.GRAB_FOLLOW_REQUESTED: {
       // 通知事件，不修改状态（由 UI 消费）
       return core;
+    }
+
+    case SW_EVENTS.UNIT_ATTACHED: {
+      // 冰霜战斧：将源单位从棋盘移除，附加到目标单位
+      const { sourcePosition: uaSource, targetPosition: uaTarget, sourceUnitId: uaSourceId, sourceCard: uaCard, sourceOwner: uaOwner } = payload as {
+        sourcePosition: CellCoord; targetPosition: CellCoord;
+        sourceUnitId: string; sourceCard: UnitCard; sourceOwner: PlayerId;
+      };
+      const uaBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const uaSourceCell = uaBoard[uaSource.row]?.[uaSource.col];
+      const uaTargetCell = uaBoard[uaTarget.row]?.[uaTarget.col];
+      if (uaSourceCell?.unit && uaTargetCell?.unit) {
+        uaSourceCell.unit = undefined;
+        uaTargetCell.unit = {
+          ...uaTargetCell.unit,
+          attachedUnits: [...(uaTargetCell.unit.attachedUnits ?? []), { cardId: uaSourceId, card: uaCard, owner: uaOwner }],
+        };
+      }
+      return { ...core, board: uaBoard };
     }
 
     case SW_EVENTS.ABILITIES_COPIED: {

@@ -36,6 +36,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 /** 创建极地矮人 vs 亡灵法师的测试状态 */
 function createFrostState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
@@ -95,7 +97,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeFrostMage(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '冰霜法师', unitClass: 'common',
-    faction: '极地矮人', strength: 1, life: 4, cost: 1,
+    faction: 'frost', strength: 1, life: 4, cost: 1,
     attackType: 'ranged', attackRange: 3,
     abilities: ['frost_bolt'], deckSymbols: [],
   };
@@ -105,7 +107,7 @@ function makeFrostMage(id: string): UnitCard {
 function makeNatiana(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '纳蒂亚娜', unitClass: 'champion',
-    faction: '极地矮人', strength: 2, life: 7, cost: 6,
+    faction: 'frost', strength: 2, life: 7, cost: 6,
     attackType: 'ranged', attackRange: 3,
     abilities: ['greater_frost_bolt'], deckSymbols: [],
   };
@@ -115,7 +117,7 @@ function makeNatiana(id: string): UnitCard {
 function makeIceGolem(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '寒冰魔像', unitClass: 'common',
-    faction: '极地矮人', strength: 2, life: 5, cost: 2,
+    faction: 'frost', strength: 2, life: 5, cost: 2,
     attackType: 'melee', attackRange: 1,
     abilities: ['living_gate', 'mobile_structure', 'slow'], deckSymbols: [],
   };
@@ -125,7 +127,7 @@ function makeIceGolem(id: string): UnitCard {
 function makeFrostSummoner(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '丝瓦拉', unitClass: 'summoner',
-    faction: '极地矮人', strength: 3, life: 12, cost: 0,
+    faction: 'frost', strength: 3, life: 12, cost: 0,
     attackType: 'ranged', attackRange: 3,
     abilities: ['structure_shift'], deckSymbols: [],
   };
@@ -135,7 +137,7 @@ function makeFrostSummoner(id: string): UnitCard {
 function makeJarmund(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '贾穆德', unitClass: 'champion',
-    faction: '极地矮人', strength: 3, life: 7, cost: 5,
+    faction: 'frost', strength: 3, life: 7, cost: 5,
     attackType: 'ranged', attackRange: 3,
     abilities: ['imposing', 'ice_shards'], deckSymbols: [],
   };
@@ -145,7 +147,7 @@ function makeJarmund(id: string): UnitCard {
 function makeBearCavalry(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '熊骑兵', unitClass: 'common',
-    faction: '极地矮人', strength: 3, life: 5, cost: 3,
+    faction: 'frost', strength: 3, life: 5, cost: 3,
     attackType: 'melee', attackRange: 1,
     abilities: ['trample'], deckSymbols: [],
   };
@@ -155,7 +157,7 @@ function makeBearCavalry(id: string): UnitCard {
 function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'necromancer', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -165,7 +167,7 @@ function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makePortal(id: string): StructureCard {
   return {
     id, cardType: 'structure', name: '传送门',
-    cost: 0, life: 5, isGate: true, deckSymbols: [],
+    faction: 'frost', cost: 0, life: 5, isGate: true, deckSymbols: [],
   };
 }
 
@@ -173,7 +175,7 @@ function makePortal(id: string): StructureCard {
 function makeParapet(id: string): StructureCard {
   return {
     id, cardType: 'structure', name: '护城墙',
-    cost: 0, life: 5, isGate: false, deckSymbols: [],
+    faction: 'frost', cost: 0, life: 5, isGate: false, deckSymbols: [],
   };
 }
 
@@ -184,7 +186,7 @@ function executeAndReduce(
   payload: Record<string, unknown>
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -204,6 +206,7 @@ function addEventToHand(
     id: eventId,
     cardType: 'event',
     name: overrides?.name ?? '测试事件',
+    faction: 'frost',
     cost: overrides?.cost ?? 0,
     playPhase: overrides?.playPhase ?? 'summon',
     effect: overrides?.effect ?? '测试效果',
@@ -499,7 +502,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('3格');
@@ -529,7 +532,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('移动阶段');
@@ -559,7 +562,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('友方建筑');
@@ -629,7 +632,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: { abilityId: 'ice_shards', sourceUnitId: 'test-jarmund' },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('充能');

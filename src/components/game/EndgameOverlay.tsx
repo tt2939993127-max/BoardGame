@@ -15,6 +15,7 @@ import { useMatchRoomExit } from '../../contexts/MatchRoomExitContext';
 import { useGameMode } from '../../contexts/GameModeContext';
 import { VictoryParticles } from '../common/animations';
 import { RematchActions, type RematchActionsProps } from './RematchActions';
+import { UI_Z_INDEX } from '../../core';
 
 export interface GameOverResult {
     winner?: string;
@@ -203,7 +204,8 @@ export function EndgameOverlay({
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: OVERLAY_FADE_MS / 1000 }}
-                    className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none"
+                    className="fixed inset-0 flex items-center justify-center pointer-events-none"
+                    style={{ zIndex: UI_Z_INDEX.overlayRaised }}
                 >
                     {/* 彻底移除背景遮罩 */}
 

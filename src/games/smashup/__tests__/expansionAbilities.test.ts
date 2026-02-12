@@ -22,6 +22,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -121,12 +122,12 @@ describe('幽灵派系能力', () => {
 
             const events = execPlayMinion(state, '0', 'm1', 0);
             // 多张可弃手牌时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('ghost_ghost');
+            expect((promptEvents[0] as any).payload.abilityId).toBe('ghost_ghost');
         });
 
-        it('单张手牌时自动弃牌', () => {
+        it('单张手牌时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -141,10 +142,9 @@ describe('幽灵派系能力', () => {
             });
 
             const events = execPlayMinion(state, '0', 'm1', 0);
-            const discardEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DISCARDED);
-            expect(discardEvents.length).toBe(1);
-            expect((discardEvents[0] as any).payload.playerId).toBe('0');
-            expect((discardEvents[0] as any).payload.cardUids).toEqual(['h1']);
+            // 单张手牌时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
 
         it('无其他手牌时不弃牌', () => {
@@ -163,7 +163,7 @@ describe('幽灵派系能力', () => {
             expect(discardEvents.length).toBe(0);
         });
 
-        it('弃牌后状态正确（reduce 验证）', () => {
+        it('单张手牌时 Prompt 待决（reduce 验证）', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -179,10 +179,10 @@ describe('幽灵派系能力', () => {
 
             const events = execPlayMinion(state, '0', 'm1', 0);
             const newState = applyEvents(state, events);
-            // 手牌应为空（m1 打出，h1 弃掉）
-            expect(newState.players['0'].hand.length).toBe(0);
-            // h1 应在弃牌堆
-            expect(newState.players['0'].discard.some(c => c.uid === 'h1')).toBe(true);
+            // CHOICE_REQUESTED 已生成（Prompt 待决），h1 仍在手牌
+            const promptEvts = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvts.length).toBe(1);
+            expect(newState.players['0'].hand.some(c => c.uid === 'h1')).toBe(true);
             // m1 应在基地上
             expect(newState.bases[0].minions.some(m => m.uid === 'm1')).toBe(true);
         });
@@ -507,12 +507,12 @@ describe('蒸汽朋克派系能力', () => {
 
             const events = execPlayAction(state, '0', 'a1');
             // 多张行动卡时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('steampunk_scrap_diving');
+            expect((promptEvents[0] as any).payload.abilityId).toBe('steampunk_scrap_diving');
         });
 
-        it('单张行动卡时自动取回', () => {
+        it('单张行动卡时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -527,9 +527,9 @@ describe('蒸汽朋克派系能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-            expect(recoverEvents.length).toBe(1);
-            expect((recoverEvents[0] as any).payload.cardUids).toEqual(['d2']);
+            // 单张行动卡时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
 
         it('弃牌堆无行动卡时不产生事件', () => {
@@ -548,7 +548,7 @@ describe('蒸汽朋克派系能力', () => {
             expect(recoverEvents.length).toBe(0);
         });
 
-        it('取回后状态正确（reduce 验证）', () => {
+        it('单张行动卡时 Prompt 待决（reduce 验证）', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -563,12 +563,11 @@ describe('蒸汽朋克派系能力', () => {
 
             const events = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
-            // d1 应从弃牌堆回到手牌
-            expect(newState.players['0'].hand.some(c => c.uid === 'd1')).toBe(true);
-            // a1 打出后进弃牌堆（standard action），d1 被取回
-            // 弃牌堆应只有 a1
+            // CHOICE_REQUESTED 已生成（Prompt 待决），d1 仍在弃牌堆
+            const promptEvts = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvts.length).toBe(1);
             expect(newState.players['0'].discard.some(c => c.uid === 'a1')).toBe(true);
-            expect(newState.players['0'].discard.some(c => c.uid === 'd1')).toBe(false);
+            expect(newState.players['0'].discard.some(c => c.uid === 'd1')).toBe(true);
         });
     });
 });

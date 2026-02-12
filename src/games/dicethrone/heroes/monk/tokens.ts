@@ -7,8 +7,8 @@
  * - debuff 类型：击倒（被动触发）
  */
 
-import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
-import { TOKEN_IDS, STATUS_IDS } from '../../domain/ids';
+import type { TokenDef, TokenState } from '../../domain/tokenTypes';
+import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
 import { RESOURCE_IDS } from '../../domain/resources';
 
 const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
@@ -44,6 +44,7 @@ export const MONK_TOKENS: TokenDef[] = [
             },
         },
         frameId: 'tai-chi',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
     },
     
     /**
@@ -67,6 +68,7 @@ export const MONK_TOKENS: TokenDef[] = [
             },
         },
         frameId: 'dodge',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
     },
     
     /**
@@ -87,6 +89,7 @@ export const MONK_TOKENS: TokenDef[] = [
             effect: { type: 'removeDebuff' },
         },
         frameId: TOKEN_IDS.PURIFY,
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
     },
     
     // ============================================
@@ -110,6 +113,8 @@ export const MONK_TOKENS: TokenDef[] = [
             removable: true,
             removalCost: { resource: RESOURCE_IDS.CP, amount: 2 },
         },
+        frameId: 'knockdown',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
     },
 ];
 

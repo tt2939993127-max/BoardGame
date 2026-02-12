@@ -42,3 +42,6 @@ export type {
     UseSpotlightConfig,
     UseSpotlightReturn,
 } from './hooks';
+
+// UI 层级常量
+export { UI_Z_INDEX } from './zIndex';

@@ -14,7 +14,7 @@ import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types'
 import { STATUS_IDS, TOKEN_IDS, DICETHRONE_COMMANDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
 import { MONK_CARDS } from '../heroes/monk/cards';
-import type { AbilityEffect } from '../../../systems/presets/combat';
+import type { AbilityEffect } from '../domain/combat';
 import { GameTestRunner, type TestCase } from '../../../engine/testing';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
@@ -36,6 +36,7 @@ import {
     expectedDeckAfterDraw4,
     expectedIncomeCp,
     fistAttackAbilityId,
+    injectPendingInteraction,
     type DiceThroneExpectation,
     type CommandInput,
 } from './test-utils';
@@ -114,23 +115,24 @@ const baseTestCases: TestCase<DiceThroneExpectation>[] = [
         name: '交互未确认不可推进阶段',
         setup: (playerIds, random) => {
             const state = createInitializedState(playerIds, random);
-            state.core.pendingInteraction = {
+            const pendingInteraction = {
                 id: 'test-interaction',
-                playerId: '0',
+                playerId: '0' as string,
                 sourceCardId: 'card-test',
-                type: 'modifyDie',
+                type: 'modifyDie' as const,
                 titleKey: 'interaction.selectDieToChange',
                 selectCount: 1,
-                selected: [],
-                dieModifyConfig: { mode: 'any' },
+                selected: [] as string[],
+                dieModifyConfig: { mode: 'any' as const },
             };
+            injectPendingInteraction(state, pendingInteraction);
             return state;
         },
         commands: [
             { type: 'ADVANCE_PHASE', playerId: '0', payload: {} },
         ],
         expect: {
-            expectError: { command: 'ADVANCE_PHASE', error: 'cannot_advance_phase' },
+            expectError: { command: 'ADVANCE_PHASE', error: '请先完成当前交互' },
             turnPhase: 'main1',
             pendingInteraction: { type: 'modifyDie', selectCount: 1, playerId: '0', dieModifyMode: 'any' },
         },
@@ -295,7 +297,6 @@ describe('王权骰铸流程测试', () => {
             }
 
             expect(state.core.hostStarted).toBe(true);
-            expect(state.core.turnPhase).toBe('main1');
             expect(state.sys.phase).toBe('main1');
         });
 
@@ -807,31 +808,33 @@ describe('王权骰铸流程测试', () => {
     });
 
     describe('卡牌效果', () => {
-        it('打出升级卡时应使用静态表 previewRef（忽略手牌污染）', () => {
+        it('打出升级卡时 EventStream 应包含 ABILITY_REPLACED 事件', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
-                name: 'lastPlayedCard previewRef 取静态表（升级卡）',
+                name: 'ABILITY_REPLACED 事件应包含升级卡信息',
                 setup: createSetupWithHand(['card-meditation-2'], {
                     cp: 2,
-                    mutate: (core) => {
-                        const card = core.players['0']?.hand[0];
-                        if (card) {
-                            card.previewRef = { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 25 };
-                        }
-                    },
                 }),
                 commands: [
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-2', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    lastPlayedCard: {
-                        cardId: 'card-meditation-2',
-                        playerId: '0',
-                        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 6 },
+                    players: {
+                        '0': { abilityLevels: { meditation: 2 } },
                     },
                 },
             });
             expect(result.assertionErrors).toEqual([]);
+
+            // 验证 EventStream 包含 ABILITY_REPLACED 事件
+            const entries = result.finalState.sys.eventStream?.entries ?? [];
+            const abilityReplacedEntry = entries.find(
+                (e: { event: { type: string } }) => e.event.type === 'ABILITY_REPLACED'
+            );
+            expect(abilityReplacedEntry).toBeDefined();
+            const payload = abilityReplacedEntry!.event.payload as { cardId: string; playerId: string };
+            expect(payload.cardId).toBe('card-meditation-2');
+            expect(payload.playerId).toBe('0');
         });
 
         it('打出内心平静获得2太极', () => {
@@ -1883,19 +1886,13 @@ describe('王权骰铸流程测试', () => {
     });
 
     describe('卡牌交互（全覆盖）', () => {
-        beforeEach(() => {
-            vi.useFakeTimers();
-            vi.setSystemTime(new Date('2025-01-01T00:00:00Z'));
-        });
-
-        afterEach(() => {
-            vi.useRealTimers();
-        });
+        // GameTestRunner 用 stepNum（命令索引+1）作为 timestamp
+        // interactionId = `${cardId}-${playCardStep}`
 
         it('玩得六啊：set 模式修改 1 颗骰子至 6', () => {
             const runner = createRunner(createQueuedRandom([1, 2, 3, 4, 5]));
-            const ts = Date.now();
-            const interactionId = `card-play-six-${ts}`;
+            // ADVANCE_PHASE=1, ROLL_DICE=2, PLAY_CARD=3
+            const interactionId = `card-play-six-3`;
             const result = runner.run({
                 name: '玩得六啊 set',
                 setup: createSetupWithHand(['card-play-six'], { cp: 10 }),
@@ -1918,8 +1915,7 @@ describe('王权骰铸流程测试', () => {
 
         it('俺也一样：copy 模式修改骰子为另一颗值', () => {
             const runner = createRunner(createQueuedRandom([2, 5, 1, 3, 4]));
-            const ts = Date.now();
-            const interactionId = `card-me-too-${ts}`;
+            const interactionId = `card-me-too-3`;
             const result = runner.run({
                 name: '俺也一样 copy',
                 setup: createSetupWithHand(['card-me-too'], { cp: 10 }),
@@ -1942,8 +1938,7 @@ describe('王权骰铸流程测试', () => {
 
         it('惊不惊喜：any 模式修改任意 1 颗骰子', () => {
             const runner = createRunner(createQueuedRandom([1, 2, 3, 4, 5]));
-            const ts = Date.now();
-            const interactionId = `card-surprise-${ts}`;
+            const interactionId = `card-surprise-3`;
             const result = runner.run({
                 name: '惊不惊喜 any-1',
                 setup: createSetupWithHand(['card-surprise'], { cp: 10 }),
@@ -1965,8 +1960,7 @@ describe('王权骰铸流程测试', () => {
 
         it('意不意外：any 模式修改任意 2 颗骰子', () => {
             const runner = createRunner(createQueuedRandom([1, 2, 3, 4, 5]));
-            const ts = Date.now();
-            const interactionId = `card-unexpected-${ts}`;
+            const interactionId = `card-unexpected-3`;
             const result = runner.run({
                 name: '意不意外 any-2',
                 setup: createSetupWithHand(['card-unexpected'], { cp: 10 }),
@@ -1989,8 +1983,7 @@ describe('王权骰铸流程测试', () => {
 
         it('弹一手：adjust 模式增减 1 点', () => {
             const runner = createRunner(createQueuedRandom([2, 2, 2, 2, 2]));
-            const ts = Date.now();
-            const interactionId = `card-flick-${ts}`;
+            const interactionId = `card-flick-3`;
             const result = runner.run({
                 name: '弹一手 adjust',
                 setup: createSetupWithHand(['card-flick'], { cp: 10 }),
@@ -2012,8 +2005,7 @@ describe('王权骰铸流程测试', () => {
 
         it('不愧是我：重掷至多 2 颗骰子', () => {
             const runner = createRunner(createQueuedRandom([1, 2, 3, 4, 5, 6, 6]));
-            const ts = Date.now();
-            const interactionId = `card-worthy-of-me-${ts}`;
+            const interactionId = `card-worthy-of-me-3`;
             const result = runner.run({
                 name: '不愧是我 reroll-2',
                 setup: createSetupWithHand(['card-worthy-of-me'], { cp: 10 }),
@@ -2034,8 +2026,7 @@ describe('王权骰铸流程测试', () => {
 
         it('我又行了：重掷至多 5 颗骰子', () => {
             const runner = createRunner(createQueuedRandom([1, 1, 1, 1, 1, 2, 3, 4, 5, 6]));
-            const ts = Date.now();
-            const interactionId = `card-i-can-again-${ts}`;
+            const interactionId = `card-i-can-again-3`;
             const result = runner.run({
                 name: '我又行了 reroll-5',
                 setup: createSetupWithHand(['card-i-can-again'], { cp: 10 }),
@@ -2056,8 +2047,8 @@ describe('王权骰铸流程测试', () => {
 
         it('抬一手：强制对手重掷 1 颗骰子（防御阶段，进攻方响应）', () => {
             const runner = createRunner(createQueuedRandom([1, 1, 1, 1, 1, 2, 2, 2, 2, 6]));
-            const ts = Date.now();
-            const interactionId = `card-give-hand-${ts}`;
+            // PLAY_CARD is step 10: ADVANCE+ROLL+CONFIRM+PASS*2+SELECT+ADVANCE+ROLL+CONFIRM+PLAY_CARD
+            const interactionId = `card-give-hand-10`;
             const result = runner.run({
                 name: '抬一手 reroll-opponent (防御阶段)',
                 setup: createSetupWithHand(['card-give-hand'], {
@@ -2092,8 +2083,8 @@ describe('王权骰铸流程测试', () => {
 
         it('抬一手：强制对手重掷 1 颗骰子（进攻阶段，防御方响应）', () => {
             const runner = createRunner(createQueuedRandom([1, 1, 1, 1, 1, 6]));
-            const ts = Date.now();
-            const interactionId = `card-give-hand-${ts}`;
+            // PLAY_CARD is step 4: ADVANCE+ROLL+CONFIRM+PLAY_CARD
+            const interactionId = `card-give-hand-4`;
             const result = runner.run({
                 name: '抬一手 reroll-opponent (进攻阶段)',
                 setup: createSetupWithHand([], {
@@ -2143,8 +2134,8 @@ describe('王权骰铸流程测试', () => {
 
         it('惊不惊喜：在响应窗口中使用（进攻阶段，防御方响应）', () => {
             const runner = createRunner(createQueuedRandom([1, 1, 1, 1, 1]));
-            const ts = Date.now();
-            const interactionId = `card-surprise-${ts}`;
+            // PLAY_CARD is step 4: ADVANCE+ROLL+CONFIRM+PLAY_CARD
+            const interactionId = `card-surprise-4`;
             const result = runner.run({
                 name: '惊不惊喜 response-window',
                 setup: createSetupWithHand([], {
@@ -2193,8 +2184,8 @@ describe('王权骰铸流程测试', () => {
 
         it('拜拜了您内：移除 1 个状态效果', () => {
             const runner = createRunner(fixedRandom);
-            const ts = Date.now();
-            const interactionId = `card-bye-bye-${ts}`;
+            // PLAY_CARD is step 2: ADVANCE+PLAY_CARD
+            const interactionId = `card-bye-bye-2`;
             const result = runner.run({
                 name: '拜拜了您内 remove-status',
                 setup: createSetupWithHand(['card-bye-bye'], {
@@ -2215,6 +2206,85 @@ describe('王权骰铸流程测试', () => {
                         '0': { discardSize: 1 },
                     },
                     pendingInteraction: null,
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+    });
+
+    describe('阶段推进防护（状态驱动回归测试）', () => {
+        it('main1 阶段 BONUS_DICE_SETTLED 不触发阶段推进', () => {
+            // 模拟卡牌效果在 main1 触发奖励骰重掷交互，结算后阶段应停留在 main1
+            const random = createQueuedRandom([1, 1, 1, 1, 1]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: (playerIds: PlayerId[], r: RandomFn) => {
+                    const state = createInitializedState(playerIds, r);
+                    // 注入 pendingBonusDiceSettlement（模拟卡牌效果产生的奖励骰）
+                    state.core.pendingBonusDiceSettlement = {
+                        id: 'test-bonus-dice-main1',
+                        sourceAbilityId: 'test-card-effect',
+                        attackerId: '0',
+                        targetId: '1',
+                        dice: [{ index: 0, value: 3, face: 'fist' }],
+                        rerollCostTokenId: TOKEN_IDS.TAIJI,
+                        rerollCostAmount: 2,
+                        rerollCount: 0,
+                        readyToSettle: false,
+                    };
+                    // 注入 dt:bonus-dice 交互（模拟 DiceThrone event system 创建的交互）
+                    state.sys.interaction = {
+                        ...state.sys.interaction,
+                        current: {
+                            id: 'dt-bonus-dice-test-bonus-dice-main1',
+                            kind: 'dt:bonus-dice',
+                            playerId: '0',
+                            data: state.core.pendingBonusDiceSettlement,
+                        },
+                    };
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: 'main1 奖励骰结算不推进阶段',
+                commands: [
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                    pendingBonusDiceSettlement: null,
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('main2 阶段 CHOICE_RESOLVED 不触发阶段推进', () => {
+            // 模拟卡牌效果在 main2 触发选择交互，选择解决后阶段应停留在 main2
+            const random = fixedRandom;
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: createSetupWithHand(['card-buddha-light'], {
+                    cp: 10,
+                }),
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: 'main2 阶段打出卡牌后不自动推进',
+                commands: [
+                    ...advanceTo('main2'),
+                    cmd('PLAY_CARD', '0', { cardId: 'card-buddha-light' }),
+                ],
+                expect: {
+                    turnPhase: 'main2',
                 },
             });
             expect(result.assertionErrors).toEqual([]);

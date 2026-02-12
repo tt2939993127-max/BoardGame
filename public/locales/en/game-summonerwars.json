@@ -36,7 +36,9 @@
     "confirmDiscard": "Confirm Discard",
     "confirmSelection": "Confirm Selection",
     "confirmMove": "Confirm Move",
-    "confirmControl": "Confirm Control",
+    "withdrawCharge": "Spend Charge",
+    "withdrawMagic": "Spend 1 Magic",
+    "confirmControl": "Control",
     "continue": "Continue",
     "finish": "Finish",
     "skip": "Skip",
@@ -46,7 +48,9 @@
     "damage": "Damage",
     "bloodRuneDamage": "Take 1 Damage",
     "bloodRuneCharge": "Spend 1 Magic to Charge",
-    "feedBeastSelfDestroy": "Self-Destruct"
+    "feedBeastSelfDestroy": "Self-destruct",
+    "chargeSelf": "Charge Self",
+    "attachToSoldier": "Attach to Soldier"
   },
   "player": {
     "default1": "Player 1",
@@ -155,6 +159,61 @@
     "magic": "Magic",
     "draw": "Draw"
   },
+  "actionLog": {
+    "playerLabel": "Player {{playerId}}",
+    "positionUnknown": "Unknown",
+    "position": "{{row}},{{col}}",
+    "summonUnit": "Summon unit:",
+    "moveUnit": "Move:",
+    "attackDeclared": "Declare attack",
+    "attackHits": "Hits {{hits}}",
+    "attackUnit": "Attack:",
+    "buildStructure": "Build structure:",
+    "endPhase": "End phase{{phase}}",
+    "advancePhase": "Advance phase: {{phase}}",
+    "discardForMagic": "Discard for magic:",
+    "none": "None",
+    "cardSeparator": ", ",
+    "playEvent": "Play event:",
+    "bloodSummon": "Blood summon:",
+    "funeralPyreSkip": "Funeral Pyre: skip heal",
+    "funeralPyreHeal": "Funeral Pyre heal:",
+    "activateAbility": "Activate ability: {{abilityName}}",
+    "activateAbilitySource": " Source:",
+    "activateAbilityTarget": " Target:",
+    "activateAbilityTargetPosition": " Target position: {{position}}",
+    "unitSummoned": "Unit summoned:",
+    "unitSummonedFromDiscard": "(from discard)",
+    "unitMoved": "Unit moved:",
+    "unitDamaged": "Took {{amount}} damage:",
+    "unitHealed": "Healed {{amount}}:",
+    "unitDestroyed": "Unit destroyed:",
+    "unitCharged": "Charge {{amount}}:",
+    "unitChargeTotal": "(total {{total}})",
+    "sourceAbility": "(source: {{abilityName}})",
+    "structureBuilt": "Structure built:",
+    "structureDamaged": "Structure took {{amount}} damage:",
+    "structureHealed": "Structure healed {{amount}}:",
+    "structureDestroyed": "Structure destroyed:",
+    "magicChanged": "{{player}} magic {{delta}}",
+    "cardDrawn": "{{player}} draws {{count}}",
+    "cardDiscarded": "{{player}} discards:",
+    "abilityTriggered": "Ability triggered: {{abilityName}}",
+    "strengthModified": "Strength multiplier ×{{multiplier}}:",
+    "damageReduced": "Damage reduced {{amount}}:",
+    "unitPushed": "Push:",
+    "unitPulled": "Pull:",
+    "unitsSwapped": "Swap positions:",
+    "controlTransferred": "Control transferred to {{player}}:",
+    "controlTransferredTemporary": "(temporary)",
+    "eventAttached": "Event attached:",
+    "funeralPyreCharged": "Funeral Pyre charge {{amount}}:",
+    "funeralPyreChargeSet": "Funeral Pyre charge set to {{total}}:",
+    "abilitiesCopied": "Abilities copied:",
+    "unitAttached": "Unit attached:",
+    "healingModeSet": "Healing mode:",
+    "hypnoticLureMarked": "Hypnotic lure marked:"
+  },
   "hint": {
     "factionSelect": "Choose a faction and get ready",
     "summon": "Summon units from hand adjacent to gates",
@@ -235,6 +294,7 @@
   "cardSelector": {
     "reviveUndead": "Revive Undead: Select an undead unit from the discard pile",
     "infection": "Infection: Select a plague zombie from the discard pile",
+    "fortressPower": "Fortress Power: Select a fortress unit from the discard pile",
     "default": "Select a card",
     "empty": "No eligible cards"
   },
@@ -297,7 +357,13 @@
       "illusion": "Illusion: Select a common unit within 3 spaces to copy abilities",
       "bloodRune": "Blood Rune: Take 1 damage or spend 1 magic to charge",
       "iceShards": "Ice Shards: Spend 1 charge to deal 1 damage to enemies adjacent to buildings?",
-      "feedBeast": "Feed the Beast: Remove an adjacent ally, or self-destruct"
+      "feedBeast": "Feed the Beast: Remove an adjacent ally, or self-destruct",
+      "spiritBond": "Spirit Bond: Select target within 3 to transfer charge, or charge self",
+      "ancestralBond": "Ancestral Bond: Select friendly unit within 3 to transfer charge",
+      "structureShift": "Structure Shift: Select friendly building within 3",
+      "frostAxe": "Frost Axe: Charge self, or spend charges to attach to friendly soldier",
+      "frostAxeSelectTarget": "Frost Axe: Select a friendly soldier within 3 spaces",
+      "vanish": "Vanish: Select a 0-cost friendly unit to swap positions"
     },
     "beforeAttack": {
       "lifeDrain": "Pre-attack: Life Drain ready, select an attack target",
@@ -323,6 +389,21 @@
     "mindControl": {
       "message": "Mind Control: Select enemy units within 2 spaces (selected {{count}})"
     },
+    "entanglement": {
+      "message": "Chant of Entanglement: Select 2 friendly commons within 3 spaces (selected {{count}})"
+    },
+    "sneak": {
+      "selectUnit": "Sneak: Select a 0-cost friendly unit to push/pull (recorded {{count}})",
+      "selectDirection": "Sneak: Select move direction"
+    },
+    "glacialShift": {
+      "selectBuilding": "Glacial Shift: Select a friendly building within 3 spaces (recorded {{count}}/3)",
+      "selectDestination": "Glacial Shift: Select destination (1-2 empty spaces)"
+    },
+    "withdraw": {
+      "selectCost": "Withdraw: Choose cost type",
+      "selectPosition": "Withdraw: Select move destination (1-2 empty spaces)"
+    },
     "hypnoticLure": {
       "message": "Hypnotic Lure: Select an enemy unit"
     },
@@ -346,7 +427,15 @@
     "fireSacrificeSummon": "🔥 Fire Sacrifice Summon (Destroy ally and move)",
     "lifeDrain": "💀 Life Drain (Destroy ally, double strength)",
     "holyArrow": "✨ Holy Arrow (Discard for magic and strength)",
-    "healing": "✨ Healing (Discard to convert attack to healing)"
+    "healing": "✨ Healing (Discard to convert attack to healing)",
+    "prepare": "⚡ Prepare (Charge instead of moving)",
+    "fortressPower": "🏰 Fortress Power (Take fortress unit from discard)",
+    "structureShift": "🛠️ Structure Shift (Move friendly building within 3)",
+    "ancestralBond": "🔗 Ancestral Bond (Charge friendly unit within 3)",
+    "spiritBondSelf": "✨ Spirit Bond (Charge self)",
+    "spiritBondTransfer": "➡️ Spirit Bond (Transfer charge)",
+    "withdraw": "🏃 Withdraw (Spend charge/magic to move)",
+    "vanish": "👻 Vanish (Swap with 0-cost ally)"
   },
   "status": {
     "yourTurn": "Your Turn",

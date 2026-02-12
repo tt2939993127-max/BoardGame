@@ -5,7 +5,7 @@
  * 同时显示摧毁文字提示
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShatterEffect } from '../../../components/common/animations/ShatterEffect';
@@ -52,14 +52,15 @@ const DestroyEffectItem: React.FC<DestroyEffectProps> = ({
     ? getSpriteAtlasStyle(effect.frameIndex, spriteSource.config)
     : undefined;
 
-  // 构建直接图片源（跳过 DOM 截取，更可靠）
-  const imageSource: ShatterImageSource | undefined = spriteSource && spriteStyle
-    ? {
-        url: spriteSource.image,
-        bgSize: spriteStyle.backgroundSize as string,
-        bgPosition: spriteStyle.backgroundPosition as string,
-      }
-    : undefined;
+  // 构建直接图片源（useMemo 稳定引用，防止 ShatterEffect 动画重启）
+  const imageSource = useMemo<ShatterImageSource | undefined>(() => {
+    if (!spriteSource || !spriteStyle) return undefined;
+    return {
+      url: spriteSource.image,
+      bgSize: spriteStyle.backgroundSize as string,
+      bgPosition: spriteStyle.backgroundPosition as string,
+    };
+  }, [spriteSource, spriteStyle]);
 
   return (
     <motion.div

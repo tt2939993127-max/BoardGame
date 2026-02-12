@@ -9,14 +9,14 @@ import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
-import { PROMPT_COMMANDS } from '../../../engine/systems/PromptSystem';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import { createFlowSystem, createDefaultSystems } from '../../../engine';
 import { smashUpFlowHooks } from '../domain/index';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
-import { createSmashUpPromptBridge } from '../domain/systems';
+import { createSmashUpEventSystem } from '../domain/systems';
 import { resolvePromptContinuation } from '../domain/promptContinuation';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
@@ -28,7 +28,7 @@ function createRunner() {
         systems: [
             createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
             ...createDefaultSystems<SmashUpCore>(),
-            createSmashUpPromptBridge(),
+            createSmashUpEventSystem(),
         ],
         playerIds: PLAYER_IDS,
     });
@@ -64,7 +64,7 @@ describe('P7: PromptSystem 集成', () => {
                 name: 'SYS_PROMPT_RESPOND 放行',
                 commands: [
                     ...DRAFT_COMMANDS,
-                    { type: PROMPT_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'test' } },
+                    { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'test' } },
                 ],
             });
             // PromptSystem 拦截并返回 "没有待处理的选择"（不是"未知命令"）
@@ -90,15 +90,14 @@ describe('P7: PromptSystem 集成', () => {
     });
 
     describe('Prompt 基础设施', () => {
-        it('初始状态没有活跃 Prompt 和 pendingPromptContinuation', () => {
+        it('初始状态没有活跃 Interaction', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '初始状态检查',
                 commands: DRAFT_COMMANDS,
             });
-            expect(result.finalState.sys.prompt.current).toBeUndefined();
-            expect(result.finalState.sys.prompt.queue).toEqual([]);
-            expect(result.finalState.core.pendingPromptContinuation).toBeUndefined();
+            expect(result.finalState.sys.interaction.current).toBeUndefined();
+            expect(result.finalState.sys.interaction.queue).toEqual([]);
         });
 
         it('SmashUp Prompt 桥接系统正常注册', () => {
@@ -155,8 +154,7 @@ describe('P7: PromptSystem 集成', () => {
             });
 
             // 只有基地 0 有随从，应自动选择，不创建 Prompt
-            expect(result.finalState.sys.prompt.current).toBeUndefined();
-            expect(result.finalState.core.pendingPromptContinuation).toBeUndefined();
+            expect(result.finalState.sys.interaction.current).toBeUndefined();
         });
     });
 });

@@ -13,6 +13,7 @@ import type { PowerChangeEffect, ActionShowEffect, BaseScoredEffect } from './us
 import { useTranslation } from 'react-i18next';
 import { getCardDef, resolveCardName, resolveCardText } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
+import { UI_Z_INDEX } from '../../../core';
 
 // ============================================================================
 // 力量变化浮字
@@ -32,7 +33,7 @@ const PowerChangeFloat: React.FC<{
       initial={{ opacity: 1, y: 0, scale: 0.8, rotate: -5 }}
       animate={{ opacity: 0, y: -40, scale: 1.2, rotate: 5 }}
       transition={{ duration: 0.8, ease: 'easeOut' }}
-      className="absolute pointer-events-none z-50 select-none"
+      className="absolute pointer-events-none select-none"
       style={{ fontFamily: "'Caveat', 'Comic Sans MS', cursive" }}
     >
       <span className={`text-[1.8vw] font-black drop-shadow-md ${
@@ -64,7 +65,8 @@ const ActionCardShowOverlay: React.FC<{
 
   return (
     <motion.div
-      className="fixed inset-0 z-[80] flex items-center justify-center pointer-events-none"
+      className="fixed inset-0 flex items-center justify-center pointer-events-none"
+      style={{ zIndex: UI_Z_INDEX.overlayRaised }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -144,8 +146,8 @@ const VpFlyEffect: React.FC<{
 
   return (
     <motion.div
-      className="fixed z-[90] pointer-events-none select-none"
-      style={{ left: '50%', top: `${startY}%` }}
+      className="fixed pointer-events-none select-none"
+      style={{ left: '50%', top: `${startY}%`, zIndex: UI_Z_INDEX.overlayRaised }}
       initial={{ opacity: 1, scale: 1.5, x: '-50%' }}
       animate={{ opacity: 0, scale: 0.8, y: -80, x: '-50%' }}
       transition={{ duration: 1, ease: 'easeOut' }}
@@ -216,8 +218,8 @@ export const SmashUpEffectsLayer: React.FC<{
           return (
             <div
               key={pc.id}
-              className="fixed pointer-events-none z-50"
-              style={{ left: rect.right + 8, top: rect.top - 10 }}
+              className="fixed pointer-events-none"
+              style={{ left: rect.right + 8, top: rect.top - 10, zIndex: UI_Z_INDEX.overlayRaised }}
             >
               <PowerChangeFloat
                 effect={pc}

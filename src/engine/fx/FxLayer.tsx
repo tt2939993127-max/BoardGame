@@ -4,7 +4,8 @@
  * 职责：
  * - 遍历 FxBus 中的活跃特效
  * - 根据 cue 查注册表获取 FxRenderer
- * - 渲染 renderer 并传入标准化 props
+ * - 渲染 renderer 并传入标准化 props（含 onImpact）
+ * - onImpact 自动触发反馈包中 timing='on-impact' 的音效和震动
  *
  * 替代原 `BoardEffectsLayer` 的 switch/case 分发逻辑。
  * 额外功能（如召唤暗角遮罩）由游戏侧在 FxLayer 外部自行处理。
@@ -41,7 +42,7 @@ export const FxLayer: React.FC<FxLayerProps> = ({
   onEffectComplete,
   className = '',
 }) => {
-  const { activeEffects, removeEffect, registry } = bus;
+  const { activeEffects, removeEffect, registry, fireImpact } = bus;
 
   // 稳定化外部回调引用
   const onCompleteRef = useRef(onEffectComplete);
@@ -51,6 +52,10 @@ export const FxLayer: React.FC<FxLayerProps> = ({
     onCompleteRef.current?.(id, cue);
     removeEffect(id);
   }, [removeEffect]);
+
+  const handleImpact = useCallback((id: string) => {
+    fireImpact(id);
+  }, [fireImpact]);
 
   return (
     <div
@@ -69,6 +74,7 @@ export const FxLayer: React.FC<FxLayerProps> = ({
               event={event}
               getCellPosition={getCellPosition}
               onComplete={() => handleComplete(event.id, event.cue)}
+              onImpact={() => handleImpact(event.id)}
             />
           );
         })}

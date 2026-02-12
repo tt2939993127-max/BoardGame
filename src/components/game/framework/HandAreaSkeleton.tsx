@@ -9,6 +9,7 @@ import { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { HandAreaFilterContext } from '../../../core/ui';
 import type { HandAreaSkeletonProps } from './types';
 import type { DragOffset } from '../../../core/ui';
+import { useInteractionGuard } from './InteractionGuard';
 
 /**
  * 获取卡牌 ID
@@ -76,6 +77,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
         ? canSelect && (resolvedInteractionMode === 'click' || resolvedInteractionMode === 'both')
         : canSelect;
     const allowCardClick = !resolvedInteractionMode || resolvedInteractionMode !== 'drag';
+    const guard = useInteractionGuard();
 
     // 拖拽状态
     const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
@@ -244,18 +246,26 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
     // 处理卡牌点击（选中/取消选中）
     const handleCardClick = useCallback(
         (cardId: string) => {
-            if (isDraggingRef.current || !allowCardClick) return;
+            if (isDraggingRef.current) return;
+            if (!onCardClick && !onSelectChange) return;
+            if (!allowCardClick) {
+                guard.notifyDenied('hand-area-click-disabled', { key: 'hand-area-click-disabled' });
+                return;
+            }
             // 优先使用通用点击回调（游戏层自定义逻辑）
             if (onCardClick) {
                 onCardClick(cardId);
                 return;
             }
             // 回退到选中/取消选中逻辑
-            if (!allowSelect) return;
+            if (!allowSelect) {
+                guard.notifyDenied('hand-area-select-disabled', { key: 'hand-area-select-disabled' });
+                return;
+            }
             const isCurrentlySelected = selectedCardIds.includes(cardId);
             onSelectChange?.(cardId, !isCurrentlySelected);
         },
-        [allowCardClick, allowSelect, selectedCardIds, onSelectChange, onCardClick]
+        [allowCardClick, allowSelect, selectedCardIds, onSelectChange, onCardClick, guard]
     );
 
     // 解析并执行排序代码

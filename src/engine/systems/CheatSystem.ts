@@ -169,8 +169,10 @@ export function createCheatSystem<TCore>(
     modifier?: CheatResourceModifier<TCore>,
     config: CheatSystemConfig = {}
 ): EngineSystem<TCore> {
-    const isDev = config.devOverride
-        ?? (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
+    const isDev = config.devOverride ?? (
+        (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true
+        || (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production')
+    );
     return {
         id: SYSTEM_IDS.CHEAT,
         name: 'Cheat 系统',

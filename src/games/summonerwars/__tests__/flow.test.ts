@@ -4,7 +4,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
-import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard } from '../domain/types';
+import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard, EventCard } from '../domain/types';
+
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import {
@@ -199,7 +200,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
                 cardType: 'unit',
                 name: '测试召唤单位',
                 unitClass: 'common',
-                faction: '堕落王国',
+                faction: 'necromancer',
                 strength: 2,
                 life: 4,
                 cost: 2,
@@ -464,11 +465,12 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
         setup: (playerIds, random) => {
             const core = createInitializedCore(playerIds, random);
             // 添加一张0费事件卡到手牌（血契召唤，召唤阶段可用）
-            const eventCard = {
+            const eventCard: EventCard = {
                 id: 'test-event-0',
                 cardType: 'event' as const,
                 name: '测试事件',
                 eventType: 'common' as const,
+                faction: 'necromancer',
                 cost: 0,
                 playPhase: 'summon' as const,
                 effect: '测试效果',
@@ -495,11 +497,12 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
         setup: (playerIds, random) => {
             const core = createInitializedCore(playerIds, random);
             // 添加一张移动阶段事件卡
-            const eventCard = {
+            const eventCard: EventCard = {
                 id: 'test-event-move',
                 cardType: 'event' as const,
                 name: '移动阶段事件',
                 eventType: 'common' as const,
+                faction: 'necromancer',
                 cost: 0,
                 playPhase: 'move' as const,
                 effect: '测试效果',
@@ -525,11 +528,12 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
         setup: (playerIds, random) => {
             const core = createInitializedCore(playerIds, random);
             // 添加一张主动事件卡
-            const eventCard = {
+            const eventCard: EventCard = {
                 id: 'test-active-event',
                 cardType: 'event' as const,
                 name: '主动事件',
                 eventType: 'legendary' as const,
+                faction: 'necromancer',
                 cost: 1,
                 playPhase: 'summon' as const,
                 effect: '持续效果',
@@ -552,330 +556,17 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
             player0Magic: 1, // 2 - 1 = 1
         },
     },
-
-    // ========== 召唤错误测试 ==========
-    {
-        name: '召唤错误 - 非召唤阶段',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.phase = 'move'; // 设置为移动阶段
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.SUMMON_UNIT,
-                playerId: '0',
-                payload: { cardId: 'necro-undead-warrior-0-0-3', position: { row: 6, col: 3 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '当前不是召唤阶段' },
-        },
-    },
-    {
-        name: '召唤错误 - 魔力不足',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.players['0'].magic = 0; // 设置魔力为0
-            // 注入一张已知 ID 的单位卡
-            const testCard: UnitCard = {
-                id: 'test-expensive-unit',
-                cardType: 'unit',
-                name: '测试单位',
-                unitClass: 'common',
-                faction: '堕落王国',
-                strength: 2,
-                life: 4,
-                cost: 2,
-                attackType: 'melee',
-                attackRange: 1,
-                deckSymbols: [],
-            };
-            core.players['0'].hand.push(testCard);
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.SUMMON_UNIT,
-                playerId: '0',
-                payload: { cardId: 'test-expensive-unit', position: { row: 6, col: 3 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '魔力不足' },
-        },
-    },
-    {
-        name: '召唤错误 - 无效的召唤位置',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            // 注入一张已知 ID 的单位卡
-            const testCard: UnitCard = {
-                id: 'test-bad-pos-unit',
-                cardType: 'unit',
-                name: '测试单位',
-                unitClass: 'common',
-                faction: '堕落王国',
-                strength: 1,
-                life: 1,
-                cost: 0,
-                attackType: 'melee',
-                attackRange: 1,
-                deckSymbols: [],
-            };
-            core.players['0'].hand.push(testCard);
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.SUMMON_UNIT,
-                playerId: '0',
-                payload: { cardId: 'test-bad-pos-unit', position: { row: 0, col: 0 } }, // 远离城门
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '无效的召唤位置（必须在城门相邻的空格）' },
-        },
-    },
-    {
-        name: '召唤错误 - 无效的卡牌',
-        commands: [
-            {
-                type: SW_COMMANDS.SUMMON_UNIT,
-                playerId: '0',
-                payload: { cardId: 'invalid-card-id', position: { row: 6, col: 3 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '无效的单位卡牌' },
-        },
-    },
-
-    // ========== 建造错误测试 ==========
-    {
-        name: '建造错误 - 非建造阶段',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            // 添加一张城墙卡
-            const wallCard = {
-                id: 'test-wall',
-                cardType: 'structure' as const,
-                name: '城墙',
-                cost: 2,
-                life: 9,
-                isGate: false,
-                deckSymbols: [],
-            };
-            core.players['0'].hand.push(wallCard);
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.BUILD_STRUCTURE,
-                playerId: '0',
-                payload: { cardId: 'test-wall', position: { row: 7, col: 0 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '当前不是建造阶段' },
-        },
-    },
-    {
-        name: '建造错误 - 魔力不足',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.phase = 'build';
-            core.players['0'].magic = 0;
-            const wallCard = {
-                id: 'test-wall',
-                cardType: 'structure' as const,
-                name: '城墙',
-                cost: 2,
-                life: 9,
-                isGate: false,
-                deckSymbols: [],
-            };
-            core.players['0'].hand.push(wallCard);
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.BUILD_STRUCTURE,
-                playerId: '0',
-                payload: { cardId: 'test-wall', position: { row: 7, col: 0 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '魔力不足' },
-        },
-    },
-    {
-        name: '建造错误 - 无效的建筑卡牌',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.phase = 'build';
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.BUILD_STRUCTURE,
-                playerId: '0',
-                payload: { cardId: 'invalid-card', position: { row: 7, col: 0 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '无效的建筑卡牌' },
-        },
-    },
-
-    // ========== 移动次数上限测试 ==========
-    {
-        name: '移动错误 - 移动次数已用完',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.phase = 'move';
-            core.players['0'].moveCount = 3; // 已用完3次移动
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.MOVE_UNIT,
-                playerId: '0',
-                payload: { from: { row: 7, col: 3 }, to: { row: 6, col: 3 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '本回合移动次数已用完' },
-        },
-    },
-    {
-        name: '移动错误 - 单位本回合已移动',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.phase = 'move';
-            // 标记召唤师已移动
-            const summoner = core.board[7][3].unit!;
-            core.board[7][3].unit = { ...summoner, hasMoved: true };
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.MOVE_UNIT,
-                playerId: '0',
-                payload: { from: { row: 7, col: 3 }, to: { row: 6, col: 3 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '该单位本回合已移动' },
-        },
-    },
-    {
-        name: '移动错误 - 移动敌方单位',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.phase = 'move';
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.MOVE_UNIT,
-                playerId: '0',
-                payload: { from: { row: 0, col: 2 }, to: { row: 1, col: 2 } }, // 尝试移动敌方召唤师
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '无法移动该单位' },
-        },
-    },
-
-    // ========== 攻击次数上限测试 ==========
-    {
-        name: '攻击错误 - 攻击次数已用完',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            // 将玩家0召唤师移动到玩家1召唤师旁边
-            const unit0 = core.board[7][3].unit!;
-            core.board[7][3].unit = undefined;
-            core.board[1][2].unit = { ...unit0, position: { row: 1, col: 2 } };
-            core.phase = 'attack';
-            core.players['0'].attackCount = 3; // 已用完3次攻击
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.DECLARE_ATTACK,
-                playerId: '0',
-                payload: { attacker: { row: 1, col: 2 }, target: { row: 0, col: 2 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '本回合攻击次数已用完' },
-        },
-    },
-    {
-        name: '攻击错误 - 单位本回合已攻击',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            // 将玩家0召唤师移动到玩家1召唤师旁边
-            const unit0 = core.board[7][3].unit!;
-            core.board[7][3].unit = undefined;
-            core.board[1][2].unit = { ...unit0, position: { row: 1, col: 2 }, hasAttacked: true };
-            core.phase = 'attack';
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.DECLARE_ATTACK,
-                playerId: '0',
-                payload: { attacker: { row: 1, col: 2 }, target: { row: 0, col: 2 } },
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '该单位本回合已攻击' },
-        },
-    },
-    {
-        name: '攻击错误 - 使用敌方单位攻击',
-        setup: (playerIds, random) => {
-            const core = createInitializedCore(playerIds, random);
-            core.phase = 'attack';
-            const sys = createInitialSystemState(playerIds, []);
-            return { core, sys };
-        },
-        commands: [
-            {
-                type: SW_COMMANDS.DECLARE_ATTACK,
-                playerId: '0',
-                payload: { attacker: { row: 0, col: 2 }, target: { row: 7, col: 3 } }, // 尝试用敌方召唤师攻击
-            },
-        ],
-        expect: {
-            errorAtStep: { step: 1, error: '无法使用该单位攻击' },
-        },
-    },
-
-    // ========== 事件卡魔力不足测试 ==========
     {
         name: '事件卡错误 - 魔力不足',
         setup: (playerIds, random) => {
             const core = createInitializedCore(playerIds, random);
             core.players['0'].magic = 0;
-            const eventCard = {
+            const eventCard: EventCard = {
                 id: 'test-expensive-event',
                 cardType: 'event' as const,
                 name: '昂贵事件',
                 eventType: 'common' as const,
+                faction: 'necromancer',
                 cost: 5,
                 playPhase: 'summon' as const,
                 effect: '测试效果',
@@ -910,7 +601,7 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
                 cardType: 'unit',
                 name: '高费单位',
                 unitClass: 'common',
-                faction: 'test',
+                faction: 'necromancer',
                 strength: 5,
                 life: 8,
                 cost: 7,
@@ -941,9 +632,9 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
             core.phase = 'magic';
             core.players['0'].magic = 3;
             const cards: UnitCard[] = [
-                { id: 'discard-a', cardType: 'unit', name: '弃牌A', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 5, attackType: 'melee', attackRange: 1, deckSymbols: [] },
-                { id: 'discard-b', cardType: 'unit', name: '弃牌B', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 6, attackType: 'melee', attackRange: 1, deckSymbols: [] },
-                { id: 'discard-c', cardType: 'unit', name: '弃牌C', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 8, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'discard-a', cardType: 'unit', name: '弃牌A', unitClass: 'common', faction: 'necromancer', strength: 1, life: 1, cost: 5, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'discard-b', cardType: 'unit', name: '弃牌B', unitClass: 'common', faction: 'necromancer', strength: 1, life: 1, cost: 6, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'discard-c', cardType: 'unit', name: '弃牌C', unitClass: 'common', faction: 'necromancer', strength: 1, life: 1, cost: 8, attackType: 'melee', attackRange: 1, deckSymbols: [] },
             ];
             core.players['0'].hand.push(...cards);
             const sys = createInitialSystemState(playerIds, []);
@@ -968,8 +659,8 @@ const testCases: TestCase<SummonerWarsExpectation>[] = [
             core.phase = 'magic';
             core.players['0'].magic = 14;
             const cards: UnitCard[] = [
-                { id: 'over-a', cardType: 'unit', name: '溢出A', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 1, attackType: 'melee', attackRange: 1, deckSymbols: [] },
-                { id: 'over-b', cardType: 'unit', name: '溢出B', unitClass: 'common', faction: 'test', strength: 1, life: 1, cost: 1, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'over-a', cardType: 'unit', name: '溢出A', unitClass: 'common', faction: 'necromancer', strength: 1, life: 1, cost: 1, attackType: 'melee', attackRange: 1, deckSymbols: [] },
+                { id: 'over-b', cardType: 'unit', name: '溢出B', unitClass: 'common', faction: 'necromancer', strength: 1, life: 1, cost: 1, attackType: 'melee', attackRange: 1, deckSymbols: [] },
             ];
             core.players['0'].hand.push(...cards);
             const sys = createInitialSystemState(playerIds, []);

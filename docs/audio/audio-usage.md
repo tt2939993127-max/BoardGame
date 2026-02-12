@@ -3,6 +3,21 @@
 > 本文用于补齐“音频文件如何接入/压缩/注册”的完整流程，与图片资源规范保持一致。
 > 新增音频的全链路流程详见：`docs/audio/add-audio.md`
 
+
+## 音频资源架构（强制）
+
+**三层架构**：
+1. **通用注册表**（`public/assets/common/audio/registry.json`）：所有音效资源的唯一来源，包含 key 和物理路径映射。
+2. **游戏配置**（`src/games/<gameId>/audio.config.ts`）：定义事件音效的映射规则（`feedbackResolver`），使用通用注册表中的 key。
+3. **FX 系统**（`src/games/<gameId>/ui/fxSetup.ts`）：直接使用通用注册表中的 key 定义 `FeedbackPack`，不依赖游戏配置常量。
+
+**核心原则**：
+- **禁止重复定义**：音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用 key 字符串，不再定义常量。
+- **禁止**在游戏层定义音频资源（`audio.config.ts` 不得声明 `basePath/sounds`）。
+- **禁止**在 `src/games/<gameId>/` 下放音频文件或自建音频目录。
+- **禁止**使用旧短 key（如 `click` / `dice_roll` / `card_draw`）。
+- **必须**使用 registry 的完整 key（如 `ui.general....uiclick_dialog_choice_01_krst_none`）。
+
 ## 1. 目录与来源（强制）
 - **唯一音频资源目录**：`public/assets/common/audio/`
 - **禁止**在 `src/games/<gameId>/` 下放音频文件或自建音频目录。
@@ -43,8 +58,11 @@ node scripts/audio/generate_audio_assets_md.js
 
 - 产出：`docs/audio/common-audio-assets.md`
 
-### 2.4 生成 AI 精简 registry（可选）
+### 2.4 生成 AI 精简 registry（强烈推荐）
 用于减少 AI 查找音效时的 token 消耗（不影响运行时）。
+
+> 说明：AI 在挑选/替换音效时**优先**使用精简 registry（`registry.ai*.json`）+ 语义目录（`audio-catalog.md`）定位候选 key。
+> 仅当目录/精简库不足以定位时，再回退到全量 `public/assets/common/audio/registry.json`。
 
 **全量精简版（全仓库通用）**
 ```bash
@@ -63,13 +81,18 @@ node scripts/audio/generate_ai_audio_registry_dicethrone.js
 ### 2.5 AI 查找/筛选音效（推荐流程）
 **目标**：在挑选音效时，用最小 token 成本定位合适 key。
 
-**首选方法：语义目录**
+**首选方法：语义目录（强制执行，除非明确说明不需要）**
 
 1. 打开 `docs/audio/audio-catalog.md`（42 KB，531 个语义组，AI 可一次性读取）
 2. 搜索场景关键词（如 `negative`、`click`、`sword`、`heal`、`alert`）
 3. 找到组后，复制 grep 模式列的值（如 `puzzle.*negative_pop`）
 4. 在 `registry.json` 中 grep 该模式获取完整 key
 5. 变体替换末尾数字/字母（`_01` → `_02`）
+
+> 强制说明：凡是“找音效 key / 给候选列表 / 替换音效”的任务，AI 必须优先使用：
+> 1) `docs/audio/audio-catalog.md`（语义目录）
+> 2) `docs/audio/registry.ai.json` 或 `docs/audio/registry.ai.<gameId>.json`（精简 registry，如存在）
+> 仅当以上信息不足以定位 key，才允许回退到全量 `public/assets/common/audio/registry.json`。
 
 **生成/更新目录：**
 ```bash
@@ -125,7 +148,7 @@ return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_sy
 ```
 
 ### 3.2 事件音 vs UI 音 vs 拒绝音（统一标准）
-- **游戏态事件音**：通过事件流触发（`eventSoundResolver` / `audioKey` / `audioCategory`）。
+- **游戏态事件音**：通过事件流触发（`feedbackResolver` / `audioKey` / `audioCategory`）。
 - **UI 点击音**：仅用于纯 UI 操作（面板/Tab 切换），通过 `GameButton`。
 - **操作拒绝音**：用户尝试不合法操作时（非自己回合、条件不满足等），通过 `playDeniedSound()` 播放（key: `puzzle.18.negative_pop_01`）。
 - **单一来源原则**：同一动作只能由"事件音"、"按钮音"或"拒绝音"其中之一触发，禁止重复。
@@ -136,6 +159,30 @@ return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_sy
 event.audioKey = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
 event.audioCategory = { group: 'ui', sub: 'click' };
 ```
+
+### 3.3 音效预加载策略（新增）
+- **criticalSounds**：进入游戏后立即预加载的“首回合高频音效”。数量建议 5~15。
+- **contextualPreloadKeys**：基于上下文增量预热（如选派系/卡组后加载对应音效）。
+- **UI 层提前预热**：在 UI 即将出现前手动调用 `AudioManager.preloadKeys()`，用于单个按钮/步骤的点击音。
+
+示例：
+```ts
+// 游戏配置：上下文预加载
+contextualPreloadKeys: (context) => {
+  return context.G?.selectedFactions ? ['ui.general.menu_click_01'] : [];
+}
+
+// UI 层：进入教程后预热按钮音效
+AudioManager.preloadKeys(['ui.general.menu_click_01']);
+```
+
+### 3.4 骰子游戏通用音效选择策略
+- **目标**：掷骰音效按骰子数量分流，避免单骰与多骰混用。
+- **规则**：
+  - `diceCount = 1`：固定使用单骰 key（`dice_roll_velvet_001`）。
+  - `diceCount >= 2`：从多骰池随机（建议 `minGap=1` 防止连续重复）。
+- **统一入口**：使用 `pickDiceRollSoundKey()`，禁止游戏内重复实现。
+- **接入点**：事件流（如 `DICE_ROLLED` / `UNIT_ATTACKED`）或 UI 掷骰展示时。
 
 ## 4. BGM 选曲与分配规范（强制）
 
@@ -192,3 +239,4 @@ event.audioCategory = { group: 'ui', sub: 'click' };
 - [ ] 游戏层 `audio.config.ts` 不含 `basePath/sounds`
 - [ ] 音频播放代码不在 `ctx.resume()` 后同步检查 context 状态
 - [ ] BGM 播放不用 `isContextSuspended()` 拦截
+

@@ -6,7 +6,7 @@
  * 5: Card (卡牌)
  * 6: Shadow (暗影)
  */
-import type { DiceDefinition } from '../../../../systems/DiceSystem/types';
+import type { DiceDefinition } from '../../../../engine/primitives';
 import { SHADOW_THIEF_DICE_FACE_IDS } from '../../domain/ids';
 
 export const shadowThiefDiceDefinition: DiceDefinition = {

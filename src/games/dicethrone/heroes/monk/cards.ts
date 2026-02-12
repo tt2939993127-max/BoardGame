@@ -6,7 +6,7 @@ import type { AbilityCard } from '../../types';
 import { DICE_FACE_IDS, TOKEN_IDS, STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import type { RandomFn } from '../../../../engine/types';
-import type { AbilityEffect, AbilityDef, EffectTiming, EffectCondition } from '../../../../systems/presets/combat';
+import type { AbilityEffect, AbilityDef, EffectTiming, EffectCondition } from '../../domain/combat';
 import {
     MONK_SFX_PUNCH_1,
     MONK_SFX_PUNCH_2,

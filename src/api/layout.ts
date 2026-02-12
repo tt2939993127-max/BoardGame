@@ -57,11 +57,6 @@ const postLayout = async (path: string, payload: string): Promise<LayoutSaveResp
 
 export const saveSummonerWarsLayout = async (config: BoardLayoutConfig): Promise<LayoutSaveResponse> => {
     const payload = JSON.stringify(config);
-    // TODO: 调试布局保存后移除日志（确认 400 根因后删除）
-    const gridInfo = config?.grid
-        ? `rows=${config.grid.rows} cols=${config.grid.cols}`
-        : 'none';
-    console.log(`[LayoutSave] request url=${LAYOUT_API_URL}/summonerwars payloadBytes=${payload?.length ?? 0} version=${config?.version ?? 'none'} grid=${gridInfo} zones=${config?.zones?.length ?? 0} tracks=${config?.tracks?.length ?? 0} stacks=${config?.stackPoints?.length ?? 0}`);
     if (!payload) {
         throw new Error('layoutConfig.invalid');
     }

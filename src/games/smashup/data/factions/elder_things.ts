@@ -83,7 +83,7 @@ export const ELDER_THINGS_ACTIONS: ActionCardDef[] = [
     {
         id: 'elder_thing_dunwich_horror',
         type: 'action',
-        subtype: 'standard',
+        subtype: 'ongoing',
         name: '敦威治恐怖',
         nameEn: 'Dunwich Horror',
         faction: 'elder_things',

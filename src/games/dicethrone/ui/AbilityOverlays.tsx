@@ -2,8 +2,9 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { saveDiceThroneAbilityLayout } from '../../../api/layout';
+import { UI_Z_INDEX } from '../../../core';
 import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
-import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { CardPreviewRef } from '../../../core';
 import type { AbilityCard } from '../types';
 // 导入所有英雄的卡牌定义
 import { MONK_CARDS } from '../heroes/monk/cards';
@@ -186,9 +187,11 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         const { t } = useTranslation('game-dicethrone');
 
         // 游戏级布局配置：所有用户共享一致的默认布局
-        const [slots, setSlots] = React.useState(() => (
-            DEFAULT_ABILITY_SLOT_LAYOUT.map(slot => ({ ...slot }))
-        ));
+        const [slots, setSlots] = React.useState(() => {
+            const initial = DEFAULT_ABILITY_SLOT_LAYOUT.map(slot => ({ ...slot }));
+            console.warn('[AbilityOverlays] 布局数据来源:', JSON.stringify(initial.map(s => ({ id: s.id, x: s.x, y: s.y, w: s.w, h: s.h }))));
+            return initial;
+        });
         const [editingId, setEditingId] = React.useState<string | null>(null);
         const containerRef = React.useRef<HTMLDivElement>(null);
         const dragInfo = React.useRef<{ id: string, type: 'move' | 'resize', startX: number, startY: number, startVal: { x: number; y: number; w: number; h: number } } | null>(null);
@@ -252,7 +255,8 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         return (
             <div
                 ref={containerRef}
-                className="absolute inset-0 z-20 pointer-events-none"
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: UI_Z_INDEX.hud }}
                 data-tutorial-id="ability-slots"
             >
                 {slots.map((slot) => {

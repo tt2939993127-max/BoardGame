@@ -6,13 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { AudioEvent } from '../../../lib/audio/types';
 import {
-    COMBAT_STRUCTURE_DAMAGE_KEY,
-    COMBAT_STRUCTURE_DESTROY_KEY,
-    COMBAT_UNIT_DESTROY_KEY,
-    resolveDamageSound,
-    resolveMeleeAttackSound,
-    resolveRangedAttackSound,
-    resolveStructureDestroySound,
+    resolveDiceRollSound,
     SUMMONER_WARS_AUDIO_CONFIG,
 } from '../audio.config';
 import { SW_EVENTS } from '../domain/types';
@@ -116,6 +110,14 @@ const RANGED_ATTACK_KEYS = [
     'combat.general.mini_games_sound_effects_and_music_pack.bow.sfx_weapon_bow_shoot_3',
 ];
 
+const DICE_ROLL_SINGLE_KEY = 'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_001';
+const DICE_ROLL_MULTI_KEYS = [
+    'dice.decks_and_cards_sound_fx_pack.few_dice_roll_001',
+    'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_003',
+    'dice.decks_and_cards_sound_fx_pack.few_dice_roll_005',
+];
+const DICE_ROLL_KEYS = [DICE_ROLL_SINGLE_KEY, ...DICE_ROLL_MULTI_KEYS];
+
 const MOVE_SWING_KEYS = [
     'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1',
     'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_small_1',
@@ -150,99 +152,97 @@ const mockContext = {
     meta: { currentPlayerId: '0' },
 } as any;
 
+const resolveKey = (event: AudioEvent): string | undefined => {
+    const resolver = SUMMONER_WARS_AUDIO_CONFIG.feedbackResolver;
+    if (!resolver) throw new Error('feedbackResolver 未定义');
+    return resolver(event, mockContext)?.key;
+};
+
 describe('Summoner Wars 音效配置', () => {
     it('应解析基础事件音效', () => {
-        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
-
-        expect(resolver({ type: SW_EVENTS.FACTION_SELECTED } as AudioEvent, mockContext)).toBe(SELECTION_KEY);
-        expect(resolver({ type: SW_EVENTS.PLAYER_READY } as AudioEvent, mockContext)).toBe(POSITIVE_SIGNAL_KEY);
-        expect(resolver({ type: SW_EVENTS.HOST_STARTED } as AudioEvent, mockContext)).toBe(UPDATE_CHIME_KEY);
-        expect(resolver({ type: SW_EVENTS.UNIT_SUMMONED } as AudioEvent, mockContext)).toBe(SUMMON_KEY);
-        expect(resolver({ type: SW_EVENTS.UNIT_MOVED } as AudioEvent, mockContext)).toBe(MOVE_FALLBACK_KEY);
-        expect(resolver({ type: SW_EVENTS.STRUCTURE_BUILT } as AudioEvent, mockContext)).toBe(BUILD_KEY);
-        expect(resolver({ type: SW_EVENTS.CARD_DRAWN } as AudioEvent, mockContext)).toBe(CARD_DRAW_KEY);
-        expect(resolver({ type: SW_EVENTS.CARD_DISCARDED } as AudioEvent, mockContext)).toBe(CARD_DISCARD_KEY);
-        expect(resolver({ type: SW_EVENTS.EVENT_PLAYED } as AudioEvent, mockContext)).toBe(EVENT_PLAY_KEY);
-        expect(resolver({ type: SW_EVENTS.UNIT_CHARGED } as AudioEvent, mockContext)).toBe(UNIT_CHARGE_KEY);
-        expect(resolver({ type: SW_EVENTS.HEALING_MODE_SET } as AudioEvent, mockContext)).toBe(HEAL_MODE_KEY);
+        expect(resolveKey({ type: SW_EVENTS.FACTION_SELECTED } as AudioEvent)).toBe(SELECTION_KEY);
+        expect(resolveKey({ type: SW_EVENTS.PLAYER_READY } as AudioEvent)).toBe(POSITIVE_SIGNAL_KEY);
+        expect(resolveKey({ type: SW_EVENTS.HOST_STARTED } as AudioEvent)).toBe(UPDATE_CHIME_KEY);
+        // UNIT_SUMMONED 音效由 FX 系统播放，不在 feedbackResolver 中返回
+        expect(resolveKey({ type: SW_EVENTS.UNIT_SUMMONED } as AudioEvent)).toBeNull();
+        expect(resolveKey({ type: SW_EVENTS.UNIT_MOVED } as AudioEvent)).toBe(MOVE_FALLBACK_KEY);
+        expect(resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT } as AudioEvent)).toBe(BUILD_KEY);
+        expect(resolveKey({ type: SW_EVENTS.CARD_DRAWN } as AudioEvent)).toBe(CARD_DRAW_KEY);
+        expect(resolveKey({ type: SW_EVENTS.CARD_DISCARDED } as AudioEvent)).toBe(CARD_DISCARD_KEY);
+        expect(resolveKey({ type: SW_EVENTS.EVENT_PLAYED } as AudioEvent)).toBe(EVENT_PLAY_KEY);
+        expect(resolveKey({ type: SW_EVENTS.UNIT_CHARGED } as AudioEvent)).toBe(UNIT_CHARGE_KEY);
+        expect(resolveKey({ type: SW_EVENTS.HEALING_MODE_SET } as AudioEvent)).toBe(HEAL_MODE_KEY);
     });
 
     it('应区分传送门与城墙的建造/摧毁音效', () => {
-        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
-
         // 城墙建造 → 放置音
-        const wallBuild = resolver({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: false } } } as AudioEvent, mockContext);
+        const wallBuild = resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: false } } } as AudioEvent);
         expect(wallBuild).toBe(BUILD_KEY);
 
         // 传送门建造 → 时空裂隙打开音
-        const gateBuild = resolver({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: true } } } as AudioEvent, mockContext);
+        const gateBuild = resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: true } } } as AudioEvent);
         expect(GATE_BUILD_KEYS).toContain(gateBuild);
 
         // 城墙摧毁 → 石块崩碎
-        const wallDestroy = resolveStructureDestroySound(false);
+        const wallDestroy = resolveKey({
+            type: SW_EVENTS.STRUCTURE_DESTROYED,
+            payload: { isGate: false },
+        } as AudioEvent);
         expect(wallDestroy).toBe(STRUCTURE_DESTROY_KEY);
 
         // 传送门摧毁 → 时空裂隙关闭音
-        const gateDestroy = resolveStructureDestroySound(true);
+        const gateDestroy = resolveKey({
+            type: SW_EVENTS.STRUCTURE_DESTROYED,
+            payload: { isGate: true },
+        } as AudioEvent);
         expect(GATE_DESTROY_KEYS).toContain(gateDestroy);
     });
 
     it('应解析伤害与治疗音效', () => {
-        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
-
-        const light = resolveDamageSound(1);
-        const heavy = resolveDamageSound(3);
-        expect(light).toBe(DAMAGE_LIGHT_KEY);
-        expect(heavy).toBe(DAMAGE_HEAVY_KEY);
-        expect(resolver({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 1 } } as AudioEvent, mockContext)).toBeUndefined();
-        expect(resolver({ type: SW_EVENTS.UNIT_HEALED } as AudioEvent, mockContext)).toBe(HEAL_KEY);
-        expect(resolver({ type: SW_EVENTS.STRUCTURE_HEALED } as AudioEvent, mockContext)).toBe(HEAL_KEY);
-        expect(resolver({ type: SW_EVENTS.STRUCTURE_DAMAGED } as AudioEvent, mockContext)).toBeUndefined();
-        expect(resolver({ type: SW_EVENTS.UNIT_DESTROYED } as AudioEvent, mockContext)).toBeUndefined();
-        expect(COMBAT_STRUCTURE_DAMAGE_KEY).toBe(STRUCTURE_DAMAGE_KEY);
-        expect(COMBAT_UNIT_DESTROY_KEY).toBe(UNIT_DESTROY_KEY);
-        expect(COMBAT_STRUCTURE_DESTROY_KEY).toBe(STRUCTURE_DESTROY_KEY);
+        expect(resolveKey({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 1 } } as AudioEvent)).toBe(DAMAGE_LIGHT_KEY);
+        expect(resolveKey({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 3 } } as AudioEvent)).toBe(DAMAGE_HEAVY_KEY);
+        expect(resolveKey({ type: SW_EVENTS.UNIT_HEALED } as AudioEvent)).toBe(HEAL_KEY);
+        expect(resolveKey({ type: SW_EVENTS.STRUCTURE_HEALED } as AudioEvent)).toBe(HEAL_KEY);
+        expect(resolveKey({ type: SW_EVENTS.UNIT_DESTROYED } as AudioEvent)).toBe(UNIT_DESTROY_KEY);
     });
 
     it('应解析魔力变化音效', () => {
-        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
-
-        const gain = resolver({ type: SW_EVENTS.MAGIC_CHANGED, payload: { delta: 2 } } as AudioEvent, mockContext);
-        const spend = resolver({ type: SW_EVENTS.MAGIC_CHANGED, payload: { delta: -1 } } as AudioEvent, mockContext);
+        const gain = resolveKey({ type: SW_EVENTS.MAGIC_CHANGED, payload: { delta: 2 } } as AudioEvent);
+        const spend = resolveKey({ type: SW_EVENTS.MAGIC_CHANGED, payload: { delta: -1 } } as AudioEvent);
         expect(gain).toBe(MAGIC_GAIN_KEY);
         expect(spend).toBe(MAGIC_SPEND_KEY);
     });
 
     it('应解析近战/远程与位移音效', () => {
-        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
-
-        expect(resolver({ type: SW_EVENTS.UNIT_ATTACKED } as AudioEvent, mockContext)).toBeUndefined();
-        const meleeKey = resolveMeleeAttackSound();
-        expect([...MELEE_LIGHT_KEYS, ...MELEE_HEAVY_KEYS]).toContain(meleeKey);
-
-        const rangedKey = resolveRangedAttackSound();
+        const attackKey = resolveKey({ type: SW_EVENTS.UNIT_ATTACKED } as AudioEvent);
+        expect(MELEE_LIGHT_KEYS).toContain(attackKey);
+        const rangedKey = resolveKey({
+            type: SW_EVENTS.UNIT_ATTACKED,
+            payload: { attackType: 'ranged' },
+        } as AudioEvent);
         expect(RANGED_ATTACK_KEYS).toContain(rangedKey);
 
-        const moveKey = resolver({ type: SW_EVENTS.UNIT_PUSHED } as AudioEvent, mockContext);
+        const moveKey = resolveKey({ type: SW_EVENTS.UNIT_PUSHED } as AudioEvent);
         expect(MOVE_SWING_KEYS).toContain(moveKey);
     });
 
-    it('应解析技能音效', () => {
-        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
+    it('掷骰音效应按骰子数量选择', () => {
+        const single = resolveDiceRollSound(1);
+        expect(single).toBe(DICE_ROLL_SINGLE_KEY);
 
-        const reviveKey = resolver({ type: SW_EVENTS.UNIT_SUMMONED, payload: { sourceAbilityId: 'revive_undead' } } as AudioEvent, mockContext);
-        const telekinesisKey = resolver({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'telekinesis' } } as AudioEvent, mockContext);
-        const guidanceKey = resolver({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'guidance' } } as AudioEvent, mockContext);
-        const vanishKey = resolver({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'vanish' } } as AudioEvent, mockContext);
-        const structureShiftKey = resolver({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'structure_shift' } } as AudioEvent, mockContext);
-        const rapidFireKey = resolver({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'rapid_fire' } } as AudioEvent, mockContext);
-        expect(reviveKey).toBe(ABILITY_KEYS.reviveUndead);
+        const multi = resolveDiceRollSound(3);
+        expect(DICE_ROLL_MULTI_KEYS).toContain(multi);
+    });
+
+    it('应解析技能音效', () => {
+        // revive_undead 的召唤音效由 FX 系统播放，不在 feedbackResolver 中返回
+        const reviveKey = resolveKey({ type: SW_EVENTS.UNIT_SUMMONED, payload: { sourceAbilityId: 'revive_undead' } } as AudioEvent);
+        const telekinesisKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'telekinesis' } } as AudioEvent);
+        const guidanceKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'guidance' } } as AudioEvent);
+        const vanishKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'vanish' } } as AudioEvent);
+        const structureShiftKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'structure_shift' } } as AudioEvent);
+        const rapidFireKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'rapid_fire' } } as AudioEvent);
+        expect(reviveKey).toBeNull(); // 召唤音效由 FX 系统播放
         expect(telekinesisKey).toBe(ABILITY_KEYS.telekinesis);
         expect(guidanceKey).toBe(ABILITY_KEYS.guidance);
         expect(vanishKey).toBe(ABILITY_KEYS.vanish);
@@ -251,11 +251,56 @@ describe('Summoner Wars 音效配置', () => {
     });
 
     it('应解析控制与请求音效', () => {
-        const resolver = SUMMONER_WARS_AUDIO_CONFIG.eventSoundResolver;
-        if (!resolver) throw new Error('eventSoundResolver 未定义');
+        expect(resolveKey({ type: SW_EVENTS.CONTROL_TRANSFERRED } as AudioEvent)).toBe(MAGIC_SHOCK_KEY);
+        expect(resolveKey({ type: SW_EVENTS.SOUL_TRANSFER_REQUESTED } as AudioEvent)).toBe(PROMPT_KEY);
+    });
 
-        expect(resolver({ type: SW_EVENTS.CONTROL_TRANSFERRED } as AudioEvent, mockContext)).toBe(MAGIC_SHOCK_KEY);
-        expect(resolver({ type: SW_EVENTS.SOUL_TRANSFER_REQUESTED } as AudioEvent, mockContext)).toBe(PROMPT_KEY);
+    it('上下文预加载包含已选阵营的移动与技能音效', () => {
+        const resolver = SUMMONER_WARS_AUDIO_CONFIG.contextualPreloadKeys;
+        if (!resolver) throw new Error('contextualPreloadKeys 未定义');
+
+        const keys = resolver({
+            G: {
+                selectedFactions: { '0': 'goblin', '1': 'unselected' },
+            },
+            ctx: {},
+            meta: { currentPlayerId: '0' },
+        } as any);
+
+        // 阵营专属音效
+        const expectedMove = FACTION_MOVE_KEYS.goblin ?? [];
+        expectedMove.forEach((key) => {
+            expect(keys).toContain(key);
+        });
+        expect(keys).toContain(ABILITY_KEYS.vanish);
+
+        // 通用战斗音效（选角后即预加载）
+        MELEE_LIGHT_KEYS.forEach((key) => expect(keys).toContain(key));
+        MELEE_HEAVY_KEYS.forEach((key) => expect(keys).toContain(key));
+        RANGED_ATTACK_KEYS.forEach((key) => expect(keys).toContain(key));
+        MOVE_SWING_KEYS.forEach((key) => expect(keys).toContain(key));
+        DICE_ROLL_KEYS.forEach((key) => expect(keys).toContain(key));
+        expect(keys).toContain(DAMAGE_HEAVY_KEY);
+        expect(keys).toContain(UNIT_DESTROY_KEY);
+        expect(keys).toContain(STRUCTURE_DAMAGE_KEY);
+        expect(keys).toContain(STRUCTURE_DESTROY_KEY);
+        GATE_BUILD_KEYS.forEach((key) => expect(keys).toContain(key));
+        GATE_DESTROY_KEYS.forEach((key) => expect(keys).toContain(key));
+    });
+
+    it('无人选角时不预加载', () => {
+        const resolver = SUMMONER_WARS_AUDIO_CONFIG.contextualPreloadKeys;
+        if (!resolver) throw new Error('contextualPreloadKeys 未定义');
+
+        const keys = resolver({
+            G: {
+                selectedFactions: { '0': 'unselected', '1': 'unselected' },
+            },
+            ctx: {},
+            meta: { currentPlayerId: '0' },
+        } as any);
+
+        expect(keys).toHaveLength(0);
     });
 
     it('应按阶段切换 BGM', () => {
@@ -267,7 +312,7 @@ describe('Summoner Wars 音效配置', () => {
     });
 
     it('应定义 BGM 分组', () => {
-        const groups = SUMMONER_WARS_AUDIO_CONFIG.bgmGroups ?? {};
+        const groups = (SUMMONER_WARS_AUDIO_CONFIG.bgmGroups ?? {}) as Record<string, string[]>;
         expect(groups.normal).toBeDefined();
         expect(groups.battle).toBeDefined();
         expect(groups.normal).toContain(BGM_TO_THE_WALL_KEY);
@@ -334,6 +379,7 @@ describe('Summoner Wars 音效配置', () => {
             ...MELEE_HEAVY_KEYS,
             ...RANGED_ATTACK_KEYS,
             ...MOVE_SWING_KEYS,
+            ...DICE_ROLL_KEYS,
             ...Object.values(ABILITY_KEYS),
             ...abilitySfxKeys,
         ];

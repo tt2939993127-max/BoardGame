@@ -24,6 +24,8 @@ const ALL_TIP_IMAGES = [
 
 // 通用资源路径
 const COMMON_PATHS = {
+    map: 'summonerwars/common/map',
+    cardback: 'summonerwars/common/cardback',
     portal: 'summonerwars/common/Portal',
     dice: 'summonerwars/common/dice',
 };
@@ -50,6 +52,10 @@ describe('summonerWarsCriticalImageResolver', () => {
     it('无状态时预加载所有 hero 图集，tip 图片为暖加载', () => {
         const result = summonerWarsCriticalImageResolver(undefined);
 
+        // 地图和卡背为关键
+        expect(result.critical).toContain(COMMON_PATHS.map);
+        expect(result.critical).toContain(COMMON_PATHS.cardback);
+
         // 所有 hero 图集为关键
         for (const heroPath of ALL_HERO_ATLASES) {
             expect(result.critical).toContain(heroPath);
@@ -64,6 +70,10 @@ describe('summonerWarsCriticalImageResolver', () => {
     it('派系选择阶段：hero 图集为关键，tip 图片为暖加载', () => {
         const state = makeState('factionSelect');
         const result = summonerWarsCriticalImageResolver(state);
+
+        // 地图和卡背为关键
+        expect(result.critical).toContain(COMMON_PATHS.map);
+        expect(result.critical).toContain(COMMON_PATHS.cardback);
 
         // 所有 hero 图集为关键
         for (const heroPath of ALL_HERO_ATLASES) {
@@ -87,6 +97,8 @@ describe('summonerWarsCriticalImageResolver', () => {
         const result = summonerWarsCriticalImageResolver(state);
 
         // 通用资源为关键
+        expect(result.critical).toContain(COMMON_PATHS.map);
+        expect(result.critical).toContain(COMMON_PATHS.cardback);
         expect(result.critical).toContain(COMMON_PATHS.portal);
         expect(result.critical).toContain(COMMON_PATHS.dice);
 

@@ -1,12 +1,14 @@
 /**
- * 召唤师战争 - 格子交互逻辑 Hook
- * 
- * 处理棋盘格子点击、手牌选择、事件卡打出等交互
+ * 召唤师战争 - 格子交互逻辑 Hook（编排层）
+ *
+ * 组合 useEventCardModes 子 hook，处理核心阶段交互（召唤/移动/攻击/建造）
+ * 和技能模式交互。事件卡多步骤模式已委托给 useEventCardModes。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useAutoSkipPhase } from '../../../components/game/framework';
 import { useTranslation } from 'react-i18next';
-import type { SummonerWarsCore, CellCoord, EventCard, UnitCard, GamePhase } from '../domain/types';
+import type { SummonerWarsCore, CellCoord, UnitCard, GamePhase } from '../domain/types';
 import { SW_COMMANDS } from '../domain/types';
 import { FLOW_COMMANDS } from '../../../engine';
 import {
@@ -14,51 +16,24 @@ import {
   getValidMoveTargetsEnhanced, getValidAttackTargetsEnhanced,
   getPlayerUnits, hasAvailableActions, isCellEmpty, isImmobile,
   getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
-  getSummoner, manhattanDistance, isInStraightLine,
+  manhattanDistance, getStructureAt, findUnitPosition,
 } from '../domain/helpers';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import type { AbilityModeState, SoulTransferModeState, MindCaptureModeState, AfterAttackAbilityModeState } from './useGameEvents';
-import type { BloodSummonModeState, AnnihilateModeState, FuneralPyreModeState } from './StatusBanners';
 import { useToast } from '../../../contexts/ToastContext';
+import { useEventCardModes } from './useEventCardModes';
+import type { PendingBeforeAttack } from './modeTypes';
+
+// 从 modeTypes 重新导出类型（保持 StatusBanners 等消费方的导入路径兼容）
+export type {
+  EventTargetModeState, MindControlModeState, ChantEntanglementModeState,
+  WithdrawModeState, GlacialShiftModeState, SneakModeState,
+  StunModeState, HypnoticLureModeState,
+} from './modeTypes';
 
 // ============================================================================
-// 类型
+// 参数
 // ============================================================================
-
-export interface EventTargetModeState {
-  cardId: string;
-  card: EventCard;
-  validTargets: CellCoord[];
-}
-
-/** 心灵操控多目标选择模式 */
-export interface MindControlModeState {
-  cardId: string;
-  validTargets: CellCoord[]; // 召唤师2格内的敌方士兵/冠军
-  selectedTargets: CellCoord[];
-}
-
-/** 震慑目标+方向选择模式 */
-export interface StunModeState {
-  step: 'selectTarget' | 'selectDirection';
-  cardId: string;
-  validTargets: CellCoord[]; // 召唤师3格直线内的敌方士兵/冠军
-  targetPosition?: CellCoord;
-}
-
-/** 催眠引诱目标选择模式 */
-export interface HypnoticLureModeState {
-  cardId: string;
-  validTargets: CellCoord[]; // 所有敌方士兵/冠军
-}
-
-interface PendingBeforeAttack {
-  abilityId: 'life_drain' | 'holy_arrow' | 'healing';
-  sourceUnitId: string;
-  targetUnitId?: string;
-  targetCardId?: string;
-  discardCardIds?: string[];
-}
 
 interface UseCellInteractionParams {
   core: SummonerWarsCore;
@@ -93,7 +68,8 @@ export function useCellInteraction({
 }: UseCellInteractionParams) {
   const { t } = useTranslation('game-summonerwars');
   const showToast = useToast();
-  // 手牌选中状态
+
+  // ---------- 核心状态 ----------
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [selectedCardsForDiscard, setSelectedCardsForDiscard] = useState<string[]>([]);
   const [pendingBeforeAttack, setPendingBeforeAttack] = useState<PendingBeforeAttack | null>(null);
@@ -103,88 +79,37 @@ export function useCellInteraction({
     if (currentPhase !== 'magic') setSelectedCardsForDiscard([]);
   }, [currentPhase]);
 
-  // 事件卡目标选择模式
-  const [eventTargetMode, setEventTargetMode] = useState<EventTargetModeState | null>(null);
+  // ---------- 事件卡模式子 hook ----------
+  const eventCardModes = useEventCardModes({
+    core, moves, currentPhase, myPlayerId, myHand, setSelectedHandCardId,
+    soulTransferMode, mindCaptureMode,
+    afterAttackAbilityMode, setAfterAttackAbilityMode,
+  });
 
-  // 血契召唤多步骤模式
-  const [bloodSummonMode, setBloodSummonMode] = useState<BloodSummonModeState | null>(null);
+  // ---------- 核心阶段高亮 ----------
 
-  // 殉葬火堆治疗模式
-  const [funeralPyreMode, setFuneralPyreMode] = useState<FuneralPyreModeState | null>(null);
-
-  // 除灭多步骤模式
-  const [annihilateMode, setAnnihilateMode] = useState<AnnihilateModeState | null>(null);
-
-  // 心灵操控多目标选择模式
-  const [mindControlMode, setMindControlMode] = useState<MindControlModeState | null>(null);
-
-  // 震慑目标+方向选择模式
-  const [stunMode, setStunMode] = useState<StunModeState | null>(null);
-
-  // 催眠引诱目标选择模式
-  const [hypnoticLureMode, setHypnoticLureMode] = useState<HypnoticLureModeState | null>(null);
-
-  // 念力推拉方向选择模式（目标已选，等待方向）
-  const [telekinesisTargetMode, setTelekinesisTargetMode] = useState<{
-    abilityId: 'telekinesis' | 'high_telekinesis';
-    sourceUnitId: string;
-    targetPosition: CellCoord;
-  } | null>(null);
-
-  // 统一清除所有多步骤事件卡模式及手牌选中状态
-  const clearAllEventModes = useCallback(() => {
-    setEventTargetMode(null);
-    setBloodSummonMode(null);
-    setAnnihilateMode(null);
-    setMindControlMode(null);
-    setStunMode(null);
-    setHypnoticLureMode(null);
-    setSelectedHandCardId(null);
-  }, []);
-
-  // 检查是否有任何多步骤事件卡模式激活
-  const hasActiveEventMode = !!(eventTargetMode || bloodSummonMode || annihilateMode || mindControlMode || stunMode || hypnoticLureMode);
-
-  // 阶段切换时自动取消所有多步骤事件卡模式
-  useEffect(() => {
-    clearAllEventModes();
-  }, [currentPhase, clearAllEventModes]);
-
-  // 获取选中的手牌
   const selectedHandCard = useMemo(() => {
     if (!selectedHandCardId) return null;
     return myHand.find(c => c.id === selectedHandCardId) ?? null;
   }, [selectedHandCardId, myHand]);
 
-  // 获取可召唤位置
   const validSummonPositions = useMemo(() => {
     if (currentPhase !== 'summon' || !isMyTurn || !selectedHandCard) return [];
     if (selectedHandCard.cardType !== 'unit') return [];
     return getValidSummonPositions(core, myPlayerId as '0' | '1');
   }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
 
-  // 获取可建造位置
   const validBuildPositions = useMemo(() => {
     if (currentPhase !== 'build' || !isMyTurn || !selectedHandCard) return [];
     if (selectedHandCard.cardType !== 'structure') return [];
     return getValidBuildPositions(core, myPlayerId as '0' | '1');
   }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
 
-  // 获取技能目标位置（复活死灵、感染）
+  // 技能目标位置（复活死灵、感染）
   const validAbilityPositions = useMemo(() => {
     if (!abilityMode || abilityMode.step !== 'selectPosition') return [];
     if (abilityMode.abilityId === 'revive_undead') {
-      let sourcePos: CellCoord | null = null;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (unit && unit.cardId === abilityMode.sourceUnitId) {
-            sourcePos = { row, col };
-            break;
-          }
-        }
-        if (sourcePos) break;
-      }
+      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const adj: CellCoord[] = [
         { row: sourcePos.row - 1, col: sourcePos.col },
@@ -200,8 +125,20 @@ export function useCellInteraction({
     return [];
   }, [abilityMode, core]);
 
-  // 获取技能可选单位（火祀召唤、吸取生命）
+  // 技能可选单位（火祀召唤、吸取生命、幻化、结构变换等）
   const validAbilityUnits = useMemo(() => {
+    // frost_axe selectAttachTarget: 3格内友方士兵（非自身）
+    if (abilityMode?.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget') {
+      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      if (!sourcePos) return [];
+      return getPlayerUnits(core, myPlayerId as '0' | '1')
+        .filter(u => {
+          if (u.cardId === abilityMode.sourceUnitId) return false;
+          if (u.card.unitClass !== 'common') return false;
+          return manhattanDistance(sourcePos, u.position) <= 3;
+        })
+        .map(u => u.position);
+    }
     if (!abilityMode || abilityMode.step !== 'selectUnit') return [];
     if (abilityMode.abilityId === 'fire_sacrifice_summon') {
       return getPlayerUnits(core, myPlayerId as '0' | '1')
@@ -209,39 +146,18 @@ export function useCellInteraction({
         .map(u => u.position);
     }
     if (abilityMode.abilityId === 'life_drain') {
-      let sourcePos: CellCoord | null = null;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (unit && unit.cardId === abilityMode.sourceUnitId) {
-            sourcePos = { row, col };
-            break;
-          }
-        }
-        if (sourcePos) break;
-      }
+      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       return getPlayerUnits(core, myPlayerId as '0' | '1')
         .filter(u => {
           if (u.cardId === abilityMode.sourceUnitId) return false;
-          const dist = Math.abs(u.position.row - sourcePos!.row) + Math.abs(u.position.col - sourcePos!.col);
-          return dist <= 2;
+          return manhattanDistance(sourcePos, u.position) <= 2;
         })
         .map(u => u.position);
     }
     // 幻化：3格内的士兵（任意阵营）
     if (abilityMode.abilityId === 'illusion') {
-      let sourcePos: CellCoord | null = null;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (unit && unit.cardId === abilityMode.sourceUnitId) {
-            sourcePos = { row, col };
-            break;
-          }
-        }
-        if (sourcePos) break;
-      }
+      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const targets: CellCoord[] = [];
       for (let row = 0; row < BOARD_ROWS; row++) {
@@ -259,23 +175,46 @@ export function useCellInteraction({
     }
     // 喂养巨食兽：相邻友方单位（非自身）
     if (abilityMode.abilityId === 'feed_beast') {
-      let sourcePos: CellCoord | null = null;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (unit && unit.cardId === abilityMode.sourceUnitId) {
-            sourcePos = { row, col };
-            break;
-          }
-        }
-        if (sourcePos) break;
-      }
+      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const adj = getAdjacentCells(sourcePos);
       return adj.filter(p => {
         const unit = core.board[p.row]?.[p.col]?.unit;
         return unit && unit.owner === (myPlayerId as '0' | '1') && unit.cardId !== abilityMode.sourceUnitId;
       });
+    }
+    // 结构变换：3格内友方建筑
+    if (abilityMode.abilityId === 'structure_shift') {
+      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      if (!sourcePos) return [];
+      const targets: CellCoord[] = [];
+      for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLS; col++) {
+          const structure = getStructureAt(core, { row, col });
+          if (structure && structure.owner === (myPlayerId as '0' | '1')) {
+            const dist = manhattanDistance(sourcePos, { row, col });
+            if (dist > 0 && dist <= 3) targets.push({ row, col });
+          }
+        }
+      }
+      return targets;
+    }
+    // 神出鬼没：全场0费友方单位（非自身）
+    if (abilityMode.abilityId === 'vanish') {
+      return getPlayerUnits(core, myPlayerId as '0' | '1')
+        .filter(u => u.cardId !== abilityMode.sourceUnitId && u.card.cost === 0)
+        .map(u => u.position);
+    }
+    // 祖灵羁绊 / 祖灵交流(transfer)：3格内友方单位（非自身）
+    if (abilityMode.abilityId === 'ancestral_bond' || abilityMode.abilityId === 'spirit_bond') {
+      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      if (!sourcePos) return [];
+      return getPlayerUnits(core, myPlayerId as '0' | '1')
+        .filter(u => {
+          if (u.cardId === abilityMode.sourceUnitId) return false;
+          return manhattanDistance(sourcePos, u.position) <= 3;
+        })
+        .map(u => u.position);
     }
     return [];
   }, [abilityMode, core, myPlayerId]);
@@ -315,7 +254,32 @@ export function useCellInteraction({
     return extendedTargets;
   }, [core, currentPhase, isMyTurn, myPlayerId, pendingBeforeAttack]);
 
-  // 可操作单位高亮
+  // 可以使用技能的单位（青色 + 波纹）
+  const abilityReadyPositions = useMemo(() => {
+    if (!isMyTurn) return [];
+    const pid = myPlayerId as '0' | '1';
+    const player = core.players[pid];
+    const units = getPlayerUnits(core, pid);
+    const positions: CellCoord[] = [];
+    if (currentPhase === 'summon') {
+      for (const u of units) {
+        const abilities = u.card.abilities ?? [];
+        if (abilities.includes('revive_undead')) {
+          const hasUndead = player.discard.some(c =>
+            c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === 'necromancer')
+          );
+          if (hasUndead) positions.push(u.position);
+        }
+      }
+    }
+    // 临时调试
+    if (positions.length > 0) {
+      console.log('[abilityReadyPositions] 找到可使用技能的单位:', positions, '当前阶段:', currentPhase);
+    }
+    return positions;
+  }, [core, currentPhase, isMyTurn, myPlayerId]);
+
+  // 可以移动/攻击的单位（绿色边框）
   const actionableUnitPositions = useMemo(() => {
     if (!isMyTurn) return [];
     const pid = myPlayerId as '0' | '1';
@@ -323,25 +287,12 @@ export function useCellInteraction({
     const units = getPlayerUnits(core, pid);
     const positions: CellCoord[] = [];
     switch (currentPhase) {
-      case 'summon': {
-        for (const u of units) {
-          const abilities = u.card.abilities ?? [];
-          if (abilities.includes('revive_undead')) {
-            const hasUndead = player.discard.some(c =>
-              c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国')
-            );
-            if (hasUndead) positions.push(u.position);
-          }
-        }
-        break;
-      }
       case 'move': {
         const remainingMoves = MAX_MOVES_PER_TURN - player.moveCount;
         if (remainingMoves > 0) {
           for (const u of units) {
             if (!u.hasMoved && !isImmobile(u) && getValidMoveTargetsEnhanced(core, u.position).length > 0) {
               positions.push(u.position);
-              // 高亮数量不超过剩余可移动次数
               if (positions.length >= remainingMoves) break;
             }
           }
@@ -354,7 +305,6 @@ export function useCellInteraction({
           for (const u of units) {
             if (!u.hasAttacked && getValidAttackTargetsEnhanced(core, u.position).length > 0) {
               positions.push(u.position);
-              // 高亮数量不超过剩余可攻击次数
               if (positions.length >= remainingAttacks) break;
             }
           }
@@ -365,105 +315,7 @@ export function useCellInteraction({
     return positions;
   }, [core, currentPhase, isMyTurn, myPlayerId]);
 
-  // 事件目标位置
-  const validEventTargets = useMemo(() => {
-    if (!eventTargetMode) return [];
-    return eventTargetMode.validTargets;
-  }, [eventTargetMode]);
-
-  // 血契召唤有效位置
-  const bloodSummonHighlights = useMemo(() => {
-    if (!bloodSummonMode) return [];
-    if (bloodSummonMode.step === 'selectTarget') {
-      return getPlayerUnits(core, myPlayerId as '0' | '1').map(u => u.position);
-    }
-    if (bloodSummonMode.step === 'selectPosition' && bloodSummonMode.targetPosition) {
-      const tp = bloodSummonMode.targetPosition;
-      const adj: CellCoord[] = [
-        { row: tp.row - 1, col: tp.col },
-        { row: tp.row + 1, col: tp.col },
-        { row: tp.row, col: tp.col - 1 },
-        { row: tp.row, col: tp.col + 1 },
-      ];
-      return adj.filter(p => isCellEmpty(core, p));
-    }
-    return [];
-  }, [bloodSummonMode, core, myPlayerId]);
-
-  // 除灭有效位置
-  const annihilateHighlights = useMemo(() => {
-    if (!annihilateMode) return [];
-    if (annihilateMode.step === 'selectTargets') {
-      return getPlayerUnits(core, myPlayerId as '0' | '1')
-        .filter(u => u.card.unitClass !== 'summoner')
-        .map(u => u.position);
-    }
-    if (annihilateMode.step === 'selectDamageTarget') {
-      const currentTarget = annihilateMode.selectedTargets[annihilateMode.currentTargetIndex];
-      if (currentTarget) {
-        return getAdjacentCells(currentTarget).filter(adj => {
-          const unit = core.board[adj.row]?.[adj.col]?.unit;
-          return unit !== undefined;
-        });
-      }
-    }
-    return [];
-  }, [annihilateMode, core, myPlayerId]);
-
-  // 心灵操控有效位置
-  const mindControlHighlights = useMemo(() => {
-    if (!mindControlMode) return [];
-    return mindControlMode.validTargets;
-  }, [mindControlMode]);
-
-  // 震慑有效位置
-  const stunHighlights = useMemo(() => {
-    if (!stunMode) return [];
-    return stunMode.validTargets;
-  }, [stunMode]);
-
-  // 催眠引诱有效位置
-  const hypnoticLureHighlights = useMemo(() => {
-    if (!hypnoticLureMode) return [];
-    return hypnoticLureMode.validTargets;
-  }, [hypnoticLureMode]);
-
-  // 攻击后技能有效位置（念力/高阶念力/读心传念）
-  const afterAttackAbilityHighlights = useMemo(() => {
-    if (!afterAttackAbilityMode) return [];
-    const { abilityId, sourcePosition } = afterAttackAbilityMode;
-    const positions: CellCoord[] = [];
-
-    if (abilityId === 'telekinesis' || abilityId === 'high_telekinesis') {
-      // 念力：范围内的士兵/冠军（非召唤师）
-      const maxRange = abilityId === 'high_telekinesis' ? 3 : 2;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (!unit || unit.card.unitClass === 'summoner') continue;
-          if ((unit.card.abilities ?? []).includes('stable')) continue;
-          const dist = manhattanDistance(sourcePosition, { row, col });
-          if (dist > 0 && dist <= maxRange) {
-            positions.push({ row, col });
-          }
-        }
-      }
-    } else if (abilityId === 'mind_transmission') {
-      // 读心传念：3格内友方士兵
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (!unit || unit.owner !== myPlayerId || unit.card.unitClass !== 'common') continue;
-          const dist = manhattanDistance(sourcePosition, { row, col });
-          if (dist > 0 && dist <= 3) {
-            positions.push({ row, col });
-          }
-        }
-      }
-    }
-    return positions;
-  }, [afterAttackAbilityMode, core, myPlayerId]);
-
+  // 攻击前技能状态
   const activeBeforeAttack = useMemo(() => {
     if (!pendingBeforeAttack || !core.selectedUnit) return null;
     const unit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
@@ -488,185 +340,46 @@ export function useCellInteraction({
     }
   }, [currentPhase, core, pendingBeforeAttack]);
 
-  // 点击格子
+  // ---------- 格子点击 ----------
+
   const handleCellClick = useCallback((row: number, col: number) => {
     const { row: gameRow, col: gameCol } = fromViewCoord({ row, col });
 
     // 任何格子交互都重置结束阶段确认状态
     setEndPhaseConfirmPending(false);
 
-    // 殉葬火堆治疗目标选择
-    if (funeralPyreMode) {
-      const targetUnit = core.board[gameRow]?.[gameCol]?.unit;
-      if (targetUnit && targetUnit.damage > 0) {
-        moves[SW_COMMANDS.FUNERAL_PYRE_HEAL]?.({
-          cardId: funeralPyreMode.cardId,
+    // 事件卡/多步骤模式优先处理
+    if (eventCardModes.handleEventModeClick(gameRow, gameCol)) return;
+
+    // frost_axe 附加目标选择
+    if (abilityMode && abilityMode.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget') {
+      const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
+      if (isValid) {
+        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+          abilityId: 'frost_axe',
+          sourceUnitId: abilityMode.sourceUnitId,
+          choice: 'attach',
           targetPosition: { row: gameRow, col: gameCol },
         });
-        setFuneralPyreMode(null);
+        setAbilityMode(null);
       }
       return;
     }
 
-    // 灵魂转移确认模式下不处理其他点击
-    if (soulTransferMode) return;
-
-    // 心灵捕获选择模式下不处理其他点击（由 StatusBanners 按钮处理）
-    if (mindCaptureMode) return;
-
-    // 攻击后技能目标选择模式
-    if (afterAttackAbilityMode) {
-      const isValid = afterAttackAbilityHighlights.some(p => p.row === gameRow && p.col === gameCol);
-      if (isValid) {
-        if (afterAttackAbilityMode.abilityId === 'mind_transmission') {
-          // 读心传念：直接执行
-          moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
-            abilityId: 'mind_transmission',
-            sourceUnitId: afterAttackAbilityMode.sourceUnitId,
-            targetPosition: { row: gameRow, col: gameCol },
-          });
-          setAfterAttackAbilityMode(null);
-        } else {
-          // 念力/高阶念力：进入推拉方向选择（由 StatusBanners 处理）
-          setAfterAttackAbilityMode(null);
-          // 使用 stunMode 类似的模式：先选目标，再选方向
-          setTelekinesisTargetMode({
-            abilityId: afterAttackAbilityMode.abilityId,
-            sourceUnitId: afterAttackAbilityMode.sourceUnitId,
-            targetPosition: { row: gameRow, col: gameCol },
-          });
-        }
-      }
-      return;
-    }
-
-    // 念力推拉方向选择模式下不处理其他点击（由 StatusBanners 按钮处理）
-    if (telekinesisTargetMode) return;
-
-    // 血契召唤多步骤模式
-    if (bloodSummonMode) {
-      if (bloodSummonMode.step === 'selectTarget') {
-        const isValid = bloodSummonHighlights.some(p => p.row === gameRow && p.col === gameCol);
-        if (isValid) {
-          setBloodSummonMode({ ...bloodSummonMode, step: 'selectCard', targetPosition: { row: gameRow, col: gameCol } });
-        }
-      } else if (bloodSummonMode.step === 'selectPosition' && bloodSummonMode.targetPosition && bloodSummonMode.summonCardId) {
-        const isValid = bloodSummonHighlights.some(p => p.row === gameRow && p.col === gameCol);
-        if (isValid) {
-          const isFirstUse = (bloodSummonMode.completedCount ?? 0) === 0;
-          if (isFirstUse && bloodSummonMode.cardId) {
-            moves[SW_COMMANDS.PLAY_EVENT]?.({ cardId: bloodSummonMode.cardId });
-          }
-          moves[SW_COMMANDS.BLOOD_SUMMON_STEP]?.({
-            targetUnitPosition: bloodSummonMode.targetPosition,
-            summonCardId: bloodSummonMode.summonCardId,
-            summonPosition: { row: gameRow, col: gameCol },
-          });
-          setBloodSummonMode({
-            step: 'confirm', cardId: bloodSummonMode.cardId,
-            completedCount: (bloodSummonMode.completedCount ?? 0) + 1,
-          });
-        }
-      }
-      return;
-    }
-
-    // 除灭多步骤模式
-    if (annihilateMode) {
-      if (annihilateMode.step === 'selectTargets') {
-        const friendlyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
-          .filter(u => u.card.unitClass !== 'summoner');
-        const isValid = friendlyUnits.some(u => u.position.row === gameRow && u.position.col === gameCol);
-        if (isValid) {
-          const alreadySelected = annihilateMode.selectedTargets.some(p => p.row === gameRow && p.col === gameCol);
-          if (alreadySelected) {
-            setAnnihilateMode({
-              ...annihilateMode,
-              selectedTargets: annihilateMode.selectedTargets.filter(p => !(p.row === gameRow && p.col === gameCol)),
-            });
-          } else {
-            setAnnihilateMode({
-              ...annihilateMode,
-              selectedTargets: [...annihilateMode.selectedTargets, { row: gameRow, col: gameCol }],
-            });
-          }
-        }
-      } else if (annihilateMode.step === 'selectDamageTarget') {
-        const currentTarget = annihilateMode.selectedTargets[annihilateMode.currentTargetIndex];
-        if (currentTarget) {
-          const adjacentUnits = getAdjacentCells(currentTarget)
-            .filter(adj => core.board[adj.row]?.[adj.col]?.unit !== undefined);
-          const isValid = adjacentUnits.some(p => p.row === gameRow && p.col === gameCol);
-          if (isValid) {
-            const newDamageTargets = [...annihilateMode.damageTargets];
-            newDamageTargets[annihilateMode.currentTargetIndex] = { row: gameRow, col: gameCol };
-            const nextIndex = annihilateMode.currentTargetIndex + 1;
-            if (nextIndex < annihilateMode.selectedTargets.length) {
-              setAnnihilateMode({ ...annihilateMode, damageTargets: newDamageTargets, currentTargetIndex: nextIndex });
-            } else {
-              moves[SW_COMMANDS.PLAY_EVENT]?.({
-                cardId: annihilateMode.cardId,
-                targets: annihilateMode.selectedTargets,
-                damageTargets: newDamageTargets,
-              });
-              setAnnihilateMode(null);
-            }
-          }
-        }
-      }
-      return;
-    }
-
-    // 心灵操控多目标选择模式
-    if (mindControlMode) {
-      const isValid = mindControlMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
-      if (isValid) {
-        const alreadySelected = mindControlMode.selectedTargets.some(p => p.row === gameRow && p.col === gameCol);
-        if (alreadySelected) {
-          setMindControlMode({
-            ...mindControlMode,
-            selectedTargets: mindControlMode.selectedTargets.filter(p => !(p.row === gameRow && p.col === gameCol)),
-          });
-        } else {
-          setMindControlMode({
-            ...mindControlMode,
-            selectedTargets: [...mindControlMode.selectedTargets, { row: gameRow, col: gameCol }],
-          });
-        }
-      }
-      return;
-    }
-
-    // 震慑目标选择模式
-    if (stunMode) {
-      if (stunMode.step === 'selectTarget') {
-        const isValid = stunMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
-        if (isValid) {
-          setStunMode({ ...stunMode, step: 'selectDirection', targetPosition: { row: gameRow, col: gameCol } });
-        }
-      }
-      // selectDirection 步骤由 StatusBanners 的 UI 按钮处理（推/拉 + 距离选择）
-      return;
-    }
-
-    // 催眠引诱目标选择模式
-    if (hypnoticLureMode) {
-      const isValid = hypnoticLureMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
-      if (isValid) {
-        moves[SW_COMMANDS.PLAY_EVENT]?.({
-          cardId: hypnoticLureMode.cardId,
-          targets: [{ row: gameRow, col: gameCol }],
-        });
-        setHypnoticLureMode(null);
-        setSelectedHandCardId(null);
-      }
-      return;
-    }
-
-    // 技能单位选择模式（火祀召唤、吸取生命、幻化）
+    // 技能单位选择模式（火祀召唤、吸取生命、幻化、结构变换等）
     if (abilityMode && abilityMode.step === 'selectUnit') {
       const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
+        // 结构变换目标是建筑，无需 unit 检查
+        if (abilityMode.abilityId === 'structure_shift') {
+          moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+            abilityId: 'structure_shift',
+            sourceUnitId: abilityMode.sourceUnitId,
+            targetPosition: { row: gameRow, col: gameCol },
+          });
+          setAbilityMode(null);
+          return;
+        }
         const targetUnit = core.board[gameRow]?.[gameCol]?.unit;
         if (targetUnit) {
           if (abilityMode.context === 'beforeAttack') {
@@ -676,16 +389,33 @@ export function useCellInteraction({
               targetUnitId: targetUnit.cardId,
             });
           } else if (abilityMode.abilityId === 'illusion') {
-            // 幻化：发送目标位置
             moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
               abilityId: 'illusion',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
             });
+          } else if (abilityMode.abilityId === 'ancestral_bond') {
+            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+              abilityId: 'ancestral_bond',
+              sourceUnitId: abilityMode.sourceUnitId,
+              targetPosition: { row: gameRow, col: gameCol },
+            });
+          } else if (abilityMode.abilityId === 'spirit_bond') {
+            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+              abilityId: 'spirit_bond',
+              sourceUnitId: abilityMode.sourceUnitId,
+              choice: 'transfer',
+              targetPosition: { row: gameRow, col: gameCol },
+            });
           } else if (abilityMode.abilityId === 'feed_beast') {
-            // 喂养巨食兽：选择相邻友方单位移除
             moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
               abilityId: 'feed_beast',
+              sourceUnitId: abilityMode.sourceUnitId,
+              targetPosition: { row: gameRow, col: gameCol },
+            });
+          } else if (abilityMode.abilityId === 'vanish') {
+            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+              abilityId: 'vanish',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
             });
@@ -717,17 +447,6 @@ export function useCellInteraction({
       return;
     }
 
-    // 事件目标选择模式
-    if (eventTargetMode) {
-      const isValidTarget = eventTargetMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
-      if (isValidTarget) {
-        moves[SW_COMMANDS.PLAY_EVENT]?.({ cardId: eventTargetMode.cardId, targets: [{ row: gameRow, col: gameCol }] });
-      }
-      setEventTargetMode(null);
-      setSelectedHandCardId(null);
-      return;
-    }
-
     // 召唤阶段：点击拥有复活死灵技能的单位
     if (currentPhase === 'summon' && !selectedHandCardId) {
       const clickedUnit = core.board[gameRow]?.[gameCol]?.unit;
@@ -735,7 +454,7 @@ export function useCellInteraction({
         const abilities = clickedUnit.card.abilities ?? [];
         if (abilities.includes('revive_undead')) {
           const hasUndeadInDiscard = core.players[myPlayerId]?.discard.some(c =>
-            c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国')
+            c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === 'necromancer')
           );
           if (hasUndeadInDiscard) {
             setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: clickedUnit.cardId });
@@ -772,7 +491,6 @@ export function useCellInteraction({
     // 移动阶段
     if (currentPhase === 'move') {
       if (core.selectedUnit) {
-        // 点击已选中的单位 → 取消选中
         if (gameRow === core.selectedUnit.row && gameCol === core.selectedUnit.col) {
           moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } });
           return;
@@ -785,7 +503,6 @@ export function useCellInteraction({
           if (clickedUnit && clickedUnit.owner === myPlayerId) {
             moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
           } else {
-            // 点击了无效移动位置
             if (!clickedUnit || clickedUnit.owner !== myPlayerId) {
               showToast.warning(t('interaction.cannotMoveThere'));
             }
@@ -801,7 +518,6 @@ export function useCellInteraction({
     // 攻击阶段
     if (currentPhase === 'attack') {
       if (core.selectedUnit) {
-        // 点击已选中的单位 → 取消选中
         if (gameRow === core.selectedUnit.row && gameCol === core.selectedUnit.col) {
           moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } });
           return;
@@ -828,7 +544,6 @@ export function useCellInteraction({
           if (clickedUnit && clickedUnit.owner === myPlayerId) {
             moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
           } else {
-            // 点击了无效攻击目标
             if (clickedUnit && clickedUnit.owner !== myPlayerId) {
               showToast.warning(t('interaction.cannotAttackThere'));
             }
@@ -844,16 +559,15 @@ export function useCellInteraction({
     // 其他阶段：普通选择
     moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
   }, [core, moves, currentPhase, selectedHandCardId, validSummonPositions, validBuildPositions,
-    validMovePositions, validAttackPositions, myPlayerId, fromViewCoord, eventTargetMode,
-    bloodSummonMode, bloodSummonHighlights, abilityMode, validAbilityPositions, validAbilityUnits,
-    annihilateMode, funeralPyreMode, soulTransferMode,
-    mindControlMode, stunMode, hypnoticLureMode,
-    afterAttackAbilityMode, afterAttackAbilityHighlights, telekinesisTargetMode, mindCaptureMode,
+    validMovePositions, validAttackPositions, myPlayerId, fromViewCoord,
+    abilityMode, validAbilityPositions, validAbilityUnits,
+    eventCardModes.handleEventModeClick,
     activeBeforeAttack]);
+
+  // ---------- 手牌交互 ----------
 
   // 手牌点击（魔力阶段弃牌多选/攻击前弃牌）
   const handleCardClick = useCallback((cardId: string) => {
-    // 任何手牌交互都重置结束阶段确认状态
     setEndPhaseConfirmPending(false);
 
     if (abilityMode && abilityMode.step === 'selectCards') {
@@ -904,27 +618,31 @@ export function useCellInteraction({
 
   // 手牌选中（召唤/建造阶段单选）
   const handleCardSelect = useCallback((cardId: string | null) => {
-    // 任何手牌选择都重置结束阶段确认状态
     setEndPhaseConfirmPending(false);
 
     // 血契召唤 selectCard 步骤：选中要召唤的单位卡
-    if (bloodSummonMode?.step === 'selectCard' && cardId) {
+    if (eventCardModes.bloodSummonMode?.step === 'selectCard' && cardId) {
       const card = myHand.find(c => c.id === cardId);
       if (card && card.cardType === 'unit' && (card as UnitCard).cost <= 2) {
-        setBloodSummonMode({ ...bloodSummonMode, step: 'selectPosition', summonCardId: cardId });
-        // 同步设置选中状态，让手牌区显示上移高亮
+        eventCardModes.setBloodSummonMode({ ...eventCardModes.bloodSummonMode, step: 'selectPosition', summonCardId: cardId });
         setSelectedHandCardId(cardId);
         return;
       }
     }
 
+    // 如果点击的是已选中的卡牌，取消选中
+    if (cardId && selectedHandCardId === cardId) {
+      setSelectedHandCardId(null);
+      return;
+    }
+
     // 选中其他手牌时，自动取消所有多步骤事件卡模式
-    if (hasActiveEventMode && cardId) {
-      clearAllEventModes();
+    if (eventCardModes.hasActiveEventMode && cardId) {
+      eventCardModes.clearAllEventModes();
     }
 
     setSelectedHandCardId(cardId);
-  }, [bloodSummonMode, myHand, hasActiveEventMode, clearAllEventModes]);
+  }, [eventCardModes.bloodSummonMode, myHand, eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes, selectedHandCardId]);
 
   // 确认弃牌换魔力
   const handleConfirmDiscard = useCallback(() => {
@@ -934,151 +652,31 @@ export function useCellInteraction({
     }
   }, [moves, selectedCardsForDiscard]);
 
-  // 打出事件卡
-  const handlePlayEvent = useCallback((cardId: string) => {
-    const card = myHand.find(c => c.id === cardId);
-    if (!card || card.cardType !== 'event') return;
-    const eventCard = card as EventCard;
-    const baseId = eventCard.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+  // ---------- 阶段控制 ----------
 
-    // 多步骤事件卡打出时，统一保持事件卡选中高亮，让玩家知道当前正在执行哪张卡
-    // default 分支（直接执行）不需要，因为卡会立即从手牌消失
-    switch (baseId) {
-      case 'necro-hellfire-blade': {
-        const friendlyCommons = getPlayerUnits(core, myPlayerId as '0' | '1')
-          .filter(u => u.card.unitClass === 'common');
-        if (friendlyCommons.length === 0) return;
-        setEventTargetMode({ cardId, card: eventCard, validTargets: friendlyCommons.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
-      }
-      case 'necro-blood-summon': {
-        const friendlyUnits = getPlayerUnits(core, myPlayerId as '0' | '1');
-        if (friendlyUnits.length === 0) return;
-        setBloodSummonMode({ step: 'selectTarget', cardId });
-        setSelectedHandCardId(cardId);
-        return;
-      }
-      case 'necro-annihilate': {
-        const friendlyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
-          .filter(u => u.card.unitClass !== 'summoner');
-        if (friendlyUnits.length === 0) return;
-        setAnnihilateMode({ step: 'selectTargets', cardId, selectedTargets: [], currentTargetIndex: 0, damageTargets: [] });
-        setSelectedHandCardId(cardId);
-        return;
-      }
-      case 'trickster-mind-control': {
-        // 心灵操控：选择召唤师2格内的敌方士兵/冠军
-        const summoner = getSummoner(core, myPlayerId as '0' | '1');
-        if (!summoner) return;
-        const opponentId = myPlayerId === '0' ? '1' : '0';
-        const enemyUnits = getPlayerUnits(core, opponentId as '0' | '1')
-          .filter(u => u.card.unitClass !== 'summoner' && manhattanDistance(summoner.position, u.position) <= 2);
-        if (enemyUnits.length === 0) return;
-        setMindControlMode({ cardId, validTargets: enemyUnits.map(u => u.position), selectedTargets: [] });
-        setSelectedHandCardId(cardId);
-        return;
-      }
-      case 'trickster-stun': {
-        // 震慑：选择召唤师3格直线内的敌方士兵/冠军
-        const stunSummoner = getSummoner(core, myPlayerId as '0' | '1');
-        if (!stunSummoner) return;
-        const stunOpponentId = myPlayerId === '0' ? '1' : '0';
-        const stunTargets = getPlayerUnits(core, stunOpponentId as '0' | '1')
-          .filter(u => {
-            if (u.card.unitClass === 'summoner') return false;
-            const dist = manhattanDistance(stunSummoner.position, u.position);
-            return dist <= 3 && dist > 0 && isInStraightLine(stunSummoner.position, u.position);
-          });
-        if (stunTargets.length === 0) return;
-        setStunMode({ step: 'selectTarget', cardId, validTargets: stunTargets.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
-      }
-      case 'trickster-hypnotic-lure': {
-        // 催眠引诱：选择任意敌方士兵/冠军
-        const lureOpponentId = myPlayerId === '0' ? '1' : '0';
-        const lureTargets = getPlayerUnits(core, lureOpponentId as '0' | '1')
-          .filter(u => u.card.unitClass !== 'summoner');
-        if (lureTargets.length === 0) return;
-        setHypnoticLureMode({ cardId, validTargets: lureTargets.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
-      }
-      default: {
-        moves[SW_COMMANDS.PLAY_EVENT]?.({ cardId });
-        return;
-      }
-    }
-  }, [core, myHand, myPlayerId, moves]);
-
-  // 结束阶段确认状态：当 move/attack 阶段还有可操作单位时，需要二次确认
   const [endPhaseConfirmPending, setEndPhaseConfirmPending] = useState(false);
 
-  // 阶段切换时重置确认状态
-  useEffect(() => {
-    setEndPhaseConfirmPending(false);
-  }, [currentPhase]);
+  useEffect(() => { setEndPhaseConfirmPending(false); }, [currentPhase]);
 
-  // 结束阶段（含确认逻辑）
   const handleEndPhase = useCallback(() => {
-    // 有多步骤事件卡模式激活时，先取消再结束
-    if (hasActiveEventMode) {
-      clearAllEventModes();
+    if (eventCardModes.hasActiveEventMode) {
+      eventCardModes.clearAllEventModes();
     }
-
-    // 如果已经在确认状态，直接结束
     if (endPhaseConfirmPending) {
       setEndPhaseConfirmPending(false);
       moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({});
       return;
     }
-    // move/attack 阶段且有可操作单位时，进入确认状态
     if ((currentPhase === 'move' || currentPhase === 'attack') && actionableUnitPositions.length > 0) {
       setEndPhaseConfirmPending(true);
       return;
     }
-    // 其他情况直接结束
     moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({});
-  }, [moves, currentPhase, actionableUnitPositions.length, endPhaseConfirmPending, hasActiveEventMode, clearAllEventModes]);
+  }, [moves, currentPhase, actionableUnitPositions.length, endPhaseConfirmPending,
+    eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes]);
 
-  // 确认心灵操控（多目标选择完成）
-  const handleConfirmMindControl = useCallback(() => {
-    if (!mindControlMode || mindControlMode.selectedTargets.length === 0) return;
-    moves[SW_COMMANDS.PLAY_EVENT]?.({
-      cardId: mindControlMode.cardId,
-      targets: mindControlMode.selectedTargets,
-    });
-    setMindControlMode(null);
-    setSelectedHandCardId(null);
-  }, [moves, mindControlMode]);
+  // ---------- 外部技能确认 ----------
 
-  // 确认震慑（方向+距离选择完成）
-  const handleConfirmStun = useCallback((direction: 'push' | 'pull', distance: number) => {
-    if (!stunMode || !stunMode.targetPosition) return;
-    moves[SW_COMMANDS.PLAY_EVENT]?.({
-      cardId: stunMode.cardId,
-      targets: [stunMode.targetPosition],
-      stunDirection: direction,
-      stunDistance: distance,
-    });
-    setStunMode(null);
-    setSelectedHandCardId(null);
-  }, [moves, stunMode]);
-
-  // 确认念力推拉（方向选择完成）
-  const handleConfirmTelekinesis = useCallback((direction: 'push' | 'pull') => {
-    if (!telekinesisTargetMode) return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
-      abilityId: telekinesisTargetMode.abilityId,
-      sourceUnitId: telekinesisTargetMode.sourceUnitId,
-      targetPosition: telekinesisTargetMode.targetPosition,
-      direction,
-    });
-    setTelekinesisTargetMode(null);
-  }, [moves, telekinesisTargetMode]);
-
-  // 确认心灵捕获选择
   const handleConfirmMindCapture = useCallback((choice: 'control' | 'damage') => {
     if (!mindCaptureMode) return;
     moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
@@ -1125,60 +723,90 @@ export function useCellInteraction({
     setPendingBeforeAttack(null);
   }, []);
 
-  // 自动跳过无可用操作的阶段
-  useEffect(() => {
-    if (!isMyTurn || isGameOver) return;
-    if (!core.hostStarted) return;
-    if (typeof window !== 'undefined') {
-      const holder = window as Window & { __SW_DISABLE_AUTO_SKIP__?: boolean };
-      if (holder.__SW_DISABLE_AUTO_SKIP__) return;
-    }
-    const hasActions = hasAvailableActions(core, activePlayerId as '0' | '1');
-    if (!hasActions) {
-      const timer = setTimeout(() => { moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({}); }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [core, isMyTurn, isGameOver, activePlayerId, moves]);
+  // ---------- 自动跳过 ----------
 
-  // 检测殉葬火堆充能
-  useEffect(() => {
-    if (funeralPyreMode) return;
-    const player = core.players[myPlayerId as '0' | '1'];
-    if (!player) return;
-    for (const ev of player.activeEvents) {
-      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-      if (baseId === 'necro-funeral-pyre' && (ev.charges ?? 0) > 0) {
-        setFuneralPyreMode({ cardId: ev.id, charges: ev.charges ?? 0 });
-        return;
-      }
-    }
-  }, [core.players, myPlayerId, funeralPyreMode]);
+  // 存在活跃的交互模式时禁止自动跳过（玩家正在进行多步骤操作）
+  const hasActiveInteraction = eventCardModes.hasActiveEventMode
+    || !!eventCardModes.funeralPyreMode
+    || !!soulTransferMode
+    || !!mindCaptureMode
+    || !!afterAttackAbilityMode
+    || !!abilityMode;
+
+  // 全局禁用开关（调试用）
+  const debugDisabled = typeof window !== 'undefined'
+    && (window as Window & { __SW_DISABLE_AUTO_SKIP__?: boolean }).__SW_DISABLE_AUTO_SKIP__;
+
+  const advancePhase = useCallback(() => {
+    moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({});
+  }, [moves]);
+
+  useAutoSkipPhase({
+    isMyTurn,
+    isGameOver,
+    hasAvailableActions: hasAvailableActions(core, activePlayerId as '0' | '1'),
+    hasActiveInteraction,
+    advancePhase,
+    enabled: !!core.hostStarted && !debugDisabled,
+  });
+
+  // ---------- 返回 ----------
 
   return {
     // 状态
     selectedHandCardId, selectedCardsForDiscard,
     endPhaseConfirmPending, setEndPhaseConfirmPending,
-    eventTargetMode, bloodSummonMode, setBloodSummonMode,
-    annihilateMode, setAnnihilateMode,
-    funeralPyreMode, setFuneralPyreMode,
-    mindControlMode, setMindControlMode,
-    stunMode, setStunMode,
-    hypnoticLureMode, setHypnoticLureMode,
-    telekinesisTargetMode, setTelekinesisTargetMode,
     pendingBeforeAttack,
     abilitySelectedCardIds: abilityMode?.step === 'selectCards' ? (abilityMode.selectedCardIds ?? []) : [],
+    // 事件卡模式（透传）
+    eventTargetMode: eventCardModes.eventTargetMode,
+    bloodSummonMode: eventCardModes.bloodSummonMode,
+    setBloodSummonMode: eventCardModes.setBloodSummonMode,
+    annihilateMode: eventCardModes.annihilateMode,
+    setAnnihilateMode: eventCardModes.setAnnihilateMode,
+    funeralPyreMode: eventCardModes.funeralPyreMode,
+    setFuneralPyreMode: eventCardModes.setFuneralPyreMode,
+    mindControlMode: eventCardModes.mindControlMode,
+    setMindControlMode: eventCardModes.setMindControlMode,
+    stunMode: eventCardModes.stunMode,
+    setStunMode: eventCardModes.setStunMode,
+    hypnoticLureMode: eventCardModes.hypnoticLureMode,
+    setHypnoticLureMode: eventCardModes.setHypnoticLureMode,
+    chantEntanglementMode: eventCardModes.chantEntanglementMode,
+    setChantEntanglementMode: eventCardModes.setChantEntanglementMode,
+    sneakMode: eventCardModes.sneakMode,
+    setSneakMode: eventCardModes.setSneakMode,
+    glacialShiftMode: eventCardModes.glacialShiftMode,
+    setGlacialShiftMode: eventCardModes.setGlacialShiftMode,
+    withdrawMode: eventCardModes.withdrawMode,
+    setWithdrawMode: eventCardModes.setWithdrawMode,
+    telekinesisTargetMode: eventCardModes.telekinesisTargetMode,
+    setTelekinesisTargetMode: eventCardModes.setTelekinesisTargetMode,
     // 计算值
     validSummonPositions, validBuildPositions, validMovePositions, validAttackPositions,
-    validAbilityPositions, validAbilityUnits, actionableUnitPositions,
-    validEventTargets, bloodSummonHighlights, annihilateHighlights,
-    mindControlHighlights, stunHighlights, hypnoticLureHighlights,
-    afterAttackAbilityHighlights,
+    validAbilityPositions, validAbilityUnits, actionableUnitPositions, abilityReadyPositions,
+    validEventTargets: eventCardModes.validEventTargets,
+    bloodSummonHighlights: eventCardModes.bloodSummonHighlights,
+    annihilateHighlights: eventCardModes.annihilateHighlights,
+    mindControlHighlights: eventCardModes.mindControlHighlights,
+    entanglementHighlights: eventCardModes.entanglementHighlights,
+    sneakHighlights: eventCardModes.sneakHighlights,
+    glacialShiftHighlights: eventCardModes.glacialShiftHighlights,
+    withdrawHighlights: eventCardModes.withdrawHighlights,
+    stunHighlights: eventCardModes.stunHighlights,
+    hypnoticLureHighlights: eventCardModes.hypnoticLureHighlights,
+    afterAttackAbilityHighlights: eventCardModes.afterAttackAbilityHighlights,
     // 回调
     handleCellClick, handleCardClick, handleCardSelect,
-    handleConfirmDiscard, handlePlayEvent, handleEndPhase,
-    handleConfirmMindControl, handleConfirmStun,
-    handleConfirmTelekinesis, handleConfirmMindCapture,
+    handleConfirmDiscard, handlePlayEvent: eventCardModes.handlePlayEvent, handleEndPhase,
+    handleConfirmMindControl: eventCardModes.handleConfirmMindControl,
+    handleConfirmStun: eventCardModes.handleConfirmStun,
+    handleConfirmEntanglement: eventCardModes.handleConfirmEntanglement,
+    handleConfirmSneak: eventCardModes.handleConfirmSneak,
+    handleConfirmGlacialShift: eventCardModes.handleConfirmGlacialShift,
+    handleConfirmTelekinesis: eventCardModes.handleConfirmTelekinesis,
+    handleConfirmMindCapture,
     handleConfirmBeforeAttackCards, handleCancelBeforeAttack,
-    clearAllEventModes,
+    clearAllEventModes: eventCardModes.clearAllEventModes,
   };
 }

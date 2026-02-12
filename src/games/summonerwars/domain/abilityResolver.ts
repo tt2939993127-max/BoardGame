@@ -22,7 +22,19 @@ import type {
   AbilityTrigger,
 } from './abilities';
 import { abilityRegistry } from './abilities';
-import { BOARD_ROWS, BOARD_COLS, getUnitAt, manhattanDistance } from './helpers';
+import { BOARD_ROWS, BOARD_COLS, manhattanDistance } from './helpers';
+import { swCustomActionRegistry } from './customActionHandlers';
+import { resolveTargetUnits, resolveTargetPosition } from './abilityTargets';
+import {
+  createConditionHandlerRegistry,
+  evaluateCondition as evaluatePrimitiveCondition,
+  evaluateExpression as evaluatePrimitiveExpression,
+  lit,
+  registerConditionHandler,
+  type ConditionContext as PrimitiveConditionContext,
+  type ConditionNode as PrimitiveConditionNode,
+  type ExpressionNode as PrimitiveExpressionNode,
+} from '../../../engine/primitives';
 
 // ============================================================================
 // 效果解析上下文
@@ -79,285 +91,163 @@ export interface AbilityContext {
   timestamp: number;
 }
 
-// ============================================================================
-// 目标解析
-// ============================================================================
-
-/**
- * 解析目标引用，返回单位列表
- */
-export function resolveTargetUnits(
-  ref: TargetRef,
-  ctx: AbilityContext
-): UnitInstance[] {
-  const { state, sourceUnit, targetUnit, victimUnit, killerUnit, ownerId } = ctx;
-
-  if (ref === 'self') {
-    return [sourceUnit];
-  }
-  if (ref === 'attacker') {
-    return sourceUnit ? [sourceUnit] : [];
-  }
-  if (ref === 'target') {
-    return targetUnit ? [targetUnit] : [];
-  }
-  if (ref === 'victim') {
-    return victimUnit ? [victimUnit] : [];
-  }
-  if (ref === 'killer') {
-    return killerUnit ? [killerUnit] : [];
-  }
-  if (ref === 'adjacentEnemies') {
-    return getAdjacentUnits(state, ctx.sourcePosition, ownerId, 'enemy');
-  }
-  if (ref === 'adjacentAllies') {
-    return getAdjacentUnits(state, ctx.sourcePosition, ownerId, 'ally');
-  }
-  if (ref === 'allAllies') {
-    return getAllUnits(state, ownerId, 'ally');
-  }
-  if (ref === 'allEnemies') {
-    return getAllUnits(state, ownerId, 'enemy');
-  }
-  if (typeof ref === 'object' && 'position' in ref) {
-    const unit = getUnitAt(state, ref.position);
-    return unit ? [unit] : [];
-  }
-  if (typeof ref === 'object' && 'unitId' in ref) {
-    // 从选择的目标中查找
-    if (ref.unitId === 'selectedAlly' && ctx.selectedTargets?.units) {
-      return ctx.selectedTargets.units;
-    }
-    // 按 ID 查找
-    const unit = findUnitById(state, ref.unitId);
-    return unit ? [unit] : [];
-  }
-
-  return [];
-}
-
-/**
- * 解析目标位置
- */
-export function resolveTargetPosition(
-  ref: TargetRef | 'victimPosition' | CellCoord,
-  ctx: AbilityContext
-): CellCoord | undefined {
-  if (ref === 'victimPosition') {
-    return ctx.victimPosition;
-  }
-  if (ref === 'victim') {
-    return ctx.victimPosition;
-  }
-  if (ref === 'self') {
-    return ctx.sourcePosition;
-  }
-  if (ref === 'target') {
-    return ctx.targetPosition;
-  }
-  // 直接传入的 CellCoord（有 row 和 col 但没有 position 属性）
-  if (typeof ref === 'object' && 'row' in ref && 'col' in ref && !('position' in ref) && !('unitId' in ref)) {
-    return ref as CellCoord;
-  }
-  if (typeof ref === 'object' && 'position' in ref) {
-    return (ref as { position: CellCoord }).position;
-  }
-  return undefined;
-}
-
-/**
- * 获取相邻单位
- */
-function getAdjacentUnits(
-  state: SummonerWarsCore,
-  position: CellCoord,
-  ownerId: PlayerId,
-  filter: 'ally' | 'enemy' | 'all'
-): UnitInstance[] {
-  const units: UnitInstance[] = [];
-  const directions = [
-    { row: -1, col: 0 },
-    { row: 1, col: 0 },
-    { row: 0, col: -1 },
-    { row: 0, col: 1 },
-  ];
-
-  for (const dir of directions) {
-    const newRow = position.row + dir.row;
-    const newCol = position.col + dir.col;
-    if (newRow >= 0 && newRow < BOARD_ROWS && newCol >= 0 && newCol < BOARD_COLS) {
-      const unit = state.board[newRow]?.[newCol]?.unit;
-      if (unit) {
-        if (filter === 'all') {
-          units.push(unit);
-        } else if (filter === 'ally' && unit.owner === ownerId) {
-          units.push(unit);
-        } else if (filter === 'enemy' && unit.owner !== ownerId) {
-          units.push(unit);
-        }
-      }
-    }
-  }
-
-  return units;
-}
-
-/**
- * 获取所有单位
- */
-function getAllUnits(
-  state: SummonerWarsCore,
-  ownerId: PlayerId,
-  filter: 'ally' | 'enemy' | 'all'
-): UnitInstance[] {
-  const units: UnitInstance[] = [];
-
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const unit = state.board[row]?.[col]?.unit;
-      if (unit) {
-        if (filter === 'all') {
-          units.push(unit);
-        } else if (filter === 'ally' && unit.owner === ownerId) {
-          units.push(unit);
-        } else if (filter === 'enemy' && unit.owner !== ownerId) {
-          units.push(unit);
-        }
-      }
-    }
-  }
-
-  return units;
-}
-
-/**
- * 按 ID 查找单位
- */
-function findUnitById(state: SummonerWarsCore, unitId: string): UnitInstance | undefined {
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const unit = state.board[row]?.[col]?.unit;
-      if (unit && unit.cardId === unitId) {
-        return unit;
-      }
-    }
-  }
-  return undefined;
-}
+// 目标解析（已提取到 abilityTargets.ts）
+export { resolveTargetUnits, resolveTargetPosition } from './abilityTargets';
 
 // ============================================================================
-// 表达式计算
+// 表达式计算（复用 engine/primitives）
 // ============================================================================
 
-/**
- * 计算表达式值
- */
-export function evaluateExpression(expr: Expression, ctx: AbilityContext): number {
-  if (typeof expr === 'number') {
-    return expr;
-  }
-
-  switch (expr.type) {
-    case 'attribute': {
-      const units = resolveTargetUnits(expr.target, ctx);
-      if (units.length === 0) return 0;
-      const unit = units[0];
-      switch (expr.attr) {
-        case 'damage':
-          return unit.damage;
-        case 'life':
-          return unit.card.life;
-        case 'strength':
-          return unit.card.strength;
-        case 'charge':
-          return unit.boosts ?? 0;
-        default:
-          return 0;
-      }
-    }
-    case 'multiply':
-      return evaluateExpression(expr.left, ctx) * evaluateExpression(expr.right, ctx);
-    case 'add':
-      return evaluateExpression(expr.left, ctx) + evaluateExpression(expr.right, ctx);
+function resolveAttributeExpressionValue(
+  expr: Extract<Expression, { type: 'attribute' }>,
+  ctx: AbilityContext,
+): number {
+  const units = resolveTargetUnits(expr.target, ctx);
+  if (units.length === 0) return 0;
+  const unit = units[0];
+  switch (expr.attr) {
+    case 'damage':
+      return unit.damage;
+    case 'life':
+      return unit.card.life;
+    case 'strength':
+      return unit.card.strength;
+    case 'charge':
+      return unit.boosts ?? 0;
     default:
       return 0;
   }
 }
 
+function toPrimitiveExpressionNode(expr: Expression, ctx: AbilityContext): PrimitiveExpressionNode {
+  if (typeof expr === 'number') {
+    return lit(expr);
+  }
+
+  switch (expr.type) {
+    case 'attribute':
+      // 将 domain-specific attribute 读取预先求值为 literal，
+      // 其余算术结构交给 primitives/expression 处理。
+      return lit(resolveAttributeExpressionValue(expr, ctx));
+
+    case 'multiply':
+      return {
+        type: 'mul',
+        left: toPrimitiveExpressionNode(expr.left, ctx),
+        right: toPrimitiveExpressionNode(expr.right, ctx),
+      };
+
+    case 'add':
+      return {
+        type: 'add',
+        left: toPrimitiveExpressionNode(expr.left, ctx),
+        right: toPrimitiveExpressionNode(expr.right, ctx),
+      };
+
+    default:
+      return lit(0);
+  }
+}
+
+/**
+ * 计算表达式值
+ */
+export function evaluateExpression(expr: Expression, ctx: AbilityContext): number {
+  // 当前 SW Expression 不包含 var 引用，因此 ctx 可为空。
+  return evaluatePrimitiveExpression(toPrimitiveExpressionNode(expr, ctx), {});
+}
+
 // ============================================================================
-// 条件评估
+// 条件评估（复用 engine/primitives）
 // ============================================================================
+
+const swConditionRegistry = createConditionHandlerRegistry();
+
+registerConditionHandler(swConditionRegistry, 'hasCharge', (params, ctx) => {
+  const abilityCtx = (ctx as any).abilityCtx as AbilityContext | undefined;
+  if (!abilityCtx) return false;
+  const { target, minStacks } = (params ?? {}) as any;
+  const units = resolveTargetUnits(target, abilityCtx);
+  const min = typeof minStacks === 'number' ? minStacks : 1;
+  return units.some(u => (u.boosts ?? 0) >= min);
+});
+
+registerConditionHandler(swConditionRegistry, 'isUnitType', (params, ctx) => {
+  const abilityCtx = (ctx as any).abilityCtx as AbilityContext | undefined;
+  if (!abilityCtx) return false;
+  const { target, unitType } = (params ?? {}) as any;
+  const units = resolveTargetUnits(target, abilityCtx);
+  return units.some(u => {
+    if (unitType === 'undead') {
+      return u.card.id.includes('undead') ||
+        u.card.name.includes('亡灵') ||
+        u.card.faction === 'necromancer';
+    }
+    return u.card.unitClass === unitType;
+  });
+});
+
+registerConditionHandler(swConditionRegistry, 'isInRange', (params, ctx) => {
+  const abilityCtx = (ctx as any).abilityCtx as AbilityContext | undefined;
+  if (!abilityCtx) return false;
+  const { target, range } = (params ?? {}) as any;
+  const units = resolveTargetUnits(target, abilityCtx);
+  const r = typeof range === 'number' ? range : 0;
+  return units.some(u => manhattanDistance(abilityCtx.sourcePosition, u.position) <= r);
+});
+
+registerConditionHandler(swConditionRegistry, 'isOwner', (params, ctx) => {
+  const abilityCtx = (ctx as any).abilityCtx as AbilityContext | undefined;
+  if (!abilityCtx) return false;
+  const { target, owner } = (params ?? {}) as any;
+  const expectedOwner = owner === 'self' ? abilityCtx.ownerId : getOpponentId(abilityCtx.ownerId);
+  const units = resolveTargetUnits(target, abilityCtx);
+  return units.some(u => u.owner === expectedOwner);
+});
+
+registerConditionHandler(swConditionRegistry, 'hasCardInDiscard', (params, ctx) => {
+  const abilityCtx = (ctx as any).abilityCtx as AbilityContext | undefined;
+  if (!abilityCtx) return false;
+  const { cardType } = (params ?? {}) as any;
+  const player = abilityCtx.state.players[abilityCtx.ownerId];
+  return player.discard.some(card => {
+    if (cardType === 'undead') {
+      return card.cardType === 'unit' &&
+        (card.id.includes('undead') || card.name?.includes('亡灵'));
+    }
+    if (cardType === 'plagueZombie') {
+      return card.id.includes('plague-zombie') || card.name?.includes('疫病体');
+    }
+    return card.cardType === cardType;
+  });
+});
+
+function toPrimitiveConditionNode(condition: AbilityCondition): PrimitiveConditionNode {
+  switch (condition.type) {
+    case 'always':
+      return { type: 'always' };
+
+    case 'and':
+      return { type: 'and', conditions: condition.conditions.map(toPrimitiveConditionNode) };
+
+    case 'or':
+      return { type: 'or', conditions: condition.conditions.map(toPrimitiveConditionNode) };
+
+    case 'not':
+      return { type: 'not', condition: toPrimitiveConditionNode(condition.condition) };
+
+    default:
+      // 其余条件为 domain-specific，交给自定义 handler
+      return { type: 'custom', handler: condition.type, params: condition as any };
+  }
+}
 
 /**
  * 评估条件
  */
-export function evaluateCondition(
-  condition: AbilityCondition,
-  ctx: AbilityContext
-): boolean {
-  switch (condition.type) {
-    case 'always':
-      return true;
-
-    case 'hasCharge': {
-      const units = resolveTargetUnits(condition.target, ctx);
-      const minStacks = condition.minStacks ?? 1;
-      return units.some(u => (u.boosts ?? 0) >= minStacks);
-    }
-
-    case 'isUnitType': {
-      const units = resolveTargetUnits(condition.target, ctx);
-      return units.some(u => {
-        if (condition.unitType === 'undead') {
-          // 检查是否是亡灵单位（通过卡牌 ID 或名称判断）
-          return u.card.id.includes('undead') || 
-                 u.card.name.includes('亡灵') ||
-                 u.card.faction === '堕落王国';
-        }
-        return u.card.unitClass === condition.unitType;
-      });
-    }
-
-    case 'isInRange': {
-      const units = resolveTargetUnits(condition.target, ctx);
-      return units.some(u => {
-        const dist = manhattanDistance(ctx.sourcePosition, u.position);
-        return dist <= condition.range;
-      });
-    }
-
-    case 'isOwner': {
-      const units = resolveTargetUnits(condition.target, ctx);
-      const expectedOwner = condition.owner === 'self' ? ctx.ownerId : getOpponentId(ctx.ownerId);
-      return units.some(u => u.owner === expectedOwner);
-    }
-
-    case 'hasCardInDiscard': {
-      const player = ctx.state.players[ctx.ownerId];
-      return player.discard.some(card => {
-        if (condition.cardType === 'undead') {
-          return card.cardType === 'unit' && 
-                 (card.id.includes('undead') || card.name?.includes('亡灵'));
-        }
-        if (condition.cardType === 'plagueZombie') {
-          return card.id.includes('plague-zombie') || card.name?.includes('疫病体');
-        }
-        return card.cardType === condition.cardType;
-      });
-    }
-
-    case 'and':
-      return condition.conditions.every(c => evaluateCondition(c, ctx));
-
-    case 'or':
-      return condition.conditions.some(c => evaluateCondition(c, ctx));
-
-    case 'not':
-      return !evaluateCondition(condition.condition, ctx);
-
-    default:
-      return false;
-  }
+export function evaluateCondition(condition: AbilityCondition, ctx: AbilityContext): boolean {
+  const primCtx: PrimitiveConditionContext = { abilityCtx: ctx };
+  return evaluatePrimitiveCondition(toPrimitiveConditionNode(condition), primCtx, swConditionRegistry);
 }
 
 function getOpponentId(playerId: PlayerId): PlayerId {
@@ -393,6 +283,7 @@ export function resolveEffect(
             position: target.position,
             damage: value,
             sourceAbilityId: abilityId,
+            sourcePlayerId: ctx.ownerId,
           },
           timestamp,
         });
@@ -569,58 +460,12 @@ export function resolveEffect(
     }
 
     case 'custom': {
-      if (effect.actionId === 'soul_transfer_request') {
-        // 灵魂转移请求：由 UI 确认后执行
-        events.push({
-          type: SW_EVENTS.SOUL_TRANSFER_REQUESTED,
-          payload: {
-            sourceUnitId: ctx.sourceUnit.cardId,
-            sourcePosition: ctx.sourcePosition,
-            victimPosition: ctx.victimPosition,
-            ownerId: ctx.ownerId,
-          },
-          timestamp,
-        });
-      } else if (effect.actionId === 'mind_capture_check') {
-        // 心灵捕获检查：由攻击流程在 execute.ts 中处理
-        events.push({
-          type: SW_EVENTS.MIND_CAPTURE_REQUESTED,
-          payload: {
-            sourceUnitId: ctx.sourceUnit.cardId,
-            sourcePosition: ctx.sourcePosition,
-            targetPosition: ctx.targetPosition,
-            ownerId: ctx.ownerId,
-          },
-          timestamp,
-        });
-      } else if (effect.actionId === 'judgment_draw') {
-        // 裁决：攻击后按 melee（❤️）数量抓牌
-        const meleeCount = (ctx.diceResults ?? []).filter(r => r === 'melee').length;
-        if (meleeCount > 0) {
-          events.push({
-            type: SW_EVENTS.CARD_DRAWN,
-            payload: { playerId: ctx.ownerId, count: meleeCount, sourceAbilityId: 'judgment' },
-            timestamp,
-          });
-        }
-      } else if (effect.actionId === 'guidance_draw') {
-        // 指引：召唤阶段开始自动抓2张牌（无需玩家选择）
-        const guidancePlayer = ctx.state.players[ctx.ownerId];
-        const guidanceDraw = Math.min(2, guidancePlayer.deck.length);
-        if (guidanceDraw > 0) {
-          events.push({
-            type: SW_EVENTS.CARD_DRAWN,
-            payload: { playerId: ctx.ownerId, count: guidanceDraw, sourceAbilityId: 'guidance' },
-            timestamp,
-          });
-        }
-      } else if (effect.actionId === 'divine_shield_check') {
-        // 神圣护盾：被动效果，在攻击流程中由 execute.ts 处理
-        // 此处不做任何事，仅作为占位
-      } else if (effect.actionId === 'healing_convert') {
-        // 治疗：beforeAttack 效果，在 DECLARE_ATTACK 中处理
-        // 此处不做任何事，仅作为占位
+      const handler = swCustomActionRegistry.get(effect.actionId);
+      if (handler) {
+        // 已注册的 handler（soul_transfer、mind_capture、judgment_draw 等）
+        events.push(...handler({ ctx, params: effect.params, abilityId, timestamp }));
       } else {
+        // 未注册的 actionId → 通用 ABILITY_TRIGGERED 事件（由 execute.ts/reduce.ts 消费）
         events.push(createAbilityTriggeredEvent({
           abilityId: effect.actionId,
           params: effect.params,

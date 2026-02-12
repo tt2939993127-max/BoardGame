@@ -10,7 +10,7 @@ import type { GamePhase, CellCoord } from '../domain/types';
 import { GameButton } from './GameButton';
 import { ActionBanner } from './ActionBanner';
 import type { AbilityModeState, SoulTransferModeState, MindCaptureModeState, AfterAttackAbilityModeState } from './useGameEvents';
-import type { MindControlModeState, StunModeState, HypnoticLureModeState } from './useCellInteraction';
+import type { MindControlModeState, StunModeState, HypnoticLureModeState, ChantEntanglementModeState, SneakModeState, GlacialShiftModeState, WithdrawModeState } from './modeTypes';
 
 // ============================================================================
 // 类型定义
@@ -63,6 +63,10 @@ interface StatusBannersProps {
   soulTransferMode: SoulTransferModeState | null;
   funeralPyreMode: FuneralPyreModeState | null;
   mindControlMode: MindControlModeState | null;
+  chantEntanglementMode: ChantEntanglementModeState | null;
+  sneakMode: SneakModeState | null;
+  glacialShiftMode: GlacialShiftModeState | null;
+  withdrawMode: WithdrawModeState | null;
   stunMode: StunModeState | null;
   hypnoticLureMode: HypnoticLureModeState | null;
   mindCaptureMode: MindCaptureModeState | null;
@@ -84,6 +88,14 @@ interface StatusBannersProps {
   onSkipFuneralPyre: () => void;
   onConfirmMindControl: () => void;
   onCancelMindControl: () => void;
+  onConfirmEntanglement: () => void;
+  onCancelEntanglement: () => void;
+  onConfirmSneak: () => void;
+  onCancelSneak: () => void;
+  onConfirmGlacialShift: () => void;
+  onCancelGlacialShift: () => void;
+  onWithdrawCostSelect: (costType: 'charge' | 'magic') => void;
+  onCancelWithdraw: () => void;
   onConfirmStun: (direction: 'push' | 'pull', distance: number) => void;
   onCancelStun: () => void;
   onCancelHypnoticLure: () => void;
@@ -91,6 +103,8 @@ interface StatusBannersProps {
   onCancelAfterAttackAbility: () => void;
   onConfirmTelekinesis: (direction: 'push' | 'pull') => void;
   onCancelTelekinesis: () => void;
+  onAfterMoveSelfCharge: () => void;
+  onFrostAxeAttach?: () => void;
 }
 
 // ============================================================================
@@ -157,17 +171,23 @@ const StunBanner: React.FC<{
 export const StatusBanners: React.FC<StatusBannersProps> = ({
   currentPhase, isMyTurn,
   abilityMode, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
-  mindControlMode, stunMode, hypnoticLureMode,
+  mindControlMode, chantEntanglementMode, sneakMode, glacialShiftMode, withdrawMode, stunMode, hypnoticLureMode,
   mindCaptureMode, afterAttackAbilityMode, telekinesisTargetMode,
   onCancelAbility, onConfirmBeforeAttackCards, onConfirmBloodRune, onConfirmIceShards, onConfirmFeedBeastSelfDestroy,
   onCancelBeforeAttack, onCancelBloodSummon, onContinueBloodSummon,
   onCancelAnnihilate, onConfirmAnnihilateTargets,
   onConfirmSoulTransfer, onSkipSoulTransfer, onSkipFuneralPyre,
   onConfirmMindControl, onCancelMindControl,
+  onConfirmEntanglement, onCancelEntanglement,
+  onConfirmSneak, onCancelSneak,
+  onConfirmGlacialShift, onCancelGlacialShift,
+  onWithdrawCostSelect, onCancelWithdraw,
   onConfirmStun, onCancelStun,
   onCancelHypnoticLure,
   onConfirmMindCapture, onCancelAfterAttackAbility,
   onConfirmTelekinesis, onCancelTelekinesis,
+  onAfterMoveSelfCharge,
+  onFrostAxeAttach,
 }) => {
   const { t } = useTranslation('game-summonerwars');
   if (abilityMode) {
@@ -186,6 +206,12 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
           {abilityMode.abilityId === 'blood_rune' && t('statusBanners.ability.bloodRune')}
           {abilityMode.abilityId === 'ice_shards' && t('statusBanners.ability.iceShards')}
           {abilityMode.abilityId === 'feed_beast' && t('statusBanners.ability.feedBeast')}
+          {abilityMode.abilityId === 'spirit_bond' && t('statusBanners.ability.spiritBond')}
+          {abilityMode.abilityId === 'ancestral_bond' && t('statusBanners.ability.ancestralBond')}
+          {abilityMode.abilityId === 'structure_shift' && t('statusBanners.ability.structureShift')}
+          {abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget' && t('statusBanners.ability.frostAxe')}
+          {abilityMode.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget' && t('statusBanners.ability.frostAxeSelectTarget')}
+          {abilityMode.abilityId === 'vanish' && t('statusBanners.ability.vanish')}
         </span>
         {abilityMode.step === 'selectCards' && (
           <GameButton onClick={onConfirmBeforeAttackCards} variant="primary" size="sm">{t('actions.confirmDiscard')}</GameButton>
@@ -205,7 +231,22 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         {abilityMode.abilityId === 'feed_beast' && (
           <GameButton onClick={onConfirmFeedBeastSelfDestroy} variant="secondary" size="sm">{t('actions.feedBeastSelfDestroy')}</GameButton>
         )}
-        {!['blood_rune', 'ice_shards', 'feed_beast'].includes(abilityMode.abilityId) && (
+        {(abilityMode.abilityId === 'spirit_bond' || (abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget')) && (
+          <GameButton onClick={onAfterMoveSelfCharge} variant="primary" size="sm">{t('actions.chargeSelf')}</GameButton>
+        )}
+        {abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget' && (
+          <GameButton onClick={onFrostAxeAttach} variant="primary" size="sm">{t('actions.attachToSoldier')}</GameButton>
+        )}
+        {['spirit_bond', 'ancestral_bond', 'structure_shift'].includes(abilityMode.abilityId) && (
+          <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
+        )}
+        {abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget' && (
+          <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
+        )}
+        {abilityMode.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget' && (
+          <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+        )}
+        {!['blood_rune', 'ice_shards', 'feed_beast', 'spirit_bond', 'ancestral_bond', 'structure_shift', 'frost_axe', 'vanish'].includes(abilityMode.abilityId) && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
         )}
       </div>
@@ -292,6 +333,71 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
           <GameButton onClick={onConfirmMindControl} variant="primary" size="sm">{t('actions.confirmControl')}</GameButton>
         )}
         <GameButton onClick={onCancelMindControl} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+      </div>
+    );
+  }
+
+  if (chantEntanglementMode) {
+    return (
+      <div className="bg-emerald-900/95 px-4 py-2 rounded-lg border border-emerald-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-emerald-200 text-sm font-bold">
+          {t('statusBanners.entanglement.message', { count: chantEntanglementMode.selectedTargets.length })}
+        </span>
+        {chantEntanglementMode.selectedTargets.length >= 2 && (
+          <GameButton onClick={onConfirmEntanglement} variant="primary" size="sm">{t('actions.confirmSelection')}</GameButton>
+        )}
+        <GameButton onClick={onCancelEntanglement} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+      </div>
+    );
+  }
+
+  if (sneakMode) {
+    return (
+      <div className="bg-lime-900/95 px-4 py-2 rounded-lg border border-lime-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-lime-200 text-sm font-bold">
+          {sneakMode.step === 'selectUnit'
+            ? t('statusBanners.sneak.selectUnit', { count: sneakMode.recorded.length })
+            : t('statusBanners.sneak.selectDirection')}
+        </span>
+        {sneakMode.recorded.length > 0 && sneakMode.step === 'selectUnit' && (
+          <GameButton onClick={onConfirmSneak} variant="primary" size="sm">{t('actions.confirmSelection')}</GameButton>
+        )}
+        <GameButton onClick={onCancelSneak} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+      </div>
+    );
+  }
+
+  if (glacialShiftMode) {
+    return (
+      <div className="bg-sky-900/95 px-4 py-2 rounded-lg border border-sky-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-sky-200 text-sm font-bold">
+          {glacialShiftMode.step === 'selectBuilding'
+            ? t('statusBanners.glacialShift.selectBuilding', { count: glacialShiftMode.recorded.length })
+            : t('statusBanners.glacialShift.selectDestination')}
+        </span>
+        {glacialShiftMode.recorded.length > 0 && glacialShiftMode.step === 'selectBuilding' && (
+          <GameButton onClick={onConfirmGlacialShift} variant="primary" size="sm">{t('actions.confirmSelection')}</GameButton>
+        )}
+        <GameButton onClick={onCancelGlacialShift} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+      </div>
+    );
+  }
+
+  if (withdrawMode) {
+    return (
+      <div className="bg-amber-900/95 px-4 py-2 rounded-lg border border-amber-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-amber-200 text-sm font-bold">
+          {withdrawMode.step === 'selectCost'
+            ? t('statusBanners.withdraw.selectCost')
+            : t('statusBanners.withdraw.selectPosition')}
+        </span>
+        {withdrawMode.step === 'selectCost' && (
+          <>
+            <GameButton onClick={() => onWithdrawCostSelect('charge')} variant="primary" size="sm">{t('actions.withdrawCharge')}</GameButton>
+            <GameButton onClick={() => onWithdrawCostSelect('magic')} variant="secondary" size="sm">{t('actions.withdrawMagic')}</GameButton>
+          </>
+        )}
+        <GameButton onClick={onCancelWithdraw} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
       </div>
     );
   }

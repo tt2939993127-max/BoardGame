@@ -131,8 +131,8 @@ type UGCGameState = {
 2. 仅使用内置对象与参数，禁止 import/require
 3. 状态必须保持可序列化、确定性
 4. 若需要随机数，仅使用传入的 random
-5. **效果执行必须使用现有 GAS 系统**（src/systems/core/Ability.ts & Effect.ts）
-6. 禁止重新实现效果执行器，仅编排 GAS 能力数据与游戏规则调用
+5. **效果执行必须使用现有 engine/primitives**（effects.ts + condition/expression/target）
+6. 禁止重新实现效果执行器，仅编排 primitives 能力数据与游戏规则调用
 7. 使用 TypeScript 风格（但无需类型导入）
 8. 添加必要的中文注释
 

@@ -89,7 +89,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeFortressWarrior(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '城塞圣武士', unitClass: 'common',
-    faction: '先锋军团', strength: 3, life: 4, cost: 2,
+    faction: 'paladin', strength: 3, life: 4, cost: 2,
     attackType: 'melee', attackRange: 1,
     abilities: ['judgment'], deckSymbols: [],
   };
@@ -98,7 +98,7 @@ function makeFortressWarrior(id: string): UnitCard {
 function makeFortressKnight(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '城塞骑士', unitClass: 'common',
-    faction: '先锋军团', strength: 2, life: 5, cost: 2,
+    faction: 'paladin', strength: 2, life: 5, cost: 2,
     attackType: 'melee', attackRange: 1,
     abilities: ['entangle', 'guardian'], deckSymbols: [],
   };
@@ -107,7 +107,7 @@ function makeFortressKnight(id: string): UnitCard {
 function makeCorin(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '科琳·布莱顿', unitClass: 'champion',
-    faction: '先锋军团', strength: 3, life: 8, cost: 6,
+    faction: 'paladin', strength: 3, life: 8, cost: 6,
     attackType: 'melee', attackRange: 1,
     abilities: ['divine_shield'], deckSymbols: [],
   };
@@ -116,7 +116,7 @@ function makeCorin(id: string): UnitCard {
 function makeTemplePriest(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '圣殿牧师', unitClass: 'common',
-    faction: '先锋军团', strength: 2, life: 2, cost: 0,
+    faction: 'paladin', strength: 2, life: 2, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['healing'], deckSymbols: [],
   };
@@ -125,7 +125,7 @@ function makeTemplePriest(id: string): UnitCard {
 function makePaladinSummoner(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '瑟拉·艾德温', unitClass: 'summoner',
-    faction: '先锋军团', strength: 2, life: 12, cost: 0,
+    faction: 'paladin', strength: 2, life: 12, cost: 0,
     attackType: 'ranged', attackRange: 3,
     abilities: ['fortress_power'], deckSymbols: [],
   };
@@ -134,7 +134,7 @@ function makePaladinSummoner(id: string): UnitCard {
 function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 5, cost: 0,
+    faction: 'necromancer', strength: 2, life: 5, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -143,7 +143,7 @@ function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makeAlly(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '友方单位', unitClass: 'common',
-    faction: '先锋军团', strength: 1, life: 3, cost: 0,
+    faction: 'paladin', strength: 1, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -175,6 +175,7 @@ function addEventToHand(
     id: eventId,
     cardType: 'event',
     name: overrides?.name ?? '测试事件',
+    faction: 'paladin',
     cost: overrides?.cost ?? 0,
     playPhase: overrides?.playPhase ?? 'summon',
     effect: overrides?.effect ?? '测试效果',
@@ -806,6 +807,7 @@ describe('圣洁审判事件卡', () => {
       id: 'paladin-holy-judgment-0',
       cardType: 'event',
       name: '圣洁审判',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'attack',
       effect: '圣洁审判效果',
@@ -833,6 +835,7 @@ describe('圣洁审判事件卡', () => {
       id: 'paladin-holy-judgment-0',
       cardType: 'event',
       name: '圣洁审判',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'attack',
       effect: '圣洁审判效果',
@@ -859,6 +862,7 @@ describe('圣洁审判事件卡', () => {
       id: 'paladin-holy-judgment-0',
       cardType: 'event',
       name: '圣洁审判',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'attack',
       effect: '圣洁审判效果',
@@ -888,6 +892,7 @@ describe('圣洁审判事件卡', () => {
       id: 'paladin-holy-judgment-0',
       cardType: 'event',
       name: '圣洁审判',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'attack',
       effect: '圣洁审判效果',
@@ -933,6 +938,7 @@ describe('圣洁审判事件卡', () => {
       id: 'paladin-holy-judgment-0',
       cardType: 'event',
       name: '圣洁审判',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'attack',
       effect: '圣洁审判效果',
@@ -976,6 +982,7 @@ describe('圣洁审判事件卡', () => {
       id: 'paladin-holy-judgment-0',
       cardType: 'event',
       name: '圣洁审判',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'attack',
       effect: '圣洁审判效果',
@@ -1044,6 +1051,7 @@ describe('圣灵庇护事件卡', () => {
       id: 'paladin-holy-protection-0',
       cardType: 'event',
       name: '圣灵庇护',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'magic',
       effect: '庇护效果',
@@ -1103,6 +1111,7 @@ describe('圣灵庇护事件卡', () => {
       id: 'paladin-holy-protection-0',
       cardType: 'event',
       name: '圣灵庇护',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'magic',
       effect: '庇护效果',
@@ -1160,6 +1169,7 @@ describe('圣灵庇护事件卡', () => {
       id: 'paladin-holy-protection-0',
       cardType: 'event',
       name: '圣灵庇护',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'magic',
       effect: '庇护效果',
@@ -1215,6 +1225,7 @@ describe('圣灵庇护事件卡', () => {
       id: 'paladin-holy-protection-0',
       cardType: 'event',
       name: '圣灵庇护',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'magic',
       effect: '庇护效果',
@@ -1286,7 +1297,7 @@ describe('重燃希望事件卡', () => {
       cardId: 'test-gate',
       card: {
         id: 'test-gate', cardType: 'structure', name: '城门',
-        cost: 0, life: 10, isGate: true, deckSymbols: [],
+        faction: 'paladin', cost: 0, life: 10, isGate: true, deckSymbols: [],
       },
       owner: '0' as PlayerId,
       position: { row: 4, col: 3 },
@@ -1298,6 +1309,7 @@ describe('重燃希望事件卡', () => {
       id: 'paladin-rekindle-hope-0',
       cardType: 'event',
       name: '重燃希望',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'summon',
       effect: '重燃希望效果',
@@ -1340,6 +1352,7 @@ describe('重燃希望事件卡', () => {
       id: 'paladin-rekindle-hope-0',
       cardType: 'event',
       name: '重燃希望',
+      faction: 'paladin',
       cost: 0,
       playPhase: 'summon',
       effect: '重燃希望效果',
@@ -1378,7 +1391,7 @@ describe('重燃希望事件卡', () => {
       cardId: 'test-gate',
       card: {
         id: 'test-gate', cardType: 'structure', name: '城门',
-        cost: 0, life: 10, isGate: true, deckSymbols: [],
+        faction: 'paladin', cost: 0, life: 10, isGate: true, deckSymbols: [],
       },
       owner: '0' as PlayerId,
       position: { row: 4, col: 3 },

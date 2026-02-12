@@ -5,7 +5,7 @@
  */
 
 import { createContext, useContext, useReducer, useMemo, type ReactNode } from 'react';
-import type { SchemaDefinition } from '../schema/types';
+import type { SchemaDefinition, FieldDefinition } from '../schema/types';
 
 // ============================================================================
 // 类型定义
@@ -100,7 +100,7 @@ export interface ComponentContext {
 // Actions
 // ============================================================================
 
-type BuilderAction =
+export type BuilderAction =
   | { type: 'SET_NAME'; payload: string }
   | { type: 'SET_DESCRIPTION'; payload: string }
   | { type: 'SET_TAGS'; payload: string[] }
@@ -112,7 +112,27 @@ type BuilderAction =
   | { type: 'SELECT_SCHEMA'; payload: string | null }
   | { type: 'SELECT_COMPONENT'; payload: string | null }
   | { type: 'LOAD_STATE'; payload: Partial<BuilderState> }
-  | { type: 'RESET' };
+  | { type: 'RESET' }
+  // Schema compound operations
+  | { type: 'ADD_SCHEMA'; payload: { schema: SchemaDefinition } }
+  | { type: 'DELETE_SCHEMA'; payload: string }
+  | { type: 'ADD_SCHEMA_FIELD'; payload: { schemaId: string; key: string; field: FieldDefinition } }
+  | { type: 'DELETE_SCHEMA_FIELD'; payload: { schemaId: string; fieldKey: string } }
+  | { type: 'UPDATE_SCHEMA_FIELD'; payload: { schemaId: string; fieldKey: string; updates: Partial<FieldDefinition> } }
+  | { type: 'SET_SCHEMA_FIELD'; payload: { schemaId: string; fieldKey: string; field: FieldDefinition } }
+  // Layout
+  | { type: 'SET_LAYOUT_VALIDATED'; payload: LayoutComponent[] }
+  | { type: 'SET_LAYOUT_GROUPS'; payload: LayoutGroup[] }
+  // Rules
+  | { type: 'SET_RULES_CODE'; payload: string }
+  // Requirements
+  | { type: 'SET_REQUIREMENTS_RAW_TEXT'; payload: string }
+  | { type: 'ADD_REQUIREMENT_ENTRY'; payload: RequirementEntry }
+  | { type: 'UPDATE_REQUIREMENT_ENTRY'; payload: { id: string; updates: Partial<RequirementEntry> } }
+  | { type: 'REMOVE_REQUIREMENT_ENTRY'; payload: string }
+  | { type: 'UPSERT_REQUIREMENT_BY_LOCATION'; payload: { location: string; content: string } }
+  // Render component compound
+  | { type: 'ADD_RENDER_COMPONENT_AND_LINK'; payload: { component: RenderComponent; layoutComponentId: string } };
 
 // ============================================================================
 // Reducer
@@ -173,6 +193,163 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
       return { ...state, ...action.payload };
     case 'RESET':
       return initialState;
+
+    // --- Schema compound ---
+    case 'ADD_SCHEMA': {
+      const { schema } = action.payload;
+      return {
+        ...state,
+        schemas: [...state.schemas, schema],
+        instances: { ...state.instances, [schema.id]: [] },
+        selectedSchemaId: schema.id,
+      };
+    }
+    case 'DELETE_SCHEMA': {
+      const schemaId = action.payload;
+      const restInstances = Object.fromEntries(
+        Object.entries(state.instances).filter(([key]) => key !== schemaId)
+      );
+      return {
+        ...state,
+        schemas: state.schemas.filter(s => s.id !== schemaId),
+        instances: restInstances,
+        selectedSchemaId: state.selectedSchemaId === schemaId
+          ? state.schemas.find(s => s.id !== schemaId)?.id || null
+          : state.selectedSchemaId,
+      };
+    }
+    case 'ADD_SCHEMA_FIELD': {
+      const { schemaId, key, field } = action.payload;
+      return {
+        ...state,
+        schemas: state.schemas.map(s =>
+          s.id === schemaId ? { ...s, fields: { ...s.fields, [key]: field } } : s
+        ),
+      };
+    }
+    case 'DELETE_SCHEMA_FIELD': {
+      const { schemaId, fieldKey } = action.payload;
+      return {
+        ...state,
+        schemas: state.schemas.map(s => {
+          if (s.id !== schemaId) return s;
+          const { [fieldKey]: _, ...restFields } = s.fields;
+          return { ...s, fields: restFields };
+        }),
+      };
+    }
+    case 'UPDATE_SCHEMA_FIELD': {
+      const { schemaId, fieldKey, updates } = action.payload;
+      return {
+        ...state,
+        schemas: state.schemas.map(s => {
+          if (s.id !== schemaId) return s;
+          const existing = s.fields[fieldKey];
+          if (!existing) return s;
+          return {
+            ...s,
+            fields: { ...s.fields, [fieldKey]: { ...existing, ...updates } as FieldDefinition },
+          };
+        }),
+      };
+    }
+    case 'SET_SCHEMA_FIELD': {
+      const { schemaId, fieldKey, field } = action.payload;
+      return {
+        ...state,
+        schemas: state.schemas.map(s =>
+          s.id === schemaId ? { ...s, fields: { ...s.fields, [fieldKey]: field } } : s
+        ),
+      };
+    }
+
+    // --- Layout ---
+    case 'SET_LAYOUT_VALIDATED': {
+      const layout = action.payload;
+      return {
+        ...state,
+        layout,
+        selectedComponentId: state.selectedComponentId && layout.some(c => c.id === state.selectedComponentId)
+          ? state.selectedComponentId
+          : null,
+      };
+    }
+    case 'SET_LAYOUT_GROUPS':
+      return { ...state, layoutGroups: action.payload };
+
+    // --- Rules ---
+    case 'SET_RULES_CODE':
+      return { ...state, rulesCode: action.payload };
+
+    // --- Requirements ---
+    case 'SET_REQUIREMENTS_RAW_TEXT':
+      return { ...state, requirements: { ...state.requirements, rawText: action.payload } };
+    case 'ADD_REQUIREMENT_ENTRY':
+      return {
+        ...state,
+        requirements: {
+          ...state.requirements,
+          entries: [...state.requirements.entries, action.payload],
+        },
+      };
+    case 'UPDATE_REQUIREMENT_ENTRY': {
+      const { id, updates } = action.payload;
+      return {
+        ...state,
+        requirements: {
+          ...state.requirements,
+          entries: state.requirements.entries.map(entry =>
+            entry.id === id ? { ...entry, ...updates } : entry
+          ),
+        },
+      };
+    }
+    case 'REMOVE_REQUIREMENT_ENTRY':
+      return {
+        ...state,
+        requirements: {
+          ...state.requirements,
+          entries: state.requirements.entries.filter(entry => entry.id !== action.payload),
+        },
+      };
+    case 'UPSERT_REQUIREMENT_BY_LOCATION': {
+      const { location, content } = action.payload;
+      const trimmed = content.trim();
+      const existing = state.requirements.entries.find(entry => entry.location === location);
+      if (!trimmed) {
+        if (!existing) return state;
+        return {
+          ...state,
+          requirements: {
+            ...state.requirements,
+            entries: state.requirements.entries.filter(entry => entry.location !== location),
+          },
+        };
+      }
+      if (existing && existing.content === trimmed) return state;
+      const nextEntry = existing
+        ? { ...existing, content: trimmed }
+        : { id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, location, content: trimmed, notes: '' };
+      const entries = existing
+        ? state.requirements.entries.map(entry => entry.location === location ? nextEntry : entry)
+        : [...state.requirements.entries, nextEntry];
+      return { ...state, requirements: { ...state.requirements, entries } };
+    }
+
+    // --- Render component compound ---
+    case 'ADD_RENDER_COMPONENT_AND_LINK': {
+      const { component, layoutComponentId } = action.payload;
+      return {
+        ...state,
+        renderComponents: [...state.renderComponents, component],
+        layout: state.layout.map(c =>
+          c.id === layoutComponentId
+            ? { ...c, data: { ...c.data, renderComponentId: component.id, isNew: undefined } }
+            : c
+        ),
+      };
+    }
+
     default:
       return state;
   }

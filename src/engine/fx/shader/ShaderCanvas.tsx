@@ -50,6 +50,7 @@ export const ShaderCanvas: React.FC<ShaderCanvasProps> = ({
   uniforms,
   duration,
   onComplete,
+  maxDpr,
   className = '',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -70,8 +71,8 @@ export const ShaderCanvas: React.FC<ShaderCanvasProps> = ({
     const cw = parent?.offsetWidth ?? canvas.offsetWidth;
     const ch = parent?.offsetHeight ?? canvas.offsetHeight;
 
-    // DPI 缩放
-    const dpr = window.devicePixelRatio || 1;
+    // DPI 缩放（默认 1.5x 上限，特效天然模糊，超过几乎无视觉收益）
+    const dpr = Math.min(window.devicePixelRatio || 1, maxDpr ?? 1.5);
     canvas.width = Math.round(cw * dpr);
     canvas.height = Math.round(ch * dpr);
     canvas.style.width = `${cw}px`;
@@ -112,9 +113,32 @@ export const ShaderCanvas: React.FC<ShaderCanvasProps> = ({
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     // 渲染循环
+    // 跳过前几帧不计时：WebGL 延迟编译导致第一次 drawArrays 可能卡数百毫秒，
+    // 如果从第一帧开始计时，编译卡顿会被算入动画进度导致"跳帧"
     let startTime = 0;
+    let warmupFrames = 2;
 
     const loop = (now: number) => {
+      // 预热阶段：执行绘制但不推进动画进度，等 GPU 编译完成
+      if (warmupFrames > 0) {
+        warmupFrames--;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        const warmupUniforms: Record<string, UniformValue> = {
+          uTime: 0,
+          uResolution: [cw, ch],
+          uProgress: 0,
+        };
+        setUniforms(gl, program, warmupUniforms);
+        setUniforms(gl, program, uniformsRef.current);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
       if (!startTime) startTime = now;
       const elapsed = (now - startTime) / 1000;
       const progress = Math.min(1, elapsed / duration);
@@ -158,7 +182,7 @@ export const ShaderCanvas: React.FC<ShaderCanvasProps> = ({
       if (positionBuffer) gl.deleteBuffer(positionBuffer);
       if (program) gl.deleteProgram(program);
     };
-  }, [fragmentShader, duration]);
+  }, [fragmentShader, duration, maxDpr]);
 
   useEffect(() => {
     const cleanup = render();

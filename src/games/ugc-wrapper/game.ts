@@ -22,22 +22,48 @@ export interface UgcGameOptions {
     domainCode: string;
     minPlayers?: number;
     maxPlayers?: number;
+    commandTypes?: string[];
 }
 
 const DEFAULT_MIN_PLAYERS = 2;
 const DEFAULT_MAX_PLAYERS = 2;
 
+const normalizeRuntimePlayerId = (playerId: unknown): string => {
+    if (playerId === null || playerId === undefined) return '';
+    const raw = String(playerId);
+    if (!raw) return '';
+    if (raw.startsWith('player-')) return raw;
+    if (/^\d+$/.test(raw)) {
+        const value = Number(raw);
+        if (Number.isFinite(value)) {
+            return `player-${value + 1}`;
+        }
+    }
+    return raw;
+};
+
+const normalizeRuntimePlayerIds = (playerIds: Array<string | number>) => (
+    playerIds.map((id) => normalizeRuntimePlayerId(id)).filter(Boolean)
+);
+
 const buildDomainCore = (packageId: string, domain: UGCDomainCore): DomainCore<unknown, Command, GameEvent> => {
     return {
         gameId: packageId,
-        setup: (playerIds, random) => domain.setup(playerIds, random),
+        setup: (playerIds, random) => domain.setup(normalizeRuntimePlayerIds(playerIds), random),
         validate: (state, command) =>
-            domain.validate((state as MatchState<unknown>).core, command) as ValidationResult,
+            domain.validate(
+                (state as MatchState<unknown>).core,
+                { ...command, playerId: normalizeRuntimePlayerId(command.playerId) }
+            ) as ValidationResult,
         execute: (state, command, random) =>
-            domain.execute((state as MatchState<unknown>).core, command, random) as GameEvent[],
+            domain.execute(
+                (state as MatchState<unknown>).core,
+                { ...command, playerId: normalizeRuntimePlayerId(command.playerId) },
+                random
+            ) as GameEvent[],
         reduce: (state, event) => domain.reduce(state, event),
         playerView: domain.playerView
-            ? (state, playerId) => domain.playerView!(state, playerId) as Partial<unknown>
+            ? (state, playerId) => domain.playerView!(state, normalizeRuntimePlayerId(playerId)) as Partial<unknown>
             : undefined,
         isGameOver: domain.isGameOver
             ? (state) => domain.isGameOver!(state) as GameOverResult
@@ -66,6 +92,7 @@ export const createUgcGame = async (options: UgcGameOptions): Promise<Game> => {
         systems,
         minPlayers: options.minPlayers ?? DEFAULT_MIN_PLAYERS,
         maxPlayers: options.maxPlayers ?? DEFAULT_MAX_PLAYERS,
+        commandTypes: options.commandTypes,
         disableUndo: true,
     });
 };

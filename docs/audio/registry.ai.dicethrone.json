@@ -1,10 +1,42 @@
 {
   "version": 1,
-  "generatedAt": "2026-02-08T01:58:12.698Z",
+  "generatedAt": "2026-02-11T15:25:12.759Z",
   "registrySource": "public/assets/common/audio/registry.json",
   "scanRoot": "src/games/dicethrone",
-  "total": 69,
+  "total": 91,
   "entries": [
+    {
+      "key": "bgm.ethereal.ethereal_music_pack.luminesce_rt_4.ethereal_luminesce_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "ethereal"
+      }
+    },
+    {
+      "key": "bgm.ethereal.ethereal_music_pack.wind_chime_rt_5.ethereal_wind_chime_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "ethereal"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.corsair_rt_3.fantasy_vol5_corsair_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
     {
       "key": "bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main",
       "type": "bgm",
@@ -14,7 +46,135 @@
       }
     },
     {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.elder_awakening_rt_2.fantasy_vol7_elder_awakening_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.feysong_fields_rt_3.fantasy_vol7_feysong_fields_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.fireborn_rt_2.fantasy_vol8_fireborn_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.hang_them_rt_3.fantasy_vol5_hang_them_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.lonely_bard_rt_3.fantasy_vol5_lonely_bard_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.my_kingdom_rt_2.fantasy_vol5_my_kingdom_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.nock_rt_2.nock_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.ogres_rt_1.ogres_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
       "key": "bgm.fantasy.fantasy_music_pack_vol.shields_and_spears_rt_2.fantasy_vol5_shields_and_spears_main",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_intensity_2",
+      "type": "bgm",
+      "category": {
+        "group": "bgm",
+        "sub": "fantasy"
+      }
+    },
+    {
+      "key": "bgm.fantasy.fantasy_music_pack_vol.stormborn_destiny_rt_6.fantasy_vol7_stormborn_destiny_main",
       "type": "bgm",
       "category": {
         "group": "bgm",
@@ -246,19 +406,11 @@
       }
     },
     {
-      "key": "fantasy.dark_sword_recharge",
+      "key": "fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002",
       "type": "sfx",
       "category": {
         "group": "fantasy",
-        "sub": "dark_sword_recharge"
-      }
-    },
-    {
-      "key": "fantasy.magic_sword_recharge_01",
-      "type": "sfx",
-      "category": {
-        "group": "fantasy",
-        "sub": "magic_sword_recharge_01"
+        "sub": "gothic_fantasy_sound_fx_pack_vol"
       }
     },
     {
@@ -315,6 +467,14 @@
       "category": {
         "group": "fantasy",
         "sub": "shooting_thunder_arrow_noreverb_01"
+      }
+    },
+    {
+      "key": "magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001",
+      "type": "sfx",
+      "category": {
+        "group": "magic",
+        "sub": "general"
       }
     },
     {
@@ -494,6 +654,14 @@
       }
     },
     {
+      "key": "status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001",
+      "type": "sfx",
+      "category": {
+        "group": "status",
+        "sub": "general"
+      }
+    },
+    {
       "key": "stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose",
       "type": "sfx",
       "category": {
@@ -507,6 +675,14 @@
       "category": {
         "group": "stinger",
         "sub": "mini_games_sound_effects_and_music_pack"
+      }
+    },
+    {
+      "key": "ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003",
+      "type": "sfx",
+      "category": {
+        "group": "ui",
+        "sub": "fantasy_ui_sound_fx_pack_vol"
       }
     },
     {

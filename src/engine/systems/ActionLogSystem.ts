@@ -28,7 +28,7 @@ export interface ActionLogSystemConfig {
         command: Command;
         state: MatchState<unknown>;
         events: GameEvent[];
-    }) => ActionLogEntry | null;
+    }) => ActionLogEntry | ActionLogEntry[] | null;
 }
 
 // ============================================================================
@@ -59,15 +59,25 @@ export function createActionLogSystem<TCore>(
             if (!shouldRecordCommand(command.type, normalizedAllowlist)) return;
             if (!formatEntry) return;
 
-            const entry = formatEntry({
+            const result = formatEntry({
                 command,
                 state: state as MatchState<unknown>,
                 events,
             });
-            if (!entry) return;
+            if (!result) return;
 
+            const entries = Array.isArray(result) ? result : [result];
+            let nextState = state;
+            let touched = false;
+            for (const entry of entries) {
+                if (!entry) continue;
+                nextState = appendEntry(nextState, entry, maxEntries);
+                touched = true;
+            }
+
+            if (!touched) return;
             return {
-                state: appendEntry(state, entry, maxEntries),
+                state: nextState,
             };
         },
     };

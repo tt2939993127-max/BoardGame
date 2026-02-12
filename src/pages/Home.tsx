@@ -122,6 +122,10 @@ export const Home = () => {
             navigate('/dev/ugc');
             return;
         }
+        if (id === 'archview') {
+            navigate('/dev/arch');
+            return;
+        }
         setSearchParams({ game: id });
     };
 
@@ -288,17 +292,8 @@ export const Home = () => {
             })
             .catch((err) => {
                 if (cancelled) return;
-                const status = (err as { status?: number }).status;
-                const message = (err as { message?: string }).message ?? '';
-                if (status === 404 || message.includes('404')) {
-                    // 房间已不存在，清理本地凭证避免重复请求
-                    clearMatchCredentials(local.matchID);
-                    clearOwnerActiveMatch(local.matchID);
-                    setActiveMatch(null);
-                    setMyMatchRole(null);
-                    setLocalStorageTick((t) => t + 1);
-                    return;
-                }
+                // 不在这里处理 404，交给 WebSocket 监听统一处理
+                // 只设置一个临时状态，等待 WebSocket 确认
                 setActiveMatch({
                     matchID: local.matchID,
                     gameName: local.gameName,
@@ -315,7 +310,7 @@ export const Home = () => {
         gameId: activeMatch?.gameName,
         matchId: activeMatch?.matchID,
         enabled: Boolean(activeMatch?.gameName && activeMatch?.matchID),
-        requireSeen: true,
+        requireSeen: false, // 允许立即判断房间是否存在，无需等待"先看到再消失"
     });
 
     useEffect(() => {

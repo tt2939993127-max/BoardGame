@@ -23,12 +23,12 @@ function createTestRandom(): RandomFn {
 
 function validate(core: SummonerWarsCore, type: string, payload: Record<string, unknown>, playerId?: string) {
   const sys = createInitialSystemState(['0', '1'], []);
-  return SummonerWarsDomain.validate({ core, sys }, { type, payload, playerId });
+  return SummonerWarsDomain.validate({ core, sys }, { type, payload, playerId: playerId ?? '0' });
 }
 
 function makeUnitCard(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
-    id, cardType: 'unit', name: `测试单位-${id}`, unitClass: 'common', faction: 'test',
+    id, cardType: 'unit', name: `测试单位-${id}`, unitClass: 'common', faction: 'necromancer',
     strength: 2, life: 3, cost: 1, attackType: 'melee', attackRange: 1,
     deckSymbols: [], ...overrides,
   };
@@ -36,14 +36,14 @@ function makeUnitCard(id: string, overrides?: Partial<UnitCard>): UnitCard {
 
 function makeEventCard(id: string, overrides?: Partial<EventCard>): EventCard {
   return {
-    id, cardType: 'event', name: `测试事件-${id}`, cost: 0, playPhase: 'any',
+    id, cardType: 'event', name: `测试事件-${id}`, faction: 'necromancer', cost: 0, playPhase: 'any',
     effect: '测试', deckSymbols: [], ...overrides,
   };
 }
 
 function makeStructureCard(id: string, overrides?: Partial<StructureCard>): StructureCard {
   return {
-    id, cardType: 'structure' as const, name: `测试建筑-${id}`, cost: 0, life: 5,
+    id, cardType: 'structure' as const, name: `测试建筑-${id}`, faction: 'necromancer', cost: 0, life: 5,
     deckSymbols: [], ...overrides,
   } as StructureCard;
 }

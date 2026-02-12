@@ -22,6 +22,7 @@ import {
     createInitializedState,
     testSystems,
     cmd,
+    injectPendingInteraction,
     type CommandInput,
 } from './test-utils';
 
@@ -180,7 +181,7 @@ describe('CANCEL_INTERACTION 取消交互', () => {
             selectCount: 1,
             selected: [],
         };
-        state.core.pendingInteraction = interaction;
+        injectPendingInteraction(state, interaction);
 
         // 取消交互
         state = execCmd(state, cmd('CANCEL_INTERACTION', '0'));
@@ -190,7 +191,8 @@ describe('CANCEL_INTERACTION 取消交互', () => {
         expect(p0After.discard.some(c => c.id === testCard.id)).toBe(false);
         // CP 返还：execute 从 discard 中找到 card.cpCost=3，reducer 返还 3
         expect(p0After.resources[RESOURCE_IDS.CP]).toBe(cpBefore);
-        expect(state.core.pendingInteraction).toBeUndefined();
+        // sys.interaction 应已解除
+        expect(state.sys.interaction.current).toBeFalsy();
     });
 
     it('没有 pendingInteraction 时取消失败', () => {
@@ -212,8 +214,8 @@ describe('TRANSFER_STATUS 转移状态', () => {
         state.core.players['0'].statusEffects[STATUS_IDS.KNOCKDOWN] = 1;
         state.core.players['1'].statusEffects[STATUS_IDS.KNOCKDOWN] = 0;
 
-        // 注入 pendingInteraction（转移需要交互上下文）
-        state.core.pendingInteraction = {
+        // 注入 pendingInteraction 到 sys.interaction（转移需要交互上下文）
+        injectPendingInteraction(state, {
             id: 'transfer-test',
             playerId: '0',
             sourceCardId: 'test-card',
@@ -222,7 +224,7 @@ describe('TRANSFER_STATUS 转移状态', () => {
             selectCount: 1,
             selected: [],
             transferConfig: {},
-        };
+        });
 
         state = execCmd(state, cmd('TRANSFER_STATUS', '0', {
             fromPlayerId: '0',
@@ -240,7 +242,7 @@ describe('TRANSFER_STATUS 转移状态', () => {
         state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 3;
         state.core.players['1'].tokens[TOKEN_IDS.TAIJI] = 1;
 
-        state.core.pendingInteraction = {
+        injectPendingInteraction(state, {
             id: 'transfer-token-test',
             playerId: '0',
             sourceCardId: 'test-card',
@@ -249,7 +251,7 @@ describe('TRANSFER_STATUS 转移状态', () => {
             selectCount: 1,
             selected: [],
             transferConfig: {},
-        };
+        });
 
         state = execCmd(state, cmd('TRANSFER_STATUS', '0', {
             fromPlayerId: '0',

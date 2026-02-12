@@ -24,7 +24,7 @@
 - [ ] 3.3 SmashUp — 替换 power 计算/卡牌区域操作为 primitives 调用
 
 ## 4. 清理与文档
-- [ ] 4.1 删除 `src/systems/` 整个目录
+- [x] 4.1 删除旧 systems 目录
 - [ ] 4.2 更新 `AGENTS.md` 中 systems/ 相关引用 → primitives/
 - [ ] 4.3 更新 `docs/ai-rules/engine-systems.md` 中系统清单
 - [ ] 4.4 更新 openspec `dice-system` spec 反映新 API

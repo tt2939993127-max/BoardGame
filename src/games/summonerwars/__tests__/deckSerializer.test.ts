@@ -70,6 +70,7 @@ const mockEvent: EventCard = {
     id: 'necro_event_1',
     cardType: 'event',
     name: 'Raise Dead',
+    faction: 'necromancer',
     cost: 0,
     playPhase: 'summon',
     effect: 'Return a common unit from discard pile to play.',

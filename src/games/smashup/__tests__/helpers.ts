@@ -8,12 +8,14 @@
 import type { MatchState } from '../../../engine/types';
 import type {
     SmashUpCore,
+    SmashUpEvent,
     PlayerState,
     MinionOnBase,
     BaseInPlay,
     CardInstance,
 } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { reduce } from '../domain/reduce';
 
 // ============================================================================
 // 随从工厂
@@ -93,14 +95,32 @@ export function makePlayerWithFactions(
 // 卡牌实例工厂
 // ============================================================================
 
-/** 创建卡牌实例 */
+/** 创建卡牌实例（4 参数签名：uid, defId, type, owner） */
+export function makeCard(
+    uid: string,
+    defId: string,
+    type: 'minion' | 'action',
+    owner: string,
+): CardInstance;
+/** 创建卡牌实例（3 参数签名：uid, defId, owner，默认 type='minion'） */
 export function makeCard(
     uid: string,
     defId: string,
     owner: string,
-    type: 'minion' | 'action' = 'minion',
+): CardInstance;
+/** 创建卡牌实例实现 */
+export function makeCard(
+    uid: string,
+    defId: string,
+    typeOrOwner: 'minion' | 'action' | string,
+    owner?: string,
 ): CardInstance {
-    return { uid, defId, owner, type };
+    // 3 参数：uid, defId, owner（type 默认为 'minion'）
+    if (owner === undefined) {
+        return { uid, defId, owner: typeOrOwner, type: 'minion' };
+    }
+    // 4 参数：uid, defId, type, owner
+    return { uid, defId, owner, type: typeOrOwner as 'minion' | 'action' };
 }
 
 // ============================================================================
@@ -149,4 +169,13 @@ export function makeStateWithMadness(overrides?: Partial<SmashUpCore>): SmashUpC
 /** 包装为 MatchState（用于 validate/execute 测试） */
 export function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
     return { core, sys: { phase: 'playCards' } as any } as any;
+}
+
+// ============================================================================
+// 事件应用工具
+// ============================================================================
+
+/** 应用事件列表到状态（通过 reduce） */
+export function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
+    return events.reduce((s, e) => reduce(s, e), state);
 }

@@ -2,7 +2,7 @@
  * Monk 英雄骰子定义
  */
 
-import type { DiceDefinition } from '../../../../systems/DiceSystem/types';
+import type { DiceDefinition } from '../../../../engine/primitives';
 import { DICE_FACE_IDS } from '../../domain/ids';
 
 /**

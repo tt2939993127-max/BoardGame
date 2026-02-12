@@ -19,6 +19,14 @@ export { TutorialSelectionGate } from './TutorialSelectionGate';
 export type { TutorialSelectionGateProps } from './TutorialSelectionGate';
 export { CriticalImageGate } from './CriticalImageGate';
 export type { CriticalImageGateProps } from './CriticalImageGate';
+export { InteractionGate } from './InteractionGate';
+export type { InteractionGateProps } from './InteractionGate';
+export {
+    InteractionGuardProvider,
+    useInteractionGuard,
+    createInteractionGuardController,
+    DEFAULT_INTERACTION_GUARD_THROTTLE_MS,
+} from './InteractionGuard';
 
 // 棋盘布局组件
 export { BoardLayoutEditor } from './BoardLayoutEditor';
@@ -32,11 +40,15 @@ export {
     useHandArea,
     useResourceTray,
     useDragCard,
+    useAutoSkipPhase,
+    useVisualSequenceGate,
 } from './hooks';
 export type {
     UseGameBoardConfig,
     UseHandAreaConfig,
     UseResourceTrayConfig,
+    UseAutoSkipPhaseConfig,
+    UseVisualSequenceGateReturn,
 } from './hooks';
 
 // 预设渲染函数

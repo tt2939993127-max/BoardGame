@@ -1,60 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import type { AudioEvent, AudioRuntimeContext, GameAudioConfig } from '../types';
-import { resolveAudioEvent, resolveAudioKey, resolveBgmKey, resolveEventSoundKey } from '../audioRouting';
+import type { AudioEvent, GameAudioConfig } from '../types';
+import { resolveAudioEvent, resolveFeedback, resolveBgmKey } from '../audioRouting';
 
-const buildContext = (): AudioRuntimeContext<unknown, { phase?: string }, { userId: string }> => ({
+const buildContext = () => ({
     G: {},
-    ctx: { phase: 'a' },
+    ctx: { phase: 'a' } as { phase?: string },
     meta: { userId: 'u1' },
 });
 
 describe('audioRouting', () => {
     it('event.sfxKey 优先', () => {
         const event: AudioEvent = { type: 'X', sfxKey: 'custom' };
-        const config: GameAudioConfig = { eventSoundMap: { X: 'fallback' } };
-        const key = resolveEventSoundKey(event, buildContext(), config);
-        expect(key).toBe('custom');
+        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'fallback', timing: 'immediate' }) };
+        const result = resolveFeedback(event, buildContext(), config);
+        expect(result?.key).toBe('custom');
     });
 
-    it('resolver 返回 null 则静音', () => {
+    it('feedbackResolver 返回 null 则静音', () => {
         const event: AudioEvent = { type: 'X' };
-        const config: GameAudioConfig = {
-            eventSoundResolver: () => null,
-            eventSoundMap: { X: 'fallback' },
-        };
-        const key = resolveEventSoundKey(event, buildContext(), config);
-        expect(key).toBeNull();
+        const config: GameAudioConfig = { feedbackResolver: () => null };
+        const result = resolveFeedback(event, buildContext(), config);
+        expect(result).toBeNull();
     });
 
-    it('resolver 返回 undefined 时使用 map', () => {
+    it('feedbackResolver 结果直接返回（含 timing）', () => {
         const event: AudioEvent = { type: 'X' };
-        const config: GameAudioConfig = {
-            eventSoundResolver: () => undefined,
-            eventSoundMap: { X: 'mapped' },
-        };
-        const key = resolveEventSoundKey(event, buildContext(), config);
-        expect(key).toBe('mapped');
+        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'resolved', timing: 'on-impact' }) };
+        const result = resolveFeedback(event, buildContext(), config);
+        expect(result).toEqual({ key: 'resolved', timing: 'on-impact' });
     });
 
     it('audioKey 优先级最高', () => {
         const event: AudioEvent = { type: 'X', audioKey: 'force' };
-        const config: GameAudioConfig = { eventSoundMap: { X: 'mapped' } };
-        const key = resolveAudioKey(event, buildContext(), config, () => 'category');
-        expect(key).toBe('force');
+        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'fallback', timing: 'immediate' }) };
+        const result = resolveFeedback(event, buildContext(), config, () => 'category');
+        expect(result?.key).toBe('force');
     });
 
     it('audioCategory 命中时返回分类 key', () => {
         const event: AudioEvent = { type: 'X', audioCategory: { group: 'ui', sub: 'click' } };
-        const config: GameAudioConfig = { eventSoundMap: { X: 'mapped' } };
-        const key = resolveAudioKey(event, buildContext(), config, () => 'category');
-        expect(key).toBe('category');
+        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'fallback', timing: 'immediate' }) };
+        const result = resolveFeedback(event, buildContext(), config, () => 'category');
+        expect(result?.key).toBe('category');
     });
 
-    it('audioCategory 未命中时回退到 resolver/map', () => {
+    it('audioCategory 未命中时回退到 feedbackResolver', () => {
         const event: AudioEvent = { type: 'X', audioCategory: { group: 'ui' } };
-        const config: GameAudioConfig = { eventSoundMap: { X: 'mapped' } };
-        const key = resolveAudioKey(event, buildContext(), config, () => null);
-        expect(key).toBe('mapped');
+        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'resolved', timing: 'immediate' }) };
+        const result = resolveFeedback(event, buildContext(), config, () => null);
+        expect(result?.key).toBe('resolved');
     });
 
     it('resolveBgmKey 优先匹配规则，否则 fallback', () => {

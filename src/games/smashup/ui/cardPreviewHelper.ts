@@ -4,7 +4,7 @@
  * 用于 ActionLog 的卡牌预览获取（基于卡牌定义的 previewRef）。
  */
 
-import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { CardPreviewRef } from '../../../core';
 import { getCardDef, getBaseDef } from '../data/cards';
 
 interface CardPreviewMeta {

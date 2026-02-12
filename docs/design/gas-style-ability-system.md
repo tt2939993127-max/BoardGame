@@ -1,10 +1,12 @@
 # GAS风格通用能力系统设计方案
 
 > 参考UE的Gameplay Ability System (GAS)，设计完全通用的能力系统
+> ⚠️ 现状说明：原实现基于已移除的旧 systems 层。当前架构已迁移为 `src/engine/primitives/` + 游戏层组合（如 `src/games/<gameId>/domain/` 内的局部预设），本文作为概念设计参考。
 
 ## 实现状态
 
-✅ **已完成** - 2024年重构
+- ✅ **已完成（旧架构）** - 2024年重构
+- ✅ **已迁移** - 2026年：去除旧 systems 层，使用 `src/engine/primitives/` + 游戏层组合
 
 ## 目标
 
@@ -15,32 +17,29 @@
 ## 架构分层
 
 ```
-src/systems/
-├── core/                    # 完全通用的基础设施
-│   ├── Attribute.ts         # 通用属性管理
-│   ├── Tag.ts               # 通用标签管理
-│   ├── Effect.ts            # 通用效果执行
-│   ├── Condition.ts         # 可扩展条件系统
-│   ├── Ability.ts           # 通用技能框架
-│   ├── GameContext.ts       # 通用游戏上下文
-│   └── index.ts
-├── presets/                 # 游戏类型预设
-│   ├── combat/              # 战斗类游戏预设
-│   │   ├── types.ts         # EffectTiming, DamageModifier 等
-│   │   ├── CombatAbilityManager.ts
-│   │   └── index.ts
-│   └── index.ts
-└── index.ts                 # 统一导出
+src/engine/
+└── primitives/              # 通用原语工具（无领域概念）
+    ├── expression.ts
+    ├── condition.ts
+    ├── target.ts
+    ├── effects.ts
+    ├── zones.ts
+    ├── dice.ts
+    ├── resources.ts
+    └── index.ts
+src/games/<gameId>/domain/   # 游戏层组合/预设（按需）
+└── combat/                  # （可选）战斗类游戏局部预设
 ```
 
 ## 核心抽象
+> 说明：以下接口为概念性说明，当前未作为统一模块提供；如需使用请在游戏层结合 primitives 实现。
 
 ### 1. Attribute（属性）
 
 通用数值属性，不预设HP/MP等：
 
 ```typescript
-// 位置：src/systems/core/Attribute.ts
+// 概念位置（旧架构，已移除）
 interface AttributeDefinition {
   id: string;           // 用户定义的属性名，如 'health', 'mana', 'gold'
   name: string;         // 显示名称
@@ -62,7 +61,7 @@ attrManager.modifyAttribute('player1', 'health', -5); // 扣血
 带层数和持续时间的标签系统：
 
 ```typescript
-// 位置：src/systems/core/Tag.ts
+// 概念位置（旧架构，已移除）
 interface TagInstance {
   id: string;           // 支持层级，如 'status.debuff.stun'
   stacks: number;       // 层数
@@ -81,7 +80,7 @@ tagManager.getTagsMatching('player1', 'status.*'); // 获取所有状态
 通用效果操作，不预设"伤害"/"治疗"：
 
 ```typescript
-// 位置：src/systems/core/Effect.ts
+// 概念位置（旧架构，已移除）
 type EffectOperation =
   | { type: 'modifyAttribute'; target: TargetRef; attrId: string; value: Expression }
   | { type: 'setAttribute'; target: TargetRef; attrId: string; value: Expression }
@@ -102,7 +101,7 @@ type Expression =
 可扩展的条件系统：
 
 ```typescript
-// 位置：src/systems/core/Condition.ts
+// 概念位置（旧架构，已移除）
 // 核心条件类型
 type CoreCondition =
   | { type: 'always' }
@@ -123,7 +122,7 @@ registry.register('diceSet', (cond, ctx) => {
 通用能力框架：
 
 ```typescript
-// 位置：src/systems/core/Ability.ts
+// 概念位置（旧架构，已移除）
 interface AbilityDefinition {
   id: string;
   name: string;
@@ -142,7 +141,7 @@ interface AbilityDefinition {
 不预设战斗操作：
 
 ```typescript
-// 位置：src/systems/core/GameContext.ts
+// 概念位置（旧架构，已移除）
 interface GameContext {
   // 属性操作
   getAttribute(entityId: string, attrId: string): number;
@@ -172,7 +171,7 @@ const ctx = createGameContext(attrManager, tagManager, {
 
 ## 战斗类游戏预设
 
-位于 `src/systems/presets/combat/`，提供回合制战斗游戏的便捷抽象：
+不再提供全局预设；战斗类游戏可在 `src/games/<gameId>/domain/combat/` 维护局部预设（如 DiceThrone）：
 
 ```typescript
 // 效果时机
@@ -193,7 +192,7 @@ combatManager.registerAbility({ /* CombatAbilityDef */ });
 
 ## 与旧设计的对比
 
-| 旧设计 | 新版 (core/) |
+| 旧设计 | 新版（primitives + 游戏层） |
 |---------------------|--------------|
 | `applyDamage(target, amount)` | `modifyAttribute(target, 'health', -amount)` |
 | `applyHeal(target, amount)` | `modifyAttribute(target, 'health', amount)` |
@@ -207,29 +206,30 @@ combatManager.registerAbility({ /* CombatAbilityDef */ });
 ### 新项目
 
 ```typescript
-import { 
-  createAttributeManager, 
-  createTagManager, 
-  createGameContext,
-  createAbilityRegistry,
-} from '@/systems';
+import {
+  createConditionHandlerRegistry,
+  registerConditionHandler,
+  evaluateCondition,
+  createEffectHandlerRegistry,
+  registerEffectHandler,
+  executeEffects,
+} from '@/engine/primitives';
 
-// 1. 创建管理器
-const attrs = createAttributeManager();
-const tags = createTagManager();
-const abilities = createAbilityRegistry();
+const conditionRegistry = createConditionHandlerRegistry();
+registerConditionHandler(conditionRegistry, 'diceSet', (params, ctx) => {
+  // 自定义条件逻辑
+  return true;
+});
 
-// 2. 注册属性定义
-attrs.registerAttributes([
-  { id: 'health', name: '生命值', min: 0, max: 100, initialValue: 100 },
-  { id: 'gold', name: '金币', min: 0, initialValue: 0 },
-]);
+const effectRegistry = createEffectHandlerRegistry();
+registerEffectHandler(effectRegistry, 'damage', (effect, state) => {
+  // 返回新状态 + 事件
+  return { state, events: [] };
+});
 
-// 3. 创建游戏上下文
-const ctx = createGameContext(attrs, tags);
-
-// 4. 注册技能
-abilities.register({ id: 'fireball', name: '火球术', ... });
+if (evaluateCondition(ability.trigger, ctx, conditionRegistry)) {
+  const result = executeEffects(ability.effects, state, effectRegistry);
+}
 ```
 
 ### 战斗类游戏
@@ -238,7 +238,7 @@ abilities.register({ id: 'fireball', name: '火球术', ... });
 import { 
   createCombatAbilityManager,
   type CombatAbilityDef,
-} from '@/systems';
+} from '@/games/<gameId>/domain/combat';
 
 const combatManager = createCombatAbilityManager();
 combatManager.registerAbility({
@@ -249,13 +249,9 @@ combatManager.registerAbility({
 });
 ```
 
-## 完成清单
+## 完成清单（归档）
 
-- [x] 实现通用 AttributeSystem (`core/Attribute.ts`)
-- [x] 实现通用 TagSystem (`core/Tag.ts`)
-- [x] 实现通用 EffectSystem (`core/Effect.ts`)
-- [x] 实现通用 ConditionSystem (`core/Condition.ts`)
-- [x] 实现通用 AbilitySystem (`core/Ability.ts`)
-- [x] 重构 GameContext 为通用接口 (`core/GameContext.ts`)
-- [x] 将战斗预设移到 `presets/combat/`
-- [x] 更新导出和文档
+- [x] 通用能力系统概念设计
+- [x] 战斗类预设概念设计
+- [x] 迁移为 `engine/primitives/` + 游戏层组合（2026）
+- [x] 清理旧 systems 层与文档

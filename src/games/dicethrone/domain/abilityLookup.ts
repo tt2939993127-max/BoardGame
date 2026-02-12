@@ -7,7 +7,7 @@
  */
 
 import type { PlayerId } from '../../../engine/types';
-import type { AbilityDef, AbilityEffect, AbilityTag, AbilityVariantDef } from '../../../systems/presets/combat';
+import type { AbilityDef, AbilityEffect, AbilityTag, AbilityVariantDef } from './combat';
 import type { DiceThroneCore } from './types';
 
 export type PlayerAbilityMatch = { ability: AbilityDef; variant?: AbilityVariantDef };

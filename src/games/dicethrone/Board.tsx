@@ -6,6 +6,7 @@ import type { MatchState } from '../../engine/types';
 import { RESOURCE_IDS } from './domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
+import type { PendingInteraction } from './domain/types';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { GameDebugPanel } from '../../components/GameDebugPanel';
@@ -45,7 +46,7 @@ import { registerCardAtlasSource } from '../../components/common/media/CardPrevi
 import { useRematch } from '../../contexts/RematchContext';
 import { useGameMode } from '../../contexts/GameModeContext';
 import { useCurrentChoice, useDiceThroneState } from './hooks/useDiceThroneState';
-import { PROMPT_COMMANDS } from '../../engine/systems/PromptSystem';
+import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 // 引擎层 Hooks
 import { useSpectatorMoves } from '../../engine';
 // 游戏特定 Hooks
@@ -57,145 +58,12 @@ import { useUIState } from './hooks/useUIState';
 import { useDiceThroneAudio } from './hooks/useDiceThroneAudio';
 import { playDeniedSound } from '../../lib/audio/useGameAudio';
 import { computeViewModeState } from './ui/viewMode';
-import { getDieFace } from './domain/rules';
+import { resolveMoves, type DiceThroneMoveMap } from './ui/resolveMoves';
+import { LayoutSaveButton } from './ui/LayoutSaveButton';
+import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
 
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = BoardProps<DiceThroneMatchState>;
-type DiceThroneMoveMap = {
-    advancePhase: () => void;
-    rollDice: () => void;
-    toggleDieLock: (id: number) => void;
-    confirmRoll: () => void;
-    selectAbility: (abilityId: string) => void;
-    playCard: (cardId: string) => void;
-    sellCard: (cardId: string) => void;
-    undoSellCard?: () => void;
-    resolveChoice: (statusId: string) => void;
-    responsePass: (forPlayerId?: string) => void;
-    // 卡牌交互相关
-    modifyDie: (dieId: number, newValue: number) => void;
-    rerollDie: (dieId: number) => void;
-    removeStatus: (targetPlayerId: string, statusId?: string) => void;
-    transferStatus: (fromPlayerId: string, toPlayerId: string, statusId: string) => void;
-    confirmInteraction: (interactionId: string, selectedDiceIds?: number[]) => void;
-    cancelInteraction: () => void;
-    // Token 响应相关
-    useToken: (tokenId: string, amount: number) => void;
-    skipTokenResponse: () => void;
-    usePurify: (statusId: string) => void;
-    // 击倒移除
-    payToRemoveKnockdown: () => void;
-    // 奖励骰重掷
-    rerollBonusDie: (dieIndex: number) => void;
-    skipBonusDiceReroll: () => void;
-    // 选角相关
-    selectCharacter: (characterId: string) => void;
-    hostStartGame: () => void;
-    playerReady: () => void;
-};
-
-const requireMove = <T extends (...args: unknown[]) => void>(value: unknown, name: string): T => {
-    if (typeof value !== 'function') {
-        throw new Error(`[DiceThroneBoard] 缺少 move: ${name}`);
-    }
-    return value as T;
-};
-
-const resolveMoves = (raw: Record<string, unknown>): DiceThroneMoveMap => {
-    // 统一把 payload 包装成领域命令结构，避免 die_not_found 等校验失败
-    const advancePhase = requireMove(raw.advancePhase ?? raw.ADVANCE_PHASE, 'advancePhase');
-    const rollDice = requireMove(raw.rollDice ?? raw.ROLL_DICE, 'rollDice');
-    const toggleDieLock = requireMove(raw.toggleDieLock ?? raw.TOGGLE_DIE_LOCK, 'toggleDieLock');
-    const confirmRoll = requireMove(raw.confirmRoll ?? raw.CONFIRM_ROLL, 'confirmRoll');
-    const selectAbility = requireMove(raw.selectAbility ?? raw.SELECT_ABILITY, 'selectAbility');
-    const playCard = requireMove(raw.playCard ?? raw.PLAY_CARD, 'playCard');
-    const sellCard = requireMove(raw.sellCard ?? raw.SELL_CARD, 'sellCard');
-    const undoSellCardRaw = (raw.undoSellCard ?? raw.UNDO_SELL_CARD) as ((payload?: unknown) => void) | undefined;
-    const resolveChoice = requireMove(raw.resolveChoice ?? raw.RESOLVE_CHOICE, 'resolveChoice');
-
-    const responsePassRaw = (raw.responsePass ?? raw.RESPONSE_PASS) as ((payload?: unknown) => void) | undefined;
-    // 卡牌交互 moves
-    const modifyDieRaw = (raw.modifyDie ?? raw.MODIFY_DIE) as ((payload: unknown) => void) | undefined;
-    const rerollDieRaw = (raw.rerollDie ?? raw.REROLL_DIE) as ((payload: unknown) => void) | undefined;
-    const removeStatusRaw = (raw.removeStatus ?? raw.REMOVE_STATUS) as ((payload: unknown) => void) | undefined;
-    const transferStatusRaw = (raw.transferStatus ?? raw.TRANSFER_STATUS) as ((payload: unknown) => void) | undefined;
-    const confirmInteractionRaw = (raw.confirmInteraction ?? raw.CONFIRM_INTERACTION) as ((payload: unknown) => void) | undefined;
-    const cancelInteractionRaw = (raw.cancelInteraction ?? raw.CANCEL_INTERACTION) as ((payload: unknown) => void) | undefined;
-    // Token 响应 moves
-    const useTokenRaw = (raw.useToken ?? raw.USE_TOKEN) as ((payload: unknown) => void) | undefined;
-    const skipTokenResponseRaw = (raw.skipTokenResponse ?? raw.SKIP_TOKEN_RESPONSE) as ((payload: unknown) => void) | undefined;
-    const usePurifyRaw = (raw.usePurify ?? raw.USE_PURIFY) as ((payload: unknown) => void) | undefined;
-    const payToRemoveKnockdownRaw = (raw.payToRemoveKnockdown ?? raw.PAY_TO_REMOVE_KNOCKDOWN) as ((payload: unknown) => void) | undefined;
-    // 奖励骰重掷 moves
-    const rerollBonusDieRaw = (raw.rerollBonusDie ?? raw.REROLL_BONUS_DIE) as ((payload: unknown) => void) | undefined;
-    const skipBonusDiceRerollRaw = (raw.skipBonusDiceReroll ?? raw.SKIP_BONUS_DICE_REROLL) as ((payload: unknown) => void) | undefined;
-    const selectCharacterRaw = (raw.selectCharacter ?? raw.SELECT_CHARACTER) as ((payload: unknown) => void) | undefined;
-    const hostStartGameRaw = (raw.hostStartGame ?? raw.HOST_START_GAME) as ((payload: unknown) => void) | undefined;
-    const playerReadyRaw = (raw.playerReady ?? raw.PLAYER_READY) as ((payload: unknown) => void) | undefined;
-
-    return {
-        advancePhase: () => advancePhase({}),
-        rollDice: () => rollDice({}),
-        toggleDieLock: (id) => toggleDieLock({ dieId: id }),
-        confirmRoll: () => confirmRoll({}),
-        selectAbility: (abilityId) => selectAbility({ abilityId }),
-        playCard: (cardId) => playCard({ cardId }),
-        sellCard: (cardId) => sellCard({ cardId }),
-        undoSellCard: undoSellCardRaw ? () => undoSellCardRaw({}) : undefined,
-        resolveChoice: (statusId) => resolveChoice({ statusId }),
-        responsePass: (forPlayerId) => responsePassRaw?.(forPlayerId ? { forPlayerId } : {}),
-        // 卡牌交互
-        modifyDie: (dieId, newValue) => modifyDieRaw?.({ dieId, newValue }),
-        rerollDie: (dieId) => rerollDieRaw?.({ dieId }),
-        removeStatus: (targetPlayerId, statusId) => removeStatusRaw?.({ targetPlayerId, statusId }),
-        transferStatus: (fromPlayerId, toPlayerId, statusId) => transferStatusRaw?.({ fromPlayerId, toPlayerId, statusId }),
-        confirmInteraction: (interactionId, selectedDiceIds) => confirmInteractionRaw?.({ interactionId, selectedDiceIds }),
-        cancelInteraction: () => cancelInteractionRaw?.({}),
-        // Token 响应
-        useToken: (tokenId, amount) => useTokenRaw?.({ tokenId, amount }),
-        skipTokenResponse: () => skipTokenResponseRaw?.({}),
-        usePurify: (statusId) => usePurifyRaw?.({ statusId }),
-        // 击倒移除
-        payToRemoveKnockdown: () => payToRemoveKnockdownRaw?.({}),
-        // 奖励骰重掷
-        rerollBonusDie: (dieIndex) => rerollBonusDieRaw?.({ dieIndex }),
-        skipBonusDiceReroll: () => skipBonusDiceRerollRaw?.({}),
-        selectCharacter: (characterId) => selectCharacterRaw?.({ characterId }),
-        hostStartGame: () => hostStartGameRaw?.({}),
-        playerReady: () => playerReadyRaw?.({}),
-    };
-};
-
-/** 调试面板内的布局保存按钮 */
-const LayoutSaveButton = ({ abilityOverlaysRef }: { abilityOverlaysRef: React.RefObject<AbilityOverlaysHandle | null> }) => {
-    const [isSaving, setIsSaving] = React.useState(false);
-    const [saveHint, setSaveHint] = React.useState<string | null>(null);
-
-    const handleSave = React.useCallback(async () => {
-        if (!abilityOverlaysRef.current) return;
-        setIsSaving(true);
-        setSaveHint(null);
-        const result = await abilityOverlaysRef.current.saveLayout();
-        setSaveHint(result.hint);
-        setIsSaving(false);
-    }, [abilityOverlaysRef]);
-
-    return (
-        <div className="space-y-1">
-            <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className={`w-full py-2 rounded font-bold text-xs border transition-[background-color] duration-200 ${isSaving ? 'bg-emerald-300 border-emerald-200 text-black/70' : 'bg-emerald-600 border-emerald-400 text-white hover:bg-emerald-500'}`}
-            >
-                {isSaving ? '保存中…' : '💾 保存布局'}
-            </button>
-            {saveHint && (
-                <p className="text-[10px] text-emerald-400 bg-black/40 px-2 py-1 rounded">{saveHint}</p>
-            )}
-        </div>
-    );
-};
-
 // --- Main Layout ---
 export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, moves, playerID, reset, matchData, isMultiplayer }) => {
     const G = rawG.core;
@@ -216,15 +84,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const { isActive: isTutorialActive, currentStep: tutorialStep, nextStep: nextTutorialStep, startTutorial } = useTutorial();
     const toast = useToast();
     const locale = i18n.resolvedLanguage ?? i18n.language;
-    const shouldAutoSkipSelection = React.useMemo(() => {
-        if (typeof window === 'undefined') return false;
-        try {
-            return window.localStorage.getItem('tutorial_skip') === '1';
-        } catch {
-            return false;
-        }
-    }, []);
-    const autoSkipStageRef = React.useRef<'idle' | 'selected' | 'completed'>('idle');
     const tutorialStartRequestedRef = React.useRef(false);
 
     const isGameOver = ctx.gameover;
@@ -267,86 +126,18 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         }
     }, [reset, registerReset, isSpectator]);
 
-    React.useEffect(() => {
-        if (!shouldAutoSkipSelection) return;
-        if (isSpectator) return;
-        if (gameMode?.mode === 'tutorial') return;
-        if (currentPhase !== 'setup') return;
-
-        const isAutoSkipDone = () => {
-            const selectedCharacter = G.selectedCharacters[rootPid];
-            const hasSelected = selectedCharacter && selectedCharacter !== 'unselected';
-            if (!hasSelected) return false;
-            if (gameMode?.mode === 'online') {
-                if (rootPid === G.hostPlayerId) {
-                    return G.hostStarted;
-                }
-                return !!G.readyPlayers?.[rootPid];
-            }
-            if (gameMode?.mode === 'local') {
-                return G.hostStarted;
-            }
-            return false;
-        };
-
-        let timer: number | undefined;
-        const attemptAutoSkip = () => {
-            if (isAutoSkipDone()) {
-                autoSkipStageRef.current = 'completed';
-                if (timer !== undefined) {
-                    window.clearInterval(timer);
-                }
-                return;
-            }
-
-            const selectedCharacter = G.selectedCharacters[rootPid];
-            const hasSelected = selectedCharacter && selectedCharacter !== 'unselected';
-
-            if (!hasSelected) {
-                const defaultCharacter = rootPid === '1' ? 'barbarian' : 'monk';
-                engineMoves.selectCharacter(defaultCharacter);
-                autoSkipStageRef.current = 'selected';
-                return;
-            }
-
-            if (gameMode?.mode === 'online') {
-                if (rootPid === G.hostPlayerId) {
-                    if (!G.hostStarted) {
-                        engineMoves.hostStartGame();
-                    }
-                } else if (!G.readyPlayers?.[rootPid]) {
-                    engineMoves.playerReady();
-                }
-                return;
-            }
-
-            if (gameMode?.mode === 'local') {
-                if (!G.hostStarted) {
-                    engineMoves.hostStartGame();
-                }
-            }
-        };
-
-        attemptAutoSkip();
-        timer = window.setInterval(attemptAutoSkip, 800);
-
-        return () => {
-            if (timer !== undefined) {
-                window.clearInterval(timer);
-            }
-        };
-    }, [
-        G.hostPlayerId,
-        G.hostStarted,
-        G.readyPlayers,
-        G.selectedCharacters,
+    useAutoSkipSelection({
         currentPhase,
-        engineMoves,
-        gameMode?.mode,
         isSpectator,
+        gameMode,
         rootPid,
-        shouldAutoSkipSelection,
-    ]);
+        selectedCharacters: G.selectedCharacters,
+        hostPlayerId: G.hostPlayerId,
+        hostStarted: G.hostStarted,
+        readyPlayers: G.readyPlayers,
+        engineMoves,
+    });
+
 
     // 判断游戏结果
     const isWinner = isGameOver && ctx.gameover?.winner === rootPid;
@@ -416,8 +207,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         bonusDie,
         handleBonusDieClose,
     } = useCardSpotlight({
-        lastPlayedCard: G.lastPlayedCard,
-        lastBonusDieRoll: G.lastBonusDieRoll,
+        eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
         currentPlayerId: rootPid,
         opponentName,
         isSpectator,
@@ -448,8 +238,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const discardPileRef = React.useRef<HTMLDivElement>(null);
     const abilityOverlaysRef = React.useRef<AbilityOverlaysHandle>(null);
 
-    // 使用 useInteractionState Hook 管理交互状态
-    const pendingInteraction = G.pendingInteraction;
+    // 使用 useInteractionState Hook 管理交互状态（从 sys.interaction 读取）
+    const sysInteraction = rawG.sys.interaction?.current;
+    const pendingInteraction: PendingInteraction | undefined = sysInteraction?.kind === 'dt:card-interaction'
+        ? sysInteraction.data as PendingInteraction
+        : undefined;
     const { localState: localInteraction, handlers: interactionHandlers } = useInteractionState(pendingInteraction);
 
     // 追踪取消交互时返回的卡牌ID
@@ -499,59 +292,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         && (currentPhase === 'defensiveRoll' || hasRolled);
     const canSelectAbility = canOperateView && isViewRolling && isRollPhase
         && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed);
-    
-    // Debug log for tutorial state
-    React.useEffect(() => {
-        if (gameMode?.mode === 'tutorial') {
-            console.warn('[DiceThroneBoard] Tutorial state:', {
-                stepId: tutorialStep?.id,
-                isActive: isTutorialActive,
-                currentPhase,
-            });
-        }
-    }, [gameMode?.mode, tutorialStep?.id, isTutorialActive, currentPhase]);
-    
-    // Debug log for abilities step
-    React.useEffect(() => {
-        if (gameMode?.mode === 'tutorial' && tutorialStep?.id === 'abilities') {
-            console.warn('[DiceThroneBoard] Abilities step debug:', {
-                currentPhase,
-                isViewRolling,
-                isRollPhase,
-                rollConfirmed,
-                canSelectAbility,
-                canHighlightAbility,
-                availableAbilityIds,
-                dice: G.dice,
-                faceCounts: G.dice.reduce((acc, die) => {
-                    const face = die.symbol || getDieFace(die.value);
-                    acc[face] = (acc[face] || 0) + 1;
-                    return acc;
-                }, {} as Record<string, number>),
-            });
-        }
-    }, [gameMode?.mode, tutorialStep?.id, currentPhase, isViewRolling, isRollPhase, rollConfirmed, canSelectAbility, canHighlightAbility, availableAbilityIds, G.dice]);
-    // 阶段推进权限：由焦点玩家控制，防御阶段需要验证 rollConfirmed
-    const canAdvancePhase = isFocusPlayer && !hasPendingInteraction && (currentPhase === 'defensiveRoll' ? rollConfirmed : true);
-    const canResolveChoice = Boolean(choice.hasChoice && choice.playerId === rootPid);
-    const canInteractDice = canOperateView && isViewRolling;
-
-    // Debug log for tutorial defense phase
-    React.useEffect(() => {
-        if (gameMode?.mode === 'tutorial' && currentPhase === 'defensiveRoll') {
-            console.warn('[DiceThroneBoard] Defense phase debug:', {
-                canInteractDice,
-                canOperateView,
-                isViewRolling,
-                rollerId,
-                viewPid,
-                rootPid,
-                rollCount: G.rollCount,
-                rollConfirmed,
-                pendingAttack: G.pendingAttack,
-            });
-        }
-    }, [gameMode?.mode, currentPhase, canInteractDice, canOperateView, isViewRolling, rollerId, viewPid, rootPid, G.rollCount, rollConfirmed, G.pendingAttack]);
 
     // 响应窗口状态
     const responseWindow = access.responseWindow;
@@ -830,12 +570,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     }, [isTutorialActive, tutorialStep, nextTutorialStep]);
 
     const handleAdvancePhase = () => {
-        console.warn('[DiceThroneBoard] handleAdvancePhase called', {
-            canAdvancePhase,
-            currentPhase,
-            isTutorialActive,
-            tutorialStepId: tutorialStep?.id,
-        });
         if (!canAdvancePhase) {
             if (currentPhase === 'offensiveRoll' && !G.rollConfirmed) {
                 showHeaderError(t('error.confirmRoll'));
@@ -844,10 +578,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             }
             return;
         }
-        if (shouldBlockTutorialAction('advance-phase-button')) {
-            console.warn('[DiceThroneBoard] handleAdvancePhase blocked by tutorial');
-            return;
-        }
+        if (shouldBlockTutorialAction('advance-phase-button')) return;
         if (currentPhase === 'offensiveRoll') {
             const hasSelectedAbility = Boolean(G.pendingAttack?.sourceAbilityId);
             const hasAvailableAbilities = availableAbilityIdsForRoller.length > 0;
@@ -857,7 +588,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                 return;
             }
         }
-        console.warn('[DiceThroneBoard] Calling engineMoves.advancePhase()');
         engineMoves.advancePhase();
         advanceTutorialIfNeeded('advance-phase-button');
     };
@@ -890,8 +620,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         const timer = setTimeout(() => setActivatingAbilityId(undefined), 800);
         return () => clearTimeout(timer);
     }, [G.activatingAbilityId, G.pendingAttack?.sourceAbilityId, triggerAbilityGlow]);
-
-
 
     const damageStreamEntry = React.useMemo(() => {
         const entries = rawG.sys?.eventStream?.entries ?? [];
@@ -1196,9 +924,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     choice={choice}
                     canResolveChoice={canResolveChoice}
                     onResolveChoice={(optionId) => {
-                        const promptMove = (moves as Record<string, unknown>)[PROMPT_COMMANDS.RESPOND];
-                        if (typeof promptMove === 'function') {
-                            (promptMove as (payload: { optionId: string }) => void)({ optionId });
+                        const respondMove = (moves as Record<string, unknown>)[INTERACTION_COMMANDS.RESPOND];
+                        if (typeof respondMove === 'function') {
+                            (respondMove as (payload: { optionId: string }) => void)({ optionId });
                         }
                     }}
 

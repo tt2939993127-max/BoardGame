@@ -24,6 +24,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 function createTestState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom());
 }
@@ -63,7 +65,7 @@ function placeUnit(state: SummonerWarsCore, pos: CellCoord, overrides: Partial<B
 function makePlagueZombie(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '亡灵疫病体', unitClass: 'common',
-    faction: '堕落王国', strength: 2, life: 3, cost: 1,
+    faction: 'necromancer', strength: 2, life: 3, cost: 1,
     attackType: 'melee', attackRange: 1,
     abilities: ['soulless', 'infection'], deckSymbols: [],
   };
@@ -73,7 +75,7 @@ function makePlagueZombie(id: string): UnitCard {
 function makeUndeadArcher(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '亡灵弓箭手', unitClass: 'common',
-    faction: '堕落王国', strength: 3, life: 2, cost: 2,
+    faction: 'necromancer', strength: 3, life: 2, cost: 2,
     attackType: 'ranged', attackRange: 3,
     abilities: ['soul_transfer'], deckSymbols: [],
   };
@@ -83,7 +85,7 @@ function makeUndeadArcher(id: string): UnitCard {
 function makeEnemy(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 1, life: 1, cost: 0,
+    faction: 'goblin', strength: 1, life: 1, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
   };
 }
@@ -94,7 +96,7 @@ function executeAndReduce(state: SummonerWarsCore, commandType: string, payload:
   events: GameEvent[];
 } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, random ?? createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -163,7 +165,7 @@ describe('亡灵疫病体 - 无魂 (soulless)', () => {
       // 放置普通单位（无 soulless）
       placeUnit(state, { row: 4, col: 2 }, {
         cardId: 'test-normal',
-        card: { ...makeEnemy('test-normal'), strength: 3, life: 5, owner: undefined as any, abilities: [] },
+        card: { ...makeEnemy('test-normal'), strength: 3, life: 5, abilities: [] },
         owner: '0',
       });
 
@@ -358,6 +360,7 @@ describe('殉葬火堆 (funeral_pyre)', () => {
       cardType: 'event',
       name: '殉葬火堆',
       eventType: 'legendary',
+      faction: 'necromancer',
       cost: 1,
       playPhase: 'summon',
       effect: '持续效果',
@@ -410,6 +413,7 @@ describe('殉葬火堆 (funeral_pyre)', () => {
       cardType: 'event',
       name: '殉葬火堆',
       eventType: 'legendary',
+      faction: 'necromancer',
       cost: 1,
       playPhase: 'summon',
       effect: '持续效果',
@@ -452,6 +456,7 @@ describe('殉葬火堆 (funeral_pyre)', () => {
       cardType: 'event',
       name: '殉葬火堆',
       eventType: 'legendary',
+      faction: 'necromancer',
       cost: 1,
       playPhase: 'summon',
       effect: '持续效果',
@@ -552,7 +557,7 @@ describe('伊路特-巴尔 - 火祀召唤 (fire_sacrifice_summon)', () => {
       cardId: 'test-elut-bar',
       card: {
         id: 'test-elut-bar', cardType: 'unit', name: '伊路特-巴尔',
-        unitClass: 'champion', faction: '堕落王国', strength: 6, life: 6,
+        unitClass: 'champion', faction: 'necromancer', strength: 6, life: 6,
         cost: 6, attackType: 'melee', attackRange: 1,
         abilities: ['fire_sacrifice_summon'], deckSymbols: [],
       },
@@ -597,7 +602,7 @@ describe('德拉戈斯 - 吸取生命 (life_drain)', () => {
       cardId: 'test-dragos',
       card: {
         id: 'test-dragos', cardType: 'unit', name: '德拉戈斯',
-        unitClass: 'champion', faction: '堕落王国', strength: 4, life: 8,
+        unitClass: 'champion', faction: 'necromancer', strength: 4, life: 8,
         cost: 6, attackType: 'melee', attackRange: 1,
         abilities: ['life_drain'], deckSymbols: [],
       },

@@ -47,4 +47,31 @@ describe('SmashUp Tutorial Manifest 结构验证', () => {
         const last = SMASH_UP_TUTORIAL.steps[SMASH_UP_TUTORIAL.steps.length - 1];
         expect(last.id).toBe('finish');
     });
+
+    it('交互步骤配置了 allowedTargets 目标级门控', () => {
+        const playMinion = SMASH_UP_TUTORIAL.steps.find(s => s.id === 'playMinion');
+        expect(playMinion?.allowedTargets).toEqual(['tut-1']);
+
+        const playAction = SMASH_UP_TUTORIAL.steps.find(s => s.id === 'playAction');
+        expect(playAction?.allowedTargets).toEqual(['tut-2']);
+
+        const useTalent = SMASH_UP_TUTORIAL.steps.find(s => s.id === 'useTalent');
+        expect(useTalent?.allowedTargets).toEqual(['tut-1']);
+    });
+
+    it('allowedTargets 只引用教学手牌中存在的 uid', () => {
+        const tutorialHand = SMASH_UP_TUTORIAL.steps.find(s => s.id === 'setup');
+        const mergeAction = tutorialHand?.aiActions?.find(
+            a => a.commandType === 'SYS_CHEAT_MERGE_STATE'
+        );
+        const handCards = (mergeAction?.payload as any)?.fields?.players?.['0']?.hand ?? [];
+        const handUids = new Set(handCards.map((c: any) => c.uid));
+
+        for (const step of SMASH_UP_TUTORIAL.steps) {
+            if (!step.allowedTargets) continue;
+            for (const target of step.allowedTargets) {
+                expect(handUids.has(target), `allowedTarget '${target}' 在步骤 '${step.id}' 中引用了不存在的手牌 uid`).toBe(true);
+            }
+        }
+    });
 });

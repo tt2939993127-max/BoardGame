@@ -5,7 +5,7 @@
  * 通用 RESOURCE_IDS 从 domain/resources.ts 导入。
  */
 
-import type { ResourceDefinition } from '../../../../systems/ResourceSystem/types';
+import type { ResourceDefinition } from '../../domain/resourceSystem';
 import { INITIAL_HEALTH, INITIAL_CP, CP_MAX } from '../../domain/types';
 import { RESOURCE_IDS } from '../../domain/resources';
 

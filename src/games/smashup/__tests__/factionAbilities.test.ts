@@ -18,6 +18,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -103,7 +104,7 @@ function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
 // ============================================================================
 
 describe('海盗派系能力', () => {
-    it('pirate_broadside: 消灭对手在你有随从的基地的所有力量≤2随从', () => {
+    it('pirate_broadside: 单个有己方随从的基地时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -122,12 +123,9 @@ describe('海盗派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1', 0);
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        // 应消灭 m1(力量2) 和 m2(力量1)
-        expect(destroyEvents.length).toBe(2);
-        const destroyedUids = destroyEvents.map(e => (e as any).payload.minionUid);
-        expect(destroyedUids).toContain('m1');
-        expect(destroyedUids).toContain('m2');
+        // 单个基地时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('pirate_cannon: 多目标时创建 Prompt 选择', () => {
@@ -146,12 +144,12 @@ describe('海盗派系能力', () => {
 
         const events = execPlayAction(state, '0', 'a1');
         // 多个力量≤2目标时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('pirate_cannon_choose_first');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('pirate_cannon_choose_first');
     });
 
-    it('pirate_cannon: 单目标时自动消灭', () => {
+    it('pirate_cannon: 单目标时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -166,9 +164,8 @@ describe('海盗派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('m1');
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('pirate_swashbuckling: 所有己方随从+1力量', () => {
@@ -200,7 +197,7 @@ describe('海盗派系能力', () => {
 // ============================================================================
 
 describe('忍者派系能力', () => {
-    it('ninja_seeing_stars: 消灭任意基地一个力量≤3的对手随从', () => {
+    it('ninja_seeing_stars: 单个力量≤3对手随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -215,9 +212,8 @@ describe('忍者派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('m2');
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 });
 
@@ -226,7 +222,7 @@ describe('忍者派系能力', () => {
 // ============================================================================
 
 describe('恐龙派系能力', () => {
-    it('dino_wild_stuffing: 消灭任意基地一个力量≤3的随从', () => {
+    it('dino_wild_stuffing: 单个力量≤3随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -240,8 +236,8 @@ describe('恐龙派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(1);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {
@@ -259,12 +255,12 @@ describe('恐龙派系能力', () => {
 
         const events = execPlayAction(state, '0', 'a1');
         // 多个己方随从时应创建 Prompt 而非自动选择
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('dino_augmentation');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('dino_augmentation');
     });
 
-    it('dino_augmentation: 单个己方随从时自动+4力量', () => {
+    it('dino_augmentation: 单个己方随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -278,10 +274,8 @@ describe('恐龙派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
-        expect(powerEvents.length).toBe(1);
-        expect((powerEvents[0] as any).payload.minionUid).toBe('m1');
-        expect((powerEvents[0] as any).payload.amount).toBe(4);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('dino_howl: 所有己方随从+1力量', () => {
@@ -303,7 +297,7 @@ describe('恐龙派系能力', () => {
         expect((powerEvents[0] as any).payload.minionUid).toBe('m0');
     });
 
-    it('dino_natural_selection: 消灭力量低于己方随从的对手随从', () => {
+    it('dino_natural_selection: 单个己方随从+单个目标时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -323,9 +317,8 @@ describe('恐龙派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1', 0);
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('m1'); // 力量4 < 5
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('dino_natural_selection: 多个可消灭目标时创建 Prompt', () => {
@@ -352,9 +345,9 @@ describe('恐龙派系能力', () => {
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(0);
         // 应该有 PROMPT_CONTINUATION 事件
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('dino_natural_selection_choose_target');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('dino_natural_selection_choose_mine');
     });
 
     it('dino_natural_selection: 无合法目标时无事件', () => {
@@ -378,7 +371,7 @@ describe('恐龙派系能力', () => {
         const events = execPlayAction(state, '0', 'a1', 0);
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(0);
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(0);
     });
 
@@ -464,7 +457,7 @@ describe('机器人派系能力', () => {
         expect((limitEvents[0] as any).payload.limitType).toBe('minion');
     });
 
-    it('robot_tech_center: 按基地上己方随从数抽牌', () => {
+    it('robot_tech_center: 单个基地时创建 Prompt', () => {
         const deckCards = Array.from({ length: 5 }, (_, i) =>
             makeCard(`d${i}`, 'test_card', 'minion', '0')
         );
@@ -486,9 +479,8 @@ describe('机器人派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.count).toBe(3); // 3个随从 = 抽3张
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 });
 
@@ -497,7 +489,7 @@ describe('机器人派系能力', () => {
 // ============================================================================
 
 describe('巫师派系能力', () => {
-    it('wizard_neophyte: 牌库顶是行动卡时放入手牌', () => {
+    it('wizard_neophyte: 牌库顶是行动卡时创建 Prompt 选择处理方式', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -510,9 +502,9 @@ describe('巫师派系能力', () => {
         });
 
         const events = execPlayMinion(state, '0', 'm1', 0);
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.cardUids).toEqual(['d1']);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('wizard_neophyte');
     });
 
     it('wizard_neophyte: 牌库顶不是行动卡时不产生事件', () => {
@@ -581,7 +573,7 @@ describe('诡术师派系能力', () => {
         expect((discardEvents[0] as any).payload.cardUids.length).toBe(1);
     });
 
-    it('trickster_disenchant: 消灭基地上的持续行动卡', () => {
+    it('trickster_disenchant: 单个基地持续行动卡时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -596,17 +588,11 @@ describe('诡术师派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const detachEvents = events.filter(e => e.type === SU_EVENTS.ONGOING_DETACHED);
-        expect(detachEvents.length).toBe(1);
-        expect((detachEvents[0] as any).payload.cardUid).toBe('oa1');
-
-        // 验证 reduce：持续行动卡回所有者弃牌堆
-        const newState = applyEvents(state, events);
-        expect(newState.bases[0].ongoingActions.length).toBe(0);
-        expect(newState.players['1'].discard.some(c => c.uid === 'oa1')).toBe(true);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
-    it('trickster_disenchant: 消灭随从上的附着行动卡', () => {
+    it('trickster_disenchant: 单个随从附着行动卡时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -625,14 +611,8 @@ describe('诡术师派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const detachEvents = events.filter(e => e.type === SU_EVENTS.ONGOING_DETACHED);
-        expect(detachEvents.length).toBe(1);
-        expect((detachEvents[0] as any).payload.cardUid).toBe('att1');
-
-        // 验证 reduce
-        const newState = applyEvents(state, events);
-        expect(newState.bases[0].minions[0].attachedActions.length).toBe(0);
-        expect(newState.players['1'].discard.some(c => c.uid === 'att1')).toBe(true);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 });
 
@@ -659,7 +639,7 @@ describe('外星人派系能力', () => {
         expect((vpEvents[0] as any).payload.playerId).toBe('0');
     });
 
-    it('alien_collector: 收回本基地力量≤3的对手随从', () => {
+    it('alien_collector: 单个力量≤3对手随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -676,12 +656,11 @@ describe('外星人派系能力', () => {
         });
 
         const events = execPlayMinion(state, '0', 'm1', 0);
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MINION_RETURNED);
-        expect(returnEvents.length).toBe(1);
-        expect((returnEvents[0] as any).payload.minionUid).toBe('m2'); // 力量3≤3
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
-    it('alien_disintegrate: 将力量≤3的随从返回手牌', () => {
+    it('alien_disintegrate: 单个力量≤3随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -697,12 +676,11 @@ describe('外星人派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MINION_RETURNED);
-        expect(returnEvents.length).toBe(1);
-        expect((returnEvents[0] as any).payload.minionUid).toBe('m1');
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
-    it('alien_crop_circles: 将基地所有随从返回手牌', () => {
+    it('alien_crop_circles: 单个基地有随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -720,7 +698,7 @@ describe('外星人派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MINION_RETURNED);
-        expect(returnEvents.length).toBe(3); // 所有随从都返回
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 });

@@ -9,7 +9,7 @@
  */
 
 import type { Command, GameEvent, GameOverResult, PlayerId, PromptMultiConfig } from '../../../engine/types';
-import type { CardPreviewRef } from '../../../systems/CardSystem/types';
+import type { CardPreviewRef } from '../../../core';
 import { SMASHUP_FACTION_IDS } from './ids';
 
 // ============================================================================
@@ -79,6 +79,23 @@ export interface ActionCardDef {
 /** 卡牌定义联合类型 */
 export type CardDef = MinionCardDef | ActionCardDef;
 
+/** 基地限制规则（数据驱动） */
+export interface BaseRestriction {
+    /** 限制类型 */
+    type: 'play_minion' | 'play_action';
+    /** 条件（可选，不填表示无条件禁止） */
+    condition?: {
+        /** 随从力量上限（包含），力量 <= maxPower 的随从被禁止 */
+        maxPower?: number;
+        /**
+         * 额外出牌力量上限：仅在使用额外出牌机会（minionsPlayed >= 1）时生效，
+         * 力量 > extraPlayMinionPowerMax 的随从被禁止。
+         * 用于母星（The Homeworld）、神秘花园（Secret Garden）等基地。
+         */
+        extraPlayMinionPowerMax?: number;
+    };
+}
+
 /** 基地卡定义 */
 export interface BaseCardDef {
     id: string;
@@ -92,6 +109,8 @@ export interface BaseCardDef {
     /** 关联派系 */
     faction?: FactionId;
     previewRef?: CardPreviewRef;
+    /** 基地限制规则（如禁止打出随从/行动） */
+    restrictions?: BaseRestriction[];
 }
 
 // ============================================================================
@@ -212,8 +231,20 @@ export interface SmashUpCore {
     factionSelection?: FactionSelectionState;
     /** 疯狂牌库（克苏鲁扩展，defId 列表） */
     madnessDeck?: string[];
-    /** 待处理的 Prompt 继续上下文（能力需要目标选择时写入，Prompt 解决后读取并清除） */
-    pendingPromptContinuation?: PromptContinuationContext;
+    /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力的精确判定） */
+    turnDestroyedMinions?: { defId: string; baseIndex: number; owner: string }[];
+    /**
+     * 待展示的卡牌信息（外星人/密大查看手牌/牌库顶能力，UI 层读取后展示，玩家确认后清除）
+     *
+     * 规则依赖：DISMISS_REVEAL 命令验证依赖此字段判断查看者身份，故保留在 core 中。
+     */
+    pendingReveal?: {
+        type: 'hand' | 'deck_top';
+        targetPlayerId: string;
+        viewerPlayerId: string;
+        cards: { uid: string; defId: string }[];
+        reason: string;
+    };
 }
 
 export interface FactionSelectionState {
@@ -225,20 +256,6 @@ export interface FactionSelectionState {
     completedPlayers: PlayerId[];
 }
 
-/**
- * Prompt 继续上下文
- * 
- * 当能力需要目标选择时，将继续执行所需的上下文存入 core 状态。
- * Prompt 解决后（SYS_PROMPT_RESOLVED），FlowHooks 读取此上下文并生成继续事件。
- */
-export interface PromptContinuationContext {
-    /** 能力来源 ID（如 'pirate_dinghy'） */
-    abilityId: string;
-    /** 发起 Prompt 的玩家 */
-    playerId: PlayerId;
-    /** 额外上下文数据（能力特定） */
-    data?: Record<string, unknown>;
-}
 
 export interface PromptConfig {
     id: string;
@@ -252,7 +269,7 @@ export interface PromptConfig {
 
 export interface PromptOption {
     label: string;
-    value: any;
+    value: unknown;
     disabled?: boolean;
 }
 
@@ -285,6 +302,7 @@ export const SU_COMMANDS = {
     // === 新增 ===
     SELECT_FACTION: 'su:select_faction',
     USE_TALENT: 'su:use_talent',
+    DISMISS_REVEAL: 'su:dismiss_reveal',
 } as const;
 
 /** 打出随从 */
@@ -326,12 +344,18 @@ export interface UseTalentCommand extends Command<typeof SU_COMMANDS.USE_TALENT>
     };
 }
 
+/** 关闭卡牌展示 */
+export interface DismissRevealCommand extends Command<typeof SU_COMMANDS.DISMISS_REVEAL> {
+    payload: Record<string, never>;
+}
+
 export type SmashUpCommand =
     | PlayMinionCommand
     | PlayActionCommand
     | DiscardToLimitCommand
     | SelectFactionCommand
-    | UseTalentCommand;
+    | UseTalentCommand
+    | DismissRevealCommand;
 
 // ============================================================================
 // 事件类型
@@ -365,12 +389,20 @@ export const SU_EVENTS = {
     CARD_TRANSFERRED: 'su:card_transferred',
     CARD_RECOVERED_FROM_DISCARD: 'su:card_recovered_from_discard',
     HAND_SHUFFLED_INTO_DECK: 'su:hand_shuffled_into_deck',
-    /** Prompt 继续：能力目标选择完成后的继续事件 */
-    PROMPT_CONTINUATION: 'su:prompt_continuation',
+    /** 能力选择请求（由事件系统转换为 Interaction） */
+    CHOICE_REQUESTED: 'su:choice_requested',
     /** 疯狂卡抽取（从疯狂牌库到玩家手牌） */
     MADNESS_DRAWN: 'su:madness_drawn',
     /** 疯狂卡返回（从玩家手牌回疯狂牌库） */
     MADNESS_RETURNED: 'su:madness_returned',
+    /** 基地牌库重排（巫师学院等能力） */
+    BASE_DECK_REORDERED: 'su:base_deck_reordered',
+    /** 展示手牌（外星人 Probe / 密大 Book of Iter 等能力） */
+    REVEAL_HAND: 'su:reveal_hand',
+    /** 展示牌库顶（外星人 Scout Ship 等能力） */
+    REVEAL_DECK_TOP: 'su:reveal_deck_top',
+    /** 关闭卡牌展示 */
+    REVEAL_DISMISSED: 'su:reveal_dismissed',
 } as const;
 
 export interface MinionPlayedEvent extends GameEvent<typeof SU_EVENTS.MINION_PLAYED> {
@@ -442,6 +474,8 @@ export interface BaseReplacedEvent extends GameEvent<typeof SU_EVENTS.BASE_REPLA
         baseIndex: number;
         oldBaseDefId: string;
         newBaseDefId: string;
+        /** 为 true 时保留基地上的随从和 ongoing，仅替换 defId（如 terraform） */
+        keepCards?: boolean;
     };
 }
 
@@ -502,9 +536,12 @@ export type SmashUpEvent =
     | CardTransferredEvent
     | CardRecoveredFromDiscardEvent
     | HandShuffledIntoDeckEvent
-    | PromptContinuationEvent
+    | ChoiceRequestedEvent
     | MadnessDrawnEvent
-    | MadnessReturnedEvent;
+    | MadnessReturnedEvent
+    | BaseDeckReorderedEvent
+    | RevealHandEvent
+    | RevealDeckTopEvent;
 
 // ============================================================================
 // 新增事件接口
@@ -534,7 +571,7 @@ export interface AllFactionsSelectedEvent extends GameEvent<typeof SU_EVENTS.ALL
 }
 
 // PromptCreatedEvent 和 PromptResolvedEvent 已移除
-// 统一使用引擎层 PromptSystem 的 SYS_PROMPT_CREATED / SYS_PROMPT_RESOLVED
+// 统一使用引擎层 InteractionSystem 的 SYS_INTERACTION_* 事件
 
 // ============================================================================
 // 新增事件接口（能力系统）
@@ -657,15 +694,23 @@ export interface HandShuffledIntoDeckEvent extends GameEvent<typeof SU_EVENTS.HA
     };
 }
 
-/** Prompt 继续事件：存储/清除 Prompt 继续上下文 */
-export interface PromptContinuationEvent extends GameEvent<typeof SU_EVENTS.PROMPT_CONTINUATION> {
+/** 能力选择请求事件：由事件系统转换为引擎层 Interaction */
+export interface ChoiceRequestedEvent extends GameEvent<typeof SU_EVENTS.CHOICE_REQUESTED> {
     payload: {
-        /** 'set' 设置上下文，'clear' 清除上下文 */
-        action: 'set' | 'clear';
-        /** 继续上下文（action='set' 时必填） */
-        continuation?: PromptContinuationContext;
-        /** Prompt 解决后的选择值（action='clear' 时由继续逻辑填充） */
-        resolvedValue?: unknown;
+        /** 能力来源 ID（如 'pirate_dinghy'） */
+        abilityId: string;
+        /** 发起 Prompt 的玩家 */
+        playerId: PlayerId;
+        /** Prompt 配置 */
+        promptConfig: {
+            title: string;
+            options: PromptOption[];
+            multi?: PromptMultiConfig;
+        };
+        /** 能力特定上下文（跟随 Interaction descriptor 流转，交互解决后传回 continuation 函数） */
+        continuationContext?: Record<string, unknown>;
+        /** 由其他玩家做选择（如 shoggoth 让对手选择） */
+        targetPlayerId?: string;
     };
 }
 
@@ -686,6 +731,45 @@ export interface MadnessReturnedEvent extends GameEvent<typeof SU_EVENTS.MADNESS
     payload: {
         playerId: PlayerId;
         cardUid: string;
+        reason: string;
+    };
+}
+
+/** 基地牌库重排事件（巫师学院等能力） */
+export interface BaseDeckReorderedEvent extends GameEvent<typeof SU_EVENTS.BASE_DECK_REORDERED> {
+    payload: {
+        /** 重排后的基地牌库顶部 defId 列表（按顺序） */
+        topDefIds: string[];
+        reason: string;
+    };
+}
+
+/** 展示手牌事件（外星人 Probe / 密大 Book of Iter 等能力） */
+export interface RevealHandEvent extends GameEvent<typeof SU_EVENTS.REVEAL_HAND> {
+    payload: {
+        /** 被查看的玩家 */
+        targetPlayerId: string;
+        /** 查看者 */
+        viewerPlayerId: string;
+        /** 被展示的卡牌列表 */
+        cards: { uid: string; defId: string }[];
+        /** 触发原因 */
+        reason: string;
+    };
+}
+
+/** 展示牌库顶事件（外星人 Scout Ship 等能力） */
+export interface RevealDeckTopEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DECK_TOP> {
+    payload: {
+        /** 牌库所有者 */
+        targetPlayerId: string;
+        /** 查看者 */
+        viewerPlayerId: string;
+        /** 牌库顶卡牌 */
+        cards: { uid: string; defId: string }[];
+        /** 展示数量 */
+        count: number;
+        /** 触发原因 */
         reason: string;
     };
 }

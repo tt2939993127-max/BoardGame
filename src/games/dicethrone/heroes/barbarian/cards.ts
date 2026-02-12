@@ -5,7 +5,7 @@
 
 import type { AbilityCard } from '../../types';
 import type { RandomFn } from '../../../../engine/types';
-import type { AbilityEffect, EffectTiming, EffectCondition, AbilityDef } from '../../../../systems/presets/combat';
+import type { AbilityEffect, EffectTiming, EffectCondition, AbilityDef } from '../../domain/combat';
 import { STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import {
@@ -74,12 +74,16 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
             },
         ],
     },
+
+    // ============================================
+    // 专属行动卡 (Action Cards - Instant)
+    // ============================================
     {
         id: 'card-dizzy',
         name: cardText('card-dizzy', 'name'),
         type: 'action',
         cpCost: 0,
-        timing: 'main',
+        timing: 'instant',
         description: cardText('card-dizzy', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 3 },
         playCondition: {
@@ -94,7 +98,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         name: cardText('card-head-blow', 'name'),
         type: 'action',
         cpCost: 1,
-        timing: 'main',
+        timing: 'instant',
         description: cardText('card-head-blow', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 4 },
         effects: [
@@ -103,14 +107,14 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
     },
 
     // ============================================
-    // 专属行动卡 (Action Cards - Roll Phase)
+    // 专属行动卡 (Action Cards - Instant)
     // ============================================
     {
         id: 'card-lucky',
         name: cardText('card-lucky', 'name'),
         type: 'action',
         cpCost: 0,
-        timing: 'roll',
+        timing: 'instant',
         description: cardText('card-lucky', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 1 },
         effects: [

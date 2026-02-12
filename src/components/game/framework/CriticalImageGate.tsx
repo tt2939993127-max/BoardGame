@@ -28,27 +28,41 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     const lastReadyKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
+        console.warn(`[CriticalImageGate] effect enabled=${enabled} gameId=${gameId} hasGameState=${!!gameState} inFlight=${inFlightRef.current}`);
         if (!enabled || !gameId) {
+            console.warn(`[CriticalImageGate] disabled or no gameId, setting ready=true`);
             setReady(true);
             inFlightRef.current = false;
             lastReadyKeyRef.current = null;
             return;
         }
-        if (!gameState) return;
-        if (inFlightRef.current) return;
+        if (!gameState) {
+            console.warn(`[CriticalImageGate] no gameState, waiting...`);
+            return;
+        }
+        if (inFlightRef.current) {
+            console.warn(`[CriticalImageGate] preload already in flight, skipping`);
+            return;
+        }
 
         const runKey = `${gameId}:${locale ?? ''}`;
-        if (lastReadyKeyRef.current === runKey) return;
+        if (lastReadyKeyRef.current === runKey) {
+            console.warn(`[CriticalImageGate] already loaded for key=${runKey}, skipping`);
+            return;
+        }
 
+        console.warn(`[CriticalImageGate] starting preload for gameId=${gameId}`);
         inFlightRef.current = true;
         setReady(false);
         preloadCriticalImages(gameId, gameState, locale)
             .then((warmPaths) => {
+                console.warn(`[CriticalImageGate] preload complete, setting ready=true`);
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
                 preloadWarmImages(warmPaths);
             })
-            .catch(() => {
+            .catch((err) => {
+                console.warn(`[CriticalImageGate] preload failed, setting ready=true anyway`, err);
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
             })
@@ -63,5 +77,6 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         return <LoadingScreen description={loadingDescription} />;
     }
 
+    console.warn(`[CriticalImageGate] ready=true gameId=${gameId} rendering children`);
     return <>{children}</>;
 };

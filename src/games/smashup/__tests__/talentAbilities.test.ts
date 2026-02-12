@@ -19,6 +19,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { makeMinion, makeCard, makePlayer, makeState, makeMatchState } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -32,43 +33,10 @@ beforeAll(() => {
 // 辅助函数
 // ============================================================================
 
-function makeMinion(uid: string, defId: string, controller: string, power: number, opts?: Partial<MinionOnBase>): MinionOnBase {
-    return {
-        uid, defId, controller, owner: controller,
-        basePower: power, powerModifier: 0, talentUsed: false, attachedActions: [],
-        ...opts,
-    };
-}
 
-function makeCard(uid: string, defId: string, type: 'minion' | 'action', owner: string): CardInstance {
-    return { uid, defId, type, owner };
-}
 
-function makePlayer(id: string, overrides?: Partial<PlayerState>): PlayerState {
-    return {
-        id, vp: 0, hand: [], deck: [], discard: [],
-        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
-        factions: ['test_a', 'test_b'] as [string, string],
-        ...overrides,
-    };
-}
 
-function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
-    return {
-        players: { '0': makePlayer('0'), '1': makePlayer('1') },
-        turnOrder: ['0', '1'],
-        currentPlayerIndex: 0,
-        bases: [],
-        baseDeck: [],
-        turnNumber: 1,
-        nextUid: 100,
-        ...overrides,
-    };
-}
 
-function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
-}
 
 const defaultRandom: RandomFn = {
     shuffle: (arr: any[]) => [...arr],
@@ -174,7 +142,7 @@ describe('miskatonic_fellow（研究员 talent）', () => {
 // ============================================================================
 
 describe('cthulhu_star_spawn（星之眷族 talent）', () => {
-    it('将手中疯狂卡转给对手', () => {
+    it('单张疯狂卡时创建 Prompt', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -199,18 +167,10 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        // 返回疯狂卡
-        expect(types).toContain(SU_EVENTS.MADNESS_RETURNED);
-        // 对手抽疯狂卡
-        expect(types).toContain(SU_EVENTS.MADNESS_DRAWN);
-
-        const returnEvt = events.find(e => e.type === SU_EVENTS.MADNESS_RETURNED)!;
-        expect((returnEvt as any).payload.playerId).toBe('0');
-        expect((returnEvt as any).payload.cardUid).toBe('mad1');
-
-        const drawEvt = events.find(e => e.type === SU_EVENTS.MADNESS_DRAWN)!;
-        expect((drawEvt as any).payload.playerId).toBe('1');
-        expect((drawEvt as any).payload.count).toBe(1);
+        // 单张疯狂卡时创建 Prompt
+        expect(types).toContain(SU_EVENTS.CHOICE_REQUESTED);
+        expect(types).not.toContain(SU_EVENTS.MADNESS_RETURNED);
+        expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
     });
 
     it('手中无疯狂卡时无效果', () => {
@@ -240,7 +200,7 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
         expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
     });
 
-    it('疯狂牌库为空时只返回不抽取', () => {
+    it('疯狂牌库为空时单张疯狂卡创建 Prompt', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -262,8 +222,9 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        expect(types).toContain(SU_EVENTS.MADNESS_RETURNED);
-        // 疯狂牌库空，对手无法抽取
+        // 单张疯狂卡时创建 Prompt
+        expect(types).toContain(SU_EVENTS.CHOICE_REQUESTED);
+        expect(types).not.toContain(SU_EVENTS.MADNESS_RETURNED);
         expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
     });
 });
@@ -274,7 +235,7 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
 // ============================================================================
 
 describe('cthulhu_servitor（仆人 talent）', () => {
-    it('消灭自身 + 弃牌堆行动卡放牌库顶', () => {
+    it('消灭自身 + 单张行动卡时创建 Prompt', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -303,21 +264,14 @@ describe('cthulhu_servitor（仆人 talent）', () => {
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
         expect(types).toContain(SU_EVENTS.MINION_DESTROYED);
-        expect(types).toContain(SU_EVENTS.DECK_RESHUFFLED);
+        // 单张行动卡时创建 Prompt 而非直接放牌库顶
+        expect(types).toContain(SU_EVENTS.CHOICE_REQUESTED);
+        expect(types).not.toContain(SU_EVENTS.DECK_RESHUFFLED);
 
         // 消灭的是自身
         const destroyEvt = events.find(e => e.type === SU_EVENTS.MINION_DESTROYED)!;
         expect((destroyEvt as any).payload.minionUid).toBe('m1');
         expect((destroyEvt as any).payload.minionDefId).toBe('cthulhu_servitor');
-
-        // 牌库重排：弃牌堆行动卡放顶部
-        const reshuffleEvt = events.find(e => e.type === SU_EVENTS.DECK_RESHUFFLED)!;
-        const newDeckUids = (reshuffleEvt as any).payload.deckUids;
-        // 第一张应该是弃牌堆的行动卡
-        expect(newDeckUids[0]).toBe('dis1');
-        // 后面是原牌库
-        expect(newDeckUids[1]).toBe('d1');
-        expect(newDeckUids[2]).toBe('d2');
     });
 
     it('弃牌堆无行动卡时仅消灭自身', () => {
@@ -396,12 +350,12 @@ describe('cthulhu_servitor（仆人 talent）', () => {
         }, defaultRandom);
 
         // 多张行动卡时应创建 Prompt（不自动选择）
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        const cont = (promptEvents[0] as any).payload.continuation;
+        const cont = (promptEvents[0] as any).payload;
         expect(cont.abilityId).toBe('cthulhu_servitor');
         // 应有2个选项（dis1 和 dis2，不包含 minion_c）
-        expect(cont.data.promptConfig.options.length).toBe(2);
+        expect(cont.promptConfig.options.length).toBe(2);
     });
 });
 

@@ -1,12 +1,13 @@
 import type { RefObject } from 'react';
 import type { HeroState, TurnPhase } from '../types';
-import type { TokenDef } from '../../../systems/TokenSystem';
+import type { TokenDef } from '../domain/tokenTypes';
 import { PhaseIndicator } from './PhaseIndicator';
 import { StatusEffectsContainer, TokensContainer, type StatusAtlases } from './statusEffects';
 import { PlayerStats } from './PlayerStats';
 import { DrawDeck } from './DrawDeck';
 import { STATUS_IDS } from '../domain/ids';
 import type { HitStopConfig } from '../../../components/common/animations';
+import { UI_Z_INDEX } from '../../../core';
 
 
 export const LeftSidebar = ({
@@ -46,7 +47,10 @@ export const LeftSidebar = ({
     canRemoveKnockdown?: boolean;
 }) => {
     return (
-        <div className="absolute left-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto z-[60]">
+        <div
+            className="absolute left-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto"
+            style={{ zIndex: UI_Z_INDEX.hud }}
+        >
             <div className="w-full pt-[1.125rem] px-[1vw]"><PhaseIndicator currentPhase={currentPhase} /></div>
             <div className="flex-grow" />
             <div className="w-full flex flex-col items-center gap-[0.5vw]">

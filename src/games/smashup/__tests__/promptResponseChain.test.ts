@@ -2,9 +2,9 @@
  * 大杀四方 - Prompt 响应链集成测试
  *
  * 测试完整流程：
- * 1. 打出能力卡 → 引擎生成 PROMPT_CONTINUATION 事件
- * 2. PROMPT_CONTINUATION(set) → 创建引擎层 Prompt
- * 3. 玩家响应 SYS_PROMPT_RESPOND → SYS_PROMPT_RESOLVED
+ * 1. 打出能力卡 → CHOICE_REQUESTED 事件
+ * 2. 事件系统创建 Interaction
+ * 3. 玩家响应 SYS_INTERACTION_RESPOND → SYS_INTERACTION_RESOLVED
  * 4. 继续函数执行 → 生成后续领域事件（MINION_MOVED/CARDS_DRAWN 等）
  */
 
@@ -13,14 +13,14 @@ import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
-import { PROMPT_COMMANDS, PROMPT_EVENTS } from '../../../engine/systems/PromptSystem';
+import { INTERACTION_COMMANDS, INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import { createFlowSystem, createDefaultSystems } from '../../../engine';
 import { smashUpFlowHooks } from '../domain/index';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearPromptContinuationRegistry, resolvePromptContinuation } from '../domain/promptContinuation';
-import { createSmashUpPromptBridge } from '../domain/systems';
+import { createSmashUpEventSystem } from '../domain/systems';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
 const PLAYER_IDS = ['0', '1'];
@@ -31,7 +31,7 @@ function createRunner() {
         systems: [
             createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
             ...createDefaultSystems<SmashUpCore>(),
-            createSmashUpPromptBridge(),
+            createSmashUpEventSystem(),
         ],
         playerIds: PLAYER_IDS,
     });
@@ -75,7 +75,7 @@ describe('Prompt 响应链集成测试', () => {
     });
 
     describe('Prompt 创建流程', () => {
-        it('多目标能力创建 Prompt 并设置 pendingPromptContinuation', () => {
+        it('多目标能力创建 Prompt 并生成 CHOICE_REQUESTED', () => {
             const runner = createRunner();
 
             // 先完成选秀
@@ -104,9 +104,9 @@ describe('Prompt 响应链集成测试', () => {
                 ],
             });
 
-            // 如果只有一个基地有随从，麦田怪圈会自动选择，不创建 Prompt
-            // 需要两个基地都有随从才会触发 Prompt
-            expect(result1.finalState.core.pendingPromptContinuation).toBeUndefined();
+            // 如果只有一个基地有随从，麦田怪圈会自动选择，不创建 Interaction
+            // 需要两个基地都有随从才会触发 Interaction
+            expect(result1.finalState.sys.interaction.current).toBeUndefined();
         });
     });
 
@@ -117,7 +117,7 @@ describe('Prompt 响应链集成测试', () => {
                 name: '无 Prompt 时响应',
                 commands: [
                     ...DRAFT_COMMANDS,
-                    { type: PROMPT_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'test' } },
+                    { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'test' } },
                 ],
             });
 
@@ -138,11 +138,11 @@ describe('Prompt 响应链集成测试', () => {
 
             // 查找所有步骤中的 PROMPT_CONTINUATION 事件
             const allEvents = result.steps.flatMap(s => s.events);
-            const promptContEvents = allEvents.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptContEvents = allEvents.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
 
             // 选秀阶段不会产生 PROMPT_CONTINUATION
             // 这个测试主要验证事件类型常量正确
-            expect(SU_EVENTS.PROMPT_CONTINUATION).toBe('su:prompt_continuation');
+            expect(SU_EVENTS.CHOICE_REQUESTED).toBe('su:choice_requested');
         });
 
         it('SmashUp Prompt 桥接系统正常工作', () => {
@@ -154,8 +154,8 @@ describe('Prompt 响应链集成测试', () => {
 
             // 游戏初始化成功
             expect(result.finalState.core.turnOrder).toHaveLength(2);
-            expect(result.finalState.sys.prompt.current).toBeUndefined();
-            expect(result.finalState.sys.prompt.queue).toEqual([]);
+            expect(result.finalState.sys.interaction.current).toBeUndefined();
+            expect(result.finalState.sys.interaction.queue).toEqual([]);
         });
     });
 });
@@ -224,22 +224,16 @@ describe('SYS_PROMPT_RESOLVED 触发继续执行', () => {
     });
 
     it('PROMPT_EVENTS.RESOLVED 常量正确', () => {
-        expect(PROMPT_EVENTS.RESOLVED).toBe('SYS_PROMPT_RESOLVED');
+        expect(INTERACTION_EVENTS.RESOLVED).toBe('SYS_INTERACTION_RESOLVED');
     });
 
-    it('Prompt 解决后 pendingPromptContinuation 被清除', () => {
-        // 这个测试验证系统行为：当 Prompt 被解决后，
-        // createSmashUpPromptBridge 会生成 PROMPT_CONTINUATION(clear) 事件
-        // reducer 处理该事件后清除 pendingPromptContinuation
-
-        // 由于难以在测试中手动触发完整流程，这里只验证清除事件结构
+    it('初始状态无活跃 Interaction', () => {
         const runner = createRunner();
         const result = runner.run({
             name: '验证初始状态',
             commands: DRAFT_COMMANDS,
         });
 
-        // 初始状态没有 pendingPromptContinuation
-        expect(result.finalState.core.pendingPromptContinuation).toBeUndefined();
+        expect(result.finalState.sys.interaction.current).toBeUndefined();
     });
 });

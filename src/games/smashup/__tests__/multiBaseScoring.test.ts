@@ -58,7 +58,7 @@ function callOnPhaseExit(core: SmashUpCore): GameEvent[] | PhaseExitResult {
     const result = smashUpFlowHooks.onPhaseExit!({
         state: ({
             core,
-            sys: { phase: 'scoreBases', responseWindow: { current: undefined }, prompt: { queue: [] } },
+            sys: { phase: 'scoreBases', responseWindow: { current: undefined }, interaction: { queue: [] } },
         } as unknown) as MatchState<SmashUpCore>,
         from: 'scoreBases',
         to: 'draw',
@@ -100,10 +100,9 @@ describe('Property 14: 多基地记分提示', () => {
         expect(exitResult.halt).toBe(true);
 
         const events = exitResult.events ?? [];
-        const promptEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.action).toBe('set');
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('multi_base_scoring');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('multi_base_scoring');
 
         // 不应有 BASE_SCORED 事件（等待玩家选择）
         const scoredEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.BASE_SCORED);

@@ -1,4 +1,4 @@
-import type { CardPreviewRef } from '../../systems/CardSystem';
+import type { CardPreviewRef } from '../../core';
 
 type GetCardPreviewRefFn = (cardId: string) => CardPreviewRef | null;
 

@@ -84,7 +84,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeClimber(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '部落攀爬手', unitClass: 'common',
-    faction: '洞穴地精', strength: 1, life: 3, cost: 0,
+    faction: 'goblin', strength: 1, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['climb'], deckSymbols: [],
   };
@@ -94,7 +94,7 @@ function makeClimber(id: string): UnitCard {
 function makeBeastRider(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '野兽骑手', unitClass: 'common',
-    faction: '洞穴地精', strength: 3, life: 3, cost: 2,
+    faction: 'goblin', strength: 3, life: 3, cost: 2,
     attackType: 'melee', attackRange: 1,
     abilities: ['charge'], deckSymbols: [],
   };
@@ -104,7 +104,7 @@ function makeBeastRider(id: string): UnitCard {
 function makeSlinger(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '部落投石手', unitClass: 'common',
-    faction: '洞穴地精', strength: 2, life: 1, cost: 0,
+    faction: 'goblin', strength: 2, life: 1, cost: 0,
     attackType: 'ranged', attackRange: 3,
     abilities: ['ferocity'], deckSymbols: [],
   };
@@ -114,7 +114,7 @@ function makeSlinger(id: string): UnitCard {
 function makeGrabber(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '部落抓附手', unitClass: 'common',
-    faction: '洞穴地精', strength: 2, life: 2, cost: 0,
+    faction: 'goblin', strength: 2, life: 2, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['immobile', 'grab'], deckSymbols: [],
   };
@@ -124,7 +124,7 @@ function makeGrabber(id: string): UnitCard {
 function makeBlarf(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '布拉夫', unitClass: 'champion',
-    faction: '洞穴地精', strength: 0, life: 6, cost: 0,
+    faction: 'goblin', strength: 0, life: 6, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['blood_rune', 'power_boost'], deckSymbols: [],
   };
@@ -134,7 +134,7 @@ function makeBlarf(id: string): UnitCard {
 function makeSmirg(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '史米革', unitClass: 'champion',
-    faction: '洞穴地精', strength: 2, life: 4, cost: 0,
+    faction: 'goblin', strength: 2, life: 4, cost: 0,
     attackType: 'ranged', attackRange: 3,
     abilities: ['magic_addiction', 'ferocity'], deckSymbols: [],
   };
@@ -144,7 +144,7 @@ function makeSmirg(id: string): UnitCard {
 function makeGlutton(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '巨食兽', unitClass: 'champion',
-    faction: '洞穴地精', strength: 5, life: 9, cost: 6,
+    faction: 'goblin', strength: 5, life: 9, cost: 6,
     attackType: 'melee', attackRange: 1,
     abilities: ['feed_beast'], deckSymbols: [],
   };
@@ -154,7 +154,7 @@ function makeGlutton(id: string): UnitCard {
 function makeGoblinSummoner(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '思尼克斯', unitClass: 'summoner',
-    faction: '洞穴地精', strength: 2, life: 11, cost: 0,
+    faction: 'goblin', strength: 2, life: 11, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['vanish'], deckSymbols: [],
   };
@@ -164,7 +164,7 @@ function makeGoblinSummoner(id: string): UnitCard {
 function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'necromancer', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -174,7 +174,7 @@ function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makeZeroCostAlly(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '0费友方', unitClass: 'common',
-    faction: '洞穴地精', strength: 1, life: 2, cost: 0,
+    faction: 'goblin', strength: 1, life: 2, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
   };
 }
@@ -206,6 +206,7 @@ function addEventToHand(
     id: eventId,
     cardType: 'event',
     name: overrides?.name ?? '测试事件',
+    faction: 'goblin',
     cost: overrides?.cost ?? 0,
     playPhase: overrides?.playPhase ?? 'summon',
     effect: overrides?.effect ?? '测试效果',
@@ -314,7 +315,7 @@ describe('部落攀爬手 - 攀爬 (climb)', () => {
     state.board[4][2].structure = {
       cardId: 'test-wall', card: {
         id: 'test-wall', cardType: 'structure', name: '城墙',
-        cost: 0, life: 5, deckSymbols: [],
+        faction: 'necromancer', cost: 0, life: 5, deckSymbols: [],
       }, owner: '1', position: { row: 4, col: 2 }, damage: 0,
     };
 
@@ -1233,6 +1234,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
       id: 'goblin-swarm-0',
       cardType: 'event',
       name: '成群结队',
+      faction: 'goblin',
       cost: 0,
       playPhase: 'attack',
       effect: '',
@@ -1430,6 +1432,7 @@ describe('洞穴地精事件卡 - 不屈不挠', () => {
       id: 'goblin-relentless-0',
       cardType: 'event',
       name: '不屈不挠',
+      faction: 'goblin',
       cost: 1,
       playPhase: 'magic',
       effect: '',
@@ -1475,6 +1478,7 @@ describe('洞穴地精事件卡 - 不屈不挠', () => {
       id: 'goblin-relentless-0',
       cardType: 'event',
       name: '不屈不挠',
+      faction: 'goblin',
       cost: 1,
       playPhase: 'magic',
       effect: '',
@@ -1515,6 +1519,7 @@ describe('洞穴地精事件卡 - 不屈不挠', () => {
       id: 'goblin-relentless-0',
       cardType: 'event',
       name: '不屈不挠',
+      faction: 'goblin',
       cost: 1,
       playPhase: 'magic',
       effect: '',

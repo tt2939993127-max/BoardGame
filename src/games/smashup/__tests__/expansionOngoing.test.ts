@@ -157,7 +157,7 @@ describe('幽灵 ongoing 能力', () => {
     });
 
     describe('ghost_make_contact: 控制对手随从', () => {
-        test('将对手随从返回手牌', () => {
+        test('单目标时创建 Prompt', () => {
             const oppMinion = makeMinion({ defId: 'opp_m', uid: 'om-1', controller: '1', owner: '1', basePower: 5 });
             const base = makeBase({ minions: [oppMinion] });
             const state = makeState([base]);
@@ -169,8 +169,7 @@ describe('幽灵 ongoing 能力', () => {
             });
 
             expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(SU_EVENTS.MINION_RETURNED);
-            expect((result.events[0] as any).payload.minionUid).toBe('om-1');
+            expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
         });
     });
 });
@@ -293,7 +292,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
     });
 
     describe('steampunk_mechanic: 机械师', () => {
-        test('从弃牌堆取回行动卡', () => {
+        test('单张行动卡时创建 Prompt', () => {
             const base = makeBase();
             const state = makeState([base]);
             state.players['0'].discard = [
@@ -307,7 +306,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             });
 
             expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
+            expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
         });
     });
 
@@ -332,18 +331,18 @@ describe('食人花 ongoing 能力', () => {
     });
 
     describe('killer_plant_deep_roots: 深根保护', () => {
-        test('附着 deep_roots 的随从不可被移动', () => {
-            const minion = makeMinion({
-                defId: 'kp_a', uid: 'kp-1', controller: '0',
-                attachedActions: [{ uid: 'dr-1', defId: 'killer_plant_deep_roots', ownerId: '0' }],
+        test('基地上有 deep_roots 且随从属于拥有者→对手不可移动', () => {
+            const minion = makeMinion({ defId: 'kp_a', uid: 'kp-1', controller: '0' });
+            const base = makeBase({
+                minions: [minion],
+                ongoingActions: [{ uid: 'dr-1', defId: 'killer_plant_deep_roots', ownerId: '0' }],
             });
-            const base = makeBase({ minions: [minion] });
             const state = makeState([base]);
 
             expect(isMinionProtected(state, minion, 0, '1', 'move')).toBe(true);
         });
 
-        test('无附着时可被移动', () => {
+        test('无 deep_roots 时可被移动', () => {
             const minion = makeMinion({ defId: 'kp_a', uid: 'kp-1', controller: '0' });
             const base = makeBase({ minions: [minion] });
             const state = makeState([base]);
@@ -400,22 +399,22 @@ describe('食人花 ongoing 能力', () => {
     });
 
     describe('killer_plant_choking_vines: 窒息藤蔓', () => {
-        test('回合开始时消灭基地上力量最低的随从', () => {
-            const weak = makeMinion({ defId: 'weak_m', uid: 'wm-1', controller: '1', owner: '1', basePower: 1 });
-            const strong = makeMinion({ defId: 'strong_m', uid: 'sm-1', controller: '0', basePower: 5 });
-            const base = makeBase({
-                minions: [weak, strong],
-                ongoingActions: [{ uid: 'cv-1', defId: 'killer_plant_choking_vines', ownerId: '0' }],
+        test('回合开始时消灭附着了 choking_vines 的随从', () => {
+            const target = makeMinion({
+                defId: 'weak_m', uid: 'wm-1', controller: '1', owner: '1', basePower: 1,
+                attachedActions: [{ uid: 'cv-1', defId: 'killer_plant_choking_vines', ownerId: '0' }],
             });
+            const strong = makeMinion({ defId: 'strong_m', uid: 'sm-1', controller: '0', basePower: 5 });
+            const base = makeBase({ minions: [target, strong] });
             const state = makeState([base]);
 
             const events = fireTriggers(state, 'onTurnStart', {
                 state, playerId: '0', random: dummyRandom, now: 1000,
             });
 
-            expect(events).toHaveLength(1);
-            expect(events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
-            expect((events[0] as any).payload.minionUid).toBe('wm-1');
+            const destroyEvts = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
+            expect(destroyEvts).toHaveLength(1);
+            expect((destroyEvts[0] as any).payload.minionUid).toBe('wm-1');
         });
     });
 
@@ -425,9 +424,12 @@ describe('食人花 ongoing 能力', () => {
             expect(executor).toBeDefined();
         });
 
-        test('从牌库搜索随从', () => {
+        test('牌库有力量≤2随从时产生搜索结果', () => {
             const base = makeBase();
+            // 放入一个已注册的 power≤2 随从卡（sprout power=2）
+            const sproutCard: CardInstance = { uid: 'sp-deck', defId: 'killer_plant_sprout', type: 'minion', owner: '0' };
             const state = makeState([base]);
+            state.players['0'].deck = [sproutCard];
 
             const executor = resolveAbility('killer_plant_venus_man_trap', 'talent')!;
             const result = executor({
@@ -435,7 +437,8 @@ describe('食人花 ongoing 能力', () => {
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
-            expect(result.events).toHaveLength(1);
+            // 只有一个候选→自动抽取 (CARDS_DRAWN + LIMIT_MODIFIED + DECK_RESHUFFLED)
+            expect(result.events).toHaveLength(3);
             expect(result.events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
         });
     });

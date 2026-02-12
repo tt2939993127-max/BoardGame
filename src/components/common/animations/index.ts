@@ -10,6 +10,7 @@ export * from './ImpactContainer';
 export * from './VictoryParticles';
 export * from './BurstParticles';
 export * from './SummonEffect';
+export * from './SummonHybridEffect';
 export * from './ConeBlast';
 export * from './DamageFlash';
 export * from './FloatingText';

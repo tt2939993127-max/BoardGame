@@ -19,7 +19,11 @@
 import React from 'react';
 import { ShaderCanvas } from '../../../engine/fx/shader/ShaderCanvas';
 import { VORTEX_FRAG } from '../../../engine/fx/shader/shaders/vortex.frag';
+import { registerShader } from '../../../engine/fx/shader/ShaderPrecompile';
 import type { VortexIntensity, VortexColorTheme, VortexColorSet } from './VortexEffect';
+
+// 模块加载时自动注册 shader 到预编译队列
+registerShader(VORTEX_FRAG);
 
 // ============================================================================
 // Props
@@ -30,6 +34,8 @@ export interface VortexShaderEffectProps {
   intensity?: VortexIntensity;
   color?: VortexColorTheme;
   customColors?: VortexColorSet;
+  /** 旋涡缩放系数，默认 1.0（>1 放大，<1 缩小） */
+  size?: number;
   onComplete?: () => void;
   className?: string;
 }
@@ -38,27 +44,41 @@ export interface VortexShaderEffectProps {
 // 颜色预设（归一化到 0-1 供 GLSL 使用）
 // ============================================================================
 
+type RGB = [number, number, number];
+
+/** 归一化 5 色阶预设 */
 type NormalizedColorSet = {
-  main: [number, number, number];
-  sub: [number, number, number];
-  bright: [number, number, number];
+  dark: RGB;
+  main: RGB;
+  sub: RGB;
+  bright: RGB;
+  glow: RGB;
 };
+
+/** 便捷 0-255 → 0-1 */
+const n = (r: number, g: number, b: number): RGB => [r / 255, g / 255, b / 255];
 
 const COLOR_PRESETS: Record<'blue' | 'purple' | 'green', NormalizedColorSet> = {
   blue: {
-    main:   [96 / 255, 165 / 255, 250 / 255],   // blue-400
-    sub:    [59 / 255, 130 / 255, 246 / 255],    // blue-500
-    bright: [191 / 255, 219 / 255, 254 / 255],   // blue-200
+    dark:   n(6, 10, 36),          // 深邃太空底色
+    main:   n(40, 80, 180),         // 深蓝旋臂
+    sub:    n(80, 140, 255),        // 亮蓝
+    bright: n(160, 200, 255),       // 高光偏白蓝
+    glow:   n(220, 235, 255),       // 核心辉光
   },
   purple: {
-    main:   [168 / 255, 85 / 255, 247 / 255],
-    sub:    [124 / 255, 58 / 255, 237 / 255],
-    bright: [232 / 255, 200 / 255, 255 / 255],
+    dark:   n(12, 4, 30),           // 暗紫深空
+    main:   n(80, 30, 160),         // 紫旋臂
+    sub:    n(140, 70, 230),        // 亮紫
+    bright: n(200, 150, 255),       // 薰衣草
+    glow:   n(240, 210, 255),       // 核心辉光
   },
   green: {
-    main:   [74 / 255, 222 / 255, 128 / 255],
-    sub:    [34 / 255, 197 / 255, 94 / 255],
-    bright: [200 / 255, 255 / 255, 220 / 255],
+    dark:   n(4, 16, 12),           // 暗绿深空
+    main:   n(20, 100, 60),         // 深翠旋臂
+    sub:    n(50, 200, 120),        // 亮翠
+    bright: n(150, 255, 200),       // 高光薄荷
+    glow:   n(220, 255, 240),       // 核心辉光
   },
 };
 
@@ -68,9 +88,11 @@ function resolveNormColors(
 ): NormalizedColorSet {
   if (color === 'custom' && custom) {
     return {
+      dark: [0.02, 0.01, 0.06],
       main: [custom.main[0] / 255, custom.main[1] / 255, custom.main[2] / 255],
       sub: [custom.sub[0] / 255, custom.sub[1] / 255, custom.sub[2] / 255],
       bright: [custom.bright[0] / 255, custom.bright[1] / 255, custom.bright[2] / 255],
+      glow: [0.9, 0.92, 1.0],
     };
   }
   return COLOR_PRESETS[color === 'custom' ? 'blue' : color];
@@ -85,6 +107,7 @@ export const VortexShaderEffect: React.FC<VortexShaderEffectProps> = ({
   intensity = 'normal',
   color = 'blue',
   customColors,
+  size = 2,
   onComplete,
   className = '',
 }) => {
@@ -92,19 +115,22 @@ export const VortexShaderEffect: React.FC<VortexShaderEffectProps> = ({
 
   const isStrong = intensity === 'strong';
   const c = resolveNormColors(color, customColors);
-  const dur = isStrong ? 1.1 : 0.85;
+  const dur = isStrong ? 1.4 : 1.0;
 
   return (
     <ShaderCanvas
       fragmentShader={VORTEX_FRAG}
       uniforms={{
         uDuration: dur,
+        uDarkColor: c.dark,
         uBaseColor: c.main,
         uAccentColor: c.sub,
         uBrightColor: c.bright,
-        uSpiralTightness: 4.5,
-        uRotationSpeed: 2.2,
-        uIntensity: isStrong ? 1.3 : 0.9,
+        uGlowColor: c.glow,
+        uSpiralTightness: 5.0,
+        uRotationSpeed: 1.6,
+        uIntensity: isStrong ? 1.35 : 0.95,
+        uScale: size,
       }}
       duration={dur}
       onComplete={onComplete}

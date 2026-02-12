@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { LoadingArcaneAether } from './LoadingVariants';
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
+import { UI_Z_INDEX } from '../../core';
 
 // 全局计数器：追踪当前存活的 LoadingScreen 实例数
 let globalLoadingScreenCount = 0;
@@ -93,55 +94,61 @@ export const LoadingScreen = ({
                 animate={containerVariants.animate}
                 exit={containerVariants.exit}
                 className={clsx(
-                    "flex flex-col items-center justify-center bg-black z-[9999]",
+                    // 关键：不再用 flex-column 居中承载“动画 + 文本”，避免文本高度变化影响动画视觉中心
+                    "relative bg-black overflow-hidden",
                     fullScreen ? "fixed inset-0 w-screen h-screen" : "relative w-full h-full min-h-[400px]",
                     className
                 )}
+                style={{ zIndex: UI_Z_INDEX.loading }}
             >
-                {/* 核心法阵动画 */}
-                <div className="relative mb-8 transform scale-75 md:scale-100">
-                    <LoadingArcaneAether />
+                {/* 核心法阵动画：始终视觉居中（不受文本高度影响） */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="relative transform scale-75 md:scale-100">
+                        <LoadingArcaneAether />
 
-                    {/* 额外的底层氛围发光 */}
-                    <motion.div
-                        className="absolute inset-0 bg-amber-500/10 rounded-full blur-[60px] -z-10"
-                        animate={{
-                            scale: [1, 1.2, 1],
-                            opacity: [0.3, 0.6, 0.3]
-                        }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                    />
+                        {/* 额外的底层氛围发光 */}
+                        <motion.div
+                            className="absolute inset-0 bg-amber-500/10 rounded-full blur-[60px] -z-10"
+                            animate={{
+                                scale: [1, 1.2, 1],
+                                opacity: [0.3, 0.6, 0.3]
+                            }}
+                            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                        />
+                    </div>
                 </div>
 
-                {/* 文本提示区 */}
-                <div className="flex flex-col items-center text-center px-6 max-w-sm">
-                    {title && (
-                        <motion.h2
-                            key={title}
+                {/* 文本提示区：固定到底部，给容差；不参与垂直居中计算 */}
+                <div className="absolute left-0 right-0 bottom-16 flex flex-col items-center text-center px-6">
+                    <div className="w-full max-w-sm min-h-[76px] flex flex-col items-center">
+                        {title && (
+                            <motion.h2
+                                key={title}
+                                initial={textVariants.initial}
+                                animate={textVariants.animate}
+                                transition={shouldAnimate ? { delay: 0.2 } : { duration: 0.3 }}
+                                className={clsx(
+                                    "text-amber-500 font-bold text-lg md:text-xl tracking-[0.2em] uppercase mb-2 line-clamp-1",
+                                    titleClassName
+                                )}
+                            >
+                                {title}
+                            </motion.h2>
+                        )}
+
+                        <motion.p
+                            key={description || 'default'}
                             initial={textVariants.initial}
                             animate={textVariants.animate}
-                            transition={shouldAnimate ? { delay: 0.2 } : { duration: 0.3 }}
+                            transition={shouldAnimate ? { delay: 0.3 } : { duration: 0.3 }}
                             className={clsx(
-                                "text-amber-500 font-bold text-lg md:text-xl tracking-[0.2em] uppercase mb-2",
-                                titleClassName
+                                "text-amber-200/60 text-xs md:text-sm font-serif tracking-widest leading-relaxed line-clamp-2",
+                                descriptionClassName
                             )}
                         >
-                            {title}
-                        </motion.h2>
-                    )}
-
-                    <motion.p
-                        key={description || 'default'}
-                        initial={textVariants.initial}
-                        animate={textVariants.animate}
-                        transition={shouldAnimate ? { delay: 0.3 } : { duration: 0.3 }}
-                        className={clsx(
-                            "text-amber-200/60 text-xs md:text-sm font-serif tracking-widest leading-relaxed line-clamp-2",
-                            descriptionClassName
-                        )}
-                    >
-                        {description || t('matchRoom.loadingResources')}
-                    </motion.p>
+                            {description || t('matchRoom.loadingResources')}
+                        </motion.p>
+                    </div>
                 </div>
 
                 {/* 底部装饰线 */}
@@ -149,7 +156,7 @@ export const LoadingScreen = ({
                     initial={decorVariants.initial}
                     animate={decorVariants.animate}
                     transition={shouldAnimate ? { delay: 0.5, duration: 1 } : { duration: 0 }}
-                    className="absolute bottom-12 w-32 h-[1px] bg-gradient-to-r from-transparent via-amber-500 to-transparent"
+                    className="absolute bottom-12 left-1/2 -translate-x-1/2 w-32 h-[1px] bg-gradient-to-r from-transparent via-amber-500 to-transparent"
                 />
             </motion.div>
         </AnimatePresence>

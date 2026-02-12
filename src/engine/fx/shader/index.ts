@@ -10,6 +10,7 @@ export { ShaderCanvas } from './ShaderCanvas';
 
 // 工具
 export { compileShader, createProgram, setUniforms } from './ShaderMaterial';
+export { precompileShaders, registerShader, flushRegisteredShaders } from './ShaderPrecompile';
 
 // 类型
 export type { UniformValue, ShaderCanvasProps } from './types';

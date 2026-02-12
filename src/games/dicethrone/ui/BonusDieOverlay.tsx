@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import type { DieFace, BonusDieInfo } from '../domain/types';
 import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
+import { UI_Z_INDEX } from '../../../core';
 
 interface BonusDieOverlayProps {
     /** 单颗骰子值 (1-6)，用于普通特写模式 */
@@ -86,7 +87,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 onClose={onClose}
                 disableAutoClose
                 disableBackdropClose
-                zIndex={9999}
+                zIndex={UI_Z_INDEX.overlayRaised + 100}
             >
                 <div className="flex flex-col items-center gap-[2vw]">
                     {/* 提示文字 */}
@@ -178,7 +179,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             isVisible={isVisible}
             onClose={onClose}
             autoCloseDelay={autoCloseDelay}
-            zIndex={9999}
+            zIndex={UI_Z_INDEX.overlayRaised + 100}
         >
             <BonusDieSpotlightContent
                 value={value}

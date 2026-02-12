@@ -46,7 +46,7 @@ export const SUMMONER_GOBLIN: UnitCard = {
   cardType: 'unit',
   name: '思尼克斯',
   unitClass: 'summoner',
-  faction: '洞穴地精',
+  faction: 'goblin',
   strength: 2, // 左侧红色图标显示战力
   life: 11,
   cost: 0,
@@ -70,7 +70,7 @@ export const CHAMPION_UNITS_GOBLIN: UnitCard[] = [
     cardType: 'unit',
     name: '布拉夫',
     unitClass: 'champion',
-    faction: '洞穴地精',
+    faction: 'goblin',
     strength: 0,
     life: 6,
     cost: 0,
@@ -88,7 +88,7 @@ export const CHAMPION_UNITS_GOBLIN: UnitCard[] = [
     cardType: 'unit',
     name: '史米革',
     unitClass: 'champion',
-    faction: '洞穴地精',
+    faction: 'goblin',
     strength: 2,
     life: 4,
     cost: 0,
@@ -106,7 +106,7 @@ export const CHAMPION_UNITS_GOBLIN: UnitCard[] = [
     cardType: 'unit',
     name: '巨食兽',
     unitClass: 'champion',
-    faction: '洞穴地精',
+    faction: 'goblin',
     strength: 5,
     life: 9,
     cost: 6,
@@ -131,7 +131,7 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     cardType: 'unit',
     name: '部落攀爬手',
     unitClass: 'common',
-    faction: '洞穴地精',
+    faction: 'goblin',
     strength: 1,
     life: 3,
     cost: 0,
@@ -149,7 +149,7 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     cardType: 'unit',
     name: '野兽骑手',
     unitClass: 'common',
-    faction: '洞穴地精',
+    faction: 'goblin',
     strength: 3,
     life: 3,
     cost: 2,
@@ -167,7 +167,7 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     cardType: 'unit',
     name: '部落投石手',
     unitClass: 'common',
-    faction: '洞穴地精',
+    faction: 'goblin',
     strength: 2,
     life: 1,
     cost: 0,
@@ -185,7 +185,7 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     cardType: 'unit',
     name: '部落抓附手',
     unitClass: 'common',
-    faction: '洞穴地精',
+    faction: 'goblin',
     strength: 2,
     life: 2,
     cost: 0,
@@ -208,6 +208,7 @@ export const EVENT_CARDS_GOBLIN: EventCard[] = [
   {
     id: 'goblin-frenzy',
     cardType: 'event',
+    faction: 'goblin',
     name: '群情激愤',
     eventType: 'legendary',
     playPhase: 'magic', // 魔力阶段
@@ -222,6 +223,7 @@ export const EVENT_CARDS_GOBLIN: EventCard[] = [
   {
     id: 'goblin-sneak',
     cardType: 'event',
+    faction: 'goblin',
     name: '潜行',
     eventType: 'common',
     playPhase: 'move', // 移动阶段
@@ -236,6 +238,7 @@ export const EVENT_CARDS_GOBLIN: EventCard[] = [
   {
     id: 'goblin-relentless',
     cardType: 'event',
+    faction: 'goblin',
     name: '不屈不挠',
     eventType: 'common',
     playPhase: 'magic', // 魔力阶段
@@ -250,6 +253,7 @@ export const EVENT_CARDS_GOBLIN: EventCard[] = [
   {
     id: 'goblin-swarm',
     cardType: 'event',
+    faction: 'goblin',
     name: '成群结队',
     eventType: 'common',
     playPhase: 'attack', // 攻击阶段
@@ -271,6 +275,7 @@ export const STRUCTURE_CARDS_GOBLIN: StructureCard[] = [
   {
     id: 'goblin-starting-gate',
     cardType: 'structure',
+    faction: 'goblin',
     name: '起始城门',
     cost: 0,
     life: 10,
@@ -284,6 +289,7 @@ export const STRUCTURE_CARDS_GOBLIN: StructureCard[] = [
   {
     id: 'goblin-portal',
     cardType: 'structure',
+    faction: 'goblin',
     name: '传送门',
     cost: 0,
     life: 5,

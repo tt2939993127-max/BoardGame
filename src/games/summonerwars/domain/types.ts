@@ -63,7 +63,7 @@ export interface UnitCard {
   cardType: 'unit';
   name: string;
   unitClass: UnitClass;
-  faction: string;
+  faction: FactionId;
   strength: number;      // 攻击力（骰子数）
   life: number;          // 生命值
   cost: number;          // 召唤费用
@@ -84,6 +84,7 @@ export interface EventCard {
   id: string;
   cardType: 'event';
   name: string;
+  faction: FactionId;
   eventType?: EventType; // 传奇/普通
   cost: number;
   playPhase: GamePhase | 'any';
@@ -101,6 +102,7 @@ export interface StructureCard {
   id: string;
   cardType: 'structure';
   name: string;
+  faction: FactionId;
   cost: number;
   life: number;
   isGate?: boolean;      // 是否为城门
@@ -131,6 +133,7 @@ export interface BoardUnit {
   healingMode?: boolean; // 治疗模式（圣殿牧师：本次攻击转为治疗）
   wasAttackedThisTurn?: boolean; // 本回合是否已被攻击（庇护判定用）
   tempAbilities?: string[]; // 临时技能（幻化复制，回合结束清除）
+  attachedUnits?: { cardId: string; card: UnitCard; owner: PlayerId }[]; // 附加的单位卡（冰霜战斧）
 }
 
 /** 战场上的建筑 */
@@ -205,6 +208,8 @@ export interface SummonerWarsCore {
   hostStarted: boolean;
   /** 自定义牌组数据（选角阶段使用，玩家选择自定义牌组时存储） */
   customDeckData?: Partial<Record<PlayerId, SerializedCustomDeck>>;
+  /** 技能使用次数追踪（key: `${unitCardId}:${abilityId}`，回合结束清空） */
+  abilityUsageCount: Record<string, number>;
 }
 
 // ============================================================================
@@ -410,6 +415,8 @@ export const SW_EVENTS = {
   HEALING_MODE_SET: 'sw:healing_mode_set',
   // 技能复制（幻化）
   ABILITIES_COPIED: 'sw:abilities_copied',
+  // 单位附加（冰霜战斧）
+  UNIT_ATTACHED: 'sw:unit_attached',
 } as const;
 
 // ============================================================================

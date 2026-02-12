@@ -22,6 +22,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -102,7 +103,7 @@ function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
 // ============================================================================
 
 describe('海盗派系能力（第6批）', () => {
-    it('pirate_dinghy: 移动至多两个己方随从到其他基地', () => {
+    it('pirate_dinghy: 多个己方随从时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -117,14 +118,12 @@ describe('海盗派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const moveEvents = events.filter(e => e.type === SU_EVENTS.MINION_MOVED);
-        expect(moveEvents.length).toBe(2);
-        // 力量最低的先移动
-        expect((moveEvents[0] as any).payload.minionUid).toBe('m0');
-        expect((moveEvents[0] as any).payload.toBaseIndex).toBe(1);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('pirate_dinghy_choose_first');
     });
 
-    it('pirate_dinghy: 只有一个己方随从时只移动一个', () => {
+    it('pirate_dinghy: 只有一个己方随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -139,8 +138,8 @@ describe('海盗派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const moveEvents = events.filter(e => e.type === SU_EVENTS.MINION_MOVED);
-        expect(moveEvents.length).toBe(1);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('pirate_dinghy: 没有己方随从时无事件', () => {
@@ -178,9 +177,9 @@ describe('海盗派系能力（第6批）', () => {
 
         const events = execPlayAction(state, '0', 'a1');
         // 多个对手随从时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('pirate_shanghai_choose_minion');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('pirate_shanghai_choose_minion');
     });
 
     it('pirate_sea_dogs: 多目标时创建 Prompt 选择随从', () => {
@@ -199,12 +198,12 @@ describe('海盗派系能力（第6批）', () => {
 
         const events = execPlayAction(state, '0', 'a1');
         // 多个随从时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('pirate_sea_dogs_choose_minion');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('pirate_sea_dogs_choose_minion');
     });
 
-    it('pirate_powderkeg: 消灭己方随从并消灭同基地力量≤被消灭随从的随从', () => {
+    it('pirate_powderkeg: 单个己方随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -214,20 +213,17 @@ describe('海盗派系能力（第6批）', () => {
             },
             bases: [{
                 defId: 'b1', minions: [
-                    makeMinion('m0', 'test', '0', 2), // 己方力量最低，被牺牲
-                    makeMinion('m1', 'test', '1', 2), // 对手力量=2，≤被消灭随从，也被消灭
-                    makeMinion('m2', 'test', '1', 5), // 对手力量=5，>2，存活
+                    makeMinion('m0', 'test', '0', 2), // 己方力量最低
+                    makeMinion('m1', 'test', '1', 2), // 对手力量=2
+                    makeMinion('m2', 'test', '1', 5), // 对手力量=5
                 ], ongoingActions: [],
             }],
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(2);
-        // 第一个是己方随从被牺牲
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('m0');
-        // 第二个是同基地力量≤2的对手随从
-        expect((destroyEvents[1] as any).payload.minionUid).toBe('m1');
+        // 单个己方随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('pirate_powderkeg: 没有己方随从时无事件', () => {
@@ -257,7 +253,7 @@ describe('海盗派系能力（第6批）', () => {
 // ============================================================================
 
 describe('忍者派系能力（第6批）', () => {
-    it('ninja_way_of_deception: 移动己方最强随从到随从最少的基地', () => {
+    it('ninja_way_of_deception: 多个己方随从时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -272,10 +268,9 @@ describe('忍者派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const moveEvents = events.filter(e => e.type === SU_EVENTS.MINION_MOVED);
-        expect(moveEvents.length).toBe(1);
-        expect((moveEvents[0] as any).payload.minionUid).toBe('m0'); // 最强
-        expect((moveEvents[0] as any).payload.toBaseIndex).toBe(1); // 随从最少
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('ninja_way_of_deception_choose_minion');
     });
 
     it('ninja_way_of_deception: 没有己方随从时无事件', () => {
@@ -315,7 +310,7 @@ describe('忍者派系能力（第6批）', () => {
         expect(moveEvents.length).toBe(0);
     });
 
-    it('ninja_disguise: 返回己方最弱随从并打出手牌中最强随从', () => {
+    it('ninja_disguise: 单个己方随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -333,12 +328,9 @@ describe('忍者派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MINION_RETURNED);
-        const playEvents = events.filter(e => e.type === SU_EVENTS.MINION_PLAYED);
-        expect(returnEvents.length).toBe(1);
-        expect((returnEvents[0] as any).payload.minionUid).toBe('m0');
-        expect(playEvents.length).toBe(1);
-        expect((playEvents[0] as any).payload.baseIndex).toBe(0); // 打到同一基地
+        // 单个己方随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('ninja_disguise: 没有己方随从时无事件', () => {
@@ -362,7 +354,7 @@ describe('忍者派系能力（第6批）', () => {
         expect(returnEvents.length).toBe(0);
     });
 
-    it('ninja_disguise: 有己方随从但手牌无随从时只返回不打出', () => {
+    it('ninja_disguise: 有己方随从但手牌无随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -376,10 +368,9 @@ describe('忍者派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MINION_RETURNED);
-        const playEvents = events.filter(e => e.type === SU_EVENTS.MINION_PLAYED);
-        expect(returnEvents.length).toBe(1);
-        expect(playEvents.length).toBe(0);
+        // 单个己方随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 });
 
@@ -388,7 +379,7 @@ describe('忍者派系能力（第6批）', () => {
 // ============================================================================
 
 describe('巫师派系能力（第6批）', () => {
-    it('wizard_mass_enchantment: 从对手牌库顶取一张卡（CARD_TRANSFERRED）', () => {
+    it('wizard_mass_enchantment: 单个对手时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -401,10 +392,9 @@ describe('巫师派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const transferEvents = events.filter(e => e.type === SU_EVENTS.CARD_TRANSFERRED);
-        expect(transferEvents.length).toBe(1);
-        expect((transferEvents[0] as any).payload.cardUid).toBe('d1');
-        expect((transferEvents[0] as any).payload.toPlayerId).toBe('0');
+        // 单个对手时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('wizard_mass_enchantment: 对手牌库为空时无事件', () => {
@@ -485,7 +475,7 @@ describe('巫师派系能力（第6批）', () => {
         expect(reshuffleEvents.length).toBe(1);
     });
 
-    it('wizard_scry: 从牌库搜索一张行动卡放入手牌', () => {
+    it('wizard_scry: 单张行动卡时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -501,9 +491,9 @@ describe('巫师派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.cardUids).toEqual(['d2']);
+        // 单张行动卡时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
     });
 
     it('wizard_scry: 牌库无行动卡时无事件', () => {
@@ -522,7 +512,7 @@ describe('巫师派系能力（第6批）', () => {
         expect(drawEvents.length).toBe(0);
     });
 
-    it('wizard_sacrifice: 消灭己方最弱随从并抽等量力量的牌', () => {
+    it('wizard_sacrifice: 多个己方随从时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -541,12 +531,9 @@ describe('巫师派系能力（第6批）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('m0'); // 力量最低
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.count).toBe(3); // 抽3张（等于被消灭随从力量）
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('wizard_sacrifice');
     });
 
     it('wizard_sacrifice: 没有己方随从时无事件', () => {
@@ -607,7 +594,7 @@ describe('巫师派系能力（第6批）', () => {
 // ============================================================================
 
 describe('外星人派系能力（第6批）', () => {
-    it('alien_scout: 从牌库搜索力量最高的随从放入手牌', () => {
+    it('alien_scout: 多个随从时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -626,14 +613,9 @@ describe('外星人派系能力（第6批）', () => {
         });
 
         const events = execPlayMinion(state, '0', 'm_scout', 0);
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        // 应该有抽牌事件（搜索到力量最高的随从）
-        expect(drawEvents.length).toBeGreaterThanOrEqual(1);
-        // 找到 onPlay 触发的抽牌（排除打出随从本身的事件）
-        const scoutDraw = drawEvents.find(e => (e as any).payload.count === 1);
-        if (scoutDraw) {
-            expect((scoutDraw as any).payload.cardUids.length).toBe(1);
-        }
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('alien_scout');
     });
 
     it('alien_scout: 牌库无随从时无抽牌事件', () => {

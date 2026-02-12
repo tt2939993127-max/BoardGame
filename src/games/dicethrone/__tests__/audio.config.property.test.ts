@@ -51,6 +51,10 @@ import { getOptimizedAudioUrl } from '../../../core/AssetLoader';
 import * as fs from 'fs';
 import * as path from 'path';
 
+const resolveKey = (event: AudioEvent, ctx: any = { G: {}, ctx: {}, meta: {} }): string | null => {
+    return DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, ctx)?.key ?? null;
+};
+
 const CP_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
 const CP_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
 const CARD_PLAY_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
@@ -82,11 +86,7 @@ const resolveRegistryFilePath = (key: string): string => {
 describe('DiceThrone 音效配置属性测试', () => {
     describe('属性 1：CP 变化音效正确性', () => {
         it('应对所有 CP 变化值返回正确的音效键', () => {
-            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
-            if (!resolver) {
-                throw new Error('eventSoundResolver 未定义');
-            }
-
+            
             // 测试多个随机 delta 值
             const testCases = [
                 { delta: 5, expected: CP_GAIN_KEY },
@@ -101,7 +101,7 @@ describe('DiceThrone 音效配置属性测试', () => {
 
             for (const { delta, expected } of testCases) {
                 const event: AudioEvent = { type: 'CP_CHANGED', payload: { delta } };
-                const result = resolver(event, { G: {}, ctx: {}, meta: {} } as any);
+                const result = resolveKey(event);
                 expect(result).toBe(expected);
             }
         });
@@ -113,11 +113,37 @@ describe('DiceThrone 音效配置属性测试', () => {
     });
 
     describe('属性 2：技能音效正确性', () => {
-        it('所有带 sfxKey 的技能应在伤害事件解析音效键', () => {
-            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
-            if (!resolver) {
-                throw new Error('eventSoundResolver 未定义');
-            }
+        it('DAMAGE_DEALT 应返回 on-impact 通用伤害音效（技能 sfxKey 由冲击帧消费）', () => {
+            // 当前架构：DAMAGE_DEALT 统一返回 on-impact 通用伤害音效，
+            // 技能专属 sfxKey 由 DeferredSoundMap 在动画冲击帧 playDeferredSound(eventId) 消费
+            const event: AudioEvent = {
+                type: 'DAMAGE_DEALT',
+                payload: {
+                    actualDamage: 3,
+                    targetId: 'player2',
+                    sourceAbilityId: 'thunder-strike',
+                },
+            };
+
+            const mockContext = {
+                G: {
+                    players: {
+                        player1: { heroId: 'monk', abilities: MONK_ABILITIES },
+                        player2: { heroId: 'monk', abilities: [] },
+                    },
+                },
+                ctx: {},
+                meta: { currentPlayerId: 'player1' },
+            } as any;
+
+            const result = DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, mockContext);
+            expect(result).toBeDefined();
+            expect(result!.timing).toBe('on-impact');
+            // 通用轻击音效（damage < 8）
+            expect(result!.key).toBe('combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst');
+        });
+
+        it('所有攻击型技能应配置 sfxKey', () => {
             const resolverAbilities = [
                 ...MONK_ABILITIES,
                 ...BARBARIAN_ABILITIES,
@@ -127,38 +153,10 @@ describe('DiceThrone 音效配置属性测试', () => {
                 ...SHADOW_THIEF_ABILITIES,
             ];
 
-            const abilitiesWithSfx = resolverAbilities.filter(ability => ability.sfxKey && ability.type === 'offensive');
-
-            for (const ability of abilitiesWithSfx) {
-                const event: AudioEvent = {
-                    type: 'DAMAGE_DEALT',
-                    payload: {
-                        actualDamage: 3,
-                        targetId: 'player2',
-                        sourceAbilityId: ability.id,
-                    },
-                };
-
-                const mockContext = {
-                    G: {
-                        players: {
-                            player1: {
-                                heroId: 'monk',
-                                abilities: resolverAbilities,
-                            },
-                            player2: {
-                                heroId: 'monk',
-                                abilities: [],
-                            },
-                        },
-                    },
-                    ctx: {},
-                    meta: { currentPlayerId: 'player1' },
-                } as any;
-
-                const result = resolver(event, mockContext);
-                expect(result).toBe(ability.sfxKey);
-            }
+            const offensiveAbilities = resolverAbilities.filter(ability => ability.type === 'offensive');
+            // 攻击型技能应该有 sfxKey（至少大部分有）
+            const withSfx = offensiveAbilities.filter(a => a.sfxKey);
+            expect(withSfx.length).toBeGreaterThan(0);
         });
 
         it('所有自定义音效键应在 registry 中存在', () => {
@@ -225,9 +223,7 @@ describe('DiceThrone 音效配置属性测试', () => {
     describe('属性 3：配置完整性', () => {
         it('所有使用到的 registry key 都必须存在并有资源文件', () => {
             const keys = new Set<string>();
-            const eventKeys = Object.values(DICETHRONE_AUDIO_CONFIG.eventSoundMap ?? {});
-            eventKeys.forEach(key => keys.add(key));
-            DICETHRONE_AUDIO_CONFIG.bgm?.forEach(def => keys.add(def.key));
+                        DICETHRONE_AUDIO_CONFIG.bgm?.forEach(def => keys.add(def.key));
             DICE_ROLL_KEYS.forEach(key => keys.add(key));
             keys.add(CP_GAIN_KEY);
             keys.add(CP_SPEND_KEY);

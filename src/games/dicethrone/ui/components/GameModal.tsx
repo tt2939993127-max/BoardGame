@@ -38,8 +38,7 @@ export const GameModal = ({
                 <ModalBase
                     onClose={onClose}
                     closeOnBackdrop={closeOnBackdrop}
-                    overlayClassName="z-[1000] !bg-black/85"
-                    containerClassName="z-[1001]"
+                    overlayClassName="!bg-black/85"
                 >
                     <div
                         className={clsx(

@@ -91,6 +91,8 @@ export interface UseDragCardConfig {
     playThreshold?: number;
     /** 售卖区域元素 ref */
     sellZoneRef?: React.RefObject<HTMLElement | null>;
+    /** 是否可交互（不可交互时触发 denied 音效） */
+    canInteract?: boolean;
     /** 打出卡牌回调 */
     onPlay?: (cardId: string) => void;
     /** 售卖卡牌回调 */

@@ -2,9 +2,9 @@
  * 野蛮人 (Barbarian) 专属 Custom Action 处理器
  */
 
-import { getActiveDice, getDieFace } from '../rules';
+import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
 import { RESOURCE_IDS } from '../resources';
-import { STATUS_IDS } from '../ids';
+import { STATUS_IDS, BARBARIAN_DICE_FACE_IDS as FACES } from '../ids';
 import type {
     DiceThroneEvent,
     DamageDealtEvent,
@@ -19,7 +19,7 @@ import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomAc
 
 // ============================================================================
 // 野蛮人技能处理器
-// 注意：野蛮人骰子映射为 1-3=sword, 4-5=heart, 6=strength（见 diceConfig.ts）
+// 注意：骰面以 diceConfig.ts 为准
 // ============================================================================
 
 /**
@@ -34,8 +34,8 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
     let swordCount = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
-        const face = getDieFace(value);
-        if (value <= 3) {
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        if (face === FACES.SWORD) {
             swordCount++;
         }
         dice.push({ index: i, value, face });
@@ -89,14 +89,9 @@ function handleBarbarianSuppress2Roll(context: CustomActionContext): DiceThroneE
 function handleBarbarianThickSkin({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
 
-    // 统计心骰面数量（野蛮人骰子：4-5 = heart）
-    const activeDice = getActiveDice(state);
-    let heartCount = 0;
-    for (const die of activeDice) {
-        if (die.value === 4 || die.value === 5) {
-            heartCount++;
-        }
-    }
+    // 统计心骰面数量
+    const faceCounts = getFaceCounts(getActiveDice(state));
+    const heartCount = faceCounts[FACES.HEART] ?? 0;
 
     if (heartCount > 0) {
         events.push({
@@ -118,13 +113,8 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
     const events: DiceThroneEvent[] = [];
 
     // 统计心骰面数量
-    const activeDice = getActiveDice(state);
-    let heartCount = 0;
-    for (const die of activeDice) {
-        if (die.value === 4 || die.value === 5) {
-            heartCount++;
-        }
-    }
+    const faceCounts = getFaceCounts(getActiveDice(state));
+    const heartCount = faceCounts[FACES.HEART] ?? 0;
 
     if (heartCount > 0) {
         events.push({
@@ -150,7 +140,7 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
 
 /**
  * 精力充沛！(Energetic)：投掷1骰
- * - 星(6) → 治疗2 + 对对手施加脑震荡
+ * - 星 → 治疗2 + 对对手施加脑震荡
  * - 其他 → 抽1牌
  */
 function handleEnergeticRoll({ targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
@@ -158,8 +148,8 @@ function handleEnergeticRoll({ targetId, attackerId, sourceAbilityId, state, tim
     const events: DiceThroneEvent[] = [];
 
     const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
-    const isStrength = dieValue === 6; // 野蛮人骰子：6 = strength (星)
+    const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
+    const isStrength = face === FACES.STRENGTH;
 
     events.push({
         type: 'BONUS_DIE_ROLLED',
@@ -208,7 +198,7 @@ function handleEnergeticRoll({ targetId, attackerId, sourceAbilityId, state, tim
 /**
  * 大吉大利！(Lucky)：投掷3骰，治疗 1 + 2×心骰面数
  */
-function handleLuckyRollHeal({ attackerId, sourceAbilityId, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
@@ -216,8 +206,8 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, timestamp, random }:
     let heartCount = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
-        const face = getDieFace(value);
-        if (value === 4 || value === 5) {
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        if (face === FACES.HEART) {
             heartCount++;
         }
         dice.push({ index: i, value, face });
@@ -264,8 +254,8 @@ function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId
     let swordCount = 0;
     for (let i = 0; i < 5; i++) {
         const value = random.d(6);
-        const face = getDieFace(value);
-        if (value <= 3) {
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        if (face === FACES.SWORD) {
             swordCount++;
         }
         dice.push({ index: i, value, face });

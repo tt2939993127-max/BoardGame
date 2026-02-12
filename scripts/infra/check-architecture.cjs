@@ -2,7 +2,7 @@
 /**
  * 架构守卫脚本
  * 
- * 检查框架层（engine/、systems/）是否违反解耦原则：
+ * 检查框架层（engine/，含 primitives/）是否违反解耦原则：
  * 1. 禁止 import 游戏层模块（games/）
  * 2. 禁止包含游戏特定术语
  * 
@@ -17,7 +17,7 @@ const path = require('path');
 const SRC_DIR = path.join(__dirname, '../..', 'src');
 
 // 框架层目录
-const FRAMEWORK_DIRS = ['engine', 'systems'];
+const FRAMEWORK_DIRS = ['engine'];
 
 // 禁止的 import 模式（框架层不应 import 游戏层）
 const FORBIDDEN_IMPORTS = [
@@ -40,14 +40,7 @@ const GAME_SPECIFIC_TERMS = [
 ];
 
 // 例外文件（允许包含游戏术语的框架文件）
-const EXCEPTIONS = [
-    // 类型定义中的条件类型名称（向后兼容）
-    'systems/AbilitySystem/conditions.ts',
-    // 通用骰子系统（smallStraight/largeStraight 是通用骰子规则，不是特定游戏）
-    'systems/DiceSystem/',
-    // 类型定义中的注释示例
-    'systems/AbilitySystem/types.ts',
-];
+const EXCEPTIONS = [];
 
 let errors = [];
 let warnings = [];

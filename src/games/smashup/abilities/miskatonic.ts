@@ -1,42 +1,42 @@
 /**
  * 大杀四方 - 米斯卡塔尼克大学派系能力
  *
- * 主题：知识/研究、抽牌、行动卡操控
+ * 主题：知�?研究、抽牌、行动卡操控
  */
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
-import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionReturnedEvent, MinionCardDef } from '../domain/types';
+import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionCardDef } from '../domain/types';
 import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion, recoverCardsFromDiscard,
-    getMinionPower, setPromptContinuation, buildMinionTargetOptions,
+    getMinionPower, requestChoice, buildMinionTargetOptions,
 } from '../domain/abilityHelpers';
 import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getCardDef, getBaseDef } from '../data/cards';
 
-/** 注册米斯卡塔尼克大学派系所有能力 */
+/** 注册米斯卡塔尼克大学派系所有能�?*/
 export function registerMiskatonicAbilities(): void {
     // 这些多管闲事的小鬼（行动卡）：消灭一个基地上所有行动卡
     registerAbility('miskatonic_those_meddling_kids', 'onPlay', miskatonicThoseMeddlingKids);
-    // 心理分析（行动卡）：抽2张牌 + 抽1张疯狂卡
+    // 心理分析（行动卡）：�?张牌 + �?张疯狂卡
     registerAbility('miskatonic_psychological_profiling', 'onPlay', miskatonicPsychologicalProfiling);
-    // 强制阅读（行动卡）：目标对手抽2张疯狂卡 + 你获得1个额外行动
+    // 强制阅读（行动卡）：目标对手�?张疯狂卡 + 你获�?个额外行�?
     registerAbility('miskatonic_mandatory_reading', 'onPlay', miskatonicMandatoryReading);
-    // 失落的知识（行动卡）：手中有≥2张疯狂卡时，抽2张牌 + 额外随从 + 额外行动
+    // 失落的知识（行动卡）：手中有�?张疯狂卡时，�?张牌 + 额外随从 + 额外行动
     registerAbility('miskatonic_lost_knowledge', 'onPlay', miskatonicLostKnowledge);
-    // 也许能行（行动卡）：弃2张疯狂卡消灭一个随从
+    // 也许能行（行动卡）：�?张疯狂卡消灭一个随�?
     registerAbility('miskatonic_it_might_just_work', 'onPlay', miskatonicItMightJustWork);
-    // 不可见之书（行动卡）：查看对手手牌 + 抽1张疯狂卡 + 2个额外行动
+    // 不可见之书（行动卡）：查看对手手�?+ �?张疯狂卡 + 2个额外行�?
     registerAbility('miskatonic_book_of_iter_the_unseen', 'onPlay', miskatonicBookOfIterTheUnseen);
-    // 门口之物（行动卡）：搜索牌库找1张卡 + 抽1张疯狂卡
+    // 门口之物（行动卡）：搜索牌库�?张卡 + �?张疯狂卡
     registerAbility('miskatonic_thing_on_the_doorstep', 'onPlay', miskatonicThingOnTheDoorstep);
-    // 图书管理员（随从 onPlay）：抽2张牌或从弃牌堆取回2张行动卡
+    // 图书管理员（随从 onPlay）：�?张牌或从弃牌堆取�?张行动卡
     registerAbility('miskatonic_the_librarian', 'onPlay', miskatonicTheLibrarian);
-    // 教授（随从 onPlay）：返回本基地力量≤3的随从到手牌
+    // 教授（随�?onPlay）：返回本基地力量≤3的随从到手牌
     registerAbility('miskatonic_professor', 'onPlay', miskatonicProfessor);
-    // 研究员（随从 talent）：抽1张牌 + 额外行动
+    // 研究员（随从 talent）：�?张牌 + 额外行动
     registerAbility('miskatonic_fellow', 'talent', miskatonicFellow);
     // 学生（special）：疯狂卡转移给对手
     registerAbility('miskatonic_student', 'special', miskatonicStudent);
@@ -44,14 +44,14 @@ export function registerMiskatonicAbilities(): void {
     registerAbility('miskatonic_field_trip', 'onPlay', miskatonicFieldTrip);
 }
 
-/** 这些多管闲事的小鬼 onPlay：消灭一个基地上任意数量的行动卡（MVP：自动选行动卡最多的基地，全部消灭） */
+/** 这些多管闲事的小�?onPlay：消灭一个基地上任意数量的行动卡（MVP：自动选行动卡最多的基地，全部消灭） */
 function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
     // 找行动卡最多的基地
     let bestBaseIndex = -1;
     let bestCount = 0;
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
-        // 统计基地上的持续行动卡 + 随从附着的行动卡
+        // 统计基地上的持续行动�?+ 随从附着的行动卡
         let actionCount = base.ongoingActions.length;
         for (const m of base.minions) {
             actionCount += m.attachedActions.length;
@@ -66,7 +66,7 @@ function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const base = ctx.state.bases[bestBaseIndex];
 
-    // 消灭基地上的持续行动卡
+    // 消灭基地上的持续行动�?
     for (const ongoing of base.ongoingActions) {
         const evt: OngoingDetachedEvent = {
             type: SU_EVENTS.ONGOING_DETACHED,
@@ -101,11 +101,11 @@ function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 心理分析 onPlay：抽2张牌 + 抽1张疯狂卡 */
+/** 心理分析 onPlay：抽2张牌 + �?张疯狂卡 */
 function miskatonicPsychologicalProfiling(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const player = ctx.state.players[ctx.playerId];
-    // 抽2张牌
+    // �?张牌
     const drawCount = Math.min(2, player.deck.length);
     if (drawCount > 0) {
         const drawnUids = player.deck.slice(0, drawCount).map(c => c.uid);
@@ -116,16 +116,16 @@ function miskatonicPsychologicalProfiling(ctx: AbilityContext): AbilityResult {
         };
         events.push(drawEvt);
     }
-    // 抽1张疯狂卡
+    // �?张疯狂卡
     const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_psychological_profiling', ctx.now);
     if (madnessEvt) events.push(madnessEvt);
     return { events };
 }
 
-/** 强制阅读 onPlay：目标对手抽2张疯狂卡 + 你获得1个额外行动（MVP：自动选第一个对手） */
+/** 强制阅读 onPlay：目标对手抽2张疯狂卡 + 你获�?个额外行动（MVP：自动选第一个对手） */
 function miskatonicMandatoryReading(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
-    // 选第一个对手
+    // 选第一个对�?
     const opponent = ctx.state.turnOrder.find(pid => pid !== ctx.playerId);
     if (opponent) {
         const madnessEvt = drawMadnessCards(opponent, 2, ctx.state, 'miskatonic_mandatory_reading', ctx.now);
@@ -135,16 +135,16 @@ function miskatonicMandatoryReading(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 失落的知识 onPlay：手中有≥2张疯狂卡时，抽2张牌 + 额外随从 + 额外行动 */
+/** 失落的知�?onPlay：手中有�?张疯狂卡时，�?张牌 + 额外随从 + 额外行动 */
 function miskatonicLostKnowledge(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const player = ctx.state.players[ctx.playerId];
-    // 检查手中疯狂卡数量（注意：打出此行动卡后手牌已减少，但 execute 时 state 是打出前的状态）
-    // 在 execute 中 ctx.state 是命令执行前的状态，此时行动卡还在手牌中
-    // 所以需要排除当前打出的卡来计算手牌中的疯狂卡
+    // 检查手中疯狂卡数量（注意：打出此行动卡后手牌已减少，但 execute �?state 是打出前的状态）
+    // �?execute �?ctx.state 是命令执行前的状态，此时行动卡还在手牌中
+    // 所以需要排除当前打出的卡来计算手牌中的疯狂�?
     const madnessInHand = player.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID && c.uid !== ctx.cardUid).length;
     if (madnessInHand < 2) return { events };
-    // 抽2张牌
+    // �?张牌
     const drawCount = Math.min(2, player.deck.length);
     if (drawCount > 0) {
         const drawnUids = player.deck.slice(0, drawCount).map(c => c.uid);
@@ -161,15 +161,15 @@ function miskatonicLostKnowledge(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 研究员 talent：抽1张牌 + 额外行动
+ * 研究�?talent：抽1张牌 + 额外行动
  * 
- * 规则：抽一张牌，本回合可以额外打出一个行动卡。
+ * 规则：抽一张牌，本回合可以额外打出一个行动卡�?
  */
 function miskatonicFellow(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const player = ctx.state.players[ctx.playerId];
 
-    // 抽1张牌
+    // �?张牌
     if (player.deck.length > 0) {
         const drawnUid = player.deck[0].uid;
         const drawEvt: CardsDrawnEvent = {
@@ -187,8 +187,8 @@ function miskatonicFellow(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 图书管理员 onPlay：抽2张牌或从弃牌堆取回2张行动卡
- * MVP：优先从弃牌堆取回行动卡（如果有≥2张），否则抽2张牌
+ * 图书管理�?onPlay：抽2张牌或从弃牌堆取�?张行动卡
+ * MVP：优先从弃牌堆取回行动卡（如果有�?张），否则抽2张牌
  */
 function miskatonicTheLibrarian(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
@@ -206,7 +206,7 @@ function miskatonicTheLibrarian(ctx: AbilityContext): AbilityResult {
         };
     }
 
-    // 抽2张牌
+    // �?张牌
     const drawCount = Math.min(2, player.deck.length);
     if (drawCount === 0) return { events: [] };
     const drawnUids = player.deck.slice(0, drawCount).map(c => c.uid);
@@ -228,9 +228,6 @@ function miskatonicProfessor(ctx: AbilityContext): AbilityResult {
         m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) <= 3
     );
     if (targets.length === 0) return { events: [] };
-    if (targets.length === 1) {
-        return { events: [{ type: SU_EVENTS.MINION_RETURNED, payload: { minionUid: targets[0].uid, minionDefId: targets[0].defId, fromBaseIndex: ctx.baseIndex, toPlayerId: targets[0].owner, reason: 'miskatonic_professor' }, timestamp: ctx.now } as MinionReturnedEvent] };
-    }
     const options = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
         const name = def?.name ?? t.defId;
@@ -238,20 +235,20 @@ function miskatonicProfessor(ctx: AbilityContext): AbilityResult {
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
     return {
-        events: [setPromptContinuation({
+        events: [requestChoice({
             abilityId: 'miskatonic_professor',
             playerId: ctx.playerId,
-            data: { promptConfig: { title: '选择要返回手牌的力量≤3的随从', options: buildMinionTargetOptions(options) } },
+            promptConfig: { title: '选择要返回手牌的力量≤3的随从', options: buildMinionTargetOptions(options) },
         }, ctx.now)],
     };
 }
 
 // ============================================================================
-// Priority 2: 需要 Prompt 的疯狂卡能力
+// Priority 2: 需�?Prompt 的疯狂卡能力
 // ============================================================================
 
 /**
- * 也许能行 onPlay：弃2张疯狂卡消灭一个随从
+ * 也许能行 onPlay：弃2张疯狂卡消灭一个随�?
  */
 function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
@@ -260,7 +257,7 @@ function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
     );
     if (madnessInHand.length < 2) return { events: [] };
 
-    // 收集所有可消灭的随从
+    // 收集所有可消灭的随�?
     const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
@@ -273,53 +270,75 @@ function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
         }
     }
     if (allMinions.length === 0) return { events: [] };
-    if (allMinions.length === 1) {
-        return {
-            events: [
-                returnMadnessCard(ctx.playerId, madnessInHand[0].uid, 'miskatonic_it_might_just_work', ctx.now),
-                returnMadnessCard(ctx.playerId, madnessInHand[1].uid, 'miskatonic_it_might_just_work', ctx.now),
-                destroyMinion(allMinions[0].uid, allMinions[0].defId, allMinions[0].baseIndex, allMinions[0].owner, 'miskatonic_it_might_just_work', ctx.now),
-            ],
-        };
-    }
-    // 多目标：Prompt 选择
+    // Prompt 选择
     const options = allMinions.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     return {
-        events: [setPromptContinuation({
+        events: [requestChoice({
             abilityId: 'miskatonic_it_might_just_work',
             playerId: ctx.playerId,
-            data: { madnessUids: [madnessInHand[0].uid, madnessInHand[1].uid], promptConfig: { title: '选择要消灭的随从（弃2张疯狂卡）', options: buildMinionTargetOptions(options) } },
+            promptConfig: { title: '选择要消灭的随从（弃2张疯狂卡）', options: buildMinionTargetOptions(options) },
+                        continuationContext: { madnessUids: [madnessInHand[0].uid, madnessInHand[1].uid], },
         }, ctx.now)],
     };
 }
 
 /**
- * 不可见之书 onPlay：查看对手手牌 + 抽1张疯狂卡 + 2个额外行动
+ * 不可见之�?onPlay：查看对手手�?+ �?张疯狂卡 + 2个额外行�?
  * 
- * MVP：查看手牌为信息展示（暂不实现 UI），直接给疯狂卡和额外行动
+ * MVP：查看手牌为信息展示（暂不实�?UI），直接给疯狂卡和额外行�?
  */
 function miskatonicBookOfIterTheUnseen(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
-    // 抽1张疯狂卡
+    // �?张疯狂卡
     const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_book_of_iter_the_unseen', ctx.now);
     if (madnessEvt) events.push(madnessEvt);
-    // 2个额外行动
+    // 2个额外行�?
     events.push(grantExtraAction(ctx.playerId, 'miskatonic_book_of_iter_the_unseen', ctx.now));
     events.push(grantExtraAction(ctx.playerId, 'miskatonic_book_of_iter_the_unseen', ctx.now));
-    // TODO: 查看对手手牌的 UI 展示（需要 REVEAL_HAND 事件 + UI 支持）
+    // 查看对手手牌：收集有手牌的对�?
+    const opponents: { pid: string; label: string }[] = [];
+    for (const pid of ctx.state.turnOrder) {
+        if (pid === ctx.playerId) continue;
+        const opponent = ctx.state.players[pid];
+        if (opponent.hand.length === 0) continue;
+        opponents.push({ pid, label: `对手 ${pid}�?{opponent.hand.length}张手牌）` });
+    }
+    if (opponents.length === 1) {
+        // 只有一个对手，直接展示
+        const target = ctx.state.players[opponents[0].pid];
+        const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
+        events.push({
+            type: SU_EVENTS.REVEAL_HAND,
+            payload: {
+                targetPlayerId: opponents[0].pid,
+                viewerPlayerId: ctx.playerId,
+                cards,
+                reason: 'miskatonic_book_of_iter',
+            },
+            timestamp: ctx.now,
+        });
+    } else if (opponents.length > 1) {
+        // 多个对手，生成选择 Prompt
+        const options = opponents.map((o, i) => ({ id: `opp-${i}`, label: o.label, value: { pid: o.pid } }));
+        events.push(requestChoice({
+            abilityId: 'miskatonic_book_of_iter_choose_opponent',
+            playerId: ctx.playerId,
+            promptConfig: { title: '选择一个对手查看其手牌', options },
+        }, ctx.now));
+    }
     return { events };
 }
 
 /**
- * 门口之物 onPlay：搜索牌库找1张卡放入手牌 + 抽1张疯狂卡
+ * 门口之物 onPlay：搜索牌库找1张卡放入手牌 + �?张疯狂卡
  * 
- * MVP：自动选牌库中第一张非疯狂卡（不创建 Prompt）
+ * MVP：自动选牌库中第一张非疯狂卡（不创�?Prompt�?
  */
 function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const player = ctx.state.players[ctx.playerId];
 
-    // 从牌库中找第一张非疯狂卡
+    // 从牌库中找第一张非疯狂�?
     const targetCard = player.deck.find(c => c.defId !== MADNESS_CARD_DEF_ID);
     if (targetCard) {
         const drawEvt: CardsDrawnEvent = {
@@ -330,16 +349,16 @@ function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
         events.push(drawEvt);
     }
 
-    // 抽1张疯狂卡
+    // �?张疯狂卡
     const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_thing_on_the_doorstep', ctx.now);
     if (madnessEvt) events.push(madnessEvt);
 
     return { events };
 }
 
-/** 注册米斯卡塔尼克大学的 Prompt 继续函数 */
+/** 注册米斯卡塔尼克大学�?Prompt 继续函数 */
 export function registerMiskatonicPromptContinuations(): void {
-    // 教授：选择目标后返回手牌
+    // 教授：选择目标后返回手�?
     registerPromptContinuation('miskatonic_professor', (ctx) => {
         const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
         const base = ctx.state.bases[baseIndex];
@@ -368,6 +387,24 @@ export function registerMiskatonicPromptContinuations(): void {
         events.push(destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'miskatonic_it_might_just_work', ctx.now));
         return events;
     });
+
+    // Book of Iter：选择对手后展示手�?
+    registerPromptContinuation('miskatonic_book_of_iter_choose_opponent', (ctx) => {
+        const { pid } = ctx.selectedValue as { pid: string };
+        const target = ctx.state.players[pid];
+        if (!target || target.hand.length === 0) return [];
+        const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
+        return [{
+            type: SU_EVENTS.REVEAL_HAND,
+            payload: {
+                targetPlayerId: pid,
+                viewerPlayerId: ctx.playerId,
+                cards,
+                reason: 'miskatonic_book_of_iter',
+            },
+            timestamp: ctx.now,
+        }];
+    });
 }
 
 // ============================================================================
@@ -375,8 +412,8 @@ export function registerMiskatonicPromptContinuations(): void {
 // ============================================================================
 
 /**
- * 学生 special：将一张疯狂卡转移给对手
- * MVP：自动选手中第一张疯狂卡，转移给第一个对手
+ * 学生 special：将一张疯狂卡转移给对�?
+ * MVP：自动选手中第一张疯狂卡，转移给第一个对�?
  */
 function miskatonicStudent(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
@@ -389,14 +426,14 @@ function miskatonicStudent(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     // 返回疯狂卡到疯狂牌库
     events.push(returnMadnessCard(ctx.playerId, madnessCard.uid, 'miskatonic_student', ctx.now));
-    // 对手抽1张疯狂卡
+    // 对手�?张疯狂卡
     const madnessEvt = drawMadnessCards(opponent, 1, ctx.state, 'miskatonic_student', ctx.now);
     if (madnessEvt) events.push(madnessEvt);
     return { events };
 }
 
 /**
- * 实地考察 onPlay：手牌放牌库底 + 抽等量牌
+ * 实地考察 onPlay：手牌放牌库�?+ 抽等量牌
  * MVP：将所有手牌放牌库底，然后抽等量牌
  */
 function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
@@ -413,7 +450,7 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
         payload: { playerId: ctx.playerId, newDeckUids, reason: 'miskatonic_field_trip' },
         timestamp: ctx.now,
     });
-    // 抽等量牌（从新牌库顶部抽）
+    // 抽等量牌（从新牌库顶部抽�?
     const drawCount = Math.min(handCards.length, newDeckUids.length);
     if (drawCount > 0) {
         const drawnUids = newDeckUids.slice(0, drawCount);

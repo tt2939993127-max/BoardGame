@@ -5,7 +5,7 @@
 
 import { DiceThroneDomain } from '../domain';
 import { diceThroneSystemsForTest } from '../game';
-import type { DiceThroneCore, TurnPhase, CardInteractionType, DiceThroneCommand } from '../domain/types';
+import type { DiceThroneCore, TurnPhase, CardInteractionType, DiceThroneCommand, PendingInteraction } from '../domain/types';
 import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types';
 import { RESOURCE_IDS } from '../domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
@@ -259,11 +259,6 @@ export interface DiceThroneExpectation extends StateExpectation {
     activePlayerId?: PlayerId;
     turnNumber?: number;
     diceValues?: number[];
-    lastPlayedCard?: {
-        cardId?: string;
-        playerId?: PlayerId;
-        previewRef?: any;
-    } | null;
     players?: Record<PlayerId, PlayerExpectation>;
     pendingInteraction?: {
         type?: CardInteractionType;
@@ -300,11 +295,11 @@ export interface DiceThroneExpectation extends StateExpectation {
 // 断言函数
 // ============================================================================
 
-export function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpectation): string[] {
+export function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpectation, phase?: TurnPhase): string[] {
     const errors: string[] = [];
 
-    if (expect.turnPhase !== undefined && state.turnPhase !== expect.turnPhase) {
-        errors.push(`阶段不匹配: 预期 ${expect.turnPhase}, 实际 ${state.turnPhase}`);
+    if (expect.turnPhase !== undefined && phase !== expect.turnPhase) {
+        errors.push(`阶段不匹配: 预期 ${expect.turnPhase}, 实际 ${phase}`);
     }
 
     if (expect.activePlayerId !== undefined && state.activePlayerId !== expect.activePlayerId) {
@@ -412,8 +407,55 @@ export function assertDiceThrone(state: DiceThroneCore, expect: DiceThroneExpect
 }
 
 export const assertState = (state: MatchState<DiceThroneCore>, expect: DiceThroneExpectation): string[] => {
-    return assertDiceThrone(state.core, expect);
+    const errors = assertDiceThrone(state.core, expect, state.sys.phase as TurnPhase);
+
+    // pendingInteraction 断言（从 sys.interaction 读取）
+    if (expect.pendingInteraction !== undefined) {
+        const current = state.sys.interaction.current;
+        const actual = current?.kind === 'dt:card-interaction'
+            ? current.data as PendingInteraction
+            : undefined;
+
+        if (expect.pendingInteraction === null) {
+            if (actual) errors.push(`pendingInteraction 应为空，实际存在: ${actual.id}`);
+        } else if (!actual) {
+            errors.push(`pendingInteraction 不存在，预期 type=${expect.pendingInteraction.type}`);
+        } else {
+            if (expect.pendingInteraction.type !== undefined && actual.type !== expect.pendingInteraction.type) {
+                errors.push(`pendingInteraction.type 不匹配: 预期 ${expect.pendingInteraction.type}, 实际 ${actual.type}`);
+            }
+            if (expect.pendingInteraction.selectCount !== undefined && actual.selectCount !== expect.pendingInteraction.selectCount) {
+                errors.push(`pendingInteraction.selectCount 不匹配: 预期 ${expect.pendingInteraction.selectCount}, 实际 ${actual.selectCount}`);
+            }
+            if (expect.pendingInteraction.playerId !== undefined && actual.playerId !== expect.pendingInteraction.playerId) {
+                errors.push(`pendingInteraction.playerId 不匹配: 预期 ${expect.pendingInteraction.playerId}, 实际 ${actual.playerId}`);
+            }
+            if (expect.pendingInteraction.dieModifyMode !== undefined && actual.dieModifyConfig?.mode !== expect.pendingInteraction.dieModifyMode) {
+                errors.push(`pendingInteraction.dieModifyMode 不匹配: 预期 ${expect.pendingInteraction.dieModifyMode}, 实际 ${actual.dieModifyConfig?.mode}`);
+            }
+        }
+    }
+
+    return errors;
 };
+
+/**
+ * 工具函数：注入 pendingInteraction 到 sys.interaction（测试专用）
+ */
+export function injectPendingInteraction(
+    state: MatchState<DiceThroneCore>,
+    interaction: PendingInteraction
+): void {
+    state.sys.interaction = {
+        ...state.sys.interaction,
+        current: {
+            id: `dt-interaction-${interaction.id}`,
+            kind: 'dt:card-interaction',
+            playerId: interaction.playerId,
+            data: interaction,
+        },
+    };
+}
 
 // ============================================================================
 // 阶段推进 helper

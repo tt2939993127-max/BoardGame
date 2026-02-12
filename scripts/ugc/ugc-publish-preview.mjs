@@ -11,6 +11,9 @@ const data = JSON.parse(fs.readFileSync(draftPath, 'utf8'));
 
 const playerInstances = data?.instances?.player;
 const playerCount = Array.isArray(playerInstances) ? playerInstances.length : undefined;
+const commandTypes = Array.isArray(data?.commandTypes)
+    ? data.commandTypes.filter((item) => typeof item === 'string' && item.trim())
+    : [];
 
 const manifest = {
     entryPoints: {
@@ -26,6 +29,7 @@ const manifest = {
         ...(playerCount ? { playerOptions: [playerCount] } : {}),
     },
     files: ['domain.js'],
+    commandTypes,
     packageType: 'rules',
 };
 

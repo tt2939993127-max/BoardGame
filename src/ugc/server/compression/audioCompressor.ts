@@ -2,7 +2,7 @@
  * UGC 音频压缩器
  * 
  * 将音频压缩为 OGG/MP3 格式（不保留原图）
- * 注：实际压缩需要 ffmpeg 或类似工具
+ * 使用 ffmpeg 进行转码，优先查找项目内 bundled ffmpeg
  */
 
 import type {
@@ -17,6 +17,7 @@ import {
 } from '../../assets/types';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 // ============================================================================
 // 类型定义
@@ -93,8 +94,6 @@ export class AudioCompressor {
             };
         }
 
-        // 注：实际音频压缩需要 ffmpeg
-        // 这里提供一个占位实现，生产环境需要集成 ffmpeg
         try {
             const ffmpegPath = this.resolveFfmpegPath();
             const ffmpegAvailable = await this.checkFfmpeg(ffmpegPath);
@@ -107,24 +106,23 @@ export class AudioCompressor {
                 };
             }
 
-            // TODO: 使用 ffmpeg 进行实际压缩
-            // 这里返回占位结果
             const targetFormat = this.config.targetFormat;
+            const compressedBuffer = await this.runFfmpeg(ffmpegPath, input.buffer, formatLower, targetFormat);
             const variantPath = generateAssetPath(input.userId, input.packageId, input.assetId, targetFormat);
 
             return {
                 success: true,
                 skipped: false,
-                compressedBuffer: input.buffer, // 占位：实际应为压缩后的 buffer
+                compressedBuffer,
                 variant: {
                     id: `${input.assetId}-${targetFormat}`,
                     format: targetFormat,
                     path: variantPath,
-                    size: input.buffer.length,
-                    hash: this.generateHash(input.buffer),
+                    size: compressedBuffer.length,
+                    hash: this.generateHash(compressedBuffer),
                     url: '',
                 },
-                metadata: this.extractMetadata(input.buffer, formatLower),
+                metadata: this.extractMetadata(compressedBuffer, targetFormat),
             };
         } catch (error) {
             return {
@@ -179,6 +177,46 @@ export class AudioCompressor {
             return true;
         } catch {
             return false;
+        }
+    }
+
+    /**
+     * 调用 ffmpeg 执行音频压缩
+     * 写入临时文件 → ffmpeg 转码 → 读取输出 → 清理临时文件
+     */
+    private async runFfmpeg(
+        ffmpegPath: string,
+        inputBuffer: Buffer,
+        inputFormat: string,
+        outputFormat: string,
+    ): Promise<Buffer> {
+        const tmpDir = os.tmpdir();
+        const id = `ugc_audio_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const inputPath = path.join(tmpDir, `${id}.${inputFormat}`);
+        const outputPath = path.join(tmpDir, `${id}.${outputFormat}`);
+
+        try {
+            fs.writeFileSync(inputPath, inputBuffer);
+
+            const args = ['-y', '-i', inputPath];
+            // 比特率
+            if (this.config.bitrate) {
+                args.push('-b:a', `${this.config.bitrate}k`);
+            }
+            // 采样率
+            if (this.config.sampleRate) {
+                args.push('-ar', String(this.config.sampleRate));
+            }
+            args.push(outputPath);
+
+            const { execFileSync } = await import('child_process');
+            execFileSync(ffmpegPath, args, { stdio: 'ignore', timeout: 60_000 });
+
+            return fs.readFileSync(outputPath);
+        } finally {
+            // 清理临时文件
+            try { fs.unlinkSync(inputPath); } catch { /* 忽略 */ }
+            try { fs.unlinkSync(outputPath); } catch { /* 忽略 */ }
         }
     }
 }

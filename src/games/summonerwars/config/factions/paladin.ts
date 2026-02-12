@@ -46,7 +46,7 @@ export const SUMMONER_PALADIN: UnitCard = {
   cardType: 'unit',
   name: '瑟拉·艾德温',
   unitClass: 'summoner',
-  faction: '先锋军团',
+  faction: 'paladin',
   strength: 2,
   life: 12,
   cost: 0,
@@ -70,7 +70,7 @@ export const CHAMPION_UNITS_PALADIN: UnitCard[] = [
     cardType: 'unit',
     name: '瓦伦蒂娜·斯托哈特',
     unitClass: 'champion',
-    faction: '先锋军团',
+    faction: 'paladin',
     strength: 2,
     life: 9,
     cost: 6,
@@ -88,7 +88,7 @@ export const CHAMPION_UNITS_PALADIN: UnitCard[] = [
     cardType: 'unit',
     name: '雅各布·艾德温',
     unitClass: 'champion',
-    faction: '先锋军团',
+    faction: 'paladin',
     strength: 2,
     life: 6,
     cost: 5,
@@ -106,7 +106,7 @@ export const CHAMPION_UNITS_PALADIN: UnitCard[] = [
     cardType: 'unit',
     name: '科琳·布莱顿',
     unitClass: 'champion',
-    faction: '先锋军团',
+    faction: 'paladin',
     strength: 3,
     life: 8,
     cost: 6,
@@ -120,7 +120,6 @@ export const CHAMPION_UNITS_PALADIN: UnitCard[] = [
   },
 ];
 
-
 // ============================================================================
 // 普通单位（士兵）
 // ============================================================================
@@ -132,7 +131,7 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     cardType: 'unit',
     name: '圣殿牧师',
     unitClass: 'common',
-    faction: '先锋军团',
+    faction: 'paladin',
     strength: 2,
     life: 2,
     cost: 0,
@@ -150,7 +149,7 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     cardType: 'unit',
     name: '城塞圣武士',
     unitClass: 'common',
-    faction: '先锋军团',
+    faction: 'paladin',
     strength: 3,
     life: 4,
     cost: 2,
@@ -168,7 +167,7 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     cardType: 'unit',
     name: '城塞骑士',
     unitClass: 'common',
-    faction: '先锋军团',
+    faction: 'paladin',
     strength: 2,
     life: 5,
     cost: 2,
@@ -186,7 +185,7 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     cardType: 'unit',
     name: '城塞弓箭手',
     unitClass: 'common',
-    faction: '先锋军团',
+    faction: 'paladin',
     strength: 1,
     life: 5,
     cost: 2,
@@ -209,6 +208,7 @@ export const EVENT_CARDS_PALADIN: EventCard[] = [
   {
     id: 'paladin-holy-judgment',
     cardType: 'event',
+    faction: 'paladin',
     name: '圣洁审判',
     eventType: 'legendary',
     playPhase: 'attack',
@@ -223,6 +223,7 @@ export const EVENT_CARDS_PALADIN: EventCard[] = [
   {
     id: 'paladin-holy-protection',
     cardType: 'event',
+    faction: 'paladin',
     name: '圣灵庇护',
     eventType: 'common',
     playPhase: 'magic',
@@ -237,6 +238,7 @@ export const EVENT_CARDS_PALADIN: EventCard[] = [
   {
     id: 'paladin-mass-healing',
     cardType: 'event',
+    faction: 'paladin',
     name: '群体治疗',
     eventType: 'common',
     playPhase: 'move',
@@ -251,6 +253,7 @@ export const EVENT_CARDS_PALADIN: EventCard[] = [
   {
     id: 'paladin-rekindle-hope',
     cardType: 'event',
+    faction: 'paladin',
     name: '重燃希望',
     eventType: 'common',
     playPhase: 'summon',
@@ -271,6 +274,7 @@ export const STRUCTURE_CARDS_PALADIN: StructureCard[] = [
   {
     id: 'paladin-starting-gate',
     cardType: 'structure',
+    faction: 'paladin',
     name: '起始城门',
     cost: 0,
     life: 10,
@@ -283,6 +287,7 @@ export const STRUCTURE_CARDS_PALADIN: StructureCard[] = [
   {
     id: 'paladin-portal',
     cardType: 'structure',
+    faction: 'paladin',
     name: '传送门',
     cost: 0,
     life: 5,

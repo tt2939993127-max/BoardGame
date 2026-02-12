@@ -8,6 +8,7 @@
 import { memo, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SpotlightSkeletonProps } from './types';
+import { UI_Z_INDEX } from '../../../core';
 
 /**
  * 特写骨架
@@ -155,7 +156,7 @@ export const SpotlightSkeleton = memo(function SpotlightSkeleton({
             style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: 9999,
+                zIndex: UI_Z_INDEX.overlayRaised,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

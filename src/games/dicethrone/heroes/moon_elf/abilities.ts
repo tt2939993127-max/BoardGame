@@ -1,7 +1,7 @@
 /**
  * Moon Elf 英雄的技能定义
  */
-import type { AbilityDef, AbilityEffect, EffectTiming } from '../../../../systems/presets/combat';
+import type { AbilityDef, AbilityEffect, EffectTiming } from '../../domain/combat';
 import { MOON_ELF_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../../domain/ids';
 
 const FACE = MOON_ELF_DICE_FACE_IDS;

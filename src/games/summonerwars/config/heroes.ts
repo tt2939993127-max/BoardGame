@@ -4,6 +4,7 @@
  */
 
 import type { CellCoord } from '../../../core/ui/board-layout.types';
+import type { FactionId } from '../domain/types';
 
 /** 精灵图切片配置 */
 export interface SpriteSlice {
@@ -40,7 +41,7 @@ export interface HeroConfig {
   /** 英雄名称 */
   name: string;
   /** 阵营 */
-  faction: string;
+  faction: FactionId;
   /** 生命值 */
   health: number;
   /** 攻击骰数 */
@@ -66,7 +67,7 @@ const NECROMANCER_FRAME_HEIGHT = 376;
 export const NECROMANCER: HeroConfig = {
   id: 'necromancer',
   name: '瑞特-塔鲁斯',
-  faction: '堕落王国',
+  faction: 'necromancer',
   health: 12,
   attackDice: 2,
   sprite: {

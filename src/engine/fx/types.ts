@@ -101,6 +101,14 @@ export interface FxRendererProps {
   };
   /** 特效播放完成回调 */
   onComplete: () => void;
+  /**
+   * 冲击瞬间回调（由 FxLayer 注入）
+   *
+   * 渲染器在"爆发/命中"关键帧调用此函数，
+   * FxLayer 会自动播放 timing='on-impact' 的音效和震动。
+   * 如果注册时未声明 on-impact 反馈，此回调为空函数。
+   */
+  onImpact: () => void;
 }
 
 /**
@@ -110,6 +118,56 @@ export interface FxRendererProps {
  * Renderer 是「适配器」，将 FxEvent 的参数映射为底层组件的 props。
  */
 export type FxRenderer = React.FC<FxRendererProps>;
+
+// ============================================================================
+// 反馈包（Feedback Pack）— 音效 + 震动
+// ============================================================================
+
+/**
+ * 音效反馈配置
+ *
+ * - timing: 'immediate' — 事件推入时立即播放
+ * - timing: 'on-impact' — 延迟到渲染器触发 onImpact 回调时播放
+ * - source: 'key' — 使用固定的音效 key
+ * - source: 'deferred' — 从 DeferredSoundMap 读取（需要 params.eventId），如果读取失败且提供了 fallbackKey，则播放 fallbackKey
+ */
+export interface FxSoundConfig {
+  /** 音效来源（默认 'key'） */
+  source?: 'key' | 'deferred';
+  /** 音效 key（source='key' 时必填） */
+  key?: string;
+  /** fallback 音效 key（source='deferred' 时可选，当 DeferredSoundMap 中没有对应音效时使用） */
+  fallbackKey?: string;
+  /** 播放时机 */
+  timing: 'immediate' | 'on-impact';
+}
+
+/**
+ * 震动反馈配置
+ *
+ * - timing: 'immediate' — 事件推入时立即触发
+ * - timing: 'on-impact' — 延迟到渲染器触发 onImpact 回调时触发
+ */
+export interface FxShakeConfig {
+  /** 震动强度 */
+  intensity: 'normal' | 'strong';
+  /** 震动类型 */
+  type: 'impact' | 'hit';
+  /** 播放时机（默认 'on-impact'） */
+  timing?: 'immediate' | 'on-impact';
+}
+
+/**
+ * 反馈包 — 将视觉特效、音效、震动统一声明
+ *
+ * 设计参考：UE Gameplay Cue（一个 cue 触发完整反馈链）
+ */
+export interface FeedbackPack {
+  /** 音效配置（可选） */
+  sound?: FxSoundConfig;
+  /** 震动配置（可选） */
+  shake?: FxShakeConfig;
+}
 
 // ============================================================================
 // 注册表选项
@@ -132,4 +190,6 @@ export interface FxRegistryEntry {
   cue: FxCue;
   renderer: FxRenderer;
   options: Required<FxRendererOptions>;
+  /** 反馈包：音效 + 震动（注册时声明，运行时自动触发） */
+  feedback?: FeedbackPack;
 }

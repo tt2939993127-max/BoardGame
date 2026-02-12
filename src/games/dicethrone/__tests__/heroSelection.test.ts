@@ -6,7 +6,8 @@ import { describe, it, expect } from 'vitest';
 import { DiceThroneDomain } from '../domain';
 import type { DiceThroneCore, PlayerReadyCommand, SelectCharacterCommand, HostStartGameCommand } from '../domain/types';
 import type { RandomFn } from '../../../engine/types';
-import { validateCommand } from '../domain/commands';
+import type { TurnPhase } from '../domain/types';
+import { validateCommand } from '../domain/commandValidation';
 import { execute } from '../domain/execute';
 import { reduce } from '../domain/reducer';
 
@@ -32,7 +33,7 @@ describe('选角流程', () => {
                 payload: {},
             };
             
-            const result = validateCommand(state, cmd);
+            const result = validateCommand(state, cmd, 'setup');
             expect(result.valid).toBe(false);
             expect(result.error).toBe('character_not_selected');
         });
@@ -49,7 +50,7 @@ describe('选角流程', () => {
                 payload: {},
             };
             
-            const result = validateCommand(state, cmd);
+            const result = validateCommand(state, cmd, 'setup');
             expect(result.valid).toBe(true);
         });
 
@@ -64,7 +65,7 @@ describe('选角流程', () => {
             };
             
             // 执行命令
-            const events = execute({ core: state }, cmd, fixedRandom);
+            const events = execute({ core: state, sys: { phase: 'setup' } }, cmd, fixedRandom);
             expect(events.length).toBe(1);
             expect(events[0].type).toBe('PLAYER_READY');
             
@@ -76,7 +77,6 @@ describe('选角流程', () => {
         it('非 setup 阶段不能准备', () => {
             const state = createInitialState();
             state.selectedCharacters['1'] = 'monk';
-            state.turnPhase = 'upkeep'; // 非 setup 阶段
             
             const cmd: PlayerReadyCommand = {
                 type: 'PLAYER_READY',
@@ -84,7 +84,7 @@ describe('选角流程', () => {
                 payload: {},
             };
             
-            const result = validateCommand(state, cmd);
+            const result = validateCommand(state, cmd, 'upkeep' as TurnPhase);
             expect(result.valid).toBe(false);
             expect(result.error).toBe('invalid_phase');
         });
@@ -105,7 +105,7 @@ describe('选角流程', () => {
                 payload: {},
             };
             
-            const result = validateCommand(state, cmd);
+            const result = validateCommand(state, cmd, 'setup');
             expect(result.valid).toBe(true);
         });
 
@@ -121,7 +121,7 @@ describe('选角流程', () => {
                 payload: {},
             };
             
-            const result = validateCommand(state, cmd);
+            const result = validateCommand(state, cmd, 'setup');
             expect(result.valid).toBe(false);
             expect(result.error).toBe('player_mismatch');
         });
@@ -137,7 +137,7 @@ describe('选角流程', () => {
                 payload: { characterId: 'monk' },
             };
             
-            const result = validateCommand(state, cmd);
+            const result = validateCommand(state, cmd, 'setup');
             expect(result.valid).toBe(true);
         });
 
@@ -150,7 +150,7 @@ describe('选角流程', () => {
                 payload: { characterId: 'monk' },
             };
             
-            const events = execute({ core: state }, cmd, fixedRandom);
+            const events = execute({ core: state, sys: { phase: 'setup' } }, cmd, fixedRandom);
             expect(events.length).toBe(1);
             expect(events[0].type).toBe('CHARACTER_SELECTED');
             

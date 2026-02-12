@@ -1,4 +1,4 @@
-import type { AbilityDef, AbilityEffect, EffectTiming } from '../../../../systems/presets/combat';
+import type { AbilityDef, AbilityEffect, EffectTiming } from '../../domain/combat';
 import { SHADOW_THIEF_DICE_FACE_IDS, TOKEN_IDS } from '../../domain/ids';
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
@@ -93,7 +93,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         sfxKey: SHADOW_THIEF_SFX_SHADOW,
         trigger: { type: 'diceSet', faces: { [FACE.SHADOW]: 3 } },
         effects: [
-            { description: '投掷1骰造成一半伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-dance-roll' } },
+            { description: '投掷1骰造成一半伤害', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-dance-roll' }, timing: 'withDamage' },
             grantToken(TOKEN_IDS.SNEAK, 1, abilityEffectText('shadow-dance', 'gainSneak')),
             grantToken(TOKEN_IDS.SNEAK_ATTACK, 1, abilityEffectText('shadow-dance', 'gainSneakAttack'))
         ]
@@ -107,8 +107,8 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         sfxKey: SHADOW_THIEF_SFX_DAGGER,
         trigger: { type: 'diceSet', faces: { [FACE.CARD]: 2 } },
         effects: [
-            { description: 'Draw 1 Card', action: { type: 'drawCard', target: 'self', value: 1 } },
-            { description: '若有Shadow丢弃对手1卡', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-cornucopia-discard' } }
+            { description: 'Draw 1 Card', action: { type: 'drawCard', target: 'self', value: 1 }, timing: 'withDamage' },
+            { description: '若有Shadow丢弃对手1卡', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-cornucopia-discard' }, timing: 'withDamage' }
         ]
     },
     // 终极: Shadow Shank
@@ -164,9 +164,9 @@ export const DAGGER_STRIKE_2: AbilityDef = {
     description: abilityText('dagger-strike-2', 'description'),
     sfxKey: SHADOW_THIEF_SFX_DAGGER,
     variants: [
-        { id: 'dagger-strike-3-2', trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 3 } }, effects: [damage(4, abilityEffectText('dagger-strike', 'damage4')), { description: 'Gain 1 CP', action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: 1 } } }, { description: 'Per Shadow Poison', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-dagger-strike-poison' } }, { description: 'Per Card Draw', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-dagger-strike-draw' } }], priority: 1 },
-        { id: 'dagger-strike-4-2', trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 4 } }, effects: [damage(6, abilityEffectText('dagger-strike', 'damage6')), { description: 'Gain 1 CP', action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: 1 } } }, { description: 'Per Shadow Poison', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-dagger-strike-poison' } }, { description: 'Per Card Draw', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-dagger-strike-draw' } }], priority: 2 },
-        { id: 'dagger-strike-5-2', trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 5 } }, effects: [damage(8, abilityEffectText('dagger-strike', 'damage8')), { description: 'Gain 1 CP', action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: 1 } } }, { description: 'Per Shadow Poison', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-dagger-strike-poison' } }, { description: 'Per Card Draw', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-dagger-strike-draw' } }], priority: 3 }
+        { id: 'dagger-strike-3-2', trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 3 } }, effects: [damage(4, abilityEffectText('dagger-strike', 'damage4')), { description: 'Gain 1 CP', action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: 1 } } }, { description: 'Per Shadow Poison', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-dagger-strike-poison' } }, { description: 'Per Card Draw', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-dagger-strike-draw' }, timing: 'withDamage' }], priority: 1 },
+        { id: 'dagger-strike-4-2', trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 4 } }, effects: [damage(6, abilityEffectText('dagger-strike', 'damage6')), { description: 'Gain 1 CP', action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: 1 } } }, { description: 'Per Shadow Poison', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-dagger-strike-poison' } }, { description: 'Per Card Draw', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-dagger-strike-draw' }, timing: 'withDamage' }], priority: 2 },
+        { id: 'dagger-strike-5-2', trigger: { type: 'diceSet', faces: { [FACE.DAGGER]: 5 } }, effects: [damage(8, abilityEffectText('dagger-strike', 'damage8')), { description: 'Gain 1 CP', action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: 1 } } }, { description: 'Per Shadow Poison', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-dagger-strike-poison' } }, { description: 'Per Card Draw', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-dagger-strike-draw' }, timing: 'withDamage' }], priority: 3 }
     ]
 };
 
@@ -221,7 +221,7 @@ export const PIERCING_ATTACK: AbilityDef = {
     effects: [
         gainCp(1, 'Gain 1 CP'),
         grantToken(TOKEN_IDS.SNEAK_ATTACK, 1, 'Gain Sneak Attack'),
-        { description: 'Draw 1 Card', action: { type: 'drawCard', target: 'self', value: 1 } },
+        { description: 'Draw 1 Card', action: { type: 'drawCard', target: 'self', value: 1 }, timing: 'withDamage' },
         { description: 'Inflict Poison', action: { type: 'grantStatus', target: 'opponent', statusId: 'poison', value: 1 } }
     ]
 };
@@ -235,7 +235,7 @@ export const SHADOW_DANCE_2: AbilityDef = {
     sfxKey: SHADOW_THIEF_SFX_SHADOW,
     trigger: { type: 'diceSet', faces: { [FACE.SHADOW]: 3 } },
     effects: [
-        { description: '投掷1骰造成一半伤害(真实)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-dance-roll-2' } },
+        { description: '投掷1骰造成一半伤害(真实)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-dance-roll-2' }, timing: 'withDamage' },
     ]
 };
 
@@ -263,7 +263,7 @@ export const CORNUCOPIA_2: AbilityDef = {
     sfxKey: SHADOW_THIEF_SFX_DAGGER,
     trigger: { type: 'diceSet', faces: { [FACE.CARD]: 2 } },
     effects: [
-        { description: '每有[Card]抽1，有[Shadow]弃1，有[Bag]得1CP', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-cornucopia-2' } }
+        { description: '每有[Card]抽1，有[Shadow]弃1，有[Bag]得1CP', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-cornucopia-2' }, timing: 'withDamage' }
     ]
 };
 

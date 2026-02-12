@@ -386,7 +386,7 @@ function validateActivateAbility(
       const player = core.players[playerId];
       const card = player.discard.find(c => c.id === targetCardId);
       if (!card || card.cardType !== 'unit') return { valid: false, error: '弃牌堆中没有该单位卡' };
-      const isUndead = card.id.includes('undead') || card.name.includes('亡灵') || (card as UnitCard).faction === '堕落王国';
+      const isUndead = card.id.includes('undead') || card.name.includes('亡灵') || (card as UnitCard).faction === 'necromancer';
       if (!isUndead) return { valid: false, error: '只能复活亡灵单位' };
       if (!isAdjacent(sourcePosition, targetPosition)) return { valid: false, error: '必须放置到召唤师相邻的位置' };
       if (!isCellEmpty(core, targetPosition)) return { valid: false, error: '放置位置必须为空' };
@@ -643,6 +643,10 @@ function validateActivateAbility(
 
     case 'prepare': {
       if (core.phase !== 'move') return { valid: false, error: '预备只能在移动阶段使用' };
+      // 检查使用次数限制
+      const prepareUsageKey = `${sourceUnitId}:prepare`;
+      const prepareUsageCount = core.abilityUsageCount[prepareUsageKey] ?? 0;
+      if (prepareUsageCount >= 1) return { valid: false, error: '预备每回合只能使用一次' };
       return { valid: true };
     }
 
@@ -688,6 +692,25 @@ function validateActivateAbility(
         if (sbDist > 3) return { valid: false, error: '目标必须在3格以内' };
       }
       return { valid: true };
+    }
+
+    case 'frost_axe': {
+      if (core.phase !== 'move') return { valid: false, error: '冰霜战斧只能在移动阶段使用' };
+      const fxChoice = payload.choice as string | undefined;
+      if (fxChoice === 'self') return { valid: true };
+      if (fxChoice === 'attach') {
+        if ((sourceUnit!.boosts ?? 0) < 1) return { valid: false, error: '充能不足' };
+        if (!targetPosition) return { valid: false, error: '必须选择目标士兵' };
+        const fxDist = manhattanDistance(sourcePosition!, targetPosition);
+        if (fxDist > 3) return { valid: false, error: '目标必须在3格以内' };
+        const fxTarget = getUnitAt(core, targetPosition);
+        if (!fxTarget) return { valid: false, error: '目标位置没有单位' };
+        if (fxTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
+        if (fxTarget.card.unitClass !== 'common') return { valid: false, error: '只能附加到士兵' };
+        if (fxTarget.cardId === sourceUnitId) return { valid: false, error: '不能附加到自身' };
+        return { valid: true };
+      }
+      return { valid: false, error: '无效选择' };
     }
 
     default:

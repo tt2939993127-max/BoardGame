@@ -12,6 +12,7 @@
 
 import type { PlayerId } from '../../../engine/types';
 import type { SmashUpCore, MinionOnBase, BaseInPlay } from './types';
+import { getBaseDef } from '../data/cards';
 
 // ============================================================================
 // 类型定义
@@ -40,12 +41,36 @@ interface ModifierEntry {
     modifier: PowerModifierFn;
 }
 
+/** 临界点修正上下文 */
+export interface BreakpointModifierContext {
+    /** 当前游戏状态 */
+    state: SmashUpCore;
+    /** 基地索引 */
+    baseIndex: number;
+    /** 基地 */
+    base: BaseInPlay;
+    /** 原始临界点值 */
+    originalBreakpoint: number;
+}
+
+/** 临界点修正函数：返回增减值（正数=提高临界点，负数=降低） */
+export type BreakpointModifierFn = (ctx: BreakpointModifierContext) => number;
+
+/** 临界点修正来源 */
+interface BreakpointModifierEntry {
+    sourceDefId: string;
+    modifier: BreakpointModifierFn;
+}
+
 // ============================================================================
 // 注册表
 // ============================================================================
 
 /** 持续力量修正注册表 */
 const modifierRegistry: ModifierEntry[] = [];
+
+/** 持续临界点修正注册表 */
+const breakpointModifierRegistry: BreakpointModifierEntry[] = [];
 
 /**
  * 注册一个持续力量修正
@@ -60,9 +85,23 @@ export function registerPowerModifier(
     modifierRegistry.push({ sourceDefId, modifier });
 }
 
-/** 清空注册表（测试用） */
+/**
+ * 注册一个临界点修正
+ * 
+ * @param sourceDefId 提供修正的来源 defId
+ * @param modifier 修正函数
+ */
+export function registerBreakpointModifier(
+    sourceDefId: string,
+    modifier: BreakpointModifierFn
+): void {
+    breakpointModifierRegistry.push({ sourceDefId, modifier });
+}
+
+/** 清空所有修正注册表（测试用） */
 export function clearPowerModifierRegistry(): void {
     modifierRegistry.length = 0;
+    breakpointModifierRegistry.length = 0;
 }
 
 // ============================================================================
@@ -131,4 +170,33 @@ export function getTotalEffectivePowerOnBase(
 ): number {
     return base.minions
         .reduce((sum, m) => sum + getEffectivePower(state, m, baseIndex), 0);
+}
+
+/**
+ * 获取基地的有效临界点（含持续修正）
+ * 
+ * = baseDef.breakpoint + 所有临界点修正
+ */
+export function getEffectiveBreakpoint(
+    state: SmashUpCore,
+    baseIndex: number
+): number {
+    const base = state.bases[baseIndex];
+    if (!base) return Infinity;
+    const baseDef = getBaseDef(base.defId);
+    if (!baseDef) return Infinity;
+
+    if (breakpointModifierRegistry.length === 0) return baseDef.breakpoint;
+
+    let total = 0;
+    for (const entry of breakpointModifierRegistry) {
+        const ctx: BreakpointModifierContext = {
+            state,
+            baseIndex,
+            base,
+            originalBreakpoint: baseDef.breakpoint,
+        };
+        total += entry.modifier(ctx);
+    }
+    return baseDef.breakpoint + total;
 }

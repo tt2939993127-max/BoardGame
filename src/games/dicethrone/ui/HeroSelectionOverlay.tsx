@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { getLocalizedAssetPath } from '../../../core';
+import { getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
 import { getPortraitStyle, ASSETS } from './assets';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -120,7 +120,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex bg-[#0F0F23] overflow-hidden select-none text-white font-sans w-screen h-screen"
+            className="fixed inset-0 flex bg-[#0F0F23] overflow-hidden select-none text-white font-sans w-screen h-screen"
+            style={{ zIndex: UI_Z_INDEX.overlay }}
         >
             {/* 背景层：动态氛围 */}
             <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
@@ -239,7 +240,10 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                 </div>
 
                 {/* 底部玩家面板区域：居中布局 */}
-                <div className="h-[8vw] bg-gradient-to-t from-black/95 to-black/80 backdrop-blur-xl flex items-center justify-center gap-[3vw] px-[4vw] z-[200] flex-shrink-0 border-t border-white/5">
+                <div
+                    className="h-[8vw] bg-gradient-to-t from-black/95 to-black/80 backdrop-blur-xl flex items-center justify-center gap-[3vw] px-[4vw] flex-shrink-0 border-t border-white/5"
+                    style={{ zIndex: UI_Z_INDEX.hud }}
+                >
                     {/* 玩家卡片列表 */}
                     <div className="flex items-center justify-center gap-[1.5vw]">
                         {playerIds.map(pid => {

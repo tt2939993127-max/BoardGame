@@ -269,6 +269,19 @@ const resolveIdentifierKeys = (content: string, identifier: string, position: nu
     return extractLiteralKeysFromExpression(expression);
 };
 
+const findCallEnd = (content: string, startIndex: number): number => {
+    let depth = 0;
+    for (let i = startIndex; i < content.length; i++) {
+        const c = content[i];
+        if (c === '(') depth++;
+        else if (c === ')') {
+            if (depth === 0) return i + 1;
+            depth--;
+        }
+    }
+    return Math.min(startIndex + 200, content.length);
+};
+
 export const collectReferencesFromContent = (
     content: string,
     filePath: string,
@@ -340,7 +353,7 @@ export const collectReferencesFromContent = (
     };
 
     for (const aliasName of aliasMap.keys()) {
-        const regex = new RegExp("\\b" + aliasName + "\\s*\\(\\s*(['\"`])((?:\\\\.|(?!\\\\1).)*)\\\\1", 'g');
+        const regex = new RegExp("\\b" + aliasName + "\\s*\\(\\s*(['\"`])((?:\\\\.|(?!\\1).)*)\\1", 'g');
         let match: RegExpExecArray | null;
         while ((match = regex.exec(content)) !== null) {
             const quote = match[1];
@@ -351,7 +364,8 @@ export const collectReferencesFromContent = (
                 addWarning({ type: 'dynamic-key', key: literal.value, file: filePath, line, source });
                 continue;
             }
-            const snippet = content.slice(match.index, match.index + 300);
+            const callEnd = findCallEnd(content, match.index + match[0].length);
+            const snippet = content.slice(match.index, callEnd);
             const overrideNamespaces = findNsOverride(snippet);
             const parsed = parseI18nKey(literal.value, knownNamespaces);
             const namespaces = parsed.namespace
@@ -362,7 +376,7 @@ export const collectReferencesFromContent = (
         }
     }
 
-    const i18nCallRegex = /\bi18n\.(t|exists)\s*\(\s*(['"`])((?:\\.|(?!\\2).)*)\\2/g;
+    const i18nCallRegex = /\bi18n\.(t|exists)\s*\(\s*(['"`])((?:\\.|(?!\2).)*)\2/g;
     let i18nMatch: RegExpExecArray | null;
     while ((i18nMatch = i18nCallRegex.exec(content)) !== null) {
         const literal = parseStringLiteral(i18nMatch[2], i18nMatch[3]);
@@ -372,7 +386,8 @@ export const collectReferencesFromContent = (
             addWarning({ type: 'dynamic-key', key: literal.value, file: filePath, line, source });
             continue;
         }
-        const snippet = content.slice(i18nMatch.index, i18nMatch.index + 300);
+        const callEnd = findCallEnd(content, i18nMatch.index + i18nMatch[0].length);
+        const snippet = content.slice(i18nMatch.index, callEnd);
         const overrideNamespaces = findNsOverride(snippet);
         const parsed = parseI18nKey(literal.value, knownNamespaces);
         const namespaces = parsed.namespace

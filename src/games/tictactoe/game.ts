@@ -9,7 +9,7 @@ import {
     createActionLogSystem,
     createGameAdapter,
     createLogSystem,
-    createPromptSystem,
+    createInteractionSystem,
     createRematchSystem,
     createResponseWindowSystem,
     createTutorialSystem,
@@ -57,7 +57,7 @@ const systems = [
     createUndoSystem({
         snapshotCommandAllowlist: ACTION_ALLOWLIST,
     }),
-    createPromptSystem(),
+    createInteractionSystem(),
     createRematchSystem(),
     createResponseWindowSystem(),
     createTutorialSystem(),

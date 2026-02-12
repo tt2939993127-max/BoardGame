@@ -1,15 +1,15 @@
-﻿/**
+﻿﻿/**
  * DiceThrone 效果解析器
  * 将 AbilityEffect 转换为 DiceThroneEvent（事件驱动）
  */
 
 import type { PlayerId, RandomFn } from '../../../engine/types';
-import type { EffectAction, RollDieConditionalEffect } from '../../../systems/TokenSystem/types';
+import type { EffectAction, RollDieConditionalEffect } from './tokenTypes';
 
 export type { RollDieConditionalEffect };
-import type { AbilityEffect, EffectTiming, EffectResolutionContext } from '../../../systems/presets/combat';
+import type { AbilityEffect, EffectTiming, EffectResolutionContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
-import { getActiveDice, getFaceCounts, getDieFace, getTokenStackLimit } from './rules';
+import { getActiveDice, getFaceCounts, getPlayerDieFace, getTokenStackLimit } from './rules';
 import { RESOURCE_IDS } from './resources';
 import type {
     DiceThroneCore,
@@ -35,7 +35,7 @@ import {
     createPendingDamage,
     createTokenResponseRequestedEvent,
 } from './tokenResponse';
-import type { AbilityDef } from '../../../systems/presets/combat';
+import type { AbilityDef } from './combat';
 
 // ============================================================================
 // 效果上下文
@@ -167,6 +167,14 @@ export function isCustomActionCategory(actionId: string, category: CustomActionC
     const meta = customActionRegistry.get(actionId)?.meta;
     return meta?.categories.includes(category) ?? false;
 }
+
+/**
+ * 获取所有已注册的 Custom Action ID（用于完整性测试）
+ */
+export function getRegisteredCustomActionIds(): Set<string> {
+    return new Set(customActionRegistry.keys());
+}
+
 
 // ============================================================================
 // 多骰展示辅助函数
@@ -522,7 +530,7 @@ function resolveEffectAction(
 
             for (let i = 0; i < diceCount; i++) {
                 const value = random.d(6);
-                const face = getDieFace(value);
+                const face = getPlayerDieFace(state, attackerId, value) ?? '';
                 rollDice.push({ index: i, value, face });
 
                 // 查找匹配的条件效果

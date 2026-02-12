@@ -1,14 +1,14 @@
 /**
- * Vortex Fragment Shader — 流体旋涡特效
+ * Vortex Fragment Shader — 星系级旋涡特效
  *
- * 核心算法：
- * 1. UV → 极坐标 (r, θ)
- * 2. 螺旋扭曲：twist = θ + r × tightness − time × speed
- * 3. sin() 定义 3 条旋臂基础结构
- * 4. FBM 噪声叠加有机流体细节
- * 5. 双层旋涡（不同臂数/速度）增加深度
- * 6. 三阶段时间控制：聚拢 → 脉冲 → 消散
- * 7. density → 颜色梯度映射（base → accent → bright → white）
+ * 视觉层级（由底到顶，总计 6 snoise/pixel）：
+ * 1. 背景星场 (hash only, 0 snoise)
+ * 2. 主螺旋 5臂 + fbm3 (3 snoise)
+ * 3. 副螺旋 3臂 + fbm3 (3 snoise)
+ * 4. 尘埃暗带 (hash, 0 snoise)
+ * 5. 核心辉光 (exp, 0 snoise)
+ * 6. 6阶颜色梯度：dark → base → accent → bright → glow → white
+ * 7. 动画：淡入 → 从大到小蓄力吸入 → 淡出
  *
  * 自动注入 uniform（由 ShaderCanvas 提供）：
  * - uTime       (float)
@@ -17,12 +17,15 @@
  *
  * 自定义 uniform：
  * - uDuration        (float) — 总时长（秒）
- * - uBaseColor       (vec3)  — 主色调（归一化 0-1）
+ * - uDarkColor       (vec3)  — 最深底色（归一化 0-1）
+ * - uBaseColor       (vec3)  — 主色调
  * - uAccentColor     (vec3)  — 副色调
  * - uBrightColor     (vec3)  — 高光色
- * - uSpiralTightness (float) — 螺旋紧密度（推荐 3.0 ~ 6.0）
- * - uRotationSpeed   (float) — 旋转速度（弧度/秒，推荐 1.5 ~ 3.0）
+ * - uGlowColor       (vec3)  — 辉光色
+ * - uSpiralTightness (float) — 螺旋紧密度（推荐 4.0 ~ 6.0）
+ * - uRotationSpeed   (float) — 旋转速度（弧度/秒，推荐 1.0 ~ 2.0）
  * - uIntensity       (float) — 整体强度系数（0.8=normal, 1.2=strong）
+ * - uScale           (float) — 旋涡缩放系数（默认 1.0，>1 放大，<1 缩小）
  */
 
 import { NOISE_GLSL } from '../glsl/noise.glsl';
@@ -39,140 +42,132 @@ uniform float uProgress;
 
 // ---- Custom uniform ----
 uniform float uDuration;
+uniform vec3  uDarkColor;
 uniform vec3  uBaseColor;
 uniform vec3  uAccentColor;
 uniform vec3  uBrightColor;
+uniform vec3  uGlowColor;
 uniform float uSpiralTightness;
 uniform float uRotationSpeed;
 uniform float uIntensity;
+uniform float uScale;
 
 // ---- Constants ----
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
-
-// ---- Easing ----
-float easeOutExpo(float t) {
-  return t >= 1.0 ? 1.0 : 1.0 - pow(2.0, -10.0 * t);
-}
 
 void main() {
   // ---- 坐标系 ----
   vec2 uv = vUv - 0.5;
   float aspect = uResolution.x / uResolution.y;
   uv.x *= aspect;
+  uv /= uScale;
+
+  float t = uProgress;
+
+  // ---- 动画：整体吞噬收缩（海洋漩涡） ----
+  // 0~0.12    淡入
+  // 0.12~0.85 UV 放大 → 旋涡在屏幕上等比缩小
+  // 0.8~1.0   柔和淡出
+  float fadeIn  = smoothstep(0.0, 0.12, t);
+  float fadeOut = 1.0 - smoothstep(0.8, 1.0, t);
+  float gatherFactor = smoothstep(0.0, 0.85, t); // 0→满尺寸  1→缩到最小
+
+  // 整体缩放：UV 坐标放大 = 旋涡视觉缩小
+  float shrink = 1.0 + gatherFactor * 4.0; // 1× → 5×
+  vec2 origUv = uv;                         // 星场用原始坐标
+  uv *= shrink;
 
   float r = length(uv);
   float theta = atan(uv.y, uv.x);
-  float t = uProgress;
 
-  // ---- 阶段分界 ----
-  float gatherEnd = 0.55;
-  float pulseEnd  = 0.78;
+  float radialPull = gatherFactor * 1.5;
+  float rotAccel = 1.0 + gatherFactor * 1.5; // 越小转越快
+  float maxR = 0.45;
 
   // ================================================================
-  // 主旋涡层（3 臂）
+  //  ① 背景星场层 — 用原始坐标避免网格闪烁
   // ================================================================
-  float twist1 = theta + r * uSpiralTightness - uTime * uRotationSpeed;
-  float numArms1 = 3.0;
+  float stars = starField(origUv, 40.0, uTime) * smoothstep(0.05, 0.25, length(origUv));
 
-  // 旋臂基础结构：sin() 产生周期分布，pow() 收窄臂宽
+  // ================================================================
+  //  ② 主螺旋层（5 臂）— 3 snoise
+  // ================================================================
+  float twist1 = theta + r * uSpiralTightness - uTime * uRotationSpeed * rotAccel;
+  float numArms1 = 5.0;
+
   float spiral1 = 0.5 + 0.5 * sin(twist1 * numArms1);
   spiral1 = pow(spiral1, 1.8);
 
-  // FBM 有机细节
-  vec2 noiseCoord1 = vec2(twist1 * numArms1 / TAU, r * 5.0);
-  float noise1 = fbm(noiseCoord1 + uTime * 0.25);
+  // 噪声坐标沿 r 偏移（减速避免抖动）
+  vec2 nc1 = vec2(twist1 * numArms1 / TAU, (r + radialPull) * 3.5) + uTime * 0.1;
+  float noise1 = fbm3(nc1);
 
   float density = spiral1 * (0.45 + 0.55 * noise1);
 
+  // 外圈自然淡出（与收缩边界同步）
+  density *= mix(1.0, 0.35, smoothstep(0.0, maxR, r));
+
   // ================================================================
-  // 副旋涡层（4 臂，反向慢速）— 增加深度和非对称感
+  //  ③ 副螺旋层（3 臂，反向）— 3 snoise
   // ================================================================
-  float twist2 = theta - r * uSpiralTightness * 1.3 + uTime * uRotationSpeed * 0.6;
-  float numArms2 = 4.0;
+  float twist2 = theta - r * uSpiralTightness * 1.2 + uTime * uRotationSpeed * rotAccel * 0.5;
+  float numArms2 = 3.0;
 
   float spiral2 = 0.5 + 0.5 * sin(twist2 * numArms2);
   spiral2 = pow(spiral2, 2.2);
 
-  float noise2 = fbm3(vec2(twist2 * numArms2 / TAU, r * 3.5) - uTime * 0.15);
+  float noise2 = fbm3(vec2(twist2 * numArms2 / TAU, (r + radialPull * 0.6) * 2.5) - uTime * 0.08);
   density += spiral2 * (0.3 + 0.4 * noise2) * 0.35;
 
   // ================================================================
-  // 中心核心辉光（指数衰减）
+  //  ④ 尘埃暗带 (hash only)
   // ================================================================
-  density += exp(-r * 14.0) * 0.6;
-
-  // ================================================================
-  // 阶段 1：聚拢（0 ~ gatherEnd）
-  //   旋涡淡入 + 径向收缩
-  // ================================================================
-  float maxR = 0.45;
-
-  if (t < gatherEnd) {
-    float gt = t / gatherEnd;
-    // 淡入
-    density *= smoothstep(0.0, 0.25, gt);
-    // 径向收缩：外边界从 0.45 缩至 0.18
-    maxR = mix(0.45, 0.18, gt * gt);
-  } else {
-    maxR = 0.18;
-  }
-
-  // 径向衰减（柔和裁剪）
-  density *= smoothstep(maxR, maxR * 0.1, r);
+  float dustAngle = theta + r * uSpiralTightness * 1.05 - uTime * uRotationSpeed * rotAccel * 0.9;
+  float dust = 0.5 + 0.5 * sin(dustAngle * numArms1 + 0.5);
+  dust = pow(dust, 3.0);
+  float dustDetail = hash21(vec2(dustAngle * 2.0, r * 10.0));
+  float absorption = 1.0 - dust * (0.6 + 0.4 * dustDetail) * 0.3 * smoothstep(0.04, 0.2, r);
+  density *= absorption;
 
   // ================================================================
-  // 阶段 2：脉冲爆发（gatherEnd ~ pulseEnd）
-  //   中心白闪 + 冲击波环 + 旋涡衰减
+  //  ⑤ 核心辉光（无额外增强，随整体缩小）
   // ================================================================
-  float flashContrib = 0.0;
-  float ringContrib = 0.0;
-
-  if (t >= gatherEnd && t < pulseEnd) {
-    float pt = (t - gatherEnd) / (pulseEnd - gatherEnd);
-    float eased = easeOutExpo(pt);
-
-    // 中心白闪
-    flashContrib = exp(-r * 28.0) * (1.0 - pt) * 2.5;
-
-    // 冲击波环（Gaussian 环）
-    float ringR = 0.35 * eased;
-    float ringWidth = 40.0;
-    ringContrib = exp(-pow((r - ringR) * ringWidth, 2.0)) * (1.0 - pt) * 0.8;
-
-    // 旋涡在脉冲期间衰减
-    density *= mix(1.0, 0.15, pt);
-  }
+  float coreGlow = exp(-r * 18.0) * 0.6;
+  float diskGlow = exp(-r * 8.0)  * 0.2;
+  float haloGlow = exp(-r * 3.5)  * 0.06;
+  density += coreGlow + diskGlow + haloGlow;
 
   // ================================================================
-  // 阶段 3：消散（pulseEnd ~ 1.0）
-  //   整体淡出 + 残余辉光
+  //  ⑥ 径向边界 + 淡入淡出
   // ================================================================
-  if (t >= pulseEnd) {
-    float ft = (t - pulseEnd) / (1.0 - pulseEnd);
-    density *= 1.0 - ft * ft;
-    // 残余中心辉光
-    density += exp(-r * 18.0) * (1.0 - ft) * 0.25;
-  }
+  float boundary = 1.0 - smoothstep(maxR * 0.1, maxR, r);
+  density *= boundary * fadeIn * fadeOut;
+  // 星场边界用屏幕空间坐标
+  float screenR = maxR / shrink;
+  float starBound = 1.0 - smoothstep(screenR * 0.1, screenR, length(origUv));
+  stars *= starBound * fadeIn * fadeOut;
 
   // ================================================================
-  // 颜色映射
+  //  ⑦ 颜色梯度映射ﾈ6 阶）
   // ================================================================
-  // density 梯度 → 颜色梯度
-  vec3 col = uBaseColor;
-  col = mix(col, uAccentColor, smoothstep(0.08, 0.35, density));
-  col = mix(col, uBrightColor, smoothstep(0.35, 0.65, density));
-  col = mix(col, vec3(1.0),    smoothstep(0.65, 0.95, density));
+  vec3 col = uDarkColor;
+  col = mix(col, uBaseColor * 0.4,  smoothstep(0.02, 0.10, density));
+  col = mix(col, uBaseColor,        smoothstep(0.10, 0.25, density));
+  col = mix(col, uAccentColor,      smoothstep(0.25, 0.42, density));
+  col = mix(col, uBrightColor,      smoothstep(0.42, 0.62, density));
+  col = mix(col, uGlowColor,        smoothstep(0.62, 0.80, density));
+  col = mix(col, vec3(1.0),         smoothstep(0.80, 0.98, density));
 
-  // 脉冲闪光颜色（白偏高光色）
-  col = mix(col, uBrightColor, ringContrib);
-  col = mix(col, vec3(1.0),    flashContrib * 0.8);
+  // 星点叠加
+  vec3 starCol = mix(vec3(0.8, 0.85, 1.0), vec3(1.0), stars);
+  col += starCol * stars * 0.7;
 
   // ================================================================
-  // 最终输出
+  //  最终输出
   // ================================================================
   float alpha = clamp(
-    (density + flashContrib + ringContrib) * uIntensity,
+    (density + stars * 0.25) * uIntensity,
     0.0, 1.0
   );
 

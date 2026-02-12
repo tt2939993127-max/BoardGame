@@ -538,7 +538,7 @@ describe('诡术师 ongoing 能力', () => {
             expect(executor).toBeDefined();
         });
 
-        test('减少对手行动额度', () => {
+        test('单目标时创建 Prompt', () => {
             const base = makeBase();
             const state = makeState([base]);
 
@@ -554,9 +554,7 @@ describe('诡术师 ongoing 能力', () => {
             });
 
             expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
-            expect((result.events[0] as any).payload.playerId).toBe('1');
-            expect((result.events[0] as any).payload.delta).toBe(-1);
+            expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
         });
     });
 });

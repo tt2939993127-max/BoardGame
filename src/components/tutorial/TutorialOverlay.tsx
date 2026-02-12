@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTutorial } from '../../contexts/TutorialContext';
 import { playSound } from '../../lib/audio/useGameAudio';
+import { AudioManager } from '../../lib/audio/AudioManager';
+import { UI_Z_INDEX } from '../../core';
+
+const TUTORIAL_NEXT_SOUND_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.buttons.tab_switching_button.uiclick_tab_switching_button_01_krst_none';
 
 /** Check if an element is inside an overflow:hidden ancestor (before the viewport root). */
 function hasOverflowHiddenAncestor(el: Element): boolean {
@@ -50,6 +54,11 @@ export const TutorialOverlay: React.FC = () => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    useEffect(() => {
+        if (!isActive) return;
+        AudioManager.preloadKeys([TUTORIAL_NEXT_SOUND_KEY]);
+    }, [isActive]);
+
     // 统一布局 effect：找元素 + 算位置在同一个回调里完成，不会有过期数据
     useEffect(() => {
         if (!isActive || !currentStep) return;
@@ -86,7 +95,13 @@ export const TutorialOverlay: React.FC = () => {
             const isCenterPosition = position === 'center';
             if (!rect || isCenterPosition) {
                 setTooltipStyles({
-                    style: { position: 'fixed', bottom: '10%', left: '50%', transform: 'translateX(-50%)', zIndex: 100 },
+                    style: {
+                        position: 'fixed',
+                        bottom: '10%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: UI_Z_INDEX.tutorial,
+                    },
                     arrowClass: 'hidden'
                 });
                 setPositionedStepId(stepId);
@@ -117,7 +132,7 @@ export const TutorialOverlay: React.FC = () => {
                 pos = 'top';
             }
 
-            const styles: React.CSSProperties = { position: 'fixed', zIndex: 100 };
+            const styles: React.CSSProperties = { position: 'fixed', zIndex: UI_Z_INDEX.tutorial };
             let arrow = '';
             switch (pos) {
                 case 'right':
@@ -248,7 +263,8 @@ export const TutorialOverlay: React.FC = () => {
 
     return (
         <div
-            className="fixed inset-0 z-[9999] pointer-events-none"
+            className="fixed inset-0 pointer-events-none"
+            style={{ zIndex: UI_Z_INDEX.tutorial }}
             data-tutorial-step={currentStep.id ?? 'unknown'}
         >
             {/* 遮罩层 - 仅在遮罩开关为真且目标存在时阻止点击 */}
@@ -299,7 +315,7 @@ export const TutorialOverlay: React.FC = () => {
                     {!currentStep.requireAction && (
                         <button
                             onClick={() => {
-                                playSound('ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.buttons.tab_switching_button.uiclick_tab_switching_button_01_krst_none');
+                                playSound(TUTORIAL_NEXT_SOUND_KEY);
                                 nextStep('manual');
                             }}
                             className="w-full py-2 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center text-center relative z-10 pointer-events-auto"

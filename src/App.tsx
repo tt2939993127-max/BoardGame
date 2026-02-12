@@ -16,6 +16,7 @@ import { LoadingScreen } from './components/system/LoadingScreen';
 import { Toaster } from 'react-hot-toast';
 import { GlobalHUD } from './components/system/GlobalHUD';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
+import { InteractionGuardProvider } from './components/game/framework';
 
 import { Home } from './pages/Home';
 import { MatchRoom } from './pages/MatchRoom';
@@ -28,6 +29,7 @@ import { useTranslation } from 'react-i18next';
 const DevToolsSlicer = React.lazy(() => import('./pages/devtools/AssetSlicer'));
 const DevToolsFxPreview = React.lazy(() => import('./pages/devtools/EffectPreview'));
 const DevToolsAudioBrowser = React.lazy(() => import('./pages/devtools/AudioBrowser'));
+const DevToolsArchView = React.lazy(() => import('./pages/devtools/ArchitectureView'));
 const UnifiedBuilder = React.lazy(() => import('./ugc/builder/pages/UnifiedBuilder').then(m => ({ default: m.UnifiedBuilder })));
 const UGCRuntimeViewPage = React.lazy(() => import('./ugc/runtime/RuntimeViewPage'));
 const UGCSandbox = React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox })));
@@ -56,16 +58,18 @@ const App = () => {
             <AuthProvider>
               <SocialProvider>
                 <AudioProvider>
-                  <DebugProvider>
-                    <TutorialProvider>
-                      <BrowserRouter>
-                        <Routes>
+                  <InteractionGuardProvider>
+                    <DebugProvider>
+                      <TutorialProvider>
+                        <BrowserRouter>
+                          <Routes>
                           <Route path="/" element={<Home />} />
                           <Route path="/play/:gameId/match/:matchId" element={<MatchRoom />} />
                           <Route path="/play/:gameId/local" element={<LocalMatchRoom />} />
                           <Route path="/dev/slicer" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
                           <Route path="/dev/fx" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
                           <Route path="/dev/audio" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
+                          <Route path="/dev/arch" element={<React.Suspense fallback={<LoadingScreen title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
                           <Route path="/dev/ugc" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcBuilder')} />}><UnifiedBuilder /></React.Suspense>} />
                           <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.runtimeView')} />}><UGCRuntimeViewPage /></React.Suspense>} />
                           <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<LoadingScreen title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
@@ -94,14 +98,15 @@ const App = () => {
 
                           <Route path="*" element={<NotFound />} />
                         </Routes>
-                        <GlobalHUD />
-                        <ModalStackRoot />
-                        <ToastViewport />
-                        <Toaster />
-                        <EngineNotificationListener />
-                      </BrowserRouter>
-                    </TutorialProvider>
-                  </DebugProvider>
+                          <GlobalHUD />
+                          <ModalStackRoot />
+                          <ToastViewport />
+                          <Toaster />
+                          <EngineNotificationListener />
+                        </BrowserRouter>
+                      </TutorialProvider>
+                    </DebugProvider>
+                  </InteractionGuardProvider>
                 </AudioProvider>
               </SocialProvider>
             </AuthProvider>

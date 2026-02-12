@@ -20,6 +20,8 @@ function createTestRandom(): RandomFn {
   };
 }
 
+const fixedTimestamp = 1000;
+
 function createGoblinState(): SummonerWarsCore {
   return createInitializedCore(['0', '1'], createTestRandom(), {
     faction0: 'goblin',
@@ -58,7 +60,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeGrabber(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '部落抓附手', unitClass: 'common',
-    faction: '洞穴地精', strength: 2, life: 2, cost: 0,
+    faction: 'goblin', strength: 2, life: 2, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['immobile', 'grab'], deckSymbols: [],
   };
@@ -67,7 +69,7 @@ function makeGrabber(id: string): UnitCard {
 function makeAlly(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '友方单位', unitClass: 'common',
-    faction: '洞穴地精', strength: 1, life: 2, cost: 0,
+    faction: 'goblin', strength: 1, life: 2, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
   };
 }
@@ -78,7 +80,7 @@ function executeAndReduce(
   payload: Record<string, unknown>
 ): { newState: SummonerWarsCore; events: GameEvent[] } {
   const fullState = { core: state, sys: {} as any };
-  const command = { type: commandType, payload, timestamp: Date.now(), playerId: state.currentPlayer };
+  const command = { type: commandType, payload, timestamp: fixedTimestamp, playerId: state.currentPlayer };
   const events = SummonerWarsDomain.execute(fullState, command, createTestRandom());
   let newState = state;
   for (const event of events) {
@@ -150,7 +152,7 @@ describe('部落抓附手 - 抓附 (grab) ACTIVATE_ABILITY', () => {
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
-      timestamp: Date.now(),
+      timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('空');

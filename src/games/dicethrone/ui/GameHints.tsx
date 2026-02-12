@@ -12,6 +12,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Trash2 } from 'lucide-react';
 import type { PendingInteraction, TurnPhase } from '../domain/types';
+import { UI_Z_INDEX } from '../../../core';
 
 export interface GameHintsProps {
     /** 是否处于弃牌模式 */
@@ -49,7 +50,10 @@ const DiscardHint: React.FC<{ mustDiscardCount: number }> = ({ mustDiscardCount 
     const { t } = useTranslation('game-dicethrone');
 
     return (
-        <div className="absolute bottom-[14vw] left-1/2 -translate-x-1/2 z-[150] pointer-events-none animate-pulse">
+        <div
+            className="absolute bottom-[14vw] left-1/2 -translate-x-1/2 pointer-events-none animate-pulse"
+            style={{ zIndex: UI_Z_INDEX.hint }}
+        >
             <div className="px-[2vw] py-[0.8vw] rounded-xl bg-gradient-to-r from-red-900/90 to-orange-900/90 border-2 border-red-500/60 shadow-[0_0_2vw_rgba(239,68,68,0.4)] backdrop-blur-sm">
                 <div className="flex items-center gap-[1vw]">
                     <Trash2 className="w-[1.5vw] h-[1.5vw] text-red-200" />
@@ -74,7 +78,10 @@ const DiceInteractionHint: React.FC<{ pendingInteraction: PendingInteraction }> 
     const { t } = useTranslation('game-dicethrone');
 
     return (
-        <div className="absolute top-[6vw] left-1/2 -translate-x-1/2 z-[150] pointer-events-none animate-pulse">
+        <div
+            className="absolute top-[6vw] left-1/2 -translate-x-1/2 pointer-events-none animate-pulse"
+            style={{ zIndex: UI_Z_INDEX.hint }}
+        >
             <div className="bg-amber-600/90 backdrop-blur-sm rounded-xl px-[2vw] py-[0.6vw] border border-amber-400/60 shadow-lg text-center">
                 <span className="text-white font-bold text-[1vw] tracking-wide">
                     {t(pendingInteraction.titleKey, { count: pendingInteraction.selectCount })}
@@ -108,7 +115,10 @@ const OpponentThinkingHint: React.FC<{ opponentName: string }> = ({ opponentName
     );
 
     return (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[600] pointer-events-none">
+        <div
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+        >
             <div className="text-center">
                 <div className="text-amber-400 text-[2vw] font-bold tracking-wider drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">
                     {opponentName}
@@ -148,7 +158,10 @@ const ResponseWindowHint: React.FC<{
     const { t } = useTranslation('game-dicethrone');
 
     return (
-        <div className={`absolute ${offsetClass} left-1/2 -translate-x-1/2 z-[120]`}>
+        <div
+            className={`absolute ${offsetClass} left-1/2 -translate-x-1/2`}
+            style={{ zIndex: UI_Z_INDEX.hint }}
+        >
             <div className="flex items-center gap-[1vw] px-[1.4vw] py-[0.6vw] rounded-full bg-black/80 border border-purple-500/60 shadow-lg backdrop-blur-sm">
                 <span className="text-purple-300 text-[0.8vw] font-bold tracking-wider">
                     {t('response.yourTurn')}

@@ -212,6 +212,10 @@ import { UndoProvider } from '../../contexts/UndoContext';
 4. **需要启用 UndoSystem**
    - 游戏配置中必须包含 `createUndoSystem()`
 
+5. **排查：出牌后无法撤回**
+   - 优先检查 Board 是否包裹 `UndoProvider`
+   - 未包裹会导致 `GameHUD` 无法读取撤回状态（SmashUp 曾出现该问题）
+
 ## 文件清单
 
 ### 新增文件

@@ -75,7 +75,7 @@ export interface UndoState {
 }
 
 /**
- * Prompt 选项
+ * @deprecated 使用 InteractionSystem 替代。此类型保留仅为历史兼容，将在下个主版本删除。
  */
 export interface PromptOption<T = unknown> {
     id: string;
@@ -85,20 +85,18 @@ export interface PromptOption<T = unknown> {
 }
 
 /**
- * Prompt 多选配置
+ * @deprecated 使用 InteractionSystem 替代。
  */
 export interface PromptMultiConfig {
-    /** 最少选择数量（不传视为 1；需要允许空选时显式传 0） */
     min?: number;
-    /** 最多选择数量（不传视为不限制） */
     max?: number;
 }
 
 /**
- * Prompt 系统状态
+ * @deprecated 使用 InteractionSystem (sys.interaction) 替代。
+ * 新游戏禁止使用此类型，应使用 createSimpleChoice() / queueInteraction()。
  */
 export interface PromptState<T = unknown> {
-    /** 当前 prompt */
     current?: {
         id: string;
         playerId: PlayerId;
@@ -106,10 +104,8 @@ export interface PromptState<T = unknown> {
         options: PromptOption<T>[];
         sourceId?: string;
         timeout?: number;
-        /** 多选配置（存在则表示多选） */
         multi?: PromptMultiConfig;
     };
-    /** prompt 队列 */
     queue: PromptState<T>['current'][];
 }
 
@@ -254,6 +250,14 @@ export interface TutorialStepSnapshot {
     requireAction?: boolean;
     showMask?: boolean;
     allowedCommands?: string[];
+    /**
+     * 允许交互的目标 ID 列表（UI 层卡牌/单位级门控）
+     *
+     * 设置后，只有 ID 在此列表中的目标可交互，其余置灰。
+     * 各游戏自行定义 "目标" 含义（SmashUp = cardUid, TTT = cellId 等）。
+     * 引擎不感知此字段，门控逻辑在 Board 组件中实现。
+     */
+    allowedTargets?: string[];
     advanceOnEvents?: TutorialEventMatcher[];
     randomPolicy?: TutorialRandomPolicy;
     aiActions?: TutorialAiAction[];
@@ -324,8 +328,8 @@ export interface SystemState {
     matchId?: string;
     /** 撤销系统状态 */
     undo: UndoState;
-    /** Prompt 系统状态 */
-    prompt: PromptState;
+    /** 交互系统状态（替代旧 PromptSystem） */
+    interaction: import('./systems/InteractionSystem').InteractionState;
     /** 日志系统状态 */
     log: LogState;
     /** 事件流系统状态 */
@@ -399,6 +403,16 @@ export interface DomainCore<
      * 支持连锁：注入的事件会被后续处理继续检测。
      */
     postProcess?(state: TState, events: TEvent[]): TEvent[];
+
+    /**
+     * 可选：系统事件后处理（afterEvents 轮中，reduce 前）
+     *
+     * 典型用途：系统（如 PromptBridge）产生的领域事件需要触发领域层后处理
+     * （如消灭→onDestroy 触发、移动→onMove 触发），但这些事件不经过 execute()。
+     * pipeline 在每轮 afterEvents 收集完系统事件后、reduce 前调用此钩子，
+     * 允许领域层追加派生事件（如 trigger 回调产生的额外事件）。
+     */
+    postProcessSystemEvents?(state: TState, events: TEvent[], random: RandomFn): TEvent[];
 
     /**
      * 可选：reduce 前的单事件拦截/替换

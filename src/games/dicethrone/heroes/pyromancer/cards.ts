@@ -5,7 +5,7 @@
 
 import type { AbilityCard } from '../../types';
 import type { RandomFn } from '../../../../engine/types';
-import type { AbilityEffect, AbilityDef } from '../../../../systems/presets/combat';
+import type { AbilityEffect, AbilityDef } from '../../domain/combat';
 import { STATUS_IDS, TOKEN_IDS, PYROMANCER_DICE_FACE_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import {
@@ -63,7 +63,8 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
             grantToken(TOKEN_IDS.FIRE_MASTERY, 1, abilityEffectText('card-turning-up-the-heat', 'gainFM1')),
             {
                 description: abilityEffectText('card-turning-up-the-heat', 'spendCP'),
-                action: { type: 'custom', target: 'self', customActionId: 'pyro-spend-cp-for-fm' }
+                action: { type: 'custom', target: 'self', customActionId: 'pyro-spend-cp-for-fm' },
+                timing: 'immediate'
             }
         ],
     },
@@ -78,7 +79,8 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: abilityEffectText('card-infernal-embrace', 'roll'),
-                action: { type: 'custom', target: 'self', customActionId: 'pyro-infernal-embrace' }
+                action: { type: 'custom', target: 'self', customActionId: 'pyro-infernal-embrace' },
+                timing: 'immediate'
             }
         ],
     },
@@ -93,7 +95,8 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: abilityEffectText('card-fan-the-flames', 'increaseLimit'),
-                action: { type: 'custom', target: 'self', customActionId: 'increase-fm-limit' }
+                action: { type: 'custom', target: 'self', customActionId: 'increase-fm-limit' },
+                timing: 'immediate'
             },
             grantToken(TOKEN_IDS.FIRE_MASTERY, 2, abilityEffectText('card-fan-the-flames', 'gainFM2'))
         ],
@@ -139,7 +142,8 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
                         { face: PYROMANCER_DICE_FACE_IDS.FIERY_SOUL, grantToken: { tokenId: TOKEN_IDS.FIRE_MASTERY, value: 2 } },
                         { face: PYROMANCER_DICE_FACE_IDS.METEOR, grantStatus: { statusId: STATUS_IDS.KNOCKDOWN, value: 1 } },
                     ]
-                }
+                },
+                timing: 'withDamage'
             }
         ],
     },

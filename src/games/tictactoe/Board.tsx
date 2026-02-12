@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { useGameAudio, playSound, playDeniedSound } from '../../lib/audio/useGameAudio';
 import { TIC_TAC_TOE_AUDIO_CONFIG } from './audio.config';
 import { TIC_TAC_TOE_MANIFEST } from './manifest';
+import { UI_Z_INDEX } from '../../core';
 
 type Props = BoardProps<MatchState<TicTacToeCore>>;
 
@@ -382,8 +383,9 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
                                         className={`
                                             flex items-center justify-center relative
                                             ${isClickable ? 'cursor-pointer transition-colors duration-200' : ''}
-                                            ${isTutorialTarget ? 'z-[10000] ring-2 ring-white' : ''}
+                                            ${isTutorialTarget ? 'ring-2 ring-white' : ''}
                                         `}
+                                        style={isTutorialTarget ? { zIndex: UI_Z_INDEX.hint } : undefined}
                                     >
                                         <div className={`
                                             w-3/5 h-3/5 flex items-center justify-center 

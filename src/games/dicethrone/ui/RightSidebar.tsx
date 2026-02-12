@@ -3,6 +3,7 @@ import type { AbilityCard, Die, TurnPhase } from '../types';
 import { DiceActions, DiceTray, type DiceInteractionConfig } from './DiceTray';
 import { DiscardPile } from './DiscardPile';
 import { GameButton } from './components/GameButton';
+import { UI_Z_INDEX } from '../../../core';
 
 export const RightSidebar = ({
     dice,
@@ -60,7 +61,10 @@ export const RightSidebar = ({
     diceInteractionConfig?: DiceInteractionConfig;
 }) => {
     return (
-        <div className="absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto z-[60]">
+        <div
+            className="absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto"
+            style={{ zIndex: UI_Z_INDEX.hud }}
+        >
             <div className="flex-grow" />
             <div className="w-full flex flex-col items-center gap-[0.75vw]">
                 <DiceTray

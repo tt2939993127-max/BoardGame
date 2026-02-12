@@ -4,7 +4,7 @@
  */
 
 import { BARBARIAN_DICE_FACE_IDS, STATUS_IDS } from '../../domain/ids';
-import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../../systems/presets/combat';
+import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
 
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
 const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;

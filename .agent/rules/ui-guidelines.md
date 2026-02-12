@@ -29,3 +29,19 @@
 - 等待提示：无背景或半透明背景，使用缓慢闪烁效果（animate-[pulse_2s_ease-in-out_infinite]）
 - 交互提示：带轻微背景增强可读性，可使用 animate-pulse
 - 所有提示默认 pointer-events-none，除非需要交互
+
+## 动画 / 特效规范
+
+### 1. 自适应尺寸（强制）
+- 所有特效组件（Canvas 2D 、WebGL Shader、CSS 动画）**必须自适应父容器尺寸**，禁止硬编码像素值
+- Canvas 2D：通过 `container.offsetWidth / offsetHeight` 获取容器尺寸，粒子大小、半径等参数基于容器尺寸计算
+- WebGL Shader：使用 `absolute inset-0` 填充容器，shader 内用 UV 坐标 + `uResolution` 处理宽高比
+- 若需额外缩放控制，提供 `size` / `scale` prop（默认值不应依赖固定像素）
+
+### 2. DPI 缩放
+- Canvas 特效必须处理 `devicePixelRatio`：`canvas.width = cw * dpr`，然后 `ctx.setTransform(dpr, 0, 0, dpr, 0, 0)`
+
+### 3. 性能
+- WebGL Shader 每像素噪声调用控制在 6 次 snoise 以内
+- Canvas 2D 粒子数不超过 100，拖拽系数 > 0.9 以减少计算
+- 使用 `requestAnimationFrame` 驱动，动画结束后必须 `cancelAnimationFrame` + 清理资源

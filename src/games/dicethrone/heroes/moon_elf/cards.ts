@@ -5,7 +5,7 @@ import type { AbilityCard } from '../../types';
 import { DICETHRONE_CARD_ATLAS_IDS, STATUS_IDS, TOKEN_IDS } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import type { RandomFn } from '../../../../engine/types';
-import type { AbilityEffect, AbilityDef } from '../../../../systems/presets/combat';
+import type { AbilityEffect, AbilityDef } from '../../domain/combat';
 import {
     LONGBOW_2, LONGBOW_3, COVERT_FIRE_2, COVERING_FIRE_2,
     EXPLODING_ARROW_2, EXPLODING_ARROW_3, ENTANGLING_SHOT_2,

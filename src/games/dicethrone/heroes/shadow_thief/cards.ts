@@ -71,7 +71,7 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
         timing: 'main',
         description: 'Roll 1 die. If Shadow: Gain Sneak Attack + 2 CP. Else Draw 1 Card.',
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 6 },
-        effects: [{ description: 'Roll Die', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-one-with-shadows' } }]
+        effects: [{ description: 'Roll Die', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-one-with-shadows' }, timing: 'immediate' }]
     },
     // 7. Shadow Defense II (暗影守护 II) - Standard Defense Upgrade
     {
@@ -115,7 +115,7 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
         timing: 'main',
         description: 'Opponent Discards 1. Draw 1 (2 if Sneak).',
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 9 },
-        effects: [{ description: 'Resolve Card Trick', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-card-trick' } }]
+        effects: [{ description: 'Resolve Card Trick', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-card-trick' }, timing: 'immediate' }]
     },
     // 10. Dagger Strike II (Keeping as is)
     {

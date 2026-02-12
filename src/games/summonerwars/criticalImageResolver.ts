@@ -46,10 +46,12 @@ function getTipImagePath(factionId: FactionId): string {
     return `summonerwars/hero/${dir}/tip`;
 }
 
-/** 通用资源（传送门、骰子） */
+/** 通用资源（传送门、骰子、地图、卡背） */
 const COMMON_PATHS = {
     portal: 'summonerwars/common/Portal',
     dice: 'summonerwars/common/dice',
+    map: 'summonerwars/common/map',
+    cardback: 'summonerwars/common/cardback',
 } as const;
 
 // ============================================================================
@@ -101,7 +103,7 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
         const allHeroAtlases = ALL_FACTIONS.map(getHeroAtlasPath);
         const allTipImages = ALL_FACTIONS.map(getTipImagePath);
         return {
-            critical: allHeroAtlases,
+            critical: [COMMON_PATHS.map, COMMON_PATHS.cardback, ...allHeroAtlases],
             warm: allTipImages,
         };
     }
@@ -115,7 +117,7 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
         const allTipImages = ALL_FACTIONS.map(getTipImagePath);
 
         return {
-            critical: allHeroAtlases,
+            critical: [COMMON_PATHS.map, COMMON_PATHS.cardback, ...allHeroAtlases],
             warm: allTipImages,
         };
     }
@@ -125,7 +127,13 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
         // 异常情况：游戏已开始但无已选阵营，回退到全部预加载
         const allCardsAtlases = ALL_FACTIONS.map(getCardsAtlasPath);
         return {
-            critical: [COMMON_PATHS.portal, COMMON_PATHS.dice, ...allCardsAtlases],
+            critical: [
+                COMMON_PATHS.map,
+                COMMON_PATHS.cardback,
+                COMMON_PATHS.portal,
+                COMMON_PATHS.dice,
+                ...allCardsAtlases,
+            ],
             warm: [],
         };
     }
@@ -141,6 +149,8 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
 
     return {
         critical: [
+            COMMON_PATHS.map,
+            COMMON_PATHS.cardback,
             COMMON_PATHS.portal,
             COMMON_PATHS.dice,
             ...selectedHeroAtlases,

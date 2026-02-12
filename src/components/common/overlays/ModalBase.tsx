@@ -1,12 +1,15 @@
 import clsx from 'clsx';
 import { motion, type Variants } from 'framer-motion';
-import { memo, type ReactNode } from 'react';
+import { memo, type ReactNode, type CSSProperties } from 'react';
+import { UI_Z_INDEX } from '../../../core';
 
 interface ModalBaseProps {
     onClose?: () => void;
     closeOnBackdrop?: boolean;
     overlayClassName?: string;
+    overlayStyle?: CSSProperties;
     containerClassName?: string;
+    containerStyle?: CSSProperties;
     children: ReactNode;
 }
 
@@ -38,9 +41,14 @@ export const ModalBase = memo(({
     onClose,
     closeOnBackdrop = true,
     overlayClassName,
+    overlayStyle,
     containerClassName,
+    containerStyle,
     children,
 }: ModalBaseProps) => {
+    const resolvedOverlayStyle: CSSProperties = { zIndex: UI_Z_INDEX.modalOverlay, ...overlayStyle };
+    const resolvedContainerStyle: CSSProperties = { zIndex: UI_Z_INDEX.modalContent, ...containerStyle };
+
     return (
         <>
             <motion.div
@@ -53,7 +61,7 @@ export const ModalBase = memo(({
                     'fixed inset-0 bg-black/50 backdrop-blur-sm',
                     overlayClassName
                 )}
-                style={{ willChange: 'opacity' }}
+                style={{ willChange: 'opacity', ...resolvedOverlayStyle }}
             />
 
             <motion.div
@@ -65,7 +73,7 @@ export const ModalBase = memo(({
                     'fixed inset-0 flex items-center justify-center pointer-events-none',
                     containerClassName
                 )}
-                style={{ willChange: 'transform, opacity' }}
+                style={{ willChange: 'transform, opacity', ...resolvedContainerStyle }}
             >
                 <div className="w-full flex justify-center">
                     {children}

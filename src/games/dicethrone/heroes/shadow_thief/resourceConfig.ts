@@ -1,4 +1,4 @@
-import type { ResourceDefinition } from '../../../../systems/ResourceSystem/types';
+import type { ResourceDefinition } from '../../domain/resourceSystem';
 
 export const SHADOW_THIEF_RESOURCES: ResourceDefinition[] = [
     {

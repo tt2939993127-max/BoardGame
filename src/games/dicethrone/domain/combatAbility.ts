@@ -4,7 +4,7 @@
  * 使用通用的战斗预设系统，不再依赖旧 AbilitySystem。
  */
 
-import { createCombatAbilityManager } from '../../../systems/presets/combat';
+import { createCombatAbilityManager } from './combat';
 
 /**
  * 全局战斗技能管理器实例

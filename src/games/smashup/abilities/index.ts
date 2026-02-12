@@ -1,7 +1,7 @@
 /**
  * 大杀四方 - 能力注册入口
  *
- * 在游戏初始化时调用 initAllAbilities() 注册所有派系能力。
+ * 在游戏初始化时调�?initAllAbilities() 注册所有派系能力�?
  */
 
 import { registerAlienAbilities } from './aliens';
@@ -14,7 +14,7 @@ import { registerDinosaurAbilities } from './dinosaurs';
 import { registerDinosaurPromptContinuations } from './dinosaurs';
 import { registerRobotAbilities } from './robots';
 import { registerRobotPromptContinuations } from './robots';
-import { registerWizardAbilities } from './wizards';
+import { registerWizardAbilities, registerWizardPromptContinuations } from './wizards';
 import { registerZombieAbilities } from './zombies';
 import { registerZombiePromptContinuations } from './zombies';
 import { registerTricksterAbilities } from './tricksters';
@@ -25,18 +25,19 @@ import { registerBearCavalryAbilities } from './bear_cavalry';
 import { registerBearCavalryPromptContinuations } from './bear_cavalry';
 import { registerSteampunkAbilities } from './steampunks';
 import { registerSteampunkPromptContinuations } from './steampunks';
-import { registerKillerPlantAbilities } from './killer_plants';
-import { registerInnsmouthAbilities } from './innsmouth';
+import { registerKillerPlantAbilities, registerKillerPlantPromptContinuations } from './killer_plants';
+import { registerInnsmouthAbilities, registerInnsmouthPromptContinuations } from './innsmouth';
 import { registerMiskatonicAbilities } from './miskatonic';
 import { registerMiskatonicPromptContinuations } from './miskatonic';
 import { registerCthulhuAbilities } from './cthulhu';
 import { registerCthulhuPromptContinuations } from './cthulhu';
 import { registerElderThingAbilities } from './elder_things';
 import { registerElderThingPromptContinuations } from './elder_things';
-import { registerBaseAbilities } from '../domain/baseAbilities';
+import { registerBaseAbilities, registerBasePromptContinuations } from '../domain/baseAbilities';
 import { registerMultiBaseScoringContinuation } from '../domain/index';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
 import { clearPowerModifierRegistry } from '../domain/ongoingModifiers';
+import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 
 let initialized = false;
 
@@ -45,7 +46,7 @@ export function initAllAbilities(): void {
     if (initialized) return;
     initialized = true;
 
-    // 基础版 8 派系
+    // 基础�?8 派系
     registerAlienAbilities();
     registerAlienPromptContinuations();
     registerPirateAbilities();
@@ -57,6 +58,7 @@ export function initAllAbilities(): void {
     registerRobotAbilities();
     registerRobotPromptContinuations();
     registerWizardAbilities();
+    registerWizardPromptContinuations();
     registerZombieAbilities();
     registerZombiePromptContinuations();
     registerTricksterAbilities();
@@ -64,8 +66,9 @@ export function initAllAbilities(): void {
 
     // 基地能力
     registerBaseAbilities();
+    registerBasePromptContinuations();
 
-    // 多基地计分 Prompt 继续函数
+    // 多基地计�?Prompt 继续函数
     registerMultiBaseScoringContinuation();
 
     // 扩展派系
@@ -76,9 +79,11 @@ export function initAllAbilities(): void {
     registerSteampunkAbilities();
     registerSteampunkPromptContinuations();
     registerKillerPlantAbilities();
+    registerKillerPlantPromptContinuations();
 
-    // 克苏鲁扩展
+    // 克苏鲁扩�?
     registerInnsmouthAbilities();
+    registerInnsmouthPromptContinuations();
     registerMiskatonicAbilities();
     registerMiskatonicPromptContinuations();
     registerCthulhuAbilities();
@@ -94,4 +99,5 @@ export function initAllAbilities(): void {
 export function resetAbilityInit(): void {
     initialized = false;
     clearPowerModifierRegistry();
+    clearOngoingEffectRegistry();
 }

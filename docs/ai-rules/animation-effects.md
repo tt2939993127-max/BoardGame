@@ -9,6 +9,7 @@
 
 - **动画库已接入**：项目使用 **framer-motion**（`motion` / `AnimatePresence`）。
 - **通用动效组件**：`src/components/common/animations/` 下已有 `FlyingEffect`、`ShakeContainer`、`PulseGlow` 与 `variants`。
+- **冲击帧音效绑定（强制）**：有动画的事件（伤害/治疗/状态/Token）音效必须通过 `FlyingEffectData.onImpact` 回调在动画到达时播放，禁止在事件生成时立即播放。音效 key 由 `feedbackResolver` 返回 `{ key, timing: 'on-impact' }` 写入 `DeferredSoundMap`，动画层在冲击帧调用 `playDeferredSound(eventId)` 消费。
 - **优先复用原则**：新增动画优先复用/扩展上述组件或 framer-motion 变体，避免重复造轮子或引入平行动画库。
 - **性能友好（强制）**：
   - **禁止 `transition-all` / `transition-colors`**：会导致 `border-color` 等不可合成属性触发主线程渲染。改用具体属性：`transition-[background-color]`、`transition-[opacity,transform]`。
@@ -92,18 +93,43 @@
 - **FxCue**：点分层级标识符（如 `fx.summon`、`fx.combat.shockwave`），支持通配符（`fx.combat.*`）
 - **FxRegistry**：Cue → FxRenderer 映射，精确匹配优先于通配符
 - **FxBus**（`useFxBus` hook）：push 事件触发特效，内置并发上限、防抖、安全超时
-- **FxLayer**：通用渲染层组件，查注册表获取 renderer 并渲染
+- **FxLayer**：通用渲染层组件，查注册表获取 renderer 并渲染，自动注入 `onImpact` 回调
 - **FxRenderer**：适配器组件，将 FxEvent 参数映射为底层动画组件 props
+- **FeedbackPack**：反馈包，将音效（`FxSoundConfig`）和震动（`FxShakeConfig`）与视觉特效统一声明
+
+### 反馈包系统（FeedbackPack）（强制）
+
+参考 UE Gameplay Cue 设计，一个 cue 注册时可同时声明视觉 + 音效 + 震动反馈，运行时自动触发：
+
+```ts
+// fxSetup.ts — 注册时声明反馈包
+registry.register('fx.summon', SummonRenderer, { timeoutMs: 4000 }, {
+  shake: { intensity: 'normal', type: 'impact', timing: 'on-impact' },
+});
+```
+
+- `timing: 'immediate'`：事件推入 FxBus 时立即触发
+- `timing: 'on-impact'`：渲染器调用 `props.onImpact()` 时触发（爆发/命中关键帧）
+- 震动强度支持动态覆盖：`event.ctx.intensity` 优先于注册时的默认值
+- `useFxBus` 接受 `{ playSound, triggerShake }` 选项，由游戏层注入实际播放/震动函数
+- **禁止在 useGameEvents 中手动传 `params.onImpact` 回调**，震动由 FeedbackPack 声明式管理
+- **例外：条件反馈保持手动编排**：当反馈触发依赖运行时状态（如战斗震动仅在 hits≥3 时触发），不应使用 FeedbackPack，而是由调用侧（Board.tsx）手动调用 `triggerShake`。原因：FeedbackPack 设计初衷是“一个 cue 总是触发相同反馈”（参考 UE Gameplay Cue），条件判断属于游戏规则而非反馈关注点。
+
+### FeedbackPack 适用边界（强制）
+
+- **适用**：一个 cue 触发时总是产生相同反馈（如召唤光柱总是震动）。强度可通过 `ctx.intensity` 动态调整，但“是否触发”不应有条件。
+- **不适用**：反馈是否触发取决于运行时状态（如 hits 数量、玩家阶段、特定条件）。这类反馈应由调用侧手动编排，与同一时序链中的其他反馈（音效等）统一管理。
+- **未来扩展**：若条件反馈场景增多（≥3 个不同条件触发），可考虑 UE 拆分 Cue 模式（注册不同 cue 如 `fx.combat.shockwave.light` / `fx.combat.shockwave.heavy`，每个带不同 FeedbackPack），而非在 FeedbackPack 内嵌条件函数。
 
 ### 新增特效流程
 1. 在 `src/components/common/animations/` 实现底层动画组件（如已有则复用）
-2. 在游戏侧 `fxSetup.ts` 中创建 FxRenderer 适配器，并注册到 registry
+2. 在游戏侧 `fxSetup.ts` 中创建 FxRenderer 适配器，注册到 registry，声明 FeedbackPack
 3. 在事件消费处（`useGameEvents.ts` 或 `Board.tsx`）调用 `fxBus.push(cue, ctx, params)`
 4. 在 `EffectPreview.tsx` 添加预览
 
 ### 文件分布
 - `src/engine/fx/` — 引擎层（types / FxRegistry / useFxBus / FxLayer）
-- `src/engine/fx/shader/` — WebGL Shader 子系统（ShaderCanvas / ShaderMaterial / GLSL 库 / 预设 shader）
+- `src/engine/fx/shader/` — WebGL Shader 子系统（ShaderCanvas / ShaderMaterial / ShaderPrecompile / GLSL 库 / 预设 shader）
 - `src/games/<gameId>/ui/fxSetup.ts` — 游戏侧注册表 + 渲染器适配器
 - `src/components/common/animations/` — 底层动画组件（Canvas 2D + Shader 版本共存）
 
@@ -119,14 +145,24 @@ FX 系统支持 WebGL shader 管线，用于逐像素计算的流体特效。与
 - **GLSL 噪声库**（`glsl/noise.glsl.ts`）：Simplex 2D 噪声 + FBM，以 TS 字符串导出，在 shader 中拼接使用。
 
 ### Shader 预设
+- `summon.frag.ts` — 召唤光柱（径向渐变 + 多阶段颜色映射 + 暗角遮罩）
 - `vortex.frag.ts` — 流体旋涡（极坐标螺旋扭曲 + 双层 FBM + 三阶段动画 + 颜色映射）
 - 后续可扩展：火焰、能量护盾、溶解等
+
+### Shader 预编译（自注册，自动，强制）
+
+Shader 包装组件（如 `SummonShaderEffect`、`VortexShaderEffect`）在模块顶层调用 `registerShader(FRAG)` 自注册到预编译队列。`useFxBus` 挂载时调用 `flushRegisteredShaders()` 一次性预编译所有已注册的 shader，通过后台 1×1 离屏 canvas 编译 + drawArrays 触发 GPU 驱动缓存。后续同源码 shader 编译几乎零开销。
+
+- **自注册模式**：包装组件在模块顶层 `registerShader(FRAG_SOURCE)`，import 即注册，无需在 `fxSetup.ts` 中手动声明
+- **Board.tsx / fxSetup.ts 无需关心 shader**：预编译由 `useFxBus` + 自注册自动完成，游戏侧零感知
+- **去重**：`ShaderPrecompile` 内部维护 `precompiledSet`，同一源码只编译一次
+- **非阻塞**：通过 `requestIdleCallback`（降级 `setTimeout`）异步执行
 
 ### 新增 Shader 特效流程
 1. 在 `src/engine/fx/shader/glsl/` 中复用或新增 GLSL 工具函数
 2. 在 `src/engine/fx/shader/shaders/` 中创建 `.frag.ts`，拼接 noise 库 + 主 shader 代码
-3. 在 `src/components/common/animations/` 创建包装组件（如 `VortexShaderEffect`），内部使用 `ShaderCanvas`
-4. 在游戏侧 `fxSetup.ts` 注册到 FxRegistry
+3. 在 `src/components/common/animations/` 创建包装组件（如 `VortexShaderEffect`），内部使用 `ShaderCanvas`，**模块顶层调用 `registerShader(FRAG_SOURCE)` 自注册到预编译队列**
+4. 在游戏侧 `fxSetup.ts` 注册到 FxRegistry（无需声明 shader 依赖，自注册已处理）
 5. 颜色值从 0-255 归一化到 0-1 后传入 uniform（GLSL 标准）
 
 ### 降级策略

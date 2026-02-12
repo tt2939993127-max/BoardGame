@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useInteractionGuard } from '../InteractionGuard';
 import type { UseResourceTrayReturn } from '../../../../core/ui/hooks';
 
 export interface UseResourceTrayConfig<TItem> {
@@ -14,6 +15,8 @@ export interface UseResourceTrayConfig<TItem> {
     getItemId: (item: TItem, index: number) => string | number;
     /** 是否允许多选 */
     multiSelect?: boolean;
+    /** 是否可交互 */
+    canInteract?: boolean;
     /** 点击回调 */
     onItemClick?: (itemId: string | number) => void;
     /** 切换回调（如锁定/解锁） */
@@ -41,11 +44,16 @@ export interface UseResourceTrayConfig<TItem> {
 export function useResourceTray<TItem>(
     config: UseResourceTrayConfig<TItem>
 ): UseResourceTrayReturn<TItem> {
-    const { items, multiSelect = false, onItemClick, onItemToggle } = config;
+    const { items, multiSelect = false, canInteract = true, onItemClick, onItemToggle } = config;
     const [selectedItemId, setSelectedItemId] = useState<string | number | null>(null);
+    const guard = useInteractionGuard();
 
     const handleItemClick = useCallback(
         (itemId: string | number) => {
+            if (!canInteract) {
+                guard.notifyDenied('resource-tray-click-disabled', { key: 'resource-tray-click-disabled' });
+                return;
+            }
             // 更新选中状态
             if (multiSelect) {
                 // 多选模式下切换选中
@@ -58,14 +66,18 @@ export function useResourceTray<TItem>(
             // 调用外部回调
             onItemClick?.(itemId);
         },
-        [multiSelect, onItemClick]
+        [canInteract, guard, multiSelect, onItemClick]
     );
 
     const handleItemToggle = useCallback(
         (itemId: string | number) => {
+            if (!canInteract) {
+                guard.notifyDenied('resource-tray-toggle-disabled', { key: 'resource-tray-toggle-disabled' });
+                return;
+            }
             onItemToggle?.(itemId);
         },
-        [onItemToggle]
+        [canInteract, guard, onItemToggle]
     );
 
     return {

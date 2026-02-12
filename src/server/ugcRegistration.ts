@@ -126,13 +126,22 @@ export const buildUgcServerGames = async (options?: {
         const domainCode = await loadUgcDomainCode(entryPath, packageId);
         if (!domainCode) continue;
         const { minPlayers, maxPlayers } = resolvePlayerRange(manifest);
+        const commandTypes = Array.isArray(manifest?.commandTypes)
+            ? manifest.commandTypes
+                .filter((item): item is string => typeof item === 'string')
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
+            : undefined;
+        console.log(`[UGC] 注册包: packageId=${packageId}, gameId=${gameId}, commandTypes=`, commandTypes);
         try {
             const ugcGame = await createUgcGame({
                 packageId: gameId,
                 domainCode,
                 minPlayers,
                 maxPlayers,
+                commandTypes,
             });
+            console.log(`[UGC] 成功创建游戏: gameId=${gameId}`);
             games.push(ugcGame);
             manifestGameIds.add(gameId);
             gameIds.push(gameId);

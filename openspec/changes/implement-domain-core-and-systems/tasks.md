@@ -18,8 +18,8 @@
 - [x] 服务端注册依赖 `GAME_SERVER_MANIFEST`（来自 `manifest.server.generated.ts`）
 - [x] 现有跨游戏能力：
   - `src/engine/systems/UndoSystem` - 自动快照与撤销握手
-  - `src/systems/AbilitySystem` - 成熟的技能系统
-  - `src/systems/StatusEffectSystem` - 状态效果系统
+  - `src/engine/primitives/` - 通用原语工具库（expression/condition/target/effects/zones/dice/resources）
+  - 游戏层能力/效果（如 DiceThrone domain/combat）
   - `server.ts` 的 `archiveMatchResult` - 归档能力
 
 ### 2) 目录结构约定 ✅
@@ -55,22 +55,20 @@
 
 ## 阶段 3+：引擎层系统扩展
 
-### 3+.1 DiceSystem 引擎层
-- [x] 创建 `src/systems/DiceSystem/types.ts` - 骰面、骰子定义、实例、触发条件
-- [x] 创建 `src/systems/DiceSystem/DiceSystem.ts` - 注册、创建、掷骰、统计
+### 3+.1 Dice primitives 引擎层
+- [x] 创建 `src/engine/primitives/dice.ts` - 骰子操作（roll/lock/reroll）
+- [x] 提供骰子统计与结果处理的纯函数工具
 - [x] 创建 `src/games/dicethrone/monk/diceConfig.ts` - Monk 骰子定义
 - [x] 更新 DiceThrone `Die` 接口使用新系统
 - [x] 创建 `openspec/specs/dice-system/spec.md` - 规格文档
-
-### 3+.2 CardSystem 引擎层
-- [x] 创建 `src/systems/CardSystem/types.ts` - 卡牌定义、牌组、手牌区等通用类型
-- [x] 创建 `src/systems/CardSystem/CardSystem.ts` - 实现服务
+### 3+.2 Card/Zone primitives 引擎层
+- [x] 创建 `src/engine/primitives/zones.ts` - 抽牌/洗牌/移动/窥视/归还
+- [ ] 迁移 DiceThrone 使用 zones 原语（可选）
 - [ ] 迁移 DiceThrone 使用 CardSystem（可选）
 
-### 3+.4 ResourceSystem 引擎层
-- [x] 创建 `src/systems/ResourceSystem/types.ts` - 资源定义、资源池、操作类型
-- [x] 创建 `src/systems/ResourceSystem/ResourceSystem.ts` - 实现服务
-- [ ] 迁移 DiceThrone 使用 ResourceSystem（可选）
+### 3+.4 Resource primitives 引擎层
+- [x] 创建 `src/engine/primitives/resources.ts` - get/set/modify + clamp
+- [ ] 迁移 DiceThrone 使用 resources 原语（可选）
 
 ### 3+.3 确定性修复
 - [x] 修改 `DomainCore.setup` 签名接收 `RandomFn`

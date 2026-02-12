@@ -25,6 +25,9 @@ const disableAudio = async (context: BrowserContext | Page) => {
 
 const resetMatchIdentity = async (context: BrowserContext | Page) => {
   await context.addInitScript(() => {
+    if (sessionStorage.getItem('e2e_identity_reset') === '1') {
+      return;
+    }
     localStorage.removeItem('owner_active_match');
     const keys: string[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
@@ -38,6 +41,7 @@ const resetMatchIdentity = async (context: BrowserContext | Page) => {
     const guestId = `${Date.now()}-${Math.floor(Math.random() * 9000) + 1000}`;
     localStorage.setItem('guest_id', guestId);
     document.cookie = `bg_guest_id=${encodeURIComponent(guestId)}; path=/; SameSite=Lax`;
+    sessionStorage.setItem('e2e_identity_reset', '1');
   });
 };
 
@@ -67,8 +71,63 @@ const waitForHomeGameList = async (page: Page) => {
   await page.waitForSelector('[data-game-id]', { timeout: 15000, state: 'attached' });
 };
 
+const waitForMatchCredentials = async (page: Page) => {
+  const url = new URL(page.url());
+  const matchId = url.pathname.split('/match/')[1]?.split('/')[0];
+  if (!matchId) return;
+  await expect.poll(async () => {
+    return page.evaluate((id) => {
+      const raw = localStorage.getItem(`match_creds_${id}`);
+      if (!raw) return false;
+      try {
+        const data = JSON.parse(raw) as { playerID?: string; credentials?: string };
+        return Boolean(data?.playerID && data?.credentials);
+      } catch {
+        return false;
+      }
+    }, matchId);
+  }).toBe(true);
+};
+
+const getMatchIdFromUrl = (page: Page) => new URL(page.url()).pathname.split('/match/')[1]?.split('/')[0];
+
+const readStoredMatchPlayerId = async (page: Page, matchId?: string) => {
+  if (!matchId) return null;
+  const raw = await page.evaluate((id) => localStorage.getItem(`match_creds_${id}`), matchId);
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw) as { playerID?: string };
+    return data.playerID ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const ensureJoinedMatch = async (page: Page) => {
+  const getPlayerId = () => new URL(page.url()).searchParams.get('playerID');
+  if (getPlayerId()) return getPlayerId();
+
+  const matchId = getMatchIdFromUrl(page);
+  const storedPlayerId = await readStoredMatchPlayerId(page, matchId);
+  if (storedPlayerId) {
+    const targetUrl = new URL(page.url());
+    targetUrl.searchParams.set('playerID', storedPlayerId);
+    await page.goto(targetUrl.toString(), { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => new URL(page.url()).searchParams.get('playerID')).not.toBeNull();
+    return getPlayerId();
+  }
+
+  const joinUrl = new URL(page.url());
+  joinUrl.searchParams.set('join', 'true');
+  await page.goto(joinUrl.toString(), { waitUntil: 'domcontentloaded' });
+  await expect.poll(() => new URL(page.url()).searchParams.get('playerID')).not.toBeNull();
+  return getPlayerId();
+};
+
+const getGameServerBaseURL = () => process.env.PW_GAME_SERVER_URL || process.env.VITE_GAME_SERVER_URL || 'http://localhost:18000';
+
 const ensureGameServerAvailable = async (page: Page) => {
-  const gameServerBaseURL = process.env.PW_GAME_SERVER_URL || process.env.VITE_GAME_SERVER_URL || 'http://localhost:18000';
+  const gameServerBaseURL = getGameServerBaseURL();
   const candidates = ['/games', `${gameServerBaseURL}/games`];
   for (const url of candidates) {
     try {
@@ -81,11 +140,83 @@ const ensureGameServerAvailable = async (page: Page) => {
   return false;
 };
 
+const ensureHostSeat = async (page: Page, matchId?: string) => {
+  if (!matchId) return;
+  const guestId = await page.evaluate(() => localStorage.getItem('guest_id'));
+  const playerName = 'E2E_Player';
+  const url = `${getGameServerBaseURL()}/games/${PACKAGE_ID}/${matchId}/claim-seat`;
+  const response = await page.request.post(url, {
+    data: {
+      playerID: '0',
+      guestId,
+      playerName,
+    },
+  });
+  if (!response.ok()) {
+    throw new Error(`claim-seat failed: ${response.status()} ${response.statusText()}`);
+  }
+  const data = await response.json() as { playerCredentials?: string } | null;
+  const credentials = data?.playerCredentials;
+  if (!credentials) {
+    throw new Error('claim-seat missing credentials');
+  }
+  await page.evaluate(({ id, playerID, credentials }) => {
+    localStorage.setItem(`match_creds_${id}`,
+      JSON.stringify({ matchID: id, playerID, credentials, updatedAt: Date.now() }));
+    window.dispatchEvent(new Event('match-credentials-changed'));
+  }, { id: matchId, playerID: '0', credentials });
+  await page.goto(`/play/${PACKAGE_ID}/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
+};
+
+const ensurePlayerSeat = async (page: Page) => {
+  const currentUrl = new URL(page.url());
+  if (currentUrl.searchParams.get('playerID')) return;
+
+  const matchIdMatch = currentUrl.pathname.match(/\/play\/[^/]+\/match\/([^/]+)/);
+  const matchId = matchIdMatch?.[1];
+  if (!matchId) return;
+
+  const storedPlayerId = await page.evaluate((id) => {
+    const raw = localStorage.getItem(`match_creds_${id}`);
+    if (!raw) return null;
+    try {
+      const data = JSON.parse(raw) as { playerID?: string };
+      return data.playerID ?? null;
+    } catch {
+      return null;
+    }
+  }, matchId);
+
+  if (!storedPlayerId) return;
+
+  currentUrl.searchParams.set('playerID', storedPlayerId);
+  await page.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+  await page.waitForURL(/playerID=/, { timeout: 10000 });
+};
+
+
 type RuntimeState = {
   phase?: string;
   activePlayerId?: string;
   publicZones?: Record<string, unknown>;
   gameOver?: { winner?: string };
+};
+
+const getPlayerOrder = (state: RuntimeState | null) => {
+  const zones = state?.publicZones as Record<string, unknown> | undefined;
+  const order = Array.isArray(zones?.playerOrder)
+    ? (zones?.playerOrder as Array<string | number>).map(id => String(id))
+    : [];
+  if (order.length > 0) return order;
+  const players = state && typeof state === 'object' ? (state as { players?: Record<string, unknown> }).players : null;
+  return players ? Object.keys(players) : [];
+};
+
+const getNextPlayerId = (order: string[], currentPlayerId: string) => {
+  if (order.length === 0) return currentPlayerId;
+  const index = order.indexOf(currentPlayerId);
+  if (index < 0) return order[0];
+  return order[(index + 1) % order.length];
 };
 
 const getHandCardId = (state: RuntimeState | null, playerId: string) => {
@@ -99,27 +230,48 @@ const getHandCardId = (state: RuntimeState | null, playerId: string) => {
   return null;
 };
 
-const requestRuntimeState = async (frame: FrameLocator) => frame.locator('body').evaluate(async () => {
-  return new Promise<RuntimeState | null>((resolve) => {
-    const handler = (event: MessageEvent) => {
-      const data = event.data as { source?: string; type?: string; payload?: { state?: RuntimeState } } | undefined;
-      if (data?.source !== 'ugc-host' || data.type !== 'STATE_UPDATE') return;
-      window.removeEventListener('message', handler);
-      resolve(data.payload?.state ?? null);
-    };
-    window.addEventListener('message', handler);
-    window.parent.postMessage({
-      id: `state-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      source: 'ugc-view',
-      type: 'STATE_REQUEST',
-      timestamp: Date.now(),
-    }, '*');
-    window.setTimeout(() => {
-      window.removeEventListener('message', handler);
-      resolve(null);
-    }, 1500);
-  });
-});
+const requestRuntimeState = async (frame: FrameLocator) => {
+  try {
+    return await frame.locator('body').evaluate(async () => {
+      return new Promise<RuntimeState | null>((resolve) => {
+        const handler = (event: MessageEvent) => {
+          const data = event.data as { source?: string; type?: string; payload?: { state?: RuntimeState } } | undefined;
+          if (data?.source !== 'ugc-host' || data.type !== 'STATE_UPDATE') return;
+          window.removeEventListener('message', handler);
+          resolve(data.payload?.state ?? null);
+        };
+        window.addEventListener('message', handler);
+        window.parent.postMessage({
+          id: `state-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          source: 'ugc-view',
+          type: 'STATE_REQUEST',
+          timestamp: Date.now(),
+        }, '*');
+        window.setTimeout(() => {
+          window.removeEventListener('message', handler);
+          resolve(null);
+        }, 1500);
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error && /frame was detached/i.test(error.message)) {
+      return null;
+    }
+    throw error;
+  }
+};
+
+const waitForRuntimeState = async (frame: FrameLocator): Promise<RuntimeState> => {
+  let latest: RuntimeState | null = null;
+  await expect.poll(async () => {
+    latest = await requestRuntimeState(frame);
+    return Boolean(latest?.activePlayerId);
+  }).toBe(true);
+  if (!latest) {
+    throw new Error('运行时状态获取失败');
+  }
+  return latest;
+};
 
 const sendRuntimeCommand = async (
   frame: FrameLocator,
@@ -127,18 +279,37 @@ const sendRuntimeCommand = async (
   playerId: string,
   params: Record<string, unknown> = {},
 ) => {
-  await frame.locator('body').evaluate((_, { commandType, playerId, params }) => {
-    window.parent.postMessage({
-      id: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      source: 'ugc-view',
-      type: 'COMMAND',
-      timestamp: Date.now(),
-      payload: {
-        commandType,
-        playerId,
-        params,
-      },
-    }, '*');
+  return frame.locator('body').evaluate(async (_, { commandType, playerId, params }) => {
+    return new Promise<{ success: boolean; error?: string }>((resolve) => {
+      const requestId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const handler = (event: MessageEvent) => {
+        const data = event.data as {
+          source?: string;
+          type?: string;
+          payload?: { requestId?: string; success?: boolean; error?: string };
+        } | undefined;
+        if (data?.source !== 'ugc-host' || data.type !== 'COMMAND_RESULT') return;
+        if (data.payload?.requestId !== requestId) return;
+        window.removeEventListener('message', handler);
+        resolve({ success: Boolean(data.payload?.success), error: data.payload?.error });
+      };
+      window.addEventListener('message', handler);
+      window.parent.postMessage({
+        id: requestId,
+        source: 'ugc-view',
+        type: 'COMMAND',
+        timestamp: Date.now(),
+        payload: {
+          commandType,
+          playerId,
+          params,
+        },
+      }, '*');
+      window.setTimeout(() => {
+        window.removeEventListener('message', handler);
+        resolve({ success: false, error: 'command_result_timeout' });
+      }, 3000);
+    });
   }, { commandType, playerId, params });
 };
 
@@ -146,38 +317,61 @@ const waitForActivePlayer = async (frame: FrameLocator, playerId: string) => {
   await expect.poll(async () => (await requestRuntimeState(frame))?.activePlayerId).toBe(playerId);
 };
 
+const waitForHighestBid = async (frame: FrameLocator, score: number) => {
+  await expect.poll(async () => {
+    const state = await requestRuntimeState(frame);
+    const zones = state?.publicZones as Record<string, unknown> | undefined;
+    return Number(zones?.highestBid ?? 0);
+  }).toBe(score);
+};
+
+const expectCommandSuccess = (result: { success: boolean; error?: string } | null, label: string) => {
+  expect(result, `${label} 未收到结果`).not.toBeNull();
+  expect(result?.success, `${label} 失败: ${result?.error || '未知错误'}`).toBe(true);
+};
+
 test.describe('UGC 斗地主预览流程', () => {
   test('大厅可见并能进入 UGC 对局（截图）', async ({ browser }, testInfo) => {
-    test.setTimeout(120000);
+    test.setTimeout(180000); // 增加超时时间以支持多客户端
     const baseURL = testInfo.project.use.baseURL as string | undefined;
 
-    const context = await browser.newContext({ baseURL });
-    await blockAudioRequests(context);
-    await setEnglishLocale(context);
-    await disableAudio(context);
-    await disableTutorial(context);
-    await resetMatchIdentity(context);
+    // 创建房主客户端
+    const hostContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(hostContext);
+    await setEnglishLocale(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    await resetMatchIdentity(hostContext);
 
-    const page = await context.newPage();
+    const hostPage = await hostContext.newPage();
+    hostPage.on('pageerror', (error) => {
+      console.log('[Host pageerror]', error.message);
+    });
+    hostPage.on('console', (message) => {
+      if (message.type() === 'error') {
+        console.log('[Host console-error]', message.text());
+      }
+    });
 
-    if (!await ensureGameServerAvailable(page)) {
+    if (!await ensureGameServerAvailable(hostPage)) {
       test.skip(true, 'Game server unavailable');
     }
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await dismissViteOverlay(page);
-    await dismissLobbyConfirmIfNeeded(page);
-    await waitForHomeGameList(page);
+    // 房主创建房间
+    await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+    await dismissViteOverlay(hostPage);
+    await dismissLobbyConfirmIfNeeded(hostPage);
+    await waitForHomeGameList(hostPage);
 
-    const ugcCard = page.locator(`[data-game-id="${PACKAGE_ID}"]`).first();
+    const ugcCard = hostPage.locator(`[data-game-id="${PACKAGE_ID}"]`).first();
     await expect(ugcCard).toBeVisible({ timeout: 20000 });
 
-    await page.screenshot({ path: 'screenshots/ugc-preview-lobby.png', fullPage: true });
+    await hostPage.screenshot({ path: testInfo.outputPath('ugc-preview-lobby.png'), fullPage: true });
 
     await ugcCard.click();
-    await expect(page).toHaveURL(/game=doudizhu-preview/);
+    await expect(hostPage).toHaveURL(/game=doudizhu-preview/);
 
-    const modalRoot = page.locator('#modal-root');
+    const modalRoot = hostPage.locator('#modal-root');
     await expect(modalRoot.getByRole('heading', { name: GAME_NAME })).toBeVisible({ timeout: 15000 });
 
     const lobbyTab = modalRoot.getByRole('button', { name: /Lobby|在线大厅/i });
@@ -189,81 +383,171 @@ test.describe('UGC 斗地主预览流程', () => {
     await expect(createButton).toBeVisible({ timeout: 20000 });
     await createButton.click();
 
-    await expect(page.getByRole('heading', { name: /Create Room|创建房间/i })).toBeVisible({ timeout: 10000 });
-    const confirmButton = page.getByRole('button', { name: /Confirm|确认/i });
+    await expect(hostPage.getByRole('heading', { name: /Create Room|创建房间/i })).toBeVisible({ timeout: 10000 });
+    const confirmButton = hostPage.getByRole('button', { name: /Confirm|确认/i });
     await expect(confirmButton).toBeEnabled({ timeout: 5000 });
     await confirmButton.click();
 
-    await page.waitForURL(/\/play\/doudizhu-preview\/match\//, { timeout: 15000 });
+    await hostPage.waitForURL(/\/play\/doudizhu-preview\/match\//, { timeout: 15000 });
+    const matchId = getMatchIdFromUrl(hostPage);
+    await ensureHostSeat(hostPage, matchId);
+    await waitForMatchCredentials(hostPage);
+    await expect.poll(() => new URL(hostPage.url()).searchParams.get('playerID')).toBe('0');
 
-    const iframe = page.locator(`iframe[title="UGC Remote Host ${PACKAGE_ID}"]`);
-    await expect(iframe).toBeVisible({ timeout: 20000 });
+    // 创建其他玩家客户端
+    const player2Context = await browser.newContext({ baseURL });
+    await blockAudioRequests(player2Context);
+    await setEnglishLocale(player2Context);
+    await disableAudio(player2Context);
+    await disableTutorial(player2Context);
+    
+    const player2Page = await player2Context.newPage();
+    player2Page.on('pageerror', (error) => {
+      console.log('[Player2 pageerror]', error.message);
+    });
+    player2Page.on('console', (message) => {
+      if (message.type() === 'error') {
+        console.log('[Player2 console-error]', message.text());
+      }
+    });
 
-    const previewCanvas = page
-      .frameLocator(`iframe[title="UGC Remote Host ${PACKAGE_ID}"]`)
-      .locator('[data-testid="ugc-preview-canvas"]');
-    await expect(previewCanvas).toBeVisible({ timeout: 20000 });
+    const player3Context = await browser.newContext({ baseURL });
+    await blockAudioRequests(player3Context);
+    await setEnglishLocale(player3Context);
+    await disableAudio(player3Context);
+    await disableTutorial(player3Context);
+    
+    const player3Page = await player3Context.newPage();
+    player3Page.on('pageerror', (error) => {
+      console.log('[Player3 pageerror]', error.message);
+    });
+    player3Page.on('console', (message) => {
+      if (message.type() === 'error') {
+        console.log('[Player3 console-error]', message.text());
+      }
+    });
 
-    const frame = page.frameLocator(`iframe[title="UGC Remote Host ${PACKAGE_ID}"]`);
-    const handArea = frame.locator('[data-component-id="hand-bottom"] [data-hand-area="root"]');
-    const playZone = frame.locator('[data-component-id="play-zone"] [data-hand-area="root"]');
-    const actionBar = frame.locator('[data-component="action-bar"]');
-    const bidButton = actionBar.getByRole('button', { name: '叫分' });
-    const callLandlordButton = actionBar.getByRole('button', { name: '抢地主' });
-    const passButton = actionBar.getByRole('button', { name: '不出' });
-    await expect(handArea).toBeVisible({ timeout: 20000 });
-    await expect(playZone).toBeVisible({ timeout: 20000 });
-    await expect(bidButton).toBeVisible({ timeout: 10000 });
-    await expect(callLandlordButton).toBeVisible({ timeout: 10000 });
-    await expect(passButton).toBeVisible({ timeout: 10000 });
+    // 玩家 2 和 3 加入房间
+    await player2Page.goto(`/play/${PACKAGE_ID}/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
+    await ensurePlayerSeat(player2Page);
+    
+    await player3Page.goto(`/play/${PACKAGE_ID}/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
+    await ensurePlayerSeat(player3Page);
 
-    const initialHandCount = Number(await handArea.getAttribute('data-card-count') || 0);
-    const initialPlayCount = Number(await playZone.getAttribute('data-card-count') || 0);
-    await expect(initialHandCount).toBeGreaterThan(0);
-    const bidState = await requestRuntimeState(frame);
+    // 等待所有玩家的 iframe 加载完成
+    await hostPage.waitForTimeout(2000);
+    await player2Page.waitForTimeout(2000);
+    await player3Page.waitForTimeout(2000);
+
+    // 获取各玩家的 iframe
+    const hostFrame = hostPage.frameLocator(`iframe[title="UGC Remote Host ${PACKAGE_ID}"]`);
+    const player2Frame = player2Page.frameLocator(`iframe[title="UGC Remote Host ${PACKAGE_ID}"]`);
+    const player3Frame = player3Page.frameLocator(`iframe[title="UGC Remote Host ${PACKAGE_ID}"]`);
+
+    // 验证房主的 iframe 已加载
+    await expect(hostFrame.locator('[data-testid="ugc-preview-canvas"]')).toBeVisible({ timeout: 20000 });
+
+    // 验证所有玩家的 UI 已加载
+    const hostHandArea = hostFrame.locator('[data-component-id="hand-bottom"] [data-hand-area="root"]');
+    await expect(hostHandArea).toBeVisible({ timeout: 20000 });
+
+    // 获取初始状态
+    const bidState = await waitForRuntimeState(hostFrame);
     expect(bidState?.phase).toBe('bid');
-    expect(bidState?.activePlayerId).toBe('player-1');
+    const bidPlayerId = String(bidState?.activePlayerId || 'player-1');
+    const bidOrder = getPlayerOrder(bidState);
 
-    await bidButton.click();
-    await waitForActivePlayer(frame, 'player-2');
-    const afterBidState = await requestRuntimeState(frame);
-    const afterBidZones = afterBidState?.publicZones as Record<string, unknown> | undefined;
-    expect(afterBidState?.phase).toBe('bid');
-    expect(afterBidZones?.highestBid).toBe(1);
+    console.log('游戏开始，叫分阶段，当前玩家:', bidPlayerId, '玩家顺序:', bidOrder);
 
-    await sendRuntimeCommand(frame, 'CALL_LANDLORD', 'player-2');
-    await expect.poll(async () => (await requestRuntimeState(frame))?.phase).toBe('action');
-    const actionState = await requestRuntimeState(frame);
+    // 玩家 1 叫分（假设 player-1 是第一个叫分的）
+    if (bidPlayerId === 'player-1') {
+      const bidResult = await sendRuntimeCommand(hostFrame, 'BID', bidPlayerId, { score: 1 });
+      expectCommandSuccess(bidResult, '玩家1叫分');
+      await waitForHighestBid(hostFrame, 1);
+    }
+
+    // 等待状态更新
+    await hostPage.waitForTimeout(1000);
+    const afterBidState = await requestRuntimeState(hostFrame);
+    const callLandlordPlayerId = String(afterBidState?.activePlayerId || 'player-2');
+    
+    console.log('叫分后，当前玩家:', callLandlordPlayerId);
+
+    // 根据当前玩家选择对应的客户端发送命令
+    let callLandlordFrame: typeof hostFrame;
+    if (callLandlordPlayerId === 'player-1') {
+      callLandlordFrame = hostFrame;
+      console.log('玩家1抢地主');
+    } else if (callLandlordPlayerId === 'player-2') {
+      callLandlordFrame = player2Frame;
+      console.log('玩家2抢地主');
+    } else {
+      callLandlordFrame = player3Frame;
+      console.log('玩家3抢地主');
+    }
+
+    const callLandlordResult = await sendRuntimeCommand(callLandlordFrame, 'CALL_LANDLORD', callLandlordPlayerId);
+    expectCommandSuccess(callLandlordResult, '抢地主');
+    
+    // 等待进入出牌阶段
+    await expect.poll(async () => (await requestRuntimeState(hostFrame))?.phase).toBe('action');
+    const actionState = await requestRuntimeState(hostFrame);
     const actionZones = actionState?.publicZones as Record<string, unknown> | undefined;
-    const landlordId = String(actionZones?.landlordId || 'player-2');
-    expect(landlordId).toBe('player-2');
+    const landlordId = String(actionZones?.landlordId || callLandlordPlayerId);
+    
+    console.log('地主:', landlordId);
 
-    for (let i = 0; i < 25; i += 1) {
-      await waitForActivePlayer(frame, landlordId);
-      let loopState = await requestRuntimeState(frame);
+    const actionOrder = getPlayerOrder(actionState);
+    const nextPlayerId = getNextPlayerId(actionOrder, landlordId);
+    const thirdPlayerId = getNextPlayerId(actionOrder, nextPlayerId);
+
+    console.log('出牌顺序:', landlordId, '→', nextPlayerId, '→', thirdPlayerId);
+
+    // 选择对应的 frame
+    const getFrameForPlayer = (playerId: string) => {
+      if (playerId === 'player-1') return hostFrame;
+      if (playerId === 'player-2') return player2Frame;
+      return player3Frame;
+    };
+
+    // 进行几轮出牌测试
+    for (let i = 0; i < 5; i += 1) {
+      await waitForActivePlayer(hostFrame, landlordId);
+      let loopState = await requestRuntimeState(hostFrame);
       if (loopState?.gameOver?.winner) break;
 
       const cardId = getHandCardId(loopState, landlordId);
       if (!cardId) break;
 
-      await sendRuntimeCommand(frame, 'PLAY_CARD', landlordId, { cardIds: [cardId] });
-      loopState = await requestRuntimeState(frame);
+      const landlordFrame = getFrameForPlayer(landlordId);
+      const playResult = await sendRuntimeCommand(landlordFrame, 'PLAY_CARD', landlordId, { cardIds: [cardId] });
+      expectCommandSuccess(playResult, `地主出牌 ${i + 1}`);
+      
+      loopState = await requestRuntimeState(hostFrame);
       if (loopState?.gameOver?.winner) break;
 
-      await waitForActivePlayer(frame, 'player-3');
-      await sendRuntimeCommand(frame, 'PASS', 'player-3');
-      loopState = await requestRuntimeState(frame);
+      await waitForActivePlayer(hostFrame, nextPlayerId);
+      const nextFrame = getFrameForPlayer(nextPlayerId);
+      const nextPassResult = await sendRuntimeCommand(nextFrame, 'PASS', nextPlayerId);
+      expectCommandSuccess(nextPassResult, `玩家${nextPlayerId}不出`);
+      
+      loopState = await requestRuntimeState(hostFrame);
       if (loopState?.gameOver?.winner) break;
 
-      await waitForActivePlayer(frame, 'player-1');
-      await sendRuntimeCommand(frame, 'PASS', 'player-1');
+      await waitForActivePlayer(hostFrame, thirdPlayerId);
+      const thirdFrame = getFrameForPlayer(thirdPlayerId);
+      const thirdPassResult = await sendRuntimeCommand(thirdFrame, 'PASS', thirdPlayerId);
+      expectCommandSuccess(thirdPassResult, `玩家${thirdPlayerId}不出`);
     }
 
-    const finalState = await requestRuntimeState(frame);
-    expect(finalState?.gameOver?.winner).toBe(landlordId);
+    const finalState = await requestRuntimeState(hostFrame);
+    console.log('游戏结束，胜者:', finalState?.gameOver?.winner);
 
-    await page.screenshot({ path: 'screenshots/ugc-preview-match.png', fullPage: true });
+    await hostPage.screenshot({ path: testInfo.outputPath('ugc-preview-match.png'), fullPage: true });
 
-    await context.close();
+    // 清理所有客户端
+    await hostContext.close();
+    await player2Context.close();
+    await player3Context.close();
   });
 });

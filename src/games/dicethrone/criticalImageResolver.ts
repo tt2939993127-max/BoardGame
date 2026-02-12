@@ -55,6 +55,12 @@ function getPlayerBoardPath(charId: SelectableCharacterId): string {
     return `dicethrone/images/${dir}/player-board`;
 }
 
+/** 获取角色的提示板图片路径 */
+function getTipBoardPath(charId: SelectableCharacterId): string {
+    const dir = CHARACTER_DIR_MAP[charId];
+    return `dicethrone/images/${dir}/tip`;
+}
+
 /** 获取角色的卡牌图集路径 */
 function getAbilityCardsPath(charId: SelectableCharacterId): string {
     const dir = CHARACTER_DIR_MAP[charId];
@@ -79,11 +85,13 @@ function getStatusIconsPath(charId: SelectableCharacterId): string {
 
 /** 通用资源路径 */
 const COMMON_PATHS = {
+    background: 'dicethrone/images/Common/background',
     cardBackground: 'dicethrone/images/Common/card-background',
     characterPortraits: 'dicethrone/images/Common/character-portraits',
 } as const;
 
 const COMMON_CRITICAL_PATHS = [
+    COMMON_PATHS.background,
     COMMON_PATHS.cardBackground,
     COMMON_PATHS.characterPortraits,
 ];
@@ -111,7 +119,7 @@ function extractSelectedCharacters(core: DiceThroneCore): SelectableCharacterId[
  * 检查是否处于角色选择阶段
  */
 function isInSetupPhase(core: DiceThroneCore): boolean {
-    return core.turnPhase === 'setup';
+    return !core.hostStarted;
 }
 
 /**
@@ -144,11 +152,12 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
     const inSetup = isInSetupPhase(core);
 
     if (inSetup) {
-        // 角色选择阶段：player-board 为关键
+        // 角色选择阶段：player-board 和 tip-board 为关键（选择界面需要预览）
         const allPlayerBoards = IMPLEMENTED_CHARACTERS.map(getPlayerBoardPath);
+        const allTipBoards = IMPLEMENTED_CHARACTERS.map(getTipBoardPath);
 
         return {
-            critical: [...COMMON_CRITICAL_PATHS, ...allPlayerBoards],
+            critical: [...COMMON_CRITICAL_PATHS, ...allPlayerBoards, ...allTipBoards],
             warm: [],
         };
     }
@@ -167,6 +176,7 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
 
     for (const charId of selectedCharacters) {
         criticalPaths.push(getPlayerBoardPath(charId));
+        criticalPaths.push(getTipBoardPath(charId));
         criticalPaths.push(getAbilityCardsPath(charId));
         criticalPaths.push(getDicePath(charId));
         criticalPaths.push(getStatusIconsPath(charId));

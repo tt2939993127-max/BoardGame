@@ -18,6 +18,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -82,10 +83,6 @@ function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, t
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, defaultRandom);
-}
-
-function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
-    return events.reduce((s, e) => reduce(s, e), state);
 }
 
 // ============================================================================
@@ -180,7 +177,7 @@ describe('HAND_SHUFFLED_INTO_DECK reducer', () => {
 // ============================================================================
 
 describe('僵尸派系能力', () => {
-    it('zombie_grave_digger: 从弃牌堆取回一个随从', () => {
+    it('zombie_grave_digger: 单张随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -196,14 +193,10 @@ describe('僵尸派系能力', () => {
         });
 
         const events = execPlayMinion(state, '0', 'm1', 0);
-        const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-        expect(recoverEvents.length).toBe(1);
-        // 应取回第一个随从 d2（跳过行动卡 d1）
-        expect((recoverEvents[0] as any).payload.cardUids).toEqual(['d2']);
-
-        const newState = applyEvents(state, events);
-        expect(newState.players['0'].hand.some(c => c.uid === 'd2')).toBe(true);
-        expect(newState.players['0'].discard.some(c => c.uid === 'd2')).toBe(false);
+        // 单张随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_digger');
     });
 
     it('zombie_grave_digger: 弃牌堆无随从时不产生事件', () => {
@@ -223,7 +216,7 @@ describe('僵尸派系能力', () => {
         expect(recoverEvents.length).toBe(0);
     });
 
-    it('zombie_walker: 弃掉牌库顶的牌', () => {
+    it('zombie_walker: 创建 Prompt 选择弃掉或保留', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -236,14 +229,9 @@ describe('僵尸派系能力', () => {
         });
 
         const events = execPlayMinion(state, '0', 'm1', 0);
-        const discardEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DISCARDED);
-        expect(discardEvents.length).toBe(1);
-        expect((discardEvents[0] as any).payload.cardUids).toEqual(['d1']);
-
-        const newState = applyEvents(state, events);
-        expect(newState.players['0'].discard.some(c => c.uid === 'd1')).toBe(true);
-        expect(newState.players['0'].deck.length).toBe(1);
-        expect(newState.players['0'].deck[0].uid).toBe('d2');
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_walker');
     });
 
     it('zombie_grave_robbing: 多张弃牌时创建 Prompt', () => {
@@ -262,12 +250,12 @@ describe('僵尸派系能力', () => {
 
         const events = execPlayAction(state, '0', 'a1');
         // 多张弃牌 → Prompt 选择
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('zombie_grave_robbing');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_robbing');
     });
 
-    it('zombie_grave_robbing: 单张弃牌时自动取回', () => {
+    it('zombie_grave_robbing: 单张弃牌时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -279,9 +267,10 @@ describe('僵尸派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-        expect(recoverEvents.length).toBe(1);
-        expect((recoverEvents[0] as any).payload.cardUids).toEqual(['d1']);
+        // 单张弃牌时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_robbing');
     });
 
     it('zombie_not_enough_bullets: 多组同名随从时创建 Prompt', () => {
@@ -302,12 +291,12 @@ describe('僵尸派系能力', () => {
 
         const events = execPlayAction(state, '0', 'a1');
         // 2组不同 defId → Prompt 选择
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('zombie_not_enough_bullets');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_not_enough_bullets');
     });
 
-    it('zombie_not_enough_bullets: 单组同名随从时自动取回', () => {
+    it('zombie_not_enough_bullets: 单组同名随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -323,13 +312,10 @@ describe('僵尸派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-        expect(recoverEvents.length).toBe(1);
-        const recoveredUids = (recoverEvents[0] as any).payload.cardUids;
-        expect(recoveredUids.length).toBe(3);
-        expect(recoveredUids).toContain('d1');
-        expect(recoveredUids).toContain('d2');
-        expect(recoveredUids).toContain('d4');
+        // 单组同名随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_not_enough_bullets');
     });
 
     it('zombie_lend_a_hand: 弃牌堆洗回牌库', () => {
@@ -411,7 +397,7 @@ describe('僵尸派系能力', () => {
         expect(limitEvents.length).toBe(0);
     });
 
-    it('zombie_mall_crawl: 搜索牌库同名卡放入弃牌堆', () => {
+    it('zombie_mall_crawl: 多组不同卡名时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -427,18 +413,9 @@ describe('僵尸派系能力', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 应有 CARDS_DRAWN（搜索）+ CARDS_DISCARDED（弃掉）
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        const discardEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DISCARDED);
-        expect(drawEvents.length).toBe(1);
-        expect(discardEvents.length).toBe(1);
-        // 应找到 2 张 zombie_walker
-        expect((drawEvents[0] as any).payload.count).toBe(2);
-
-        const newState = applyEvents(state, events);
-        // 牌库只剩 zombie_grave_digger
-        expect(newState.players['0'].deck.length).toBe(1);
-        expect(newState.players['0'].deck[0].defId).toBe('zombie_grave_digger');
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_mall_crawl');
     });
 });
 
@@ -514,7 +491,7 @@ describe('巫师派系能力（新增）', () => {
         expect(newState.players['0'].deck.length).toBe(0);
     });
 
-    it('wizard_sacrifice: 消灭己方随从并抽等量力量的牌', () => {
+    it('wizard_sacrifice: 多个己方随从时创建 Prompt 选择', () => {
         const deckCards = Array.from({ length: 10 }, (_, i) =>
             makeCard(`d${i}`, 'test_card', 'minion', '0')
         );
@@ -535,23 +512,9 @@ describe('巫师派系能力（新增）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-
-        // MVP：自动选力量最低的 m0(力量2)
-        expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('m0');
-
-        // 抽 2 张牌（等于 m0 的力量）
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.count).toBe(2);
-
-        const newState = applyEvents(state, events);
-        // m0 被消灭，只剩 m1
-        expect(newState.bases[0].minions.length).toBe(1);
-        expect(newState.bases[0].minions[0].uid).toBe('m1');
-        // m0 进弃牌堆
-        expect(newState.players['0'].discard.some(c => c.uid === 'm0')).toBe(true);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('wizard_sacrifice');
     });
 
     it('wizard_sacrifice: 没有己方随从时不产生事件', () => {
@@ -575,7 +538,7 @@ describe('巫师派系能力（新增）', () => {
         expect(drawEvents.length).toBe(0);
     });
 
-    it('wizard_sacrifice: 力量含修正值', () => {
+    it('wizard_sacrifice: 单个己方随从时创建 Prompt', () => {
         const deckCards = Array.from({ length: 10 }, (_, i) =>
             makeCard(`d${i}`, 'test_card', 'minion', '0')
         );
@@ -595,8 +558,9 @@ describe('巫师派系能力（新增）', () => {
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        // 应抽 5 张（3 基础 + 2 修正）
-        expect((drawEvents[0] as any).payload.count).toBe(5);
+        // 单个己方随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('wizard_sacrifice');
     });
 });

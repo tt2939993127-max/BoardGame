@@ -27,17 +27,21 @@ import {
 import { dispatchEngineNotification } from './notifications';
 import { UNDO_COMMANDS } from './systems/UndoSystem';
 import { REMATCH_COMMANDS } from './systems/RematchSystem';
-import { PROMPT_COMMANDS } from './systems/PromptSystem';
+import { INTERACTION_COMMANDS } from './systems/InteractionSystem';
 import { FLOW_COMMANDS } from './systems/FlowSystem';
 import { TUTORIAL_COMMANDS } from './systems/TutorialSystem';
+import { RESPONSE_WINDOW_COMMANDS } from './systems/ResponseWindowSystem';
+import { CHEAT_COMMANDS } from './systems/CheatSystem';
 
-// 所有系统命令（自动合并到 commandTypes）
+// 所有系统命令（自动合并到 commandTypes，游戏层无需手动添加）
 const ALL_SYSTEM_COMMANDS: string[] = [
     ...Object.values(FLOW_COMMANDS),
     ...Object.values(UNDO_COMMANDS),
     ...Object.values(REMATCH_COMMANDS),
-    ...Object.values(PROMPT_COMMANDS),
+    ...Object.values(INTERACTION_COMMANDS),
     ...Object.values(TUTORIAL_COMMANDS),
+    ...Object.values(RESPONSE_WINDOW_COMMANDS),
+    ...Object.values(CHEAT_COMMANDS),
 ];
 
 const RANDOM_SEQUENCE_MAX = 1000000;
@@ -279,15 +283,6 @@ export function createGameAdapter<
                 systemsConfig,
             };
 
-            // 调试日志
-            if (commandType === 'ADVANCE_PHASE') {
-                console.log('[ADVANCE_PHASE] 执行前', {
-                    commandType,
-                    playerId: normalizedPlayerId,
-                    currentPhase: (G as { core?: { turnPhase?: string } }).core?.turnPhase,
-                });
-            }
-
             let result = executePipeline(
                 pipelineConfig,
                 G,
@@ -315,16 +310,6 @@ export function createGameAdapter<
                 }
             }
 
-            // 调试日志
-            if (commandType === 'ADVANCE_PHASE') {
-                console.log('[ADVANCE_PHASE] 执行后', {
-                    success: result.success,
-                    error: result.error,
-                    'sys.phase': (result.state as { sys?: { phase?: string } }).sys?.phase,
-                    'core.turnPhase': (result.state as { core?: { turnPhase?: string } }).core?.turnPhase,
-                });
-            }
-
             if (isUndoCommand && isDev) {
                 console.log('[撤销调试][结果]', {
                     commandType,
@@ -344,7 +329,18 @@ export function createGameAdapter<
             }
 
             // 直接修改 G（Boardgame.io 使用 Immer）
-            Object.assign(G, result.state);
+            try {
+                if (result.state && typeof result.state === 'object' && 'core' in result.state && 'sys' in result.state) {
+                    G.core = result.state.core;
+                    G.sys = result.state.sys;
+                } else {
+                    console.error('[Adapter] Invalid result.state: missing core or sys', result.state);
+                    return;
+                }
+            } catch (error) {
+                console.error('[Adapter] Error updating state:', error);
+                return;
+            }
         };
     };
 

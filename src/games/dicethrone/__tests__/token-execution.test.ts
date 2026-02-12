@@ -49,7 +49,6 @@ function createSetupAtPlayer0Discard(
     const baseSetup = createNoResponseSetupWithEmptyHand();
     return (playerIds: string[], random: typeof fixedRandom) => {
         const state = baseSetup(playerIds, random);
-        state.core.turnPhase = 'discard';
         (state.sys as any).phase = 'discard';
         for (const { playerId, statusId, stacks } of entries) {
             const player = state.core.players[playerId];
@@ -70,7 +69,6 @@ function createSetupAtPlayer1Upkeep(
     const baseSetup = createNoResponseSetupWithEmptyHand();
     return (playerIds: string[], random: typeof fixedRandom) => {
         const state = baseSetup(playerIds, random);
-        state.core.turnPhase = 'upkeep';
         state.core.activePlayerId = '1';
         state.core.turnNumber = 2;
         (state.sys as any).phase = 'upkeep';
@@ -589,7 +587,6 @@ describe('致盲 (Blinded) 攻击判定', () => {
             setup: (playerIds, random) => {
                 const state = baseSetup(playerIds, random);
                 // 设置 player 1 在 offensiveRoll 阶段，有 pendingAttack 和致盲
-                state.core.turnPhase = 'offensiveRoll';
                 state.core.activePlayerId = '1';
                 state.core.turnNumber = 2;
                 (state.sys as any).phase = 'offensiveRoll';
@@ -615,7 +612,7 @@ describe('致盲 (Blinded) 攻击判定', () => {
         // 致盲被移除
         expect(core.players['1'].statusEffects[STATUS_IDS.BLINDED] ?? 0).toBe(0);
         // fixedRandom.d(6) = 1，1 <= 2 所以攻击失败，跳到 main2
-        expect(core.turnPhase).toBe('main2');
+        expect(result.finalState.sys.phase).toBe('main2');
     });
 });
 
@@ -739,7 +736,6 @@ function createSetupAtOffensiveRollWithDaze(
     const baseSetup = createNoResponseSetupWithEmptyHand();
     return (playerIds: string[], random: typeof fixedRandom) => {
         const state = baseSetup(playerIds, random);
-        state.core.turnPhase = 'offensiveRoll';
         state.core.activePlayerId = attackerId;
         state.core.turnNumber = 2;
         (state.sys as any).phase = 'offensiveRoll';
@@ -791,7 +787,7 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
         // daze 被移除
         expect(core.players['0'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
         // 进入额外攻击的 offensiveRoll
-        expect(core.turnPhase).toBe('offensiveRoll');
+        expect(result.finalState.sys.phase).toBe('offensiveRoll');
         // 额外攻击进行中标志已设置
         expect(core.extraAttackInProgress).toBeDefined();
         expect(core.extraAttackInProgress!.attackerId).toBe('1'); // 防御方获得额外攻击
@@ -814,7 +810,7 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
         });
         const core = result.finalState.core;
         // 进入 main2
-        expect(core.turnPhase).toBe('main2');
+        expect(result.finalState.sys.phase).toBe('main2');
         // 额外攻击标志已清除
         expect(core.extraAttackInProgress).toBeUndefined();
         // 活跃玩家恢复为原回合玩家（Player 0）
@@ -837,7 +833,7 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
         });
         const core = result.finalState.core;
         // 最终应在 main2，不会再次进入 offensiveRoll
-        expect(core.turnPhase).toBe('main2');
+        expect(result.finalState.sys.phase).toBe('main2');
         expect(core.extraAttackInProgress).toBeUndefined();
     });
 
@@ -852,7 +848,6 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
             ],
             setup: (playerIds, random) => {
                 const state = baseSetup(playerIds, random);
-                state.core.turnPhase = 'offensiveRoll';
                 state.core.activePlayerId = '0';
                 state.core.turnNumber = 2;
                 (state.sys as any).phase = 'offensiveRoll';
@@ -877,7 +872,7 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
         // daze 被移除
         expect(core.players['0'].statusEffects[STATUS_IDS.DAZE] ?? 0).toBe(0);
         // 进入额外攻击的 offensiveRoll
-        expect(core.turnPhase).toBe('offensiveRoll');
+        expect(result.finalState.sys.phase).toBe('offensiveRoll');
         expect(core.extraAttackInProgress).toBeDefined();
         expect(core.extraAttackInProgress!.attackerId).toBe('1');
         expect(core.activePlayerId).toBe('1');
@@ -896,7 +891,7 @@ describe('晕眩 (Daze) 额外攻击执行', () => {
             }),
         });
         const core = result.finalState.core;
-        expect(core.turnPhase).toBe('main2');
+        expect(result.finalState.sys.phase).toBe('main2');
         expect(core.extraAttackInProgress).toBeUndefined();
         expect(core.activePlayerId).toBe('0');
     });

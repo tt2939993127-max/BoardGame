@@ -4,6 +4,7 @@ import type { Card } from '../domain/types';
 import { CardSprite } from './CardSprite';
 import { GameButton } from './GameButton';
 import { resolveCardAtlasId } from './cardAtlas';
+import { UI_Z_INDEX } from '../../../core';
 
 interface CardSelectorOverlayProps {
     /** 可选卡牌列表（不需要包含 position，只需要 Card 数据） */
@@ -41,7 +42,10 @@ export const CardSelectorOverlay: React.FC<CardSelectorOverlayProps> = ({
     // 如果没有卡牌，直接显示提示并提供关闭按钮
     if (!cards || cards.length === 0) {
         return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+            <div
+                className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in"
+                style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+            >
                 <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl text-center max-w-sm mx-4">
                     <h3 className="text-xl text-white font-bold mb-4">{title}</h3>
                     <p className="text-slate-300 mb-6">{t('cardSelector.empty')}</p>
@@ -60,7 +64,8 @@ export const CardSelectorOverlay: React.FC<CardSelectorOverlayProps> = ({
 
     return (
         <div 
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in"
+            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
             data-testid="sw-card-selector-overlay"
         >
             {/* 标题区域 */}

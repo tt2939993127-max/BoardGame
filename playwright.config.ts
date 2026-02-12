@@ -18,7 +18,7 @@ const webServerConfig = process.env.PW_SKIP_WEB_SERVER
         ...(shouldStartFrontend
             ? [
                 {
-                    command: `npm run generate:manifests && npx vite --port ${port} --strictPort`,
+                    command: `node scripts/ugc/ugc-publish-preview.mjs && npm run generate:manifests && npx vite --port ${port} --strictPort`,
                     url: baseURL,
                     reuseExistingServer,
                     timeout: 120000,
@@ -28,7 +28,7 @@ const webServerConfig = process.env.PW_SKIP_WEB_SERVER
         ...(shouldStartGameServer
             ? [
                 {
-                    command: `npm run generate:manifests && cross-env USE_PERSISTENT_STORAGE=false GAME_SERVER_PORT=${gameServerPort} npm run dev:game`,
+                    command: `node scripts/ugc/ugc-publish-preview.mjs && npm run generate:manifests && cross-env USE_PERSISTENT_STORAGE=false GAME_SERVER_PORT=${gameServerPort} npm run dev:game`,
                     url: `http://localhost:${gameServerPort}/games`,
                     reuseExistingServer,
                     timeout: 120000,
@@ -54,7 +54,9 @@ export default defineConfig({
     expect: {
         timeout: 5000
     },
-    fullyParallel: true,
+    // 当前所有测试共享同一个游戏服务器进程，服务端无 per-test 状态隔离，
+    // 因此必须串行执行。未来添加服务端状态重置后可改为并行。
+    fullyParallel: false,
     forbidOnly: !!process.env.CI,
     retries: 0,
     workers: 1,

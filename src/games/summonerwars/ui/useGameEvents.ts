@@ -5,7 +5,7 @@
  * 遵循 lastSeenEventId 模式，首次挂载跳过历史事件
  */
 
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { EventStreamEntry, MatchState } from '../../../engine/types';
 import type { SummonerWarsCore, PlayerId, CellCoord, UnitCard, StructureCard } from '../domain/types';
 import { SW_EVENTS } from '../domain/types';
@@ -15,6 +15,8 @@ import type { DiceFace } from '../config/dice';
 import { getDestroySpriteConfig } from './spriteHelpers';
 import type { FxBus } from '../../../engine/fx';
 import { SW_FX } from './fxSetup';
+import { playDeferredSound } from '../../../lib/audio/DeferredSoundMap';
+import type { UseVisualSequenceGateReturn } from '../../../components/game/framework/hooks/useVisualSequenceGate';
 
 // ============================================================================
 // 类型定义
@@ -34,7 +36,8 @@ export interface PendingAttack {
   target: CellCoord;
   attackType: 'melee' | 'ranged';
   hits: number;
-  damages: Array<{ position: CellCoord; damage: number }>;
+  attackEventId: number;
+  damages: Array<{ position: CellCoord; damage: number; eventId: number }>;
 }
 
 /** 临时可视缓存（死亡动画前保留本体） */
@@ -130,11 +133,13 @@ interface UseGameEventsParams {
   G: MatchState<SummonerWarsCore>;
   core: SummonerWarsCore;
   myPlayerId: string;
+  currentPhase: string;
   pushDestroyEffect: (data: Omit<DestroyEffectData, 'id'>) => void;
   fxBus: FxBus;
-  triggerShake: (intensity: string, type: string) => void;
-  /** 摧毁特效触发时的音效回调 */
-  onDestroySound?: (type: 'unit' | 'structure', isGate?: boolean) => void;
+  /** 掷骰结果展示时的音效回调 */
+  onDiceRollSound?: (diceCount: number) => void;
+  /** 视觉序列门控（框架层 hook 实例） */
+  gate: UseVisualSequenceGateReturn;
 }
 
 // ============================================================================
@@ -142,8 +147,8 @@ interface UseGameEventsParams {
 // ============================================================================
 
 export function useGameEvents({
-  G, core, myPlayerId,
-  pushDestroyEffect, fxBus, triggerShake, onDestroySound,
+  G, core, myPlayerId, currentPhase,
+  pushDestroyEffect, fxBus, onDiceRollSound, gate,
 }: UseGameEventsParams) {
   // 骰子结果状态
   const [diceResult, setDiceResult] = useState<DiceResultState | null>(null);
@@ -163,11 +168,28 @@ export function useGameEvents({
   // 攻击后技能模式（念力/高阶念力/读心传念）
   const [afterAttackAbilityMode, setAfterAttackAbilityMode] = useState<AfterAttackAbilityModeState | null>(null);
 
+  // 阶段切换时清理技能模式
+  useEffect(() => {
+    // 移动后技能（ancestral_bond, spirit_bond, structure_shift, frost_axe）只在移动阶段有效
+    if (abilityMode && currentPhase !== 'move') {
+      const movePhaseAbilities = ['ancestral_bond', 'spirit_bond', 'structure_shift', 'frost_axe'];
+      if (movePhaseAbilities.includes(abilityMode.abilityId)) {
+        setAbilityMode(null);
+      }
+    }
+    // 召唤阶段技能（revive_undead）只在召唤阶段有效
+    if (abilityMode && currentPhase !== 'summon') {
+      if (abilityMode.abilityId === 'revive_undead') {
+        setAbilityMode(null);
+      }
+    }
+  }, [currentPhase, abilityMode]);
+
   // 待播放的攻击效果队列
   const pendingAttackRef = useRef<PendingAttack | null>(null);
 
   // 待延迟播放的摧毁效果（含 isGate 标记用于音效区分）
-  const pendingDestroyRef = useRef<(DestroyEffectData & { isGate?: boolean })[]>([]);
+  const pendingDestroyRef = useRef<(DestroyEffectData & { isGate?: boolean; destroyEventId: number })[]>([]);
 
   // ============================================================================
   // 回调函数稳定化（避免 useLayoutEffect 因回调引用变化而重复执行）
@@ -176,10 +198,11 @@ export function useGameEvents({
   pushDestroyEffectRef.current = pushDestroyEffect;
   const fxBusRef = useRef(fxBus);
   fxBusRef.current = fxBus;
-  const triggerShakeRef = useRef(triggerShake);
-  triggerShakeRef.current = triggerShake;
-  const onDestroySoundRef = useRef(onDestroySound);
-  onDestroySoundRef.current = onDestroySound;
+  const onDiceRollSoundRef = useRef(onDiceRollSound);
+  onDiceRollSoundRef.current = onDiceRollSound;
+  // gate 回调稳定化
+  const gateRef = useRef(gate);
+  gateRef.current = gate;
 
   // 事件流诊断日志控制
   const eventStreamLogRef = useRef(0);
@@ -221,6 +244,7 @@ export function useGameEvents({
       pendingDestroyRef.current = [];
       setDiceResult(null);
       setDyingEntities([]);
+      gateRef.current.reset();
     }
 
     lastSeenEventId.current = nextLastSeenId;
@@ -234,27 +258,29 @@ export function useGameEvents({
     for (const entry of newEntries) {
       const event = entry.event;
 
-      // 召唤事件 - 落场震动 + 全屏震动
+      // 召唤事件 - 光柱特效（震动由 FeedbackPack on-impact 自动触发）
       if (event.type === SW_EVENTS.UNIT_SUMMONED) {
         const p = event.payload as { position: CellCoord; card: { unitClass?: string } };
         const intensity = p.card?.unitClass === 'champion' ? 'strong' : 'normal';
         fxBusRef.current.push(SW_FX.SUMMON, { cell: p.position, intensity });
-        triggerShakeRef.current(intensity, 'impact');
       }
 
-      // 攻击事件 - 显示骰子，效果队列化
+      // 攻击事件 - 显示骰子，效果队列化，开启视觉序列门控
       if (event.type === SW_EVENTS.UNIT_ATTACKED) {
         const p = event.payload as {
-          attackType: 'melee' | 'ranged'; diceResults: DiceFace[]; hits: number;
+          attackType: 'melee' | 'ranged'; diceResults: DiceFace[]; hits: number; diceCount?: number;
           target: CellCoord; attacker: CellCoord;
         };
         const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
         const isOpponentAttack = attackerUnit ? attackerUnit.owner !== myPlayerId : false;
 
+        gateRef.current.beginSequence();
         pendingAttackRef.current = {
           attacker: p.attacker, target: p.target,
-          attackType: p.attackType, hits: p.hits, damages: [],
+          attackType: p.attackType, hits: p.hits, attackEventId: entry.id, damages: [],
         };
+
+        onDiceRollSoundRef.current?.(p.diceCount ?? p.diceResults?.length ?? 1);
 
         setDiceResult({
           results: p.diceResults, attackType: p.attackType,
@@ -266,7 +292,7 @@ export function useGameEvents({
       if (event.type === SW_EVENTS.UNIT_DAMAGED) {
         const p = event.payload as { position: CellCoord; damage: number };
         if (pendingAttackRef.current) {
-          pendingAttackRef.current.damages.push({ position: p.position, damage: p.damage });
+          pendingAttackRef.current.damages.push({ position: p.position, damage: p.damage, eventId: entry.id });
         } else {
           fxBusRef.current.push(SW_FX.COMBAT_DAMAGE, {
             cell: p.position,
@@ -277,12 +303,12 @@ export function useGameEvents({
 
       // 单位摧毁事件
       if (event.type === SW_EVENTS.UNIT_DESTROYED) {
-        handleDestroyEvent(event.payload as Record<string, unknown>, 'unit');
+        handleDestroyEvent(event.payload as Record<string, unknown>, 'unit', entry.id);
       }
 
       // 建筑摧毁事件
       if (event.type === SW_EVENTS.STRUCTURE_DESTROYED) {
-        handleDestroyEvent(event.payload as Record<string, unknown>, 'structure');
+        handleDestroyEvent(event.payload as Record<string, unknown>, 'structure', entry.id);
       }
 
       // 充能事件 - 旋涡动画反馈
@@ -293,7 +319,7 @@ export function useGameEvents({
         }
       }
 
-      // 感染触发
+      // 感染触发（交互类：通过 gate 调度，攻击动画期间延迟）
       if (event.type === SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED) {
         const p = event.payload as {
           playerId: string; cardType: string; position: CellCoord;
@@ -308,30 +334,32 @@ export function useGameEvents({
             return false;
           });
           if (hasValidCard) {
-            setAbilityMode({
-              abilityId: 'infection', step: 'selectCard',
-              sourceUnitId: p.sourceUnitId ?? '', targetPosition: p.position,
+            const captured = { sourceUnitId: p.sourceUnitId ?? '', targetPosition: p.position };
+            gateRef.current.scheduleInteraction(() => {
+              setAbilityMode({
+                abilityId: 'infection', step: 'selectCard',
+                sourceUnitId: captured.sourceUnitId, targetPosition: captured.targetPosition,
+              });
             });
           }
         }
       }
 
-      // 灵魂转移请求
+      // 灵魂转移请求（交互类：通过 gate 调度）
       if (event.type === SW_EVENTS.SOUL_TRANSFER_REQUESTED) {
         const p = event.payload as {
           sourceUnitId: string; sourcePosition: CellCoord;
           victimPosition: CellCoord; ownerId: string;
         };
         if (p.ownerId === myPlayerId) {
-          setSoulTransferMode({
-            sourceUnitId: p.sourceUnitId,
-            sourcePosition: p.sourcePosition,
-            victimPosition: p.victimPosition,
+          const captured = { sourceUnitId: p.sourceUnitId, sourcePosition: p.sourcePosition, victimPosition: p.victimPosition };
+          gateRef.current.scheduleInteraction(() => {
+            setSoulTransferMode(captured);
           });
         }
       }
 
-      // 心灵捕获请求
+      // 心灵捕获请求（交互类：通过 gate 调度）
       if (event.type === SW_EVENTS.MIND_CAPTURE_REQUESTED) {
         const p = event.payload as {
           sourceUnitId: string; sourcePosition: CellCoord;
@@ -339,12 +367,12 @@ export function useGameEvents({
           ownerId: string; hits: number;
         };
         if (p.ownerId === myPlayerId) {
-          setMindCaptureMode({
-            sourceUnitId: p.sourceUnitId,
-            sourcePosition: p.sourcePosition,
-            targetPosition: p.targetPosition,
-            targetUnitId: p.targetUnitId,
-            hits: p.hits,
+          const captured = {
+            sourceUnitId: p.sourceUnitId, sourcePosition: p.sourcePosition,
+            targetPosition: p.targetPosition, targetUnitId: p.targetUnitId, hits: p.hits,
+          };
+          gateRef.current.scheduleInteraction(() => {
+            setMindCaptureMode(captured);
           });
         }
       }
@@ -358,10 +386,13 @@ export function useGameEvents({
           // 检查是否是我的单位
           const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
-            setAfterAttackAbilityMode({
+            const captured = {
               abilityId: p.abilityId as 'telekinesis' | 'high_telekinesis' | 'mind_transmission',
               sourceUnitId: p.sourceUnitId,
               sourcePosition: p.sourcePosition,
+            };
+            gateRef.current.scheduleInteraction(() => {
+              setAfterAttackAbilityMode(captured);
             });
           }
         }
@@ -399,13 +430,60 @@ export function useGameEvents({
             });
           }
         }
-        // 喂养巨食兽：攻击阶段结束时进入选择模式
+        // 喟养巨食兽：攻击阶段结束时进入选择模式
         if (p.abilityId === 'feed_beast_check') {
           const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
           if (unit && unit.owner === myPlayerId) {
             setAbilityMode({
               abilityId: 'feed_beast',
               step: 'selectUnit', // 选择相邻友方单位或自毁
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
+        // ================================================================
+        // afterMove 技能触发：移动后自动进入技能选择模式
+        // ================================================================
+        // 祖灵交流：充能自身或转移给3格内友方
+        if (p.abilityId === 'afterMove:spirit_bond') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'spirit_bond',
+              step: 'selectUnit',
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
+        // 祖灵羁绊：充能+转移给3格内友方（可选）
+        if (p.abilityId === 'afterMove:ancestral_bond') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'ancestral_bond',
+              step: 'selectUnit',
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
+        // 结构变换：推拉3格内友方建筑（可选）
+        if (p.abilityId === 'afterMove:structure_shift') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'structure_shift',
+              step: 'selectUnit',
+              sourceUnitId: p.sourceUnitId,
+            });
+          }
+        }
+        // 冰霜战斧：充能或消耗充能附加（可选）
+        if (p.abilityId === 'afterMove:frost_axe') {
+          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            setAbilityMode({
+              abilityId: 'frost_axe',
+              step: 'selectUnit',
               sourceUnitId: p.sourceUnitId,
             });
           }
@@ -428,7 +506,7 @@ export function useGameEvents({
   };
 
   /** 处理摧毁事件（单位/建筑通用） */
-  function handleDestroyEvent(payload: Record<string, unknown>, type: 'unit' | 'structure') {
+  function handleDestroyEvent(payload: Record<string, unknown>, type: 'unit' | 'structure', entryId: number) {
     const position = payload.position as CellCoord;
     const cardName = payload.cardName as string;
     const cardId = payload.cardId as string | undefined;
@@ -456,7 +534,7 @@ export function useGameEvents({
     );
 
     if (shouldDelay) {
-      pendingDestroyRef.current.push({ ...destroyEffect, isGate });
+      pendingDestroyRef.current.push({ ...destroyEffect, isGate, destroyEventId: entryId });
       if (atlasId !== undefined && frameIndex !== undefined) {
         setDyingEntities(prev => ([
           ...prev,
@@ -472,8 +550,9 @@ export function useGameEvents({
       }
     } else {
       pushDestroyEffectRef.current({ position, cardName, type, atlasId, frameIndex });
-      // 非延迟摧毁：立即播放音效
-      onDestroySoundRef.current?.(type, isGate);
+      // 非延迟摧毁：等 useEffect 将音效写入 DeferredSoundMap 后消费
+      const eid = entryId;
+      setTimeout(() => playDeferredSound(eid), 0);
     }
   }
 
@@ -488,7 +567,7 @@ export function useGameEvents({
     pendingAttackRef.current = null;
   }, []);
 
-  // 播放延迟的摧毁特效（含音效）
+  // 播放延迟的摧毁特效（含音效）+ 结束视觉序列门控
   const flushPendingDestroys = useCallback(() => {
     if (pendingDestroyRef.current.length > 0) {
       for (const effect of pendingDestroyRef.current) {
@@ -496,17 +575,19 @@ export function useGameEvents({
           position: effect.position, cardName: effect.cardName, type: effect.type,
           atlasId: effect.atlasId, frameIndex: effect.frameIndex,
         });
-        // 死亡/摧毁音效（传送门 vs 城墙区分）
-        onDestroySoundRef.current?.(effect.type, effect.isGate);
+        playDeferredSound(effect.destroyEventId);
       }
       pendingDestroyRef.current = [];
       setDyingEntities([]);
     }
+    // 结束视觉序列，排空交互队列（感染/灵魂转移/念力等延迟到此刻触发）
+    gateRef.current.endSequence();
   }, []);
 
   return {
     diceResult,
     dyingEntities,
+    isVisualBusy: gate.isVisualBusy,
     abilityMode,
     setAbilityMode,
     soulTransferMode,

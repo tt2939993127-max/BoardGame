@@ -8,10 +8,19 @@ import type {
   SummonerWarsCore,
   BoardUnit,
   BoardStructure,
+  BoardCell,
   GamePhase,
 } from './types';
 
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
+import {
+  isValidGridCoord,
+  manhattanDist,
+  isGridAdjacent,
+  getAdjacentPositions as getAdjacentPositionsEngine,
+  findOnGrid,
+  collectOnGrid,
+} from '../../../engine/primitives/grid';
 
 // ============================================================================
 // 常量
@@ -43,33 +52,22 @@ export const SECOND_PLAYER_MAGIC = 3;
 
 /** 检查坐标是否在棋盘内 */
 export function isValidCoord(coord: CellCoord): boolean {
-  return coord.row >= 0 && coord.row < BOARD_ROWS &&
-         coord.col >= 0 && coord.col < BOARD_COLS;
+  return isValidGridCoord(coord, BOARD_ROWS, BOARD_COLS);
 }
 
 /** 检查两个坐标是否相邻（不含对角线） */
 export function isAdjacent(a: CellCoord, b: CellCoord): boolean {
-  const dr = Math.abs(a.row - b.row);
-  const dc = Math.abs(a.col - b.col);
-  return (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
+  return isGridAdjacent(a, b);
 }
 
 /** 计算曼哈顿距离 */
 export function manhattanDistance(a: CellCoord, b: CellCoord): number {
-  return Math.abs(a.row - b.row) + Math.abs(a.col - b.col);
+  return manhattanDist(a, b);
 }
 
 /** 获取相邻格子 */
 export function getAdjacentCells(coord: CellCoord): CellCoord[] {
-  const directions = [
-    { row: -1, col: 0 },
-    { row: 1, col: 0 },
-    { row: 0, col: -1 },
-    { row: 0, col: 1 },
-  ];
-  return directions
-    .map(d => ({ row: coord.row + d.row, col: coord.col + d.col }))
-    .filter(isValidCoord);
+  return getAdjacentPositionsEngine(coord, BOARD_ROWS, BOARD_COLS);
 }
 
 /** 检查是否在直线上（用于远程攻击） */
@@ -124,16 +122,8 @@ export function isCellEmpty(state: SummonerWarsCore, coord: CellCoord): boolean 
 
 /** 获取玩家的所有单位 */
 export function getPlayerUnits(state: SummonerWarsCore, playerId: PlayerId): BoardUnit[] {
-  const units: BoardUnit[] = [];
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const unit = state.board[row][col].unit;
-      if (unit && unit.owner === playerId) {
-        units.push(unit);
-      }
-    }
-  }
-  return units;
+  return collectOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.owner === playerId)
+    .map(r => r.cell.unit!);
 }
 
 /** 获取玩家的召唤师 */
@@ -141,18 +131,17 @@ export function getSummoner(state: SummonerWarsCore, playerId: PlayerId): BoardU
   return getPlayerUnits(state, playerId).find(u => u.card.unitClass === 'summoner');
 }
 
+/** 按 cardId 查找单位在棋盘上的位置 */
+export function findUnitPosition(state: SummonerWarsCore, cardId: string): CellCoord | null {
+  const result = findOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.cardId === cardId);
+  return result ? result.position : null;
+}
+
 /** 获取玩家的城门 */
 export function getPlayerGates(state: SummonerWarsCore, playerId: PlayerId): BoardStructure[] {
-  const gates: BoardStructure[] = [];
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const structure = state.board[row][col].structure;
-      if (structure && structure.owner === playerId && structure.card.isGate) {
-        gates.push(structure);
-      }
-    }
-  }
-  return gates;
+  return collectOnGrid<BoardCell>(state.board, (cell) =>
+    !!cell.structure && cell.structure.owner === playerId && !!cell.structure.card.isGate
+  ).map(r => r.cell.structure!);
 }
 
 // ============================================================================
@@ -222,16 +211,8 @@ export function getMovePath(from: CellCoord, to: CellCoord): CellCoord[] {
 
 /** 获取单位可移动的所有位置 */
 export function getValidMoveTargets(state: SummonerWarsCore, from: CellCoord): CellCoord[] {
-  const targets: CellCoord[] = [];
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const to = { row, col };
-      if (canMoveTo(state, from, to)) {
-        targets.push(to);
-      }
-    }
-  }
-  return targets;
+  return collectOnGrid<BoardCell>(state.board, (_, pos) => canMoveTo(state, from, pos))
+    .map(r => r.position);
 }
 
 // ============================================================================
@@ -269,16 +250,8 @@ export function canAttack(
 
 /** 获取单位可攻击的所有目标 */
 export function getValidAttackTargets(state: SummonerWarsCore, attacker: CellCoord): CellCoord[] {
-  const targets: CellCoord[] = [];
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const target = { row, col };
-      if (canAttack(state, attacker, target)) {
-        targets.push(target);
-      }
-    }
-  }
-  return targets;
+  return collectOnGrid<BoardCell>(state.board, (_, pos) => canAttack(state, attacker, pos))
+    .map(r => r.position);
 }
 
 /** 获取攻击类型（近战/远程） */
@@ -590,22 +563,16 @@ export function getUnitMoveEnhancements(
 
   // 浮空术光环：检查2格内是否有葛拉克（aerial_strike）
   if (unit.card.unitClass === 'common') {
-    for (let row = 0; row < BOARD_ROWS; row++) {
-      for (let col = 0; col < BOARD_COLS; col++) {
-        const nearby = state.board[row]?.[col]?.unit;
-        if (nearby && nearby.owner === unit.owner && nearby.cardId !== unit.cardId) {
-          const nearbyAbilities = getUnitAbilities(nearby);
-          if (nearbyAbilities.includes('aerial_strike')) {
-            const dist = manhattanDistance(unitPos, { row, col });
-            if (dist <= 2) {
-              // 获得飞行：额外移动1格 + 穿越
-              extraDistance = Math.max(extraDistance, 1);
-              canPassThrough = true;
-              canPassStructures = true;
-            }
-          }
-        }
-      }
+    const aerialUnit = findOnGrid<BoardCell>(state.board, (cell, pos) =>
+      !!cell.unit && cell.unit.owner === unit.owner && cell.unit.cardId !== unit.cardId
+      && getUnitAbilities(cell.unit).includes('aerial_strike')
+      && manhattanDistance(unitPos, pos) <= 2
+    );
+    if (aerialUnit) {
+      // 获得飞行：额外移动1格 + 穿越
+      extraDistance = Math.max(extraDistance, 1);
+      canPassThrough = true;
+      canPassStructures = true;
     }
   }
 
@@ -741,16 +708,8 @@ function hasValidPath(
  * 增强版获取可移动位置（考虑技能）
  */
 export function getValidMoveTargetsEnhanced(state: SummonerWarsCore, from: CellCoord): CellCoord[] {
-  const targets: CellCoord[] = [];
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const to = { row, col };
-      if (canMoveToEnhanced(state, from, to)) {
-        targets.push(to);
-      }
-    }
-  }
-  return targets;
+  return collectOnGrid<BoardCell>(state.board, (_, pos) => canMoveToEnhanced(state, from, pos))
+    .map(r => r.position);
 }
 
 /**
@@ -797,16 +756,8 @@ export function canAttackEnhanced(
  * 增强版获取可攻击目标（考虑技能）
  */
 export function getValidAttackTargetsEnhanced(state: SummonerWarsCore, attacker: CellCoord): CellCoord[] {
-  const targets: CellCoord[] = [];
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const target = { row, col };
-      if (canAttackEnhanced(state, attacker, target)) {
-        targets.push(target);
-      }
-    }
-  }
-  return targets;
+  return collectOnGrid<BoardCell>(state.board, (_, pos) => canAttackEnhanced(state, attacker, pos))
+    .map(r => r.position);
 }
 
 /**

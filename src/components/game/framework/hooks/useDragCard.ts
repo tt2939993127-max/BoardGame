@@ -7,6 +7,7 @@
 import { useState, useCallback, useRef } from 'react';
 import type { DragOffset } from '../../../../core/ui';
 import type { UseDragCardConfig, UseDragCardReturn } from '../../../../core/ui/hooks';
+import { useInteractionGuard } from '../InteractionGuard';
 
 /**
  * 卡牌拖拽逻辑
@@ -34,6 +35,7 @@ export function useDragCard(
     const {
         playThreshold = 150,
         sellZoneRef,
+        canInteract = true,
         onPlay,
         onSell,
         onCancel,
@@ -46,6 +48,7 @@ export function useDragCard(
 
     const startPosRef = useRef<DragOffset>({ x: 0, y: 0 });
     const isDraggingRef = useRef(false);
+    const guard = useInteractionGuard();
 
     // 检测是否在售卖区域内
     const checkSellZone = useCallback(
@@ -71,6 +74,10 @@ export function useDragCard(
     );
 
     const onPointerDown = useCallback((e: React.PointerEvent) => {
+        if (!canInteract) {
+            guard.notifyDenied('drag-card-disabled', { key: 'drag-card-disabled' });
+            return;
+        }
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
 
@@ -78,7 +85,7 @@ export function useDragCard(
         startPosRef.current = { x: e.clientX, y: e.clientY };
         setIsDragging(true);
         setOffset({ x: 0, y: 0 });
-    }, []);
+    }, [canInteract, guard]);
 
     const onPointerMove = useCallback(
         (e: React.PointerEvent) => {

@@ -5,7 +5,7 @@ vi.mock('../useGameAudio', () => ({
 }));
 
 import { playSound } from '../useGameAudio';
-import { pickRandomSoundKey, playRandomSound } from '../audioUtils';
+import { pickDiceRollSoundKey, pickRandomSoundKey, playRandomSound } from '../audioUtils';
 
 const originalRandom = Math.random;
 
@@ -36,5 +36,16 @@ describe('audioUtils', () => {
         const keys = ['a', 'b'];
         const picked = playRandomSound('play', keys);
         expect(playSound).toHaveBeenCalledWith(picked);
+    });
+
+    it('pickDiceRollSoundKey 单骰固定返回单骰 key', () => {
+        const picked = pickDiceRollSoundKey('dice.single', 1, { single: 'single', multiple: ['multi1'] });
+        expect(picked).toBe('single');
+    });
+
+    it('pickDiceRollSoundKey 多骰从多骰池中选择', () => {
+        const pool = { single: 'single', multiple: ['multi1', 'multi2'] };
+        const picked = pickDiceRollSoundKey('dice.multi', 3, pool, { minGap: 1 });
+        expect(pool.multiple).toContain(picked);
     });
 });

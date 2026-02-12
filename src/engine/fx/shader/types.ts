@@ -48,6 +48,15 @@ export interface ShaderCanvasProps {
   /** 动画完成回调 */
   onComplete?: () => void;
 
+  /**
+   * DPR 上限（可选）
+   *
+   * 高 DPR 屏幕上全屏 shader 开销很大，对于本身模糊的特效（光柱/辉光）
+   * 可传 1 降低渲染分辨率，大幅减少 GPU 负载而视觉几乎无差异。
+   * 默认 1.5（特效天然模糊，超过 1.5x 几乎无视觉收益）。
+   */
+  maxDpr?: number;
+
   /** 额外 className */
   className?: string;
 }

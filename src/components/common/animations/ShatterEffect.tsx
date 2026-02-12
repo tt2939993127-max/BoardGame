@@ -197,6 +197,10 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
   const onStartRef = useRef(onStart);
   onCompleteRef.current = onComplete;
   onStartRef.current = onStart;
+  // imageSource 是对象 prop，每次父组件渲染都会新建引用
+  // 必须用 ref 持有，从 useCallback 依赖中移除，否则动画会无限重启
+  const imageSourceRef = useRef(imageSource);
+  imageSourceRef.current = imageSource;
 
   const isStrong = intensity === 'strong';
   const cols = colsProp ?? (isStrong ? 4 : 3);
@@ -214,17 +218,14 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
     const parentW = parent.offsetWidth;
     const parentH = parent.offsetHeight;
     let snapshot: HTMLCanvasElement | null = null;
+    let contentEl: HTMLElement | null = null;
+    const imgSrc = imageSourceRef.current;
 
-    if (imageSource) {
-      // 计算与卡牌相同的内容区域尺寸
-      const contentW = parentW * 0.85; // CARD_WIDTH_RATIO
-      const contentH = contentW * (1044 / 729); // CARD_ASPECT_RATIO
-      const effectiveH = Math.min(contentH, parentH);
-      const effectiveW = effectiveH < contentH ? effectiveH * (729 / 1044) : contentW;
-      snapshot = await captureFromImageSource(imageSource, Math.round(effectiveW), Math.round(effectiveH));
+    if (imgSrc) {
+      snapshot = await captureFromImageSource(imgSrc, Math.round(parentW), Math.round(parentH));
     } else {
       // 回退：从 DOM 截取
-      const contentEl = parent.querySelector('[data-shatter-target]') as HTMLElement
+      contentEl = parent.querySelector('[data-shatter-target]') as HTMLElement
         ?? parent.firstElementChild as HTMLElement;
       if (!contentEl || contentEl === container) return;
       snapshot = await captureElementAsync(contentEl);
@@ -258,12 +259,25 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // 内容在 canvas 中的偏移（因为 canvas 比父容器大）
-    const parentRect = parent.getBoundingClientRect();
-    const contentRect = contentEl.getBoundingClientRect();
-    const offsetX = contentRect.left - parentRect.left + overflow;
-    const offsetY = contentRect.top - parentRect.top + overflow;
-    const contentW = contentRect.width;
-    const contentH = contentRect.height;
+    let offsetX: number;
+    let offsetY: number;
+    let contentW: number;
+    let contentH: number;
+
+    if (contentEl) {
+      const parentRect = parent.getBoundingClientRect();
+      const contentRect = contentEl.getBoundingClientRect();
+      offsetX = contentRect.left - parentRect.left + overflow;
+      offsetY = contentRect.top - parentRect.top + overflow;
+      contentW = contentRect.width;
+      contentH = contentRect.height;
+    } else {
+      // imageSource 路径：内容填满父容器
+      offsetX = overflow;
+      offsetY = overflow;
+      contentW = parentW;
+      contentH = parentH;
+    }
 
     // 生成碎片
     const shardW = contentW / cols;
@@ -355,6 +369,7 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
     };
 
     rafRef.current = requestAnimationFrame(loop);
+  // imageSource 通过 imageSourceRef 访问，不放入依赖（对象引用不稳定）
   }, [isStrong, cols, rows]);
 
   useEffect(() => {

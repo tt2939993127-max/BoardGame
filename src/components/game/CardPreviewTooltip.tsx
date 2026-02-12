@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CardPreview } from '../common/media/CardPreview';
-import type { CardPreviewRef } from '../../systems/CardSystem';
+import { UI_Z_INDEX, type CardPreviewRef } from '../../core';
 
 interface CardPreviewTooltipProps {
     /** 卡牌预览引用 */
@@ -99,10 +99,11 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
             */}
             {isHovered && portalRoot && previewPosition && createPortal(
                 <div
-                    className="fixed z-[10001] pointer-events-none"
+                    className="fixed pointer-events-none"
                     style={{
                         left: previewPosition.left,
                         top: previewPosition.top,
+                        zIndex: UI_Z_INDEX.tooltip,
                         filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5))',
                     }}
                 >

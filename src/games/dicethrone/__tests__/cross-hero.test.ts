@@ -111,7 +111,7 @@ describe('跨英雄对战', () => {
             expect(state.core.players['1'].resources[RESOURCE_IDS.CP]).toBe(INITIAL_CP);
             expect(state.core.players['0'].hand.length).toBe(4);
             expect(state.core.players['1'].hand.length).toBe(4);
-            expect(state.core.turnPhase).toBe('main1');
+            expect(state.sys.phase).toBe('main1');
         });
     });
 

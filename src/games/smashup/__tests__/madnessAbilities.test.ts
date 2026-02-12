@@ -21,6 +21,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -220,12 +221,12 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
             expect(madnessEvents.length).toBe(1);
 
             // 多个对手随从时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('cthulhu_corruption');
+            expect((promptEvents[0] as any).payload.abilityId).toBe('cthulhu_corruption');
         });
 
-        it('单个对手随从时自动消灭', () => {
+        it('单个对手随从时创建 Prompt', () => {
             const state = makeStateWithMadness({
                 players: {
                     '0': makePlayer('0', {
@@ -245,9 +246,9 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
             const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
 
-            const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-            expect(destroyEvents.length).toBe(1);
-            expect((destroyEvents[0] as any).payload.minionUid).toBe('m1');
+            // 单个对手随从时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
 
         it('无对手随从时只抽疯狂卡', () => {
@@ -290,12 +291,12 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
 
             const events = execPlayAction(state, '0', 'a1');
             // 多个对手随从时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('cthulhu_corruption');
+            expect((promptEvents[0] as any).payload.abilityId).toBe('cthulhu_corruption');
         });
 
-        it('状态正确（reduce 验证）', () => {
+        it('状态正确（reduce 验证）- 单目标时 Prompt 待决', () => {
             const state = makeStateWithMadness({
                 players: {
                     '0': makePlayer('0', {
@@ -312,10 +313,10 @@ describe('克苏鲁之仆 - 疯狂卡能力', () => {
 
             const events = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
-            // m1 被消灭
-            expect(newState.bases[0].minions.length).toBe(0);
-            // m1 在 P1 弃牌堆
-            expect(newState.players['1'].discard.some(c => c.uid === 'm1')).toBe(true);
+            // 单目标创建 CHOICE_REQUESTED，m1 未被消灭
+            const promptEvts = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvts.length).toBe(1);
+            expect(newState.bases[0].minions.length).toBe(1);
             // P0 手牌有疯狂卡
             expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(1);
         });

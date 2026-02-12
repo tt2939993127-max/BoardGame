@@ -7,7 +7,7 @@
 - 服务端注册与大厅推送：`server.ts` 从 `GAME_SERVER_MANIFEST` 注册游戏，并维护 lobby socket 的缓存与推送。
 - 跨游戏能力已经出现共享代码雏形：
   - 撤销：已迁移到 `src/engine/systems/UndoSystem.ts`（自动快照）。
-  - 技能/效果：`src/systems/AbilitySystem` 已被 `src/games/dicethrone/game.ts` 使用。
+- 技能/效果：由游戏层实现并结合 `src/engine/primitives/` 复用通用工具。
 
 随着计划覆盖更多类型桌游（骰子对战、卡牌驱动、德式计分、隐藏信息/推理），平台能力将继续扩张（撤销、教程、回放/审计、统一 prompt/choice、成就、统计、AI 等）。如果这些能力继续散落在每个 `game.ts` 里，会导致维护成本急剧上升。
 

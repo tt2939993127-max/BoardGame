@@ -1,25 +1,10 @@
-import type { AudioCategory, AudioEvent, AudioRuntimeContext, BgmGroupId, BgmRule, GameAudioConfig, SoundKey } from './types';
+import type { AudioCategory, AudioEvent, AudioRuntimeContext, BgmGroupId, BgmRule, EventSoundResult, GameAudioConfig, SoundKey } from './types';
 
-export function resolveEventSoundKey<
-    G = unknown,
-    Ctx = unknown,
-    Meta extends Record<string, unknown> = Record<string, unknown>
->(
-    event: AudioEvent,
-    context: AudioRuntimeContext<G, Ctx, Meta>,
-    config: GameAudioConfig
-): SoundKey | null {
-    if (event.sfxKey) return event.sfxKey;
-
-    const resolved = config.eventSoundResolver?.(event, context);
-    if (resolved !== undefined) {
-        return resolved ?? null;
-    }
-
-    return config.eventSoundMap?.[event.type] ?? null;
-}
-
-export function resolveAudioKey<
+/**
+ * 统一反馈解析：调用 feedbackResolver 获取 { key, timing } 或 null。
+ * event.audioKey / event.audioCategory 仍享有最高优先级（向前兼容引擎层事件标注）。
+ */
+export function resolveFeedback<
     G = unknown,
     Ctx = unknown,
     Meta extends Record<string, unknown> = Record<string, unknown>
@@ -27,16 +12,23 @@ export function resolveAudioKey<
     event: AudioEvent,
     context: AudioRuntimeContext<G, Ctx, Meta>,
     config: GameAudioConfig,
-    resolveCategoryKey: (category: AudioCategory) => SoundKey | null
-): SoundKey | null {
-    if (event.audioKey) return event.audioKey;
+    resolveCategoryKey?: (category: AudioCategory) => SoundKey | null
+): EventSoundResult | null {
+    // event 上的 audioKey（引擎层标注）优先级最高
+    if (event.audioKey) return { key: event.audioKey, timing: 'immediate' };
 
-    if (event.audioCategory) {
+    // event 上的 audioCategory
+    if (event.audioCategory && resolveCategoryKey) {
         const categoryKey = resolveCategoryKey(event.audioCategory);
-        if (categoryKey) return categoryKey;
+        if (categoryKey) return { key: categoryKey, timing: 'immediate' };
     }
 
-    return resolveEventSoundKey(event, context, config);
+    // event.sfxKey（事件级注入）
+    if (event.sfxKey) return { key: event.sfxKey, timing: 'immediate' };
+
+    // 游戏层 feedbackResolver
+    const resolved = config.feedbackResolver(event, context);
+    return resolved ?? null;
 }
 
 export function resolveBgmKey<

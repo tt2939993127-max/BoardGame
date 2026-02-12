@@ -3,7 +3,7 @@
  */
 
 import type { AbilityCard } from '../../types';
-import type { AbilityEffect } from '../../../../systems/presets/combat';
+import type { AbilityEffect } from '../../domain/combat';
 import { DICETHRONE_CARD_ATLAS_IDS, TOKEN_IDS } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import type { RandomFn } from '../../../../engine/types';
@@ -16,7 +16,7 @@ import {
     RIGHTEOUS_PRAYER_2,
     HOLY_STRIKE_2
 } from './abilities';
-import type { AbilityDef } from '../../../../systems/presets/combat';
+import type { AbilityDef } from '../../domain/combat';
 
 // 文本辅助
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
@@ -107,7 +107,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-gods-grace', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 33 }, // TODO: Confirm Index
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 33 },
         effects: [{
             description: '投掷1骰：祈祷-4CP; 否则-抽1',
             action: { type: 'custom', target: 'self', customActionId: 'paladin-gods-grace' },
@@ -216,7 +216,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 19 },
         effects: [{
             description: '升级教会税',
-            action: { type: 'custom', target: 'self', customActionId: 'paladin-upgrade-tithes' }, // TODO: Implement Passive Upgrade
+            action: { type: 'custom', target: 'self', customActionId: 'paladin-upgrade-tithes' },
             timing: 'immediate'
         }]
     },

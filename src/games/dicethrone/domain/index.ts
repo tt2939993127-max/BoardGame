@@ -3,11 +3,11 @@
  */
 
 import type { DomainCore, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
-import { diceSystem } from '../../../systems/DiceSystem';
+import { registerDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
-import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId } from './types';
+import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, PendingInteraction } from './types';
 import { RESOURCE_IDS } from './resources';
-import { validateCommand } from './commands';
+import { validateCommand } from './commandValidation';
 import { execute } from './execute';
 import { reduce } from './reducer';
 import { playerView } from './view';
@@ -30,12 +30,12 @@ import { paladinResourceDefinitions } from '../heroes/paladin/resourceConfig';
 registerDiceThroneConditions();
 
 // 注册 角色 骰子与资源定义
-diceSystem.registerDefinition(monkDiceDefinition);
-diceSystem.registerDefinition(barbarianDiceDefinition);
-diceSystem.registerDefinition(pyromancerDiceDefinition);
-diceSystem.registerDefinition(moonElfDiceDefinition);
-diceSystem.registerDefinition(shadowThiefDiceDefinition);
-diceSystem.registerDefinition(paladinDiceDefinition);
+registerDiceDefinition(monkDiceDefinition);
+registerDiceDefinition(barbarianDiceDefinition);
+registerDiceDefinition(pyromancerDiceDefinition);
+registerDiceDefinition(moonElfDiceDefinition);
+registerDiceDefinition(shadowThiefDiceDefinition);
+registerDiceDefinition(paladinDiceDefinition);
 monkResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 barbarianResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 pyromancerResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
@@ -90,7 +90,6 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             rollLimit: 3,
             rollDiceCount: 5,
             rollConfirmed: false,
-            turnPhase: 'setup',
             activePlayerId: playerIds[0],
             startingPlayerId: playerIds[0],
             turnNumber: 1,
@@ -100,14 +99,21 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
         };
     },
 
-    validate: (state, command) => validateCommand(state.core, command),
+    validate: (state, command) => {
+        const phase = (state.sys?.phase ?? 'setup') as TurnPhase;
+        const interaction = state.sys?.interaction?.current;
+        const pendingInteraction = interaction?.kind === 'dt:card-interaction'
+            ? interaction.data as PendingInteraction
+            : undefined;
+        return validateCommand(state.core, command, phase, pendingInteraction);
+    },
     execute: (state, command, random) => execute(state, command, random),
     reduce,
     playerView,
 
     isGameOver: (state: DiceThroneCore): GameOverResult | undefined => {
         // 在 setup 阶段不进行胜负判定，避免血量未初始化导致误判
-        if (state.turnPhase === 'setup') return undefined;
+        if (!state.hostStarted) return undefined;
 
         const playerIds = Object.keys(state.players);
         const defeated = playerIds.filter(id => (state.players[id]?.resources[RESOURCE_IDS.HP] ?? 0) <= 0);

@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { UI_Z_INDEX } from '../../../core';
 
 // 抽牌动画数据结构
 export interface CardDrawData {
@@ -49,7 +50,7 @@ const CardDrawItem = ({
 
     return (
         <motion.div
-            className="fixed z-[9998] pointer-events-none"
+            className="fixed pointer-events-none"
             style={{
                 // 定位到起始位置中心（减去卡牌一半尺寸）
                 left: card.startPos.x - card.endSize.width / 2,
@@ -57,6 +58,7 @@ const CardDrawItem = ({
                 width: card.endSize.width,
                 height: card.endSize.height,
                 transformOrigin: 'center center',
+                zIndex: UI_Z_INDEX.overlayRaised,
             }}
             initial={{
                 x: 0,

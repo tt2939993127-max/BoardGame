@@ -12,6 +12,7 @@
 
 import type { PlayerId, RandomFn } from '../../../engine/types';
 import type { SmashUpCore, SmashUpEvent, MinionOnBase } from './types';
+import { getBaseDef } from '../data/cards';
 
 // ============================================================================
 // 类型定义
@@ -61,12 +62,28 @@ export interface RestrictionCheckContext {
 /** 限制检查函数：返回 true 表示操作被限制 */
 export type RestrictionChecker = (ctx: RestrictionCheckContext) => boolean;
 
+/**
+ * 事件拦截器：替代效果（Replacement Effects）
+ *
+ * 返回值语义与引擎 interceptEvent 一致：
+ * - undefined → 不拦截（继续检查下一个拦截器）
+ * - SmashUpEvent / SmashUpEvent[] → 替换
+ * - null → 吞噬
+ */
+export type EventInterceptor = (
+    state: SmashUpCore,
+    event: SmashUpEvent
+) => SmashUpEvent | SmashUpEvent[] | null | undefined;
+
 /** 触发时机 */
 export type TriggerTiming =
     | 'onMinionPlayed'     // 随从入场时
     | 'onMinionDestroyed'  // 随从被消灭时
+    | 'onMinionMoved'      // 随从被移动时
     | 'onTurnEnd'          // 回合结束时
-    | 'onTurnStart';       // 回合开始时
+    | 'onTurnStart'        // 回合开始时
+    | 'beforeScoring'      // 基地计分前
+    | 'afterScoring';      // 基地计分后
 
 /** 触发上下文 */
 export interface TriggerContext {
@@ -112,6 +129,11 @@ interface TriggerEntry {
     callback: TriggerCallback;
 }
 
+interface InterceptorEntry {
+    sourceDefId: string;
+    interceptor: EventInterceptor;
+}
+
 // ============================================================================
 // 注册表
 // ============================================================================
@@ -119,6 +141,7 @@ interface TriggerEntry {
 const protectionRegistry: ProtectionEntry[] = [];
 const restrictionRegistry: RestrictionEntry[] = [];
 const triggerRegistry: TriggerEntry[] = [];
+const interceptorRegistry: InterceptorEntry[] = [];
 
 /** 注册保护拦截器 */
 export function registerProtection(
@@ -147,11 +170,20 @@ export function registerTrigger(
     triggerRegistry.push({ sourceDefId, timing, callback });
 }
 
+/** 注册事件拦截器（替代效果） */
+export function registerInterceptor(
+    sourceDefId: string,
+    interceptor: EventInterceptor
+): void {
+    interceptorRegistry.push({ sourceDefId, interceptor });
+}
+
 /** 清空所有注册表（测试用） */
 export function clearOngoingEffectRegistry(): void {
     protectionRegistry.length = 0;
     restrictionRegistry.length = 0;
     triggerRegistry.length = 0;
+    interceptorRegistry.length = 0;
 }
 
 /** 获取注册表大小（调试用） */
@@ -159,11 +191,13 @@ export function getOngoingEffectRegistrySize(): {
     protection: number;
     restriction: number;
     trigger: number;
+    interceptor: number;
 } {
     return {
         protection: protectionRegistry.length,
         restriction: restrictionRegistry.length,
         trigger: triggerRegistry.length,
+        interceptor: interceptorRegistry.length,
     };
 }
 
@@ -207,7 +241,9 @@ export function isMinionProtected(
 /**
  * 检查操作是否被限制
  *
- * 遍历所有限制拦截器，只要有一个返回 true 就表示被限制。
+ * 两层检查：
+ * 1. 基地定义上的 restrictions（数据驱动，自动解析）
+ * 2. ongoing 效果注册表（行动卡/随从的拦截器）
  */
 export function isOperationRestricted(
     state: SmashUpCore,
@@ -216,22 +252,72 @@ export function isOperationRestricted(
     restrictionType: RestrictionType,
     extra?: Record<string, unknown>
 ): boolean {
-    if (restrictionRegistry.length === 0) return false;
+    const base = state.bases[baseIndex];
+    if (!base) return false;
 
-    const ctx: RestrictionCheckContext = {
-        state,
-        baseIndex,
-        playerId,
-        restrictionType,
-        extra,
-    };
-
-    for (const entry of restrictionRegistry) {
-        if (entry.restrictionType !== restrictionType) continue;
-        if (!isSourceActive(state, entry.sourceDefId)) continue;
-        if (entry.checker(ctx)) return true;
+    // 1. 基地定义上的限制规则（数据驱动）
+    const baseDef = getBaseDef(base.defId);
+    if (baseDef?.restrictions) {
+        for (const r of baseDef.restrictions) {
+            if (r.type !== restrictionType) continue;
+            // 无条件限制
+            if (!r.condition) return true;
+            // 条件限制：maxPower（力量 <= maxPower 的随从被禁止）
+            if (r.condition.maxPower !== undefined && restrictionType === 'play_minion') {
+                const basePower = extra?.basePower as number | undefined;
+                if (basePower !== undefined && basePower <= r.condition.maxPower) return true;
+            }
+            // 条件限制：extraPlayMinionPowerMax（额外出牌时力量 > limit 的随从被禁止）
+            if (r.condition.extraPlayMinionPowerMax !== undefined && restrictionType === 'play_minion') {
+                const basePower = extra?.basePower as number | undefined;
+                const minionsPlayed = state.players[playerId]?.minionsPlayed ?? 0;
+                // 仅在使用额外出牌机会时生效（已打出 >= 1 个随从）
+                if (minionsPlayed >= 1 && basePower !== undefined && basePower > r.condition.extraPlayMinionPowerMax) {
+                    return true;
+                }
+            }
+        }
     }
+
+    // 2. ongoing 效果注册表（行动卡/随从的拦截器）
+    if (restrictionRegistry.length > 0) {
+        const ctx: RestrictionCheckContext = {
+            state,
+            baseIndex,
+            playerId,
+            restrictionType,
+            extra,
+        };
+        for (const entry of restrictionRegistry) {
+            if (entry.restrictionType !== restrictionType) continue;
+            if (!isSourceActiveOnBase(state, entry.sourceDefId, baseIndex)) continue;
+            if (entry.checker(ctx)) return true;
+        }
+    }
+
     return false;
+}
+
+/**
+ * 执行事件拦截：遍历注册的拦截器，第一个返回非 undefined 的结果生效
+ *
+ * 返回值：
+ * - undefined → 无拦截器匹配
+ * - SmashUpEvent / SmashUpEvent[] → 替换
+ * - null → 吞噬
+ */
+export function interceptEvent(
+    state: SmashUpCore,
+    event: SmashUpEvent
+): SmashUpEvent | SmashUpEvent[] | null | undefined {
+    if (interceptorRegistry.length === 0) return undefined;
+
+    for (const entry of interceptorRegistry) {
+        if (!isSourceActive(state, entry.sourceDefId)) continue;
+        const result = entry.interceptor(state, event);
+        if (result !== undefined) return result;
+    }
+    return undefined;
 }
 
 /**
@@ -266,12 +352,15 @@ export function fireTriggers(
  * 检查拦截器来源是否在场上活跃
  *
  * 来源可以是：
- * 1. 基地上的 ongoing 行动卡（ongoingActions 中的 defId）
- * 2. 基地上的随从（minions 中的 defId，且有 ongoing 能力标签）
- * 3. 随从上附着的 ongoing 行动卡（attachedActions 中的 defId）
+ * 1. 基地本身（base.defId）
+ * 2. 基地上的 ongoing 行动卡（ongoingActions 中的 defId）
+ * 3. 基地上的随从（minions 中的 defId，且有 ongoing 能力标签）
+ * 4. 随从上附着的 ongoing 行动卡（attachedActions 中的 defId）
  */
 function isSourceActive(state: SmashUpCore, sourceDefId: string): boolean {
     for (const base of state.bases) {
+        // 检查基地本身
+        if (base.defId === sourceDefId) return true;
         // 检查基地上的 ongoing 行动卡
         if (base.ongoingActions.some(o => o.defId === sourceDefId)) return true;
         // 检查基地上的随从
@@ -281,5 +370,21 @@ function isSourceActive(state: SmashUpCore, sourceDefId: string): boolean {
             if (m.attachedActions.some(a => a.defId === sourceDefId)) return true;
         }
     }
+    return false;
+}
+
+/**
+ * 检查拦截器来源是否在指定基地上活跃
+ * 用于基地自身的限制效果
+ */
+export function isSourceActiveOnBase(state: SmashUpCore, sourceDefId: string, baseIndex: number): boolean {
+    const base = state.bases[baseIndex];
+    if (!base) return false;
+    // 检查基地本身
+    if (base.defId === sourceDefId) return true;
+    // 检查基地上的 ongoing 行动卡
+    if (base.ongoingActions.some(o => o.defId === sourceDefId)) return true;
+    // 检查基地上的随从
+    if (base.minions.some(m => m.defId === sourceDefId)) return true;
     return false;
 }

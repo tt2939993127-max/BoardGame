@@ -8,6 +8,7 @@ import type { PlayerId } from '../../../engine/types';
 import { getFactionCards, resolveCardName, resolveCardText, getCardDef, getBaseDef } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { X, Check, Search, Layers, ZoomIn, Pencil, Lock } from 'lucide-react';
+import { UI_Z_INDEX } from '../../../core';
 
 interface Props {
     core: SmashUpCore;
@@ -38,7 +39,11 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
     };
 
     return (
-        <div data-tutorial-id="su-faction-select" className="absolute inset-0 z-50 bg-[#2d1b10] flex flex-col items-center overflow-hidden font-sans selection:bg-amber-500/30">
+        <div
+            data-tutorial-id="su-faction-select"
+            className="absolute inset-0 bg-[#2d1b10] flex flex-col items-center overflow-hidden font-sans selection:bg-amber-500/30"
+            style={{ zIndex: UI_Z_INDEX.overlay }}
+        >
             {/* Improved CSS Wood Grain (Fallback logic) */}
             <div className="absolute inset-0 z-0 pointer-events-none"
                 style={{
@@ -191,7 +196,10 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
             {/* MODAL: Focused Faction Details */}
             <AnimatePresence>
                 {focusedFactionId && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
+                    <div
+                        className="fixed inset-0 flex items-center justify-center p-4 md:p-8"
+                        style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+                    >
                         {/* Backdrop */}
                         <motion.div
                             initial={{ opacity: 0 }}
@@ -472,7 +480,8 @@ const CardDetailOverlay: React.FC<{
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-8 cursor-pointer"
+            className="fixed inset-0 bg-black/90 flex items-center justify-center p-8 cursor-pointer"
+            style={{ zIndex: UI_Z_INDEX.magnify }}
         >
             <motion.div
                 initial={{ scale: 0.8, y: 50 }}

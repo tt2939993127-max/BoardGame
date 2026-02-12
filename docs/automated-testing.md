@@ -65,7 +65,7 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 ### 何时跑全量
 
 满足任一条件就扩大范围：
-- 修改 `src/engine/`、`src/systems/`、`src/core/`、`src/components/game/framework/`
+- 修改 `src/engine/`（含 `primitives/` 与 `systems/`）、`src/core/`、`src/components/game/framework/`
 - 涉及多人联机、状态同步、Undo/Rematch/Prompt 等系统性行为
 - 涉及公共类型/协议
 
@@ -309,3 +309,95 @@ build: {
   }
 }
 ```
+
+
+## 多客户端测试（Multi-Player E2E）
+
+**适用场景**：需要模拟真实多玩家交互的测试（如 UGC 游戏、回合制游戏、实时对战）。
+
+**核心原理**：为每个玩家创建独立的浏览器上下文（BrowserContext），每个上下文有自己的 playerID 和 credentials，符合 boardgame.io 的权限模型。
+
+### 使用通用辅助工具
+
+项目提供 `MultiPlayerTest` 类（位于 `e2e/helpers/multiPlayer.ts`），简化多客户端测试编写：
+
+```typescript
+import { createMultiPlayerTest } from './helpers/multiPlayer';
+
+test('多玩家游戏流程', async ({ browser }, testInfo) => {
+  const multiPlayer = await createMultiPlayerTest({
+    browser,
+    baseURL: testInfo.project.use.baseURL,
+    gameId: 'my-game',
+    matchId: 'test-match-id',
+    numPlayers: 3,
+    disableAudio: true,
+    disableTutorial: true,
+  });
+
+  try {
+    // 获取各玩家的 Page 对象
+    const player1 = multiPlayer.getPlayer('0');
+    const player2 = multiPlayer.getPlayer('1');
+    const player3 = multiPlayer.getPlayer('2');
+
+    // 等待所有玩家加载完成
+    await multiPlayer.waitForAllPlayersReady();
+
+    // 执行测试逻辑...
+    // 每个玩家使用自己的客户端发送命令
+  } finally {
+    await multiPlayer.cleanup();
+  }
+});
+```
+
+### 手动实现多客户端
+
+如果需要更精细的控制，可以手动创建多个上下文：
+
+```typescript
+test('手动多客户端', async ({ browser }, testInfo) => {
+  // 创建房主客户端
+  const hostContext = await browser.newContext({ baseURL });
+  const hostPage = await hostContext.newPage();
+  
+  // 创建其他玩家客户端
+  const player2Context = await browser.newContext({ baseURL });
+  const player2Page = await player2Context.newPage();
+  
+  try {
+    // 房主创建房间
+    await hostPage.goto('/');
+    // ... 创建房间逻辑
+    
+    // 玩家2加入房间
+    await player2Page.goto(`/play/game-id/match/${matchId}?join=true`);
+    
+    // 根据当前回合玩家选择对应客户端发送命令
+    const currentPlayerId = await getCurrentPlayer(hostPage);
+    const activePage = currentPlayerId === '0' ? hostPage : player2Page;
+    await sendCommand(activePage, 'SOME_ACTION');
+  } finally {
+    await hostContext.close();
+    await player2Context.close();
+  }
+});
+```
+
+### 关键要点
+
+1. **独立上下文**：每个玩家必须使用独立的 `BrowserContext`，自动隔离 cookies、localStorage、sessionStorage
+2. **Credentials 管理**：每个玩家需要独立获取和存储 credentials（通过 `claim-seat` API 或 `?join=true` 参数）
+3. **动态选择客户端**：根据游戏状态（当前回合玩家）动态选择对应的客户端发送命令
+4. **状态同步**：所有客户端通过 socket.io 与服务端同步，可以从任一客户端读取游戏状态
+5. **清理资源**：测试结束后必须关闭所有上下文，避免资源泄漏
+
+### 示例参考
+
+- `e2e/ugc-preview.e2e.ts` - UGC 斗地主多客户端测试，展示完整的3人游戏流程
+- `e2e/helpers/multiPlayer.ts` - 通用多客户端测试辅助工具
+
+### 为什么需要多客户端
+
+boardgame.io 的 `moves` 对象只能以当前客户端的 playerID 发送命令，无法跨玩家操作。单客户端测试无法模拟真实的多玩家交互场景，会导致"非当前玩家回合"等权限错误。多客户端方案通过为每个玩家创建独立的浏览器上下文，完全符合 boardgame.io 的设计，能够真实模拟多玩家游戏流程。

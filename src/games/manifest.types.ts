@@ -21,4 +21,8 @@ export interface GameManifestEntry {
     tags?: string[];
     /** 最佳游玩人数配置 */
     bestPlayers?: number[];
+    /** 关键图片路径列表（相对于 /assets/），进入对局前必须加载完成 */
+    criticalImages?: string[];
+    /** 暖加载图片路径列表（相对于 /assets/），进入对局后后台预取 */
+    warmImages?: string[];
 }

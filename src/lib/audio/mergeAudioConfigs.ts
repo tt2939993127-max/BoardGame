@@ -14,7 +14,7 @@ export function mergeAudioConfigs(...configs: GameAudioConfig[]): GameAudioConfi
     const result: GameAudioConfig = {
         sounds: {},
         bgm: [],
-        eventSoundMap: {},
+        feedbackResolver: () => null,
     };
 
     for (const config of configs) {
@@ -37,14 +37,9 @@ export function mergeAudioConfigs(...configs: GameAudioConfig[]): GameAudioConfi
             }
         }
 
-        // 合并 eventSoundMap（后者覆盖前者）
-        if (config.eventSoundMap) {
-            Object.assign(result.eventSoundMap!, config.eventSoundMap);
-        }
-
-        // 游戏层的 resolver/rules/triggers 直接覆盖（不做合并）
-        if (config.eventSoundResolver) {
-            result.eventSoundResolver = config.eventSoundResolver;
+        // 游戏层的 feedbackResolver/rules/triggers 直接覆盖（不做合并）
+        if (config.feedbackResolver) {
+            result.feedbackResolver = config.feedbackResolver;
         }
         if (config.bgmRules) {
             result.bgmRules = config.bgmRules;

@@ -4,7 +4,7 @@
  */
 
 import type { PlayerId, ResponseWindowType } from '../../../engine/types';
-import type { AbilityContext } from '../../../systems/presets/combat';
+import type { AbilityContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
 import { isCustomActionCategory } from './effects';
 import type {
@@ -13,43 +13,66 @@ import type {
     DieFace,
     TurnPhase,
     AbilityCard,
+    SelectableCharacterId,
 } from './types';
 import { HAND_LIMIT, PHASE_ORDER } from './types';
 import { RESOURCE_IDS } from './resources';
 import { DICE_FACE_IDS, BARBARIAN_DICE_FACE_IDS } from './ids';
+import { getDieFaceByValue } from './diceRegistry';
+import { CHARACTER_DATA_MAP } from './characters';
 
-type GameModeHost = { __BG_GAME_MODE__?: string };
-const getGameMode = () => (
-    typeof globalThis !== 'undefined'
-        ? (globalThis as GameModeHost).__BG_GAME_MODE__
-        : undefined
-);
+import { getGameMode } from './utils';
 
 // ============================================================================
 // 骰子规则
 // ============================================================================
 
 /**
- * 根据骰子值获取骰面类型
- * 优先使用 DiceSystem，兼容旧代码回退到硬编码映射
+ * 根据骰子定义 ID 和点数获取骰面类型
+ * @param definitionId 骰子定义 ID（如 'monk-dice', 'barbarian-dice'）
+ * @param value 骰子点数 (1-6)
+ * @returns 骰面 ID 或 null
  */
-export const getDieFace = (value: number): DieFace => {
-    // 硬编码映射作为回退（兼容无 definitionId 的场景）
-    if (value === 1 || value === 2) return DICE_FACE_IDS.FIST;
-    if (value === 3) return DICE_FACE_IDS.PALM;
-    if (value === 4 || value === 5) return DICE_FACE_IDS.TAIJI;
-    return DICE_FACE_IDS.LOTUS;
+export const getDieFaceByDefinition = (definitionId: string, value: number): DieFace | null => {
+    const faceDef = getDieFaceByValue(definitionId, value);
+    if (!faceDef) return null;
+    return faceDef.symbols[0] as DieFace;
+};
+
+/**
+ * 根据角色 ID 和骰子点数获取骰面类型
+ * @param characterId 角色 ID（如 'monk', 'barbarian'）
+ * @param value 骰子点数 (1-6)
+ * @returns 骰面 ID 或 null
+ */
+export const getHeroDieFace = (characterId: SelectableCharacterId, value: number): DieFace | null => {
+    const charData = CHARACTER_DATA_MAP[characterId];
+    if (!charData) return null;
+    return getDieFaceByDefinition(charData.diceDefinitionId, value);
+};
+
+/**
+ * 根据游戏状态、玩家 ID 和骰子点数获取骰面类型（便捷包装）
+ * @param state 游戏核心状态
+ * @param playerId 玩家 ID
+ * @param value 骰子点数 (1-6)
+ * @returns 骰面 ID 或 null
+ */
+export const getPlayerDieFace = (state: DiceThroneCore, playerId: PlayerId, value: number): DieFace | null => {
+    const player = state.players[playerId];
+    if (!player || !player.characterId || player.characterId === 'unselected') return null;
+    return getHeroDieFace(player.characterId, value);
 };
 
 /**
  * 统计活跃骰子的各骰面数量
- * 优先使用 die.symbol，回退到 getDieFace
+ * 使用骰子的 symbol 字段（已通过 diceSystem 解析）
  */
 export const getFaceCounts = (dice: Die[]): Record<DieFace, number> => {
     return dice.reduce(
         (acc, die) => {
-            // 优先使用已解析的 symbol，回退到 getDieFace
-            const face = (die.symbol as DieFace) || getDieFace(die.value);
+            // 使用已解析的 symbol
+            const face = die.symbol as DieFace;
             if (face) {
                 acc[face] = (acc[face] ?? 0) + 1;
             }
@@ -117,8 +140,15 @@ export const getNextPlayerId = (state: DiceThroneCore): PlayerId => {
 /**
  * 获取当前掷骰玩家 ID
  */
-export const getRollerId = (state: DiceThroneCore): PlayerId => {
-    if (state.turnPhase === 'defensiveRoll' && state.pendingAttack) {
+export const getRollerId = (state: DiceThroneCore, phase?: TurnPhase): PlayerId => {
+    if (phase === 'defensiveRoll') {
+        return state.pendingAttack?.defenderId ?? state.activePlayerId;
+    }
+    if (phase === 'offensiveRoll') {
+        return state.activePlayerId;
+    }
+    // 未显式传入 phase 时，基于防御技能是否已选中推断掷骰者
+    if (state.pendingAttack?.defenseAbilityId) {
         return state.pendingAttack.defenderId;
     }
     return state.activePlayerId;
@@ -131,9 +161,9 @@ export const getRollerId = (state: DiceThroneCore): PlayerId => {
 /**
  * 检查是否可以推进阶段
  */
-export const canAdvancePhase = (state: DiceThroneCore): boolean => {
+export const canAdvancePhase = (state: DiceThroneCore, phase: TurnPhase): boolean => {
     // 选角阶段门禁
-    if (state.turnPhase === 'setup') {
+    if (phase === 'setup') {
         const playerIds = Object.keys(state.players);
         
         // 教程模式：只检查玩家 0 是否选好角色
@@ -157,28 +187,17 @@ export const canAdvancePhase = (state: DiceThroneCore): boolean => {
         return allSelected && allNonHostReady && state.hostStarted;
     }
 
-    // 有待处理选择时不可推进
-    // 注意：pendingChoice 已迁移到 sys.prompt，这里只检查领域层约束
-    if (state.pendingInteraction) {
-        return false;
-    }
-
     // 防御阶段：必须已选择防御技能才能推进
     // 规则 §3.6：先选技能 → 掷骰 → 确认
     // 注意：pendingAttack 为 null 表示攻击已结算（ATTACK_RESOLVED），此时允许推进
-    if (state.turnPhase === 'defensiveRoll') {
+    if (phase === 'defensiveRoll') {
         if (state.pendingAttack && !state.pendingAttack.defenseAbilityId) {
             return false;
         }
     }
 
-    // 有待处理的奖励骰重掷时不可推进（需要先完成重掷交互）
-    if (state.pendingBonusDiceSettlement) {
-        return false;
-    }
-    
     // 弃牌阶段手牌超限时不可推进
-    if (state.turnPhase === 'discard') {
+    if (phase === 'discard') {
         const player = state.players[state.activePlayerId];
         if (player && player.hand.length > HAND_LIMIT) {
             return false;
@@ -191,13 +210,13 @@ export const canAdvancePhase = (state: DiceThroneCore): boolean => {
 /**
  * 获取下一阶段
  */
-export const getNextPhase = (state: DiceThroneCore): TurnPhase => {
-    const currentIndex = PHASE_ORDER.indexOf(state.turnPhase);
+export const getNextPhase = (state: DiceThroneCore, phase: TurnPhase): TurnPhase => {
+    const currentIndex = PHASE_ORDER.indexOf(phase);
     let nextPhase = PHASE_ORDER[(currentIndex + 1) % PHASE_ORDER.length];
     
     // 第一回合先手玩家跳过 income
     if (
-        state.turnPhase === 'upkeep' &&
+        phase === 'upkeep' &&
         state.turnNumber === 1 &&
         state.activePlayerId === state.startingPlayerId
     ) {
@@ -205,7 +224,7 @@ export const getNextPhase = (state: DiceThroneCore): TurnPhase => {
     }
     
     // 进攻阶段结束后的分支
-    if (state.turnPhase === 'offensiveRoll') {
+    if (phase === 'offensiveRoll') {
         if (state.pendingAttack && state.pendingAttack.isDefendable) {
             nextPhase = 'defensiveRoll';
         } else {
@@ -214,7 +233,7 @@ export const getNextPhase = (state: DiceThroneCore): TurnPhase => {
     }
     
     // 弃牌阶段结束后切换玩家
-    if (state.turnPhase === 'discard') {
+    if (phase === 'discard') {
         nextPhase = 'upkeep';
     }
     
@@ -255,7 +274,8 @@ export const getDefensiveAbilityIds = (
  */
 export const getAvailableAbilityIds = (
     state: DiceThroneCore,
-    playerId: PlayerId
+    playerId: PlayerId,
+    phase: TurnPhase
 ): string[] => {
     const player = state.players[playerId];
     if (!player) return [];
@@ -265,7 +285,7 @@ export const getAvailableAbilityIds = (
     const faceCounts = getFaceCounts(dice);
 
     const context: AbilityContext = {
-        currentPhase: state.turnPhase,
+        currentPhase: phase,
         diceValues,
         faceCounts,
         resources: { cp: player.resources[RESOURCE_IDS.CP] ?? 0 },
@@ -273,9 +293,9 @@ export const getAvailableAbilityIds = (
     };
 
     // 根据阶段过滤技能类型
-    const expectedType = state.turnPhase === 'defensiveRoll'
+    const expectedType = phase === 'defensiveRoll'
         ? 'defensive'
-        : state.turnPhase === 'offensiveRoll'
+        : phase === 'offensiveRoll'
             ? 'offensive'
             : undefined;
 
@@ -352,12 +372,11 @@ export const getUpgradeTargetAbilityId = (card: AbilityCard): string | null => {
 export const checkPlayCard = (
     state: DiceThroneCore,
     playerId: PlayerId,
-    card: AbilityCard
+    card: AbilityCard,
+    phase: TurnPhase
 ): CardPlayCheckResult => {
     const player = state.players[playerId];
     if (!player) return { ok: false, reason: 'playerNotFound' };
-    
-    const phase = state.turnPhase;
     const playerCp = player.resources[RESOURCE_IDS.CP] ?? 0;
     
     // 升级卡：自动提取目标技能并验证
@@ -434,12 +453,12 @@ export const checkPlayCard = (
         }
         
         // 检查是否需要是当前投掷方（防御阶段为防御方，进攻阶段为进攻方）
-        if (cond.requireIsRoller && playerId !== getRollerId(state)) {
+        if (cond.requireIsRoller && playerId !== getRollerId(state, phase)) {
             return { ok: false, reason: 'requireIsRoller' };
         }
         
         // 检查是否需要不是当前投掷方（用于响应对手骰面确认，如"抬一手"）
-        if (cond.requireIsNotRoller && playerId === getRollerId(state)) {
+        if (cond.requireIsNotRoller && playerId === getRollerId(state, phase)) {
             return { ok: false, reason: 'requireIsNotRoller' };
         }
         
@@ -504,7 +523,8 @@ export const checkPlayUpgradeCard = (
     state: DiceThroneCore,
     playerId: PlayerId,
     card: AbilityCard,
-    targetAbilityId: string
+    targetAbilityId: string,
+    phase: TurnPhase
 ): UpgradeCardPlayCheckResult => {
     const player = state.players[playerId];
     if (!player) return { ok: false, reason: 'playerNotFound' };
@@ -513,7 +533,7 @@ export const checkPlayUpgradeCard = (
     if (card.type !== 'upgrade') return { ok: false, reason: 'notUpgradeCard' };
     
     // 仅 Main Phase 可用
-    if (state.turnPhase !== 'main1' && state.turnPhase !== 'main2') {
+    if (phase !== 'main1' && phase !== 'main2') {
         return { ok: false, reason: 'wrongPhaseForUpgrade' };
     }
 
@@ -599,7 +619,8 @@ export const isCardPlayableInResponseWindow = (
     state: DiceThroneCore,
     playerId: PlayerId,
     card: AbilityCard,
-    windowType: ResponseWindowType
+    windowType: ResponseWindowType,
+    phase: TurnPhase
 ): boolean => {
     // 升级卡不能在响应窗口打出
     if (card.type === 'upgrade') return false;
@@ -609,8 +630,6 @@ export const isCardPlayableInResponseWindow = (
     
     const playerCp = player.resources[RESOURCE_IDS.CP] ?? 0;
     if (card.cpCost > playerCp) return false;
-    
-    const phase = state.turnPhase;
     const isOwnTurn = playerId === state.activePlayerId;
     
     // 检查卡牌的基础 timing
@@ -647,12 +666,12 @@ export const isCardPlayableInResponseWindow = (
         }
         
         // 检查是否需要是当前投掷方
-        if (cond.requireIsRoller && playerId !== getRollerId(state)) {
+        if (cond.requireIsRoller && playerId !== getRollerId(state, phase)) {
             return false;
         }
         
         // 检查是否需要不是当前投掷方（用于响应对手骰面确认，如"抬一手"）
-        if (cond.requireIsNotRoller && playerId === getRollerId(state)) {
+        if (cond.requireIsNotRoller && playerId === getRollerId(state, phase)) {
             return false;
         }
         
@@ -717,7 +736,7 @@ export const isCardPlayableInResponseWindow = (
                 return false;
             }
             // 检查玩家是否是对手
-            const rollerId = getRollerId(state);
+            const rollerId = getRollerId(state, phase);
             const isRoller = playerId === rollerId;
             if (isRoller) {
                 // rollerId 不能在响应窗口中出牌，应该在确认骰面前主动出牌
@@ -828,14 +847,15 @@ export const hasRespondableContent = (
     state: DiceThroneCore,
     playerId: PlayerId,
     windowType: ResponseWindowType,
-    _sourceId?: string
+    _sourceId: string | undefined,
+    phase: TurnPhase
 ): boolean => {
     const player = state.players[playerId];
     if (!player) return false;
 
     // 检查手牌中是否有可响应的卡牌
     for (const card of player.hand) {
-        if (isCardPlayableInResponseWindow(state, playerId, card, windowType)) {
+        if (isCardPlayableInResponseWindow(state, playerId, card, windowType, phase)) {
             return true;
         }
     }
@@ -866,8 +886,9 @@ export const getResponderQueue = (
     state: DiceThroneCore,
     windowType: ResponseWindowType,
     triggerId: PlayerId,
-    sourceId?: string,
-    excludeId?: PlayerId
+    sourceId: string | undefined,
+    excludeId: PlayerId | undefined,
+    phase: TurnPhase
 ): PlayerId[] => {
     // 规则 4.4：终极技能行动锁定 - 对手不能采取任何行动
     // 影响的窗口：afterRollConfirmed
@@ -880,7 +901,7 @@ export const getResponderQueue = (
     const queue: PlayerId[] = [];
     
     // 触发者优先（如果有可响应内容且未被排除）
-    if (triggerId !== excludeId && hasRespondableContent(state, triggerId, windowType, sourceId)) {
+    if (triggerId !== excludeId && hasRespondableContent(state, triggerId, windowType, sourceId, phase)) {
         queue.push(triggerId);
     }
     
@@ -888,7 +909,7 @@ export const getResponderQueue = (
     for (const pid of allPlayers) {
         if (pid === triggerId) continue;
         if (pid === excludeId) continue;
-        if (hasRespondableContent(state, pid, windowType, sourceId)) {
+        if (hasRespondableContent(state, pid, windowType, sourceId, phase)) {
             queue.push(pid);
         }
     }

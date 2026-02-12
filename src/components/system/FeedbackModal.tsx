@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { cn } from '../../lib/utils';
 import { FEEDBACK_API_URL as API_URL } from '../../config/server';
+import { UI_Z_INDEX } from '../../core';
 
 interface FeedbackModalProps {
     onClose: () => void;
@@ -146,7 +147,8 @@ export const FeedbackModal = ({ onClose }: FeedbackModalProps) => {
         <div
             ref={backdropRef}
             onClick={handleBackdropClick}
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
+            className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
+            style={{ zIndex: UI_Z_INDEX.modalContent }}
         >
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}

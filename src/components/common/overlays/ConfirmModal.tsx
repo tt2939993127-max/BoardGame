@@ -1,6 +1,7 @@
 import { twMerge } from 'tailwind-merge';
 import { useTranslation } from 'react-i18next';
 import { ModalBase } from './ModalBase';
+import { UI_Z_INDEX } from '../../../core';
 
 type ConfirmTone = 'warm' | 'cool';
 
@@ -88,8 +89,10 @@ export const ConfirmModal = ({
         <ModalBase
             onClose={onCancel}
             closeOnBackdrop={closeOnBackdrop}
-            overlayClassName={twMerge('z-[60]', mergedTheme.overlay, overlayClassName)}
-            containerClassName={twMerge('z-[61] p-4 sm:p-6', mergedTheme.container, containerClassName)}
+            overlayClassName={twMerge(mergedTheme.overlay, overlayClassName)}
+            overlayStyle={{ zIndex: UI_Z_INDEX.modalOverlay }}
+            containerClassName={twMerge('p-4 sm:p-6', mergedTheme.container, containerClassName)}
+            containerStyle={{ zIndex: UI_Z_INDEX.modalContent }}
         >
             <div
                 className={twMerge(

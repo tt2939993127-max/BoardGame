@@ -19,8 +19,9 @@ import type { PlayerId } from '../../../engine/types';
 import type { FactionId } from '../domain/types';
 import { FACTION_CATALOG, type FactionCatalogEntry } from '../config/factions';
 import { CardSprite } from './CardSprite';
-import { initSpriteAtlases } from './cardAtlas';
+import { initSpriteAtlases, getSpriteAtlasSource, getFactionAtlasId } from './cardAtlas';
 import { DeckBuilderDrawer } from './DeckBuilderDrawer';
+import { UI_Z_INDEX } from '../../../core';
 import type { SerializedCustomDeck } from '../config/deckSerializer';
 import type { TFunction } from 'i18next';
 
@@ -80,7 +81,15 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
 }) => {
   const { t } = useTranslation('game-summonerwars');
   const isHost = currentPlayerId === hostPlayerId;
-  const playerIds = ['0', '1'];
+  // 动态获取所有玩家 ID（从 selectedFactions 或 readyPlayers 中推断）
+  const playerIds = useMemo(() => {
+    const allPids = new Set<string>();
+    Object.keys(selectedFactions).forEach(pid => allPids.add(pid));
+    Object.keys(readyPlayers).forEach(pid => allPids.add(pid));
+    Object.keys(playerNames).forEach(pid => allPids.add(pid));
+    // 如果没有任何数据，回退到默认的 2 人游戏
+    return allPids.size > 0 ? Array.from(allPids).sort() : ['0', '1'];
+  }, [selectedFactions, readyPlayers, playerNames]);
 
   // 自定义牌组选择状态（按玩家 ID 存储）
   const [customDeckSelections, setCustomDeckSelections] = useState<Record<string, CustomDeckInfo>>({});
@@ -109,6 +118,44 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   const availableFactions = useMemo(() => {
     return FACTION_CATALOG.filter(f => f.selectable !== false);
   }, []);
+
+  // 预加载双方选择的阵营资源（包括对方的）
+  React.useEffect(() => {
+    const factionsToPreload = new Set<FactionId>();
+    
+    // 收集所有已选择的阵营（动态遍历所有玩家）
+    Object.entries(selectedFactions).forEach(([pid, faction]) => {
+      if (faction && faction !== 'unselected') {
+        factionsToPreload.add(faction);
+      }
+    });
+
+    // 预加载图片资源
+    factionsToPreload.forEach(factionId => {
+      const entry = FACTION_CATALOG.find(f => f.id === factionId);
+      if (!entry) return;
+
+      // 预加载 hero 精灵图
+      const heroAtlasId = getSummonerAtlasId(factionId);
+      const heroSource = getSpriteAtlasSource(heroAtlasId);
+      if (heroSource) {
+        const img = new Image();
+        img.src = heroSource.image;
+      }
+
+      // 预加载 cards 精灵图
+      const cardsAtlasId = getFactionAtlasId(factionId, 'cards');
+      const cardsSource = getSpriteAtlasSource(cardsAtlasId);
+      if (cardsSource) {
+        const img = new Image();
+        img.src = cardsSource.image;
+      }
+
+      // 预加载 tip 图
+      const tipImg = new Image();
+      tipImg.src = entry.tipImagePath;
+    });
+  }, [selectedFactions]);
 
   // 放大预览状态（支持 tip 图和召唤师卡牌两种）
   const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
@@ -151,7 +198,8 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex flex-col bg-[#0d1117] overflow-hidden select-none text-white font-sans w-screen h-screen"
+      className="fixed inset-0 flex flex-col bg-[#0d1117] overflow-hidden select-none text-white font-sans w-screen h-screen"
+      style={{ zIndex: UI_Z_INDEX.overlay }}
     >
       {/* 背景氛围层 - 动态流光 */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">

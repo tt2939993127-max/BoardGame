@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUndo, useUndoStatus } from '../../contexts/UndoContext';
+import { UI_Z_INDEX } from '../../core';
 import { FabMenu, type FabAction } from '../system/FabMenu';
 import { UNDO_COMMANDS } from '../../engine';
 import { AudioControlSection } from './AudioControlSection';
@@ -741,6 +742,7 @@ export const GameHUD = ({
                 isDark={true}
                 items={items}
                 position="bottom-right"
+                zIndex={UI_Z_INDEX.overlayRaised}
             />
 
             {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}

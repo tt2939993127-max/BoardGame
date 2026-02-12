@@ -8,6 +8,13 @@ export interface RandomSoundOptions {
     weights?: number[];
 }
 
+export interface DiceRollSoundPool {
+    /** 单颗骰子（diceCount=1）专用 key */
+    single: SoundKey;
+    /** 多颗骰子（diceCount>=2）随机池 */
+    multiple: SoundKey[];
+}
+
 const lastIndexByGroup = new Map<string, number>();
 
 const pickWeightedIndex = (weights: number[]): number => {
@@ -55,6 +62,21 @@ export const pickRandomSoundKey = (
 
     lastIndexByGroup.set(groupId, nextIndex);
     return keys[nextIndex];
+};
+
+export const pickDiceRollSoundKey = (
+    groupId: string,
+    diceCount: number,
+    pool: DiceRollSoundPool,
+    options: RandomSoundOptions = {}
+): SoundKey => {
+    const normalizedCount = Number.isFinite(diceCount) ? Math.max(1, Math.floor(diceCount)) : 1;
+    if (normalizedCount <= 1) {
+        return pool.single;
+    }
+
+    const multiKeys = pool.multiple.length > 0 ? pool.multiple : [pool.single];
+    return pickRandomSoundKey(groupId, multiKeys, options);
 };
 
 export const playRandomSound = (

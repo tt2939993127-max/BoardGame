@@ -25,8 +25,8 @@ import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponse
 import type { PlayerId } from '../../../engine/types';
 import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
-import type { TokenDef } from '../../../systems/TokenSystem';
-import { PROMPT_COMMANDS } from '../../../engine/systems/PromptSystem';
+import type { TokenDef } from '../domain/tokenTypes';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
 export interface BoardOverlaysProps {
     // 放大预览
@@ -233,10 +233,10 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         key="choice"
                         choice={props.choice.hasChoice ? { title: props.choice.title ?? '', options: props.choice.options } : null}
                         canResolve={props.canResolveChoice}
-                        onResolve={(optionId) => {
-                            const promptMove = props.moves[PROMPT_COMMANDS.RESPOND];
-                            if (typeof promptMove === 'function') {
-                                (promptMove as (payload: { optionId: string }) => void)({ optionId });
+                    onResolve={(optionId) => {
+                            const respondMove = props.moves[INTERACTION_COMMANDS.RESPOND];
+                            if (typeof respondMove === 'function') {
+                                (respondMove as (payload: { optionId: string }) => void)({ optionId });
                             }
                         }}
                         locale={props.locale}

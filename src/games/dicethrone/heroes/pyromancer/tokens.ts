@@ -7,8 +7,8 @@
  * - debuff 类型：击倒、燃烧（被动触发）
  */
 
-import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
-import { TOKEN_IDS, STATUS_IDS } from '../../domain/ids';
+import type { TokenDef, TokenState } from '../../domain/tokenTypes';
+import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
 import { RESOURCE_IDS } from '../../domain/resources';
 
 const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
@@ -45,7 +45,8 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
                 value: 1,
             },
         },
-        frameId: 'fire-mastery',
+        frameId: 'pyro-status-2',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER,
     },
 
     // ============================================
@@ -69,6 +70,8 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
             removable: true,
             removalCost: { resource: RESOURCE_IDS.CP, amount: 2 },
         },
+        frameId: 'knockdown',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
     },
 
     /**
@@ -88,6 +91,8 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
             removable: true,
             actions: [{ type: 'damage', target: 'self', value: 1 }],
         },
+        frameId: 'pyro-status-4',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER,
     },
 
     /**
@@ -106,6 +111,8 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
             timing: 'onPhaseEnter',
             removable: true,
         },
+        frameId: 'pyro-status-1',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER,
     },
 ];
 

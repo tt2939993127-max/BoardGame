@@ -416,7 +416,7 @@ describe('胜负判定边界', () => {
 
     it('setup 阶段不判定胜负（即使 HP=0）', () => {
         const core = getInitCore();
-        core.turnPhase = 'setup';
+        core.hostStarted = false;
         core.players['0'].resources[RESOURCE_IDS.HP] = 0;
 
         const result = DiceThroneDomain.isGameOver!(core);

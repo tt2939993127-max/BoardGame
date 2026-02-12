@@ -46,14 +46,32 @@ const normalizePayload = (payload: unknown): Record<string, unknown> => {
     return {};
 };
 
+const normalizeRuntimePlayerId = (playerId: unknown): string => {
+    if (playerId === null || playerId === undefined) return '';
+    const raw = String(playerId);
+    if (!raw) return '';
+    if (raw.startsWith('player-')) return raw;
+    if (/^\d+$/.test(raw)) {
+        const value = Number(raw);
+        if (Number.isFinite(value)) {
+            return `player-${value + 1}`;
+        }
+    }
+    return raw;
+};
+
+const normalizeRuntimePlayerIds = (playerIds: Array<string | number>) => (
+    playerIds.map((id) => normalizeRuntimePlayerId(id)).filter(Boolean)
+);
+
 const buildDomainCore = (packageId: string, domain: RuntimeDomainCore): DomainCore<UGCGameState, RuntimeCommandLike, RuntimeEventLike> => {
     return {
         gameId: packageId,
-        setup: (playerIds, random) => domain.setup(playerIds, random),
+        setup: (playerIds, random) => domain.setup(normalizeRuntimePlayerIds(playerIds), random),
         validate: (state, command) => {
             const runtimeCommand = {
                 type: command.type,
-                playerId: command.playerId,
+                playerId: normalizeRuntimePlayerId(command.playerId),
                 payload: normalizePayload(command.payload),
                 timestamp: command.timestamp,
             };
@@ -62,7 +80,7 @@ const buildDomainCore = (packageId: string, domain: RuntimeDomainCore): DomainCo
         execute: (state, command, random) => {
             const runtimeCommand = {
                 type: command.type,
-                playerId: command.playerId,
+                playerId: normalizeRuntimePlayerId(command.playerId),
                 payload: normalizePayload(command.payload),
                 timestamp: command.timestamp,
             };
@@ -79,7 +97,7 @@ const buildDomainCore = (packageId: string, domain: RuntimeDomainCore): DomainCo
             return domain.reduce(state, runtimeEvent) as UGCGameState;
         },
         playerView: domain.playerView
-            ? (state, playerId) => domain.playerView!(state, playerId) as Partial<UGCGameState>
+            ? (state, playerId) => domain.playerView!(state, normalizeRuntimePlayerId(playerId)) as Partial<UGCGameState>
             : undefined,
         isGameOver: domain.isGameOver
             ? (state) => domain.isGameOver!(state) as GameOverResult

@@ -5,8 +5,9 @@
 import type { MatchState, ValidationResult } from '../../../engine/types';
 import type { SmashUpCommand, SmashUpCore, ActionCardDef } from './types';
 import { SU_COMMANDS, getCurrentPlayerId, HAND_LIMIT } from './types';
-import { getCardDef } from '../data/cards';
+import { getCardDef, getMinionDef } from '../data/cards';
 import { isOperationRestricted } from './ongoingEffects';
+import { getPlayerEffectivePowerOnBase } from './ongoingModifiers';
 
 export function validate(
     state: MatchState<SmashUpCore>,
@@ -17,7 +18,7 @@ export function validate(
     const phase = state.sys.phase;
 
     // 系统命令（SYS_ 前缀）由引擎层处理，领域层直接放行
-    if ((command as any).type.startsWith('SYS_')) {
+    if ((command as { type: string }).type.startsWith('SYS_')) {
         return { valid: true };
     }
 
@@ -41,11 +42,22 @@ export function validate(
             if (baseIndex < 0 || baseIndex >= core.bases.length) {
                 return { valid: false, error: '无效的基地索引' };
             }
-            // ongoing 限制检查：是否禁止打出随从到此基地
+            // 限制检查：是否禁止打出随从到此基地（包括基地效果和 ongoing 效果）
+            const minionDef = getMinionDef(card.defId);
+            const basePower = minionDef?.power ?? 0;
             if (isOperationRestricted(core, baseIndex, command.playerId, 'play_minion', {
                 minionDefId: card.defId,
+                basePower,
             })) {
-                return { valid: false, error: '该基地禁止打出随从' };
+                return { valid: false, error: '该基地禁止打出该随从' };
+            }
+            // 修格斯 (Shoggoth) 自身打出限制：只能打到己方≥6力量的基地
+            if (card.defId === 'elder_thing_shoggoth') {
+                const base = core.bases[baseIndex];
+                const myPower = getPlayerEffectivePowerOnBase(core, base, baseIndex, command.playerId);
+                if (myPower < 6) {
+                    return { valid: false, error: '修格斯只能打到你至少拥有6点力量的基地' };
+                }
             }
             return { valid: true };
         }
@@ -168,9 +180,19 @@ export function validate(
             return { valid: true };
         }
 
+        case SU_COMMANDS.DISMISS_REVEAL: {
+            if (!core.pendingReveal) {
+                return { valid: false, error: '没有待展示的卡牌' };
+            }
+            if (command.playerId !== core.pendingReveal.viewerPlayerId) {
+                return { valid: false, error: '只有查看者可以关闭展示' };
+            }
+            return { valid: true };
+        }
+
         default:
             // RESPONSE_PASS 由引擎 ResponseWindowSystem 处理，领域层直接放行
-            if ((command as any).type === 'RESPONSE_PASS') {
+            if ((command as { type: string }).type === 'RESPONSE_PASS') {
                 return { valid: true };
             }
             return { valid: false, error: '未知命令' };

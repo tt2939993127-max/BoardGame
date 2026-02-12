@@ -20,6 +20,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { makeMinion, makeCard, makePlayer, makeState, makeMatchState } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -33,42 +34,10 @@ beforeAll(() => {
 // 辅助函数
 // ============================================================================
 
-function makeMinion(uid: string, defId: string, controller: string, power: number): MinionOnBase {
-    return {
-        uid, defId, controller, owner: controller,
-        basePower: power, powerModifier: 0, talentUsed: false, attachedActions: [],
-    };
-}
 
-function makeCard(uid: string, defId: string, type: 'minion' | 'action', owner: string): CardInstance {
-    return { uid, defId, type, owner };
-}
 
-function makePlayer(id: string, overrides?: Partial<PlayerState>): PlayerState {
-    return {
-        id, vp: 0, hand: [], deck: [], discard: [],
-        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
-        factions: ['test_a', 'test_b'] as [string, string],
-        ...overrides,
-    };
-}
 
-function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
-    return {
-        players: { '0': makePlayer('0'), '1': makePlayer('1') },
-        turnOrder: ['0', '1'],
-        currentPlayerIndex: 0,
-        bases: [],
-        baseDeck: [],
-        turnNumber: 1,
-        nextUid: 100,
-        ...overrides,
-    };
-}
 
-function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
-}
 
 const defaultRandom: RandomFn = {
     shuffle: (arr: any[]) => [...arr],

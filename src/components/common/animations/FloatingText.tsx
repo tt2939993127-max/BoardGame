@@ -13,6 +13,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, useAnimate } from 'framer-motion';
 import { createPortal } from 'react-dom';
+import { UI_Z_INDEX } from '../../../core';
 
 // ============================================================================
 // 颜色配置
@@ -97,7 +98,7 @@ const FloatingTextItem: React.FC<{
   return (
     <motion.div
       ref={scope}
-      className="fixed pointer-events-none z-[9999]"
+      className="fixed pointer-events-none"
       style={{
         left: data.position.x,
         top: data.position.y,
@@ -105,6 +106,7 @@ const FloatingTextItem: React.FC<{
         translateY: '-50%',
         opacity: 0,
         scale: 0.3,
+        zIndex: UI_Z_INDEX.overlayRaised,
       }}
     >
       <span

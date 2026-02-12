@@ -29,6 +29,7 @@ AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 + 法师战争（优先级中）
 + 石器时代（优先级低，至少还是要一个德式）
 
+> 还有一个想法是爬取规则文档作为知识库，添加一个规则问答助手，就不用看繁重的QA文本，也不怕村规了，这个只有等有时间再琢磨了
 </details>
 
 ## ✨ 特性
@@ -217,6 +218,8 @@ npm run test:e2e         # 端到端测试
 
 ## 📄 文档
 
+- [**架构可视化**](docs/architecture-visual.svg) — 动画 SVG，一图看懂整体架构与管线流程
+- [架构设计文档](docs/architecture.md) — 完整技术架构说明
 - [部署指南](docs/deploy.md) — 同域 / Pages 分离 / 镜像部署完整说明
 - [前端框架](docs/framework/frontend.md) — 游戏 UI 框架与组件约定
 - [后端框架](docs/framework/backend.md) — API 与游戏服务架构

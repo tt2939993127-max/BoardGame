@@ -95,7 +95,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'zen-forget' }),
                     cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 触发 preDefense choice
-                    cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
@@ -140,7 +140,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'zen-forget' }),
                     cmd('ADVANCE_PHASE', '0'),
-                    cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),
@@ -316,7 +316,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '1'),      // 防御方掷骰
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),  // defensiveRoll 退出，触发攻击结算，rollDie 产生 choice，halt
-                    cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -363,7 +363,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
                     cmd('ADVANCE_PHASE', '1'),  // defensiveRoll 退出，触发攻击结算，rollDie 产生 choice，halt
-                    cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -695,7 +695,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'lotus-palm' }),
                     cmd('ADVANCE_PHASE', '0'), // preDefense 选择是否花费太极
-                    cmd('SYS_PROMPT_RESPOND', '0', { optionId: 'option-0' }), // 选择花费2太极使攻击不可防御
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }), // 选择花费2太极使攻击不可防御
                     cmd('ADVANCE_PHASE', '0'), // 不可防御攻击跳过防御骰阶段，直接到 main2
                 ],
                 expect: {

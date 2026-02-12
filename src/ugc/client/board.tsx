@@ -24,10 +24,13 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
     const { packageId, viewUrl, allowedOrigins, previewConfig } = options;
     const iframeSrc = viewUrl && viewUrl.trim() ? viewUrl.trim() : DEFAULT_RUNTIME_VIEW_URL;
 
-    const UgcRemoteHostBoard = ({ G, ctx, moves }: BoardProps<MatchState<UGCGameState>>) => {
+    const UgcRemoteHostBoard = ({ G, ctx, moves, playerID, matchID, credentials }: BoardProps<MatchState<UGCGameState>>) => {
         const iframeRef = useRef<HTMLIFrameElement | null>(null);
         const bridgeRef = useRef<UGCHostBridge | null>(null);
         const stateRef = useRef<UGCGameState | null>(null);
+        const buildStateRef = useRef<(() => UGCGameState) | null>(null);
+        const handleCommandRef = useRef<((commandType: string, playerId: PlayerId, params: Record<string, unknown>) =>
+            Promise<{ success: boolean; error?: string }>) | null>(null);
         const [iframeReady, setIframeReady] = useState(false);
         const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
@@ -73,27 +76,59 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
         }, [coreState, corePlayers, ctx.phase, ctx.turn, ctx.gameover, currentPlayerId, previewConfig]);
 
         useEffect(() => {
+            buildStateRef.current = buildState;
+        }, [buildState]);
+
+        useEffect(() => {
             const nextState = buildState();
-            stateRef.current = nextState;
-            bridgeRef.current?.sendStateUpdate();
+            // 只有状态真正变化时才发送更新
+            if (JSON.stringify(stateRef.current) !== JSON.stringify(nextState)) {
+                stateRef.current = nextState;
+                bridgeRef.current?.sendStateUpdate();
+            }
         }, [buildState]);
 
         const handleCommand = useCallback(async (
             commandType: string,
-            _playerId: PlayerId,
+            runtimePlayerId: PlayerId,
             params: Record<string, unknown>
         ) => {
+            console.log(`[UGC Board] handleCommand: ${commandType}`, { 
+                runtimePlayerId, 
+                currentPlayerID: playerID,
+                params 
+            });
+
+            // UGC online 模式：直接调用 move，让 boardgame.io 处理权限验证
+            // 注意：boardgame.io 会自动使用当前客户端的 playerID
+            // 如果需要跨玩家操作，应该为每个玩家创建独立的客户端连接
+
             const moveFn = (moves as Record<string, (payload: unknown) => void>)[commandType];
+            console.log(`[UGC Board] Available moves:`, Object.keys(moves || {}));
+            console.log(`[UGC Board] Move function exists:`, !!moveFn);
             if (!moveFn) {
                 return { success: false, error: `未知命令: ${commandType}` };
             }
             try {
                 moveFn(params);
+                console.log(`[UGC Board] Command executed successfully`);
                 return { success: true };
             } catch (error) {
+                console.error(`[UGC Board] Command execution error:`, error);
                 return { success: false, error: error instanceof Error ? error.message : '命令执行失败' };
             }
-        }, [moves]);
+        }, [moves, playerID]);
+
+        useEffect(() => {
+            handleCommandRef.current = handleCommand;
+        }, [handleCommand]);
+
+        const commandHandler = useCallback((
+            commandType: string,
+            playerId: PlayerId,
+            params: Record<string, unknown>
+        ) => handleCommandRef.current?.(commandType, playerId, params)
+            ?? Promise.resolve({ success: false, error: '命令处理器未就绪' }), []);
 
         useEffect(() => {
             if (!iframeReady || !iframeRef.current) return undefined;
@@ -104,8 +139,8 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
                 currentPlayerId,
                 playerIds,
                 allowedOrigins,
-                onCommand: handleCommand,
-                getState: () => stateRef.current ?? buildState(),
+                onCommand: commandHandler,
+                getState: () => stateRef.current ?? buildStateRef.current?.() ?? buildState(),
                 onError: (error) => setRuntimeError(error),
             });
             bridge.start();
@@ -115,7 +150,7 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
                 bridge.stop();
                 bridgeRef.current = null;
             };
-        }, [iframeReady, packageId, currentPlayerId, playerIds, allowedOrigins, handleCommand, buildState]);
+        }, [iframeReady, packageId, currentPlayerId, playerIds, allowedOrigins, commandHandler]);
 
         if (runtimeError) {
             return (

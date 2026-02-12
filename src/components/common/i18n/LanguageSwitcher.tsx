@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { LANGUAGE_OPTIONS } from '../../../lib/i18n/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
+import { UI_Z_INDEX } from '../../../core';
 
 interface LanguageSwitcherProps {
     className?: string;
@@ -60,10 +61,11 @@ export const LanguageSwitcher = ({ className = '' }: LanguageSwitcherProps) => {
                         exit={{ opacity: 0, y: -4, scale: 0.95 }}
                         transition={{ duration: 0.15, ease: 'easeOut' }}
                         className={clsx(
-                            'absolute top-full right-0 mt-1 z-[60] min-w-[120px]',
+                            'absolute top-full right-0 mt-1 min-w-[120px]',
                             'bg-[#fefcf7] border border-[#d3ccba] shadow-[0_4px_12px_rgba(67,52,34,0.15)] rounded overflow-hidden',
                             'py-1'
                         )}
+                        style={{ zIndex: UI_Z_INDEX.tooltip }}
                     >
                         <div className="absolute -top-1.5 right-3 w-2.5 h-2.5 bg-[#fefcf7] border-l border-t border-[#d3ccba] rotate-45" />
 

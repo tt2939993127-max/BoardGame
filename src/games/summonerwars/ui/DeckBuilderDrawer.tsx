@@ -17,6 +17,7 @@ import { FactionPanel } from './deckbuilder/FactionPanel';
 import { CardPoolPanel } from './deckbuilder/CardPoolPanel';
 import { MyDeckPanel } from './deckbuilder/MyDeckPanel';
 import { serializeDeck, type SerializedCustomDeck } from '../config/deckSerializer';
+import { UI_Z_INDEX } from '../../../core';
 
 interface DeckBuilderDrawerProps {
     isOpen: boolean;
@@ -78,7 +79,8 @@ export const DeckBuilderDrawer: React.FC<DeckBuilderDrawerProps> = ({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150]"
+                        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+                        style={{ zIndex: UI_Z_INDEX.overlay }}
                     />
 
                     {/* 抽屉主体 */}
@@ -87,7 +89,8 @@ export const DeckBuilderDrawer: React.FC<DeckBuilderDrawerProps> = ({
                         animate={{ y: 0 }}
                         exit={{ y: '100%' }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed inset-x-0 bottom-0 h-[85vh] z-[160] bg-[#0d1117] rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.8)] border-t border-white/10 flex flex-col overflow-hidden"
+                        className="fixed inset-x-0 bottom-0 h-[85vh] bg-[#0d1117] rounded-t-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.8)] border-t border-white/10 flex flex-col overflow-hidden"
+                        style={{ zIndex: UI_Z_INDEX.overlayRaised }}
                     >
                         {/* 头部栏 */}
                         <div className="h-12 border-b border-white/10 flex items-center justify-between px-6 bg-gradient-to-r from-amber-900/20 to-transparent">

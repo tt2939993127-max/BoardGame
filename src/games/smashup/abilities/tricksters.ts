@@ -1,12 +1,12 @@
 /**
- * 大杀四方 - 诡术师派系能力
+ * 大杀四方 - 诡术师派系能�?
  *
- * 主题：陷阱、干扰对手、消灭随从
+ * 主题：陷阱、干扰对手、消灭随�?
  */
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, getMinionPower, setPromptContinuation, buildMinionTargetOptions } from '../domain/abilityHelpers';
+import { destroyMinion, getMinionPower, requestChoice, buildMinionTargetOptions } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDiscardedEvent, CardsDrawnEvent, OngoingDetachedEvent, SmashUpEvent, LimitModifiedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -24,8 +24,10 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myMinionCount
     );
     if (targets.length === 0) return { events: [] };
+    // 单目标自动执�?
     if (targets.length === 1) {
-        return { events: [destroyMinion(targets[0].uid, targets[0].defId, ctx.baseIndex, targets[0].owner, 'trickster_gnome', ctx.now)] };
+        const t = targets[0];
+        return { events: [destroyMinion(t.uid, t.defId, ctx.baseIndex, t.owner, 'trickster_gnome', ctx.now)] };
     }
     const options = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
@@ -34,10 +36,10 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
     return {
-        events: [setPromptContinuation({
+        events: [requestChoice({
             abilityId: 'trickster_gnome',
             playerId: ctx.playerId,
-            data: { promptConfig: { title: '选择要消灭的随从（力量低于己方随从数量）', options: buildMinionTargetOptions(options) } },
+            promptConfig: { title: '选择要消灭的随从（力量低于己方随从数量）', options: buildMinionTargetOptions(options) },
         }, ctx.now)],
     };
 }
@@ -50,7 +52,7 @@ function tricksterTakeTheShinies(ctx: AbilityContext): AbilityResult {
         const player = ctx.state.players[pid];
         if (player.hand.length === 0) continue;
 
-        // 随机选择至多2张
+        // 随机选择至多2�?
         const handCopy = [...player.hand];
         const discardUids: string[] = [];
         const count = Math.min(2, handCopy.length);
@@ -70,9 +72,9 @@ function tricksterTakeTheShinies(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 幻想破碎 onPlay：消灭一个已打出到随从或基地上的行动卡 */
+/** 幻想破碎 onPlay：消灭一个已打出到随从或基地上的行动�?*/
 function tricksterDisenchant(ctx: AbilityContext): AbilityResult {
-    // 收集所有对手的持续行动卡
+    // 收集所有对手的持续行动�?
     const targets: { uid: string; defId: string; ownerId: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
@@ -94,40 +96,37 @@ function tricksterDisenchant(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [] };
-    if (targets.length === 1) {
-        return { events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid: targets[0].uid, defId: targets[0].defId, ownerId: targets[0].ownerId, reason: 'trickster_disenchant' }, timestamp: ctx.now } as OngoingDetachedEvent] };
-    }
     const options = targets.map((t, i) => ({
         id: `action-${i}`, label: t.label, value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
     }));
     return {
-        events: [setPromptContinuation({
+        events: [requestChoice({
             abilityId: 'trickster_disenchant',
             playerId: ctx.playerId,
-            data: { promptConfig: { title: '选择要消灭的行动卡', options } },
+            promptConfig: { title: '选择要消灭的行动牌', options },
         }, ctx.now)],
     };
 }
 
-/** 注册诡术师派系所有能力 */
+/** 注册诡术师派系所有能�?*/
 export function registerTricksterAbilities(): void {
     registerAbility('trickster_gnome', 'onPlay', tricksterGnome);
-    // 带走宝物（行动卡）：每个对手随机弃两张手牌
+    // 带走宝物（行动卡）：每个对手随机弃两张手�?
     registerAbility('trickster_take_the_shinies', 'onPlay', tricksterTakeTheShinies);
     // 幻想破碎（行动卡）：消灭一个已打出的行动卡
     registerAbility('trickster_disenchant', 'onPlay', tricksterDisenchant);
-    // 小妖精 onDestroy：被消灭后抽1张牌 + 对手随机弃1张牌
+    // 小妖�?onDestroy：被消灭后抽1张牌 + 对手随机�?张牌
     registerAbility('trickster_gremlin', 'onDestroy', tricksterGremlinOnDestroy);
     // 沉睡印记（行动卡）：对手下回合不能打行动
     registerAbility('trickster_mark_of_sleep', 'onPlay', tricksterMarkOfSleep);
 
-    // 注册 ongoing 拦截器
+    // 注册 ongoing 拦截�?
     registerTricksterOngoingEffects();
 }
 
 /** 注册诡术师派系的 Prompt 继续函数 */
 export function registerTricksterPromptContinuations(): void {
-    // 侏儒：选择目标后消灭
+    // 侏儒：选择目标后消�?
     registerPromptContinuation('trickster_gnome', (ctx) => {
         const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
         const base = ctx.state.bases[baseIndex];
@@ -142,14 +141,26 @@ export function registerTricksterPromptContinuations(): void {
         const { cardUid, defId, ownerId } = ctx.selectedValue as { cardUid: string; defId: string; ownerId: string };
         return [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'trickster_disenchant' }, timestamp: ctx.now }];
     });
+
+    // 沉睡印记：选择对手后执�?
+    registerPromptContinuation('trickster_mark_of_sleep', (ctx) => {
+        const { pid } = ctx.selectedValue as { pid: string };
+        const currentLimit = ctx.state.players[pid].actionLimit;
+        if (currentLimit <= 0) return [];
+        return [{
+            type: SU_EVENTS.LIMIT_MODIFIED,
+            payload: { playerId: pid, limitType: 'action' as const, delta: -currentLimit, reason: 'trickster_mark_of_sleep' },
+            timestamp: ctx.now,
+        }];
+    });
 }
 
 
-/** 小妖精 onDestroy：被消灭后抽1张牌 + 每个对手随机弃1张牌 */
+/** 小妖�?onDestroy：被消灭后抽1张牌 + 每个对手随机�?张牌 */
 function tricksterGremlinOnDestroy(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
 
-    // 抽1张牌
+    // �?张牌
     const player = ctx.state.players[ctx.playerId];
     if (player && player.deck.length > 0) {
         const { drawnUids } = drawCards(player, 1, ctx.random);
@@ -162,7 +173,7 @@ function tricksterGremlinOnDestroy(ctx: AbilityContext): AbilityResult {
         }
     }
 
-    // 每个对手随机弃1张牌
+    // 每个对手随机�?张牌
     for (const pid of ctx.state.turnOrder) {
         if (pid === ctx.playerId) continue;
         const opponent = ctx.state.players[pid];
@@ -179,57 +190,49 @@ function tricksterGremlinOnDestroy(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/**
- * 沉睡印记 onPlay：对手下回合不能打行动卡
- * MVP：通过 LIMIT_MODIFIED 将对手行动额度设为 -1（下回合重置时恢复）
- */
+/** 沉睡印记 onPlay：选择一个对手，其下回合不能打行动卡 */
 function tricksterMarkOfSleep(ctx: AbilityContext): AbilityResult {
-    const events: SmashUpEvent[] = [];
-    // 选择一个对手（MVP：选手牌最多的对手）
-    let targetPid: string | undefined;
-    let maxHand = -1;
-    for (const pid of ctx.state.turnOrder) {
-        if (pid === ctx.playerId) continue;
-        const hand = ctx.state.players[pid].hand.length;
-        if (hand > maxHand) {
-            maxHand = hand;
-            targetPid = pid;
-        }
-    }
-    if (!targetPid) return { events: [] };
+    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
+    if (opponents.length === 0) return { events: [] };
+    const options = opponents.map((pid, i) => ({
+        id: `opp-${i}`, label: `对手 ${pid}`, value: { pid },
+    }));
+    return {
+        events: [requestChoice({
+            abilityId: 'trickster_mark_of_sleep',
+            playerId: ctx.playerId,
+            promptConfig: { title: '选择一个对手（其下回合不能打行动卡）', options },
+        }, ctx.now)],
+    };
+}
 
-    // 将对手行动额度减为 0（当前回合生效，下回合重置）
+function executeMarkOfSleep(ctx: AbilityContext, targetPid: string): AbilityResult {
     const currentLimit = ctx.state.players[targetPid].actionLimit;
-    if (currentLimit > 0) {
-        events.push({
+    if (currentLimit <= 0) return { events: [] };
+    return {
+        events: [{
             type: SU_EVENTS.LIMIT_MODIFIED,
-            payload: {
-                playerId: targetPid,
-                limitType: 'action' as const,
-                delta: -currentLimit,
-                reason: 'trickster_mark_of_sleep',
-            },
+            payload: { playerId: targetPid, limitType: 'action' as const, delta: -currentLimit, reason: 'trickster_mark_of_sleep' },
             timestamp: ctx.now,
-        } as LimitModifiedEvent);
-    }
-    return { events };
+        } as LimitModifiedEvent],
+    };
 }
 
 // ============================================================================
-// Ongoing 拦截器注册
+// Ongoing 拦截器注�?
 // ============================================================================
 
-/** 注册诡术师派系的 ongoing 拦截器 */
+/** 注册诡术师派系的 ongoing 拦截�?*/
 function registerTricksterOngoingEffects(): void {
-    // 小矮妖：其他玩家打出力量更低的随从到同基地时消灭该随从
+    // 小矮妖：其他玩家打出力量更低的随从到同基地时消灭该随�?
     registerTrigger('trickster_leprechaun', 'onMinionPlayed', (trigCtx) => {
         if (!trigCtx.triggerMinionUid || !trigCtx.triggerMinionDefId || trigCtx.baseIndex === undefined) return [];
-        // 找到 leprechaun 所在基地
+        // 找到 leprechaun 所在基�?
         for (let i = 0; i < trigCtx.state.bases.length; i++) {
             const base = trigCtx.state.bases[i];
             const leprechaun = base.minions.find(m => m.defId === 'trickster_leprechaun');
             if (!leprechaun) continue;
-            // 只在同基地触发
+            // 只在同基地触�?
             if (i !== trigCtx.baseIndex) continue;
             // 只对其他玩家触发
             if (leprechaun.controller === trigCtx.playerId) continue;
@@ -255,7 +258,7 @@ function registerTricksterOngoingEffects(): void {
         return [];
     });
 
-    // 布朗尼：被对手行动影响时，对手弃两张牌
+    // 布朗尼：被对手行动影响时，对手弃两张�?
     registerTrigger('trickster_brownie', 'onMinionPlayed', (trigCtx) => {
         // 简化实现：当对手在 brownie 所在基地打出随从时触发弃牌
         if (!trigCtx.triggerMinionUid || trigCtx.baseIndex === undefined) return [];
@@ -286,7 +289,7 @@ function registerTricksterOngoingEffects(): void {
 
     // 迷雾笼罩：此基地上可额外打出一个随从（回合开始时给额外额度）
     registerTrigger('trickster_enshrouding_mist', 'onTurnStart', (trigCtx) => {
-        // 找到 enshrouding_mist 的拥有者
+        // 找到 enshrouding_mist 的拥有�?
         for (const base of trigCtx.state.bases) {
             const mist = base.ongoingActions.find(o => o.defId === 'trickster_enshrouding_mist');
             if (!mist) continue;
@@ -308,11 +311,11 @@ function registerTricksterOngoingEffects(): void {
 
     // 藏身处：保护同基地己方随从不受对手行动卡影响
     registerProtection('trickster_hideout', 'action', (ctx) => {
-        // 检查目标随从是否附着了 hideout，或同基地有 hideout ongoing
+        // 检查目标随从是否附着�?hideout，或同基地有 hideout ongoing
         if (ctx.targetMinion.attachedActions.some(a => a.defId === 'trickster_hideout')) {
             return ctx.targetMinion.controller !== ctx.sourcePlayerId;
         }
-        // 也检查基地上的 ongoing
+        // 也检查基地上�?ongoing
         const base = ctx.state.bases[ctx.targetBaseIndex];
         if (base?.ongoingActions.some(o => o.defId === 'trickster_hideout')) {
             return ctx.targetMinion.controller !== ctx.sourcePlayerId;
@@ -320,7 +323,7 @@ function registerTricksterOngoingEffects(): void {
         return false;
     });
 
-    // 火焰陷阱：其他玩家打出随从到此基地时消灭该随从
+    // 火焰陷阱：其他玩家打出随从到此基地时消灭该随�?
     registerTrigger('trickster_flame_trap', 'onMinionPlayed', (trigCtx) => {
         if (!trigCtx.triggerMinionUid || !trigCtx.triggerMinionDefId || trigCtx.baseIndex === undefined) return [];
         for (let i = 0; i < trigCtx.state.bases.length; i++) {
@@ -344,15 +347,15 @@ function registerTricksterOngoingEffects(): void {
         return [];
     });
 
-    // 封路：指定派系不能打出随从到此基地
+    // 封路：指定派系不能打出随从到此基�?
     registerRestriction('trickster_block_the_path', 'play_minion', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return false;
         const blockAction = base.ongoingActions.find(o => o.defId === 'trickster_block_the_path');
         if (!blockAction) return false;
-        // 只限制对手
+        // 只限制对�?
         if (blockAction.ownerId === ctx.playerId) return false;
-        // MVP：限制所有对手打出随从到此基地（完整版需要 Prompt 选择派系）
+        // MVP：限制所有对手打出随从到此基地（完整版需�?Prompt 选择派系�?
         return true;
     });
 

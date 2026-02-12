@@ -4,6 +4,7 @@ import type { TurnPhase } from '../types';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { PhaseIndicatorSkeleton } from '../../../components/game/framework';
 import type { PhaseInfo } from '../../../core/ui';
+import { UI_Z_INDEX } from '../../../core';
 import { resolveI18nList, type TranslateFn } from './utils';
 
 /** 构建阶段信息列表 */
@@ -23,7 +24,8 @@ export const PhaseIndicator = ({ currentPhase }: { currentPhase: TurnPhase }) =>
 
     return (
         <div
-            className="flex flex-col gap-[0.4vw] pointer-events-auto opacity-100 w-full z-[80]"
+            className="flex flex-col gap-[0.4vw] pointer-events-auto opacity-100 w-full"
+            style={{ zIndex: UI_Z_INDEX.hud }}
             data-tutorial-id="phase-indicator"
         >
             <h3 className="text-[1.0vw] font-black text-slate-300/80 mb-[0.4vw] ml-[0.3vw] tracking-[0.2em] uppercase truncate drop-shadow-md">

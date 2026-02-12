@@ -7,8 +7,8 @@
  * - unique 类型：神圣祝福（特殊触发）
  */
 
-import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
-import { TOKEN_IDS } from '../../domain/ids';
+import type { TokenDef, TokenState } from '../../domain/tokenTypes';
+import { TOKEN_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
 
 const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
 
@@ -38,7 +38,8 @@ export const PALADIN_TOKENS: TokenDef[] = [
                 value: 1,
             },
         },
-        frameId: 'crit',
+        frameId: 'holy-strike',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
     },
 
     /**
@@ -62,7 +63,8 @@ export const PALADIN_TOKENS: TokenDef[] = [
                 value: 0, // 不增加伤害，而是使攻击不可防御（逻辑在 custom action 中）
             },
         },
-        frameId: 'accuracy',
+        frameId: 'rallying-cry',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
     },
 
     /**
@@ -86,7 +88,8 @@ export const PALADIN_TOKENS: TokenDef[] = [
                 value: -1,
             },
         },
-        frameId: 'protect',
+        frameId: 'divine-shield',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
     },
 
     /**
@@ -110,7 +113,8 @@ export const PALADIN_TOKENS: TokenDef[] = [
                 value: 0, // 不减伤，而是反弹 2 点伤害（逻辑在 custom action 中）
             },
         },
-        frameId: 'retribution',
+        frameId: 'shield-break',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
     },
 
     // ============================================
@@ -129,7 +133,8 @@ export const PALADIN_TOKENS: TokenDef[] = [
         description: tokenText(TOKEN_IDS.TITHES_UPGRADED, 'description') as unknown as string[],
         stackLimit: 1,
         category: 'unique',
-        frameId: 'tithes-upgraded',
+        frameId: 'rallying-cry',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
     },
 
     // ============================================
@@ -156,7 +161,8 @@ export const PALADIN_TOKENS: TokenDef[] = [
                 { type: 'custom', customActionId: 'paladin-blessing-prevent', target: 'self' },
             ],
         },
-        frameId: 'blessing-of-divinity',
+        frameId: 'guardian-angel',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
     },
 ];
 

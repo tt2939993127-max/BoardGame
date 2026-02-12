@@ -11,7 +11,7 @@ import { SHADOW_THIEF_ABILITIES } from './shadow_thief/abilities';
 import { PALADIN_CARDS, getPaladinStartingDeck } from './paladin/cards';
 import { PALADIN_ABILITIES } from './paladin/abilities';
 import type { AbilityCard } from '../types';
-import type { AbilityDef } from '../../../systems/presets/combat';
+import type { AbilityDef } from '../domain/combat';
 import type { RandomFn } from '../../../engine/types';
 
 export interface HeroData {

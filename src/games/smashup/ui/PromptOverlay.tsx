@@ -3,16 +3,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { PROMPT_COMMANDS } from '../../../engine/systems/PromptSystem';
-import type { PromptState, PlayerId } from '../../../engine/types';
+import { INTERACTION_COMMANDS, asSimpleChoice, type InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
+import type { PlayerId } from '../../../engine/types';
+import { UI_Z_INDEX } from '../../../core';
 
 interface Props {
-    prompt: PromptState['current'] | undefined;
+    interaction: InteractionDescriptor | undefined;
     moves: Record<string, any>;
     playerID: PlayerId | null;
 }
 
-export const PromptOverlay: React.FC<Props> = ({ prompt, moves, playerID }) => {
+export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID }) => {
+    const prompt = asSimpleChoice(interaction);
     const { t } = useTranslation('game-smashup');
 
     const isMyPrompt = !!prompt && prompt.playerId === playerID;
@@ -35,7 +37,7 @@ export const PromptOverlay: React.FC<Props> = ({ prompt, moves, playerID }) => {
 
     const handleOptionSelect = (optionId: string) => {
         if (!isMyPrompt) return;
-        moves[PROMPT_COMMANDS.RESPOND]?.({ optionId });
+        moves[INTERACTION_COMMANDS.RESPOND]?.({ optionId });
     };
 
     const handleToggleMulti = (optionId: string, disabled?: boolean) => {
@@ -59,7 +61,8 @@ export const PromptOverlay: React.FC<Props> = ({ prompt, moves, playerID }) => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 pointer-events-auto"
+                className="fixed inset-0 flex items-center justify-center p-4 bg-black/40 pointer-events-auto"
+                style={{ zIndex: UI_Z_INDEX.overlay }}
             >
                 {/* Modal Container */}
                 <motion.div
@@ -139,7 +142,7 @@ export const PromptOverlay: React.FC<Props> = ({ prompt, moves, playerID }) => {
                             <div className="flex items-center justify-between gap-3">
                                 <span>{isMyPrompt ? t('ui.prompt_select_option') : t('ui.prompt_wait')}</span>
                                 <button
-                                    onClick={() => moves[PROMPT_COMMANDS.RESPOND]?.({ optionIds: selectedIds })}
+                                    onClick={() => moves[INTERACTION_COMMANDS.RESPOND]?.({ optionIds: selectedIds })}
                                     disabled={!canSubmitMulti}
                                     className={`px-4 py-2 rounded text-xs font-black uppercase tracking-widest transition-all border-2
                                         ${canSubmitMulti

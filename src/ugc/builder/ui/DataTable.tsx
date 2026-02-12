@@ -11,6 +11,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { SchemaDefinition, FieldDefinition } from '../schema/types';
 import { getTableFields } from '../schema/types';
+import { UI_Z_INDEX } from '../../../core';
 
 // ============================================================================
 // 类型定义
@@ -469,9 +470,10 @@ export function DataTable<T extends Record<string, unknown>>({
                             {/* 分级下拉 - 使用 fixed 定位避免被父容器裁剪 */}
                             {isTagDropdownOpen && (
                               <div 
-                                className="fixed z-[9999] bg-slate-700 border border-slate-600 rounded shadow-lg min-w-[150px] max-h-[200px] overflow-y-auto"
+                                className="fixed bg-slate-700 border border-slate-600 rounded shadow-lg min-w-[150px] max-h-[200px] overflow-y-auto"
                                 style={{ 
                                   marginTop: '4px',
+                                  zIndex: UI_Z_INDEX.tooltip,
                                 }}
                                 onClick={e => e.stopPropagation()}
                               >

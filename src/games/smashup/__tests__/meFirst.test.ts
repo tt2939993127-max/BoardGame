@@ -12,10 +12,8 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
-import { smashUpFlowHooks } from '../domain/index';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
 import { initAllAbilities } from '../abilities';
 import { clearRegistry, clearBaseAbilityRegistry } from '../domain';
 import { resetAbilityInit } from '../abilities';
@@ -23,13 +21,11 @@ import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSy
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState } from '../../../engine/pipeline';
+import { smashUpSystemsForTest } from '../game';
 
 const PLAYER_IDS = ['0', '1'];
 
-const systems = [
-    createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-    ...createDefaultSystems<SmashUpCore>(),
-];
+const systems = smashUpSystemsForTest;
 
 function createRunner() {
     return new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
@@ -60,6 +56,34 @@ function setupWithBreakpoint(ids: PlayerId[], random: RandomFn): MatchState<Smas
         core.bases[0] = { ...core.bases[0], minions: [...core.bases[0].minions, ...fakeMinions] };
     }
     return { sys, core };
+}
+
+/** 达标但没人有特殊行动卡 */
+function setupWithBreakpointNoSpecial(ids: PlayerId[], random: RandomFn): MatchState<SmashUpCore> {
+    const state = setupWithBreakpoint(ids, random);
+    for (const pid of ids) {
+        const player = state.core.players[pid];
+        if (player) {
+            player.hand = [];
+        }
+    }
+    return state;
+}
+
+/** 达标且仅 1 号玩家有特殊行动卡 */
+function setupWithBreakpointOnlyP1Special(ids: PlayerId[], random: RandomFn): MatchState<SmashUpCore> {
+    const state = setupWithBreakpoint(ids, random);
+    const p0 = state.core.players['0'];
+    if (p0) {
+        p0.hand = [];
+    }
+    const p1 = state.core.players['1'];
+    if (p1) {
+        p1.hand = [
+            { uid: 'special-1', defId: 'ninja_hidden_ninja', type: 'action', owner: '1' },
+        ];
+    }
+    return state;
 }
 
 /** 蛇形选秀（多轮 afterEvents 自动推进到 playCards） */
@@ -126,6 +150,47 @@ describe('Me First! 响应窗口', () => {
         expect(result.finalState.sys.responseWindow.current).toBeTruthy();
         expect(result.finalState.sys.responseWindow.current?.windowType).toBe('meFirst');
         expect(result.finalState.sys.responseWindow.current?.responderQueue).toEqual(['0', '1']);
+    });
+    it('有基地达标但无人有特殊行动卡时，响应窗口自动关闭并推进', () => {
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems,
+            playerIds: PLAYER_IDS,
+            setup: setupWithBreakpointNoSpecial,
+        });
+        const result = runner.run({
+            name: '无人可响应自动关闭',
+            commands: [
+                ...BREAKPOINT_COMMANDS,
+            ] as any[],
+        });
+
+        expect(result.finalState.sys.responseWindow.current).toBeUndefined();
+        expect(result.finalState.sys.phase).not.toBe('scoreBases');
+        const allEventTypes = result.steps.flatMap(s => s.events);
+        expect(allEventTypes).toContain(RESPONSE_WINDOW_EVENTS.OPENED);
+        expect(allEventTypes).toContain(RESPONSE_WINDOW_EVENTS.CLOSED);
+    });
+
+    it('有基地达标时跳过无特殊牌玩家，从有特殊牌玩家开始响应', () => {
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems,
+            playerIds: PLAYER_IDS,
+            setup: setupWithBreakpointOnlyP1Special,
+        });
+        const result = runner.run({
+            name: '跳过无特殊牌响应者',
+            commands: [
+                ...BREAKPOINT_COMMANDS,
+            ] as any[],
+        });
+
+        const window = result.finalState.sys.responseWindow.current;
+        expect(window).toBeTruthy();
+        expect(window?.responderQueue).toEqual(['0', '1']);
+        expect(window?.currentResponderIndex).toBe(1);
+        expect(window?.passedPlayers).toEqual(['0']);
     });
 
     it('有基地达标时所有玩家让过后关闭响应窗口', () => {

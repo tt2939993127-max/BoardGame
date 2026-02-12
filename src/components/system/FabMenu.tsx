@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { PulseGlow } from '../common/animations/PulseGlow';
+import { UI_Z_INDEX } from '../../core';
 
 export interface FabAction {
     id: string;
@@ -20,6 +21,8 @@ interface FabMenuProps {
     items: FabAction[];
     position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
     isDark?: boolean;
+    /** 覆盖悬浮球整体层级（默认 UI_Z_INDEX.hud） */
+    zIndex?: number;
 }
 
 type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
@@ -27,12 +30,12 @@ type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
 const BUTTON_SIZE = 48;
 const BUTTON_GAP = 12;
 const EDGE_PADDING = 32;
-const TOOLTIP_Z_INDEX = 9200;
 
 export const FabMenu = ({
     items,
     position: initialPosition = 'bottom-right',
-    isDark = true
+    isDark = true,
+    zIndex = UI_Z_INDEX.hud,
 }: FabMenuProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const [activeItemId, setActiveItemId] = useState<string | null>(null);
@@ -80,13 +83,31 @@ export const FabMenu = ({
         return { left: EDGE_PADDING, top: EDGE_PADDING };
     }, [initialPosition]);
 
-    // 加载保存的位置（兼容旧偏移格式）
+    // 加载保存的位置（支持百分比格式，兼容旧绝对坐标）
     useEffect(() => {
         try {
             const saved = localStorage.getItem('hud_fab_position');
             if (saved) {
                 const parsed = JSON.parse(saved);
-                const next = clampPosition(parsed);
+                let next: { left: number; top: number };
+                
+                // 检测是否为百分比格式
+                if ('leftPercent' in parsed && 'topPercent' in parsed) {
+                    next = {
+                        left: parsed.leftPercent * window.innerWidth,
+                        top: parsed.topPercent * window.innerHeight,
+                    };
+                } else {
+                    // 旧格式：绝对坐标，转换为百分比后保存
+                    next = parsed;
+                    const percent = {
+                        leftPercent: next.left / window.innerWidth,
+                        topPercent: next.top / window.innerHeight,
+                    };
+                    localStorage.setItem('hud_fab_position', JSON.stringify(percent));
+                }
+                
+                next = clampPosition(next);
                 setFabPosition(next);
                 setAlignment(getAlignmentForPosition(next));
                 return;
@@ -100,7 +121,11 @@ export const FabMenu = ({
                     left: base.left + (parsed.x ?? 0),
                     top: base.top + (parsed.y ?? 0),
                 });
-                localStorage.setItem('hud_fab_position', JSON.stringify(next));
+                const percent = {
+                    leftPercent: next.left / window.innerWidth,
+                    topPercent: next.top / window.innerHeight,
+                };
+                localStorage.setItem('hud_fab_position', JSON.stringify(percent));
                 localStorage.removeItem('hud_fab_offset');
                 setFabPosition(next);
                 setAlignment(getAlignmentForPosition(next));
@@ -123,7 +148,12 @@ export const FabMenu = ({
             top: fabPosition.top + info.offset.y,
         });
         setFabPosition(next);
-        localStorage.setItem('hud_fab_position', JSON.stringify(next));
+        // 保存为百分比格式
+        const percent = {
+            leftPercent: next.left / window.innerWidth,
+            topPercent: next.top / window.innerHeight,
+        };
+        localStorage.setItem('hud_fab_position', JSON.stringify(percent));
         dragX.set(0);
         dragY.set(0);
         setAlignment(getAlignmentForPosition(next));
@@ -203,6 +233,25 @@ export const FabMenu = ({
     useEffect(() => {
         if (!fabPosition) return;
         const handleResize = () => {
+            // 从 localStorage 读取百分比，按新尺寸重新计算
+            try {
+                const saved = localStorage.getItem('hud_fab_position');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if ('leftPercent' in parsed && 'topPercent' in parsed) {
+                        const next = clampPosition({
+                            left: parsed.leftPercent * window.innerWidth,
+                            top: parsed.topPercent * window.innerHeight,
+                        });
+                        setFabPosition(next);
+                        setAlignment(getAlignmentForPosition(next));
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            // 降级：直接 clamp 当前位置
             const next = clampPosition(fabPosition);
             setFabPosition(next);
             setAlignment(getAlignmentForPosition(next));
@@ -242,116 +291,72 @@ export const FabMenu = ({
 
     if (!fabPosition) return null;
 
-    const listCount = Math.max(items.length - 1, 0);
-    const listHeight = listCount > 0
-        ? listCount * BUTTON_SIZE + (listCount - 1) * BUTTON_GAP
-        : 0;
-    const isListVisible = isOpen || isListAnimating;
     const hasAnyNotification = items.some((item) => item.active);
-    const listOffset = (isListVisible && isButtonBottom && listCount > 0)
-        ? listHeight + BUTTON_GAP
-        : 0;
-    const containerTop = fabPosition.top - listOffset;
     // 波纹/辉光颜色跟随"选中态"同色系，避免不明显
     const glowColor = isDark ? 'rgba(0, 243, 255, 0.55)' : 'rgba(140, 123, 100, 0.85)';
 
     return (
         <motion.div
             ref={containerRef}
-            className={`fixed z-[9000] flex flex-col ${alignClass} gap-3 font-sans`}
+            className="fixed font-sans"
             drag
             dragMomentum={false}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onPointerDownCapture={handlePointerDownCapture}
-            style={{ left: fabPosition.left, top: containerTop, x: dragX, y: dragY }}
+            style={{ left: fabPosition.left, top: fabPosition.top, x: dragX, y: dragY, zIndex }}
             data-testid="fab-menu"
         >
-            {isButtonBottom ? (
-                <>
-                    <SatelliteList
-                        isOpen={isOpen}
-                        items={satellitesToRender}
-                        activeId={activeItemId}
-                        onItemClick={handleSatelliteClick}
-                        alignment={alignment}
-                        isDark={isDark}
-                        tooltipPortalRoot={tooltipPortalRoot}
-                        onExitComplete={handleListExitComplete}
-                        glowColor={glowColor}
-                        isDragging={isDragging}
-                    />
-                    {items[0] && (
-                        <div className={`relative flex items-center justify-center ${activeItemId === items[0].id ? 'z-50' : 'z-20'}`}>
-                            <Panel
-                                item={items[0]}
-                                isActive={activeItemId === items[0].id && isOpen}
-                                alignment={alignment}
-                                isDark={isDark}
-                            />
-                            <MenuButton
-                                item={items[0]}
-                                onClick={handleMainClick}
-                                isActive={activeItemId === items[0].id && isOpen}
-                                showGlow={hasAnyNotification}
-                                isMain={true}
-                                isDark={isDark}
-                                alignment={alignment}
-                                tooltipPortalRoot={tooltipPortalRoot}
-                                glowColor={glowColor}
-                                isDragging={isDragging}
-                            />
-                        </div>
-                    )}
-                </>
-            ) : (
-                <>
-                    {items[0] && (
-                        <div className={`relative flex items-center justify-center ${activeItemId === items[0].id ? 'z-50' : 'z-20'}`}>
-                            <Panel
-                                item={items[0]}
-                                isActive={activeItemId === items[0].id && isOpen}
-                                alignment={alignment}
-                                isDark={isDark}
-                            />
-                            <MenuButton
-                                item={items[0]}
-                                onClick={handleMainClick}
-                                isActive={activeItemId === items[0].id && isOpen}
-                                showGlow={hasAnyNotification}
-                                isMain={true}
-                                isDark={isDark}
-                                alignment={alignment}
-                                tooltipPortalRoot={tooltipPortalRoot}
-                                glowColor={glowColor}
-                                isDragging={isDragging}
-                            />
-                        </div>
-                    )}
-                    <SatelliteList
-                        isOpen={isOpen}
-                        items={satellitesToRender}
-                        activeId={activeItemId}
-                        onItemClick={handleSatelliteClick}
-                        alignment={alignment}
-                        isDark={isDark}
-                        tooltipPortalRoot={tooltipPortalRoot}
-                        onExitComplete={handleListExitComplete}
-                        glowColor={glowColor}
-                        isDragging={isDragging}
-                    />
-                </>
-            )}
+            {/* 主球：锚点，位置固定 */}
+            <div className={`relative flex items-center justify-center ${activeItemId === items[0].id ? 'z-50' : 'z-20'}`}>
+                <Panel
+                    item={items[0]}
+                    isActive={activeItemId === items[0].id && isOpen}
+                    alignment={alignment}
+                    isDark={isDark}
+                />
+                <MenuButton
+                    item={items[0]}
+                    onClick={handleMainClick}
+                    isActive={activeItemId === items[0].id && isOpen}
+                    showGlow={hasAnyNotification}
+                    isMain={true}
+                    isDark={isDark}
+                    alignment={alignment}
+                    tooltipPortalRoot={tooltipPortalRoot}
+                    glowColor={glowColor}
+                    isDragging={isDragging}
+                />
+            </div>
+
+            {/* 卫星按钮：绝对定位，相对主球偏移 */}
+            <SatelliteList
+                isOpen={isOpen}
+                items={satellitesToRender}
+                activeId={activeItemId}
+                onItemClick={handleSatelliteClick}
+                alignment={alignment}
+                isDark={isDark}
+                tooltipPortalRoot={tooltipPortalRoot}
+                onExitComplete={handleListExitComplete}
+                glowColor={glowColor}
+                isDragging={isDragging}
+            />
         </motion.div>
     );
 };
 
 const SatelliteList = ({ isOpen, items, activeId, onItemClick, alignment, isDark, tooltipPortalRoot, onExitComplete, glowColor, isDragging }: any) => {
+    const isButtonBottom = alignment.v === 'bottom';
+    const positionClass = isButtonBottom ? 'bottom-[calc(100%+12px)]' : 'top-[calc(100%+12px)]';
+    const flexDirection = isButtonBottom ? 'flex-col-reverse' : 'flex-col';
+    const alignItems = alignment.h === 'right' ? 'items-start' : 'items-end';
+
     return (
         <AnimatePresence onExitComplete={onExitComplete}>
             {isOpen && (
                 <motion.div
-                    className={`flex flex-col gap-3 ${alignment.h === 'right' ? 'items-start' : 'items-end'}`}
+                    className={`absolute ${positionClass} left-0 flex ${flexDirection} ${alignItems} gap-3`}
                     initial="hidden"
                     animate="visible"
                     exit="hidden"
@@ -523,7 +528,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                             ? window.innerWidth - tooltipRect.left + gap
                                             : undefined,
                                         transform: `translate(${tooltipSide === 'right' ? '0' : '-100%'}, -50%)`,
-                                        zIndex: TOOLTIP_Z_INDEX,
+                                        zIndex: UI_Z_INDEX.tooltip,
                                     }}
                                 >
                                     {item.label}
@@ -552,7 +557,7 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
                                             ? window.innerWidth - tooltipRect.left + gap
                                             : undefined,
                                         transform: `translate(${previewSide === 'right' ? '0' : '-100%'}, -50%)`,
-                                        zIndex: TOOLTIP_Z_INDEX,
+                                        zIndex: UI_Z_INDEX.tooltip,
                                         maxWidth: 'min(360px, 70vw)',
                                     }}
                                 >

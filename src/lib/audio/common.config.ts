@@ -4,10 +4,40 @@
  * 游戏层可通过同名 key 覆盖这些定义
  * @deprecated 已迁移到 registry.json + commonRegistry，待确认删除。
  */
-import type { GameAudioConfig } from './types';
+import type { AudioEvent, EventSoundResult, GameAudioConfig } from './types';
 
 // 通用音效资源基础路径
 const COMMON_BASE = 'common/audio';
+
+const COMMON_EVENT_SFX = {
+    // 注意：阶段切换的音效不在这里统一播放。
+    // 现在的阶段推进交互通常会触发 UI 点击音 + SYS_PHASE_CHANGED，
+    // 如果这里再对 SYS_PHASE_CHANGED 播放 phase_change，会导致“推进阶段音效重复”。
+    // 如需强调阶段变化，可在具体游戏层做更细粒度的 resolver（例如仅特定 phase 播）。
+    // [FLOW_EVENTS.PHASE_CHANGED]: 'phase_change',
+    BONUS_DIE_ROLLED: 'bonus_die_roll',
+    DIE_LOCK_TOGGLED: 'dice_lock',
+    ROLL_CONFIRMED: 'dice_confirm',
+    DIE_MODIFIED: 'die_modify',
+    DIE_REROLLED: 'die_reroll',
+    CARD_DRAWN: 'card_draw',
+    CARD_DISCARDED: 'card_discard',
+    CARD_SOLD: 'card_sell',
+    SELL_UNDONE: 'card_sell_undo',
+    CARD_REORDERED: 'card_reorder',
+    DECK_SHUFFLED: 'deck_shuffle',
+    TOKEN_GRANTED: 'token_gain',
+    TOKEN_USED: 'token_use',
+    STATUS_APPLIED: 'status_apply',
+    STATUS_REMOVED: 'status_remove',
+    HEAL_APPLIED: 'heal',
+    DAMAGE_SHIELD_GRANTED: 'damage_shield_gain',
+    CHOICE_REQUESTED: 'choice_request',
+    CHOICE_RESOLVED: 'choice_resolve',
+    RESPONSE_WINDOW_OPENED: 'response_open',
+    RESPONSE_WINDOW_CLOSED: 'response_close',
+    TURN_CHANGED: 'turn_change',
+} as const;
 
 export const COMMON_AUDIO_CONFIG: GameAudioConfig = {
     basePath: COMMON_BASE,
@@ -60,34 +90,8 @@ export const COMMON_AUDIO_CONFIG: GameAudioConfig = {
         defeat: { src: 'sfx/stinger/Mini Games Sound Effects and Music Pack/STINGER/STGR_Action_Lose.ogg', volume: 1.0, category: { group: 'stinger', sub: 'defeat' } },
     },
 
-    // 通用事件映射（游戏层可覆盖或扩展）
-    eventSoundMap: {
-        // 注意：阶段切换的音效不在这里统一播放。
-        // 现在的阶段推进交互通常会触发 UI 点击音 + SYS_PHASE_CHANGED，
-        // 如果这里再对 SYS_PHASE_CHANGED 播放 phase_change，会导致“推进阶段音效重复”。
-        // 如需强调阶段变化，可在具体游戏层做更细粒度的 resolver（例如仅特定 phase 播）。
-        // [FLOW_EVENTS.PHASE_CHANGED]: 'phase_change',
-        BONUS_DIE_ROLLED: 'bonus_die_roll',
-        DIE_LOCK_TOGGLED: 'dice_lock',
-        ROLL_CONFIRMED: 'dice_confirm',
-        DIE_MODIFIED: 'die_modify',
-        DIE_REROLLED: 'die_reroll',
-        CARD_DRAWN: 'card_draw',
-        CARD_DISCARDED: 'card_discard',
-        CARD_SOLD: 'card_sell',
-        SELL_UNDONE: 'card_sell_undo',
-        CARD_REORDERED: 'card_reorder',
-        DECK_SHUFFLED: 'deck_shuffle',
-        TOKEN_GRANTED: 'token_gain',
-        TOKEN_USED: 'token_use',
-        STATUS_APPLIED: 'status_apply',
-        STATUS_REMOVED: 'status_remove',
-        HEAL_APPLIED: 'heal',
-        DAMAGE_SHIELD_GRANTED: 'damage_shield_gain',
-        CHOICE_REQUESTED: 'choice_request',
-        CHOICE_RESOLVED: 'choice_resolve',
-        RESPONSE_WINDOW_OPENED: 'response_open',
-        RESPONSE_WINDOW_CLOSED: 'response_close',
-        TURN_CHANGED: 'turn_change',
+    feedbackResolver: (event: AudioEvent): EventSoundResult | null => {
+        const key = COMMON_EVENT_SFX[event.type as keyof typeof COMMON_EVENT_SFX];
+        return key ? { key, timing: 'immediate' } : null;
     },
 };

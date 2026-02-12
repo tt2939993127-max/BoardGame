@@ -1,4 +1,4 @@
-import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { CardPreviewRef } from '../../../core';
 import { MONK_CARDS } from '../heroes/monk/cards';
 import { BARBARIAN_CARDS } from '../heroes/barbarian/cards';
 import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';

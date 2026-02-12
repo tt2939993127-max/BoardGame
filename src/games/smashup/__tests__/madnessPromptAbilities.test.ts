@@ -22,6 +22,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -120,14 +121,14 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
 
         const events = execPlayAction(state, '0', 'a1');
         // 多张疑狂卡时应创建 Prompt（不直接弃牌）
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        const cont = (promptEvents[0] as any).payload.continuation;
+        const cont = (promptEvents[0] as any).payload;
         expect(cont.abilityId).toBe('cthulhu_madness_unleashed');
         // 应有3个选项（每张疑狂卡一个）
-        expect(cont.data.promptConfig.options.length).toBe(3);
+        expect(cont.promptConfig.options.length).toBe(3);
         // 应支持多选
-        expect(cont.data.promptConfig.multi).toEqual({ min: 1, max: 3 });
+        expect(cont.promptConfig.multi).toEqual({ min: 1, max: 3 });
     });
 
     it('手中无疯狂卡时无效果', () => {
@@ -150,7 +151,7 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         expect(limitEvents.length).toBe(0);
     });
 
-    it('只有1张疯狂卡时弃1张', () => {
+    it('只有1张疯狂卡时创建 Prompt', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -165,13 +166,10 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_RETURNED);
-        expect(returnEvents.length).toBe(1);
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.count).toBe(1);
-        const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-        expect(limitEvents.length).toBe(1);
+        // 单张疯狂卡时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('cthulhu_madness_unleashed');
     });
 
     it('多张疑狂卡+牌库不足时也创建 Prompt', () => {
@@ -192,11 +190,11 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
 
         const events = execPlayAction(state, '0', 'a1');
         // 多张疑狂卡时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        const cont = (promptEvents[0] as any).payload.continuation;
+        const cont = (promptEvents[0] as any).payload;
         expect(cont.abilityId).toBe('cthulhu_madness_unleashed');
-        expect(cont.data.promptConfig.options.length).toBe(3);
+        expect(cont.promptConfig.options.length).toBe(3);
     });
 
     it('状态正确（reduce 验证）- 多张疑狂卡产生 PROMPT_CONTINUATION', () => {
@@ -221,13 +219,11 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
 
         const events = execPlayAction(state, '0', 'a1');
         const newState = applyEvents(state, events);
-        // 多张疑狂卡时应有 PROMPT_CONTINUATION 事件
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        // 多张疑狂卡时应有 CHOICE_REQUESTED 事件
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        // 状态中应设置 pendingPromptContinuation
-        expect(newState.pendingPromptContinuation).toBeDefined();
-        expect(newState.pendingPromptContinuation!.abilityId).toBe('cthulhu_madness_unleashed');
-        // 手牌中疑狂卡仍在（等待 Prompt 解决）
+        expect((promptEvents[0] as any).payload.abilityId).toBe('cthulhu_madness_unleashed');
+        // 手牌中疑狂卡仍在（等待玩家选择）
         expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(2);
     });
 });
@@ -263,12 +259,12 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
 
         const events = execPlayAction(state, '0', 'a1');
         // 多个随从时应创建 Prompt（不直接消灭）
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('miskatonic_it_might_just_work');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
     });
 
-    it('单个随从时自动弃疯狂卡并消灭', () => {
+    it('单个随从时创建 Prompt', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -289,12 +285,10 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 单个随从时自动执行
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_RETURNED);
-        expect(returnEvents.length).toBe(2);
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('target');
+        // 单个随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
     });
 
     it('手中疯狂卡不足2张时无效果', () => {
@@ -364,12 +358,12 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
 
         const events = execPlayAction(state, '0', 'a1');
         // 多个随从时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('miskatonic_it_might_just_work');
+        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
     });
 
-    it('无对手随从时单个己方随从自动消灭', () => {
+    it('无对手随从时单个己方随从创建 Prompt', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -390,14 +384,13 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        const returnEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_RETURNED);
-        expect(returnEvents.length).toBe(2);
-        const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-        expect(destroyEvents.length).toBe(1);
-        expect((destroyEvents[0] as any).payload.minionUid).toBe('my_only');
+        // 单个己方随从时创建 Prompt
+        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents.length).toBe(1);
+        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
     });
 
-    it('状态正确（reduce 验证）', () => {
+    it('状态正确（reduce 验证）- 单目标 Prompt 待决', () => {
         const state = makeStateWithMadness({
             players: {
                 '0': makePlayer('0', {
@@ -417,14 +410,12 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
 
         const events = execPlayAction(state, '0', 'a1');
         const newState = applyEvents(state, events);
-        // 手牌中疯狂卡被清除
-        expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(0);
-        // 疯狂牌库增加2张
-        expect(newState.madnessDeck!.length).toBe(MADNESS_DECK_SIZE + 2);
-        // 基地上随从被消灭
-        expect(newState.bases[0].minions.length).toBe(0);
-        // 被消灭随从进入对手弃牌堆
-        expect(newState.players['1'].discard.some(c => c.uid === 'target')).toBe(true);
+        // CHOICE_REQUESTED 事件已生成（Prompt 待决），疯狂卡仍在手牌
+        const promptEvents2 = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+        expect(promptEvents2.length).toBe(1);
+        expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(2);
+        // 基地上随从未被消灭
+        expect(newState.bases[0].minions.length).toBe(1);
     });
 });
 

@@ -1,4 +1,4 @@
-import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../../systems/presets/combat';
+import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
 import { STATUS_IDS, TOKEN_IDS, PYROMANCER_DICE_FACE_IDS } from '../../domain/ids';
 
 const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
@@ -137,7 +137,8 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
                         { face: PYROMANCER_DICE_FACE_IDS.FIERY_SOUL, grantToken: { tokenId: TOKEN_IDS.FIRE_MASTERY, value: 2 } },
                         { face: PYROMANCER_DICE_FACE_IDS.METEOR, grantStatus: { statusId: STATUS_IDS.KNOCKDOWN, value: 1 } },
                     ]
-                }
+                },
+                timing: 'withDamage'
             }
         ]
     },
@@ -284,7 +285,8 @@ export const HOT_STREAK_2: AbilityDef = {
                 grantToken(TOKEN_IDS.FIRE_MASTERY, 2, abilityEffectText('fiery-combo-2', 'gainFM2')),
                 {
                     description: abilityEffectText('fiery-combo-2', 'main'),
-                    action: { type: 'custom', target: 'self', customActionId: 'fiery-combo-2-resolve' }
+                    action: { type: 'custom', target: 'self', customActionId: 'fiery-combo-2-resolve' },
+                    timing: 'withDamage'
                 }
             ],
             priority: 1
@@ -352,7 +354,8 @@ export const PYRO_BLAST_2: AbilityDef = {
                 type: 'custom',
                 target: 'self',
                 customActionId: 'pyro-blast-2-roll'
-            }
+            },
+            timing: 'withDamage'
         }
     ]
 };
@@ -372,7 +375,8 @@ export const PYRO_BLAST_3: AbilityDef = {
                 type: 'custom',
                 target: 'self',
                 customActionId: 'pyro-blast-3-roll'
-            }
+            },
+            timing: 'withDamage'
         }
     ]
 };

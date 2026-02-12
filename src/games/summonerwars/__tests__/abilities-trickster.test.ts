@@ -84,7 +84,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeTelekinetic(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '掷术师', unitClass: 'common',
-    faction: '欺心巫族', strength: 1, life: 4, cost: 1,
+    faction: 'trickster', strength: 1, life: 4, cost: 1,
     attackType: 'ranged', attackRange: 3,
     abilities: ['evasion', 'rebound'], deckSymbols: [],
   };
@@ -94,7 +94,7 @@ function makeTelekinetic(id: string): UnitCard {
 function makeWindArcher(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '清风弓箭手', unitClass: 'common',
-    faction: '欺心巫族', strength: 4, life: 2, cost: 2,
+    faction: 'trickster', strength: 4, life: 2, cost: 2,
     attackType: 'ranged', attackRange: 3,
     abilities: ['swift', 'ranged'], deckSymbols: [],
   };
@@ -104,7 +104,7 @@ function makeWindArcher(id: string): UnitCard {
 function makeGelak(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '葛拉克', unitClass: 'champion',
-    faction: '欺心巫族', strength: 3, life: 8, cost: 6,
+    faction: 'trickster', strength: 3, life: 8, cost: 6,
     attackType: 'ranged', attackRange: 3,
     abilities: ['flying', 'aerial_strike'], deckSymbols: [],
   };
@@ -114,7 +114,7 @@ function makeGelak(id: string): UnitCard {
 function makeKara(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '卡拉', unitClass: 'champion',
-    faction: '欺心巫族', strength: 4, life: 8, cost: 7,
+    faction: 'trickster', strength: 4, life: 8, cost: 7,
     attackType: 'ranged', attackRange: 3,
     abilities: ['high_telekinesis', 'stable'], deckSymbols: [],
   };
@@ -124,7 +124,7 @@ function makeKara(id: string): UnitCard {
 function makeSummoner(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '泰珂露', unitClass: 'summoner',
-    faction: '欺心巫族', strength: 3, life: 13, cost: 0,
+    faction: 'trickster', strength: 3, life: 13, cost: 0,
     attackType: 'ranged', attackRange: 3,
     abilities: ['mind_capture'], deckSymbols: [],
   };
@@ -134,7 +134,7 @@ function makeSummoner(id: string): UnitCard {
 function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'goblin', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -144,7 +144,7 @@ function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makeAllyCommon(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '友方士兵', unitClass: 'common',
-    faction: '欺心巫族', strength: 2, life: 3, cost: 1,
+    faction: 'trickster', strength: 2, life: 3, cost: 1,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -918,6 +918,7 @@ function addEventToHand(
     isActive: overrides?.isActive ?? false,
     deckSymbols: [],
     ...overrides,
+    faction: overrides?.faction ?? 'trickster',
   };
   state.players[playerId].hand.push(eventCard);
   return eventCard;
@@ -1055,6 +1056,7 @@ describe('欺心巫族事件卡 - 风暴侵袭 (storm-assault)', () => {
       id: 'trickster-storm-assault',
       cardType: 'event',
       name: '风暴侵袭',
+      faction: 'trickster',
       cost: 0,
       playPhase: 'magic',
       effect: '持续：单位必须减少移动1个区格。',
@@ -1083,6 +1085,7 @@ describe('欺心巫族事件卡 - 风暴侵袭 (storm-assault)', () => {
       id: 'trickster-storm-assault-0',
       cardType: 'event',
       name: '风暴侵袭',
+      faction: 'trickster',
       cost: 0,
       playPhase: 'magic',
       effect: '',
@@ -1101,6 +1104,7 @@ describe('欺心巫族事件卡 - 风暴侵袭 (storm-assault)', () => {
       id: 'trickster-storm-assault',
       cardType: 'event',
       name: '风暴侵袭',
+      faction: 'trickster',
       cost: 0,
       playPhase: 'magic',
       effect: '',
@@ -1339,6 +1343,7 @@ describe('欺心巫族事件卡 - 催眠引诱 (hypnotic-lure)', () => {
       id: 'trickster-hypnotic-lure-0',
       cardType: 'event',
       name: '催眠引诱',
+      faction: 'trickster',
       cost: 0,
       playPhase: 'summon',
       effect: '',
@@ -1373,6 +1378,7 @@ describe('欺心巫族事件卡 - 催眠引诱 (hypnotic-lure)', () => {
       id: 'trickster-hypnotic-lure-0',
       cardType: 'event',
       name: '催眠引诱',
+      faction: 'trickster',
       cost: 0,
       playPhase: 'summon',
       effect: '',

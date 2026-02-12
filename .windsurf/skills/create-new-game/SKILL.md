@@ -28,22 +28,29 @@ description: "为本项目创建新游戏。当用户要求新增游戏时使用
 
 ### 1.1 创建目录结构
 
+> **默认拆分**：中等以上复杂度游戏（命令数 ≥5 或有多阶段回合）从第一天就用拆分结构。
+
 ```
 src/games/<gameId>/
   manifest.ts          # 清单元数据
-  game.ts              # 引擎适配器组装（占位）
-  Board.tsx            # UI 主板（占位）
+  game.ts              # 引擎适配器组装（只做组装，不写逻辑）
+  Board.tsx            # UI 布局组装（逻辑拆到 hooks/，子组件拆到 ui/）
   thumbnail.tsx        # 缩略图组件
   tutorial.ts          # 教学配置（占位）
   audio.config.ts      # 音频配置（占位）
   criticalImageResolver.ts  # 关键图片预加载（若有精灵图）
   domain/
     index.ts           # 领域内核入口
-    types.ts           # 核心状态/命令/事件类型
+    types.ts           # re-export barrel（导出 core-types + commands + events）
+    core-types.ts      # 状态接口（PlayerState, GameCore, 基础类型）
+    commands.ts        # 命令类型 + XX_COMMANDS 常量
+    events.ts          # 事件类型 + XX_EVENTS 常量
     ids.ts             # 领域 ID 常量表
+    utils.ts           # 游戏内共享工具（从第一天就建立）
   rule/
     <游戏名>规则.md     # 规则文档占位
-  ui/                  # 游戏 UI 子模块（空目录）
+  hooks/               # 游戏业务 hooks
+  ui/                  # 游戏 UI 子组件
   __tests__/
     smoke.test.ts      # 冒烟测试占位
 ```
@@ -73,23 +80,42 @@ export const <GAME_ID>_MANIFEST: GameManifestEntry = entry;
 export default entry;
 ```
 
-### 1.3 domain/types.ts（核心状态骨架）
+### 1.3 domain 类型文件（默认拆分结构）
 
-**必须定义**：
-- `GamePhase` 类型（所有游戏阶段枚举）
-- `PlayerState` 接口
-- `<GameId>Core` 核心状态接口
-- `<GameId>Command` 命令联合类型
-- `<GameId>Event` 事件联合类型
-- 命令常量对象 `XX_COMMANDS`
-- 事件常量对象 `XX_EVENTS`
-
-参考 smashup 的模式：
+**core-types.ts** — 状态接口：
 ```ts
+import type { PlayerId } from '../../../engine/types';
 export type GamePhase = 'factionSelect' | 'startTurn' | 'playCards' | ...;
 export const PHASE_ORDER: GamePhase[] = [...];
-export const SU_COMMANDS = { PLAY_MINION: 'PLAY_MINION', ... } as const;
-export const SU_EVENTS = { MINION_PLAYED: 'MINION_PLAYED', ... } as const;
+export interface PlayerState { id: PlayerId; /* ... */ }
+export interface <GameId>Core {
+    players: Record<PlayerId, PlayerState>;
+    turnNumber: number;
+    gameResult?: { winner?: string; draw?: boolean };
+}
+```
+
+**commands.ts** — 命令类型：
+```ts
+import type { Command } from '../../../engine/types';
+export const XX_COMMANDS = { DO_SOMETHING: 'DO_SOMETHING', ... } as const;
+export interface DoSomethingCommand extends Command<'DO_SOMETHING'> { payload: { ... }; }
+export type <GameId>Command = DoSomethingCommand | ...;
+```
+
+**events.ts** — 事件类型：
+```ts
+import type { GameEvent } from '../../../engine/types';
+export const XX_EVENTS = { SOMETHING_DONE: 'SOMETHING_DONE', ... } as const;
+export interface SomethingDoneEvent extends GameEvent<'SOMETHING_DONE'> { payload: { ... }; }
+export type <GameId>Event = SomethingDoneEvent | ...;
+```
+
+**types.ts** — re-export barrel：
+```ts
+export * from './core-types';
+export * from './commands';
+export * from './events';
 ```
 
 ### 1.4 domain/ids.ts（领域 ID 常量表）
@@ -249,13 +275,14 @@ config/
 ### 2.4 检查系统需求
 
 对照规则，在引擎层检索可复用实现：
-- 骰子 → `src/systems/DiceSystem/`
-- 资源 → `src/systems/ResourceSystem/`
-- 卡牌 → `src/systems/CardSystem/`
-- 技能 → `src/systems/AbilitySystem/`
-- 状态效果 → `src/systems/StatusEffectSystem/`
+- 骰子 → `src/engine/primitives/dice.ts`
+- 资源 → `src/engine/primitives/resources.ts`
+- 卡牌/区域 → `src/engine/primitives/zones.ts`
+- 条件/表达式 → `src/engine/primitives/condition.ts` + `expression.ts`
+- 目标解析 → `src/engine/primitives/target.ts`
+- 效果执行 → `src/engine/primitives/effects.ts`
 
-**若缺口存在**：先在 `src/systems/` 或 `src/engine/systems/` 补齐通用实现，再回到游戏层。
+**若缺口存在**：优先补充 `src/engine/primitives/`（通用工具函数）；领域语义放在游戏层（`src/games/<gameId>/domain/`）。
 
 ### 验收
 
@@ -302,15 +329,30 @@ export function execute(state: MatchState<Core>, command: Command, random?: Rand
 // domain/reducer.ts
 export function reduce(core: Core, event: GameEvent): Core {
     switch (event.type) {
-        case 'UNIT_MOVED': return { ...core, ... };
-        case 'DAMAGE_DEALT': return { ...core, ... };
+        case 'DAMAGE_DEALT': {
+            // ✅ 结构共享：只 spread 变更路径
+            const { targetId, amount } = event.payload;
+            const target = core.players[targetId];
+            if (!target) return core;
+            return {
+                ...core,
+                players: {
+                    ...core.players,
+                    [targetId]: { ...target, hp: Math.max(0, target.hp - amount) },
+                },
+            };
+        }
         // 每种事件类型一个 case
         default: return core;
     }
 }
 ```
 
-**关键约束**：reduce 必须是纯函数，不依赖随机数。
+**关键约束**：
+- reduce 必须是纯函数，不依赖随机数。
+- **禁止 `JSON.parse(JSON.stringify())`**（性能灾难）。只 spread 变更路径，未变路径保持原引用。
+- 嵌套超过 3 层时提取 `updatePlayer()` 等 helper 到 `domain/utils.ts`。
+- 详见 `docs/ai-rules/engine-systems.md`「Reducer 结构共享范例」。
 
 ### 3.4 实现 isGameOver
 
@@ -411,9 +453,15 @@ const systems = [
     createLogSystem(),
     createActionLogSystem({ commandAllowlist: ACTION_ALLOWLIST, formatEntry }),
     createUndoSystem({ snapshotCommandAllowlist: ACTION_ALLOWLIST }),
-    createPromptSystem(),
+    createInteractionSystem(),
     createRematchSystem(),
-    createResponseWindowSystem(),
+    createResponseWindowSystem({  // 需要响应窗口时配置注入
+        allowedCommands: ['PLAY_CARD'],  // 响应期间允许的游戏命令
+        responseAdvanceEvents: [         // 触发响应者推进的事件
+            { eventType: 'CARD_PLAYED' },
+        ],
+        // interactionLock: { ... },     // 多步交互锁定（可选）
+    }),
     createTutorialSystem(),
     createCheatSystem<Core>(cheatModifier),
 
@@ -422,17 +470,9 @@ const systems = [
     // createCheatSystem<Core>(cheatModifier),
 ];
 
-// 命令类型（必须列出所有业务命令 + 系统命令）
+// 命令类型（只列业务命令，系统命令由 adapter 自动合并）
 const commandTypes = [
     ...Object.values(XX_COMMANDS),
-    FLOW_COMMANDS.ADVANCE_PHASE,    // 阶段推进
-    UNDO_COMMANDS.REQUEST_UNDO,     // 撤销系统
-    UNDO_COMMANDS.APPROVE_UNDO,
-    UNDO_COMMANDS.REJECT_UNDO,
-    UNDO_COMMANDS.CANCEL_UNDO,
-    CHEAT_COMMANDS.SET_RESOURCE,    // 作弊系统（开发用）
-    CHEAT_COMMANDS.SET_STATE,
-    // ...按需添加
 ];
 ```
 
@@ -741,8 +781,8 @@ npm run dev                         # 大厅可见、可创建对局、可完整
 |------|------|------|
 | 多阶段回合制 | FlowSystem | 必选。所有游戏都使用 |
 | 撤销/重做 | UndoSystem | 默认包含。配置 snapshotCommandAllowlist |
-| 玩家选择/输入 | PromptSystem | 需要玩家从选项中选择时使用 |
-| 响应窗口 | ResponseWindowSystem | 对手操作后玩家可响应时使用 |
+| 玩家选择/输入 | InteractionSystem | `createSimpleChoice()` 单步选择、多步交互（kind 扩展）。替代旧 PromptSystem |
+| 响应窗口 | ResponseWindowSystem | 对手操作后玩家可响应。**必须配置注入** `allowedCommands` / `responseAdvanceEvents` |
 | 日志记录 | LogSystem + ActionLogSystem | 默认包含 |
 | 事件流消费 | EventStreamSystem | UI 消费事件驱动动画/音效时必选 |
 | 教学 | TutorialSystem | 教学模式必选 |
@@ -753,10 +793,14 @@ npm run dev                         # 大厅可见、可创建对局、可完整
 ### 默认系统组合
 
 ```ts
-createDefaultSystems()  // = EventStream + Log + ActionLog + Undo + Prompt + Rematch + ResponseWindow + Tutorial
+createDefaultSystems()  // = EventStream + Log + ActionLog + Undo + Interaction + Rematch + ResponseWindow + Tutorial
 ```
 
 **注意**：`createDefaultSystems` 不包含 FlowSystem 和 CheatSystem，需额外添加。
+
+### 系统命令自动合并
+
+`adapter` 自动将所有系统命令（FLOW、UNDO、REMATCH、INTERACTION、TUTORIAL、RESPONSE_WINDOW、CHEAT）合并到 `commandTypes`。**游戏层 commandTypes 只需列出业务命令**，禁止手动添加系统命令。
 
 ---
 
@@ -772,6 +816,9 @@ createDefaultSystems()  // = EventStream + Log + ActionLog + Undo + Prompt + Rem
 8. **i18n 双语齐全**：新增文案必须同步 `zh-CN` 与 `en`
 9. **sys.phase 单一权威**：阶段信息以 `G.sys.phase` 为准，不在 core 中重复维护阶段状态
 10. **事件消费用 EventStreamSystem**：UI 动画/音效消费事件用 `getEventStreamEntries(G)`，不用 LogSystem
+11. **commandTypes 只列业务命令**：系统命令（UNDO/CHEAT/FLOW/INTERACTION/RESPONSE_WINDOW/TUTORIAL/REMATCH）由 adapter 自动合并，禁止手动添加
+12. **InteractionSystem 替代 PromptSystem**：所有玩家选择/多步交互使用 `createSimpleChoice()` 或 `createInteraction()`，不使用已废弃的 PromptSystem
+13. **ResponseWindowSystem 配置注入**：响应窗口的 `allowedCommands`、`responseAdvanceEvents`、`interactionLock` 必须通过配置注入，禁止修改引擎文件
 
 ---
 
@@ -788,7 +835,7 @@ createDefaultSystems()  // = EventStream + Log + ActionLog + Undo + Prompt + Rem
 - **中等复杂 + 卡牌区控**：`src/games/smashup/`（多人支持/基地记分/派系混搭/持续效果）
 - **框架层组件**：`src/components/game/framework/`
 - **引擎系统**：`src/engine/systems/`
-- **通用系统**：`src/systems/`
+- **引擎原语**：`src/engine/primitives/`
 
 ## 缩略图配置模板（thumbnail.tsx）
 

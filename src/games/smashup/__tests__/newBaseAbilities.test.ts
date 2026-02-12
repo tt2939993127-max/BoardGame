@@ -89,9 +89,11 @@ describe('base_haunted_house_al9000: 随从入场后弃牌', () => {
 
         const events = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', ctx);
         expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
-        expect((events[0] as any).payload.playerId).toBe('0');
-        expect((events[0] as any).payload.cardUids.length).toBe(1);
+        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
+        const continuation = (events[0] as any).payload;
+        expect(continuation.abilityId).toBe('base_haunted_house_al9000');
+        expect(continuation.playerId).toBe('0');
+        expect(continuation.data.promptConfig.options.length).toBe(2);
     });
 
     it('手牌为空时不触发弃牌', () => {

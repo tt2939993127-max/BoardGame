@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { UI_Z_INDEX } from '../../core';
 
 interface ImageLightboxProps {
     src: string | null;
@@ -36,7 +37,8 @@ export default function ImageLightbox({ src, alt = '预览', onClose }: ImageLig
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15 }}
-                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out"
+                    className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out"
+                    style={{ zIndex: UI_Z_INDEX.magnify }}
                     onClick={onClose}
                 >
                     <button

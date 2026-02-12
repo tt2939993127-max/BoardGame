@@ -87,41 +87,132 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 
 ---
 
+## 🚀 关键图片预加载规范（criticalImageResolver）
+
+> **触发条件**：新增游戏、新增角色/派系、修改游戏 Board 中使用的图片资源时必读。
+
+### 机制概述
+
+项目采用**两阶段预加载**策略，防止进入对局时出现白屏/闪烁：
+
+- **关键图片（critical）**：阻塞渲染，加载完成前显示 LoadingScreen，5 秒超时后放行
+- **暖图片（warm）**：后台异步加载，不阻塞对局渲染
+
+门禁落在 `MatchRoom`/`LocalMatchRoom` 入口层，各游戏通过 `criticalImageResolver.ts` 提供动态解析。
+
+### 强制规则
+
+1. **Board 中使用的所有图片必须出现在 criticalImageResolver 中**：要么在 `critical` 列表（首屏必需），要么在 `warm` 列表（后台预取）。
+2. **首屏可见的图片必须放 critical**：背景图、玩家面板、提示板、地图等进入对局立即可见的资源。
+3. **按需加载的图片放 warm**：未选角色/派系的资源、非首屏展示的图集。
+4. **路径格式与图片引用一致**：相对于 `/assets/`，不含 `compressed/`（预加载 API 内部自动处理）。
+5. **解析器必须按游戏阶段动态返回**：选角/选派系阶段 vs 游戏进行阶段，关键资源不同。
+
+### 解析器模板
+
+```typescript
+import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
+
+export const <gameId>CriticalImageResolver: CriticalImageResolver = (
+    gameState: unknown,
+): CriticalImageResolverResult => {
+    // 1. 无状态时：预加载选择界面所需资源
+    // 2. 选择阶段：所有可选项的预览图为 critical
+    // 3. 游戏进行中：已选项的完整资源为 critical，未选项放 warm
+    return { critical: [...], warm: [...] };
+};
+```
+
+### 注册方式
+
+在游戏入口 `index.ts` 中注册：
+
+```typescript
+import { registerCriticalImageResolver } from '../../core';
+import { <gameId>CriticalImageResolver } from './criticalImageResolver';
+
+registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
+```
+
+### 各游戏 critical 资源清单参考
+
+| 游戏 | 选择阶段 critical | 游戏阶段 critical |
+|------|-------------------|-------------------|
+| DiceThrone | 背景图、卡背、头像图集、所有角色 player-board + tip | 背景图、卡背、头像图集、已选角色 player-board + tip + ability-cards + dice + status-icons-atlas |
+| SummonerWars | 地图、卡背、所有阵营 hero 图集 | 地图、卡背、传送门、骰子、已选阵营 hero + cards 图集 |
+| SmashUp | 所有基地图集 | 所有基地图集 + 已选派系卡牌图集 |
+
+### 新增角色/派系检查清单
+
+- [ ] 新资源路径已加入 `criticalImageResolver.ts` 的对应阶段
+- [ ] 选择阶段：预览图（player-board/hero/tip）在 critical 中
+- [ ] 游戏阶段：完整资源（卡牌图集/骰子/状态图标）在 critical 中
+- [ ] 运行相关单测：`npm test -- criticalImageResolver`
+
+### 参考实现
+
+- `src/games/dicethrone/criticalImageResolver.ts` — 按角色 + 游戏阶段动态解析
+- `src/games/summonerwars/criticalImageResolver.ts` — 按阵营 + 游戏阶段动态解析
+- `src/games/smashup/criticalImageResolver.ts` — 按派系图集分组
+
+---
+
 ## 🔊 音频资源规范
 
 > 新增音频全链路流程详见：`docs/audio/add-audio.md`
 
-### 现行规范（已启用）
+### 音频资源架构（强制）
 
-音效/音乐仅允许使用 `public/assets/common/audio/registry.json` 中的**唯一 key**。
+**三层架构**：
+1. **通用注册表**（`public/assets/common/audio/registry.json`）：所有音效资源的唯一来源，包含 key 和物理路径映射。
+2. **游戏配置**（`src/games/<gameId>/audio.config.ts`）：定义事件→音效的映射规则（`feedbackResolver`），使用通用注册表中的 key。
+3. **FX 系统**（`src/games/<gameId>/ui/fxSetup.ts`）：直接使用通用注册表中的 key 定义 `FeedbackPack`，不依赖游戏配置常量。
 
-- **禁止**在游戏层定义音频资源（`src/games/<gameId>/audio.config.ts` 不得再声明 `basePath/sounds`）。
+**核心原则**：
+- **禁止重复定义**：音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用 key 字符串，不再定义常量。
+- **禁止**在游戏层定义音频资源（`audio.config.ts` 不得声明 `basePath/sounds`）。
 - **禁止**使用旧短 key（如 `click` / `dice_roll` / `card_draw`）。
 - **必须**使用 registry 的完整 key（如 `ui.general....uiclick_dialog_choice_01_krst_none`）。
 - **路径规则**：`getOptimizedAudioUrl()` 自动插入 `compressed/`，配置中**不得**手写 `compressed/`。
 
 ### ✅ 音效触发规范（统一标准）
 
-- **游戏态事件音**：一律通过事件流触发（`eventSoundResolver` 或事件元数据）。
-- **UI 点击音**：仅用于纯 UI 行为（打开面板/切换 Tab），通过 `GameButton` 播放。
-- **操作拒绝音**：用户尝试不合法操作时，通过 `playDeniedSound()`（`src/lib/audio/useGameAudio.ts`）播放，key 为 `puzzle.18.negative_pop_01`。
-- **单一来源原则**：同一动作只能由"事件音"、"按钮音"或"拒绝音"其中之一触发，禁止重复。
-- **阶段推进**：统一使用 `SYS_PHASE_CHANGED` 事件音效；推进按钮需关闭点击音。
+**音效四条路径**：
+1. **路径①（EventStream + immediate）**：无动画事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `{ key, timing: 'immediate' }` 即时播放，key 来自通用注册表。
+2. **路径②（EventStream + on-impact + DeferredSoundMap）**：有动画但无 FX 特效的事件音（伤害/治疗数字飞行）`feedbackResolver` 返回 `{ key, timing: 'on-impact' }` 写入 `DeferredSoundMap`，`FlyingEffect.onImpact` 冲击帧调用 `playDeferredSound(eventId)`，key 来自通用注册表。
+3. **路径③（FX 系统 + FeedbackPack）**：有 FX 特效的事件音（召唤光柱/攻击气浪/充能旋涡）通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 自动在 push（immediate）或渲染器 `onImpact()`（on-impact）时触发。**优先使用此路径**，音效与视觉完全同步。key 直接使用通用注册表中的完整 key 字符串。
+4. **路径④（UI 交互音）**：UI 点击音走 `GameButton`，拒绝音走 `playDeniedSound()`，key 来自通用注册表。
+
+**选择原则**：有 FX 特效 → 路径③；有动画无特效 → 路径②；无动画 → 路径①；UI 交互 → 路径④。
+
+**避免重复**：同一事件只能选择一条路径，禁止在 `feedbackResolver` 和 `FeedbackPack` 中同时配置音效。
 
 ### ✅ 当前正确示例（音频）
 
 ```typescript
-// 事件解析直接返回 registry key
-eventSoundResolver: (event) => {
+// ===== 路径① 示例：feedbackResolver 返回 immediate =====
+feedbackResolver: (event) => {
   if (event.type === 'CELL_OCCUPIED') {
-    return 'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.heavy_object_move';
+    return { 
+      key: 'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.heavy_object_move', 
+      timing: 'immediate' 
+    };
   }
-  return undefined;
+  return null;
 }
 
-// 事件级元数据（优先级最高）
-event.audioKey = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
-event.audioCategory = { group: 'ui', sub: 'click' };
+// ===== 路径③ 示例：FX 系统 FeedbackPack =====
+// src/games/summonerwars/ui/fxSetup.ts
+const SUMMON_FEEDBACK: FeedbackPack = {
+  sound: {
+    // 直接使用通用注册表中的 key，不定义常量
+    key: 'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_06_krst',
+    timing: 'on-impact',
+  },
+  shake: { intensity: 'normal', type: 'impact', timing: 'on-impact' },
+};
+
+registry.register(SW_FX.SUMMON, SummonRenderer, { timeoutMs: 4000 }, SUMMON_FEEDBACK);
 ```
 
 ### 音频工具链

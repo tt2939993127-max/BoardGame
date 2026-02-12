@@ -1,16 +1,16 @@
-# Change: 删除 systems/ 层，新建 engine/primitives/ 工具函数库
+# Change: 删除旧 systems 层，新建 engine/primitives/ 工具函数库
 
 ## Why
-当前 `src/systems/` 层试图在引擎层预定义通用"游戏系统"（Ability、Effect、Condition、Combat 等），但经审计发现：
-- `systems/core/`（Attribute/Tag/Effect/Ability/Condition）**零游戏使用**，属于完整死代码
-- `systems/presets/combat/` 仅 DiceThrone 部分使用
+当前旧 systems 层试图在引擎层预定义通用"游戏系统"（Ability、Effect、Condition、Combat 等），但经审计发现：
+- 旧 core（Attribute/Tag/Effect/Ability/Condition）**零游戏使用**，属于完整死代码
+- 旧 combat preset 仅 DiceThrone 部分使用
 - SummonerWars 绕过 systems 层，在 domain/ 自建了一套平行的 AbilityDef/AbilityRegistry/AbilityCondition/Expression/TargetRef 体系
 - 每个游戏独立实现条件评估、表达式计算、卡牌区域操作，存在大量重复代码
 
 根本原因：systems/ 层试图复用**领域概念**（伤害、治疗、召唤），但不同桌游的触发时机、效果类型、执行上下文差异巨大，无法统一。
 
 ## What Changes
-- **BREAKING** 删除整个 `src/systems/` 目录（core/、presets/、CardSystem/、DiceSystem/、TokenSystem/、ResourceSystem/）
+- **BREAKING** 删除旧 systems 目录（core/、presets/、CardSystem/、DiceSystem/、TokenSystem/、ResourceSystem/）
 - **BREAKING** 新建 `src/engine/primitives/` 工具函数库，提供 7 个模块：
   - `expression.ts` — 表达式求值（add/mul/var/min/max）
   - `condition.ts` — 条件评估（and/or/compare）+ 可扩展自定义处理器注册
@@ -27,7 +27,7 @@
 ## Impact
 - Affected specs: `dice-system`（DiceSystem 类 → primitives/dice 纯函数）
 - Affected code:
-  - 删除: `src/systems/` 全部文件（~2500 行）
+  - 删除: 旧 systems 全部文件（~2500 行）
   - 新增: `src/engine/primitives/`（~700 行）
   - 修改: 各游戏 domain/ 层的 import 路径和少量 API 调用
   - 修改: `AGENTS.md`、`docs/ai-rules/engine-systems.md`

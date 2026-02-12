@@ -78,6 +78,7 @@ export const SummonerWarsDomain: DomainCore<SummonerWarsCore> = {
       readyPlayers: { '0': false, '1': false } as Record<PlayerId, boolean>,
       hostPlayerId: '0' as PlayerId,
       hostStarted: false,
+      abilityUsageCount: {},
     };
   },
 

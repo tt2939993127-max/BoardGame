@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { GameManifestEntry } from '../../games/manifest.types';
+import { UI_Z_INDEX } from '../../core';
 
 /** 保存时间选项（秒） */
 const RETENTION_OPTIONS = [
@@ -75,7 +76,8 @@ export const CreateRoomModal = ({
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
                         onClick={handleBackdropClick}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[3000]"
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+                        style={{ zIndex: UI_Z_INDEX.modalOverlay }}
                     />
 
                     {/* 弹窗内容 */}
@@ -84,7 +86,8 @@ export const CreateRoomModal = ({
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="fixed inset-0 flex items-center justify-center p-4 sm:p-8 z-[3001] pointer-events-none"
+                        className="fixed inset-0 flex items-center justify-center p-4 sm:p-8 pointer-events-none"
+                        style={{ zIndex: UI_Z_INDEX.modalContent }}
                     >
                         <div
                             className="bg-parchment-card-bg pointer-events-auto w-full max-w-md rounded-sm shadow-parchment-card-hover border border-parchment-card-border/30 relative overflow-hidden font-serif"

@@ -41,11 +41,11 @@ import { DiceResultOverlay } from './ui/DiceResultOverlay';
 import { DestroyEffectsLayer, useDestroyEffects } from './ui/DestroyEffect';
 import { useScreenShake } from './ui/BoardEffects';
 import { useFxBus, FxLayer } from '../../engine/fx';
+import { useVisualSequenceGate } from '../../components/game/framework/hooks/useVisualSequenceGate';
 import { summonerWarsFxRegistry, SW_FX } from './ui/fxSetup';
 import type { Card, BoardUnit, BoardStructure, CellCoord, UnitCard, EventCard, PlayerId } from './domain/types';
 import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
 import { DiscardPileOverlay } from './ui/DiscardPileOverlay';
-import { getPlayerUnits } from './domain/helpers';
 import { FactionSelection } from './ui/FactionSelectionAdapter';
 import type { FactionId } from './domain/types';
 import { BOARD_ROWS, BOARD_COLS } from './config/board';
@@ -56,7 +56,8 @@ import { useGameEvents } from './ui/useGameEvents';
 import { useCellInteraction } from './ui/useCellInteraction';
 import { StatusBanners } from './ui/StatusBanners';
 import { BoardGrid, getCellPosition } from './ui/BoardGrid';
-import { SUMMONER_WARS_AUDIO_CONFIG, resolveMeleeAttackSound, resolveRangedAttackSound, resolveDamageSound, COMBAT_UNIT_DESTROY_KEY, resolveStructureDestroySound } from './audio.config';
+import { AbilityButtonsPanel } from './ui/AbilityButtonsPanel';
+import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';
 
 type Props = BoardProps<MatchState<SummonerWarsCore>>;
@@ -224,15 +225,21 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 摧毁效果
   const { effects: destroyEffects, pushEffect: pushDestroyEffect, removeEffect: removeDestroyEffect } = useDestroyEffects();
-  // FX 系统（替代原 useBoardEffects）
-  const fxBus = useFxBus(summonerWarsFxRegistry);
   // 全屏震动
   const { shakeStyle, triggerShake } = useScreenShake();
+  // FX 系统（替代原 useBoardEffects，注入音效/震动回调实现反馈包自动触发）
+  const fxBus = useFxBus(summonerWarsFxRegistry, {
+    playSound,
+    triggerShake,
+  });
+
+  // 视觉序列门控（攻击动画期间延迟交互事件 + 游戏结束 overlay）
+  const gate = useVisualSequenceGate();
 
   // 远程攻击气浪完成后才 flush 摧毁效果的标记
   const waitingForShockwaveRef = useRef(false);
   // 远程攻击气浪到达目标后才播放的伤害特效
-  const pendingRangedDamagesRef = useRef<Array<{ position: CellCoord; damage: number }>>([]);
+  const pendingRangedDamagesRef = useRef<Array<{ position: CellCoord; damage: number; eventId: number }>>([]);
   // 远程攻击气浪到达后是否需要震动
   const pendingRangedShakeRef = useRef(false);
   const destroyingCells = useMemo(() => {
@@ -252,6 +259,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const {
     diceResult,
     dyingEntities,
+    isVisualBusy,
     abilityMode, setAbilityMode,
     soulTransferMode, setSoulTransferMode,
     mindCaptureMode, setMindCaptureMode,
@@ -259,13 +267,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     pendingAttackRef, handleCloseDiceResult: rawCloseDiceResult,
     clearPendingAttack, flushPendingDestroys,
   } = useGameEvents({
-    G, core, myPlayerId,
+    G, core, myPlayerId, currentPhase,
     pushDestroyEffect,
     fxBus,
-    triggerShake,
-    onDestroySound: (type, isGate) => {
-      playSound(type === 'structure' ? resolveStructureDestroySound(!!isGate) : COMBAT_UNIT_DESTROY_KEY);
+    onDiceRollSound: (diceCount) => {
+      playSound(resolveDiceRollSound(diceCount));
     },
+    gate,
   });
 
   // 格子交互 Hook
@@ -301,9 +309,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         waitingForShockwaveRef.current = true;
         pendingRangedDamagesRef.current = [...attackSnapshot.damages];
         pendingRangedShakeRef.current = attackSnapshot.hits >= 3;
-        // 远程攻击音：气浪发射时播放
-        playSound(resolveRangedAttackSound());
-        fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: attackSnapshot.target, intensity: hitIntensity }, { attackType: attackSnapshot.attackType, source: attackSnapshot.attacker });
+        // 远程攻击音 + 震动：由 COMBAT_SHOCKWAVE 的 FeedbackPack 自动处理
+        fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: attackSnapshot.target, intensity: hitIntensity }, { attackType: attackSnapshot.attackType, source: attackSnapshot.attacker, eventId: attackSnapshot.attackEventId });
         // 伤害特效和 flushPendingDestroys 由 handleFxComplete 在气浪完成时触发
       }, 180);
     } else {
@@ -312,24 +319,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     }
   }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, fxBus]);
 
-  // 近战攻击命中回调（卡牌冲到目标时触发，播放伤害特效 + 音效）
+  // 近战攻击命中回调（卡牌冲到目标时触发，播放伤害特效）
   const handleAttackHit = useCallback(() => {
     const pending = pendingAttackRef.current;
     if (!pending) return;
 
     const hitIntensity = pending.hits >= 3 ? 'strong' : 'normal';
-    // 近战攻击音：冲到目标时播放
-    const attackerUnit = core.board[pending.attacker.row]?.[pending.attacker.col]?.unit;
-    playSound(resolveMeleeAttackSound(attackerUnit?.card.unitClass));
-    fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: pending.target, intensity: hitIntensity }, { attackType: pending.attackType, source: pending.attacker });
+    // 近战攻击音 + 震动：由 COMBAT_SHOCKWAVE 的 FeedbackPack 自动处理
+    fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: pending.target, intensity: hitIntensity }, { attackType: pending.attackType, source: pending.attacker, eventId: pending.attackEventId });
     for (const dmg of pending.damages) {
-      // 受伤音：受击特效触发时播放
-      const dmgSound = resolveDamageSound(dmg.damage);
-      if (dmgSound) playSound(dmgSound);
-      fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage });
+      // 受伤音：由 COMBAT_DAMAGE 的 FeedbackPack 自动处理
+      fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, eventId: dmg.eventId });
     }
-    if (pending.hits >= 3) triggerShake('normal', 'hit');
-  }, [pendingAttackRef, fxBus, triggerShake, core.board]);
+  }, [pendingAttackRef, fxBus]);
 
   // 近战攻击回弹完成回调（卡牌回到原位后触发，flush 摧毁效果）
   const handleAttackReturn = useCallback(() => {
@@ -342,13 +344,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const handleFxComplete = useCallback((id: string, cue: string) => {
     if (waitingForShockwaveRef.current && cue === SW_FX.COMBAT_SHOCKWAVE) {
       waitingForShockwaveRef.current = false;
-      // 气浪到达目标：播放伤害特效 + 受伤音
+      // 气浪到达目标：播放伤害特效（音效 + 震动由 FeedbackPack 自动处理）
       for (const dmg of pendingRangedDamagesRef.current) {
-        const dmgSound = resolveDamageSound(dmg.damage);
-        if (dmgSound) playSound(dmgSound);
-        fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage });
+        fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, eventId: dmg.eventId });
       }
-      if (pendingRangedShakeRef.current) triggerShake('normal', 'hit');
       pendingRangedDamagesRef.current = [];
       pendingRangedShakeRef.current = false;
       flushPendingDestroys();
@@ -357,7 +356,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     if (isTutorialPendingAnimation && (cue === SW_FX.SUMMON || cue === SW_FX.COMBAT_SHOCKWAVE)) {
       tutorialAnimationComplete();
     }
-  }, [flushPendingDestroys, fxBus, triggerShake, isTutorialPendingAnimation, tutorialAnimationComplete]);
+  }, [flushPendingDestroys, fxBus, isTutorialPendingAnimation, tutorialAnimationComplete]);
 
   // 卡牌放大
   const handleMagnifyCard = useCallback((card: Card) => {
@@ -387,8 +386,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction.handleCardSelect(null);
   }, [interaction]);
   const handleContinueBloodSummon = useCallback(() => {
-    // 继续下一次血契召唤，恢复事件卡选中高亮
-    interaction.handleCardSelect(interaction.bloodSummonMode?.cardId ?? null);
+    // 直接设置状态，避免经过 handleCardSelect 触发 clearAllEventModes
     interaction.setBloodSummonMode({
       step: 'selectTarget',
       cardId: interaction.bloodSummonMode?.cardId,
@@ -433,6 +431,26 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction.setMindControlMode(null);
     interaction.handleCardSelect(null);
   }, [interaction]);
+  const handleConfirmEntanglement = useCallback(() => interaction.handleConfirmEntanglement(), [interaction]);
+  const handleCancelEntanglement = useCallback(() => {
+    interaction.setChantEntanglementMode(null);
+    interaction.handleCardSelect(null);
+  }, [interaction]);
+  const handleConfirmSneak = useCallback(() => interaction.handleConfirmSneak(), [interaction]);
+  const handleCancelSneak = useCallback(() => {
+    interaction.setSneakMode(null);
+    interaction.handleCardSelect(null);
+  }, [interaction]);
+  const handleConfirmGlacialShift = useCallback(() => interaction.handleConfirmGlacialShift(), [interaction]);
+  const handleCancelGlacialShift = useCallback(() => {
+    interaction.setGlacialShiftMode(null);
+    interaction.handleCardSelect(null);
+  }, [interaction]);
+  const handleWithdrawCostSelect = useCallback((costType: 'charge' | 'magic') => {
+    if (!interaction.withdrawMode) return;
+    interaction.setWithdrawMode({ ...interaction.withdrawMode, step: 'selectPosition', costType });
+  }, [interaction]);
+  const handleCancelWithdraw = useCallback(() => interaction.setWithdrawMode(null), [interaction]);
   const handleConfirmStun = useCallback((direction: 'push' | 'pull', distance: number) => {
     interaction.handleConfirmStun(direction, distance);
   }, [interaction]);
@@ -483,6 +501,21 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction.handleConfirmTelekinesis(direction);
   }, [interaction]);
   const handleCancelTelekinesis = useCallback(() => interaction.setTelekinesisTargetMode(null), [interaction]);
+  // afterMove 技能：充能自身
+  const handleAfterMoveSelfCharge = useCallback(() => {
+    if (!abilityMode) return;
+    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+      abilityId: abilityMode.abilityId,
+      sourceUnitId: abilityMode.sourceUnitId,
+      choice: 'self',
+    });
+    setAbilityMode(null);
+  }, [abilityMode, moves, setAbilityMode]);
+  // 冰霜战斧：进入附加目标选择
+  const handleFrostAxeAttach = useCallback(() => {
+    if (!abilityMode || abilityMode.abilityId !== 'frost_axe') return;
+    setAbilityMode({ ...abilityMode, step: 'selectAttachTarget' });
+  }, [abilityMode, setAbilityMode]);
 
   const handleSaveLayout = useCallback(async (config: BoardLayoutConfig) => saveSummonerWarsLayout(config), []);
 
@@ -576,12 +609,18 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         validAbilityPositions={interaction.validAbilityPositions}
                         validAbilityUnits={interaction.validAbilityUnits}
                         actionableUnitPositions={interaction.actionableUnitPositions}
+                        abilityReadyPositions={interaction.abilityReadyPositions}
                         bloodSummonHighlights={interaction.bloodSummonHighlights}
                         annihilateHighlights={interaction.annihilateHighlights}
                         annihilateMode={interaction.annihilateMode}
                         abilityMode={abilityMode}
                         mindControlHighlights={interaction.mindControlHighlights}
                         mindControlSelectedTargets={interaction.mindControlMode?.selectedTargets ?? []}
+                        entanglementHighlights={interaction.entanglementHighlights}
+                        entanglementSelectedTargets={interaction.chantEntanglementMode?.selectedTargets ?? []}
+                        sneakHighlights={interaction.sneakHighlights}
+                        glacialShiftHighlights={interaction.glacialShiftHighlights}
+                        withdrawHighlights={interaction.withdrawHighlights}
                         stunHighlights={interaction.stunHighlights}
                         hypnoticLureHighlights={interaction.hypnoticLureHighlights}
                         afterAttackAbilityHighlights={interaction.afterAttackAbilityHighlights}
@@ -601,14 +640,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         getCellPosition={getCellPositionWithView}
                         onEffectComplete={removeDestroyEffect}
                       />
-                      {/* 召唤暗角遮罩 */}
-                      <div
-                        className="absolute inset-0 z-10 pointer-events-none transition-opacity duration-300"
-                        style={{
-                          background: 'radial-gradient(circle, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.5) 60%, rgba(0,0,0,0.7) 100%)',
-                          opacity: fxBus.activeEffects.some(e => e.cue === SW_FX.SUMMON) ? 1 : 0,
-                        }}
-                      />
+                      {/* 召唤暗角已内置于 SummonShaderEffect（dimStrength），此处不再需要 CSS 遮罩 */}
                       {/* FX 特效层 */}
                       <FxLayer
                         bus={fxBus}
@@ -740,6 +772,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     soulTransferMode={soulTransferMode}
                     funeralPyreMode={interaction.funeralPyreMode}
                     mindControlMode={interaction.mindControlMode}
+                    chantEntanglementMode={interaction.chantEntanglementMode}
+                    sneakMode={interaction.sneakMode}
+                    glacialShiftMode={interaction.glacialShiftMode}
+                    withdrawMode={interaction.withdrawMode}
                     stunMode={interaction.stunMode}
                     hypnoticLureMode={interaction.hypnoticLureMode}
                     mindCaptureMode={mindCaptureMode}
@@ -760,6 +796,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onSkipFuneralPyre={handleSkipFuneralPyre}
                     onConfirmMindControl={handleConfirmMindControl}
                     onCancelMindControl={handleCancelMindControl}
+                    onConfirmEntanglement={handleConfirmEntanglement}
+                    onCancelEntanglement={handleCancelEntanglement}
+                    onConfirmSneak={handleConfirmSneak}
+                    onCancelSneak={handleCancelSneak}
+                    onConfirmGlacialShift={handleConfirmGlacialShift}
+                    onCancelGlacialShift={handleCancelGlacialShift}
+                    onWithdrawCostSelect={handleWithdrawCostSelect}
+                    onCancelWithdraw={handleCancelWithdraw}
                     onConfirmStun={handleConfirmStun}
                     onCancelStun={handleCancelStun}
                     onCancelHypnoticLure={handleCancelHypnoticLure}
@@ -767,6 +811,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onCancelAfterAttackAbility={handleCancelAfterAttackAbility}
                     onConfirmTelekinesis={handleConfirmTelekinesis}
                     onCancelTelekinesis={handleCancelTelekinesis}
+                    onAfterMoveSelfCharge={handleAfterMoveSelfCharge}
+                    onFrostAxeAttach={handleFrostAxeAttach}
                   />
                 </div>
 
@@ -795,14 +841,18 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 <CardSelectorOverlay
                   title={
                     abilityMode.abilityId === 'revive_undead' ? t('cardSelector.reviveUndead') :
-                      abilityMode.abilityId === 'infection' ? t('cardSelector.infection') : t('cardSelector.default')
+                      abilityMode.abilityId === 'infection' ? t('cardSelector.infection') :
+                      abilityMode.abilityId === 'fortress_power' ? t('cardSelector.fortressPower') : t('cardSelector.default')
                   }
                   cards={core.players[myPlayerId]?.discard.filter(c => {
                     if (abilityMode.abilityId === 'revive_undead') {
-                      return c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国');
+                      return c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === 'necromancer');
                     }
                     if (abilityMode.abilityId === 'infection') {
                       return c.cardType === 'unit' && (c.id.includes('plague-zombie') || c.name.includes('疫病体'));
+                    }
+                    if (abilityMode.abilityId === 'fortress_power') {
+                      return c.cardType === 'unit' && c.id.includes('fortress');
                     }
                     return true;
                   }) ?? []}
@@ -811,6 +861,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                       moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
                         abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
                         targetCardId: card.id, targetPosition: abilityMode.targetPosition,
+                      });
+                      setAbilityMode(null);
+                    } else if (abilityMode.abilityId === 'fortress_power') {
+                      moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+                        abilityId: 'fortress_power', sourceUnitId: abilityMode.sourceUnitId,
+                        targetCardId: card.id,
                       });
                       setAbilityMode(null);
                     } else {
@@ -822,72 +878,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               )}
 
               {/* 单位操作面板（主动技能按钮） */}
-              {!abilityMode && !interaction.bloodSummonMode && !interaction.eventTargetMode && core.selectedUnit && isMyTurn && (() => {
-                const unit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
-                if (!unit || unit.owner !== myPlayerId) return null;
-                const abilities = unit.card.abilities ?? [];
-                const buttons: React.ReactNode[] = [];
-
-                if (abilities.includes('revive_undead') && currentPhase === 'summon') {
-                  const hasUndeadInDiscard = core.players[myPlayerId]?.discard.some(c =>
-                    c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === '堕落王国')
-                  );
-                  if (hasUndeadInDiscard) {
-                    buttons.push(
-                      <GameButton key="revive_undead" onClick={() => setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: unit.cardId })} variant="primary" size="md">
-                        {t('abilityButtons.reviveUndead')}
-                      </GameButton>
-                    );
-                  }
-                }
-                if (abilities.includes('fire_sacrifice_summon') && currentPhase === 'summon') {
-                  const hasOtherUnits = getPlayerUnits(core, myPlayerId as '0' | '1').some(u => u.cardId !== unit.cardId);
-                  if (hasOtherUnits) {
-                    buttons.push(
-                      <GameButton key="fire_sacrifice_summon" onClick={() => setAbilityMode({ abilityId: 'fire_sacrifice_summon', step: 'selectUnit', sourceUnitId: unit.cardId })} variant="secondary" size="md">
-                        {t('abilityButtons.fireSacrificeSummon')}
-                      </GameButton>
-                    );
-                  }
-                }
-                if (abilities.includes('life_drain') && currentPhase === 'attack') {
-                  const nearbyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
-                    .filter(u => {
-                      if (u.cardId === unit.cardId) return false;
-                      const dist = Math.abs(u.position.row - core.selectedUnit!.row) + Math.abs(u.position.col - core.selectedUnit!.col);
-                      return dist <= 2;
-                    });
-                  if (nearbyUnits.length > 0) {
-                    buttons.push(
-                      <GameButton key="life_drain" onClick={() => setAbilityMode({ abilityId: 'life_drain', step: 'selectUnit', sourceUnitId: unit.cardId, context: 'beforeAttack' })} variant="secondary" size="md">
-                        {t('abilityButtons.lifeDrain')}
-                      </GameButton>
-                    );
-                  }
-                }
-                if (abilities.includes('holy_arrow') && currentPhase === 'attack') {
-                  const hasValidDiscard = myHand.some(card => card.cardType === 'unit' && card.name !== unit.card.name);
-                  if (hasValidDiscard) {
-                    buttons.push(
-                      <GameButton key="holy_arrow" onClick={() => setAbilityMode({ abilityId: 'holy_arrow', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
-                        {t('abilityButtons.holyArrow')}
-                      </GameButton>
-                    );
-                  }
-                }
-                if (abilities.includes('healing') && currentPhase === 'attack') {
-                  const hasDiscard = myHand.length > 0;
-                  if (hasDiscard) {
-                    buttons.push(
-                      <GameButton key="healing" onClick={() => setAbilityMode({ abilityId: 'healing', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
-                        {t('abilityButtons.healing')}
-                      </GameButton>
-                    );
-                  }
-                }
-                if (buttons.length === 0) return null;
-                return <div className="absolute bottom-[220px] left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex gap-2">{buttons}</div>;
-              })()}
+              <AbilityButtonsPanel
+                core={core}
+                currentPhase={currentPhase}
+                isMyTurn={isMyTurn}
+                myPlayerId={myPlayerId}
+                myHand={myHand}
+                abilityMode={abilityMode}
+                bloodSummonMode={interaction.bloodSummonMode}
+                eventTargetMode={interaction.eventTargetMode}
+                moves={moves as Record<string, (payload?: unknown) => void>}
+                setAbilityMode={setAbilityMode}
+                setWithdrawMode={interaction.setWithdrawMode}
+              />
 
               {/* 卡牌放大预览 */}
               <MagnifyOverlay isOpen={!!magnifiedCard} onClose={() => setMagnifiedCard(null)} containerClassName="max-h-[85vh] max-w-[90vw]" closeLabel={t('actions.closePreview')}>
@@ -908,9 +911,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 onClose={handleCloseDiceResult}
               />
 
-              {/* 结束页面遮罩 */}
+              {/* 结束页面遮罩（视觉序列进行中延迟显示，确保死亡动画播完） */}
               <EndgameOverlay
-                isGameOver={!!isGameOver}
+                isGameOver={!!isGameOver && !isVisualBusy}
                 result={isGameOver}
                 playerID={playerID}
                 reset={isSpectator ? undefined : reset}

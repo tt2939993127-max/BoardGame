@@ -78,7 +78,7 @@ function clearArea(state: SummonerWarsCore, rows: number[], cols: number[]) {
 function makeFortressKnight(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '城塞骑士', unitClass: 'common',
-    faction: '先锋军团', strength: 2, life: 5, cost: 2,
+    faction: 'paladin', strength: 2, life: 5, cost: 2,
     attackType: 'melee', attackRange: 1,
     abilities: ['entangle', 'guardian'], deckSymbols: [],
   };
@@ -88,7 +88,7 @@ function makeFortressKnight(id: string): UnitCard {
 function makeFortressWarrior(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '城塞圣武士', unitClass: 'common',
-    faction: '先锋军团', strength: 3, life: 4, cost: 2,
+    faction: 'paladin', strength: 3, life: 4, cost: 2,
     attackType: 'melee', attackRange: 1,
     abilities: ['judgment'], deckSymbols: [],
   };
@@ -98,7 +98,7 @@ function makeFortressWarrior(id: string): UnitCard {
 function makeFortressArcher(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '城塞弓箭手', unitClass: 'common',
-    faction: '先锋军团', strength: 1, life: 5, cost: 2,
+    faction: 'paladin', strength: 1, life: 5, cost: 2,
     attackType: 'ranged', attackRange: 3,
     abilities: ['holy_arrow'], deckSymbols: [],
   };
@@ -108,7 +108,7 @@ function makeFortressArcher(id: string): UnitCard {
 function makeValentina(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '瓦伦蒂娜·斯托哈特', unitClass: 'champion',
-    faction: '先锋军团', strength: 2, life: 9, cost: 6,
+    faction: 'paladin', strength: 2, life: 9, cost: 6,
     attackType: 'melee', attackRange: 1,
     abilities: ['guidance', 'fortress_elite'], deckSymbols: [],
   };
@@ -118,7 +118,7 @@ function makeValentina(id: string): UnitCard {
 function makeJacob(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '雅各布·艾德温', unitClass: 'champion',
-    faction: '先锋军团', strength: 2, life: 6, cost: 5,
+    faction: 'paladin', strength: 2, life: 6, cost: 5,
     attackType: 'ranged', attackRange: 3,
     abilities: ['radiant_shot'], deckSymbols: [],
   };
@@ -128,7 +128,7 @@ function makeJacob(id: string): UnitCard {
 function makePaladinSummoner(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '瑟拉·艾德温', unitClass: 'summoner',
-    faction: '先锋军团', strength: 2, life: 12, cost: 0,
+    faction: 'paladin', strength: 2, life: 12, cost: 0,
     attackType: 'ranged', attackRange: 3,
     abilities: ['fortress_power'], deckSymbols: [],
   };
@@ -138,7 +138,7 @@ function makePaladinSummoner(id: string): UnitCard {
 function makeTemplePriest(id: string): UnitCard {
   return {
     id, cardType: 'unit', name: '圣殿牧师', unitClass: 'common',
-    faction: '先锋军团', strength: 2, life: 2, cost: 0,
+    faction: 'paladin', strength: 2, life: 2, cost: 0,
     attackType: 'melee', attackRange: 1,
     abilities: ['healing'], deckSymbols: [],
   };
@@ -148,7 +148,7 @@ function makeTemplePriest(id: string): UnitCard {
 function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '敌方单位', unitClass: 'common',
-    faction: '测试', strength: 2, life: 3, cost: 0,
+    faction: 'necromancer', strength: 2, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -158,7 +158,7 @@ function makeEnemy(id: string, overrides?: Partial<UnitCard>): UnitCard {
 function makeAlly(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
     id, cardType: 'unit', name: '友方单位', unitClass: 'common',
-    faction: '先锋军团', strength: 1, life: 3, cost: 0,
+    faction: 'paladin', strength: 1, life: 3, cost: 0,
     attackType: 'melee', attackRange: 1, deckSymbols: [],
     ...overrides,
   };
@@ -191,6 +191,7 @@ function addEventToHand(
     id: eventId,
     cardType: 'event',
     name: overrides?.name ?? '测试事件',
+    faction: 'paladin',
     cost: overrides?.cost ?? 0,
     playPhase: overrides?.playPhase ?? 'summon',
     effect: overrides?.effect ?? '测试效果',

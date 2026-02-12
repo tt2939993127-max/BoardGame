@@ -80,8 +80,8 @@ export class UGCHostBridge {
     }
 
     /** 发送状态更新 */
-    sendStateUpdate(): void {
-        if (!this.isReady) return;
+    sendStateUpdate(force: boolean = false): void {
+        if (!this.isReady && !force) return;
         
         const message: HostStateUpdateMessage = {
             id: this.generateMessageId(),
@@ -142,7 +142,10 @@ export class UGCHostBridge {
                 await this.handleCommand(message);
                 break;
             case 'STATE_REQUEST':
-                this.sendStateUpdate();
+                if (!this.viewOrigin) {
+                    this.viewOrigin = event.origin;
+                }
+                this.sendStateUpdate(true);
                 break;
             case 'PLAY_SFX':
                 this.handlePlaySfx(message);
@@ -198,7 +201,7 @@ export class UGCHostBridge {
 
             // 命令成功后发送状态更新
             if (result.success) {
-                this.sendStateUpdate();
+                this.sendStateUpdate(true);
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : '未知错误';

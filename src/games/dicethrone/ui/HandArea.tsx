@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 import { AnimatePresence, animate, motion, motionValue, type MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { AbilityCard, TurnPhase } from '../types';
-import { buildLocalizedImageSet } from '../../../core';
+import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { ENGINE_NOTIFICATION_EVENT, type EngineNotificationDetail } from '../../../engine/notifications';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { ASSETS } from './assets';
@@ -546,7 +546,8 @@ export const HandArea = ({
     return (
         <div
             ref={handAreaRef}
-            className="absolute bottom-0 left-0 right-0 z-[100] flex justify-center items-end pb-0 h-[22vw] pointer-events-none"
+            className="absolute bottom-0 left-0 right-0 flex justify-center items-end pb-0 h-[22vw] pointer-events-none"
+            style={{ zIndex: UI_Z_INDEX.hud }}
         >
             {/* 教程高亮目标：仅覆盖实际卡牌区域 */}
             <div
@@ -568,7 +569,7 @@ export const HandArea = ({
                         const isDealing = dealingCardKey === cardKey;
                         const isFlipped = flippedCardKeys.has(cardKey);
                         const returningEntry = returningCardMap[cardKey];
-                        const zIndex = isDragging ? 500 : 100 + i;
+                        const zIndex = isDragging ? UI_Z_INDEX.hud + 40 : UI_Z_INDEX.hud + 1 + i;
                         const isReturning = !!returningEntry;
                         const returnVersion = returningVersionMap[cardKey] ?? 0;
                         // 弃牌模式下禁用拖拽，改用点击
@@ -726,7 +727,7 @@ export const HandArea = ({
                                 style={{
                                     bottom: '-2vw',
                                     left: `calc(50% + ${startIndexOffset * 7}vw - 6vw)`,
-                                    zIndex: 600,
+                                    zIndex: UI_Z_INDEX.overlayRaised,
                                 }}
                                 initial={{
                                     x: startOffset.x,

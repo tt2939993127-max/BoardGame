@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ActionLogSegment } from '../../engine/types';
 import { CardPreviewTooltip } from './CardPreviewTooltip';
-import type { CardPreviewRef } from '../../systems/CardSystem';
+import type { CardPreviewRef } from '../../core';
 
 interface ActionLogSegmentsProps {
     segments: ActionLogSegment[];

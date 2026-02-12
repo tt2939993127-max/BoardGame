@@ -10,11 +10,9 @@
  * - 通过 MERGE_STATE 设置玩家手牌为教学指定卡牌
  *
  * 教学手牌设计（P0）：
- * - 战争猛禽 (dino_war_raptor, 力量2) — 简单随从，用于演示打出随从
- * - 重装剑龙 (dino_armor_stego, 力量3) — 持续能力随从，丰富手牌
- * - 大副 (pirate_first_mate, 力量2) — 海盗随从，展示混搭派系
+ * - 研究员 (miskatonic_fellow, 力量3, 天赋) — 天赋随从，用于演示打出随从 + 激活天赋
  * - 机能强化 (dino_augmentation, 标准行动) — 简单行动卡，用于演示打出行动
- * - 虚张声势 (pirate_swashbuckling, 标准行动) — 海盗行动卡，丰富手牌
+ * - 战争猛禽 (dino_war_raptor, 力量2) — 备用随从，丰富手牌
  */
 
 import type { TutorialManifest } from '../../engine/types';
@@ -62,15 +60,16 @@ export {
 // ============================================================================
 
 /**
- * 教学用固定手牌：2 张随从 + 2 张行动 + 1 张备用随从
+ * 教学用固定手牌：只包含教学必需的卡牌
+ * - 研究员：天赋随从，教学打出随从 + 激活天赋
+ * - 机能强化：简单行动卡，教学打出行动
+ * - 战争猛禽：备用随从，让手牌不至于只有 2 张
  * uid 使用 'tut-' 前缀避免与游戏生成的 uid 冲突
  */
 const TUTORIAL_HAND: CardInstance[] = [
-    { uid: 'tut-1', defId: 'dino_war_raptor', type: 'minion', owner: '0' },
-    { uid: 'tut-2', defId: 'dino_armor_stego', type: 'minion', owner: '0' },
-    { uid: 'tut-3', defId: 'pirate_first_mate', type: 'minion', owner: '0' },
-    { uid: 'tut-4', defId: 'dino_augmentation', type: 'action', owner: '0' },
-    { uid: 'tut-5', defId: 'pirate_swashbuckling', type: 'action', owner: '0' },
+    { uid: 'tut-1', defId: 'miskatonic_fellow', type: 'minion', owner: '0' },
+    { uid: 'tut-2', defId: 'dino_augmentation', type: 'action', owner: '0' },
+    { uid: 'tut-3', defId: 'dino_war_raptor', type: 'minion', owner: '0' },
 ];
 
 // ============================================================================
@@ -186,6 +185,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             position: 'top',
             requireAction: true,
             allowedCommands: [SU_COMMANDS.PLAY_MINION],
+            allowedTargets: ['tut-1'],
             advanceOnEvents: [{ type: SU_EVENTS.MINION_PLAYED }],
         },
 
@@ -197,10 +197,23 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             position: 'top',
             requireAction: true,
             allowedCommands: [SU_COMMANDS.PLAY_ACTION],
+            allowedTargets: ['tut-2'],
             advanceOnEvents: [{ type: SU_EVENTS.ACTION_PLAYED }],
         },
 
-        // 9: 结束出牌 — 引导玩家点击结束按钮推进到下一阶段
+        // 9: 使用天赋 — 点击基地上金色发光的随从激活天赋能力
+        {
+            id: 'useTalent',
+            content: 'game-smashup:tutorial.steps.useTalent',
+            highlightTarget: 'su-base-area',
+            position: 'bottom',
+            requireAction: true,
+            allowedCommands: [SU_COMMANDS.USE_TALENT],
+            allowedTargets: ['tut-1'],
+            advanceOnEvents: [{ type: SU_EVENTS.TALENT_USED }],
+        },
+
+        // 10: 结束出牌 — 引导玩家点击结束按钮推进到下一阶段
         {
             id: 'endPlayCards',
             content: 'game-smashup:tutorial.steps.endPlayCards',
@@ -290,15 +303,7 @@ const SMASH_UP_TUTORIAL: TutorialManifest = {
             ],
         },
 
-        // 17: 天赋能力说明 — 介绍天赋机制
-        {
-            id: 'talentIntro',
-            content: 'game-smashup:tutorial.steps.talentIntro',
-            position: 'center',
-            requireAction: false,
-        },
-
-        // 18: 回合循环说明 — 介绍回合交替机制
+        // 17: 回合循环说明 — 介绍回合交替机制
         {
             id: 'turnCycle',
             content: 'game-smashup:tutorial.steps.turnCycle',

@@ -146,18 +146,7 @@ export function deserializeDeck(
 // 内部辅助函数
 // ============================================================================
 
-/**
- * 从卡牌中提取阵营 ID
- *
- * UnitCard 有 faction 字段；EventCard 和 StructureCard 没有，
- * 但在自定义牌组场景中，所有手动添加的卡牌都应有阵营信息。
- * 对于没有 faction 字段的卡牌，使用 ID 前缀推断。
- */
+/** 从卡牌中提取阵营 ID（三种卡牌类型均有 faction 字段） */
 function extractFaction(card: Card): FactionId {
-    if ('faction' in card && card.faction) {
-        return resolveFactionId(card.faction as string);
-    }
-    // 回退：从 ID 前缀推断（与 cardRegistry 中的模式一致）
-    // TODO: 当卡牌数据结构统一 faction 字段后，移除此回退逻辑
-    return 'necromancer' as FactionId;
+    return resolveFactionId(card.faction);
 }

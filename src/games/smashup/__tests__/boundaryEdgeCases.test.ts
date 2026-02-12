@@ -197,7 +197,7 @@ describe('三基地同时达标', () => {
         expect(exitResult.halt).toBe(true);
 
         const events = exitResult.events ?? [];
-        const promptEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+        const promptEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
     });
 });

@@ -25,6 +25,7 @@ src/
 │   ├── AssetLoader.ts       # 资源路径/预加载统一入口
 │   └── index.ts             # 框架核心导出
 ├── engine/                  # 引擎管线与系统
+│   ├── primitives/          # 引擎原语（condition/effects/dice/resources/target/zones/expression）
 │   ├── systems/
 │   │   ├── CheatSystem.ts           # 调试/作弊辅助
 │   │   ├── FlowSystem.ts            # 回合/阶段流程
@@ -42,28 +43,6 @@ src/
 │   ├── notifications.ts      # 事件/通知
 │   ├── pipeline.ts           # 执行管线
 │   └── types.ts              # 引擎类型
-├── systems/                 # 通用游戏系统（跨游戏复用）
-│   ├── core/                # 通用核心（Attribute/Tag/Effect/Condition/Ability）
-│   ├── presets/             # 游戏类型预设（combat 等）
-│   │   └── types.ts          # 类型
-│   ├── CardSystem/
-│   │   ├── CardSystem.ts     # 卡牌系统
-│   │   ├── index.ts          # 导出
-│   │   └── types.ts          # 类型
-│   ├── DiceSystem/
-│   │   ├── DiceSystem.ts     # 骰子系统
-│   │   ├── index.ts          # 导出
-│   │   └── types.ts          # 类型
-│   ├── ResourceSystem/
-│   │   ├── ResourceSystem.ts # 资源系统
-│   │   ├── index.ts          # 导出
-│   │   └── types.ts          # 类型
-│   ├── TokenSystem/
-│   │   ├── TokenSystem.ts    # Token 系统
-│   │   ├── index.ts          # 导出
-│   │   └── types.ts          # 类型
-│   ├── StatusEffectSystem.ts # 状态效果系统
-│   └── index.ts              # 系统聚合导出
 ├── games/                   # 具体游戏实现
 │   ├── assetslicer/                 # 工具型模块
 │   ├── dicethrone/                  # DiceThrone 实现
@@ -140,7 +119,7 @@ src/
   - 资源注册表 API（可选）：`registerGameAssets` / `preloadGameAssets`
 - **引擎管线与系统**：`src/engine/`（Flow/Prompt/Undo/ResponseWindow/Rematch 等）
 - **撤销系统**：`src/engine/systems/UndoSystem.ts`（通过 `createDefaultSystems` 启用）
-- **通用游戏系统**：`src/systems/`（StatusEffect/Ability/Resource/Token/Dice/Card 等，含条件注册表）
+- **引擎原语**：`src/engine/primitives/`（condition/effects/dice/resources/target/zones/expression）
 - **动画组件库**：`src/components/common/animations/`
   - `FlyingEffect` / `ShakeContainer` / `PulseGlow` / `variants` / `VictoryParticles` / `BurstParticles`
   - `VictoryParticles` 依赖 `@tsparticles/react` + `@tsparticles/slim`，用于胜利弹出粒子特效（动态加载，避免 SSR 访问 window）
@@ -159,14 +138,12 @@ src/
   - `RematchSystem.ts`（重赛管理）
   - `ResponseWindowSystem.ts`（响应窗口）
   - `UndoSystem.ts`（撤销）
-- **Game Systems（`src/systems/`）**
-  - `core/`（能力/条件/效果/属性/标签）
-  - `presets/`（战斗类等预设）
-  - `CardSystem/`（卡牌）
-  - `DiceSystem/`（骰子）
-  - `ResourceSystem/`（资源）
-  - `StatusEffectSystem.ts`（状态效果）
-  - `TokenSystem/`（Token）
+- **Engine Primitives（`src/engine/primitives/`）**
+  - `condition.ts` / `effects.ts` / `dice.ts` / `resources.ts` / `target.ts` / `zones.ts` / `expression.ts`
+  - `visual.ts` — VisualResolver（基于约定的视觉资源解析）
+  - `actionRegistry.ts` — ActionHandlerRegistry（actionId → handler 注册表）
+- **Engine Testing（`src/engine/testing/`）**
+  - `referenceValidator.ts` — validateReferences / extractRefChains（实体引用链完整性验证）
 
 ## 3. 游戏接入规范（避免重复造轮子）
 
@@ -177,7 +154,12 @@ src/
    - `src/games/<gameId>/Board.tsx`：UI
    - `src/games/<gameId>/types.ts`：状态/类型
    - 如有英雄模块：`src/games/<gameId>/<hero>/`
-4) **通用系统优先**：状态/技能优先使用 `StatusEffectSystem` / `systems/core` / `systems/presets`。
+4) **通用能力优先**：状态/技能等机制优先使用 `engine/primitives/` 与 `engine/systems/` 的通用能力。
+5) **实体定义完整性检查清单**（新增实体/能力时强制）：
+   - 实体定义（TokenDef/CardDef/AbilityDef）中引用的 handler/actionId 必须在对应注册表中有注册
+   - 新增实体后必须运行 entity-chain-integrity 测试（`__tests__/entity-chain-integrity.test.ts`）确保无断裂引用
+   - 测试使用 `engine/testing/referenceValidator.ts` 的 `validateReferences()` + `extractRefChains()`
+   - 参考：DiceThrone/SummonerWars/SmashUp 的 `entity-chain-integrity.test.ts`
 
 ## 4. DiceThrone 领域扩展（数据驱动注册表）
 
@@ -217,7 +199,7 @@ src/
 
 > 解耦要求：框架不再默认注册任何游戏特定条件（如骰子组合/顺子/阶段）。这些条件需在游戏层通过 `conditionRegistry.register()` 显式注册，以避免耦合。
 
-- **跨游戏复用** → 放 `core/` 或 `systems/`
+- **跨游戏复用** → 放 `core/` 或 `engine/primitives/`
 - **仅游戏内使用** → 放 `games/<gameId>/`
 - **通用 UI 组件** → 放 `components/`
 - **工具型能力** → 放 `lib/`

@@ -5,7 +5,7 @@
  * 4-5: Foot (足)
  * 6: Moon (月)
  */
-import type { DiceDefinition } from '../../../../systems/DiceSystem/types';
+import type { DiceDefinition } from '../../../../engine/primitives';
 import { MOON_ELF_DICE_FACE_IDS } from '../../domain/ids';
 
 export const moonElfDiceDefinition: DiceDefinition = {

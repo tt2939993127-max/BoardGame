@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveActiveMatchExitPayload, shouldPromptExitActiveMatch } from '../GameDetailsModal';
+import { resolveActiveMatchExitPayload, shouldPromptExitActiveMatch } from '../roomActions';
 
 const buildStored = (override: Partial<{ matchID: string; playerID: string; credentials: string; gameName: string }> = {}) => ({
     matchID: 'match-1',

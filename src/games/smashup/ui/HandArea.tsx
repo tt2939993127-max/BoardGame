@@ -5,6 +5,7 @@ import type { CardInstance } from '../domain/types';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { User, Swords } from 'lucide-react';
 import { getCardDef as lookupCardDef, getMinionDef as lookupMinionDef, resolveCardName, resolveCardText } from '../data/cards';
+import { UI_Z_INDEX } from '../../../core';
 
 // ============================================================================
 // Layout Constants
@@ -22,6 +23,8 @@ type Props = {
     isDiscardMode?: boolean;
     discardSelection?: Set<string>;
     disableInteraction?: boolean;
+    /** 教学模式下被禁用的卡牌 uid 集合（置灰 + 摇头） */
+    disabledCardUids?: Set<string>;
 };
 
 // New prop for viewing details
@@ -33,13 +36,15 @@ type HandCardProps = {
     isDiscardSelected: boolean;
     isDiscardMode: boolean;
     disableInteraction: boolean;
+    /** 教学模式下此卡被单独禁用（置灰 + 摇头） */
+    isTutorialDisabled: boolean;
     onSelect: () => void;
     onViewDetail?: () => void;
 };
 
 
 const HandCard: React.FC<HandCardProps> = ({
-    card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, onSelect, onViewDetail
+    card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, isTutorialDisabled, onSelect, onViewDetail
 }) => {
     const { t, i18n } = useTranslation('game-smashup');
     const [isHovered, setIsHovered] = useState(false);
@@ -82,7 +87,7 @@ const HandCard: React.FC<HandCardProps> = ({
             }}
             initial={{ y: 200, opacity: 0, scale: 0.8 }}
             animate={{
-                y: isSelected ? `-${SELECTED_Y_LIFT_VW}vw` : (isHovered ? '-1.5vw' : '0'),
+                y: isSelected ? `-${SELECTED_Y_LIFT_VW}vw` : '0',
                 scale: isSelected ? 1.15 : 1,
                 rotate: isShaking ? [0, -6, 6, -4, 4, 0] : (isSelected ? 0 : rotationSeed),
                 opacity: 1
@@ -92,7 +97,7 @@ const HandCard: React.FC<HandCardProps> = ({
             onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
             onClick={() => {
-                if (disableInteraction) {
+                if (disableInteraction || isTutorialDisabled) {
                     // 不可操作时摇头抖动
                     setIsShaking(true);
                     setTimeout(() => setIsShaking(false), 400);
@@ -104,9 +109,10 @@ const HandCard: React.FC<HandCardProps> = ({
             {/* Card Container */}
             <div className={`
                 w-full h-full relative rounded-md shadow-md transition-all duration-200
+                ${isTutorialDisabled ? 'opacity-40 grayscale cursor-not-allowed' : ''}
                 ${isSelected ? 'ring-4 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)]' : 'shadow-black/30'}
                 ${isDiscardSelected ? 'ring-4 ring-red-500 shadow-red-500/50 grayscale' : ''}
-                ${!isSelected && !isDiscardSelected ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white/50 hover:shadow-xl') : ''}
+                ${!isSelected && !isDiscardSelected && !isTutorialDisabled ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white hover:shadow-xl') : ''}
             `}>
 
                 {/* Detail View Button (Magnifying Glass) - Appears on hover */}
@@ -180,6 +186,7 @@ export const HandArea: React.FC<Props> = ({
     isDiscardMode = false,
     discardSelection,
     disableInteraction = false,
+    disabledCardUids,
 }) => {
     // Basic mount animation
     const [isLoaded, setIsLoaded] = useState(false);
@@ -188,7 +195,8 @@ export const HandArea: React.FC<Props> = ({
 
     return (
         <div
-            className="absolute bottom-4 left-0 right-0 h-[20vh] flex flex-col justify-end items-center pointer-events-none z-40"
+            className="absolute bottom-4 left-0 right-0 h-[20vh] flex flex-col justify-end items-center pointer-events-none"
+            style={{ zIndex: UI_Z_INDEX.hud }}
             data-testid="su-hand-area"
         >
             <div className="flex items-end justify-center px-4 max-w-[90vw] perspective-[1000px]" data-tutorial-id="su-hand-area">
@@ -203,6 +211,7 @@ export const HandArea: React.FC<Props> = ({
                             isDiscardSelected={!!discardSelection?.has(card.uid)}
                             isDiscardMode={isDiscardMode}
                             disableInteraction={disableInteraction}
+                            isTutorialDisabled={!!disabledCardUids?.has(card.uid)}
                             onSelect={() => onCardSelect(card)}
                             onViewDetail={() => onCardView?.(card)}
                         />

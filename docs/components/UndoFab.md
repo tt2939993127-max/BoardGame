@@ -64,7 +64,7 @@ export const YourGameBoard: React.FC<Props> = ({
     moves={moves}
     playerID={playerID}
     isGameOver={!!isGameOver}
-    className="fixed top-8 left-8 z-[10000] flex flex-col items-start gap-2 font-sans"
+    className="fixed top-8 left-8 flex flex-col items-start gap-2 font-sans"
 />
 ```
 
@@ -77,7 +77,7 @@ export const YourGameBoard: React.FC<Props> = ({
 | `moves` | `any` | ✅ | - | boardgame.io moves 对象 |
 | `playerID` | `string \| null` | ✅ | - | 当前玩家 ID |
 | `isGameOver` | `boolean` | ❌ | `false` | 游戏是否结束 |
-| `className` | `string` | ❌ | `"fixed bottom-8 left-8 z-[10000]..."` | 自定义样式类名 |
+| `className` | `string` | ❌ | `"fixed bottom-8 left-8 ..."` | 自定义样式类名（位置/布局为主） |
 
 ## 组件行为
 
@@ -205,7 +205,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ /* ... */ }) => {
 
 1. **不要在观战模式显示**：观战者不应该看到撤回按钮
 2. **游戏结束时隐藏**：游戏结束后撤回功能应该不可用
-3. **Z-index 管理**：默认 `z-[10000]` 确保在大多数元素之上
+3. **Z-index 管理**：撤回按钮层级由 `FabMenu` 统一管理，遵循 `UI_Z_INDEX.hud`，不要在 `className` 里硬编码 z-index
 4. **拖动区域**：悬浮球可拖动，但展开的面板不会触发拖动
 
 ## 未来改进

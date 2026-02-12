@@ -15,6 +15,21 @@ import type { Command, DomainCore, RandomFn, PlayerId, GameEvent, MatchState } f
 import { createInitialSystemState, executePipeline, type PipelineConfig } from '../pipeline';
 import type { EngineSystem } from '../systems/types';
 
+// 实体交互链完整性测试套件（契约验证工厂）
+export {
+    createRegistryIntegritySuite,
+    createRefChainSuite,
+    createTriggerPathSuite,
+    createEffectContractSuite,
+    extractRefChains,
+    type RegistryIntegrityConfig,
+    type RefChainSuiteConfig,
+    type TriggerPathSuiteConfig,
+    type EffectContractSuiteConfig,
+    type EffectContractRule,
+    type RefChain,
+} from './entityIntegritySuite';
+
 // ============================================================================
 // 类型定义
 // ============================================================================

@@ -274,13 +274,16 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
 
     if ((phase === 'summon' || phase === 'build') && isMyTurn) {
+      // 如果点击的是已选中的卡牌，直接取消选中（无需检查是否能打出）
+      if (selectedCardId === cardId) {
+        onCardSelect?.(null);
+        return;
+      }
+      
+      // 选中新卡牌时才检查是否能打出
       const canPlay = canPlayCard(card);
       if (canPlay) {
-        if (selectedCardId === cardId) {
-          onCardSelect?.(null);
-        } else {
-          onCardSelect?.(cardId);
-        }
+        onCardSelect?.(cardId);
       } else {
         // 提示为什么不能打出
         if (phase === 'summon' && card.cardType !== 'unit') {

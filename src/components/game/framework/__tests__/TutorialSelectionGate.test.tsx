@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TutorialSelectionGate } from '../TutorialSelectionGate';
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
+}));
 
 describe('TutorialSelectionGate', () => {
   it('教程模式下显示加载文案并屏蔽子内容', () => {

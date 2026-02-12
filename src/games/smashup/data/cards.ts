@@ -74,6 +74,7 @@ export const BASE_CARDS: BaseCardDef[] = [
         abilityTextEn: 'After each time a minion is played here, its owner may play an extra minion of power 2 or less.',
         faction: 'aliens',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 0 },
+        restrictions: [{ type: 'play_minion', condition: { extraPlayMinionPowerMax: 2 } }],
     },
     {
         id: 'base_the_mothership',
@@ -258,6 +259,7 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         abilityTextEn: 'Actions cannot be played on this base.',
         faction: 'ghosts',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 6 },
+        restrictions: [{ type: 'play_action' }],
     },
     {
         id: 'base_haunted_house_al9000',
@@ -292,6 +294,7 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         abilityTextEn: 'Minions of power 2 or less cannot be played here.',
         faction: 'bear_cavalry',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 1 },
+        restrictions: [{ type: 'play_minion', condition: { maxPower: 2 } }],
     },
     // Steampunks
     {
@@ -338,6 +341,7 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         abilityTextEn: 'On your turn, you may play one extra minion of power 2 or less here.',
         faction: 'killer_plants',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 5 },
+        restrictions: [{ type: 'play_minion', condition: { extraPlayMinionPowerMax: 2 } }],
     },
 ];
 registerBases(BASE_CARDS_AL9000);
@@ -414,6 +418,7 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         abilityTextEn: 'Minions cannot be played here.',
         faction: 'princesses',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 5 },
+        restrictions: [{ type: 'play_minion' }],
     },
     // Mythic Horses
     {
@@ -652,6 +657,11 @@ export function registerFaction(cards: CardDef[], bases?: BaseCardDef[]): void {
 /** 获取派系的所有卡牌定义 */
 export function getFactionCards(factionId: FactionId): CardDef[] {
     return Array.from(_cardRegistry.values()).filter(c => c.faction === factionId);
+}
+
+/** 获取所有卡牌定义 */
+export function getAllCardDefs(): CardDef[] {
+    return Array.from(_cardRegistry.values());
 }
 
 /** 获取所有基地定义 ID 列表 */

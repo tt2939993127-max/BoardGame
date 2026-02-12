@@ -2,39 +2,22 @@
  * useCardSpotlight Hook
  * 
  * 管理卡牌特写队列和额外骰子特写展示。
- * 自动追踪 lastPlayedCard 和 lastBonusDieRoll 的变化，维护特写队列。
+ * 通过 EventStream 消费 CARD_PLAYED / ABILITY_REPLACED / BONUS_DIE_ROLLED / BONUS_DIE_REROLLED 事件，
+ * 不再从 core 读取 lastPlayedCard / lastBonusDieRoll。
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { PlayerId } from '../../../engine/types';
-import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { PlayerId, EventStreamEntry } from '../../../engine/types';
 import type { DieFace } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
+import { findHeroCard } from '../heroes';
 
 /**
  * 卡牌特写配置
  */
 export interface CardSpotlightConfig {
-    /** 最后打出的卡牌 */
-    lastPlayedCard?: {
-        timestamp: number;
-        cardId: string;
-        previewRef?: CardPreviewRef;
-        playerId: PlayerId;
-    };
-    /** 最后的额外骰子投掷 */
-    lastBonusDieRoll?: {
-        timestamp: number;
-        value: number;
-        face?: DieFace;
-        playerId: PlayerId;
-        /** 效果目标玩家（若与 playerId 不同，则双方都显示特写） */
-        targetPlayerId?: PlayerId;
-        /** 效果描述 key */
-        effectKey?: string;
-        /** 效果描述参数 */
-        effectParams?: Record<string, string | number>;
-    };
+    /** EventStream entries（来自 getEventStreamEntries(rawG)） */
+    eventStreamEntries: EventStreamEntry[];
     /** 当前玩家 ID */
     currentPlayerId: PlayerId;
     /** 对手名称 */
@@ -70,13 +53,21 @@ export interface CardSpotlightState {
     handleBonusDieClose: () => void;
 }
 
+/** 事件 payload 类型（仅从 payload 提取需要的字段） */
+interface CardEventPayload { playerId: PlayerId; cardId: string }
+interface BonusDiePayload { value: number; face: DieFace; playerId: PlayerId; targetPlayerId?: PlayerId; effectKey?: string; effectParams?: Record<string, string | number> }
+interface BonusDieRerolledPayload { newValue: number; newFace: DieFace; playerId: PlayerId; targetPlayerId?: PlayerId; effectKey?: string; effectParams?: Record<string, string | number> }
+
+/** 卡牌特写相关的事件类型 */
+const CARD_EVENT_TYPES = new Set(['CARD_PLAYED', 'ABILITY_REPLACED']);
+const BONUS_DIE_EVENT_TYPES = new Set(['BONUS_DIE_ROLLED', 'BONUS_DIE_REROLLED']);
+
 /**
- * 管理卡牌和额外骰子特写队列
+ * 管理卡牌和额外骰子特写队列（EventStream 驱动）
  */
 export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightState {
     const {
-        lastPlayedCard,
-        lastBonusDieRoll,
+        eventStreamEntries,
         currentPlayerId,
         opponentName,
         isSpectator = false,
@@ -93,109 +84,136 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
     const [bonusDieEffectParams, setBonusDieEffectParams] = useState<Record<string, string | number> | undefined>(undefined);
     const [showBonusDie, setShowBonusDie] = useState(false);
 
-    // 追踪 timestamp 避免重复触发
-    const prevLastPlayedCardTimestampRef = useRef<number | undefined>(lastPlayedCard?.timestamp);
-    const prevBonusDieTimestampRef = useRef<number | undefined>(lastBonusDieRoll?.timestamp);
+    // lastSeenEventId 模式追踪已消费事件（首次挂载时跳过历史）
+    const lastSeenEventIdRef = useRef<number>(-1);
+    const isFirstMountRef = useRef(true);
 
     // 同步队列到 ref
     useEffect(() => {
         cardSpotlightQueueRef.current = cardSpotlightQueue;
     }, [cardSpotlightQueue]);
 
-    /**
-     * 监听额外骰子投掷
-     */
+    // 首次挂载：将指针推进到末尾，跳过历史事件
     useEffect(() => {
-        const bonusDie = lastBonusDieRoll;
-        const prevTimestamp = prevBonusDieTimestampRef.current;
-
-        if (!bonusDie || bonusDie.timestamp === prevTimestamp) {
-            return;
+        if (isFirstMountRef.current && eventStreamEntries.length > 0) {
+            lastSeenEventIdRef.current = eventStreamEntries[eventStreamEntries.length - 1].id;
+            isFirstMountRef.current = false;
         }
-
-        prevBonusDieTimestampRef.current = bonusDie.timestamp;
-
-        const selfPlayerId = normalizePlayerId(currentPlayerId);
-        const bonusPlayerId = normalizePlayerId(bonusDie.playerId);
-        const bonusTargetId = normalizePlayerId(bonusDie.targetPlayerId ?? bonusDie.playerId);
-        const shouldShowBonusDie = isSpectator || selfPlayerId === bonusPlayerId || selfPlayerId === bonusTargetId;
-
-        if (!shouldShowBonusDie) {
-            setShowBonusDie(false);
-            return;
-        }
-
-        // 尝试绑定到卡牌队列（卡左骰右）
-        const cardQueue = cardSpotlightQueueRef.current;
-        const thresholdMs = 1500;
-        const cardCandidate = [...cardQueue]
-            .reverse()
-            .find((item) =>
-                normalizePlayerId(item.playerId) === bonusPlayerId &&
-                Math.abs(item.timestamp - bonusDie.timestamp) <= thresholdMs
-            );
-
-        if (cardCandidate) {
-            // 绑定到卡牌上一起显示
-            setCardSpotlightQueue((prev) =>
-                prev.map((item) =>
-                    item.id === cardCandidate.id
-                        ? {
-                            ...item,
-                            bonusDice: [
-                                ...(item.bonusDice || []),
-                                {
-                                    value: bonusDie.value,
-                                    face: bonusDie.face,
-                                    timestamp: bonusDie.timestamp,
-                                    effectKey: bonusDie.effectKey,
-                                    effectParams: bonusDie.effectParams,
-                                },
-                            ],
-                        }
-                        : item
-                )
-            );
-            setShowBonusDie(false);
-            return;
-        }
-
-        // 否则使用独立骰子特写
-        setBonusDieValue(bonusDie.value);
-        setBonusDieFace(bonusDie.face);
-        setBonusDieEffectKey(bonusDie.effectKey);
-        setBonusDieEffectParams(bonusDie.effectParams);
-        setShowBonusDie(true);
-    }, [lastBonusDieRoll, currentPlayerId, isSpectator]);
+    }, [eventStreamEntries]);
 
     /**
-     * 监听其他玩家打出卡牌
+     * 核心：消费 EventStream 中的新事件
      */
     useEffect(() => {
-        const card = lastPlayedCard;
-        const prevTimestamp = prevLastPlayedCardTimestampRef.current;
+        if (isFirstMountRef.current) return;
+        if (eventStreamEntries.length === 0) return;
 
-        if (!card || card.timestamp === prevTimestamp) {
-            return;
+        const lastSeenId = lastSeenEventIdRef.current;
+        const newEntries = eventStreamEntries.filter(e => e.id > lastSeenId);
+        if (newEntries.length === 0) return;
+
+        lastSeenEventIdRef.current = newEntries[newEntries.length - 1].id;
+        const selfId = normalizePlayerId(currentPlayerId);
+
+        for (const entry of newEntries) {
+            const { type, payload, timestamp } = entry.event;
+            const eventTimestamp = typeof timestamp === 'number' ? timestamp : 0;
+
+            // ---- 卡牌特写：CARD_PLAYED / ABILITY_REPLACED ----
+            if (CARD_EVENT_TYPES.has(type)) {
+                const p = payload as CardEventPayload;
+                const cardPlayerId = normalizePlayerId(p.playerId);
+
+                // 自己打的卡不显示特写（观战模式除外）
+                if (!isSpectator && cardPlayerId === selfId) continue;
+
+                // 通过静态表解析 previewRef（替代原 reducer 中的 findHeroCard 调用）
+                const heroCard = findHeroCard(p.cardId);
+
+                const newItem: CardSpotlightItem = {
+                    id: `${p.cardId}-${eventTimestamp}`,
+                    timestamp: eventTimestamp,
+                    previewRef: heroCard?.previewRef,
+                    playerId: p.playerId,
+                    playerName: opponentName,
+                };
+                setCardSpotlightQueue(prev => [...prev, newItem]);
+            }
+
+            // ---- 奖励骰特写：BONUS_DIE_ROLLED / BONUS_DIE_REROLLED ----
+            if (BONUS_DIE_EVENT_TYPES.has(type)) {
+                let bonusValue: number;
+                let bonusFace: DieFace | undefined;
+                let bonusPlayerId: PlayerId;
+                let bonusTargetId: PlayerId | undefined;
+                let bonusEffectKey: string | undefined;
+                let bonusEffectParams: Record<string, string | number> | undefined;
+
+                if (type === 'BONUS_DIE_ROLLED') {
+                    const p = payload as BonusDiePayload;
+                    bonusValue = p.value;
+                    bonusFace = p.face;
+                    bonusPlayerId = p.playerId;
+                    bonusTargetId = p.targetPlayerId;
+                    bonusEffectKey = p.effectKey;
+                    bonusEffectParams = p.effectParams;
+                } else {
+                    const p = payload as BonusDieRerolledPayload;
+                    bonusValue = p.newValue;
+                    bonusFace = p.newFace;
+                    bonusPlayerId = p.playerId;
+                    bonusTargetId = p.targetPlayerId;
+                    bonusEffectKey = p.effectKey;
+                    bonusEffectParams = p.effectParams;
+                }
+
+                const bonusPid = normalizePlayerId(bonusPlayerId);
+                const bonusTid = normalizePlayerId(bonusTargetId ?? bonusPlayerId);
+                const shouldShowBonusDie = isSpectator || selfId === bonusPid || selfId === bonusTid;
+
+                if (!shouldShowBonusDie) continue;
+
+                // 尝试绑定到卡牌队列（卡左骰右）
+                const cardQueue = cardSpotlightQueueRef.current;
+                const thresholdMs = 1500;
+                const cardCandidate = [...cardQueue]
+                    .reverse()
+                    .find((item) =>
+                        normalizePlayerId(item.playerId) === bonusPid &&
+                        Math.abs(item.timestamp - eventTimestamp) <= thresholdMs
+                    );
+
+                if (cardCandidate) {
+                    setCardSpotlightQueue(prev =>
+                        prev.map(item =>
+                            item.id === cardCandidate.id
+                                ? {
+                                    ...item,
+                                    bonusDice: [
+                                        ...(item.bonusDice || []),
+                                        {
+                                            value: bonusValue,
+                                            face: bonusFace,
+                                            timestamp: eventTimestamp,
+                                            effectKey: bonusEffectKey,
+                                            effectParams: bonusEffectParams,
+                                        },
+                                    ],
+                                }
+                                : item
+                        )
+                    );
+                } else {
+                    // 独立骰子特写
+                    setBonusDieValue(bonusValue);
+                    setBonusDieFace(bonusFace);
+                    setBonusDieEffectKey(bonusEffectKey);
+                    setBonusDieEffectParams(bonusEffectParams);
+                    setShowBonusDie(true);
+                }
+            }
         }
-
-        prevLastPlayedCardTimestampRef.current = card.timestamp;
-
-        // 归一化 ID 比较
-        const cardPlayerId = normalizePlayerId(card.playerId);
-        const selfPlayerId = normalizePlayerId(currentPlayerId);
-
-        if (!isSpectator && cardPlayerId === selfPlayerId) return;
-
-        const newItem: CardSpotlightItem = {
-            id: `${card.cardId}-${card.timestamp}`,
-            timestamp: card.timestamp,
-            previewRef: card.previewRef,
-            playerId: card.playerId,
-            playerName: opponentName, // 注意：如果是自己，这里的名字可能不对，但 UI 暂未显示名字
-        };
-        setCardSpotlightQueue((prev) => [...prev, newItem]);
-    }, [lastPlayedCard, currentPlayerId, opponentName, isSpectator]);
+    }, [eventStreamEntries, currentPlayerId, opponentName, isSpectator]);
 
     /**
      * 关闭卡牌特写

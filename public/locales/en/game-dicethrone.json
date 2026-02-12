@@ -168,6 +168,37 @@
       ]
     }
   },
+  "actionLog": {
+    "playerLabel": "Player {{playerId}}",
+    "playCard": "Play card",
+    "playUpgradeCard": "Play upgrade card",
+    "advancePhase": "Advance phase: {{phase}}",
+    "abilityActivated": "Activate ability: {{abilityName}}",
+    "abilityActivatedDefense": "Activate defensive ability: {{abilityName}}",
+    "damageTaken": "Took {{amount}} damage",
+    "damageDealt": "Dealt {{amount}} damage",
+    "damageOriginal": "(Original {{amount}})",
+    "healApplied": "Heal {{targetLabel}} for {{amount}}",
+    "statusApplied": "Applied status {{statusLabel}} to {{targetLabel}}",
+    "statusAppliedDelta": "(+{{stacks}}, now {{total}})",
+    "statusRemoved": "Removed status {{statusLabel}} from {{targetLabel}}",
+    "statusRemovedDelta": "(-{{stacks}})",
+    "tokenGranted": "Granted {{tokenLabel}} x{{amount}} to {{targetLabel}}",
+    "tokenTotal": "(Now {{total}})",
+    "tokenConsumed": "Consumed {{tokenLabel}} x{{amount}}",
+    "tokenRemaining": "(Remaining {{total}})",
+    "tokenUsed": "Use {{tokenLabel}} ({{effectLabel}})",
+    "tokenModifier": "(Adjust {{amount}})",
+    "tokenEvasion": "(Roll {{value}}, {{result}})",
+    "tokenEvasionSuccess": "Success",
+    "tokenEvasionFail": "Fail",
+    "tokenEffect": {
+      "damageBoost": "Damage Boost",
+      "damageReduction": "Damage Reduction",
+      "evasionAttempt": "Evasion Check",
+      "removeDebuff": "Purify"
+    }
+  },
   "purify": {
     "title": "Use Purify",
     "desc": "Select a negative status effect to remove",
@@ -310,8 +341,8 @@
       "infernalEmbrace.2": "Draw 1 Card",
       "infernalEmbrace.3": "Draw 1 Card",
       "infernalEmbrace.4": "Draw 1 Card",
-      "infernalEmbrace.5": "Max Fire Mastery!",
-      "infernalEmbrace.6": "Draw 1 Card",
+      "infernalEmbrace.5": "Draw 1 Card",
+      "infernalEmbrace.6": "Max Fire Mastery!",
       "pyroBlast2Die": "Pyro Blast!",
       "pyroBlast2Reroll": "Rerolled!",
       "pyroBlast3Die": "Pyro Blast!",
@@ -408,6 +439,11 @@
       "title": "Lotus Palm",
       "pay2": "Spend 2 Taiji to make this attack undefendable",
       "skip": "Do not spend Taiji"
+    },
+    "pyroSpendCpForFM": {
+      "title": "Spend CP for Fire Mastery?",
+      "pay": "Spend 2 CP: Gain 1 Fire Mastery",
+      "skip": "Skip"
     }
   },
   "common": {

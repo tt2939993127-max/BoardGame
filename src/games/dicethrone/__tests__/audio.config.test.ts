@@ -2,7 +2,7 @@
  * DiceThrone 音效配置单元测试
  * 验证 CP 音效和 Monk 技能音效配置的正确性
  */
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { DICETHRONE_AUDIO_CONFIG } from '../audio.config';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
@@ -11,6 +11,29 @@ import type { AudioEvent } from '../../../lib/audio/types';
 
 const CP_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
 const CP_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
+const DICE_ROLL_SINGLE_KEY = 'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_001';
+const DICE_ROLL_MULTI_KEYS = [
+    'dice.decks_and_cards_sound_fx_pack.few_dice_roll_001',
+    'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_003',
+    'dice.decks_and_cards_sound_fx_pack.few_dice_roll_005',
+];
+
+const originalRandom = Math.random;
+
+afterEach(() => {
+    (Math.random as unknown as typeof Math.random) = originalRandom;
+    vi.clearAllMocks();
+});
+
+/** 提取 feedbackResolver 返回的 key 字符串 */
+const resolveKey = (event: AudioEvent, ctx: unknown = { G: {}, ctx: {}, meta: {} }): string | null => {
+    return DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, ctx as never)?.key ?? null;
+};
+
+/** 获取完整 EventSoundResult（含 timing） */
+const resolveResult = (event: AudioEvent, ctx: unknown = { G: {}, ctx: {}, meta: {} }) => {
+    return DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, ctx as never);
+};
 
 const ABILITY_SFX_KEYS = {
     transcendence: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst',
@@ -20,26 +43,31 @@ const ABILITY_SFX_KEYS = {
 
 describe('DiceThrone 音效配置', () => {
     describe('CP 音效配置', () => {
-        it('eventSoundResolver 应根据 delta 正负值返回正确的 CP 音效键', () => {
-            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
-            if (!resolver) {
-                throw new Error('eventSoundResolver 未定义');
-            }
-
+        it('feedbackResolver 应根据 delta 正负值返回正确的 CP 音效键', () => {
             // 测试 CP 增加
             const gainEvent: AudioEvent = { type: 'CP_CHANGED', payload: { delta: 2 } };
-            const gainResult = resolver(gainEvent, { G: {}, ctx: {}, meta: {} } as any);
-            expect(gainResult).toBe(CP_GAIN_KEY);
+            expect(resolveKey(gainEvent)).toBe(CP_GAIN_KEY);
 
             // 测试 CP 减少
             const spendEvent: AudioEvent = { type: 'CP_CHANGED', payload: { delta: -3 } };
-            const spendResult = resolver(spendEvent, { G: {}, ctx: {}, meta: {} } as any);
-            expect(spendResult).toBe(CP_SPEND_KEY);
+            expect(resolveKey(spendEvent)).toBe(CP_SPEND_KEY);
 
             // 测试 delta 为 0（边界情况）
             const zeroEvent: AudioEvent = { type: 'CP_CHANGED', payload: { delta: 0 } };
-            const zeroResult = resolver(zeroEvent, { G: {}, ctx: {}, meta: {} } as any);
-            expect(zeroResult).toBe(CP_GAIN_KEY); // delta >= 0 返回 cp_gain
+            expect(resolveKey(zeroEvent)).toBe(CP_GAIN_KEY); // delta >= 0 返回 cp_gain
+        });
+    });
+
+    describe('掷骰音效配置', () => {
+        it('单骰结果应返回单骰音效', () => {
+            const event: AudioEvent = { type: 'DICE_ROLLED', payload: { results: [1], rollerId: '0' } } as AudioEvent;
+            expect(resolveKey(event)).toBe(DICE_ROLL_SINGLE_KEY);
+        });
+
+        it('多骰结果应从多骰池中选择', () => {
+            (Math.random as unknown as typeof Math.random) = vi.fn(() => 0);
+            const event: AudioEvent = { type: 'DICE_ROLLED', payload: { results: [1, 2], rollerId: '0' } } as AudioEvent;
+            expect(DICE_ROLL_MULTI_KEYS).toContain(resolveKey(event));
         });
     });
 
@@ -63,38 +91,25 @@ describe('DiceThrone 音效配置', () => {
         });
 
         it('防御技能不播放音效', () => {
-            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
-            if (!resolver) {
-                throw new Error('eventSoundResolver 未定义');
-            }
-
-            // 测试防御技能（不播放音效）
             const meditation = MONK_ABILITIES.find(a => a.id === 'meditation');
             expect(meditation).toBeDefined();
             expect(meditation?.sfxKey).toBeUndefined();
 
-            // 模拟技能激活事件
+            // ABILITY_ACTIVATED 事件在 feedbackResolver 中返回 null（技能音效由动画冲击帧驱动）
             const event: AudioEvent = {
                 type: 'ABILITY_ACTIVATED',
                 payload: { playerId: 'player1', abilityId: 'meditation', isDefense: true },
             };
-
-            // 创建模拟的游戏状态
             const mockContext = {
                 G: {
                     players: {
-                        player1: {
-                            heroId: 'monk',
-                            abilities: MONK_ABILITIES,
-                        },
+                        player1: { heroId: 'monk', abilities: MONK_ABILITIES },
                     },
                 },
                 ctx: {},
                 meta: {},
-            } as any;
-
-            const result = resolver(event, mockContext);
-            expect(result).toBeNull();
+            };
+            expect(resolveKey(event, mockContext)).toBeNull();
         });
     });
 
@@ -123,8 +138,8 @@ describe('DiceThrone 音效配置', () => {
 
         it('bgmRules 应按阶段切换 group', () => {
             const rules = DICETHRONE_AUDIO_CONFIG.bgmRules ?? [];
-            const battleRule = rules.find(r => r.when({ G: {}, ctx: { currentPhase: 'offensiveRoll' }, meta: {} } as any));
-            const normalRule = rules.find(r => r.when({ G: {}, ctx: { currentPhase: 'upkeep' }, meta: {} } as any));
+            const battleRule = rules.find(r => r.when({ G: {}, ctx: { currentPhase: 'offensiveRoll' }, meta: {} } as never));
+            const normalRule = rules.find(r => r.when({ G: {}, ctx: { currentPhase: 'upkeep' }, meta: {} } as never));
             expect(battleRule?.group).toBe('battle');
             expect(normalRule?.group).toBe('normal');
         });
@@ -143,36 +158,29 @@ describe('DiceThrone 音效配置', () => {
     });
 
     describe('状态/Token 音效映射', () => {
-        it('状态施加应按 statusId 使用专属音效', () => {
-            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
-            if (!resolver) {
-                throw new Error('eventSoundResolver 未定义');
-            }
-
-            const statusDef = ALL_TOKEN_DEFINITIONS.find(def => def.id === STATUS_IDS.BURN);
-            expect(statusDef).toBeDefined();
+        it('状态施加应返回 on-impact 通用状态音效', () => {
+            // 当前架构：STATUS_APPLIED 统一返回 on-impact 通用音效，
+            // 专属 sfxKey 由 DeferredSoundMap 在动画冲击帧 playDeferredSound(eventId) 消费
             const event: AudioEvent = {
                 type: 'STATUS_APPLIED',
                 payload: { statusId: STATUS_IDS.BURN },
             };
-            const result = resolver(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} } as any);
-            expect(result).toBe(statusDef?.sfxKey);
+            const result = resolveResult(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} });
+            expect(result).toBeDefined();
+            expect(result!.timing).toBe('on-impact');
+            expect(result!.key).toBe('status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a');
         });
 
-        it('Token 授予应按 tokenId 使用专属音效', () => {
-            const resolver = DICETHRONE_AUDIO_CONFIG.eventSoundResolver;
-            if (!resolver) {
-                throw new Error('eventSoundResolver 未定义');
-            }
-
-            const tokenDef = ALL_TOKEN_DEFINITIONS.find(def => def.id === TOKEN_IDS.TAIJI);
-            expect(tokenDef).toBeDefined();
+        it('Token 授予应返回 on-impact 通用 Token 音效', () => {
+            // 当前架构：TOKEN_GRANTED 统一返回 on-impact 通用音效（冲击帧消费）
             const event: AudioEvent = {
                 type: 'TOKEN_GRANTED',
                 payload: { tokenId: TOKEN_IDS.TAIJI },
             };
-            const result = resolver(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} } as any);
-            expect(result).toBe(tokenDef?.sfxKey);
+            const result = resolveResult(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} });
+            expect(result).toBeDefined();
+            expect(result!.timing).toBe('on-impact');
+            expect(result!.key).toBe('status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a');
         });
     });
 });

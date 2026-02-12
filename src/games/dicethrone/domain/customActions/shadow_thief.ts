@@ -2,7 +2,7 @@
  * 影子盗贼 (Shadow Thief) 专属 Custom Action 处理器
  */
 
-import { getActiveDice, getFaceCounts, getDieFace, getTokenStackLimit } from '../rules';
+import { getActiveDice, getFaceCounts, getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { SHADOW_THIEF_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../ids';
 import { CP_MAX } from '../types';
@@ -186,7 +186,7 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
+    const face = getPlayerDieFace(state, ctx.attackerId, dieValue) ?? '';
 
     // Emit Roll Event
     events.push({
@@ -335,7 +335,7 @@ function handleOneWithShadows({ targetId, state, timestamp, random }: CustomActi
     if (!random) return [];
 
     const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
+    const face = getPlayerDieFace(state, targetId, dieValue) ?? '';
     const events: DiceThroneEvent[] = [];
 
     events.push({
@@ -404,7 +404,7 @@ function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, r
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
+    const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
 
     // Emit Roll Event
     events.push({
@@ -705,7 +705,7 @@ function handleSneakAttackUse({ attackerId, state, timestamp, random }: CustomAc
     if (!state.pendingAttack) return [];
 
     const dieValue = random.d(6);
-    const face = getDieFace(dieValue);
+    const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
     const events: DiceThroneEvent[] = [];
 
     events.push({

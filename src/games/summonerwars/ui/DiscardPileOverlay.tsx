@@ -12,6 +12,7 @@ import type { Card } from '../domain/types';
 import { CardSprite } from './CardSprite';
 import { GameButton } from './GameButton';
 import { resolveCardAtlasId } from './cardAtlas';
+import { UI_Z_INDEX } from '../../../core';
 
 /** 获取卡牌精灵图配置 */
 function getCardAtlasConfig(card: Card): { atlasId: string; frameIndex: number } {
@@ -61,7 +62,8 @@ export const DiscardPileOverlay: React.FC<DiscardPileOverlayProps> = ({
   if (reversed.length === 0) {
     return (
       <div
-        className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        style={{ zIndex: UI_Z_INDEX.overlayRaised }}
         onClick={onClose}
       >
         <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl text-center max-w-sm mx-4">
@@ -77,7 +79,8 @@ export const DiscardPileOverlay: React.FC<DiscardPileOverlayProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[9000] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm"
+      style={{ zIndex: UI_Z_INDEX.overlayRaised }}
       onClick={onClose}
       data-testid="sw-discard-pile-overlay"
     >

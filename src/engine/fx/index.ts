@@ -34,13 +34,16 @@ export type {
   FxRenderer,
   FxRendererOptions,
   FxRegistryEntry,
+  FxSoundConfig,
+  FxShakeConfig,
+  FeedbackPack,
 } from './types';
 
 // 注册表
 export { FxRegistry } from './FxRegistry';
 
 // 调度 Hook
-export { useFxBus, type FxBus } from './useFxBus';
+export { useFxBus, type FxBus, type FxBusOptions, type FxSoundPlayer, type FxShakeTrigger } from './useFxBus';
 
 // 渲染层
 export { FxLayer, type FxLayerProps } from './FxLayer';

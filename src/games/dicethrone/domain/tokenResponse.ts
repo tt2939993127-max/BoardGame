@@ -23,7 +23,7 @@ import type {
     TokenEffectContext,
     TokenEffectResult,
     TokenEffectProcessor,
-} from '../../../systems/TokenSystem/types';
+} from './tokenTypes';
 import { RESOURCE_IDS } from './resources';
 import { TOKEN_IDS } from './ids';
 

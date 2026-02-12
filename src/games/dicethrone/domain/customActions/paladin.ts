@@ -2,7 +2,7 @@
  * 圣骑士 (Paladin) 专属 Custom Action 处理器
  */
 
-import { getDieFace, getTokenStackLimit } from '../rules';
+import { getPlayerDieFace, getTokenStackLimit } from '../rules';
 import { RESOURCE_IDS } from '../resources';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS as FACES } from '../ids';
 import type {
@@ -35,7 +35,7 @@ function handleHolyLightRoll({ targetId, sourceAbilityId, state, timestamp, rand
     const rollResults: { value: number; face: string }[] = [];
     for (let i = 0; i < diceCount; i++) {
         const value = random.d(6);
-        const face = getDieFace(value);
+        const face = getPlayerDieFace(state, targetId, value) ?? '';
         rollResults.push({ value, face });
         dice.push({ index: i, value, face });
         events.push({
@@ -132,7 +132,7 @@ function handleHolyDefenseRoll({ targetId, attackerId, sourceAbilityId, state, t
     const rollResults: { value: number; face: string }[] = [];
     for (let i = 0; i < diceCount; i++) {
         const value = random.d(6);
-        const face = getDieFace(value);
+        const face = getPlayerDieFace(state, targetId, value) ?? '';
         rollResults.push({ value, face });
         dice.push({ index: i, value, face });
         events.push({
@@ -234,7 +234,7 @@ function handleGodsGrace({ targetId, state, timestamp, random }: CustomActionCon
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, targetId, value) ?? '';
 
     events.push({
         type: 'BONUS_DIE_ROLLED',
@@ -271,7 +271,7 @@ function handleDivineFavor({ targetId, state, timestamp, random }: CustomActionC
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, targetId, value) ?? '';
 
     events.push({
         type: 'BONUS_DIE_ROLLED',
@@ -331,7 +331,7 @@ function handleAbsolution({ targetId, attackerId, sourceAbilityId, state, timest
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const value = random.d(6);
-    const face = getDieFace(value);
+    const face = getPlayerDieFace(state, targetId, value) ?? '';
 
     events.push({
         type: 'BONUS_DIE_ROLLED',

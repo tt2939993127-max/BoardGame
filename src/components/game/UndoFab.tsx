@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Undo2 } from 'lucide-react';
+import { UI_Z_INDEX } from '../../core';
 import { FabMenu } from '../system/FabMenu';
 import { UNDO_COMMANDS } from '../../engine';
 import type { MatchState } from '../../engine/types';
@@ -163,6 +164,7 @@ export const UndoFab: React.FC<UndoFabProps> = ({
             isDark={true}
             items={items}
             position="bottom-left"
+            zIndex={UI_Z_INDEX.overlayRaised}
         />
     );
 };

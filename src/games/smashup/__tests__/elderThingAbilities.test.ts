@@ -26,6 +26,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -385,7 +386,7 @@ describe('远古之物派系能力', () => {
     });
 
     describe('elder_thing_begin_the_summoning（开始召唤）', () => {
-        it('弃牌堆随从放牌库顶 + 额外行动', () => {
+        it('单个弃牌堆随从时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -401,15 +402,9 @@ describe('远古之物派系能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-
-            expect(reshuffleEvents.length).toBe(1);
-            // 随从应在牌库顶
-            const newDeck = (reshuffleEvents[0] as any).payload.deckUids;
-            expect(newDeck[0]).toBe('disc1');
-            expect(limitEvents.length).toBe(1);
-            expect((limitEvents[0] as any).payload.limitType).toBe('action');
+            // 单个弃牌堆随从时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
 
         it('弃牌堆无随从时只给额外行动', () => {

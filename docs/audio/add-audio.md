@@ -211,6 +211,22 @@ return 'ui.general.menu_click_01';
 
 > `getOptimizedAudioUrl()` 会自动优先使用压缩音频路径，无需自行处理。
 
+### 8.1 预加载策略（新增）
+- **criticalSounds**：进入游戏后立即预加载（适合首回合高频音效）。
+- **contextualPreloadKeys**：基于上下文增量预热（如选派系/卡组后加载对应音效）。
+- **UI 层预热**：按钮/教程步骤等可在显示前手动调用 `AudioManager.preloadKeys()`。
+
+示例：
+```ts
+// 游戏配置：上下文预加载
+contextualPreloadKeys: (context) => {
+  return context.G?.selectedFactions ? ['ui.general.menu_click_01'] : [];
+}
+
+// UI 层：进入教程后预热按钮音效
+AudioManager.preloadKeys(['ui.general.menu_click_01']);
+```
+
 ---
 
 ## 9. 全链路检查清单（提交前必过）

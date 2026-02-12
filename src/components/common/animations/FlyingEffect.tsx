@@ -9,6 +9,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useMotionValue, useAnimate } from 'framer-motion';
+import { UI_Z_INDEX } from '../../../core';
 
 // ============================================================================
 // 类型
@@ -23,6 +24,8 @@ export interface FlyingEffectData {
     endPos: { x: number; y: number };
     /** 效果强度（伤害/治疗量），影响粒子密度。默认 1 */
     intensity?: number;
+    /** 飞行体到达目标（冲击帧）时触发的回调，用于同步播放音效/震屏等 */
+    onImpact?: () => void;
 }
 
 // ============================================================================
@@ -296,7 +299,8 @@ const FlameTrailCanvas: React.FC<{
     return (
         <canvas
             ref={canvasRef}
-            className="fixed inset-0 pointer-events-none z-[9998]"
+            className="fixed inset-0 pointer-events-none"
+            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
         />
     );
 };
@@ -375,13 +379,14 @@ const FloatingTextInner: React.FC<{
     return (
         <motion.div
             ref={scope}
-            className="absolute pointer-events-none z-20"
+            className="absolute pointer-events-none"
             style={{
                 left: '50%', top: '50%',
                 translateX: '-50%', translateY: '-50%',
                 x, y,
                 opacity: 0,
                 scale: 0.3,
+                zIndex: UI_Z_INDEX.overlayRaised + 1,
             }}
         >
             <span
@@ -463,12 +468,15 @@ const FlyingEffectItem: React.FC<{
         setArrived(true);
         setEmitting(false);
 
+        // 冲击帧：触发音效/震屏等绑定在动画到达点的回调
+        effect.onImpact?.();
+
         const hasDamageOrHeal = effect.type === 'damage' || effect.type === 'heal';
         pendingRef.current = hasDamageOrHeal ? 1 : 0;
         if (pendingRef.current === 0) {
             setTimeout(() => onComplete(effect.id), 300);
         }
-    }, [effect.id, effect.type, onComplete]);
+    }, [effect.id, effect.type, effect.onImpact, onComplete]);
 
     const handlePhaseComplete = React.useCallback(() => {
         pendingRef.current--;
@@ -500,8 +508,8 @@ const FlyingEffectItem: React.FC<{
             )}
 
             <motion.div
-                className="fixed z-[9999] pointer-events-none"
-                style={{ left: effect.startPos.x, top: effect.startPos.y }}
+                className="fixed pointer-events-none"
+                style={{ left: effect.startPos.x, top: effect.startPos.y, zIndex: UI_Z_INDEX.overlayRaised + 1 }}
                 initial={{ opacity: 1 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}

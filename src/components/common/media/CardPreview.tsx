@@ -1,6 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
-import type { CardPreviewRef } from '../../../systems/CardSystem';
-import { buildLocalizedImageSet, getLocalizedAssetPath } from '../../../core';
+import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { buildLocalizedImageSet, getLocalizedAssetPath, getLocalizedImageUrls, type CardPreviewRef } from '../../../core';
 import { OptimizedImage } from './OptimizedImage';
 
 export type CardPreviewRenderer = (args: {
@@ -108,20 +107,14 @@ export function CardPreview({
     }
 
     if (previewRef.type === 'atlas') {
-        const source = getCardAtlasSource(previewRef.atlasId);
-        if (!source) return null;
-        const atlasStyle = getCardAtlasStyle(previewRef.index, source.config);
-        const backgroundImage = buildLocalizedImageSet(source.image, locale);
         return (
-            <div
+            <AtlasCard
+                atlasId={previewRef.atlasId}
+                index={previewRef.index}
+                locale={locale}
                 className={className}
+                style={style}
                 title={title}
-                style={{
-                    backgroundImage,
-                    backgroundRepeat: 'no-repeat',
-                    ...atlasStyle,
-                    ...style,
-                }}
             />
         );
     }
@@ -139,4 +132,83 @@ export function CardPreview({
     const renderer = getCardPreviewRenderer(previewRef.rendererId);
     if (!renderer) return null;
     return renderer({ previewRef, locale, className, style });
+}
+
+// ============================================================================
+// Atlas 精灵图卡牌（带 shimmer 占位）
+// ============================================================================
+
+/** 已加载的精灵图 URL 缓存（全局共享，避免重复检测） */
+const loadedAtlasCache = new Set<string>();
+
+interface AtlasCardProps {
+    atlasId: string;
+    index: number;
+    locale?: string;
+    className?: string;
+    style?: CSSProperties;
+    title?: string;
+}
+
+function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCardProps) {
+    const source = getCardAtlasSource(atlasId);
+    const localizedUrls = source ? getLocalizedImageUrls(source.image, locale) : null;
+    const checkUrls = localizedUrls
+        ? [localizedUrls.primary.webp, localizedUrls.fallback.webp].filter(Boolean)
+        : [];
+    const checkKey = checkUrls.join('|');
+
+    // 精灵图是否已加载（缓存命中时直接 true）
+    const [loaded, setLoaded] = useState(() => checkUrls.some((url) => loadedAtlasCache.has(url)));
+
+    useEffect(() => {
+        if (checkUrls.length === 0) {
+            setLoaded(true);
+            return;
+        }
+        if (checkUrls.some((url) => loadedAtlasCache.has(url))) {
+            setLoaded(true);
+            return;
+        }
+        setLoaded(false);
+        let cancelled = false;
+
+        const tryLoad = (index: number) => {
+            if (index >= checkUrls.length) {
+                if (!cancelled) setLoaded(true); // 全部失败也移除 shimmer
+                return;
+            }
+            const url = checkUrls[index];
+            const img = new Image();
+            img.onload = () => {
+                loadedAtlasCache.add(url);
+                if (!cancelled) setLoaded(true);
+            };
+            img.onerror = () => tryLoad(index + 1);
+            img.src = url;
+        };
+
+        tryLoad(0);
+        return () => {
+            cancelled = true;
+        };
+    }, [checkKey]);
+
+    if (!source) return null;
+
+    const atlasStyle = getCardAtlasStyle(index, source.config);
+    const backgroundImage = buildLocalizedImageSet(source.image, locale);
+
+    return (
+        <div
+            className={`${loaded ? '' : 'atlas-shimmer'} ${className ?? ''}`}
+            title={title}
+            style={{
+                backgroundImage,
+                backgroundRepeat: 'no-repeat',
+                ...atlasStyle,
+                ...style,
+            }}
+        />
+    );
 }

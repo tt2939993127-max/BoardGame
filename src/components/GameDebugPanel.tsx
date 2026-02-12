@@ -11,6 +11,7 @@ import { GAME_SERVER_URL } from '../config/server';
 import { matchSocket } from '../services/matchSocket';
 import { destroyMatch, persistMatchCredentials } from '../hooks/match/useMatchStatus';
 import { getOrCreateGuestId, getGuestName as resolveGuestName } from '../hooks/match/ownerIdentity';
+import { UI_Z_INDEX } from '../core';
 
 const DEBUG_BUTTON_SIZE = 48;
 const EDGE_PADDING = 16;
@@ -224,8 +225,9 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                     y: dragY,
                     width: DEBUG_BUTTON_SIZE,
                     height: DEBUG_BUTTON_SIZE,
+                    zIndex: UI_Z_INDEX.debugButton,
                 }}
-                className="z-[9999] cursor-grab active:cursor-grabbing"
+                className="cursor-grab active:cursor-grabbing"
                 data-testid="debug-toggle-container"
             >
                 <div
@@ -241,7 +243,8 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
             {/* 主面板 */}
             {isOpen && (
                 <div
-                    className="fixed top-20 right-4 bottom-24 w-96 bg-white shadow-2xl rounded-xl border border-gray-200 z-[9998] flex flex-col overflow-hidden font-mono text-sm ring-1 ring-black/5"
+                    className="fixed top-20 right-4 bottom-24 w-96 bg-white shadow-2xl rounded-xl border border-gray-200 flex flex-col overflow-hidden font-mono text-sm ring-1 ring-black/5"
+                    style={{ zIndex: UI_Z_INDEX.debugPanel }}
                     data-testid="debug-panel"
                 >
                     {/* 页眉 */}

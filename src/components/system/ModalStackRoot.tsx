@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { useModalStack } from '../../contexts/ModalStackContext';
+import { UI_Z_INDEX } from '../../core';
 
-// 默认起始层级，需覆盖常规页面元素且低于教程/调试层
-const DEFAULT_Z_INDEX = 2000;
+// 默认起始层级，需覆盖常规页面元素且低于教程层
+const DEFAULT_Z_INDEX = UI_Z_INDEX.modalRoot;
 
 export const ModalStackRoot = () => {
     const { stack, closeTop, closeModal, closeAll } = useModalStack();

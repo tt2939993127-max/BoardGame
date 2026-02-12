@@ -2,9 +2,9 @@
  * 大杀四方 - Prompt 端到端测试
  *
  * 使用确定性状态构造，测试完整流程：
- * 1. 打出能力卡 → PROMPT_CONTINUATION 事件
- * 2. 引擎创建 Prompt → sys.prompt.current 设置
- * 3. 玩家响应 → SYS_PROMPT_RESOLVED 事件
+ * 1. 打出能力卡 → CHOICE_REQUESTED 事件
+ * 2. 事件系统创建 Interaction
+ * 3. 玩家响应 → SYS_INTERACTION_RESOLVED 事件
  * 4. 继续函数执行 → 最终领域事件（MINION_MOVED/MINION_DESTROYED 等）
  *
  * 设计原则：
@@ -16,11 +16,11 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { execute, reduce, validate } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type { SmashUpCore, SmashUpEvent, MinionOnBase, CardInstance, BaseInPlay } from '../domain/types';
-import { PROMPT_COMMANDS, PROMPT_EVENTS } from '../../../engine/systems/PromptSystem';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 // ============================================================================
@@ -67,7 +67,7 @@ function makeState(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards', prompt: { current: undefined, queue: [] } } as any } as any;
+    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
 }
 
 const defaultRandom: RandomFn = {
@@ -128,15 +128,14 @@ describe('Prompt E2E: 确定性状态测试', () => {
             const events = execPlayAction(state, '0', 'action1');
 
             // 应该有 PROMPT_CONTINUATION 事件
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
 
             const payload = (promptEvents[0] as any).payload;
-            expect(payload.action).toBe('set');
-            expect(payload.continuation.abilityId).toBe('pirate_cannon_choose_first');
+            expect(payload.abilityId).toBe('pirate_cannon_choose_first');
         });
 
-        it('只有一个力量≤2随从时自动消灭', () => {
+        it('只有一个力量≤2随从时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': {
@@ -160,14 +159,9 @@ describe('Prompt E2E: 确定性状态测试', () => {
 
             const events = execPlayAction(state, '0', 'action1');
 
-            // 应该直接消灭，不创建 Prompt
-            const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-            expect(destroyEvents.length).toBe(1);
-            expect((destroyEvents[0] as any).payload.minionUid).toBe('m1');
-
-            // 不应该有 PROMPT_CONTINUATION
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
-            expect(promptEvents.length).toBe(0);
+            // 单目标时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
 
         it('无力量≤2随从时无事件', () => {
@@ -196,7 +190,7 @@ describe('Prompt E2E: 确定性状态测试', () => {
 
             // 不应该有消灭或 Prompt 事件
             const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(destroyEvents.length).toBe(0);
             expect(promptEvents.length).toBe(0);
         });
@@ -230,12 +224,12 @@ describe('Prompt E2E: 确定性状态测试', () => {
 
             const events = execPlayAction(state, '0', 'action1');
 
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('pirate_powderkeg');
+            expect((promptEvents[0] as any).payload.abilityId).toBe('pirate_powderkeg');
         });
 
-        it('只有一个己方随从时自动执行牺牲', () => {
+        it('只有一个己方随从时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': {
@@ -262,15 +256,9 @@ describe('Prompt E2E: 确定性状态测试', () => {
 
             const events = execPlayAction(state, '0', 'action1');
 
-            // 应该直接消灭，不创建 Prompt
-            const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-            // m1 被牺牲，m2 力量≤3 被连带消灭
-            expect(destroyEvents.length).toBe(2);
-
-            const destroyedUids = destroyEvents.map(e => (e as any).payload.minionUid);
-            expect(destroyedUids).toContain('m1');
-            expect(destroyedUids).toContain('m2');
-            expect(destroyedUids).not.toContain('m3'); // 力量4不被消灭
+            // 单个己方随从时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
     });
 
@@ -304,12 +292,12 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('zombie_grave_digger');
+            expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_digger');
         });
 
-        it('弃牌堆只有一张随从时自动回收', () => {
+        it('弃牌堆只有一张随从时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': {
@@ -334,15 +322,9 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
-            // 应该直接回收，生成 CARD_RECOVERED_FROM_DISCARD 事件
-            const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-            expect(recoverEvents.length).toBe(1);
-            // cardUids 是数组
-            expect((recoverEvents[0] as any).payload.cardUids).toContain('d1');
-
-            // 不应该有 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
-            expect(promptEvents.length).toBe(0);
+            // 单张随从时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
 
         it('弃牌堆没有随从时无回收事件', () => {
@@ -371,7 +353,7 @@ describe('Prompt E2E: 确定性状态测试', () => {
             } as any, defaultRandom);
 
             const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(recoverEvents.length).toBe(0);
             expect(promptEvents.length).toBe(0);
         });
@@ -403,12 +385,12 @@ describe('Prompt E2E: 确定性状态测试', () => {
 
             const events = execPlayAction(state, '0', 'action1');
 
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.PROMPT_CONTINUATION);
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.continuation.abilityId).toBe('alien_crop_circles');
+            expect((promptEvents[0] as any).payload.abilityId).toBe('alien_crop_circles');
         });
 
-        it('只有一个有随从的基地时自动选择', () => {
+        it('只有一个有随从的基地时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': {
@@ -433,11 +415,9 @@ describe('Prompt E2E: 确定性状态测试', () => {
 
             const events = execPlayAction(state, '0', 'action1');
 
-            // 麦田怪圈返回随从到手牌（MINION_RETURNED），不是移动
-            const returnEvents = events.filter(e => e.type === SU_EVENTS.MINION_RETURNED);
-            
-            // 只有一个基地有随从时，自动返回该基地所有随从
-            expect(returnEvents.length).toBe(2); // 两个随从都返回手牌
+            // 单个有随从的基地时创建 Prompt
+            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
+            expect(promptEvents.length).toBe(1);
         });
     });
 });
@@ -451,46 +431,22 @@ describe('Prompt E2E: 状态变更验证', () => {
         initAllAbilities();
     });
 
-    it('PROMPT_CONTINUATION(set) 后 reducer 设置 pendingPromptContinuation', () => {
+    it('CHOICE_REQUESTED 事件被 reducer 正确处理（返回状态不变）', () => {
         const state = makeState();
 
-        // 手动构造 PROMPT_CONTINUATION 事件
         const event: SmashUpEvent = {
-            type: SU_EVENTS.PROMPT_CONTINUATION,
+            type: SU_EVENTS.CHOICE_REQUESTED,
             payload: {
-                action: 'set',
-                continuation: {
-                    abilityId: 'test_ability',
-                    playerId: '0',
-                    data: { foo: 'bar' },
-                },
-            },
-            timestamp: Date.now(),
-        } as any;
-
-        const newState = reduce(state, event);
-        expect(newState.pendingPromptContinuation).toBeDefined();
-        expect(newState.pendingPromptContinuation?.abilityId).toBe('test_ability');
-        expect(newState.pendingPromptContinuation?.playerId).toBe('0');
-        expect(newState.pendingPromptContinuation?.data?.foo).toBe('bar');
-    });
-
-    it('PROMPT_CONTINUATION(clear) 后 reducer 清除 pendingPromptContinuation', () => {
-        const state = makeState({
-            pendingPromptContinuation: {
                 abilityId: 'test_ability',
                 playerId: '0',
+                promptConfig: { title: '测试', options: [] },
             },
-        });
-
-        const event: SmashUpEvent = {
-            type: SU_EVENTS.PROMPT_CONTINUATION,
-            payload: { action: 'clear' },
             timestamp: Date.now(),
         } as any;
 
         const newState = reduce(state, event);
-        expect(newState.pendingPromptContinuation).toBeUndefined();
+        // CHOICE_REQUESTED 不修改 core 状态，交互由事件系统处理
+        expect(newState).toBe(state);
     });
 
     it('MINION_DESTROYED 事件后 reducer 从基地移除随从', () => {

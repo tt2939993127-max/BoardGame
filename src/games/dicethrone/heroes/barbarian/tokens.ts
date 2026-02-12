@@ -8,8 +8,8 @@
  * 注意：狂战士没有 consumable 类型的 Token（不像僧侣有太极、闪避、净化）
  */
 
-import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
-import { STATUS_IDS } from '../../domain/ids';
+import type { TokenDef, TokenState } from '../../domain/tokenTypes';
+import { STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
 
 const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
 
@@ -41,6 +41,8 @@ export const BARBARIAN_TOKENS: TokenDef[] = [
             removable: true, // 自动移除，不需要花费移除（但可被净化）
             actions: [{ type: 'skipPhase', target: 'self' }], // 跳过收入阶段
         },
+        frameId: 'vulnerable',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN,
     },
     
     /**
@@ -62,6 +64,8 @@ export const BARBARIAN_TOKENS: TokenDef[] = [
             removable: true, // 攻击结束后自动移除（但可被净化）
             actions: [{ type: 'extraAttack', target: 'self' }], // 触发额外攻击
         },
+        frameId: 'stun',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN,
     },
 ];
 

@@ -93,6 +93,20 @@ export interface TutorialStep {
    
    **注意**：系统命令（`SYS_` 前缀）始终不受限制，包括 CHEAT 命令和教程控制命令。
 
+8. **目标级门控（`allowedTargets`）**：
+   `allowedTargets` 可以在交互步骤中限制只有特定卡牌/单位可交互，其他置灰显示。
+   - 这是 **UI 层** 的门控，引擎不感知此字段，逻辑在 Board 组件中实现。
+   - 各游戏自行定义"目标"含义：SmashUp = cardUid，TTT = cellId，DT = cardId 等。
+   - 非允许目标视觉反馈：降低透明度 + 灰度 + 点击摇头，允许目标保留游戏原有交互样式。
+   ```typescript
+   {
+       id: 'playMinion',
+       allowedCommands: ['PLAY_MINION'],   // 命令类型门控（引擎层）
+       allowedTargets: ['tut-1'],          // 目标级门控（UI 层）
+       advanceOnEvents: [{ type: 'MINION_PLAYED' }],
+   }
+   ```
+
 7. **动画等待**：
    对于有视觉效果的操作步骤（如召唤、攻击），设置 `waitForAnimation: true` 可以让教程等待动画播放完毕后才推进到下一步。
    

@@ -57,7 +57,7 @@
   - [ ]* 4.2 编写 CP 音效测试用例
     - 测试 `cp_gain` 配置使用正确的能量充能音效
     - 测试 `cp_spend` 配置使用正确的能量释放音效
-    - 测试 `eventSoundResolver` 根据 delta 正负值返回正确音效键
+    - 测试 `feedbackResolver` 根据 delta 正负值返回正确音效键
     - _需求：1.1, 1.2_
   
   - [ ]* 4.3 编写 Monk 技能音效测试用例

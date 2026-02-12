@@ -3,7 +3,7 @@
  * 包含所有升级与基础技能
  */
 
-import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../../../systems/presets/combat';
+import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS as FACES } from '../../domain/ids';
 
 // 文本辅助

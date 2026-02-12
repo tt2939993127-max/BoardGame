@@ -4,7 +4,7 @@
  * 用于 ActionLog / HUD 的卡牌预览获取（基于卡牌配置静态映射）。
  */
 
-import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { CardPreviewRef } from '../../../core';
 import type { Card, FactionId } from '../domain/types';
 import { createDeckByFactionId } from '../config/factions';
 import { resolveCardAtlasId } from './cardAtlas';

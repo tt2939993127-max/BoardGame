@@ -27,14 +27,14 @@ function reduce(core: SummonerWarsCore, event: GameEvent): SummonerWarsCore {
 
 function makeUnitCard(id: string, overrides?: Partial<UnitCard>): UnitCard {
   return {
-    id, cardType: 'unit', name: `测试-${id}`, unitClass: 'common', faction: 'test',
+    id, cardType: 'unit', name: `测试-${id}`, unitClass: 'common', faction: 'necromancer',
     strength: 2, life: 3, cost: 1, attackType: 'melee', attackRange: 1,
     deckSymbols: [], ...overrides,
   };
 }
 
 function makeEventCard(id: string, overrides?: Partial<EventCard>): EventCard {
-  return { id, cardType: 'event', name: `事件-${id}`, cost: 0, playPhase: 'any', effect: '测试', deckSymbols: [], ...overrides };
+  return { id, cardType: 'event', name: `事件-${id}`, faction: 'necromancer', cost: 0, playPhase: 'any', effect: '测试', deckSymbols: [], ...overrides };
 }
 
 function placeUnit(core: SummonerWarsCore, pos: CellCoord, owner: PlayerId, card: UnitCard, extra?: Partial<BoardUnit>): BoardUnit {
@@ -172,12 +172,14 @@ describe('UNIT_DAMAGED', () => {
       timestamp: 0,
     });
 
-    expect(result.board[pos.row][pos.col].unit).toBeUndefined();
-    expect(result.players['1'].discard.length).toBe(prevDiscard1 + 1);
-    expect(result.players['0'].magic).toBe(prevMagic0 + 1);
+    // 伤害归约只累积伤害，不处理销毁与奖励
+    expect(result.board[pos.row][pos.col].unit).toBeDefined();
+    expect(result.board[pos.row][pos.col].unit!.damage).toBe(3);
+    expect(result.players['1'].discard.length).toBe(prevDiscard1);
+    expect(result.players['0'].magic).toBe(prevMagic0);
   });
 
-  it('skipMagicReward 时不给对方魔力', () => {
+  it('skipMagicReward 时不给对方魔力（UNIT_DESTROYED）', () => {
     const core = createInitializedCore(['0', '1'], createTestRandom());
     const pos: CellCoord = { row: 4, col: 4 };
     clearCell(core, pos);
@@ -185,8 +187,15 @@ describe('UNIT_DAMAGED', () => {
     const prevMagic0 = core.players['0'].magic;
 
     const result = reduce(core, {
-      type: SW_EVENTS.UNIT_DAMAGED,
-      payload: { position: pos, damage: 1, skipMagicReward: true },
+      type: SW_EVENTS.UNIT_DESTROYED,
+      payload: {
+        position: pos,
+        cardId: 'soulless-victim',
+        cardName: '测试',
+        owner: '1',
+        killerPlayerId: '0',
+        skipMagicReward: true,
+      },
       timestamp: 0,
     });
 
@@ -194,12 +203,13 @@ describe('UNIT_DAMAGED', () => {
     expect(result.players['0'].magic).toBe(prevMagic0);
   });
 
-  it('建筑致死伤害移除建筑', () => {
+  it('建筑致死伤害仅累积伤害', () => {
     const core = createInitializedCore(['0', '1'], createTestRandom());
     const pos: CellCoord = { row: 4, col: 4 };
     clearCell(core, pos);
     core.board[pos.row][pos.col].structure = {
-      cardId: 'struct-1', card: { id: 'struct-1', cardType: 'structure', name: '测试建筑', cost: 0, life: 2, deckSymbols: [] } as StructureCard,
+      cardId: 'struct-1',
+      card: { id: 'struct-1', cardType: 'structure', name: '测试建筑', faction: 'necromancer', cost: 0, life: 2, deckSymbols: [] } as StructureCard,
       owner: '1', position: pos, damage: 0,
     };
     const prevMagic0 = core.players['0'].magic;
@@ -210,8 +220,9 @@ describe('UNIT_DAMAGED', () => {
       timestamp: 0,
     });
 
-    expect(result.board[pos.row][pos.col].structure).toBeUndefined();
-    expect(result.players['0'].magic).toBe(prevMagic0 + 1);
+    expect(result.board[pos.row][pos.col].structure).toBeDefined();
+    expect(result.board[pos.row][pos.col].structure!.damage).toBe(2);
+    expect(result.players['0'].magic).toBe(prevMagic0);
   });
 });
 
@@ -285,6 +296,45 @@ describe('UNIT_DESTROYED', () => {
 
     expect(result.board[pos.row][pos.col].unit).toBeUndefined();
     expect(result.players['1'].discard.length).toBe(prevDiscard + 1);
+  });
+
+  it('击杀敌方单位获得魔力奖励', () => {
+    const core = createInitializedCore(['0', '1'], createTestRandom());
+    const pos: CellCoord = { row: 4, col: 4 };
+    clearCell(core, pos);
+    placeUnit(core, pos, '1', makeUnitCard('destroyed-unit'));
+    const prevMagic0 = core.players['0'].magic;
+
+    const result = reduce(core, {
+      type: SW_EVENTS.UNIT_DESTROYED,
+      payload: { position: pos, cardId: 'destroyed-unit', cardName: '测试', owner: '1', killerPlayerId: '0' },
+      timestamp: 0,
+    });
+
+    expect(result.players['0'].magic).toBe(prevMagic0 + 1);
+  });
+});
+
+describe('STRUCTURE_DESTROYED', () => {
+  it('移除建筑并给击杀者魔力奖励', () => {
+    const core = createInitializedCore(['0', '1'], createTestRandom());
+    const pos: CellCoord = { row: 4, col: 4 };
+    clearCell(core, pos);
+    core.board[pos.row][pos.col].structure = {
+      cardId: 'struct-1',
+      card: { id: 'struct-1', cardType: 'structure', name: '测试建筑', faction: 'necromancer', cost: 0, life: 2, deckSymbols: [] } as StructureCard,
+      owner: '1', position: pos, damage: 0,
+    };
+    const prevMagic0 = core.players['0'].magic;
+
+    const result = reduce(core, {
+      type: SW_EVENTS.STRUCTURE_DESTROYED,
+      payload: { position: pos, cardId: 'struct-1', owner: '1', killerPlayerId: '0' },
+      timestamp: 0,
+    });
+
+    expect(result.board[pos.row][pos.col].structure).toBeUndefined();
+    expect(result.players['0'].magic).toBe(prevMagic0 + 1);
   });
 });
 
@@ -612,7 +662,8 @@ describe('STRUCTURE_HEALED', () => {
     const pos: CellCoord = { row: 4, col: 4 };
     clearCell(core, pos);
     core.board[pos.row][pos.col].structure = {
-      cardId: 'struct-heal', card: { id: 'struct-heal', cardType: 'structure', name: '建筑', cost: 0, life: 5, deckSymbols: [] } as StructureCard,
+      cardId: 'struct-heal',
+      card: { id: 'struct-heal', cardType: 'structure', name: '建筑', faction: 'necromancer', cost: 0, life: 5, deckSymbols: [] } as StructureCard,
       owner: '0', position: pos, damage: 3,
     };
 

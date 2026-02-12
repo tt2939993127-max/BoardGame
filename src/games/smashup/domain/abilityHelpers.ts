@@ -5,7 +5,7 @@
  * 所有函数返回事件数组，由 reducer 统一归约。
  */
 
-import type { PlayerId } from '../../../engine/types';
+import type { PlayerId, PromptMultiConfig } from '../../../engine/types';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -218,7 +218,7 @@ export function shuffleHandIntoDeck(
 import type { GameEvent } from '../../../engine/types';
 import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
 import type { PromptOption as EnginePromptOption } from '../../../engine/types';
-import type { PromptContinuationContext, PromptContinuationEvent } from './types';
+import type { ChoiceRequestedEvent } from './types';
 
 // ============================================================================
 // 疯狂牌库操作
@@ -341,40 +341,40 @@ export function openMeFirstWindow(
 
 
 // ============================================================================
-// Prompt 辅助函数（目标选择）
+// 交互辅助函数（目标选择）
 // ============================================================================
 
 /**
- * 生成 Prompt 继续上下文设置事件
+ * 生成能力选择请求事件
  * 
- * 当能力需要目标选择时，先生成此事件将继续上下文存入 core 状态，
- * 然后通过 queuePrompt 创建引擎层 Prompt。
- * Prompt 解决后，FlowHooks 读取 pendingPromptContinuation 并执行继续逻辑。
+ * 当能力需要目标选择时，生成此事件，由事件系统转换为引擎层 Interaction。
+ * continuationContext 跟随 Interaction descriptor 流转，交互解决后传回 continuation 函数。
  */
-export function setPromptContinuation(
-    continuation: PromptContinuationContext,
+export function requestChoice(
+    params: {
+        abilityId: string;
+        playerId: PlayerId;
+        promptConfig: { title: string; options: EnginePromptOption[]; multi?: PromptMultiConfig };
+        continuationContext?: Record<string, unknown>;
+        targetPlayerId?: string;
+    },
     now: number
-): PromptContinuationEvent {
+): ChoiceRequestedEvent {
     return {
-        type: SU_EVENTS.PROMPT_CONTINUATION,
-        payload: { action: 'set', continuation },
-        timestamp: now,
-    };
-}
-
-/** 生成清除 Prompt 继续上下文事件 */
-export function clearPromptContinuation(
-    now: number
-): PromptContinuationEvent {
-    return {
-        type: SU_EVENTS.PROMPT_CONTINUATION,
-        payload: { action: 'clear' },
+        type: SU_EVENTS.CHOICE_REQUESTED,
+        payload: {
+            abilityId: params.abilityId,
+            playerId: params.playerId,
+            promptConfig: params.promptConfig,
+            continuationContext: params.continuationContext,
+            targetPlayerId: params.targetPlayerId,
+        },
         timestamp: now,
     };
 }
 
 /**
- * 构建随从目标选择的 Prompt 选项
+ * 构建随从目标选择的交互选项
  * 
  * @param candidates 候选随从列表（含基地索引）
  * @returns 引擎层 PromptOption 数组
@@ -390,7 +390,7 @@ export function buildMinionTargetOptions(
 }
 
 /**
- * 构建基地目标选择的 Prompt 选项
+ * 构建基地目标选择的交互选项
  * 
  * @param candidates 候选基地列表
  * @returns 引擎层 PromptOption 数组

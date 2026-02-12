@@ -8,15 +8,19 @@ import { getCardDef, resolveCardName } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { useDelayedBackdropBlur } from '../../../hooks/ui/useDelayedBackdropBlur';
 import { SMASHUP_CARD_BACK } from '../domain/ids';
+import { UI_Z_INDEX } from '../../../core';
 
 type Props = {
     deckCount: number;
     discard: CardInstance[];
     myPlayerId: string;
     isMyTurn: boolean;
+    /** 弃牌堆中有可从弃牌堆打出的卡牌时为 true */
+    hasPlayableFromDiscard?: boolean;
+    onCardView?: (card: CardInstance) => void;
 };
 
-export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn }) => {
+export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, onCardView }) => {
     const { t, i18n } = useTranslation('game-smashup');
     const [showDiscard, setShowDiscard] = useState(false);
     const topCard = discard.length > 0 ? discard[discard.length - 1] : null;
@@ -46,7 +50,11 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn 
     };
 
     return (
-        <div data-tutorial-id="su-deck-discard" className="absolute bottom-4 left-[2vw] right-[2vw] z-30 flex justify-between items-end pointer-events-none">
+        <div
+            data-tutorial-id="su-deck-discard"
+            className="absolute bottom-4 left-[2vw] right-[2vw] flex justify-between items-end pointer-events-none"
+            style={{ zIndex: UI_Z_INDEX.hud }}
+        >
             {/* Deck Pile - Left */}
             <div className="flex flex-col items-center pointer-events-auto group">
                 <div className="relative w-[7.5vw] aspect-[0.714]">
@@ -74,17 +82,24 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn 
 
             {/* Discard Pile - Right */}
             <div
-                className="flex flex-col items-center pointer-events-auto group cursor-pointer"
+                className="flex flex-col items-center pointer-events-auto group cursor-pointer relative"
                 onClick={handleDiscardClick}
             >
                 <div className="relative w-[7.5vw] aspect-[0.714]">
+                    {/* 可从弃牌堆打出时的脉冲光晕 */}
+                    {hasPlayableFromDiscard && (
+                        <div className="absolute -inset-2 rounded-lg z-0">
+                            <div className="absolute inset-0 rounded-lg bg-amber-400/40 animate-ping" />
+                            <div className="absolute inset-0 rounded-lg bg-amber-400/30 animate-pulse shadow-[0_0_20px_6px_rgba(251,191,36,0.5)]" />
+                        </div>
+                    )}
                     {discard.length > 0 ? (
                         <>
                             {/* Symmetric Stack Effect */}
                             <div className="absolute inset-0 bg-white rounded-sm border border-slate-300 shadow-sm -translate-x-1 -translate-y-1 -rotate-1" />
 
                             {/* Top Card */}
-                            <div className="absolute inset-0 bg-white rounded-sm shadow-xl transition-transform group-hover:-translate-y-2 group-hover:rotate-1 border border-slate-200 overflow-hidden">
+                            <div className={`absolute inset-0 bg-white rounded-sm shadow-xl transition-transform group-hover:-translate-y-2 group-hover:rotate-1 border overflow-hidden z-10 ${hasPlayableFromDiscard ? 'border-amber-400 border-2' : 'border-slate-200'}`}>
                                 <CardPreview
                                     previewRef={topDef?.previewRef}
                                     className="w-full h-full object-cover"
@@ -101,9 +116,20 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn 
                             <Trash2 className="text-white/30" />
                         </div>
                     )}
+                    {/* 可打出徽章 */}
+                    {hasPlayableFromDiscard && (
+                        <div className="absolute -top-3 -right-3 z-20 flex items-center justify-center">
+                            <span className="relative flex h-6 w-6">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-6 w-6 bg-amber-500 items-center justify-center text-white text-[10px] font-black shadow-lg">!</span>
+                            </span>
+                        </div>
+                    )}
                 </div>
-                <div className="mt-2 h-5 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 group-hover:text-red-400 transition-colors">
-                    <Trash2 size={10} /> {t('ui.discard')} ({discard.length}) {(!isMyTurn) && <span className="text-yellow-400 text-[9px]">({t('ui.viewing')})</span>}
+                <div className={`mt-2 h-5 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-amber-500/80 text-white animate-pulse' : 'bg-black/60 text-white group-hover:text-red-400'}`}>
+                    <Trash2 size={10} /> {t('ui.discard')} ({discard.length})
+                    {hasPlayableFromDiscard && <span className="text-[9px] ml-1">⚡</span>}
+                    {(!isMyTurn && !hasPlayableFromDiscard) && <span className="text-yellow-400 text-[9px]">({t('ui.viewing')})</span>}
                 </div>
             </div>
 
@@ -114,6 +140,7 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn 
                         <DiscardListOverlay
                             matches={discard}
                             onClose={() => setShowDiscard(false)}
+                            onCardView={onCardView}
                         />
                     )
                 }
@@ -126,7 +153,8 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn 
 const DiscardListOverlay: React.FC<{
     matches: CardInstance[];
     onClose: () => void;
-}> = ({ matches, onClose }) => {
+    onCardView?: (card: CardInstance) => void;
+}> = ({ matches, onClose, onCardView }) => {
     const { t, i18n } = useTranslation('game-smashup');
     // Standard backdrop blur handling according to AGENTS.md
     const blurActive = useDelayedBackdropBlur(true);
@@ -137,7 +165,8 @@ const DiscardListOverlay: React.FC<{
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             // Apply delay-loaded blur class and ensure pointer events are enabled
-            className={`fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-10 cursor-pointer pointer-events-auto ${blurActive ? 'backdrop-blur-md' : ''}`}
+            className={`fixed inset-0 bg-black/60 flex items-center justify-center p-10 cursor-pointer pointer-events-auto ${blurActive ? 'backdrop-blur-md' : ''}`}
+            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
             onClick={(e) => {
                 // Ensure we are clicking the backdrop div itself
                 if (e.target === e.currentTarget) {
@@ -175,7 +204,11 @@ const DiscardListOverlay: React.FC<{
                             const def = getCardDef(card.defId);
                             const resolvedName = resolveCardName(def, i18n.language) || card.defId;
                             return (
-                                <div key={card.uid} className="relative aspect-[0.714] bg-white rounded shadow-lg hover:scale-105 transition-transform group">
+                                <div
+                                    key={card.uid}
+                                    className="relative aspect-[0.714] bg-white rounded shadow-lg hover:scale-105 transition-transform group cursor-zoom-in"
+                                    onClick={() => onCardView?.(card)}
+                                >
                                     <div className="w-full h-full rounded overflow-hidden relative bg-slate-200">
                                         <CardPreview
                                             previewRef={def?.previewRef}

@@ -9,7 +9,8 @@
 
 import React from 'react';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import type { CardPreviewRef } from '../../../systems/CardSystem';
+import type { CardPreviewRef } from '../../../core';
+import { UI_Z_INDEX } from '../../../core';
 import type { DieFace } from '../types';
 import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
@@ -96,7 +97,7 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
             isVisible={true}
             onClose={() => onClose(currentItem.id)}
             autoCloseDelay={autoCloseDelay}
-            zIndex={9998}
+            zIndex={UI_Z_INDEX.overlayRaised}
             contentMotion={{
                 initial: { x: startPos.x, y: startPos.y, scale: 0.2, opacity: 0 },
                 animate: { x: 0, y: '-10vh', scale: 1, opacity: 1 },

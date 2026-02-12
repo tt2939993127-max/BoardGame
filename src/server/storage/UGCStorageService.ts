@@ -5,7 +5,7 @@
  * 2. 对象存储（生产/大规模）
  */
 
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, unlinkSync } from 'fs';
 import { dirname, join } from 'path';
 import type { S3Client } from '@aws-sdk/client-s3';
 
@@ -120,11 +120,51 @@ export class UGCStorageService {
   }
   
   /**
+   * 从 URL 提取相对路径
+   * URL 格式：{publicUrlBase}/{relativePath}
+   */
+  private extractRelativePath(url: string): string {
+    const prefix = `${this.publicUrlBase}/`;
+    if (url.startsWith(prefix)) {
+      return url.slice(prefix.length);
+    }
+    // 兼容只传 relativePath 的情况
+    return url;
+  }
+
+  /**
    * 删除资源
    */
   async delete(url: string): Promise<void> {
-    // TODO: 实现删除逻辑
-    console.log('TODO: 删除资源', url);
+    const relativePath = this.extractRelativePath(url);
+
+    if (this.config.mode === 'local') {
+      return this.deleteFromLocal(relativePath);
+    } else {
+      return this.deleteFromObjectStorage(relativePath);
+    }
+  }
+
+  /** 从本地文件系统删除 */
+  private async deleteFromLocal(relativePath: string): Promise<void> {
+    const uploadDir = this.config.localPath || join(process.cwd(), 'uploads');
+    const fullPath = join(uploadDir, relativePath);
+    if (existsSync(fullPath)) {
+      unlinkSync(fullPath);
+    }
+  }
+
+  /** 从对象存储删除 */
+  private async deleteFromObjectStorage(relativePath: string): Promise<void> {
+    if (!this.config.s3Client || !this.config.bucketName) {
+      throw new Error('对象存储未配置');
+    }
+    const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+    const command = new DeleteObjectCommand({
+      Bucket: this.config.bucketName,
+      Key: relativePath,
+    });
+    await this.config.s3Client.send(command);
   }
 }
 

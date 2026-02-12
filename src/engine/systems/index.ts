@@ -8,7 +8,7 @@ export * from './types';
 // 系统实现
 export { createFlowSystem, getCurrentPhase, setPhase, FLOW_COMMANDS, FLOW_EVENTS, type FlowHooks, type FlowSystemConfig, type PhaseChangedEvent, type PhaseExitResult, type CanAdvanceResult } from './FlowSystem';
 export { createUndoSystem, UNDO_COMMANDS, type UndoSystemConfig } from './UndoSystem';
-export { createPromptSystem, createPrompt, queuePrompt, resolvePrompt, PROMPT_COMMANDS, PROMPT_EVENTS } from './PromptSystem';
+export { createInteractionSystem, createSimpleChoice, queueInteraction, resolveInteraction, asSimpleChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS, type InteractionDescriptor, type InteractionState, type SimpleChoiceData, type InteractionSystemConfig } from './InteractionSystem';
 export { createLogSystem, getCommands, getEvents, getEventsByType, getRecentLogs } from './LogSystem';
 export { createEventStreamSystem, getEventStreamEntries } from './EventStreamSystem';
 export { createActionLogSystem, type ActionLogSystemConfig } from './ActionLogSystem';
@@ -20,7 +20,7 @@ export { CharacterSelectionSystem, CHARACTER_SELECTION_COMMANDS, type CharacterS
 
 // 默认系统集合
 import { createUndoSystem } from './UndoSystem';
-import { createPromptSystem } from './PromptSystem';
+import { createInteractionSystem } from './InteractionSystem';
 import { createLogSystem } from './LogSystem';
 import { createEventStreamSystem } from './EventStreamSystem';
 import { createRematchSystem } from './RematchSystem';
@@ -45,7 +45,7 @@ export function createDefaultSystems<TCore>(config: DefaultSystemsConfig = {}): 
         createLogSystem(),
         createActionLogSystem(actionLog),
         createUndoSystem(undo),
-        createPromptSystem(),
+        createInteractionSystem(),
         createRematchSystem(),
         createResponseWindowSystem(),
         createTutorialSystem(),

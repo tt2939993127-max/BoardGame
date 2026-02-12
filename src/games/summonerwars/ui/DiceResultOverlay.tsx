@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Swords, Crosshair, Zap } from 'lucide-react';
 import type { DiceFace } from '../config/dice';
 import { getSpriteAtlasSource, getSpriteAtlasStyle, DICE_FACE_SPRITE_MAP } from './cardAtlas';
+import { UI_Z_INDEX } from '../../../core';
 
 interface DiceResultOverlayProps {
   results: DiceFace[] | null;
@@ -191,7 +192,8 @@ export const DiceResultOverlay: React.FC<DiceResultOverlayProps> = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-50 flex items-center justify-center cursor-pointer"
+            className="fixed inset-0 flex items-center justify-center cursor-pointer"
+            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
             onClick={closeNow}
           >
             <div

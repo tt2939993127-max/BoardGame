@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { getLocalizedAssetPath } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
 import { getPortraitStyle, ASSETS } from './assets';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -108,21 +108,25 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex bg-[#050510] overflow-hidden select-none text-white font-sans w-screen h-screen"
+            className="fixed inset-0 h-full flex bg-[#050510] overflow-hidden select-none text-white font-sans"
+            style={{ zIndex: UI_Z_INDEX.overlay }}
         >
-            {/* 动态氛围背景（纯视觉，不影响布局） */}
-            <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-                <div className="absolute inset-0 bg-indigo-950/10 z-10" />
-                <OptimizedImage
-                    src={getLocalizedAssetPath('dicethrone/images/Common/background', locale)}
-                    fallbackSrc="dicethrone/images/Common/background"
-                    className="w-full h-full object-cover opacity-15"
-                    alt=""
-                />
-            </div>
+            {/* 动态氛围背景（铺满整个 overlay） */}
+            <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    zIndex: 0,
+                    backgroundImage: buildLocalizedImageSet('dicethrone/images/Common/background', locale),
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat',
+                    opacity: 0.85,
+                }}
+            />
+            <div className="absolute inset-0 bg-indigo-950/3 pointer-events-none" style={{ zIndex: 1 }} />
 
             {/* 左侧：英雄选择列表 (18vw) */}
-            <div className="w-[18vw] h-full border-r border-white/5 flex flex-col z-10 bg-black/60 backdrop-blur-2xl relative flex-shrink-0">
+            <div className="w-[18vw] h-full border-r border-white/5 flex flex-col z-10 bg-black/15 backdrop-blur-2xl relative flex-shrink-0">
                 <div className="px-[1vw] pt-[1.2vw] pb-[0.6vw] border-b border-white/10">
                     <h2 className="text-[1vw] font-bold text-white/90 uppercase tracking-wider">
                         {t('selection.title')}
@@ -178,7 +182,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             </div>
 
             {/* 右侧：角色预览区 */}
-            <div className="flex-1 h-full relative flex flex-col z-10 overflow-hidden bg-gradient-to-br from-slate-900/20 to-black">
+            <div className="flex-1 h-full relative flex flex-col z-10 overflow-hidden bg-gradient-to-br from-slate-900/5 to-black/12">
                 <div className="flex-1 flex items-center justify-center p-[1vw] overflow-hidden">
                     <AnimatePresence mode="wait">
                         <motion.div
@@ -219,7 +223,10 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 </div>
 
                 {/* 底部玩家面板 (8vw) */}
-                <div className="h-[8vw] bg-gradient-to-t from-black/95 to-black/80 backdrop-blur-xl flex items-center justify-center gap-[3vw] px-[4vw] z-[200] flex-shrink-0 border-t border-white/5">
+                <div
+                    className="h-[8vw] bg-gradient-to-t from-black/25 via-black/10 to-transparent backdrop-blur-xl flex items-center justify-center gap-[3vw] px-[4vw] flex-shrink-0"
+                    style={{ zIndex: UI_Z_INDEX.hud }}
+                >
                     <div className="flex items-center justify-center gap-[1.5vw]">
                         {playerIds.map(pid => {
                             const charId = selectedCharacters[pid as PlayerId];
@@ -316,8 +323,11 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 </div>
             </div>
 
-            {/* 资源预加载层 - 还原原版逻辑 */}
-            <div className="fixed bottom-[-2000px] left-0 pointer-events-none opacity-0">
+            {/* 资源预加载层 - 离屏渲染确保图片被浏览器加载 */}
+            <div
+                className="fixed left-0 top-[-10000px] w-px h-px overflow-hidden opacity-0 pointer-events-none"
+                aria-hidden="true"
+            >
                 {availableCharacters.map(char => (
                     <React.Fragment key={char.id}>
                         <img src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD(char.id), locale)} alt="" />

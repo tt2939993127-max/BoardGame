@@ -844,7 +844,7 @@ const builderPreviewConfig = {
             "scope": "current-player",
             "variant": "primary",
             "requirement": "仅开局阶段可点击",
-            "hookCode": "(payload) => { return; }"
+            "hookCode": "(payload) => ({ type: 'CALL_LANDLORD', payload: { componentId: payload.context.componentId } })"
           },
           {
             "id": "bid",
@@ -852,7 +852,7 @@ const builderPreviewConfig = {
             "scope": "current-player",
             "variant": "secondary",
             "requirement": "仅开局阶段可点击",
-            "hookCode": "(payload) => { return; }"
+            "hookCode": "(payload) => ({ type: 'BID', payload: { componentId: payload.context.componentId, score: 1 } })"
           },
           {
             "id": "pass",

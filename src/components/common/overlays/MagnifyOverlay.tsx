@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { UI_Z_INDEX } from '../../../core';
 
 export const MagnifyOverlay = ({
     isOpen,
@@ -21,8 +22,10 @@ export const MagnifyOverlay = ({
 
     return (
         <div
-            className={`fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-8 backdrop-blur-md animate-in fade-in duration-200 ${overlayClassName}`}
+            className={`fixed inset-0 bg-black/90 flex items-center justify-center p-8 backdrop-blur-md animate-in fade-in duration-200 ${overlayClassName}`}
+            style={{ zIndex: UI_Z_INDEX.magnify }}
             onClick={onClose}
+            data-interaction-allow
         >
             <div
                 className={`relative shadow-2xl border border-white/10 rounded-[1vw] overflow-hidden group/modal ${containerClassName}`}

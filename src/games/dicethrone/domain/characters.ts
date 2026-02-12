@@ -4,7 +4,7 @@
  */
 
 import type { PlayerId, RandomFn } from '../../../engine/types';
-import type { TokenDef } from '../../../systems/TokenSystem';
+import type { TokenDef } from './tokenTypes';
 import type { AbilityCard, HeroState, SelectableCharacterId, Die, DieFace } from './types';
 import { MONK_ABILITIES, MONK_TOKENS, MONK_INITIAL_TOKENS, getMonkStartingDeck } from '../heroes/monk';
 import { BARBARIAN_ABILITIES, BARBARIAN_TOKENS, BARBARIAN_INITIAL_TOKENS, getBarbarianStartingDeck } from '../heroes/barbarian';
@@ -12,10 +12,11 @@ import { PYROMANCER_ABILITIES, PYROMANCER_TOKENS, PYROMANCER_INITIAL_TOKENS, get
 import { MOON_ELF_ABILITIES, MOON_ELF_TOKENS, MOON_ELF_INITIAL_TOKENS, getMoonElfStartingDeck } from '../heroes/moon_elf';
 import { SHADOW_THIEF_ABILITIES, SHADOW_THIEF_TOKENS, SHADOW_THIEF_INITIAL_TOKENS, getShadowThiefStartingDeck } from '../heroes/shadow_thief';
 import { PALADIN_ABILITIES, PALADIN_TOKENS, PALADIN_INITIAL_TOKENS, getPaladinStartingDeck } from '../heroes/paladin';
-import { diceSystem } from '../../../systems/DiceSystem';
+import { createDie } from '../../../engine/primitives';
+import { getDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
-import { STATUS_IDS } from './ids';
+import { STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from './ids';
 
 
 export interface CharacterData {
@@ -26,6 +27,10 @@ export interface CharacterData {
     diceDefinitionId: string;
     getStartingDeck: (random: RandomFn) => AbilityCard[];
     initialAbilityLevels: Record<string, number>;
+    /** 状态图集 ID（用于 VisualResolver） */
+    statusAtlasId: string;
+    /** 状态图集 JSON 路径 */
+    statusAtlasPath: string;
 }
 
 const BARBARIAN_DATA: CharacterData = {
@@ -45,6 +50,8 @@ const BARBARIAN_DATA: CharacterData = {
         'reckless-strike': 1,
         'thick-skin': 1,
     },
+    statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.BARBARIAN,
+    statusAtlasPath: 'dicethrone/images/barbarian/status-icons-atlas.json',
 };
 
 export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = {
@@ -65,6 +72,8 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'calm-water': 1,
             'meditation': 1,
         },
+        statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
+        statusAtlasPath: 'dicethrone/images/monk/status-icons-atlas.json',
     },
     barbarian: BARBARIAN_DATA,
     pyromancer: {
@@ -85,6 +94,8 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'magma-armor': 1,
             'ultimate-inferno': 1,
         },
+        statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER,
+        statusAtlasPath: 'dicethrone/images/pyromancer/status-icons-atlas.json',
     },
     shadow_thief: {
         id: 'shadow_thief',
@@ -104,6 +115,8 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'shadow-defense': 1,
             'fearless-riposte': 1,
         },
+        statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.SHADOW_THIEF,
+        statusAtlasPath: 'dicethrone/images/shadow_thief/status-icons-atlas.json',
     },
     moon_elf: {
         id: 'moon_elf',
@@ -123,6 +136,8 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'lunar-eclipse': 1,
             'elusive-step': 1,
         },
+        statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.MOON_ELF,
+        statusAtlasPath: 'dicethrone/images/moon_elf/status-icons-atlas.json',
     },
     paladin: {
         id: 'paladin',
@@ -141,6 +156,8 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'holy-defense': 1,
             'unyielding-faith': 1,
         },
+        statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
+        statusAtlasPath: 'dicethrone/images/Paladin/status-icons-atlas.json',
     },
     ninja: { ...BARBARIAN_DATA, id: 'ninja' },
     treant: { ...BARBARIAN_DATA, id: 'treant' },
@@ -247,8 +264,12 @@ export function initHeroState(
  */
 export function createCharacterDice(characterId: SelectableCharacterId): Die[] {
     const data = CHARACTER_DATA_MAP[characterId];
+    const definition = getDiceDefinition(data.diceDefinitionId);
+    if (!definition) {
+        throw new Error(`[DiceThrone] 未注册骰子定义: ${data.diceDefinitionId}`);
+    }
     return Array.from({ length: 5 }, (_, index) => {
-        const die = diceSystem.createDie(data.diceDefinitionId, { id: index, initialValue: 1 });
+        const die = createDie(definition, index, { initialValue: 1 });
         return {
             ...die,
             symbol: die.symbol as DieFace | null,

@@ -20,6 +20,40 @@ import { SYSTEM_IDS } from './types';
 export interface ResponseWindowSystemConfig {
     /** 检测玩家是否有可响应内容的函数（由游戏实现注入） */
     hasRespondableContent?: (state: unknown, playerId: PlayerId, windowType: ResponseWindowType, sourceId?: string) => boolean;
+
+    /**
+     * 响应窗口期间允许执行的额外游戏命令
+     * 引擎自动包含 RESPONSE_PASS + SYS_INTERACTION_* + SYS_ 前缀系统命令，无需重复列出
+     */
+    allowedCommands?: string[];
+
+    /** 不受"当前响应者"约束的命令（如 USE_TOKEN 由自身 responderId 校验） */
+    responderExemptCommands?: string[];
+
+    /** 命令的窗口类型限制：只在指定窗口类型下才允许执行 */
+    commandWindowTypeConstraints?: Record<string, ResponseWindowType[]>;
+
+    /**
+     * 触发响应者推进的事件类型
+     * 当前响应者产生这些事件后，自动推进到下一个响应者
+     * payload 需包含 playerId 字段用于匹配当前响应者
+     */
+    responseAdvanceEvents?: Array<{
+        eventType: string;
+        /** 仅在特定窗口类型下生效（不填=所有类型） */
+        windowTypes?: ResponseWindowType[];
+    }>;
+
+    /**
+     * 交互锁定配置：在响应窗口内发起多步交互时锁定推进
+     * payload 约定：requestEvent.payload.interaction.{id, playerId}; resolveEvents.payload.interactionId
+     */
+    interactionLock?: {
+        /** 锁定事件类型 */
+        requestEvent: string;
+        /** 解锁+推进事件类型 */
+        resolveEvents: string[];
+    };
 }
 
 // ============================================================================
@@ -156,25 +190,11 @@ export function getResponseWindowResponderId<TCore>(
 }
 
 // ============================================================================
-// 允许在响应窗口期间执行的命令类型
+// 引擎级始终允许的命令（无需游戏配置）
 // ============================================================================
 
-const ALLOWED_COMMANDS_DURING_RESPONSE = [
-    'RESPONSE_PASS',      // 跳过响应
-    'PLAY_CARD',          // 打出卡牌（响应卡）
-    'SYS_PROMPT_RESPOND', // Prompt 响应命令
-    'SYS_PROMPT_TIMEOUT', // Prompt 超时命令
-    'USE_TOKEN',          // Token 响应
-    'SKIP_TOKEN_RESPONSE', // 跳过 Token 响应
-    // 卡牌交互相关命令
-    'MODIFY_DIE',         // 修改骰子数值
-    'REROLL_DIE',         // 重掷骰子
-    'REMOVE_STATUS',      // 移除状态效果
-    'TRANSFER_STATUS',    // 转移状态效果
-    'CONFIRM_INTERACTION', // 确认交互
-    'CANCEL_INTERACTION', // 取消交互
-    // SmashUp 响应命令
-    'su:play_action',     // 大杀四方：Me First! 响应打出特殊行动卡
+const ENGINE_ALLOWED_COMMANDS = [
+    'RESPONSE_PASS',
 ];
 
 const resolveCommandTimestamp = (command: { timestamp?: number }): number =>
@@ -219,6 +239,20 @@ export function createResponseWindowSystem<TCore>(
     config: ResponseWindowSystemConfig = {}
 ): EngineSystem<TCore> {
     const { hasRespondableContent } = config;
+
+    // 合并引擎级 + 游戏级允许命令
+    const gameAllowedCommands = config.allowedCommands ?? [];
+    const allAllowedCommands = new Set([
+        ...ENGINE_ALLOWED_COMMANDS,
+        ...gameAllowedCommands,
+    ]);
+    const responderExempt = new Set(config.responderExemptCommands ?? []);
+    const windowTypeConstraints = config.commandWindowTypeConstraints ?? {};
+    const advanceEvents = config.responseAdvanceEvents ?? [];
+    const interactionLock = config.interactionLock;
+
+    /** 判断命令是否为 SYS_ 前缀系统命令（始终放行） */
+    const isSysCommand = (type: string) => type.startsWith('SYS_');
 
     return {
         id: SYSTEM_IDS.RESPONSE_WINDOW,
@@ -273,7 +307,6 @@ export function createResponseWindowSystem<TCore>(
                 const cmdTimestamp = resolveCommandTimestamp(command);
                 
                 if (nextWindow) {
-                    // 还有下一个响应者
                     const newState = openResponseWindow(state, nextWindow);
                     events.push({
                         type: RESPONSE_WINDOW_EVENTS.RESPONDER_CHANGED,
@@ -286,7 +319,6 @@ export function createResponseWindowSystem<TCore>(
                     });
                     return { halt: false, state: newState, events };
                 } else {
-                    // 所有人都已跳过，关闭窗口
                     const newState = closeResponseWindow(state);
                     events.push({
                         type: RESPONSE_WINDOW_EVENTS.CLOSED,
@@ -300,14 +332,20 @@ export function createResponseWindowSystem<TCore>(
                 }
             }
 
-            // 检查命令是否允许在响应窗口期间执行
-            if (ALLOWED_COMMANDS_DURING_RESPONSE.includes(command.type)) {
-                if (command.type === 'su:play_action' && currentWindow.windowType !== 'meFirst') {
+            // SYS_ 前缀系统命令始终放行
+            if (isSysCommand(command.type)) {
+                return;
+            }
+
+            // 检查命令是否在允许列表中
+            if (allAllowedCommands.has(command.type)) {
+                // 窗口类型约束检查
+                const constraints = windowTypeConstraints[command.type];
+                if (constraints && !constraints.includes(currentWindow.windowType)) {
                     return { halt: true, error: '等待响应窗口关闭' };
                 }
-                // Token 响应依赖 pendingDamage.responderId 校验，不与 response window responder 强绑定
-                if (command.type !== 'USE_TOKEN' && command.type !== 'SKIP_TOKEN_RESPONSE') {
-                    // 只有当前响应者可以执行这些命令
+                // 非豁免命令需检查是否为当前响应者
+                if (!responderExempt.has(command.type)) {
                     if (command.playerId !== currentResponderId) {
                         return { halt: true, error: '等待对方响应' };
                     }
@@ -365,8 +403,8 @@ export function createResponseWindowSystem<TCore>(
                     newState = closeResponseWindow(newState);
                 }
                 
-                // 处理交互请求事件：锁定响应窗口，阻止推进
-                if (event.type === 'INTERACTION_REQUESTED') {
+                // 交互锁定：请求事件锁定响应窗口推进
+                if (interactionLock && event.type === interactionLock.requestEvent) {
                     const currentWindow = newState.sys.responseWindow?.current;
                     if (currentWindow) {
                         const interactionPayload = event.payload as { interaction: { id: string; playerId: PlayerId } };
@@ -390,19 +428,16 @@ export function createResponseWindowSystem<TCore>(
                     }
                 }
                 
-                // 处理交互完成/取消事件：解除锁定并推进响应者
-                if (event.type === 'INTERACTION_COMPLETED' || event.type === 'INTERACTION_CANCELLED') {
+                // 交互锁定：解锁事件解除锁定并推进响应者
+                if (interactionLock && interactionLock.resolveEvents.includes(event.type)) {
                     const currentWindow = newState.sys.responseWindow?.current;
                     if (currentWindow && currentWindow.pendingInteractionId) {
                         const interactionPayload = event.payload as { interactionId: string };
                         
-                        // 匹配交互 ID 才解锁
                         if (interactionPayload.interactionId === currentWindow.pendingInteractionId) {
-                            // 解除交互锁
                             const unlockedWindow = { ...currentWindow, pendingInteractionId: undefined };
                             const currentResponderId = getCurrentResponderId(unlockedWindow);
                             
-                            // 推进到下一个响应者
                             const nextWindow = skipToNextRespondableResponder(
                                 newState,
                                 advanceToNextResponder(unlockedWindow, currentResponderId!),
@@ -421,7 +456,6 @@ export function createResponseWindowSystem<TCore>(
                                     timestamp: eventTimestamp,
                                 });
                             } else {
-                                // 所有人都已响应，关闭窗口
                                 newState = closeResponseWindow(newState);
                                 additionalEvents.push({
                                     type: RESPONSE_WINDOW_EVENTS.CLOSED,
@@ -436,49 +470,48 @@ export function createResponseWindowSystem<TCore>(
                     }
                 }
                 
-                // 处理打牌事件：仅在无交互锁时才推进（普通卡牌/行动卡）
-                if (event.type === 'CARD_PLAYED' || event.type === 'su:action_played') {
+                // 响应者推进：配置的事件触发后推进到下一个响应者
+                for (const adv of advanceEvents) {
+                    if (event.type !== adv.eventType) continue;
                     const currentWindow = newState.sys.responseWindow?.current;
-                    if (currentWindow && !currentWindow.pendingInteractionId) {
-                        if (event.type === 'su:action_played' && currentWindow.windowType !== 'meFirst') {
-                            continue;
-                        }
-                        const cardPayload = event.payload as { playerId: PlayerId };
-                        const currentResponderId = getCurrentResponderId(currentWindow);
-                        
-                        // 只有当前响应者打牌才推进
-                        if (cardPayload.playerId === currentResponderId) {
-                            const nextWindow = skipToNextRespondableResponder(
-                                newState,
-                                advanceToNextResponder(currentWindow, currentResponderId),
-                                hasRespondableContent
-                            );
-                            
-                            if (nextWindow) {
-                                newState = openResponseWindow(newState, nextWindow);
-                                additionalEvents.push({
-                                    type: RESPONSE_WINDOW_EVENTS.RESPONDER_CHANGED,
-                                    payload: {
-                                        windowId: currentWindow.id,
-                                        previousResponderId: currentResponderId,
-                                        nextResponderId: getCurrentResponderId(nextWindow),
-                                    },
-                                    timestamp: eventTimestamp,
-                                });
-                            } else {
-                                // 所有人都已响应，关闭窗口
-                                newState = closeResponseWindow(newState);
-                                additionalEvents.push({
-                                    type: RESPONSE_WINDOW_EVENTS.CLOSED,
-                                    payload: {
-                                        windowId: currentWindow.id,
-                                        allPassed: false, // 有人打牌了
-                                    },
-                                    timestamp: eventTimestamp,
-                                });
-                            }
-                        }
+                    if (!currentWindow || currentWindow.pendingInteractionId) break;
+                    // 窗口类型约束
+                    if (adv.windowTypes && !adv.windowTypes.includes(currentWindow.windowType)) continue;
+                    const cardPayload = event.payload as { playerId: PlayerId };
+                    const currentResponderId = getCurrentResponderId(currentWindow);
+                    
+                    // 只有当前响应者的事件才推进
+                    if (cardPayload.playerId !== currentResponderId) break;
+                    
+                    const nextWindow = skipToNextRespondableResponder(
+                        newState,
+                        advanceToNextResponder(currentWindow, currentResponderId),
+                        hasRespondableContent
+                    );
+                    
+                    if (nextWindow) {
+                        newState = openResponseWindow(newState, nextWindow);
+                        additionalEvents.push({
+                            type: RESPONSE_WINDOW_EVENTS.RESPONDER_CHANGED,
+                            payload: {
+                                windowId: currentWindow.id,
+                                previousResponderId: currentResponderId,
+                                nextResponderId: getCurrentResponderId(nextWindow),
+                            },
+                            timestamp: eventTimestamp,
+                        });
+                    } else {
+                        newState = closeResponseWindow(newState);
+                        additionalEvents.push({
+                            type: RESPONSE_WINDOW_EVENTS.CLOSED,
+                            payload: {
+                                windowId: currentWindow.id,
+                                allPassed: false,
+                            },
+                            timestamp: eventTimestamp,
+                        });
                     }
+                    break; // 每个事件最多匹配一个推进规则
                 }
             }
             
@@ -493,7 +526,6 @@ export function createResponseWindowSystem<TCore>(
         playerView: (state, _playerId): Partial<{ responseWindow: ResponseWindowState }> => {
             const currentWindow = state.sys.responseWindow?.current;
 
-            // 所有玩家都能看到响应窗口状态（用于 UI 显示）
             return {
                 responseWindow: {
                     current: currentWindow,

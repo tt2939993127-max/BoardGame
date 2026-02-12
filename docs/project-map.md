@@ -124,10 +124,12 @@ src/components/
 │       ├── types.ts
 │       └── hooks/
 │           ├── index.ts
+│           ├── useAutoSkipPhase.ts
 │           ├── useDragCard.ts
 │           ├── useGameBoard.ts
 │           ├── useHandArea.ts
-│           └── useResourceTray.ts
+│           ├── useResourceTray.ts
+│           └── useVisualSequenceGate.ts
 ├── layout/
 │   └── CategoryPills.tsx
 ├── lobby/

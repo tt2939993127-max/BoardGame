@@ -7,8 +7,8 @@
  * - Entangle (缠绕)
  * - Targeted (锁定)
  */
-import type { TokenDef, TokenState } from '../../../../systems/TokenSystem';
-import { TOKEN_IDS, STATUS_IDS } from '../../domain/ids';
+import type { TokenDef, TokenState } from '../../domain/tokenTypes';
+import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
 
 // 复用 Monk 的 Evasive 定义，但在 Moon Elf 中重新声明以保持独立性结构，
 // 或者引用已有的定义如果完全一致。这里为了方便维护（如果音效/描述有微调），我们复制并适配。
@@ -42,7 +42,8 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
                 // Image text: "掷骰1颗。如果结果为1-2，伤害减至0" matches Monk logic.
             },
         },
-        frameId: 'dodge', // Reuse existing frame asset
+        frameId: 'dodge',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
     },
 
     // ============================================
@@ -52,7 +53,7 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
     /**
      * 致盲 (Blinded) - Does not stack
      * 效果：攻击掷骰阶段结算时，掷骰1颗。1-2：攻击无效。
-     * 执行逻辑：game.ts onPhaseExit offensiveRoll 中实现
+     * 执行逻辑：game.ts onPhaseExit offensiveRoll 中直接实现（非 token passiveTrigger 通道）
      */
     {
         id: STATUS_IDS.BLINDED,
@@ -65,12 +66,14 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
         passiveTrigger: {
             timing: 'onPhaseEnter',
             removable: true,
-            actions: [{ type: 'custom', customActionId: 'blinded-attack-check', target: 'self' }],
+            actions: [],
         },
+        frameId: 'blinded',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MOON_ELF,
     },
 
     /**
-     * 缠绕 (Entangle) - Does not stack
+     * 缠绕 (Entangle)
      * 效果：下次攻击掷骰少一次 (3 -> 2)。
      * 执行逻辑：game.ts onPhaseEnter offensiveRoll 中实现
      */
@@ -87,10 +90,12 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
             removable: true,
             actions: [{ type: 'modifyStat', target: 'self', value: -1 }],
         },
+        frameId: 'entangle',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MOON_ELF,
     },
 
     /**
-     * 锁定 (Targeted) - Does not stack
+     * 锁定 (Targeted)
      * 效果：受到的伤害 +2。
      * 执行逻辑：effects.ts resolveEffectAction damage case 中实现
      */
@@ -110,6 +115,8 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
                 { type: 'removeStatus', target: 'self', statusId: STATUS_IDS.TARGETED, value: 1 },
             ],
         },
+        frameId: 'targeted',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MOON_ELF,
     },
 ];
 

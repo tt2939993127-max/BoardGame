@@ -8,6 +8,7 @@
 import React from 'react';
 import type { MotionProps } from 'framer-motion';
 import { motion, AnimatePresence } from 'framer-motion';
+import { UI_Z_INDEX } from '../../../core';
 
 type SpotlightMotion = Pick<MotionProps, 'initial' | 'animate' | 'exit' | 'transition'>;
 
@@ -52,7 +53,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     onClose,
     autoCloseDelay = 2500,
     children,
-    zIndex = 9999,
+    zIndex = UI_Z_INDEX.overlayRaised,
     contentMotion,
     closeOnContentClick = true,
     disableAutoClose = false,

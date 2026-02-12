@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { HeroState } from '../types';
 import type { TranslateFn } from './utils';
 import { buildLocalizedImageSet } from '../../../core';
+import { getDieFaceByValue } from '../domain/diceRegistry';
 
 const getCharacterAssetBase = (charId: string = 'monk') => (
     `dicethrone/images/${charId}`
@@ -52,15 +53,16 @@ export const getDiceSpritePosition = (value: number) => {
     return { xPos, yPos };
 };
 
-export const getBonusFaceLabel = (value: number, t: TranslateFn) => {
-    const face = value === 1 || value === 2
-        ? 'fist'
-        : value === 3
-            ? 'palm'
-            : value === 4 || value === 5
-                ? 'taiji'
-                : 'lotus';
-    return t(`dice.face.${face}`) as string;
+export const getBonusFaceLabel = (
+    value: number | undefined,
+    t: TranslateFn,
+    options?: { face?: string; definitionId?: string }
+) => {
+    const face = options?.face
+        ?? (options?.definitionId && typeof value === 'number'
+            ? getDieFaceByValue(options.definitionId, value)?.symbols?.[0]
+            : undefined);
+    return face ? (t(`dice.face.${face}`) as string) : (t('bonusDie.title') as string);
 };
 
 const PORTRAIT_ATLAS = {
