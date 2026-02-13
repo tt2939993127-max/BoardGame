@@ -8,6 +8,7 @@ import type { RandomFn } from '../../../../engine/types';
 import type { AbilityEffect, AbilityDef } from '../../domain/combat';
 import { STATUS_IDS, TOKEN_IDS, PYROMANCER_DICE_FACE_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
+import { abilityEffectText } from '../../../../engine/primitives/ability';
 import {
     FIREBALL_2,
     BURNING_SOUL_2,
@@ -20,7 +21,6 @@ import {
 } from './abilities';
 
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
 
 // ============================================
 // 辅助函数

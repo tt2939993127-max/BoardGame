@@ -388,9 +388,12 @@ describe('诡术师 ongoing 能力', () => {
                 now: 1000,
             });
 
-            expect(events).toHaveLength(1);
+            expect(events).toHaveLength(2);
             expect(events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
             expect((events[0] as any).payload.reason).toBe('trickster_flame_trap');
+            // 火焰陷阱触发后自毁
+            expect(events[1].type).toBe(SU_EVENTS.ONGOING_DETACHED);
+            expect((events[1] as any).payload.defId).toBe('trickster_flame_trap');
         });
 
         test('自己打出随从不触发', () => {
@@ -538,13 +541,15 @@ describe('诡术师 ongoing 能力', () => {
             expect(executor).toBeDefined();
         });
 
-        test('单目标时创建 Prompt', () => {
+        test('单目标时创建 Interaction', () => {
             const base = makeBase();
             const state = makeState([base]);
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
             const executor = resolveAbility('trickster_mark_of_sleep', 'onPlay')!;
             const result = executor({
                 state,
+                matchState: ms,
                 playerId: '0',
                 cardUid: 'ms-1',
                 defId: 'trickster_mark_of_sleep',
@@ -553,8 +558,11 @@ describe('诡术师 ongoing 能力', () => {
                 now: 1000,
             });
 
-            expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
+            // 迁移后通过 Interaction 而非事件
+            const interaction = (result.matchState?.sys as any)?.interaction;
+            const current = interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('trickster_mark_of_sleep');
         });
     });
 });

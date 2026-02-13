@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useMemo, type ReactNode
 import { useAuth } from './AuthContext';
 import { socialSocket, SOCIAL_EVENTS, type FriendStatusPayload, type FriendRequestPayload, type NewMessagePayload } from '../services/socialSocket';
 import { AUTH_API_URL } from '../config/server';
-import type { FriendUser, FriendRequest, Conversation, Message, SearchUserResult } from '../types/social';
+import type { FriendUser, FriendRequest, Conversation, Message, SearchUserResult } from '../services/social.types';
 import i18n from '../lib/i18n';
 
 interface SocialContextType {

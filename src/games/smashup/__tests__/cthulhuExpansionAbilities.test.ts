@@ -70,7 +70,7 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
+    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
 }
 
 const defaultRandom: RandomFn = {

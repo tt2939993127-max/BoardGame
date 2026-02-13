@@ -8,10 +8,7 @@ export const MADNESS_CARDS: CardDef[] = [
         subtype: 'standard',
         name: '疯狂',
         nameEn: 'Madness',
-        faction: 'madness',
-        effectText: '抽两张卡或将本卡返回疯狂牌堆。',
-        effectTextEn: 'Draw two cards OR return this card to the Madness deck.',
-        // 特殊规则（已实现）：
+        faction: 'madness',        // 特殊规则（已实现）：
         // 1. 属于独立的“疯狂牌堆”，不进入玩家起始牌组
         // 2. 游戏结束时，在玩家牌组/手牌/弃牌堆中的每份该卡扣除 1/2 VP（向下取整）
         count: 30,

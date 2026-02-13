@@ -331,7 +331,7 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                                     {/* Hover info */}
                                                     <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2 pointer-events-none">
                                                         <div className="text-white font-black text-[10px] uppercase leading-none mb-1">
-                                                            {resolveCardName(card, i18n.language)}
+                                                            {resolveCardName(card, t)}
                                                         </div>
                                                         <div className="text-[8px] text-amber-400 font-bold uppercase tracking-widest">
                                                             {card.type === 'minion' ? `${t('ui.minion')}: ${(card as import('../domain/types').MinionCardDef).power}` : t('ui.action')}
@@ -465,11 +465,11 @@ const CardDetailOverlay: React.FC<{
     type: 'minion' | 'base' | 'action';
     onClose: () => void;
 }> = ({ defId, type, onClose }) => {
-    const { i18n } = useTranslation('game-smashup');
+    const { t } = useTranslation('game-smashup');
     const def = type === 'base' ? getBaseDef(defId) : getCardDef(defId);
     if (!def) return null;
-    const resolvedName = resolveCardName(def, i18n.language) || defId;
-    const resolvedText = resolveCardText(def, i18n.language);
+    const resolvedName = resolveCardName(def, t) || defId;
+    const resolvedText = resolveCardText(def, t);
 
     return (
         <motion.div

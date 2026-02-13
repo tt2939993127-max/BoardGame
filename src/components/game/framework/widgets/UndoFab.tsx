@@ -1,10 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Undo2 } from 'lucide-react';
-import { UI_Z_INDEX } from '../../core';
-import { FabMenu } from '../system/FabMenu';
-import { UNDO_COMMANDS } from '../../engine';
-import type { MatchState } from '../../engine/types';
+import { UI_Z_INDEX } from '../../../../core';
+import { FabMenu } from '../../../system/FabMenu';
+import { UNDO_COMMANDS } from '../../../../engine';
+import type { MatchState } from '../../../../engine/types';
 
 interface UndoFabProps {
     G: MatchState<unknown>;

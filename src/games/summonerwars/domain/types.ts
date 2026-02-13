@@ -70,7 +70,6 @@ export interface UnitCard {
   attackType: AttackType;
   attackRange: AttackRange; // 射程（近战1，远程通常3）
   abilities?: string[];  // 能力 ID 列表
-  abilityText?: string;  // 能力描述文本
   deckSymbols: string[]; // 牌组符号
   spriteIndex?: number;  // 精灵图索引
   spriteAtlas?: 'hero' | 'cards' | 'portal'; // 精灵图集类型

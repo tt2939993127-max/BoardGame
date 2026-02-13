@@ -10,7 +10,7 @@ import type { PlayerId, MatchState, ResponseWindowState } from '../../../engine/
 import { asSimpleChoice, type SimpleChoiceData } from '../../../engine/systems/InteractionSystem';
 import type { HeroState, Die, TurnPhase, PendingAttack, PendingInteraction } from '../types';
 import type { DiceThroneCore } from '../domain';
-import { getAvailableAbilityIds, getDefensiveAbilityIds } from '../domain/rules';
+import { getAvailableAbilityIds, getDefensiveAbilityIds, canAdvancePhase as canAdvancePhaseDomain } from '../domain/rules';
 
 // ============================================================================
 // 类型定义
@@ -92,6 +92,9 @@ export interface DiceThroneStateAccess {
     // 焦点玩家（当前应该操作的玩家）
     focusPlayerId: PlayerId;
     
+    // 阶段推进权限（领域校验 + UI 层焦点/交互判断）
+    canAdvancePhase: boolean;
+    
     // 攻击状态
     pendingAttack: PendingAttack | null;
     availableAbilityIds: string[];
@@ -147,6 +150,11 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
                 ? getAvailableAbilityIds(core, rollerId, turnPhase)
                 : [];
         
+        // 阶段推进权限：领域规则校验 + 无待处理交互
+        const hasPendingInteraction = Boolean(sys.interaction.current);
+        const domainCanAdvance = canAdvancePhaseDomain(core, turnPhase);
+        const canAdvance = domainCanAdvance && !hasPendingInteraction;
+        
         return {
             players: core.players,
             getPlayer: (playerId: PlayerId) => core.players[playerId],
@@ -161,6 +169,7 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
             activePlayerId: core.activePlayerId,
             turnNumber: core.turnNumber,
             focusPlayerId,
+            canAdvancePhase: canAdvance,
             
             pendingAttack: core.pendingAttack,
             availableAbilityIds,

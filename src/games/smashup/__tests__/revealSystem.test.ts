@@ -15,12 +15,12 @@ import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
+import { createFlowSystem, createBaseSystems } from '../../../engine';
 import { smashUpFlowHooks } from '../domain/index';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { createSmashUpEventSystem } from '../domain/systems';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { reduce } from '../domain/reduce';
@@ -33,7 +33,7 @@ function createRunner() {
         domain: SmashUpDomain,
         systems: [
             createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-            ...createDefaultSystems<SmashUpCore>(),
+            ...createBaseSystems<SmashUpCore>(),
             createSmashUpEventSystem(),
         ],
         playerIds: PLAYER_IDS,
@@ -51,7 +51,7 @@ describe('卡牌展示系统', () => {
     beforeAll(() => {
         clearRegistry();
         clearBaseAbilityRegistry();
-        clearPromptContinuationRegistry();
+        clearInteractionHandlers();
         resetAbilityInit();
         initAllAbilities();
     });
@@ -151,7 +151,7 @@ describe('卡牌展示系统', () => {
                 type: SU_EVENTS.REVEAL_DISMISSED,
                 payload: {},
                 timestamp: 300,
-            } as SmashUpEvent;
+            } as unknown as SmashUpEvent;
 
             const newState = reduce(stateWithReveal, event);
             expect(newState.pendingReveal).toBeUndefined();

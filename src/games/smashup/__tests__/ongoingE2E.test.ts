@@ -19,7 +19,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { clearPowerModifierRegistry } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 import type { MatchState, RandomFn } from '../../../engine/types';
@@ -80,9 +80,14 @@ const defaultRandom: RandomFn = {
     range: (_min: number) => _min,
 };
 
+/** 保存最近一次 execute 调用的 matchState 引用 */
+let lastMatchState: MatchState<SmashUpCore> | null = null;
+
 /** 执行打出行动卡命令，返回事件列表 */
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+    const ms = makeMatchState(state);
+    lastMatchState = ms;
+    return execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid },
     } as any, defaultRandom);
@@ -90,10 +95,23 @@ function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string): 
 
 /** 执行打出随从命令，返回事件列表 */
 function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+    const ms = makeMatchState(state);
+    lastMatchState = ms;
+    return execute(ms, {
         type: SU_COMMANDS.PLAY_MINION, playerId,
         payload: { cardUid, baseIndex },
     } as any, defaultRandom);
+}
+
+/** 从最近一次 execute 的 matchState 中获取 interactions */
+function getLastInteractions(): any[] {
+    if (!lastMatchState) return [];
+    const interaction = (lastMatchState.sys as any)?.interaction;
+    if (!interaction) return [];
+    const list: any[] = [];
+    if (interaction.current) list.push(interaction.current);
+    if (interaction.queue?.length) list.push(...interaction.queue);
+    return list;
 }
 
 // ============================================================================
@@ -103,7 +121,7 @@ function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, b
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     clearPowerModifierRegistry();
     clearOngoingEffectRegistry();
     resetAbilityInit();
@@ -204,13 +222,12 @@ describe('E2E: 移动触发链 (cub_scout + processMoveTriggers)', () => {
 
         const events = execPlayAction(state, '0', 'action1');
 
-        // shanghai 对只有一个对手随从的情况应产生 Prompt
+        // shanghai 对只有一个对手随从的情况应产生 Interaction
         // 即使最终移动在 Prompt 链中完成，processMoveTriggers 会在 execute() 末尾处理
-        // 这里验证 Prompt 创建正确，移动+消灭链的完整验证需要解决 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        const payload = (promptEvents[0] as any).payload;
-        expect(payload.abilityId).toBe('pirate_shanghai_choose_minion');
+        // 这里验证 Interaction 创建正确
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('pirate_shanghai_choose_minion');
     });
 
 });
@@ -340,7 +357,7 @@ describe('E2E: 保护→消灭过滤 (upgrade+tooth_and_claw)', () => {
 import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
+import { createFlowSystem, createBaseSystems } from '../../../engine';
 import { createSmashUpEventSystem } from '../domain/systems';
 import { INTERACTION_COMMANDS, asSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import { createInitialSystemState } from '../../../engine/pipeline';
@@ -350,7 +367,7 @@ const PLAYER_IDS = ['0', '1'];
 function createCustomRunner(customState: MatchState<SmashUpCore>) {
     const systems = [
         createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-        ...createDefaultSystems<SmashUpCore>(),
+        ...createBaseSystems<SmashUpCore>(),
         createSmashUpEventSystem(),
     ];
     return new GameTestRunner<SmashUpCore, any, SmashUpEvent>({
@@ -366,7 +383,7 @@ function createCustomRunner(customState: MatchState<SmashUpCore>) {
 function makeFullMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
     const systems = [
         createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-        ...createDefaultSystems<SmashUpCore>(),
+        ...createBaseSystems<SmashUpCore>(),
         createSmashUpEventSystem(),
     ];
     const sys = createInitialSystemState(PLAYER_IDS, systems);

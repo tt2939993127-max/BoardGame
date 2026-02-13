@@ -7,6 +7,7 @@ import { pickDiceRollSoundKey } from '../../lib/audio/audioUtils';
 import type { DiceThroneCore, TurnPhase, SelectableCharacterId } from './domain/types';
 import { findPlayerAbility } from './domain/abilityLookup';
 import { findHeroCard } from './heroes';
+import { CHARACTER_DATA_MAP } from './domain/characters';
 
 const resolveTokenSfx = (state: DiceThroneCore, tokenId?: string): string | null => {
     if (!tokenId) return null;
@@ -347,9 +348,18 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         keys.add(DAMAGE_LIGHT_KEY);
         keys.add(UNIT_DESTROY_KEY);
 
-        // 已选角色的专属音效（如果有）
+        // 已选角色的专属音效（技能 + Token）
         for (const charId of selected) {
-            // 这里可以添加角色专属音效，目前 DiceThrone 暂无角色专属音效配置
+            const data = CHARACTER_DATA_MAP[charId];
+            if (!data) continue;
+            // 技能 sfxKey
+            for (const ability of data.abilities) {
+                if (ability.sfxKey) keys.add(ability.sfxKey);
+            }
+            // Token sfxKey
+            for (const token of data.tokens) {
+                if (token.sfxKey) keys.add(token.sfxKey);
+            }
         }
 
         return Array.from(keys);

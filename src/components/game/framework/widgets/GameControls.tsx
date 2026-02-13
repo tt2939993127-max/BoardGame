@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { UNDO_COMMANDS } from '../../engine';
-import type { MatchState } from '../../engine/types';
+import { UNDO_COMMANDS } from '../../../../engine';
+import type { MatchState } from '../../../../engine/types';
 
 interface GameControlsProps {
     G: MatchState<unknown>;

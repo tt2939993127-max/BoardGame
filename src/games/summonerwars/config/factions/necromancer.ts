@@ -56,7 +56,6 @@ export const SUMMONER_NECROMANCER: UnitCard = {
   attackType: 'ranged',
   attackRange: 3,
   abilities: ['revive_undead'],
-  abilityText: '复活死灵：每回合一次，在你的召唤阶段，你可以对本单位造成2点伤害，以从你的弃牌堆中拿取一张亡灵单位并且放置到本单位相邻的区格。',
   deckSymbols: [DECK_SYMBOLS.DOUBLE_AXE, DECK_SYMBOLS.FLAME, DECK_SYMBOLS.MOON], // ⚔️🔥🌙（双斧 + 阵营的2种符号）
   spriteIndex: 0,
   spriteAtlas: 'hero',
@@ -79,7 +78,6 @@ export const CHAMPION_UNITS: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['fire_sacrifice_summon'],
-    abilityText: '火祀召唤：当你为召唤本单位支付费用时，还必须消灭一个友方单位，并且使用本单位替换被消灭的单位。',
     deckSymbols: [DECK_SYMBOLS.FLAME], // 🔥 (图片确认)
     spriteIndex: SPRITE_INDEX.CHAMPION_ELUT_BAR,
   },
@@ -95,7 +93,6 @@ export const CHAMPION_UNITS: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['life_drain'],
-    abilityText: '吸取生命：在本单位攻击之前，可以消灭其2个区格以内的一个友方单位。如果你这样做，则本次攻击中，特殊结果符号(✦)视为近战命中符号(⚔)。',
     deckSymbols: [DECK_SYMBOLS.MOON], // 🌙 (图片确认)
     spriteIndex: SPRITE_INDEX.CHAMPION_DRAGOS,
   },
@@ -111,7 +108,6 @@ export const CHAMPION_UNITS: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['rage'],
-    abilityText: '暴怒：本单位每有1点伤害，则获得战力+1。',
     deckSymbols: [DECK_SYMBOLS.FLAME, DECK_SYMBOLS.MOON], // 🔥🌙 (图片确认)
     spriteIndex: SPRITE_INDEX.CHAMPION_GUL_DAS,
   },
@@ -134,7 +130,6 @@ export const COMMON_UNITS: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['blood_rage', 'power_boost', 'blood_rage_decay'],
-    abilityText: '血腥狂怒：每当一个单位在你的回合中被消灭时，将本单位充能。在你的回合结束时，从本单位上移除2点充能。\n力量强化：本单位每有1点充能，则获得战力+1，至多为+5。',
     deckSymbols: [DECK_SYMBOLS.MOON], // 🌙 (图片确认)
     spriteIndex: SPRITE_INDEX.COMMON_UNDEAD_WARRIOR,
   },
@@ -150,7 +145,6 @@ export const COMMON_UNITS: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['sacrifice'],
-    abilityText: '献祭：在本单位被消灭之后，对所有相邻的敌方单位造成1点伤害。',
     deckSymbols: [DECK_SYMBOLS.FLAME], // 🔥 (图片确认)
     spriteIndex: SPRITE_INDEX.COMMON_HELLFIRE_CULTIST,
   },
@@ -166,7 +160,6 @@ export const COMMON_UNITS: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['soulless', 'infection'],
-    abilityText: '无魂：当本单位消灭敌方单位时，你不会获得魔力。\n感染：在本单位消灭一个单位之后，你可以使用你的弃牌堆中一个疫病体单位替换被消灭的单位。',
     deckSymbols: [DECK_SYMBOLS.MOON], // 🌙 (图片确认)
     spriteIndex: SPRITE_INDEX.COMMON_PLAGUE_ZOMBIE,
   },
@@ -182,7 +175,6 @@ export const COMMON_UNITS: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['soul_transfer'],
-    abilityText: '灵魂转移：在本单位3个区格以内的一个单位在你的回合中被消灭之后，你可以使用本单位替换被消灭的单位。',
     deckSymbols: [DECK_SYMBOLS.FLAME], // 🔥 (图片确认)
     spriteIndex: SPRITE_INDEX.COMMON_UNDEAD_ARCHER,
   },

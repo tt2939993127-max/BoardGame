@@ -293,6 +293,10 @@ export const getAvailableAbilityIds = (
         statusEffects: player.statusEffects,
     };
 
+    // 临时日志：排查 straight 不可选问题
+    console.log('[getAvailableAbilityIds] phase=%s, playerId=%s, rollDiceCount=%d, diceValues=%s, faceCounts=%s',
+        phase, playerId, state.rollDiceCount, JSON.stringify(diceValues), JSON.stringify(faceCounts));
+
     // 根据阶段过滤技能类型
     const expectedType = phase === 'defensiveRoll'
         ? 'defensive'
@@ -308,18 +312,27 @@ export const getAvailableAbilityIds = (
 
         if (def.variants?.length) {
             for (const variant of def.variants) {
-                if (combatAbilityManager.checkTrigger(variant.trigger, context)) {
+                const result = combatAbilityManager.checkTrigger(variant.trigger, context);
+                console.log('[getAvailableAbilityIds] variant id=%s, trigger=%s, result=%s',
+                    variant.id, JSON.stringify(variant.trigger), result);
+                if (result) {
                     available.push(variant.id);
                 }
             }
             continue;
         }
 
-        if (def.trigger && combatAbilityManager.checkTrigger(def.trigger, context)) {
-            available.push(def.id);
+        if (def.trigger) {
+            const result = combatAbilityManager.checkTrigger(def.trigger, context);
+            console.log('[getAvailableAbilityIds] ability id=%s, trigger=%s, result=%s',
+                def.id, JSON.stringify(def.trigger), result);
+            if (result) {
+                available.push(def.id);
+            }
         }
     }
 
+    console.log('[getAvailableAbilityIds] available=%s', JSON.stringify(available));
     return available;
 };
 
@@ -353,7 +366,8 @@ export type CardPlayFailReason =
     | 'requireDiceExists'          // 卡牌需要有骰子结果
     | 'requireOpponentDiceExists'  // 卡牌需要对手有骰子结果
     | 'requireRollConfirmed'       // 卡牌需要骰面已确认（响应对手确认后）
-    | 'requireNotRollConfirmed';   // 骰面已确认，不能再打出该卡
+    | 'requireNotRollConfirmed'    // 骰面已确认，不能再打出该卡
+    | 'requireMinDamageDealt';     // 本回合未造成足够伤害
 
 /**
  * 从升级卡效果中提取目标技能 ID
@@ -495,6 +509,14 @@ export const checkPlayCard = (
         // 检查骰面是否未确认（用于增加投掷次数的卡牌）
         if (cond.requireNotRollConfirmed && state.rollConfirmed) {
             return { ok: false, reason: 'requireNotRollConfirmed' };
+        }
+        
+        // 检查本回合是否已造成足够伤害（用于"造成至少 N 伤害"条件的卡牌）
+        if (cond.requireMinDamageDealt !== undefined) {
+            const dealt = state.lastResolvedAttackDamage ?? 0;
+            if (dealt < cond.requireMinDamageDealt) {
+                return { ok: false, reason: 'requireMinDamageDealt' };
+            }
         }
     }
     
@@ -704,6 +726,14 @@ export const isCardPlayableInResponseWindow = (
         // 检查骰面是否未确认（用于增加投掷次数的卡牌）
         if (cond.requireNotRollConfirmed && state.rollConfirmed) {
             return false;
+        }
+        
+        // 检查本回合是否已造成足够伤害
+        if (cond.requireMinDamageDealt !== undefined) {
+            const dealt = state.lastResolvedAttackDamage ?? 0;
+            if (dealt < cond.requireMinDamageDealt) {
+                return false;
+            }
         }
     }
     

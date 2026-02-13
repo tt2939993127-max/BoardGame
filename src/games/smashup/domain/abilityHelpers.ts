@@ -6,7 +6,7 @@
  */
 
 import type { PlayerId } from '../../../engine/types';
-import type { PromptMultiConfig, PromptOption as EnginePromptOption } from '../../../engine/systems/InteractionSystem';
+import type { PromptOption as EnginePromptOption } from '../../../engine/systems/InteractionSystem';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -218,7 +218,6 @@ export function shuffleHandIntoDeck(
 
 import type { GameEvent } from '../../../engine/types';
 import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
-import type { ChoiceRequestedEvent } from './types';
 
 // ============================================================================
 // 疯狂牌库操作
@@ -343,35 +342,6 @@ export function openMeFirstWindow(
 // ============================================================================
 // 交互辅助函数（目标选择）
 // ============================================================================
-
-/**
- * 生成能力选择请求事件
- * 
- * 当能力需要目标选择时，生成此事件，由事件系统转换为引擎层 Interaction。
- * continuationContext 跟随 Interaction descriptor 流转，交互解决后传回 continuation 函数。
- */
-export function requestChoice(
-    params: {
-        abilityId: string;
-        playerId: PlayerId;
-        promptConfig: { title: string; options: EnginePromptOption[]; multi?: PromptMultiConfig };
-        continuationContext?: Record<string, unknown>;
-        targetPlayerId?: string;
-    },
-    now: number
-): ChoiceRequestedEvent {
-    return {
-        type: SU_EVENTS.CHOICE_REQUESTED,
-        payload: {
-            abilityId: params.abilityId,
-            playerId: params.playerId,
-            promptConfig: params.promptConfig,
-            continuationContext: params.continuationContext,
-            targetPlayerId: params.targetPlayerId,
-        },
-        timestamp: now,
-    };
-}
 
 /**
  * 构建随从目标选择的交互选项

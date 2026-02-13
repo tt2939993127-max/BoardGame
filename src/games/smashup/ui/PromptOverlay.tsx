@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
+import { GameButton } from './GameButton';
 import { INTERACTION_COMMANDS, asSimpleChoice, type InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { PlayerId } from '../../../engine/types';
 import { UI_Z_INDEX } from '../../../core';
@@ -114,7 +115,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                                 const defId = extractDefId(option.value);
                                 const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
                                 const previewRef = def?.previewRef;
-                                const name = def ? resolveCardName(def, i18n.language) : option.label;
+                                const name = def ? resolveCardName(def, t) : option.label;
                                 const isSelected = selectedIds.includes(option.id);
 
                                 return (
@@ -173,17 +174,18 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                     {isMyPrompt && textOptions.length > 0 && (
                         <div className="flex gap-3 mt-6">
                             {textOptions.map((option, idx) => (
-                                <button
+                                <GameButton
                                     key={`text-${idx}`}
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => isMulti
                                         ? handleToggleMulti(option.id, option.disabled)
                                         : handleOptionSelect(option.id)
                                     }
                                     disabled={option.disabled}
-                                    className="px-5 py-2 rounded-lg bg-white/10 text-white font-bold border border-white/30 hover:bg-white/20 hover:border-white/60 transition-all disabled:opacity-40"
                                 >
                                     {option.label}
-                                </button>
+                                </GameButton>
                             ))}
                         </div>
                     )}
@@ -191,18 +193,13 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                     {/* 多选确认按钮 */}
                     {isMyPrompt && isMulti && (
                         <div className="mt-6">
-                            <button
+                            <GameButton
+                                variant="primary"
                                 onClick={() => moves[INTERACTION_COMMANDS.RESPOND]?.({ optionIds: selectedIds })}
                                 disabled={!canSubmitMulti}
-                                className={`px-8 py-3 rounded-lg text-sm font-black uppercase tracking-widest transition-all border-2
-                                    ${canSubmitMulti
-                                        ? 'bg-amber-400 text-black border-amber-300 hover:bg-amber-300 shadow-lg'
-                                        : 'bg-white/10 text-white/40 border-white/20 cursor-not-allowed'
-                                    }
-                                `}
                             >
                                 {t('ui.confirm', { defaultValue: '确认' })}
-                            </button>
+                            </GameButton>
                         </div>
                     )}
 
@@ -303,18 +300,14 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                         {isMyPrompt && isMulti ? (
                             <div className="flex items-center justify-between gap-3">
                                 <span>{isMyPrompt ? t('ui.prompt_select_option') : t('ui.prompt_wait')}</span>
-                                <button
+                                <GameButton
+                                    variant="primary"
+                                    size="sm"
                                     onClick={() => moves[INTERACTION_COMMANDS.RESPOND]?.({ optionIds: selectedIds })}
                                     disabled={!canSubmitMulti}
-                                    className={`px-4 py-2 rounded text-xs font-black uppercase tracking-widest transition-all border-2
-                                        ${canSubmitMulti
-                                            ? 'bg-slate-900 text-white border-slate-900 hover:bg-black'
-                                            : 'bg-slate-300 text-slate-500 border-slate-300 cursor-not-allowed'
-                                        }
-                                    `}
                                 >
                                     {t('ui.confirm', { defaultValue: '确认' })}
-                                </button>
+                                </GameButton>
                             </div>
                         ) : (
                             isMyPrompt ? t('ui.prompt_select_option') : t('ui.prompt_wait')

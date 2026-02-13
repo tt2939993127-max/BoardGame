@@ -1,9 +1,11 @@
 /**
  * DiceThrone - ActionLog 格式化测试
+ * 
+ * 验证 formatDiceThroneActionEntry 生成正确的 i18n segment（延迟翻译）。
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActionLogEntry, Command, GameEvent, MatchState } from '../../../engine/types';
+import { describe, expect, it } from 'vitest';
+import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState } from '../../../engine/types';
 import type {
     AbilityActivatedEvent,
     AttackResolvedEvent,
@@ -17,26 +19,6 @@ import type {
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { createInitializedState, fixedRandom, fistAttackAbilityId } from './test-utils';
 import { formatDiceThroneActionEntry } from '../game';
-import i18n from '../../../lib/i18n';
-
-const formatMockText = (key: string, params?: Record<string, string | number>) => {
-    if (!params || Object.keys(params).length === 0) return String(key);
-    const serialized = Object.entries(params)
-        .map(([paramKey, value]) => `${paramKey}=${value}`)
-        .join(',');
-    return `${key}:${serialized}`;
-};
-
-beforeEach(() => {
-    vi.spyOn(i18n, 't').mockImplementation((...args) => {
-        const [key, params] = args as [unknown, Record<string, string | number> | undefined];
-        return formatMockText(String(key), params);
-    });
-});
-
-afterEach(() => {
-    vi.restoreAllMocks();
-});
 
 const normalizeEntries = (result: ActionLogEntry | ActionLogEntry[] | null): ActionLogEntry[] => {
     if (!result) return [];
@@ -47,8 +29,18 @@ const createState = (): MatchState<DiceThroneCore> => {
     return createInitializedState(['0', '1'], fixedRandom);
 };
 
+/** 从 segments 中提取所有 i18n segment 的 key */
+const getI18nKeys = (segments: ActionLogSegment[]): string[] =>
+    segments.filter(s => s.type === 'i18n').map(s => (s as { key: string }).key);
+
+/** 查找指定 key 的 i18n segment */
+const findI18nSegment = (segments: ActionLogSegment[], key: string) =>
+    segments.find(s => s.type === 'i18n' && (s as { key: string }).key === key) as
+    | { type: 'i18n'; ns: string; key: string; params?: Record<string, string | number>; paramI18nKeys?: string[] }
+    | undefined;
+
 describe('formatDiceThroneActionEntry', () => {
-    it('SELECT_ABILITY 记录技能名称', () => {
+    it('SELECT_ABILITY 生成 i18n segment', () => {
         const state = createState();
         const command: Command = {
             type: 'SELECT_ABILITY',
@@ -70,12 +62,16 @@ describe('formatDiceThroneActionEntry', () => {
         const entries = normalizeEntries(result);
 
         expect(entries).toHaveLength(1);
-        const abilityName = i18n.t('game-dicethrone:abilities.fist-technique.name');
-        const expected = i18n.t('game-dicethrone:actionLog.abilityActivated', { abilityName });
-        expect(entries[0].segments[0]).toMatchObject({ type: 'text', text: expected });
+        const seg = entries[0].segments[0];
+        expect(seg.type).toBe('i18n');
+        if (seg.type === 'i18n') {
+            expect(seg.ns).toBe('game-dicethrone');
+            expect(seg.key).toBe('actionLog.abilityActivated');
+            expect(seg.params).toHaveProperty('abilityName');
+        }
     });
 
-    it('DAMAGE_DEALT 记录造成伤害', () => {
+    it('DAMAGE_DEALT 生成 i18n segment（含原始伤害）', () => {
         const state = createState();
         const command: Command = {
             type: 'SKIP_TOKEN_RESPONSE',
@@ -114,14 +110,20 @@ describe('formatDiceThroneActionEntry', () => {
 
         expect(entries).toHaveLength(1);
         expect(entries[0].actorId).toBe('0');
-        const text = entries[0].segments
-            .map(segment => (segment.type === 'text' ? segment.text : ''))
-            .join('');
-        expect(text).toContain(i18n.t('game-dicethrone:actionLog.damageDealt', { amount: 4 }));
-        expect(text).toContain(i18n.t('game-dicethrone:actionLog.damageOriginal', { amount: 5 }));
+        const keys = getI18nKeys(entries[0].segments);
+        // sourceAbilityId='test-ability' 在技能表中找不到，fallback 用原始 ID 作为文本
+        expect(keys).toContain('actionLog.damageDealt');
+        expect(keys).toContain('actionLog.damageOriginal');
+
+        const dealSeg = findI18nSegment(entries[0].segments, 'actionLog.damageDealt');
+        expect(dealSeg?.params?.amount).toBe(4);
+        expect(dealSeg?.params?.targetPlayerId).toBe('1');
+        expect(dealSeg?.params?.source).toBe('test-ability');
+        const origSeg = findI18nSegment(entries[0].segments, 'actionLog.damageOriginal');
+        expect(origSeg?.params?.amount).toBe(5);
     });
 
-    it('HEAL_APPLIED/STATUS_APPLIED/TOKEN_USED 记录详细文案', () => {
+    it('HEAL_APPLIED/STATUS_APPLIED/TOKEN_USED 生成正确的 i18n segment', () => {
         const state = createState();
         const command: Command = {
             type: 'SELECT_ABILITY',
@@ -157,19 +159,61 @@ describe('formatDiceThroneActionEntry', () => {
         });
         const entries = normalizeEntries(result);
 
-        // SELECT_ABILITY command 会先生成 1 个"发动技能"entry，
-        // 然后 4 个事件各生成 1 个 entry = 总共 5 个
+        // SELECT_ABILITY + 4 个事件 = 5 个 entry
         expect(entries).toHaveLength(5);
-        const text = entries
-            .map((entry) => entry.segments.map(segment => (segment.type === 'text' ? segment.text : '')).join(''))
-            .join('|');
-        expect(text).toContain(
-            i18n.t('game-dicethrone:actionLog.healApplied', {
-                targetLabel: i18n.t('game-dicethrone:actionLog.playerLabel', { playerId: '0' }),
-                amount: 3,
-            })
-        );
-        expect(text).toContain(i18n.t(`game-dicethrone:statusEffects.${STATUS_IDS.BURN}.name`));
-        expect(text).toContain(i18n.t(`game-dicethrone:tokens.${TOKEN_IDS.TAIJI}.name`));
+
+        // 验证 HEAL_APPLIED
+        const healEntry = entries.find(e => e.kind === 'HEAL_APPLIED');
+        expect(healEntry).toBeTruthy();
+        const healSeg = findI18nSegment(healEntry!.segments, 'actionLog.healApplied');
+        expect(healSeg?.params?.targetPlayerId).toBe('0');
+        expect(healSeg?.params?.amount).toBe(3);
+
+        // 验证 STATUS_APPLIED
+        const statusEntry = entries.find(e => e.kind === 'STATUS_APPLIED');
+        expect(statusEntry).toBeTruthy();
+        const statusSeg = findI18nSegment(statusEntry!.segments, 'actionLog.statusApplied');
+        expect(statusSeg?.params?.targetPlayerId).toBe('1');
+
+        // 验证 TOKEN_GRANTED
+        const tokenEntry = entries.find(e => e.kind === 'TOKEN_GRANTED');
+        expect(tokenEntry).toBeTruthy();
+        const tokenSeg = findI18nSegment(tokenEntry!.segments, 'actionLog.tokenGranted');
+        expect(tokenSeg?.params?.amount).toBe(1);
+
+        // 验证 TOKEN_USED
+        const tokenUsedEntry = entries.find(e => e.kind === 'TOKEN_USED');
+        expect(tokenUsedEntry).toBeTruthy();
+        const tokenUsedSeg = findI18nSegment(tokenUsedEntry!.segments, 'actionLog.tokenUsed');
+        expect(tokenUsedSeg?.params?.effectLabel).toBe('actionLog.tokenEffect.damageBoost');
+        expect(tokenUsedSeg?.paramI18nKeys).toContain('effectLabel');
+    });
+
+    it('ADVANCE_PHASE 生成带 paramI18nKeys 的 i18n segment', () => {
+        const state = createState();
+        const command: Command = {
+            type: 'ADVANCE_PHASE',
+            playerId: '0',
+            payload: {},
+            timestamp: 30,
+        };
+        const phaseEvent: GameEvent = {
+            type: 'SYS_PHASE_CHANGED',
+            payload: { to: 'offensiveRoll' },
+            timestamp: 30,
+        };
+
+        const result = formatDiceThroneActionEntry({
+            command,
+            state,
+            events: [phaseEvent],
+        });
+        const entries = normalizeEntries(result);
+
+        expect(entries).toHaveLength(1);
+        const seg = findI18nSegment(entries[0].segments, 'actionLog.advancePhase');
+        expect(seg).toBeTruthy();
+        expect(seg?.params?.phase).toBe('phase.offensiveRoll.label');
+        expect(seg?.paramI18nKeys).toContain('phase');
     });
 });

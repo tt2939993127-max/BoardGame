@@ -5,9 +5,7 @@
 
 import { BARBARIAN_DICE_FACE_IDS, STATUS_IDS } from '../../domain/ids';
 import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
-
-const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
+import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 
 const BARBARIAN_SFX_LIGHT = 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst';
 const BARBARIAN_SFX_HEAVY = 'combat.general.fight_fury_vol_2.versatile_punch_hit_with_blood.fghtimpt_versatile_punch_hit_with_blood_06_krst';
@@ -85,7 +83,7 @@ export const BARBARIAN_ABILITIES: AbilityDef[] = [
         description: abilityText('violent-assault', 'description'),
         sfxKey: BARBARIAN_SFX_HEAVY,
         trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 4 } },
-        effects: [inflictStatus(STATUS_IDS.STUN, 1, abilityEffectText('violent-assault', 'inflictStun')), damage(5, abilityEffectText('violent-assault', 'damage5Def'))],
+        effects: [inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault', 'inflictDaze')), damage(5, abilityEffectText('violent-assault', 'damage5Def'))],
         tags: ['unblockable'],
     },
     {
@@ -203,7 +201,7 @@ export const VIOLENT_ASSAULT_2: AbilityDef = {
         {
             id: 'violent-assault-2-shake',
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.STRENGTH]: 4 } },
-            effects: [inflictStatus(STATUS_IDS.STUN, 1, abilityEffectText('violent-assault-2-shake', 'inflictStun')), damage(7, abilityEffectText('violent-assault-2-shake', 'damage7Def'))],
+            effects: [inflictStatus(STATUS_IDS.DAZE, 1, abilityEffectText('violent-assault-2-shake', 'inflictDaze')), damage(7, abilityEffectText('violent-assault-2-shake', 'damage7Def'))],
             tags: ['unblockable'],
             priority: 2,
         },

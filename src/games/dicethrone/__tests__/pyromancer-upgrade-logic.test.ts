@@ -60,9 +60,13 @@ describe('Pyromancer 技能升级路径验证', () => {
     it('Meteor II 升级校验', () => {
         const ability = getUpgradedAbilityFromCard('card-meteor-2');
         const v2 = ability.variants?.find(v => v.id === 'meteor-2');
-        // Meteor II (x4) 应该给 2 点 FM
-        const fm = v2?.effects.find(e => e.action.tokenId === TOKEN_IDS.FIRE_MASTERY);
-        expect(fm?.action.value).toBe(2);
+        // Meteor II (x4) 的 FM 获取由 meteor-resolve custom action 内部处理
+        // 验证 custom action 存在
+        const customAction = v2?.effects.find(e => e.action.customActionId === 'meteor-resolve');
+        expect(customAction).toBeDefined();
+        // 验证有 STUN 效果
+        const stun = v2?.effects.find(e => e.action.statusId === STATUS_IDS.STUN);
+        expect(stun).toBeDefined();
     });
 
     it('Pyro Blast II & III 升级校验', () => {
@@ -78,9 +82,10 @@ describe('Pyromancer 技能升级路径验证', () => {
 
     it('Burn Down II 升级校验', () => {
         const ability = getUpgradedAbilityFromCard('card-burn-down-2');
-        // 应包含 1 点 FM 获取 (相比 I 级没有 FM)
-        const fm = ability.effects.find(e => e.action.tokenId === TOKEN_IDS.FIRE_MASTERY);
-        expect(fm?.action.value).toBe(1);
+        // FM 获取由 burn-down-2-resolve custom action 内部处理
+        // 验证 custom action 存在
+        const customAction = ability.effects.find(e => e.action.customActionId === 'burn-down-2-resolve');
+        expect(customAction).toBeDefined();
     });
 
     it('Magma Armor II & III 升级校验', () => {

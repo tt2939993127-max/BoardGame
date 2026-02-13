@@ -275,7 +275,7 @@ describe('Property 4: 能力注册表往返一致性', () => {
 
 describe('Property 6: 天赋每回合一次', () => {
     test('talentUsed=true 时验证拒绝', () => {
-        const minion = makeMinion('t-1', 'miskatonic_fellow', '0', 3);
+        const minion = makeMinion('t-1', 'miskatonic_professor', '0', 5);
         minion.talentUsed = true;
         const state: SmashUpCore = {
             players: {
@@ -1020,7 +1020,7 @@ describe('Property 7: 目标选择提示匹配', () => {
             fc.property(
                 fc.constantFrom('m-exist', 'm-nonexist'),
                 (minionUid) => {
-                    const minion = makeMinion('m-exist', 'miskatonic_fellow', '0', 3);
+                    const minion = makeMinion('m-exist', 'miskatonic_professor', '0', 5);
                     const state: SmashUpCore = {
                         players: {
                             '0': makePlayer('0', [SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY, SMASHUP_FACTION_IDS.GHOSTS], {

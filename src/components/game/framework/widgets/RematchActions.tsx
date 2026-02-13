@@ -10,8 +10,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import type { RematchVoteState } from '../../services/matchSocket';
-import { HoverOverlayLabel } from '../common/labels/HoverOverlayLabel';
+import type { RematchVoteState } from '../../../../services/matchSocket';
+import { HoverOverlayLabel } from '../../../common/labels/HoverOverlayLabel';
 
 export interface RematchActionsProps {
     /** 当前玩家 playerID */

@@ -53,6 +53,8 @@
       "leaveKeep": "Leave room (keep open)",
       "tempLeave": "Disconnect",
       "tempLeaveHint": "Disconnect but keep seat",
+      "forceExit": "Force Clear",
+      "forceExitHint": "Clear local data (room may still exist on server)",
       "backToLobby": "Back to Lobby",
       "backToLobbyHint": "Leave room completely",
       "social": "Friends",

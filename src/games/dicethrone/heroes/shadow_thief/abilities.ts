@@ -1,15 +1,12 @@
 import type { AbilityDef, AbilityEffect, EffectTiming } from '../../domain/combat';
 import { SHADOW_THIEF_DICE_FACE_IDS, TOKEN_IDS } from '../../domain/ids';
+import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
 
 export const SHADOW_THIEF_SFX_DAGGER = 'combat.general.khron_studio_fight_fury_vol_1_assets.knife_stab.weapknif_knife_stab_01';
 export const SHADOW_THIEF_SFX_SHADOW = 'magic.general.simple_magic_sound_fx_pack_vol.dark.shadow_bolt_impact_a';
 export const SHADOW_THIEF_SFX_ULTIMATE = 'magic.general.spells_variations_vol_1.shadowstrike_beam.magspel_shadowstrike_beam_01_krst';
-
-// 文本辅助
-const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
 
 // 辅助函数
 const damage = (value: number | string, description: string): AbilityEffect => ({

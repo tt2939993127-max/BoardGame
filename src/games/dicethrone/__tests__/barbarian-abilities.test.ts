@@ -80,7 +80,7 @@ describe('狂战士技能定义', () => {
             expect(ability!.tags).toContain('unblockable');
             // 第一个效果：施加眩晕
             expect(ability!.effects![0].action.type).toBe('grantStatus');
-            expect(ability!.effects![0].action.statusId).toBe(STATUS_IDS.STUN);
+            expect(ability!.effects![0].action.statusId).toBe(STATUS_IDS.DAZE);
             // 第二个效果：5 伤害
             expect(ability!.effects![1].action.value).toBe(5);
         });
@@ -177,7 +177,7 @@ describe('狂战士技能定义', () => {
             expect(crush.effects[0].action.statusId).toBe(STATUS_IDS.CONCUSSION);
             // 震荡: 4 Strength → 眩晕 + 7 伤害
             const shake = VIOLENT_ASSAULT_2.variants![1];
-            expect(shake.effects[0].action.statusId).toBe(STATUS_IDS.STUN);
+            expect(shake.effects[0].action.statusId).toBe(STATUS_IDS.DAZE);
             expect(shake.effects[1].action.value).toBe(7);
         });
 

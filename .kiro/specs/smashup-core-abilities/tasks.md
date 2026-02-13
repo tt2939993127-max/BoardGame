@@ -231,7 +231,7 @@
     - innsmouth_return_to_the_sea: 计分后同名随从回手牌（special）
     - _Requirements: 11.5_
   - [x] 9.5 米斯卡塔尼克大学剩余能力
-    - miskatonic_student: 疯狂卡转移给对手（special）
+    - miskatonic_researcher: 疯狂卡转移给对手（special）
     - miskatonic_field_trip: 手牌放牌库底+抽等量牌（onPlay）
     - _Requirements: 11.5_
   - [x]* 9.6 编写扩展派系剩余能力单元测试

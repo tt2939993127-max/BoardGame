@@ -283,6 +283,12 @@ export function createResponseWindowSystem<TCore>(
                 const payload = command.payload as { forPlayerId?: PlayerId } | undefined;
                 const wantsProxyPass = !!payload?.forPlayerId && payload.forPlayerId !== command.playerId;
                 if (wantsProxyPass && !command.skipValidation) {
+                    console.warn('[ResponseWindow] 代理跳过被拒', {
+                        commandPlayerId: command.playerId,
+                        forPlayerId: payload?.forPlayerId,
+                        currentResponderId,
+                        skipValidation: command.skipValidation,
+                    });
                     return { halt: true, error: '不能代替他人跳过响应' };
                 }
                 const targetPlayerId = payload?.forPlayerId ?? command.playerId;

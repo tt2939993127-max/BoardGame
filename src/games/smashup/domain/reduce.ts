@@ -803,10 +803,6 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
-        // CHOICE_REQUESTED 是纯标记事件，由事件系统消费，不修改 core
-        case SU_EVENTS.CHOICE_REQUESTED:
-            return state;
-
         case SU_EVENTS.MADNESS_DRAWN: {
             const { playerId, count, cardUids } = (event as MadnessDrawnEvent).payload;
             const player = state.players[playerId];

@@ -29,12 +29,13 @@ import { SocketIO } from 'boardgame.io/multiplayer';
 import { GAME_SERVER_URL } from '../config/server';
 import { getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
-import { GameHUD } from '../components/game/GameHUD';
+import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { SEO } from '../components/common/SEO';
 import { createUgcClientGame } from '../ugc/client/game';
 import { createUgcRemoteHostBoard } from '../ugc/client/board';
 import { LoadingScreen } from '../components/system/LoadingScreen';
+import { ConnectionLoadingScreen } from '../components/system/ConnectionLoadingScreen';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 import { CriticalImageGate } from '../components/game/framework';
 import { UI_Z_INDEX } from '../core';
@@ -79,7 +80,7 @@ export const MatchRoom = () => {
             board: WrappedBoard,
             debug: false,
             multiplayer: SocketIO({ server: GAME_SERVER_URL }),
-            loading: () => <LoadingScreen title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} />
+            loading: () => <ConnectionLoadingScreen title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />
         });
     }, [gameId, i18n.language, isUgcGame, t]);
 
@@ -127,7 +128,7 @@ export const MatchRoom = () => {
                     board: WrappedBoard,
                     debug: false,
                     multiplayer: SocketIO({ server: GAME_SERVER_URL }),
-                    loading: () => <LoadingScreen title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} />
+                    loading: () => <ConnectionLoadingScreen title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />
                 });
                 setUgcGameClient(() => client as GameClientComponent);
             })

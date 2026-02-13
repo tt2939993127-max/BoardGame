@@ -56,3 +56,8 @@ export function clearInteractionHandlers(): void {
 export function getInteractionHandlersSize(): number {
     return interactionHandlers.size;
 }
+
+/** 获取所有已注册的 handler sourceId（用于交互完整性审计） */
+export function getRegisteredInteractionHandlerIds(): Set<string> {
+    return new Set(interactionHandlers.keys());
+}

@@ -54,8 +54,8 @@ const HandCard: React.FC<HandCardProps> = ({
     const def = lookupCardDef(card.defId);
     const isMinion = card.type === 'minion';
     const minionDef = isMinion ? lookupMinionDef(card.defId) : null;
-    const resolvedName = resolveCardName(def, i18n.language) || t('ui.card_placeholder');
-    const resolvedText = resolveCardText(def, i18n.language);
+    const resolvedName = resolveCardName(def, t) || t('ui.card_placeholder');
+    const resolvedText = resolveCardText(def, t);
     const previewTitle = resolvedText ? `${resolvedName}\n${resolvedText}` : resolvedName;
 
     // "Paper Chaos" - Tiny random rotation

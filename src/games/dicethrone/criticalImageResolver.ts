@@ -146,6 +146,7 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
         return {
             critical: [...COMMON_CRITICAL_PATHS, ...allPlayerBoards],
             warm: IMPLEMENTED_CHARACTERS.map(getDicePath),
+            phaseKey: 'no-state',
         };
     }
 
@@ -154,13 +155,22 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
 
     if (inSetup) {
         // 角色选择阶段：player-board 和 tip-board 为关键（选择界面需要预览）
-        // 通用资源（骰子、状态图标）为暖加载
+        // 暖加载：所有角色的 ability-cards / dice / status-icons（后台预取，
+        // 确保游戏开始时卡牌图片大概率已缓存）
         const allPlayerBoards = IMPLEMENTED_CHARACTERS.map(getPlayerBoardPath);
         const allTipBoards = IMPLEMENTED_CHARACTERS.map(getTipBoardPath);
 
+        const warmPaths: string[] = [];
+        for (const charId of IMPLEMENTED_CHARACTERS) {
+            warmPaths.push(getAbilityCardsPath(charId));
+            warmPaths.push(getDicePath(charId));
+            warmPaths.push(getStatusIconsPath(charId));
+        }
+
         return {
             critical: [...COMMON_CRITICAL_PATHS, ...allPlayerBoards, ...allTipBoards],
-            warm: IMPLEMENTED_CHARACTERS.map(getDicePath),
+            warm: warmPaths,
+            phaseKey: 'setup',
         };
     }
 
@@ -170,6 +180,7 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
         return {
             critical: [...COMMON_CRITICAL_PATHS],
             warm: [],
+            phaseKey: 'playing:none',
         };
     }
 
@@ -193,8 +204,11 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
         warmPaths.push(getDicePath(charId));
     }
 
+    // phaseKey 包含已选角色，确保对手选角后能重新触发预加载
+    const sortedChars = [...selectedCharacters].sort().join(',');
     return {
         critical: criticalPaths,
         warm: warmPaths,
+        phaseKey: `playing:${sortedChars}`,
     };
 };

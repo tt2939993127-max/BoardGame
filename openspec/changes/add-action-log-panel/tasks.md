@@ -3,7 +3,7 @@
 ## 1. 引擎：ActionLogSystem 与类型
 - [ ] 1.1 在 `src/engine/types.ts` 新增 `ActionLogEntry/ActionLogState/ActionLogSegment` 类型
 - [ ] 1.2 新增 `src/engine/systems/ActionLogSystem.ts`（allowlist 过滤、默认 maxEntries=50）
-- [ ] 1.3 `createDefaultSystems` 注册 ActionLogSystem
+- [ ] 1.3 `createBaseSystems` 注册 ActionLogSystem
 
 ## 2. 撤回单步与共享白名单
 - [ ] 2.1 `UndoSystem` 默认 `maxSnapshots=1`（保持可配置）

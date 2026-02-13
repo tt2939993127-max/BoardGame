@@ -51,7 +51,6 @@ export const SUMMONER_BARBARIC: UnitCard = {
   attackType: 'ranged',
   attackRange: 3,
   abilities: ['ancestral_bond'],
-  abilityText: '祖灵羁绊：在本单位移动之后，可以指定其3个区格以内的一个友方单位为目标。将目标充能并且将本单位的所有充能移动到目标上。',
   deckSymbols: [DECK_SYMBOLS.DOUBLE_AXE, DECK_SYMBOLS.STAR, DECK_SYMBOLS.RHOMBUS], // 
   spriteIndex: 0,
   spriteAtlas: 'hero',
@@ -74,7 +73,6 @@ export const CHAMPION_UNITS_BARBARIC: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['power_up', 'trample'],
-    abilityText: '力量强化：本单位每有1点充能，则获得战力+1，至多为+5。\n践踏：本单位移动时，可以穿过士兵。在本单位移动之后，对每个被穿过的士兵造成1点伤害。',
     deckSymbols: [DECK_SYMBOLS.STAR], // 
     spriteIndex: SPRITE_INDEX_BARBARIC.CHAMPION_MOKA,
     spriteAtlas: 'cards',
@@ -91,7 +89,6 @@ export const CHAMPION_UNITS_BARBARIC: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['prepare', 'rapid_fire'],
-    abilityText: '预备：你可以将本单位充能，以代替本单位的移动。\n连续射击：每回合一次，在本单位攻击之后，你可以消耗1点充能以使其进行一次额外的攻击。',
     deckSymbols: [DECK_SYMBOLS.RHOMBUS], // 
     spriteIndex: SPRITE_INDEX_BARBARIC.CHAMPION_MAKINDA_RU,
     spriteAtlas: 'cards',
@@ -108,7 +105,6 @@ export const CHAMPION_UNITS_BARBARIC: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['inspire', 'withdraw'],
-    abilityText: '启悟：在本单位移动之后，将其相邻的所有友方单位充能。\n撤退：在本单位攻击之后，你可以消耗1点充能或魔力。如果你这样做，则将本单位推拉1至2个区格。',
     deckSymbols: [DECK_SYMBOLS.STAR, DECK_SYMBOLS.RHOMBUS], // 
     spriteIndex: SPRITE_INDEX_BARBARIC.CHAMPION_KALU,
     spriteAtlas: 'cards',
@@ -133,7 +129,6 @@ export const COMMON_UNITS_BARBARIC: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['prepare', 'rapid_fire'],
-    abilityText: '预备：你可以将本单位充能，以代替本单位的移动。\n连续射击：每回合一次，在本单位攻击之后，你可以消耗1点充能以使其进行一次额外的攻击。',
     deckSymbols: [DECK_SYMBOLS.RHOMBUS], // 
     spriteIndex: SPRITE_INDEX_BARBARIC.COMMON_FRONTIER_ARCHER,
     spriteAtlas: 'cards',
@@ -151,7 +146,6 @@ export const COMMON_UNITS_BARBARIC: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['intimidate', 'life_up'],
-    abilityText: '威势：每回合一次，在本单位攻击一个敌方单位之后，将本单位充能。\n生命强化：本单位每有1点充能，则获得生命+1，至多+5。',
     deckSymbols: [DECK_SYMBOLS.STAR], // 
     spriteIndex: SPRITE_INDEX_BARBARIC.COMMON_LIONESS,
     spriteAtlas: 'cards',
@@ -169,7 +163,6 @@ export const COMMON_UNITS_BARBARIC: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['speed_up', 'trample'],
-    abilityText: '速度强化：本单位每有1点充能，则当本单位移动时，可以额外移动1个区格，至多额外移动5个区格。\n践踏：本单位移动时，可以穿过士兵。在本单位移动之后，对每个被穿过的士兵造成1点伤害。',
     deckSymbols: [DECK_SYMBOLS.STAR], // 
     spriteIndex: SPRITE_INDEX_BARBARIC.COMMON_RHINOCEROS,
     spriteAtlas: 'cards',
@@ -187,7 +180,6 @@ export const COMMON_UNITS_BARBARIC: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['gather_power', 'spirit_bond'],
-    abilityText: '聚能：在召唤本单位之后，将其充能。\n祖灵交流：在本单位移动之后，将其充能，或者消耗1点充能以将其3个区格以内的一个友方单位充能。',
     deckSymbols: [DECK_SYMBOLS.RHOMBUS], // 
     spriteIndex: SPRITE_INDEX_BARBARIC.COMMON_SPIRIT_MAGE,
     spriteAtlas: 'cards',

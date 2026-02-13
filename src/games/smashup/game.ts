@@ -33,7 +33,7 @@ import { smashUpCriticalImageResolver } from './criticalImageResolver';
 initAllAbilities();
 
 // ============================================================================
-// 系统组装（展开 createDefaultSystems，替换 ActionLogSystem 为带配置版本）
+// 系统组装（展开 createBaseSystems，替换 ActionLogSystem 为带配置版本）
 // ============================================================================
 
 const systems: EngineSystem<SmashUpCore>[] = [

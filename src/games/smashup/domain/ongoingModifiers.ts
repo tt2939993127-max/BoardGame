@@ -104,6 +104,17 @@ export function clearPowerModifierRegistry(): void {
     breakpointModifierRegistry.length = 0;
 }
 
+/** 获取所有已注册的 sourceDefId（用于能力行为审计） */
+export function getRegisteredModifierIds(): {
+    powerModifierIds: Set<string>;
+    breakpointModifierIds: Set<string>;
+} {
+    return {
+        powerModifierIds: new Set(modifierRegistry.map(e => e.sourceDefId)),
+        breakpointModifierIds: new Set(breakpointModifierRegistry.map(e => e.sourceDefId)),
+    };
+}
+
 // ============================================================================
 // 力量计算
 // ============================================================================

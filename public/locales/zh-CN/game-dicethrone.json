@@ -174,15 +174,24 @@
     "advancePhase": "推进阶段：{{phase}}",
     "abilityActivated": "发动技能：{{abilityName}}",
     "abilityActivatedDefense": "发动防御技能：{{abilityName}}",
-    "damageTaken": "受到 {{amount}} 点伤害",
-    "damageDealt": "造成 {{amount}} 点伤害",
+    "damageTaken": "受到 {{amount}} 点伤害（{{source}}）",
+    "damageTakenPlain": "受到 {{amount}} 点伤害",
+    "damageDealt": "以【{{source}}】对玩家{{targetPlayerId}}造成 {{amount}} 点伤害",
+    "damageDealtPlain": "对玩家{{targetPlayerId}}造成 {{amount}} 点伤害",
+    "damageSource": {
+      "upkeepBurn": "燃烧",
+      "upkeepPoison": "中毒",
+      "retribution": "报复反伤",
+      "ability": "{{abilityName}}",
+      "unknown": "未知来源"
+    },
     "damageOriginal": "（原始 {{amount}}）",
-    "healApplied": "为{{targetLabel}}回复 {{amount}} 点生命",
-    "statusApplied": "对{{targetLabel}}施加状态 {{statusLabel}}",
+    "healApplied": "为玩家{{targetPlayerId}}回复 {{amount}} 点生命",
+    "statusApplied": "对玩家{{targetPlayerId}}施加状态 {{statusLabel}}",
     "statusAppliedDelta": "（+{{stacks}}，当前 {{total}}）",
-    "statusRemoved": "对{{targetLabel}}移除状态 {{statusLabel}}",
+    "statusRemoved": "对玩家{{targetPlayerId}}移除状态 {{statusLabel}}",
     "statusRemovedDelta": "（-{{stacks}}）",
-    "tokenGranted": "为{{targetLabel}}获得 {{tokenLabel}} x{{amount}}",
+    "tokenGranted": "为玩家{{targetPlayerId}}获得 {{tokenLabel}} x{{amount}}",
     "tokenTotal": "（当前 {{total}}）",
     "tokenConsumed": "消耗 {{tokenLabel}} x{{amount}}",
     "tokenRemaining": "（剩余 {{total}}）",
@@ -280,6 +289,11 @@
     "confirm": "确认",
     "skip": "跳过"
   },
+  "attackShowcase": {
+    "title": "对方发动进攻",
+    "attackerLabel": "{{name}} 使用了技能",
+    "continue": "开始防御"
+  },
   "response": {
     "waitingOpponent": "等待对手响应...",
     "yourTurn": "可以响应",
@@ -287,6 +301,10 @@
   },
   "waiting": {
     "thinkingMessage": "正在思考中"
+  },
+  "modifierActive": {
+    "label": "攻击修正",
+    "tooltip": "已激活的攻击修正卡，效果将在伤害结算时触发"
   },
   "dice": {
     "waitingOpponent": "对方正在思考中...",
@@ -366,7 +384,11 @@
       "sneakAttack": "偷袭!",
       "explodingArrow": "投出 {{value}}",
       "moonShadowStrike": "投出 {{value}}",
-      "blinded": "致盲判定"
+      "blinded": "致盲判定",
+      "fire": "烈焰: 伤害 +3",
+      "magma": "熔岩: 施加灼烧",
+      "fiery_soul": "焚魂: 获得 2 烈焰精通",
+      "meteor": "陨石: 施加击倒"
     },
     "selectToReroll": "点击骰子花费{{cost}}{{token}}重掷",
     "noTokenToReroll": "没有{{token}}标记可用于重掷",
@@ -455,8 +477,12 @@
       "skip": "不花费"
     },
     "pyroSpendCpForFM": {
-      "title": "是否花费2CP获得1烈焰精通？",
-      "pay": "花费2CP：获得1烈焰精通",
+      "title": "花费CP获得火焰专精（每1CP=1火焰专精）",
+      "pay_1": "花费1CP：获得1火焰专精",
+      "pay_2": "花费2CP：获得2火焰专精",
+      "pay_3": "花费3CP：获得3火焰专精",
+      "pay_4": "花费4CP：获得4火焰专精",
+      "pay_5": "花费5CP：获得5火焰专精",
       "skip": "不花费"
     }
   },
@@ -560,13 +586,13 @@
     "fist-technique-3-4": {
       "effects": {
         "damage8": "造成8点伤害",
-        "inflictStun": "施加1个击倒标记"
+        "inflictKnockdown": "施加1个击倒标记"
       }
     },
     "fist-technique-3-5": {
       "effects": {
         "damage9": "造成9点伤害",
-        "inflictStun": "施加1个击倒标记"
+        "inflictKnockdown": "施加1个击倒标记"
       }
     },
     "zen-forget": {
@@ -1040,9 +1066,9 @@
     },
     "burn-down-2": {
       "name": "燃烧殆尽 II",
-      "description": "获得1精通。激活烧毁：每移除1精通造成3不可防御伤害。",
+      "description": "获得1精通。激活烧毁：移除任意数量精通，每移除1精通造成4不可防御伤害。",
       "effects": {
-        "main": "激活烧毁：移除任意数量火焰精通。每移除1个造成3点不可防御伤害"
+        "main": "激活烧毁：移除任意数量火焰精通。每移除1个造成4点不可防御伤害"
       }
     },
     "ignite-2": {

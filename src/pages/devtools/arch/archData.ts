@@ -111,7 +111,7 @@ export const NODES: ArchNode[] = [
   { id: 'pipeline', label: '⚡ 回合执行引擎', desc: '每次操作经过8步处理：校验→执行→更新→通知', col: 0, row: 1, colSpan: 6, color: C.engine, layer: 'engine', expandable: 'pipeline', storyIndex: 2 },
   { id: 'systems', label: '🔌 系统插件', desc: '撤销·教学·日志…不改游戏规则就能加功能', col: 0, row: 2, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'systems' },
   { id: 'primitives', label: '🧩 基础能力库', desc: '骰子、卡牌、资源…现成的积木块，拼出任意游戏', col: 3, row: 2, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'primitives', details: ['🎯 所有游戏都能用的"积木块" — 15个独立模块', '底层: 骰子·卡牌·资源·条件·效果·棋盘格·表达式·目标选择·标签·属性·修饰器·UI提示', '中层: 注册技能 → 绑定执行逻辑 → 自动路由操作 → 图片映射', '游戏挑选需要的积木块，引擎负责组装和调度', '🎲 例: 骰子王座用能力框架注册6英雄技能，底层用[骰子+资源池+目标选择+效果处理+属性+修饰器]'] },
-  { id: 'testfw', label: '🧪 自动化测试', desc: '改了代码后自动验证游戏规则有没有被搞坏', col: 0, row: 3, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'testing', details: ['🎯 确保改代码后游戏规则没被搞坏', '录制一局完整对战 → 存为命令序列 → 每次改代码后自动回放', '回放结果和快照不一致 → 有bug!', '🎲 例: 录制\"第3回合A攻击B\" → 回放验证B血量确实 20→17'] },
+  { id: 'testfw', label: '🧪 自动化测试', desc: '五轨验证：命令回放·实体完整性·行为审计·交互完整性·E2E截图', col: 0, row: 3, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'testing', details: ['🎯 五轨并行确保改代码后游戏不坏', '① 命令驱动: 录制对局→回放命令→快照对比', '② 实体完整性: 注册表+引用链+触发路径+效果契约', '③ 行为审计: 描述关键词→代码行为·ongoing·标签·自毁·条件', '④ 交互完整性: UI状态机payload覆盖 + Handler注册链', '⑤ E2E截图: Playwright无头浏览器+像素对比'] },
   { id: 'eventstream', label: '📡 事件广播', desc: '实时通知界面播放特效和音效', col: 3, row: 3, colSpan: 3, color: C.engine, layer: 'engine', details: ['🎯 管线处理完后通知UI"发生了什么" → 播放对应特效', '每个事件有自增ID, 撤销时清空(防止重播旧动画)', '🎲 例: 管线产生[攻击命中, 扣血-3] → UI依次播放命中音效+飞字"-3"'] },
   // ── 框架核心 ──
   { id: 'matchstate', label: '💾 游戏状态', desc: '当前对局的完整快照：轮到谁、血量多少、骰子几个…', col: 0, row: 4, colSpan: 3, color: C.core, layer: 'core', storyIndex: 3,
@@ -322,7 +322,7 @@ export const OVERVIEW_LAYERS: OverviewLayer[] = [
     id: 'engine', emoji: '⚡', label: '引擎层',
     whatItDoes: '自动处理每一步操作：校验→执行→更新→通知',
     whyItExists: '没有它 → 每个游戏都要自己写回合管理、撤销、联机同步',
-    tags: ['8步管线', '11个系统插件', '15个基础能力', '自动化测试'],
+    tags: ['8步管线', '11个系统插件', '15个基础能力', '5轨自动化测试'],
     color: C.engine, drillDown: 'sub-pipeline',
   },
   {
@@ -410,7 +410,7 @@ export const CONTAINER_LINKS: { from: string; to: string; label: string; color: 
 /** 每层组件摘要（L2 容器图显示） */
 export const LAYER_SUMMARIES: Record<string, string> = {
   game: '定义游戏规则 · 开局摆什么 · 能做什么 · 做了会怎样',
-  engine: '自动处理操作 · 8步管线 · 11个系统插件 · 15个基础能力 · 测试框架',
+  engine: '自动处理操作 · 8步管线 · 11个系统插件 · 15个基础能力 · 5轨测试框架',
   core: '管理对局数据 · 游戏定义 · 三种模式自动适配 · 资源加载',
   ui: '页面路由 · 游戏骨架 · 视觉特效 · 全局状态 · 工具库',
   server: '联机同步 · 实时通信 · 用户系统(13模块) · 数据库 · CDN',
@@ -548,6 +548,39 @@ export const INTEGRITY_TEST_STEPS: IntegrityTestStep[] = [
   { emoji: '📊', label: '覆盖率报告', desc: '引用覆盖 / 分支覆盖统计', example: '引用87% · 分支92% · 无孤儿' },
 ];
 
+/** 能力行为审计步骤 */
+export interface BehaviorAuditStep {
+  emoji: string;
+  label: string;
+  desc: string;
+  example?: string;
+}
+
+export const BEHAVIOR_AUDIT_STEPS: BehaviorAuditStep[] = [
+  { emoji: '🔑', label: '关键词→行为映射', desc: '描述含"伤害"→代码有伤害逻辑', example: '"造成3点伤害"→ checkBehavior(dmg_handler) ✓' },
+  { emoji: '📌', label: 'ongoing注册覆盖', desc: 'ongoing卡必须注册trigger/protection等', example: '12张ongoing卡 → 全部有注册 ✓' },
+  { emoji: '🏷️', label: '能力标签覆盖', desc: '有abilityTag的卡必须有执行器', example: 'tag="special_play" → executor注册 ✓' },
+  { emoji: '💀', label: '自毁行为完整性', desc: '"消灭本卡"描述→自毁触发器存在', example: '"打出后消灭"→ selfDestruct handler ✓' },
+  { emoji: '❓', label: '条件语句完整性', desc: '描述中的条件→代码中的条件检查', example: '"如果基地有3+随从"→ condition check ✓' },
+];
+
+/** 交互完整性审计步骤 */
+export interface InteractionAuditStep {
+  emoji: string;
+  label: string;
+  desc: string;
+  example?: string;
+}
+
+export const INTERACTION_AUDIT_STEPS: InteractionAuditStep[] = [
+  { emoji: '🅰️', label: 'Mode A: 声明完整性', desc: '多步交互技能必须声明interactionChain', example: '移动技能需选单位+选目标 → chain声明 ✓' },
+  { emoji: '📋', label: 'Mode A: 步骤覆盖', desc: 'chain.steps产出字段⊇payloadContract.required', example: 'required:[unitId,targetCell] → 2步全覆盖 ✓' },
+  { emoji: '🔄', label: 'Mode A: 契约对齐', desc: 'AbilityDef契约与执行器契约双向校验', example: 'def.required ⊆ executor.required∪optional ✓' },
+  { emoji: '🅱️', label: 'Mode B: Handler覆盖', desc: '所有sourceId都有对应handler注册', example: 'zombie_lord_choose → handler注册 ✓' },
+  { emoji: '⛓️', label: 'Mode B: 链式完整性', desc: 'handler产出的后续sourceId也有handler', example: 'choose_minion→choose_base → 两端都有 ✓' },
+  { emoji: '👻', label: '孤儿Handler检测', desc: '注册了handler但无能力引用=死代码', example: '38个handler · 0孤儿 · 2白名单' },
+];
+
 export const E2E_TEST_STEPS: E2EStep[] = [
   { emoji: '🌐', label: '启动浏览器', desc: 'Playwright 打开 Chromium 无头浏览器', example: 'npx playwright test dice-throne.spec.ts' },
   { emoji: '🔗', label: '进入游戏页面', desc: '导航到本地开发服务器的对战页面', example: 'page.goto("/play/dice-throne/local")' },
@@ -573,13 +606,48 @@ export interface StoryStep {
 }
 
 export const USER_STORY_STEPS: StoryStep[] = [
-  { emoji: '📝', label: '定义游戏状态', desc: 'types.ts — 玩家/骰子/手牌/血量的数据结构', relatedIds: ['matchstate', 'domaincore'], layer: 'core', example: 'interface DiceCore { players: Record<string, Player>; dice: Die[]; }' },
-  { emoji: '⚙️', label: '回答引擎的4个问题', desc: '开局摆什么、能不能做、做了会怎样、怎么改状态', relatedIds: ['domaincore', 'pipeline'], layer: 'core', example: '例: 开局每人5骰子+20HP，攻击时扣血-3' },
-  { emoji: '🧩', label: '使用基础能力', desc: '骰子·卡牌·资源池·效果处理·能力框架', relatedIds: ['primitives'], layer: 'engine', example: 'createAbilityRegistry() 注册6英雄技能' },
-  { emoji: '🔌', label: '注册系统插件', desc: '回合管理·撤销·响应窗口·交互·事件推送', relatedIds: ['systems', 'eventstream'], layer: 'engine', example: '[createFlowSystem(hooks), createUndoSystem(), ...]' },
-  { emoji: '🧪', label: '编写测试', desc: 'GameTestRunner 命令驱动 + Playwright E2E', relatedIds: ['testfw'], layer: 'engine', example: '录制对局 → 回放验证 → 截图对比' },
-  { emoji: '🎨', label: '实现游戏界面', desc: 'Board.tsx — 使用骨架层+特效+全局状态', relatedIds: ['framework', 'fx', 'pages'], layer: 'ui', example: '<GameBoard> + <PlayerPanel> + <DiceArea>' },
-  { emoji: '🚀', label: '联调上线', desc: '适配器接入 boardgame.io → 联机/本地/教学', relatedIds: ['adapter', 'bgio'], layer: 'server', example: '同一套规则代码 → 三种模式自动适配' },
+  {
+    emoji: '📁', label: '目录骨架与Manifest',
+    desc: '创建游戏目录 + manifest.ts + domain/types/ids占位 + Board占位 + i18n基础文案',
+    relatedIds: ['domaincore', 'matchstate'],
+    layer: 'core',
+    example: 'src/games/<gameId>/ 完整目录 → npm run generate:manifests 通过，大厅可见',
+  },
+  {
+    emoji: '📋', label: '数据录入',
+    desc: '规则书→rule/*.md + 按5项判断原则录入必要信息(规则判定/状态区分/UI渲染/引用关系/数量分布) + 类型定义 + 引擎原语选型',
+    relatedIds: ['domaincore', 'primitives'],
+    layer: 'core',
+    example: '每批实体录入后输出核对表(列覆盖全部必要字段) → 用户确认 → 需新原语的标记DEFERRED',
+  },
+  {
+    emoji: '⚙️', label: '领域内核实现',
+    desc: 'validate校验 → execute生成事件 → reduce纯函数更新状态 → isGameOver胜负判定',
+    relatedIds: ['domaincore', 'pipeline', 'testfw'],
+    layer: 'engine',
+    example: 'Command{attack} → validate合法 → execute[命中,扣血-3] → reduce: hp 20→17',
+  },
+  {
+    emoji: '🔌', label: 'FlowSystem与系统组装',
+    desc: 'FlowHooks阶段流转 + game.ts组装11个系统 + CheatModifier调试 + ActionLog操作记录',
+    relatedIds: ['systems', 'eventstream', 'adapter'],
+    layer: 'engine',
+    example: 'createFlowSystem(hooks) + createBaseSystems() + commandTypes业务命令列表',
+  },
+  {
+    emoji: '🎨', label: 'Board/UI与交互闭环',
+    desc: '游戏专属设计规范 → Board.tsx布局组装 → UI子模块拆分 → 操作映射到Command',
+    relatedIds: ['framework', 'fx', 'pages', 'contexts'],
+    layer: 'ui',
+    example: '<GameBoard> + <HandArea> + <PhaseTracker> + useGameEvents()驱动动画+音效',
+  },
+  {
+    emoji: '🚀', label: '收尾与启用',
+    desc: 'i18n双语补齐 + 教学系统配置 + 音频接入 + 图片预加载 + 全流程验证上线',
+    relatedIds: ['adapter', 'bgio', 'assetloader'],
+    layer: 'server',
+    example: 'tutorial.ts + audio.config.ts + criticalImageResolver → 大厅可见·完整可玩',
+  },
 ];
 
 // ============================================================================

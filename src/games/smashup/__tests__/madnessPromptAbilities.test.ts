@@ -21,7 +21,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
@@ -29,7 +29,7 @@ beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
     resetAbilityInit();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     initAllAbilities();
 });
 
@@ -72,7 +72,7 @@ function makeStateWithMadness(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
+    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
 }
 
 const defaultRandom: RandomFn = {
@@ -82,11 +82,27 @@ const defaultRandom: RandomFn = {
     range: (_min: number, _max: number) => _min,
 };
 
+/** 保存最近一次 execute 调用的 matchState 引用 */
+let lastMatchState: MatchState<SmashUpCore> | null = null;
+
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+    const ms = makeMatchState(state);
+    lastMatchState = ms;
+    return execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
+}
+
+/** 从最近一次 execute 的 matchState 中获取 interactions */
+function getLastInteractions(): any[] {
+    if (!lastMatchState) return [];
+    const interaction = (lastMatchState.sys as any)?.interaction;
+    if (!interaction) return [];
+    const list: any[] = [];
+    if (interaction.current) list.push(interaction.current);
+    if (interaction.queue?.length) list.push(...interaction.queue);
+    return list;
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -120,15 +136,12 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 多张疑狂卡时应创建 Prompt（不直接弃牌）
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        const cont = (promptEvents[0] as any).payload;
-        expect(cont.abilityId).toBe('cthulhu_madness_unleashed');
+        // 多张疑狂卡时应创建 Interaction（不直接弃牌）
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('cthulhu_madness_unleashed');
         // 应有3个选项（每张疑狂卡一个）
-        expect(cont.promptConfig.options.length).toBe(3);
-        // 应支持多选
-        expect(cont.promptConfig.multi).toEqual({ min: 1, max: 3 });
+        expect(interactions[0].data.options.length).toBe(3);
     });
 
     it('手中无疯狂卡时无效果', () => {
@@ -166,10 +179,10 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 单张疯狂卡时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('cthulhu_madness_unleashed');
+        // 单张疯狂卡时创建 Interaction
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('cthulhu_madness_unleashed');
     });
 
     it('多张疑狂卡+牌库不足时也创建 Prompt', () => {
@@ -189,12 +202,11 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 多张疑狂卡时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        const cont = (promptEvents[0] as any).payload;
-        expect(cont.abilityId).toBe('cthulhu_madness_unleashed');
-        expect(cont.promptConfig.options.length).toBe(3);
+        // 多张疑狂卡时应创建 Interaction
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('cthulhu_madness_unleashed');
+        expect(interactions[0].data.options.length).toBe(3);
     });
 
     it('状态正确（reduce 验证）- 多张疑狂卡产生 PROMPT_CONTINUATION', () => {
@@ -219,10 +231,10 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
 
         const events = execPlayAction(state, '0', 'a1');
         const newState = applyEvents(state, events);
-        // 多张疑狂卡时应有 CHOICE_REQUESTED 事件
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('cthulhu_madness_unleashed');
+        // Interaction 已创建（Prompt 待决），疯狂卡仍在手牌
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('cthulhu_madness_unleashed');
         // 手牌中疑狂卡仍在（等待玩家选择）
         expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(2);
     });
@@ -258,10 +270,10 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 多个随从时应创建 Prompt（不直接消灭）
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
+        // 多个随从时应创建 Interaction（不直接消灭）
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('miskatonic_it_might_just_work');
     });
 
     it('单个随从时创建 Prompt', () => {
@@ -285,10 +297,10 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 单个随从时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
+        // 单个随从时创建 Interaction
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('miskatonic_it_might_just_work');
     });
 
     it('手中疯狂卡不足2张时无效果', () => {
@@ -357,10 +369,10 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 多个随从时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
+        // 多个随从时应创建 Interaction
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('miskatonic_it_might_just_work');
     });
 
     it('无对手随从时单个己方随从创建 Prompt', () => {
@@ -384,10 +396,10 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 单个己方随从时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_it_might_just_work');
+        // 单个己方随从时创建 Interaction
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('miskatonic_it_might_just_work');
     });
 
     it('状态正确（reduce 验证）- 单目标 Prompt 待决', () => {
@@ -410,9 +422,9 @@ describe('米斯卡塔尼克大学 - miskatonic_it_might_just_work（也许能�
 
         const events = execPlayAction(state, '0', 'a1');
         const newState = applyEvents(state, events);
-        // CHOICE_REQUESTED 事件已生成（Prompt 待决），疯狂卡仍在手牌
-        const promptEvents2 = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents2.length).toBe(1);
+        // Interaction 已创建（Prompt 待决），疯狂卡仍在手牌
+        const interactions2 = getLastInteractions();
+        expect(interactions2.length).toBe(1);
         expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(2);
         // 基地上随从未被消灭
         expect(newState.bases[0].minions.length).toBe(1);

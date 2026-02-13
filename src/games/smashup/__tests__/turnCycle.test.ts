@@ -12,7 +12,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
+import { createFlowSystem, createBaseSystems } from '../../../engine';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent, CardInstance } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS, getCurrentPlayerId, HAND_LIMIT, VP_TO_WIN, DRAW_PER_TURN } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -24,7 +24,7 @@ const PLAYER_IDS = ['0', '1'];
 
 const systems = [
     createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-    ...createDefaultSystems<SmashUpCore>(),
+    ...createBaseSystems<SmashUpCore>(),
 ];
 
 beforeAll(() => {

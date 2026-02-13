@@ -16,7 +16,7 @@
   - **优先合成属性**：`transform`、`opacity`、`filter`；**谨慎使用**：`background-color`、`box-shadow`、`border-*`。
   - **transition 与 @keyframes 互斥**：同一元素禁止同时使用，应通过 `style.transition` 动态切换。
 - **毛玻璃策略**：`backdrop-filter` 尽量保持静态；需要动效时只动遮罩层 `opacity`，避免在动画过程中改变 blur 半径。
-- **通用动效 hooks**：延迟渲染/延迟 blur 优先复用 `useDeferredRender` / `useDelayedBackdropBlur`，避免各处重复实现。
+- **通用动效 hooks**：延迟渲染/延迟 blur 优先复用 `useDeferredRender` / `useDelayedBackdropBlur`，避免各处重复实现。受击反馈优先使用 `useImpactFeedback`（组合 hook，一次调用编排震动+钝帧+裂隙闪光三件套），避免手动管理多个原子 hook。
 - **颜色/阴影替代**：若需高亮变化，优先采用"叠层 + opacity"而非直接动画颜色/阴影。
 - **Hover 颜色复用**：按钮 hover 颜色变化优先使用通用 `HoverOverlayLabel`（叠层 + opacity）模式，减少重复实现。
 
@@ -196,6 +196,36 @@ Shader 包装组件（如 `SummonShaderEffect`、`VortexShaderEffect`）在模�
 - **DamageFlash（覆盖层）**：纯视觉 overlay——斜切（RiftSlash）+ 红脉冲（RedPulse）+ 伤害数字（DamageNumber），作为 ImpactContainer 的子元素。
 - **正确组合**：`<ImpactContainer><Target /><DamageFlash /></ImpactContainer>`
 - **禁止**：把震动和视觉效果混在同一个组件里；把 DamageFlash 放在 ImpactContainer 外面（会导致震动目标不一致）。
+
+### 受击反馈 Hooks（强制）
+
+受击反馈的状态管理已抽象为通用 hooks，位于 `src/components/common/animations/`，和 `useShake` / `useHitStop` 同级：
+
+| Hook | 层级 | 职责 | API |
+|------|------|------|-----|
+| `useDamageFlash` | 原子 | 管理 DamageFlash 的激活/自动重置 | `{ isActive, damage, trigger(damage) }` |
+| `useImpactFeedback` | 组合 | 编排 useShake + useHitStop + useDamageFlash | `{ trigger(damage), shake, hitStop, flash }` |
+
+- **新游戏接入受击反馈**：直接使用 `useImpactFeedback()`，一次调用获得全套状态，把 `shake`/`hitStop`/`flash` 分别传给 `ShakeContainer`/`HitStopContainer`/`DamageFlash`。
+- **可选效果**：`useImpactFeedback({ shake: true, hitStop: true, flash: true })` 按需开关。
+- **禁止手动管理多套 useState + setTimeout**：受击反馈状态必须通过 `useImpactFeedback` 或其原子 hooks 管理，禁止在 Board.tsx 中手写 `useState<{ active, damage }>` + `setTimeout` 重置逻辑。
+
+```tsx
+// 典型用法（Board.tsx）
+const opponentImpact = useImpactFeedback();
+const selfImpact = useImpactFeedback();
+
+// 触发
+onImpact: () => opponentImpact.trigger(damage);
+
+// 渲染（OpponentHeader）
+<ShakeContainer isShaking={opponentImpact.shake.isShaking}>
+  <HitStopContainer isActive={opponentImpact.hitStop.isActive} {...opponentImpact.hitStop.config}>
+    <Content />
+    <DamageFlash active={opponentImpact.flash.isActive} damage={opponentImpact.flash.damage} />
+  </HitStopContainer>
+</ShakeContainer>
+```
 
 ---
 

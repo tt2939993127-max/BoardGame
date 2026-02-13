@@ -8,6 +8,7 @@ import { resolveI18nList } from './utils';
 
 import { STATUS_IDS } from '../domain/ids';
 import { CHARACTER_DATA_MAP } from '../domain/characters';
+import type { TokenDef } from '../domain/tokenTypes';
 
 // 从 CharacterData 自动收集图集路径（Single Source of Truth）
 const STATUS_ATLAS_PATHS: Record<string, string> = (() => {
@@ -282,6 +283,7 @@ export const StatusEffectsContainer = ({
 export const TokenBadge = ({
     tokenId,
     amount,
+    maxAmount,
     size = 'normal',
     locale,
     atlas,
@@ -290,6 +292,8 @@ export const TokenBadge = ({
 }: {
     tokenId: string;
     amount: number;
+    /** 堆叠上限（>1 时显示 数量/上限） */
+    maxAmount?: number;
     size?: 'normal' | 'small' | 'tiny';
     locale?: string;
     atlas?: StatusAtlases | null;
@@ -340,14 +344,19 @@ export const TokenBadge = ({
             >
                 {getStatusEffectIconNode(info, locale, size, atlas)}
             </div>
-            {amount > 1 && (
+            {/* 有上限(>1)时始终显示 数量/上限；否则仅 amount>1 时显示数量 */}
+            {(maxAmount != null && maxAmount > 1) ? (
+                <div className={`absolute -bottom-[0.2vw] -right-[0.2vw] ${stackSizeClass} bg-black/80 text-white font-bold rounded-full flex items-center justify-center border border-white/50 px-[0.15vw]`}>
+                    {amount}/{maxAmount}
+                </div>
+            ) : amount > 1 ? (
                 <div className={`absolute -bottom-[0.2vw] -right-[0.2vw] ${stackSizeClass} bg-black/80 text-white font-bold rounded-full flex items-center justify-center border border-white/50`}>
                     {amount}
                 </div>
-            )}
+            ) : null}
 
             <InfoTooltip
-                title={`${info.name}${amount > 1 ? ` ×${amount}` : ''}`}
+                title={`${info.name}${maxAmount != null && maxAmount > 1 ? ` ${amount}/${maxAmount}` : amount > 1 ? ` ×${amount}` : ''}`}
                 content={info.description}
                 isVisible={isHovered}
                 position="right"
@@ -366,6 +375,8 @@ export const TokensContainer = ({
     atlas,
     onTokenClick,
     clickableTokens,
+    tokenDefinitions,
+    tokenStackLimits,
 }: {
     tokens: Record<string, number>;
     maxPerRow?: number;
@@ -377,9 +388,26 @@ export const TokensContainer = ({
     onTokenClick?: (tokenId: string) => void;
     /** 可点击的 Token ID 列表 */
     clickableTokens?: string[];
+    /** Token 定义列表（用于获取 stackLimit） */
+    tokenDefinitions?: TokenDef[];
+    /** 玩家级别的堆叠上限覆盖（技能可永久提高上限） */
+    tokenStackLimits?: Record<string, number>;
 }) => {
     const activeTokens = Object.entries(tokens).filter(([, amount]) => amount > 0);
     if (activeTokens.length === 0) return null;
+
+    /** 获取某个 token 的有效上限（玩家覆盖 > 定义 > 不显示） */
+    const getEffectiveMax = (tokenId: string): number | undefined => {
+        // 玩家级别覆盖优先
+        const override = tokenStackLimits?.[tokenId];
+        if (typeof override === 'number') {
+            return override === 0 ? undefined : override; // 0 = 无限，不显示上限
+        }
+        const def = tokenDefinitions?.find(d => d.id === tokenId);
+        const base = def?.stackLimit;
+        if (base == null || base <= 1 || base === 0) return undefined; // 无限或上限1，不显示
+        return base;
+    };
 
     return (
         <div
@@ -393,6 +421,7 @@ export const TokensContainer = ({
                         key={tokenId}
                         tokenId={tokenId}
                         amount={amount}
+                        maxAmount={getEffectiveMax(tokenId)}
                         size={size}
                         locale={locale}
                         atlas={atlas}

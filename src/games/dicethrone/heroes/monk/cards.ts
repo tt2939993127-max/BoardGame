@@ -7,6 +7,7 @@ import { DICE_FACE_IDS, TOKEN_IDS, STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from 
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import type { RandomFn } from '../../../../engine/types';
 import type { AbilityEffect, AbilityDef, EffectTiming, EffectCondition } from '../../domain/combat';
+import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 import {
     MONK_SFX_PUNCH_1,
     MONK_SFX_PUNCH_2,
@@ -17,9 +18,7 @@ import {
     MONK_SFX_ZEN,
 } from './abilities';
 
-// 文本辅助
-const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
+/** 卡牌文本 i18n key 生成 */
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
 
 // 辅助函数
@@ -88,8 +87,8 @@ const FIST_TECHNIQUE_3: AbilityDef = {
     sfxKey: MONK_SFX_PUNCH_1,
     variants: [
         { id: 'fist-technique-3-3', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 3 } }, effects: [damage(7, abilityEffectText('fist-technique-3-3', 'damage7'))], priority: 1 },
-        { id: 'fist-technique-3-4', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 4 } }, effects: [damage(8, abilityEffectText('fist-technique-3-4', 'damage8')), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('fist-technique-3-4', 'inflictStun'))], priority: 2 },
-        { id: 'fist-technique-3-5', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 5 } }, effects: [damage(9, abilityEffectText('fist-technique-3-5', 'damage9')), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('fist-technique-3-5', 'inflictStun'))], priority: 3 },
+        { id: 'fist-technique-3-4', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 4 } }, effects: [damage(8, abilityEffectText('fist-technique-3-4', 'damage8')), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('fist-technique-3-4', 'inflictKnockdown'))], priority: 2 },
+        { id: 'fist-technique-3-5', trigger: { type: 'diceSet', faces: { [DICE_FACE_IDS.FIST]: 5 } }, effects: [damage(9, abilityEffectText('fist-technique-3-5', 'damage9')), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('fist-technique-3-5', 'inflictKnockdown'))], priority: 3 },
     ],
 };
 

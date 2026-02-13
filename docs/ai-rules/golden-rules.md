@@ -67,6 +67,33 @@
 
 ---
 
+## const/let 声明顺序与 TDZ（强制）
+
+> **`const`/`let` 声明不会提升，在声明语句之前引用会抛出 `ReferenceError: Cannot access 'xxx' before initialization`。**
+> 在大型组件函数中尤其容易出现：中间插入条件分支引用了后面才声明的变量。
+
+- **问题**：与 `var`（会提升为 `undefined`）不同，`const`/`let` 存在暂时性死区（Temporal Dead Zone），在声明行之前的任何引用都会直接报错导致白屏。
+- **典型错误模式**：
+  ```tsx
+  // ❌ 错误：settingsAction 在声明前被引用
+  if (useChatAsMain) {
+      items.push(settingsAction); // ReferenceError!
+  }
+  const settingsAction: FabAction = { ... };
+
+  // ✅ 正确：先声明，再引用
+  const settingsAction: FabAction = { ... };
+  if (useChatAsMain) {
+      items.push(settingsAction);
+  }
+  ```
+- **自检规则**：
+  1. 新增/移动代码块时，检查块内引用的所有 `const`/`let` 变量是否已在上方声明
+  2. 大型组件中插入条件分支时，特别注意分支内引用的变量声明位置
+  3. 重构代码顺序后，用 `getDiagnostics` 验证无 TDZ 错误
+
+---
+
 ## 高频交互规范
 
 - **Ref 优先**：`MouseMove` 等高频回调优先用 `useRef` 避开 `useState` 异步延迟导致的跳动。

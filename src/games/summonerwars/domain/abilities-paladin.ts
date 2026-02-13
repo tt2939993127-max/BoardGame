@@ -17,6 +17,7 @@
  */
 
 import type { AbilityDef } from './abilities';
+import { abilityText } from './abilityTextHelper';
 
 export const PALADIN_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -25,8 +26,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'fortress_power',
-    name: '城塞之力',
-    description: '在本单位攻击一个敌方单位之后，如果战场上有一个或更多友方城塞单位，则你可以从你的弃牌堆中拿取一张城塞单位，展示并且加入你的手牌。',
+    name: abilityText('fortress_power', 'name'),
+    description: abilityText('fortress_power', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_001',
     trigger: 'afterAttack',
     effects: [
@@ -81,6 +82,9 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.fortressPower',
       buttonVariant: 'secondary',
+      activationStep: 'selectCard',
+      quickCheck: ({ core, playerId }) =>
+        core.players[playerId]?.discard.some(c => c.cardType === 'unit' && c.id.includes('fortress')) ?? false,
     },
   },
 
@@ -90,8 +94,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'guidance',
-    name: '指引',
-    description: '在你的召唤阶段开始时，抓取两张卡牌。',
+    name: abilityText('guidance', 'name'),
+    description: abilityText('guidance', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_002',
     trigger: 'onPhaseStart',
     effects: [
@@ -112,13 +116,15 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       buttonPhase: 'summon',
       buttonLabel: 'abilityButtons.guidance',
       buttonVariant: 'secondary',
+      activationType: 'directExecute',
+      quickCheck: ({ core, playerId }) => core.players[playerId]?.deck.length > 0,
     },
   },
 
   {
     id: 'fortress_elite',
-    name: '城塞精锐',
-    description: '本单位2个区格以内每有一个友方城塞单位，则获得战力+1。',
+    name: abilityText('fortress_elite', 'name'),
+    description: abilityText('fortress_elite', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_003',
     trigger: 'onDamageCalculation',
     effects: [
@@ -132,8 +138,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'radiant_shot',
-    name: '辉光射击',
-    description: '你每拥有2点魔力，则本单位获得战力+1。',
+    name: abilityText('radiant_shot', 'name'),
+    description: abilityText('radiant_shot', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_004',
     trigger: 'onDamageCalculation',
     effects: [
@@ -147,8 +153,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'divine_shield',
-    name: '神圣护盾',
-    description: '每当本单位3个区格以内的一个友方城塞单位成为攻击的目标时，投掷2个骰子。每掷出一个❤️，则攻击单位在本次攻击的战力-1，战力最少为1点。',
+    name: abilityText('divine_shield', 'name'),
+    description: abilityText('divine_shield', 'description'),
     sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_ward',
     trigger: 'passive',
     effects: [
@@ -162,8 +168,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'healing',
-    name: '治疗',
-    description: '在本单位攻击一个友方士兵或英雄之前，你可以从你的手牌弃除一张卡牌。如果你这样做，则本次攻击掷出的每个⚔️或❤️会从目标上移除1点伤害，以代替造成伤害。',
+    name: abilityText('healing', 'name'),
+    description: abilityText('healing', 'description'),
     sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_light',
     trigger: 'beforeAttack',
     effects: [
@@ -211,6 +217,9 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.healing',
       buttonVariant: 'secondary',
+      activationStep: 'selectCards',
+      activationContext: 'beforeAttack',
+      quickCheck: ({ myHand }) => myHand.length > 0,
     },
   },
 
@@ -220,8 +229,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'judgment',
-    name: '裁决',
-    description: '在本单位攻击一个敌方单位之后，抓取数量等于所掷出❤️数量的卡牌。',
+    name: abilityText('judgment', 'name'),
+    description: abilityText('judgment', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_005',
     trigger: 'afterAttack',
     effects: [
@@ -235,8 +244,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'entangle',
-    name: '缠斗',
-    description: '每当一个相邻敌方单位因为移动或被推拉而远离本单位时，立刻对该单位造成1点伤害。',
+    name: abilityText('entangle', 'name'),
+    description: abilityText('entangle', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_006',
     trigger: 'onAdjacentEnemyLeave',
     effects: [
@@ -246,8 +255,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'guardian',
-    name: '守卫',
-    description: '当一个相邻敌方单位攻击时，必须指定一个具有守卫技能的单位为目标。',
+    name: abilityText('guardian', 'name'),
+    description: abilityText('guardian', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_007',
     trigger: 'passive',
     effects: [
@@ -261,8 +270,8 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'holy_arrow',
-    name: '圣光箭',
-    description: '在本单位攻击之前，从你的手牌展示并弃除任意数量的非同名单位。每以此法弃除一张卡牌，则获得1点魔力并且本单位在本次攻击获得战力+1。',
+    name: abilityText('holy_arrow', 'name'),
+    description: abilityText('holy_arrow', 'description'),
     sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_shock',
     trigger: 'beforeAttack',
     effects: [
@@ -310,6 +319,10 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.holyArrow',
       buttonVariant: 'secondary',
+      activationStep: 'selectCards',
+      activationContext: 'beforeAttack',
+      quickCheck: ({ myHand, unit }) =>
+        myHand.some(card => card.cardType === 'unit' && card.name !== unit.card.name),
     },
   },
 ];

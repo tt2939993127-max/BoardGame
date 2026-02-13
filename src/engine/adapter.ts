@@ -351,6 +351,7 @@ export function createGameAdapter<
             }
 
             if (!result.success) {
+                console.warn('[Adapter] command failed', { commandType, playerId: normalizedPlayerId, error: result.error });
                 dispatchEngineNotification({
                     gameId: domain.gameId,
                     error: result.error ?? 'unknownError',

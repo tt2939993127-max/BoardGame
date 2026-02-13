@@ -14,13 +14,12 @@ import { SmashUpDomain } from '../domain';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { INTERACTION_COMMANDS, INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
+import { createFlowSystem, createBaseSystems } from '../../../engine';
 import { smashUpFlowHooks } from '../domain/index';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry, resolvePromptContinuation } from '../domain/promptContinuation';
-import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { createSmashUpEventSystem } from '../domain/systems';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
@@ -31,7 +30,7 @@ function createRunner() {
         domain: SmashUpDomain,
         systems: [
             createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-            ...createDefaultSystems<SmashUpCore>(),
+            ...createBaseSystems<SmashUpCore>(),
             createSmashUpEventSystem(),
         ],
         playerIds: PLAYER_IDS,
@@ -50,7 +49,7 @@ describe('Prompt 响应链集成测试', () => {
     beforeAll(() => {
         clearRegistry();
         clearBaseAbilityRegistry();
-        clearPromptContinuationRegistry();
+        clearInteractionHandlers();
         resetAbilityInit();
         initAllAbilities();
     });
@@ -91,7 +90,7 @@ describe('Prompt 响应链集成测试', () => {
     });
 
     describe('Prompt 创建流程', () => {
-        it('多目标能力创建 Prompt 并生成 CHOICE_REQUESTED', () => {
+        it('多目标能力创建 Interaction（不再生成 CHOICE_REQUESTED）', () => {
             const runner = createRunner();
 
             // 先完成选秀
@@ -145,20 +144,17 @@ describe('Prompt 响应链集成测试', () => {
     });
 
     describe('完整响应链流程', () => {
-        it('PROMPT_CONTINUATION 事件结构正确', () => {
+        it('迁移后不再使用 CHOICE_REQUESTED 事件', () => {
             const runner = createRunner();
             const result = runner.run({
                 name: '检查事件结构',
                 commands: DRAFT_COMMANDS,
             });
 
-            // 查找所有步骤中的 PROMPT_CONTINUATION 事件
+            // 选秀阶段不会产生任何交互事件
             const allEvents = result.steps.flatMap(s => s.events);
-            const promptContEvents = allEvents.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-
-            // 选秀阶段不会产生 PROMPT_CONTINUATION
-            // 这个测试主要验证事件类型常量正确
-            expect(SU_EVENTS.CHOICE_REQUESTED).toBe('su:choice_requested');
+            // CHOICE_REQUESTED 已移除，所有交互通过 InteractionSystem 处理
+            expect(allEvents.filter(e => e.type === 'su:choice_requested')).toHaveLength(0);
         });
 
         it('SmashUp Prompt 桥接系统正常工作', () => {
@@ -180,7 +176,7 @@ describe('能力特定的 Prompt 流程', () => {
     beforeAll(() => {
         clearRegistry();
         clearBaseAbilityRegistry();
-        clearPromptContinuationRegistry();
+        clearInteractionHandlers();
         resetAbilityInit();
         initAllAbilities();
     });
@@ -234,7 +230,7 @@ describe('SYS_PROMPT_RESOLVED 触发继续执行', () => {
     beforeAll(() => {
         clearRegistry();
         clearBaseAbilityRegistry();
-        clearPromptContinuationRegistry();
+        clearInteractionHandlers();
         resetAbilityInit();
         initAllAbilities();
     });

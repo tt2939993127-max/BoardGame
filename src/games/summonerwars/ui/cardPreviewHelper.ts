@@ -5,9 +5,10 @@
  */
 
 import type { CardPreviewRef } from '../../../core';
-import type { Card, FactionId } from '../domain/types';
+import type { Card } from '../domain/types';
 import { createDeckByFactionId } from '../config/factions';
 import { resolveCardAtlasId } from './cardAtlas';
+import { getBaseCardId, VALID_FACTION_IDS } from '../domain/ids';
 
 interface CardPreviewMeta {
   name: string;
@@ -15,19 +16,6 @@ interface CardPreviewMeta {
 }
 
 const CARD_PREVIEW_MAP = new Map<string, CardPreviewMeta>();
-
-const ALL_FACTIONS: FactionId[] = [
-  'necromancer',
-  'trickster',
-  'paladin',
-  'goblin',
-  'frost',
-  'barbaric',
-];
-
-const normalizeCardId = (cardId: string): string => (
-  cardId.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '')
-);
 
 /** 召唤师战争卡牌宽高比（横向卡牌） */
 const SW_CARD_ASPECT_RATIO = 1044 / 729;
@@ -44,7 +32,7 @@ const buildPreviewRef = (card: Card): CardPreviewRef | null => {
 };
 
 const registerCard = (card: Card): void => {
-  const baseId = normalizeCardId(card.id);
+  const baseId = getBaseCardId(card.id);
   if (CARD_PREVIEW_MAP.has(baseId)) return;
   CARD_PREVIEW_MAP.set(baseId, {
     name: card.name,
@@ -54,7 +42,7 @@ const registerCard = (card: Card): void => {
 
 const initializeCardPreviewMap = (): void => {
   if (CARD_PREVIEW_MAP.size > 0) return;
-  for (const faction of ALL_FACTIONS) {
+  for (const faction of VALID_FACTION_IDS) {
     const deckData = createDeckByFactionId(faction);
     registerCard(deckData.summoner);
     registerCard(deckData.startingGate);
@@ -65,7 +53,7 @@ const initializeCardPreviewMap = (): void => {
 
 export const getSummonerWarsCardPreviewMeta = (cardId: string): CardPreviewMeta | null => {
   initializeCardPreviewMap();
-  const baseId = normalizeCardId(cardId);
+  const baseId = getBaseCardId(cardId);
   return CARD_PREVIEW_MAP.get(baseId) ?? null;
 };
 

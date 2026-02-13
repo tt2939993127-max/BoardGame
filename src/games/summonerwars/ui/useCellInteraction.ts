@@ -18,6 +18,7 @@ import {
   getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
   manhattanDistance, getStructureAt, findUnitPosition,
 } from '../domain/helpers';
+import { isUndeadCard } from '../domain/ids';
 import { getSummonerWarsUIHints } from '../domain/uiHints';
 import { extractPositions } from '../../../engine/primitives/uiHints';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
@@ -107,9 +108,15 @@ export function useCellInteraction({
     return getValidBuildPositions(core, myPlayerId as '0' | '1');
   }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
 
-  // 技能目标位置（复活死灵、感染）
+  // 技能目标位置（复活死灵、感染、结构变换推拉方向）
   const validAbilityPositions = useMemo(() => {
-    if (!abilityMode || abilityMode.step !== 'selectPosition') return [];
+    if (!abilityMode) return [];
+    // 结构变换第二步：选择推拉方向（目标建筑相邻的空格）
+    if (abilityMode.abilityId === 'structure_shift' && abilityMode.step === 'selectNewPosition' && abilityMode.targetPosition) {
+      const adj = getAdjacentCells(abilityMode.targetPosition);
+      return adj.filter(p => isCellEmpty(core, p));
+    }
+    if (abilityMode.step !== 'selectPosition') return [];
     if (abilityMode.abilityId === 'revive_undead') {
       const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
@@ -185,17 +192,22 @@ export function useCellInteraction({
         return unit && unit.owner === (myPlayerId as '0' | '1') && unit.cardId !== abilityMode.sourceUnitId;
       });
     }
-    // 结构变换：3格内友方建筑
+    // 结构变换：3格内友方建筑（含活体结构单位如寒冰魔像）
     if (abilityMode.abilityId === 'structure_shift') {
       const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const targets: CellCoord[] = [];
       for (let row = 0; row < BOARD_ROWS; row++) {
         for (let col = 0; col < BOARD_COLS; col++) {
-          const structure = getStructureAt(core, { row, col });
-          if (structure && structure.owner === (myPlayerId as '0' | '1')) {
-            const dist = manhattanDistance(sourcePos, { row, col });
-            if (dist > 0 && dist <= 3) targets.push({ row, col });
+          const pos = { row, col };
+          const structure = getStructureAt(core, pos);
+          const unit = core.board[row]?.[col]?.unit;
+          const isAllyStructure = (structure && structure.owner === (myPlayerId as '0' | '1'))
+            || (unit && unit.owner === (myPlayerId as '0' | '1')
+              && (unit.card.abilities ?? []).includes('mobile_structure'));
+          if (isAllyStructure) {
+            const dist = manhattanDistance(sourcePos, pos);
+            if (dist > 0 && dist <= 3) targets.push(pos);
           }
         }
       }
@@ -337,14 +349,13 @@ export function useCellInteraction({
     if (abilityMode && abilityMode.step === 'selectUnit') {
       const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
-        // 结构变换目标是建筑，无需 unit 检查
+        // 结构变换目标是建筑，进入选择推拉方向步骤
         if (abilityMode.abilityId === 'structure_shift') {
-          moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
-            abilityId: 'structure_shift',
-            sourceUnitId: abilityMode.sourceUnitId,
+          setAbilityMode({
+            ...abilityMode,
+            step: 'selectNewPosition',
             targetPosition: { row: gameRow, col: gameCol },
           });
-          setAbilityMode(null);
           return;
         }
         const targetUnit = core.board[gameRow]?.[gameCol]?.unit;
@@ -399,6 +410,21 @@ export function useCellInteraction({
       return;
     }
 
+    // 结构变换第二步：选择推拉方向
+    if (abilityMode && abilityMode.abilityId === 'structure_shift' && abilityMode.step === 'selectNewPosition') {
+      const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
+      if (isValid && abilityMode.targetPosition) {
+        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+          abilityId: 'structure_shift',
+          sourceUnitId: abilityMode.sourceUnitId,
+          targetPosition: abilityMode.targetPosition,
+          newPosition: { row: gameRow, col: gameCol },
+        });
+        setAbilityMode(null);
+      }
+      return;
+    }
+
     // 技能目标选择模式（复活死灵、感染）
     if (abilityMode && abilityMode.step === 'selectPosition') {
       const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
@@ -421,7 +447,7 @@ export function useCellInteraction({
         const abilities = clickedUnit.card.abilities ?? [];
         if (abilities.includes('revive_undead')) {
           const hasUndeadInDiscard = core.players[myPlayerId]?.discard.some(c =>
-            c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === 'necromancer')
+            isUndeadCard(c)
           );
           if (hasUndeadInDiscard) {
             setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: clickedUnit.cardId });

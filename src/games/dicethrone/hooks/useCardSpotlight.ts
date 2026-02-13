@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlayerId, EventStreamEntry } from '../../../engine/types';
-import type { DieFace } from '../domain/types';
+import type { DieFace, CharacterId } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
 import { findHeroCard } from '../heroes';
 
@@ -24,6 +24,8 @@ export interface CardSpotlightConfig {
     opponentName: string;
     /** 是否为观战模式（观战显示全部特写） */
     isSpectator?: boolean;
+    /** 玩家选角映射（用于解析骰子图集） */
+    selectedCharacters?: Record<PlayerId, CharacterId>;
 }
 
 const normalizePlayerId = (value: PlayerId | string | number | null | undefined): string => {
@@ -48,6 +50,8 @@ export interface CardSpotlightState {
         effectKey?: string;
         effectParams?: Record<string, string | number>;
         show: boolean;
+        /** 骰子所属角色（用于图集选择） */
+        characterId?: string;
     };
     /** 关闭额外骰子特写 */
     handleBonusDieClose: () => void;
@@ -71,6 +75,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
         currentPlayerId,
         opponentName,
         isSpectator = false,
+        selectedCharacters,
     } = config;
 
     // 卡牌特写队列
@@ -82,6 +87,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
     const [bonusDieFace, setBonusDieFace] = useState<DieFace | undefined>(undefined);
     const [bonusDieEffectKey, setBonusDieEffectKey] = useState<string | undefined>(undefined);
     const [bonusDieEffectParams, setBonusDieEffectParams] = useState<Record<string, string | number> | undefined>(undefined);
+    const [bonusDieCharacterId, setBonusDieCharacterId] = useState<string | undefined>(undefined);
     const [showBonusDie, setShowBonusDie] = useState(false);
 
     // lastSeenEventId 模式追踪已消费事件（首次挂载时跳过历史）
@@ -105,7 +111,9 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
      * 核心：消费 EventStream 中的新事件
      */
     useEffect(() => {
-        if (isFirstMountRef.current) return;
+        if (isFirstMountRef.current) {
+            return;
+        }
         if (eventStreamEntries.length === 0) return;
 
         const lastSeenId = lastSeenEventIdRef.current;
@@ -173,6 +181,11 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
 
                 if (!shouldShowBonusDie) continue;
 
+                // 从 selectedCharacters 解析骰子所属角色
+                const resolvedCharacterId = selectedCharacters?.[bonusPid as PlayerId]
+                    ?? selectedCharacters?.[bonusPlayerId]
+                    ?? undefined;
+
                 // 尝试绑定到卡牌队列（卡左骰右）
                 const cardQueue = cardSpotlightQueueRef.current;
                 const thresholdMs = 1500;
@@ -197,6 +210,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                                             timestamp: eventTimestamp,
                                             effectKey: bonusEffectKey,
                                             effectParams: bonusEffectParams,
+                                            characterId: resolvedCharacterId,
                                         },
                                     ],
                                 }
@@ -209,11 +223,12 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                     setBonusDieFace(bonusFace);
                     setBonusDieEffectKey(bonusEffectKey);
                     setBonusDieEffectParams(bonusEffectParams);
+                    setBonusDieCharacterId(resolvedCharacterId);
                     setShowBonusDie(true);
                 }
             }
         }
-    }, [eventStreamEntries, currentPlayerId, opponentName, isSpectator]);
+    }, [eventStreamEntries, currentPlayerId, opponentName, isSpectator, selectedCharacters]);
 
     /**
      * 关闭卡牌特写
@@ -238,6 +253,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
             effectKey: bonusDieEffectKey,
             effectParams: bonusDieEffectParams,
             show: showBonusDie,
+            characterId: bonusDieCharacterId,
         },
         handleBonusDieClose,
     };

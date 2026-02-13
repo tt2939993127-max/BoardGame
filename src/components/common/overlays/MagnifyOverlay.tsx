@@ -22,24 +22,29 @@ export const MagnifyOverlay = ({
 
     return (
         <div
-            className={`fixed inset-0 bg-black/90 flex items-center justify-center p-8 backdrop-blur-md animate-in fade-in duration-200 ${overlayClassName}`}
+            className={`fixed inset-0 bg-black/30 flex items-center justify-center p-8 backdrop-blur-sm animate-in fade-in duration-200 ${overlayClassName}`}
             style={{ zIndex: UI_Z_INDEX.magnify }}
             onClick={onClose}
             data-interaction-allow
         >
+            {/* 外层 wrapper 不裁剪，让关闭按钮可见 */}
             <div
-                className={`relative shadow-2xl border border-white/10 rounded-[1vw] overflow-hidden group/modal ${containerClassName}`}
+                className="relative"
                 onClick={(e) => e.stopPropagation()}
             >
-                {children}
                 {closeLabel && (
                     <button
-                        className={`absolute -top-12 right-0 text-white/50 hover:text-white text-sm flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full transition-colors ${closeButtonClassName}`}
+                        className={`absolute -top-12 right-0 text-white/50 hover:text-white text-sm flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full transition-colors z-10 ${closeButtonClassName}`}
                         onClick={onClose}
                     >
                         {closeLabel}
                     </button>
                 )}
+                <div
+                    className={`rounded-[1vw] overflow-hidden group/modal ${containerClassName}`}
+                >
+                    {children}
+                </div>
             </div>
         </div>
     );

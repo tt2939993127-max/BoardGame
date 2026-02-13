@@ -23,6 +23,7 @@ import type { BaseAbilityContext } from '../domain/baseAbilities';
 import type { SmashUpCore, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { triggerBaseAbilityWithMS, getInteractionsFromResult } from './helpers';
 
 beforeAll(() => {
     initAllAbilities();
@@ -87,13 +88,11 @@ describe('base_haunted_house_al9000: 随从入场后弃牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', ctx);
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_haunted_house_al9000');
-        expect(continuation.playerId).toBe('0');
-        expect(continuation.data.promptConfig.options.length).toBe(2);
+        const result = triggerBaseAbilityWithMS('base_haunted_house_al9000', 'onMinionPlayed', ctx);
+        expect(result.events.length).toBe(0);
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('base_haunted_house_al9000');
     });
 
     it('手牌为空时不触发弃牌', () => {
@@ -122,7 +121,7 @@ describe('base_haunted_house_al9000: 随从入场后弃牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', ctx);
+        const { events } = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -149,7 +148,7 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.VP_AWARDED);
         expect((events[0] as any).payload.playerId).toBe('0'); // 消灭者获得VP
@@ -172,7 +171,7 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -198,7 +197,7 @@ describe('base_the_workshop: 额外行动额度', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_the_workshop', 'onActionPlayed', ctx);
+        const { events } = triggerBaseAbility('base_the_workshop', 'onActionPlayed', ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
         expect((events[0] as any).payload.playerId).toBe('0');
@@ -238,7 +237,7 @@ describe('base_stadium: 控制者抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_stadium', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_stadium', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
         expect((events[0] as any).payload.playerId).toBe('0');
@@ -271,7 +270,7 @@ describe('base_stadium: 控制者抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_stadium', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_stadium', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -299,7 +298,7 @@ describe('base_tar_pits: 被消灭随从放入牌库底', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_tar_pits', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_tar_pits', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.CARD_TO_DECK_BOTTOM);
         expect((events[0] as any).payload.cardUid).toBe('m1');
@@ -322,7 +321,7 @@ describe('base_tar_pits: 被消灭随从放入牌库底', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_tar_pits', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_tar_pits', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -367,7 +366,7 @@ describe('base_haunted_house: 冠军弃手牌抽5', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_haunted_house', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_haunted_house', 'afterScoring', ctx);
         expect(events.length).toBe(2); // 弃牌 + 抽牌
 
         // 第一个事件：弃掉所有手牌
@@ -392,7 +391,7 @@ describe('base_haunted_house: 冠军弃手牌抽5', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_haunted_house', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_haunted_house', 'afterScoring', ctx);
         expect(events.length).toBe(0);
     });
 
@@ -422,7 +421,7 @@ describe('base_haunted_house: 冠军弃手牌抽5', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_haunted_house', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_haunted_house', 'afterScoring', ctx);
         expect(events.length).toBe(1); // 只有抽牌
         expect(events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
     });
@@ -456,7 +455,7 @@ describe('base_temple_of_goju: 最高力量随从放牌库底', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_temple_of_goju', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_temple_of_goju', 'afterScoring', ctx);
         expect(events.length).toBe(2); // 每位玩家一个
 
         // P0 的最高力量随从 m1 (power 5)
@@ -487,7 +486,7 @@ describe('base_temple_of_goju: 最高力量随从放牌库底', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_temple_of_goju', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_temple_of_goju', 'afterScoring', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -534,7 +533,7 @@ describe('base_great_library: 有随从的玩家抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_great_library', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_great_library', 'afterScoring', ctx);
         expect(events.length).toBe(2);
         expect(events.every(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
 
@@ -577,7 +576,7 @@ describe('base_great_library: 有随从的玩家抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_great_library', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_great_library', 'afterScoring', ctx);
         expect(events.length).toBe(1); // 只有 P0
         expect((events[0] as any).payload.playerId).toBe('0');
     });
@@ -607,7 +606,7 @@ describe('base_great_library: 有随从的玩家抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_great_library', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_great_library', 'afterScoring', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -636,7 +635,7 @@ describe('base_ritual_site: 随从洗回牌库', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_ritual_site', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_ritual_site', 'afterScoring', ctx);
         expect(events.length).toBe(3);
         expect(events.every(e => e.type === SU_EVENTS.CARD_TO_DECK_BOTTOM)).toBe(true);
 
@@ -666,7 +665,7 @@ describe('base_ritual_site: 随从洗回牌库', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_ritual_site', 'afterScoring', ctx);
+        const { events } = triggerBaseAbility('base_ritual_site', 'afterScoring', ctx);
         expect(events.length).toBe(0);
     });
 });

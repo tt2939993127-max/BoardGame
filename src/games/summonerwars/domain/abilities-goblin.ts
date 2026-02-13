@@ -17,7 +17,8 @@
  */
 
 import type { AbilityDef } from './abilities';
-import { getUnitAt, isCellEmpty } from './helpers';
+import { getUnitAt, isCellEmpty, getPlayerUnits } from './helpers';
+import { abilityText } from './abilityTextHelper';
 
 export const GOBLIN_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -26,8 +27,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'vanish',
-    name: '神出鬼没',
-    description: '每回合一次，在你的攻击阶段，本单位可以和一个费用为0点的友方单位交换位置。',
+    name: abilityText('vanish', 'name'),
+    description: abilityText('vanish', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_01',
     trigger: 'activated',
     effects: [
@@ -78,6 +79,9 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.vanish',
       buttonVariant: 'secondary',
+      activationStep: 'selectUnit',
+      quickCheck: ({ core, unit, playerId }) =>
+        getPlayerUnits(core, playerId).some(u => u.cardId !== unit.cardId && u.card.cost === 0),
     },
   },
 
@@ -87,8 +91,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'blood_rune',
-    name: '鲜血符文',
-    description: '在你的攻击阶段开始时，对本单位造成1点伤害，或者消耗1点魔力以将本单位充能。',
+    name: abilityText('blood_rune', 'name'),
+    description: abilityText('blood_rune', 'description'),
     sfxKey: 'fantasy.dark_sword_attack_withblood_01',
     trigger: 'onPhaseStart',
     effects: [
@@ -117,6 +121,7 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.bloodRune',
       buttonVariant: 'secondary',
+      activationStep: 'selectChoice',
     },
   },
 
@@ -128,8 +133,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'magic_addiction',
-    name: '魔力成瘾',
-    description: '在你的回合结束时，消耗1点魔力，或者弃除本单位。',
+    name: abilityText('magic_addiction', 'name'),
+    description: abilityText('magic_addiction', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_02',
     trigger: 'onTurnEnd',
     effects: [
@@ -141,8 +146,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'ferocity',
-    name: '凶残',
-    description: '在你的攻击阶段，你可以选择本单位作为额外的攻击单位。',
+    name: abilityText('ferocity', 'name'),
+    description: abilityText('ferocity', 'description'),
     sfxKey: 'fantasy.dark_sword_attack_withblood_02',
     trigger: 'passive',
     effects: [
@@ -158,8 +163,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'feed_beast',
-    name: '喂养巨食兽',
-    description: '在你的攻击阶段结束时，如果本单位在本回合没有消灭任何单位，则移除一个相邻友方单位，或者弃除本单位。',
+    name: abilityText('feed_beast', 'name'),
+    description: abilityText('feed_beast', 'description'),
     sfxKey: 'fantasy.dark_sword_attack_withblood_03',
     trigger: 'onPhaseEnd',
     effects: [
@@ -172,6 +177,16 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       type: 'unit',
       filter: { type: 'isOwner', target: 'self', owner: 'self' },
       count: 1,
+    },
+    interactionChain: {
+      steps: [
+        { step: 'selectChoice', inputType: 'choice', producesField: 'choice' },
+        { step: 'selectTarget', inputType: 'position', producesField: 'targetPosition', optional: true },
+      ],
+      payloadContract: {
+        required: ['choice'],
+        optional: ['targetPosition'],
+      },
     },
     validation: {
       requiredPhase: 'attack',
@@ -212,6 +227,7 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.feedBeast',
       buttonVariant: 'secondary',
+      activationStep: 'selectUnit',
     },
   },
 
@@ -221,8 +237,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'climb',
-    name: '攀爬',
-    description: '当本单位移动时，可以额外移动1个区格，并且可以穿过建筑。',
+    name: abilityText('climb', 'name'),
+    description: abilityText('climb', 'description'),
     sfxKey: 'fantasy.elemental_sword_earthattack_01',
     trigger: 'onMove',
     effects: [
@@ -236,8 +252,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'charge',
-    name: '冲锋',
-    description: '本单位可以移动1至4个直线视野区格，以代替正常移动。如果本单位移动了至少3个直线区格，则获得战力+1，直到回合结束。',
+    name: abilityText('charge', 'name'),
+    description: abilityText('charge', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_01',
     trigger: 'onMove',
     effects: [
@@ -253,8 +269,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'immobile',
-    name: '禁足',
-    description: '本单位不能移动。',
+    name: abilityText('immobile', 'name'),
+    description: abilityText('immobile', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_02',
     trigger: 'passive',
     effects: [
@@ -265,8 +281,8 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
 
   {
     id: 'grab',
-    name: '抓附',
-    description: '当一个友方单位从本单位相邻的区格开始移动时，你可以在本次移动结束之后，将本单位放置到该单位相邻的区格。',
+    name: abilityText('grab', 'name'),
+    description: abilityText('grab', 'description'),
     sfxKey: 'fantasy.elemental_sword_earthattack_01',
     trigger: 'passive',
     effects: [

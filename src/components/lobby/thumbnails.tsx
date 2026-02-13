@@ -1,3 +1,4 @@
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameManifestEntry } from '../../games/manifest.types';
 import { OptimizedImage } from '../common/media/OptimizedImage';
@@ -64,8 +65,9 @@ type ManifestGameThumbnailProps = {
 
 export const ManifestGameThumbnail = ({ manifest }: ManifestGameThumbnailProps) => {
     const { t } = useTranslation('lobby');
+    const [imgFailed, setImgFailed] = React.useState(false);
 
-    if (!manifest.thumbnailPath) {
+    if (!manifest.thumbnailPath || imgFailed) {
         return <DefaultGameThumbnail titleKey={manifest.titleKey} icon={manifest.icon} />;
     }
     const title = t(manifest.titleKey);
@@ -75,6 +77,7 @@ export const ManifestGameThumbnail = ({ manifest }: ManifestGameThumbnailProps) 
                 src={manifest.thumbnailPath}
                 alt={title}
                 className="absolute inset-0 w-full h-full object-cover"
+                onError={() => setImgFailed(true)}
             />
         </div>
     );

@@ -21,7 +21,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
@@ -29,7 +29,7 @@ beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
     resetAbilityInit();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     initAllAbilities();
 });
 
@@ -71,7 +71,7 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
+    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
 }
 
 const defaultRandom: RandomFn = {
@@ -81,18 +81,36 @@ const defaultRandom: RandomFn = {
     range: (_min: number, _max: number) => _min,
 };
 
+/** 保存最近一次 execute 调用的 matchState 引用，用于检查 interaction */
+let lastMatchState: MatchState<SmashUpCore> | null = null;
+
 function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number, random?: RandomFn): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+    const ms = makeMatchState(state);
+    lastMatchState = ms;
+    return execute(ms, {
         type: SU_COMMANDS.PLAY_MINION, playerId,
         payload: { cardUid, baseIndex },
     } as any, random ?? defaultRandom);
 }
 
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+    const ms = makeMatchState(state);
+    lastMatchState = ms;
+    return execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
+}
+
+/** 从最近一次 execute 的 matchState 中获取 interactions */
+function getLastInteractions(): any[] {
+    if (!lastMatchState) return [];
+    const interaction = (lastMatchState.sys as any)?.interaction;
+    if (!interaction) return [];
+    const list: any[] = [];
+    if (interaction.current) list.push(interaction.current);
+    if (interaction.queue?.length) list.push(...interaction.queue);
+    return list;
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -121,10 +139,10 @@ describe('幽灵派系能力', () => {
             });
 
             const events = execPlayMinion(state, '0', 'm1', 0);
-            // 多张可弃手牌时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('ghost_ghost');
+            // 多张可弃手牌时应创建 Interaction
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
+            expect(interactions[0].data.sourceId).toBe('ghost_ghost');
         });
 
         it('单张手牌时创建 Prompt', () => {
@@ -142,9 +160,9 @@ describe('幽灵派系能力', () => {
             });
 
             const events = execPlayMinion(state, '0', 'm1', 0);
-            // 单张手牌时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 单张手牌时创建 Interaction
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
         });
 
         it('无其他手牌时不弃牌', () => {
@@ -179,9 +197,9 @@ describe('幽灵派系能力', () => {
 
             const events = execPlayMinion(state, '0', 'm1', 0);
             const newState = applyEvents(state, events);
-            // CHOICE_REQUESTED 已生成（Prompt 待决），h1 仍在手牌
-            const promptEvts = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvts.length).toBe(1);
+            // Interaction 已创建（Prompt 待决），h1 仍在手牌
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
             expect(newState.players['0'].hand.some(c => c.uid === 'h1')).toBe(true);
             // m1 应在基地上
             expect(newState.bases[0].minions.some(m => m.uid === 'm1')).toBe(true);
@@ -506,10 +524,10 @@ describe('蒸汽朋克派系能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            // 多张行动卡时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('steampunk_scrap_diving');
+            // 多张行动卡时应创建 Interaction
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
+            expect(interactions[0].data.sourceId).toBe('steampunk_scrap_diving');
         });
 
         it('单张行动卡时创建 Prompt', () => {
@@ -527,9 +545,9 @@ describe('蒸汽朋克派系能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            // 单张行动卡时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 单张行动卡时创建 Interaction
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
         });
 
         it('弃牌堆无行动卡时不产生事件', () => {
@@ -563,9 +581,9 @@ describe('蒸汽朋克派系能力', () => {
 
             const events = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
-            // CHOICE_REQUESTED 已生成（Prompt 待决），d1 仍在弃牌堆
-            const promptEvts = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvts.length).toBe(1);
+            // Interaction 已创建（Prompt 待决），d1 仍在弃牌堆
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
             expect(newState.players['0'].discard.some(c => c.uid === 'a1')).toBe(true);
             expect(newState.players['0'].discard.some(c => c.uid === 'd1')).toBe(true);
         });

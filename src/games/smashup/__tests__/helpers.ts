@@ -168,7 +168,7 @@ export function makeStateWithMadness(overrides?: Partial<SmashUpCore>): SmashUpC
 
 /** 包装为 MatchState（用于 validate/execute 测试） */
 export function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
+    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
 }
 
 // ============================================================================
@@ -178,4 +178,94 @@ export function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
 /** 应用事件列表到状态（通过 reduce） */
 export function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
     return events.reduce((s, e) => reduce(s, e), state);
+}
+
+// ============================================================================
+// InteractionHandler 测试桥接工具
+// ============================================================================
+
+import type { InteractionHandler } from '../domain/abilityInteractionHandlers';
+import type { RandomFn } from '../../../engine/types';
+
+/**
+ * 旧式 handler 调用桥接：将对象参数转为位置参数
+ *
+ * 旧调用：handler({ state, playerId, selectedValue, data, random, now })
+ * 新签名：handler(matchState, playerId, value, iData, random, timestamp)
+ *
+ * 返回 events 数组（兼容旧测试断言）
+ */
+export function callHandler(
+    handler: InteractionHandler,
+    args: {
+        state: SmashUpCore;
+        playerId: string;
+        selectedValue: unknown;
+        data?: Record<string, unknown>;
+        random: RandomFn;
+        now: number;
+    },
+): SmashUpEvent[] {
+    const ms = makeMatchState(args.state);
+    // 旧测试的 data 字段对应新 handler 中 iData.continuationContext
+    const iData = args.data && Object.keys(args.data).length > 0
+        ? { continuationContext: args.data } as Record<string, unknown>
+        : undefined;
+    const result = handler(
+        ms,
+        args.playerId,
+        args.selectedValue,
+        iData,
+        args.random,
+        args.now,
+    );
+    return result?.events ?? [];
+}
+
+import type { BaseAbilityContext, BaseAbilityResult } from '../domain/baseAbilities';
+import { triggerBaseAbility as _triggerBaseAbility } from '../domain/baseAbilities';
+
+/**
+ * 基地能力测试桥接：自动注入 matchState 到 ctx
+ *
+ * 旧测试不传 matchState，但新能力实现需要它来调用 queueInteraction。
+ * 返回 BaseAbilityResult（含 events 和 matchState）。
+ */
+export function triggerBaseAbilityWithMS(
+    baseDefId: string,
+    timing: 'onMinionPlayed' | 'onMinionDestroyed' | 'onTurnStart' | 'afterScoring' | 'onActionPlayed',
+    ctx: BaseAbilityContext,
+): BaseAbilityResult {
+    const ctxWithMS: BaseAbilityContext = {
+        ...ctx,
+        matchState: ctx.matchState ?? makeMatchState(ctx.state),
+    };
+    return _triggerBaseAbility(baseDefId, timing, ctxWithMS);
+}
+
+/**
+ * 获取 BaseAbilityResult 中的所有 interaction（current + queue）
+ * 用于替代旧的 CHOICE_REQUESTED 事件检查
+ */
+export function getInteractionsFromResult(result: BaseAbilityResult): any[] {
+    const interaction = (result.matchState?.sys as any)?.interaction;
+    if (!interaction) return [];
+    const list: any[] = [];
+    if (interaction.current) list.push(interaction.current);
+    if (interaction.queue?.length) list.push(...interaction.queue);
+    return list;
+}
+
+
+/**
+ * 从 MatchState 中获取所有 interaction（current + queue）
+ * 用于 execute() 后检查是否创建了交互
+ */
+export function getInteractionsFromMS(ms: MatchState<SmashUpCore>): any[] {
+    const interaction = (ms.sys as any)?.interaction;
+    if (!interaction) return [];
+    const list: any[] = [];
+    if (interaction.current) list.push(interaction.current);
+    if (interaction.queue?.length) list.push(...interaction.queue);
+    return list;
 }

@@ -30,6 +30,43 @@ export {
     type RefChain,
 } from './entityIntegritySuite';
 
+// 能力行为审计套件（描述→代码一致性验证）
+export {
+    createAbilityBehaviorAuditSuite,
+    createKeywordBehaviorCheck,
+    createOngoingCollectionCheck,
+    createAbilityTagCoverageCheck,
+    createSelfDestructCheck,
+    createConditionCheck,
+    type AuditableEntity,
+    type KeywordBehaviorRule,
+    type KeywordBehaviorCheckConfig,
+    type OngoingRegistration,
+    type OngoingCollectionCheckConfig,
+    type AbilityTagCoverageConfig,
+    type SelfDestructCheckConfig,
+    type ConditionRule,
+    type ConditionCheckConfig,
+    type FullAuditSuiteConfig,
+} from './abilityBehaviorAudit';
+
+// 卡牌完整性审计套件（playCondition / 效果结构 / 占位符检测）
+export {
+    createCardCompletenessAuditSuite,
+    createDescriptionConditionCheck,
+    createCardStructureCheck,
+    createPlaceholderCheck,
+    type AuditableCard,
+    type AuditableCardEffect,
+    type DescriptionConditionRule,
+    type DescriptionConditionCheckConfig,
+    type CardStructureRule,
+    type CardStructureCheckConfig,
+    type PlaceholderPattern,
+    type PlaceholderCheckConfig,
+    type CardCompletenessAuditConfig,
+} from './cardCompletenessAudit';
+
 // ============================================================================
 // 类型定义
 // ============================================================================

@@ -13,7 +13,7 @@ import {
     ChevronUp,
     Play,
 } from 'lucide-react';
-import { useAudio } from '../../contexts/AudioContext';
+import { useAudio } from '../../../../contexts/AudioContext';
 import clsx from 'clsx';
 
 interface AudioControlSectionProps {

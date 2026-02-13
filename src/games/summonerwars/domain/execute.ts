@@ -47,6 +47,7 @@ import {
 } from './execute/helpers';
 import { executeActivateAbility } from './execute/abilities';
 import { executePlayEvent } from './execute/eventCards';
+import { getBaseCardId, CARD_IDS } from './ids';
 
 // 辅助函数已迁移到 execute/helpers.ts
 // 保留 getPhaseDisplayName 的导出以保持向后兼容
@@ -514,8 +515,7 @@ export function executeCommand(
             const targetOwner = targetCell.unit.owner;
             const targetPlayer = workingCore.players[targetOwner];
             const hasHolyProtection = targetPlayer.activeEvents.some(ev => {
-              const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-              return baseId === 'paladin-holy-protection';
+              return getBaseCardId(ev.id) === CARD_IDS.PALADIN_HOLY_PROTECTION;
             });
             if (hasHolyProtection && targetCell.unit.card.unitClass === 'common') {
               // 检查目标是否在召唤师3格内

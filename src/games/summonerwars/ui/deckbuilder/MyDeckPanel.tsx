@@ -5,6 +5,7 @@ import type { DeckDraft, DeckValidationResult } from '../../config/deckValidatio
 import type { SavedDeckSummary } from './useDeckBuilder';
 import { CardSprite } from '../CardSprite';
 import { MagnifyOverlay } from '../../../../components/common/overlays/MagnifyOverlay';
+import { GameButton } from '../GameButton';
 import { resolveCardAtlasId, initSpriteAtlases } from '../cardAtlas';
 import type { Card } from '../../domain/types';
 
@@ -146,13 +147,14 @@ export const MyDeckPanel: React.FC<MyDeckPanelProps> = ({
             {/* 底部操作区 */}
             <div className="p-3 border-t border-white/10 bg-black/40 space-y-2">
                 {onConfirm && (
-                    <button
+                    <GameButton
+                        variant="primary"
+                        fullWidth
                         onClick={onConfirm}
                         disabled={!validationResult.valid || !currentDeck.summoner}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2 rounded-lg text-sm font-black uppercase tracking-wider transition-colors shadow-lg shadow-emerald-900/30"
                     >
                         {t('deckBuilder.useDeck')}
-                    </button>
+                    </GameButton>
                 )}
 
                 {/* 保存牌组 */}
@@ -163,13 +165,15 @@ export const MyDeckPanel: React.FC<MyDeckPanelProps> = ({
                     placeholder={t('deckBuilder.placeholderName')}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-amber-500/50"
                 />
-                <button
+                <GameButton
+                    variant="secondary"
+                    fullWidth
+                    size="sm"
                     onClick={() => onSave(deckName)}
                     disabled={!validationResult.valid || !deckName}
-                    className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-1.5 rounded-lg text-sm font-bold transition-colors"
                 >
                     {t('deckBuilder.save')}
-                </button>
+                </GameButton>
 
                 {/* 已保存牌组 */}
                 {savedDecks.length > 0 && (

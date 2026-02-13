@@ -13,6 +13,7 @@ import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { drawCards } from '../domain/utils';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { MatchState } from '../../../engine/types';
 

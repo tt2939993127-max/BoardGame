@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
-import { getLocalizedAssetPath } from '../../../core';
+import { getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
 import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
@@ -80,7 +80,8 @@ export const CenterBoard = ({
                     />
                     <button
                         onClick={(e) => { e.stopPropagation(); onMagnifyImage(playerBoardPath); }}
-                        className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20 z-20"
+                        className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20"
+                        style={{ zIndex: UI_Z_INDEX.hud + 10 }}
                     >
                         <svg className="w-[1.2vw] h-[1.2vw] fill-current" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -102,7 +103,8 @@ export const CenterBoard = ({
                             />
                             <button
                                 onClick={(e) => { e.stopPropagation(); onMagnifyImage(tipBoardPath); }}
-                                className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20 z-20"
+                                className="absolute top-[1vw] right-[1vw] w-[2.2vw] h-[2.2vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-300 shadow-xl border border-white/20"
+                                style={{ zIndex: UI_Z_INDEX.hud + 10 }}
                             >
                                 <svg className="w-[1.2vw] h-[1.2vw] fill-current" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />

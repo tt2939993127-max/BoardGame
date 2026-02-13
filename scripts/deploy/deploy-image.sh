@@ -14,16 +14,14 @@ set -euo pipefail
 #   curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy/deploy-image.sh | bash
 #
 # 环境变量（可选，用于非交互环境）：
-#   JWT_SECRET=xxx WEB_ORIGINS=https://example.com bash deploy-image.sh
+#   JWT_SECRET=xxx bash deploy-image.sh
 #
-# 架构：Nginx (80) → Docker web 容器 (3000) → 内部 game-server (18000)
-# 脚本自动安装/配置 Nginx，管理 /etc/nginx/conf.d/boardgame.conf
+# 架构：Cloudflare CDN (HTTPS) → 服务器 80 端口 → Docker web 容器 (NestJS monolith) → 内部 game-server
+# 同域部署，无 CORS 问题。Cloudflare 自动缓存静态资源，服务器只承担 API 和 WebSocket 带宽。
 #
 # 文档：docs/deploy.md
 
 LOG_PREFIX="[镜像部署]"
-NGINX_MANAGED_CONF="boardgame.conf"
-WEB_CONTAINER_PORT=3000
 
 log() {
   echo "${LOG_PREFIX} $*"
@@ -146,28 +144,6 @@ prompt_env_interactive() {
     log "✅ 已自动生成 JWT_SECRET"
   fi
 
-  # --- WEB_ORIGINS ---
-  local web_origins=""
-  echo ""
-  echo "${LOG_PREFIX} WEB_ORIGINS 用于跨域白名单，填写你的前端访问域名。"
-  echo "${LOG_PREFIX} 示例: https://easyboardgame.top,https://boardgame-e6c.pages.dev"
-  echo "${LOG_PREFIX} 多个域名用英文逗号分隔，留空则自动检测公网 IP。"
-  echo -n "${LOG_PREFIX} WEB_ORIGINS："
-  read -r web_origins || web_origins=""
-  if [ -z "$web_origins" ]; then
-    local public_ip=""
-    if command -v curl &>/dev/null; then
-      public_ip=$(curl -fsSL --connect-timeout 5 ifconfig.me 2>/dev/null || true)
-    fi
-    if [ -n "$public_ip" ]; then
-      web_origins="http://${public_ip}"
-      log "✅ 已自动检测公网 IP: ${public_ip}"
-    else
-      web_origins="http://localhost"
-      log "⚠️  无法检测公网 IP，默认使用 http://localhost，请稍后修改 .env"
-    fi
-  fi
-
   # --- SMTP（可选） ---
   local smtp_host="" smtp_port="" smtp_user="" smtp_pass=""
   echo ""
@@ -198,9 +174,6 @@ prompt_env_interactive() {
   cat > .env << EOF
 # ===== 密钥（必填） =====
 JWT_SECRET=${jwt_secret}
-
-# ===== 跨域白名单（必填） =====
-WEB_ORIGINS=${web_origins}
 EOF
 
   if [ -n "$smtp_host" ]; then
@@ -253,172 +226,42 @@ ensure_env_file() {
   # 非交互环境
   log "非交互终端，自动生成最小 .env"
   local jwt_secret="${JWT_SECRET:-$(generate_jwt_secret)}"
-  local web_origins="${WEB_ORIGINS:-}"
-  if [ -z "$web_origins" ]; then
-    local public_ip=""
-    if command -v curl &>/dev/null; then
-      public_ip=$(curl -fsSL --connect-timeout 5 ifconfig.me 2>/dev/null || true)
-    fi
-    web_origins="${public_ip:+http://${public_ip}}"
-    web_origins="${web_origins:-http://localhost}"
-  fi
 
   cat > .env << EOF
 # 自动生成 — 请检查并按需修改
 JWT_SECRET=${jwt_secret}
-WEB_ORIGINS=${web_origins}
 EOF
 
-  log "⚠️  .env 已自动生成，建议检查 WEB_ORIGINS 是否正确"
+  log "⚠️  .env 已自动生成，建议检查配置"
 }
 
 # ============================================================
-# Nginx 自动管理
+# 端口冲突检测与清理
 # ============================================================
 
-# 期望的 Nginx 配置内容
-expected_nginx_conf() {
-  cat << 'NGINX_EOF'
-# BoardGame 反向代理（由 deploy-image.sh 自动管理，勿手动编辑）
-# 如需自定义，请创建独立的 .conf 文件，本文件会被脚本覆盖。
-server {
-    listen 80 default_server;
-    server_name _;
+ensure_port_available() {
+  local port=80
 
-    client_max_body_size 10M;
+  # 检查是否有进程占用 80 端口
+  if command -v ss &>/dev/null; then
+    local pid
+    pid=$(ss -tlnp "sport = :${port}" 2>/dev/null | grep -oP 'pid=\K\d+' | head -1 || true)
+    if [ -n "$pid" ]; then
+      local proc_name
+      proc_name=$(ps -p "$pid" -o comm= 2>/dev/null || echo "unknown")
+      log "⚠️  端口 ${port} 被占用（PID=${pid}, ${proc_name}）"
 
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_request_buffering off;
-        proxy_buffering off;
-    }
-}
-NGINX_EOF
-}
-
-# 检测包管理器
-detect_pkg_manager() {
-  if command -v apt-get &>/dev/null; then echo "apt"
-  elif command -v dnf &>/dev/null; then echo "dnf"
-  elif command -v yum &>/dev/null; then echo "yum"
-  else echo ""
-  fi
-}
-
-# 安装 Nginx
-install_nginx() {
-  if command -v nginx &>/dev/null; then
-    return 0
-  fi
-
-  local pkg_mgr
-  pkg_mgr=$(detect_pkg_manager)
-
-  case "$pkg_mgr" in
-    apt)
-      log "安装 Nginx（apt）"
-      $SUDO apt-get update -y && $SUDO apt-get install -y nginx
-      ;;
-    dnf)
-      log "安装 Nginx（dnf）"
-      $SUDO dnf install -y nginx
-      ;;
-    yum)
-      log "安装 Nginx（yum）"
-      if [ ! -f /etc/yum.repos.d/nginx.repo ]; then
-        $SUDO tee /etc/yum.repos.d/nginx.repo << 'REPO_EOF' > /dev/null
-[nginx-stable]
-name=nginx stable repo
-baseurl=http://nginx.org/packages/centos/8/$basearch/
-gpgcheck=0
-enabled=1
-REPO_EOF
+      # 如果是 Nginx，停止并禁用它
+      if [[ "$proc_name" == "nginx" ]]; then
+        log "检测到宿主机 Nginx 占用 80 端口，正在停止..."
+        $SUDO systemctl stop nginx 2>/dev/null || true
+        $SUDO systemctl disable nginx 2>/dev/null || true
+        log "✅ 已停止并禁用宿主机 Nginx（不再需要，web 容器直接监听 80）"
+      else
+        die "端口 ${port} 被 ${proc_name}(PID=${pid}) 占用，请先释放"
       fi
-      $SUDO yum install -y nginx --disableexcludes=all
-      ;;
-    *)
-      die "无法自动安装 Nginx（未识别包管理器），请手动安装后重试"
-      ;;
-  esac
-
-  log "✅ Nginx 安装完成"
-}
-
-# 配置 Nginx（幂等）
-configure_nginx() {
-  local conf_dir="/etc/nginx/conf.d"
-  local managed_conf="${conf_dir}/${NGINX_MANAGED_CONF}"
-  local expected
-  expected=$(expected_nginx_conf)
-
-  # 1. 检查我们管理的配置是否已是最新
-  if [ -f "$managed_conf" ]; then
-    local current
-    current=$(cat "$managed_conf")
-    if [ "$current" = "$expected" ]; then
-      log "Nginx 配置已是最新，跳过"
-      return 0
     fi
-    # 配置过时，备份后覆盖
-    log "更新 Nginx 配置（检测到变更）"
-    $SUDO cp "$managed_conf" "${managed_conf}.bak.$(date +%s)"
-  else
-    log "创建 Nginx 配置: ${managed_conf}"
   fi
-
-  # 2. 禁用冲突的默认配置
-  local default_conf="${conf_dir}/default.conf"
-  if [ -f "$default_conf" ]; then
-    log "禁用默认 Nginx 配置（避免端口冲突）"
-    $SUDO mv "$default_conf" "${default_conf}.disabled"
-  fi
-
-  # 3. 检查其他配置是否有冲突（监听 80 端口的 default_server）
-  for conf_file in "$conf_dir"/*.conf; do
-    [ -f "$conf_file" ] || continue
-    [ "$(basename "$conf_file")" = "$NGINX_MANAGED_CONF" ] && continue
-    if grep -q 'default_server' "$conf_file" 2>/dev/null; then
-      log "⚠️  检测到冲突配置（含 default_server）: $conf_file"
-      log "⚠️  建议检查或删除: sudo rm $conf_file"
-    fi
-  done
-
-  # 4. 写入配置
-  echo "$expected" | $SUDO tee "$managed_conf" > /dev/null
-
-  # 5. 测试并重载
-  if ! $SUDO nginx -t 2>/dev/null; then
-    die "Nginx 配置测试失败，请检查 ${managed_conf}"
-  fi
-
-  $SUDO systemctl enable nginx 2>/dev/null || true
-  $SUDO systemctl start nginx 2>/dev/null || true
-  $SUDO systemctl reload nginx
-
-  log "✅ Nginx 已就绪（80 → 127.0.0.1:${WEB_CONTAINER_PORT}）"
-}
-
-# 确保 compose 端口映射正确
-ensure_compose_port() {
-  # 统一使用 3000:80，Nginx 代理到 3000
-  if grep -q '"80:80"' "$COMPOSE_FILE" 2>/dev/null; then
-    sed -i.bak "s/\"80:80\"/\"${WEB_CONTAINER_PORT}:80\"/g" "$COMPOSE_FILE"
-    log "web 容器端口映射: ${WEB_CONTAINER_PORT}:80"
-  fi
-}
-
-# Nginx 完整配置流程
-setup_nginx() {
-  install_nginx
-  configure_nginx
-  ensure_compose_port
 }
 
 # ============================================================
@@ -429,7 +272,7 @@ deploy() {
   ensure_compose_file
   ensure_env_file
   configure_docker_mirror
-  setup_nginx
+  ensure_port_available
 
   log "拉取最新镜像"
   docker compose -f "$COMPOSE_FILE" pull
@@ -446,8 +289,12 @@ deploy() {
   log "=========================================="
   docker compose -f "$COMPOSE_FILE" ps
   echo ""
-  log "入口: http://<服务器IP>"
-  log "架构: Nginx (80) → web 容器 (${WEB_CONTAINER_PORT}) → game-server (内部)"
+  log "架构: Cloudflare (HTTPS + CDN) → 服务器 :80 → web 容器 (NestJS) → game-server (内部)"
+  log ""
+  log "部署后配置 Cloudflare："
+  log "  1. DNS: 域名 A 记录 → 服务器 IP（开启代理/橙色云朵）"
+  log "  2. SSL/TLS: 模式选 Flexible（源站 HTTP）"
+  log "  3. 不需要 api 子域名，前后端同域，无 CORS"
 }
 
 rollback() {

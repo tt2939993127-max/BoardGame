@@ -195,6 +195,53 @@ export class AbilityRegistry<TDef extends AbilityDef = AbilityDef> {
 }
 
 // ============================================================================
+// 交互链声明类型（用于多步交互技能的契约校验）
+// ============================================================================
+
+/**
+ * 交互步骤声明
+ *
+ * 描述一个多步交互中的单个步骤：用户需要做什么操作、产出什么 payload 字段。
+ * 引擎层通用，游戏层在 AbilityDef 中声明。
+ */
+export interface InteractionStep {
+  /** 步骤 ID（如 'selectBuilding', 'selectDirection'） */
+  step: string;
+  /** 输入类型 */
+  inputType: 'unit' | 'position' | 'card' | 'direction' | 'choice' | 'cards';
+  /** 此步骤产出的 payload 字段名 */
+  producesField: string;
+  /** 是否可选（某些步骤可跳过） */
+  optional?: boolean;
+}
+
+/**
+ * Payload 契约声明
+ *
+ * 声明执行器期望从 payload 中读取的字段。
+ * 用于与 interactionChain.steps 交叉校验。
+ */
+export interface PayloadContract {
+  /** 执行器必需的 payload 字段（缺失则执行器静默返回空事件） */
+  required: string[];
+  /** 可选字段（有则使用，无则走默认逻辑） */
+  optional?: string[];
+}
+
+/**
+ * 交互链声明
+ *
+ * 完整描述一个多步交互技能的 UI 交互流程和最终 payload 契约。
+ * 引擎层测试工厂自动校验：steps 产出 ⊇ payloadContract.required。
+ */
+export interface InteractionChain {
+  /** 交互步骤列表（按顺序） */
+  steps: InteractionStep[];
+  /** 最终发送给执行器的 payload 契约 */
+  payloadContract: PayloadContract;
+}
+
+// ============================================================================
 // AbilityExecutorRegistry — 能力执行器注册表
 // ============================================================================
 
@@ -223,6 +270,7 @@ export class AbilityExecutorRegistry<
   TEvent = unknown,
 > {
   private entries = new Map<string, AbilityExecutor<TCtx, TEvent>>();
+  private contracts = new Map<string, PayloadContract>();
   private label: string;
 
   constructor(label = 'AbilityExecutorRegistry') {
@@ -234,17 +282,28 @@ export class AbilityExecutorRegistry<
     return tag ? `${abilityId}::${tag}` : abilityId;
   }
 
-  /** 注册执行器 */
+  /**
+   * 注册执行器
+   *
+   * @param abilityId 技能 ID
+   * @param executor  执行函数
+   * @param tagOrOptions tag 字符串（向后兼容）或 { tag?, payloadContract? } 选项
+   */
   register(
     abilityId: string,
     executor: AbilityExecutor<TCtx, TEvent>,
-    tag?: string,
+    tagOrOptions?: string | { tag?: string; payloadContract?: PayloadContract },
   ): void {
+    const tag = typeof tagOrOptions === 'string' ? tagOrOptions : tagOrOptions?.tag;
+    const contract = typeof tagOrOptions === 'object' ? tagOrOptions?.payloadContract : undefined;
     const key = this.makeKey(abilityId, tag);
     if (this.entries.has(key)) {
       console.warn(`[${this.label}] "${key}" 已存在，将被覆盖`);
     }
     this.entries.set(key, executor);
+    if (contract) {
+      this.contracts.set(key, contract);
+    }
   }
 
   /** 查找执行器 */
@@ -266,6 +325,24 @@ export class AbilityExecutorRegistry<
     return new Set(this.entries.keys());
   }
 
+  /**
+   * 获取执行器声明的 payload 契约
+   *
+   * 用于交互链完整性测试：校验 UI 交互步骤是否覆盖了执行器所需字段。
+   */
+  getPayloadContract(abilityId: string, tag?: string): PayloadContract | undefined {
+    return this.contracts.get(this.makeKey(abilityId, tag));
+  }
+
+  /**
+   * 获取所有已声明 payload 契约的映射
+   *
+   * 返回 Map<key, PayloadContract>，用于批量审计。
+   */
+  getAllPayloadContracts(): Map<string, PayloadContract> {
+    return new Map(this.contracts);
+  }
+
   /** 注册表大小 */
   get size(): number {
     return this.entries.size;
@@ -274,6 +351,7 @@ export class AbilityExecutorRegistry<
   /** 清空（测试用） */
   clear(): void {
     this.entries.clear();
+    this.contracts.clear();
   }
 }
 
@@ -357,3 +435,31 @@ export function createAbilityExecutorRegistry<
 >(label?: string): AbilityExecutorRegistry<TCtx, TEvent> {
   return new AbilityExecutorRegistry<TCtx, TEvent>(label);
 }
+
+// ============================================================================
+// i18n key 生成辅助
+// ============================================================================
+
+/**
+ * 生成技能 i18n key
+ *
+ * 用于 AbilityDef 的 name/description 字段，存储 i18n key 而非硬编码文本。
+ * 各游戏共用，避免每个英雄/派系文件重复定义。
+ *
+ * @example
+ * abilityText('frost_axe', 'name')       // => 'abilities.frost_axe.name'
+ * abilityText('frost_axe', 'description') // => 'abilities.frost_axe.description'
+ */
+export const abilityText = (id: string, field: 'name' | 'description'): string =>
+  `abilities.${id}.${field}`;
+
+/**
+ * 生成技能效果 i18n key
+ *
+ * 用于 AbilityDef 中效果描述的 i18n key 生成。
+ *
+ * @example
+ * abilityEffectText('slash', 'damage') // => 'abilities.slash.effects.damage'
+ */
+export const abilityEffectText = (id: string, field: string): string =>
+  `abilities.${id}.effects.${field}`;

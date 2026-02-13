@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldShowVictoryParticles, type GameOverResult } from '../game/EndgameOverlay';
+import { shouldShowVictoryParticles, type GameOverResult } from '../game/framework/widgets/EndgameOverlay';
 
 describe('shouldShowVictoryParticles', () => {
     it('无结果或平局不触发', () => {

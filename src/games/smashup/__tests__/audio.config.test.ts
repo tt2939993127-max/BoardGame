@@ -331,7 +331,7 @@ describe('Smash Up 音效配置', () => {
         const elderThingAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'elder_thing_power_of_madness' } } as AudioEvent);
         const innsmouthMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'innsmouth_the_locals' } } as AudioEvent);
         const innsmouthAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'innsmouth_mysteries_of_the_deep' } } as AudioEvent);
-        const miskatonicMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'miskatonic_the_librarian' } } as AudioEvent);
+        const miskatonicMinion = resolveKey({ type: SU_EVENTS.MINION_PLAYED, payload: { defId: 'miskatonic_professor' } } as AudioEvent);
         const miskatonicAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'miskatonic_book_of_iter_the_unseen' } } as AudioEvent);
         const madnessAction = resolveKey({ type: SU_EVENTS.ACTION_PLAYED, payload: { defId: 'special_madness' } } as AudioEvent);
         const talentUsed = resolveKey({ type: SU_EVENTS.TALENT_USED, payload: { defId: 'wizard_archmage' } } as AudioEvent);
@@ -380,7 +380,6 @@ describe('Smash Up 音效配置', () => {
         expect(resolveKey({ type: SU_EVENTS.POWER_COUNTER_REMOVED } as AudioEvent)).toBe(POWER_LOSE_KEY);
         expect(resolveKey({ type: SU_EVENTS.MADNESS_DRAWN } as AudioEvent)).toBe(MADNESS_KEY);
         expect(resolveKey({ type: SU_EVENTS.MADNESS_RETURNED } as AudioEvent)).toBe(MADNESS_KEY);
-        expect(resolveKey({ type: SU_EVENTS.CHOICE_REQUESTED } as AudioEvent)).toBe(PROMPT_KEY);
     });
 
     it('应按阶段切换 BGM', () => {

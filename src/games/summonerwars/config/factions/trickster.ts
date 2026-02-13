@@ -55,7 +55,6 @@ export const SUMMONER_TRICKSTER: UnitCard = {
   attackType: 'ranged',
   attackRange: 3,
   abilities: ['mind_capture'],
-  abilityText: '心灵捕获：当本单位攻击一个敌方单位时，如果造成的伤害足够消灭目标，则你可以忽略本次伤害并且获得目标的控制权，以代替造成伤害。',
   deckSymbols: [DECK_SYMBOLS.DOUBLE_AXE, DECK_SYMBOLS.EYE, DECK_SYMBOLS.WAVE], // ⚔️👁️🌊（双斧 + 阵营的2种符号）
   spriteIndex: 0,
   spriteAtlas: 'hero',
@@ -78,7 +77,6 @@ export const CHAMPION_UNITS_TRICKSTER: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['flying', 'aerial_strike'],
-    abilityText: '飞行：当本单位移动时，可以额外移动1个区格，并且可以穿过其它卡牌。\n浮空术：本单位2个区格以内开始移动的友方士兵，在本次移动时获得飞行技能。',
     deckSymbols: [DECK_SYMBOLS.EYE, DECK_SYMBOLS.WAVE], // 👁️🌊 (图片确认)
     spriteIndex: SPRITE_INDEX_TRICKSTER.CHAMPION_LEILA,
     spriteAtlas: 'cards',
@@ -95,7 +93,6 @@ export const CHAMPION_UNITS_TRICKSTER: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['high_telekinesis', 'stable'],
-    abilityText: '高阶念力：在本单位攻击之后，或代替本单位的攻击，可以指定其最多3个区格以内的一个士兵或英雄为目标，将目标推拉1个区格。\n稳固：本单位不能被推拉。',
     deckSymbols: [DECK_SYMBOLS.WAVE], // 🌊 (图片确认)
     spriteIndex: SPRITE_INDEX_TRICKSTER.CHAMPION_KARA,
     spriteAtlas: 'cards',
@@ -112,7 +109,6 @@ export const CHAMPION_UNITS_TRICKSTER: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['mind_transmission'],
-    abilityText: '读心传念：在本单位攻击一张敌方卡牌之后，可以指定本单位3个区格以内的一个友方士兵为目标，目标进行一次额外的攻击。',
     deckSymbols: [DECK_SYMBOLS.EYE], // 👁️ (图片确认)
     spriteIndex: SPRITE_INDEX_TRICKSTER.CHAMPION_GULZAR,
     spriteAtlas: 'cards',
@@ -136,7 +132,6 @@ export const COMMON_UNITS_TRICKSTER: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['swift', 'ranged'],
-    abilityText: '迅捷：当本单位移动时，可以额外移动1个区格。\n远射：本单位可以攻击至多4个直线区格的目标。',
     deckSymbols: [DECK_SYMBOLS.WAVE], // 🌊 (图片确认)
     spriteIndex: SPRITE_INDEX_TRICKSTER.COMMON_WIND_ARCHER,
   },
@@ -152,7 +147,6 @@ export const COMMON_UNITS_TRICKSTER: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['telekinesis'],
-    abilityText: '念力：在本单位攻击之后，或代替本单位的攻击，可以指定其2个区格以内的一个士兵或英雄为目标，将目标推拉1个区格。',
     deckSymbols: [DECK_SYMBOLS.WAVE], // 🌊 (图片确认: 波浪，非眼睛)
     spriteIndex: SPRITE_INDEX_TRICKSTER.COMMON_WIND_MAGE,
     spriteAtlas: 'cards',
@@ -169,7 +163,6 @@ export const COMMON_UNITS_TRICKSTER: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['illusion'],
-    abilityText: '幻化：在你的移动阶段并开始时，可以指定本单位3个区格以内的一个士兵为目标。本单位获得目标的所有技能，直到回合结束。',
     deckSymbols: [DECK_SYMBOLS.EYE], // 👁️ (图片确认)
     spriteIndex: SPRITE_INDEX_TRICKSTER.COMMON_MIND_WITCH,
   },
@@ -185,7 +178,6 @@ export const COMMON_UNITS_TRICKSTER: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['evasion', 'rebound'],
-    abilityText: '迷魂：当一个相邻敌方单位攻击时，如果掷出一个或更多✦，则本次攻击造成的伤害减少1点。\n缠斗：每当一个相邻敌方单位因为移动或被推拉而远离本单位时，立刻对该单位造成1点伤害。',
     deckSymbols: [DECK_SYMBOLS.EYE], // 👁️ (图片确认)
     spriteIndex: SPRITE_INDEX_TRICKSTER.COMMON_TELEKINETIC,
   },

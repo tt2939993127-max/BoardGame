@@ -11,7 +11,7 @@ import type { TokenDef } from '../domain/tokenTypes';
 import type { AbilityEffect } from '../domain/combat';
 import type { AbilityCard } from '../domain/types';
 import type { AbilityDef } from '../domain/combat/types';
-import { getRegisteredCustomActionIds, isCustomActionCategory } from '../domain/effects';
+import { getRegisteredCustomActionIds, isCustomActionCategory, getCustomActionMeta } from '../domain/effects';
 import {
     createRegistryIntegritySuite,
     createEffectContractSuite,
@@ -366,4 +366,132 @@ createEffectContractSuite({
         (def.passiveTrigger?.actions ?? []).map(a => ({ tokenId: def.id, action: a })),
     rules: tokenPassiveRules,
     minSourceCount: 1,
+});
+
+
+// ============================================================================
+// 7. 能力效果双重授予检测（防止 abilities.ts 独立效果与 custom action 内部重复）
+// ============================================================================
+
+/**
+ * 检测"双重授予"反模式：
+ * 如果一个能力/变体的效果列表中同时存在：
+ *   1. 独立的 grantToken/grantStatus 效果
+ *   2. custom action，且该 custom action 的 categories 包含可能产生同类事件的分类
+ * 则标记为潜在双重授予。
+ *
+ * 这类 bug 的根因：custom action 内部已经处理了 token/status 授予（因为需要先授予再基于数量计算伤害），
+ * 但 abilities.ts 中又有独立的 grantToken/grantStatus 效果，导致同一 token/status 被授予两次。
+ *
+ * 白名单：某些能力确实需要独立效果 + custom action 共存（如 fiery-combo-2 的 FM 在 preDefense 获得，
+ * custom action 在 withDamage 只算伤害不授予 FM）。白名单中的条目必须注释说明原因。
+ */
+describe('能力效果双重授予检测', () => {
+    // 白名单：这些能力/变体确实需要独立效果 + custom action 共存（已确认不重复）
+    // 格式：'heroId/abilityId/variantId' 或 'heroId/abilityId'（无变体时）
+    const WHITELIST = new Set<string>([
+        // fiery-combo-2: grantToken(FM,2) 在 preDefense 获得，fiery-combo-2-resolve 在 withDamage 只算伤害不授予FM
+        'pyromancer/fiery-combo/fiery-combo-2',
+        // transcendence: grantToken(EVASIVE/PURIFY) 与 lotus-palm-taiji-cap-up-and-fill(太极上限+补满) 操作不同 token
+        'monk/transcendence',
+        // shadow-shank: grantToken(SNEAK) 与 gain-cp(CP获取)/shadow-shank-damage(伤害计算) 操作不同类型
+        'shadow_thief/shadow-shank',
+        // vengeance: grantToken(RETRIBUTION) 与 gain-cp(CP获取) 操作不同类型
+        'paladin/vengeance',
+        'paladin/vengeance/vengeance-2-mix',
+        'paladin/vengeance/vengeance-2-main',
+        // righteous-prayer: grantToken(CRIT) 与 gain-cp(CP获取) 操作不同类型
+        'paladin/righteous-prayer',
+        'paladin/righteous-prayer/righteous-prayer-2-main',
+    ]);
+
+    /** 可能产生 token 授予的 custom action 分类 */
+    const TOKEN_PRODUCING_CATEGORIES = new Set(['resource', 'token', 'other']);
+    /** 可能产生 status 施加的 custom action 分类 */
+    const STATUS_PRODUCING_CATEGORIES = new Set(['status', 'other']);
+
+    interface EffectGroup {
+        label: string;
+        effects: AbilityEffect[];
+    }
+
+    /** 从所有英雄的所有能力中提取效果组（含变体） */
+    function getAllEffectGroups(): EffectGroup[] {
+        const groups: EffectGroup[] = [];
+        for (const [heroId, data] of Object.entries(CHARACTER_DATA_MAP)) {
+            for (const ability of data.abilities as AbilityDef[]) {
+                // 无变体：直接检查 effects
+                if (ability.effects?.length && !ability.variants?.length) {
+                    groups.push({
+                        label: `${heroId}/${ability.id}`,
+                        effects: ability.effects,
+                    });
+                }
+                // 有变体：逐个检查
+                if (ability.variants) {
+                    for (const variant of ability.variants) {
+                        groups.push({
+                            label: `${heroId}/${ability.id}/${variant.id}`,
+                            effects: variant.effects,
+                        });
+                    }
+                }
+            }
+        }
+        return groups;
+    }
+
+    it('不存在 grantToken + custom action 双重授予', () => {
+        const violations: string[] = [];
+        for (const group of getAllEffectGroups()) {
+            if (WHITELIST.has(group.label)) continue;
+
+            const hasGrantToken = group.effects.some(e => e.action?.type === 'grantToken');
+            const customActions = group.effects.filter(e => e.action?.type === 'custom' && e.action.customActionId);
+
+            if (!hasGrantToken || customActions.length === 0) continue;
+
+            // 检查 custom action 是否可能内部也产生 token 授予
+            for (const ca of customActions) {
+                const meta = getCustomActionMeta(ca.action!.customActionId!);
+                if (!meta) continue;
+                const mayProduceTokens = meta.categories.some(c => TOKEN_PRODUCING_CATEGORIES.has(c));
+                if (mayProduceTokens) {
+                    violations.push(
+                        `[${group.label}] 独立 grantToken 效果 + custom action "${ca.action!.customActionId}"（categories: ${meta.categories.join(',')}）可能双重授予 token`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('不存在 grantStatus + custom action 双重授予', () => {
+        const violations: string[] = [];
+        // grantStatus 专用白名单：独立 grantStatus 与 custom action 操作不同 status
+        const STATUS_WHITELIST = new Set<string>([
+            // meteor: inflictStatus(STUN) 与 meteor-resolve(FM获取+FM伤害) 操作不同类型
+            'pyromancer/meteor',
+        ]);
+        for (const group of getAllEffectGroups()) {
+            if (WHITELIST.has(group.label) || STATUS_WHITELIST.has(group.label)) continue;
+
+            const hasGrantStatus = group.effects.some(e => e.action?.type === 'grantStatus');
+            const customActions = group.effects.filter(e => e.action?.type === 'custom' && e.action.customActionId);
+
+            if (!hasGrantStatus || customActions.length === 0) continue;
+
+            for (const ca of customActions) {
+                const meta = getCustomActionMeta(ca.action!.customActionId!);
+                if (!meta) continue;
+                const mayProduceStatus = meta.categories.some(c => STATUS_PRODUCING_CATEGORIES.has(c));
+                if (mayProduceStatus) {
+                    violations.push(
+                        `[${group.label}] 独立 grantStatus 效果 + custom action "${ca.action!.customActionId}"（categories: ${meta.categories.join(',')}）可能双重施加 status`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
 });

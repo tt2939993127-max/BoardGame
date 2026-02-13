@@ -5,10 +5,7 @@
 
 import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS as FACES } from '../../domain/ids';
-
-// 文本辅助
-const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
+import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 
 export const PALADIN_SFX_LIGHT = 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_grace_whisper_001';
 export const PALADIN_SFX_HEAVY = 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_hallowed_beam_001';
@@ -25,19 +22,16 @@ const damage = (value: number, description: string, opts?: { timing?: EffectTimi
 const heal = (value: number, description: string): AbilityEffect => ({
     description,
     action: { type: 'heal', target: 'self', value },
-    timing: 'immediate',
 });
 
 const grantToken = (tokenId: string, value: number, description: string): AbilityEffect => ({
     description,
     action: { type: 'grantToken', target: 'self', tokenId, value },
-    timing: 'immediate',
 });
 
 const cpGain = (value: number, description: string): AbilityEffect => ({
     description,
     action: { type: 'custom', target: 'self', customActionId: 'gain-cp', params: { amount: value } },
-    timing: 'immediate',
 });
 
 // ----------------------------------------------------------------------------
@@ -156,7 +150,7 @@ export const BLESSING_OF_MIGHT_2: AbilityDef = {
                             { tokenId: TOKEN_IDS.ACCURACY, value: 1 }
                         ]
                     },
-                    timing: 'immediate'
+                    timing: 'preDefense'
                 }
             ],
             priority: 0
@@ -187,7 +181,7 @@ export const HOLY_LIGHT_2: AbilityDef = {
         {
             description: abilityEffectText('holy-light-2', 'roll3'),
             action: { type: 'custom', target: 'self', customActionId: 'paladin-holy-light-roll-3' },
-            timing: 'immediate'
+            timing: 'withDamage'
         }
     ]
 };
@@ -381,7 +375,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
             {
                 description: abilityEffectText('holy-light', 'rollEffect'),
                 action: { type: 'custom', target: 'self', customActionId: 'paladin-holy-light-roll' },
-                timing: 'immediate'
+                timing: 'withDamage'
             }
         ]
     },

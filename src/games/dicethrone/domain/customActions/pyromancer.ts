@@ -72,29 +72,38 @@ const resolveSoulBurn = (ctx: CustomActionContext): DiceThroneEvent[] => {
 };
 
 /**
- * 灵魂燃烧 II (Burning Soul) 结算 (升级版)
+ * 灵魂燃烧 4x火魂 (Burning Soul 4) 结算
+ * 根据 i18n 描述：火焰精通堆叠上限+1，然后获得5火焰精通
+ * （击倒由 abilities.ts 的独立 inflictStatus 效果处理）
  */
 const resolveSoulBurn4 = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
-    const fm = getFireMasteryCount(ctx);
-    const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
+    const currentLimit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
+    const newLimit = currentLimit + 1;
 
-    // 通常升级版也会包含基础获得
-    if (fm < limit) {
+    // 1. 上限+1
+    events.push({
+        type: 'TOKEN_LIMIT_CHANGED',
+        payload: { playerId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, delta: 1, newLimit, sourceAbilityId: ctx.sourceAbilityId },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp: ctx.timestamp
+    } as TokenLimitChangedEvent);
+
+    // 2. 获得5火焰精通（不超过新上限）
+    const currentFM = getFireMasteryCount(ctx);
+    const amountToGain = 5;
+    const updatedFM = Math.min(currentFM + amountToGain, newLimit);
+    const actualGain = updatedFM - currentFM;
+
+    if (actualGain > 0) {
         events.push({
             type: 'TOKEN_GRANTED',
-            payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: 1, newTotal: fm + 1, sourceAbilityId: ctx.sourceAbilityId },
+            payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: actualGain, newTotal: updatedFM, sourceAbilityId: ctx.sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp
+            timestamp: ctx.timestamp + 0.1
         } as TokenGrantedEvent);
-    } else {
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: ctx.targetId, amount: 4, actualDamage: 4, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp
-        } as DamageDealtEvent);
     }
+
     return events;
 };
 
@@ -132,44 +141,19 @@ const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
 };
 
 /**
- * 烈焰连击 II (Hot Streak II) 结算
+ * 炽热波纹 II (Hot Streak II) 结算
+ * FM 已在 preDefense 阶段通过独立 grantToken 效果获得
+ * 此处只负责伤害：造成 5 + 当前FM 点伤害
  */
 const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
-    if (!ctx.random) return [];
-
-    // 基础烈焰连击 II 逻辑 (可能包含奖励骰或不同固定值)
-    const roll = ctx.random.d(6);
-    const face = getPlayerDieFace(ctx.state, ctx.attackerId, roll) ?? '';
-    const events: DiceThroneEvent[] = [{
-        type: 'BONUS_DIE_ROLLED',
-        payload: { value: roll, face, playerId: ctx.attackerId, targetPlayerId: ctx.targetId, effectKey: `bonusDie.effect.pyrohotstreak2.${roll}` },
+    const fm = getFireMasteryCount(ctx);
+    const dmg = 5 + fm;
+    return [{
+        type: 'DAMAGE_DEALT',
+        payload: { targetId: ctx.targetId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: ctx.timestamp
-    } as BonusDieRolledEvent];
-
-    let dmg = 0;
-    if (face === PYROMANCER_DICE_FACE_IDS.FIRE) dmg = 2;
-    else if (face === PYROMANCER_DICE_FACE_IDS.MAGMA) dmg = 3;
-    else if (face === PYROMANCER_DICE_FACE_IDS.FIERY_SOUL) dmg = 4;
-    else if (face === PYROMANCER_DICE_FACE_IDS.METEOR) {
-        dmg = 5;
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: { targetId: ctx.targetId, statusId: STATUS_IDS.BURN, stacks: 1, newTotal: (ctx.state.players[ctx.targetId]?.statusEffects[STATUS_IDS.BURN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + 0.1
-        } as any);
-    }
-
-    if (dmg > 0) {
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: ctx.targetId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + 0.2
-        } as DamageDealtEvent);
-    }
-    return events;
+    } as DamageDealtEvent];
 };
 
 /**
@@ -279,10 +263,10 @@ const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: numbe
 
 /**
  * 熔岩盔甲 (Magma Armor) 结算: 根据 base-ability.png 校准
- * 造成 1x [火] 伤害。
+ * 造成 dmgPerFire × [火] 伤害。
  * 获得 1x [灵魂] 烈焰精通。
  */
-const resolveMagmaArmor = (ctx: CustomActionContext, diceCount: number): DiceThroneEvent[] => {
+const resolveMagmaArmor = (ctx: CustomActionContext, diceCount: number, dmgPerFire: number = 1): DiceThroneEvent[] => {
     if (!ctx.random) return [];
     const events: DiceThroneEvent[] = [];
     const diceInfo: BonusDieInfo[] = [];
@@ -317,7 +301,7 @@ const resolveMagmaArmor = (ctx: CustomActionContext, diceCount: number): DiceThr
     if (dmgCount > 0) {
         events.push({
             type: 'DAMAGE_DEALT',
-            payload: { targetId: ctx.targetId, amount: dmgCount, actualDamage: dmgCount, sourceAbilityId: ctx.sourceAbilityId },
+            payload: { targetId: ctx.targetId, amount: dmgCount * dmgPerFire, actualDamage: dmgCount * dmgPerFire, sourceAbilityId: ctx.sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: ctx.timestamp + diceCount + 0.1
         } as DamageDealtEvent);
@@ -447,16 +431,41 @@ const resolveDmgPerFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
 };
 
 /**
- * 升温 (Turning Up The Heat)：弹出选择框，询问是否花费 2CP 获得 1 烈焰精通
- * 选择确认后由 choiceEffectHandler 'pyro-spend-cp-for-fm-confirmed' 处理
+ * 升温 (Turning Up The Heat)：花费任意数量 CP，每 1CP 获得 1 火焰专精
+ * 动态生成选项列表（1~maxSpend），选择后由 choiceEffectHandler 扣 CP
  */
 const resolveSpendCpForFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const player = ctx.state.players[ctx.attackerId];
     const currentCp = player?.resources[RESOURCE_IDS.CP] ?? 0;
-    if (currentCp < 2) return [];
+    if (currentCp < 1) return [];
     const currentFM = getFireMasteryCount(ctx);
     const limit = player?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
-    if (currentFM >= limit) return [];
+    const fmRoom = limit - currentFM;
+    if (fmRoom <= 0) return [];
+
+    const maxSpend = Math.min(currentCp, fmRoom);
+
+    // 动态生成选项：花费 1~maxSpend CP
+    const options: Array<{
+        value: number;
+        customId: string;
+        tokenId: string;
+        labelKey: string;
+    }> = [];
+    for (let i = maxSpend; i >= 1; i--) {
+        options.push({
+            value: i,
+            customId: 'pyro-spend-cp-for-fm-confirmed',
+            tokenId: TOKEN_IDS.FIRE_MASTERY,
+            labelKey: `choices.pyroSpendCpForFM.pay_${i}`,
+        });
+    }
+    // 跳过选项
+    options.push({
+        value: 0,
+        customId: 'pyro-spend-cp-for-fm-skip',
+        labelKey: 'choices.pyroSpendCpForFM.skip',
+    });
 
     return [{
         type: 'CHOICE_REQUESTED',
@@ -464,10 +473,7 @@ const resolveSpendCpForFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
             playerId: ctx.attackerId,
             sourceAbilityId: ctx.sourceAbilityId,
             titleKey: 'choices.pyroSpendCpForFM.title',
-            options: [
-                { value: 1, customId: 'pyro-spend-cp-for-fm-confirmed', tokenId: TOKEN_IDS.FIRE_MASTERY, labelKey: 'choices.pyroSpendCpForFM.pay' },
-                { value: 0, customId: 'pyro-spend-cp-for-fm-skip', labelKey: 'choices.pyroSpendCpForFM.skip' },
-            ],
+            options,
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: ctx.timestamp,
@@ -494,8 +500,8 @@ export function registerPyromancerCustomActions(): void {
     registerCustomActionHandler('burning-soul-2-resolve', resolveSoulBurn4, { categories: ['resource', 'other'] });
 
     registerCustomActionHandler('fiery-combo-resolve', resolveFieryCombo, { categories: ['other'] });
-    registerCustomActionHandler('fiery-combo-2-resolve', resolveFieryCombo2, { categories: ['dice', 'other'] });
-    registerCustomActionHandler('hot-streak-2-resolve', resolveFieryCombo2, { categories: ['dice', 'other'] });
+    registerCustomActionHandler('fiery-combo-2-resolve', resolveFieryCombo2, { categories: ['damage'] });
+    registerCustomActionHandler('hot-streak-2-resolve', resolveFieryCombo2, { categories: ['damage'] });
 
     registerCustomActionHandler('meteor-resolve', resolveMeteor, { categories: ['other'] });
     registerCustomActionHandler('meteor-2-resolve', resolveMeteor, { categories: ['other'] });
@@ -508,7 +514,7 @@ export function registerPyromancerCustomActions(): void {
 
     registerCustomActionHandler('magma-armor-resolve', (ctx) => resolveMagmaArmor(ctx, 1), { categories: ['resource', 'other'] });
     registerCustomActionHandler('magma-armor-2-resolve', (ctx) => resolveMagmaArmor(ctx, 2), { categories: ['resource', 'other'] });
-    registerCustomActionHandler('magma-armor-3-resolve', (ctx) => resolveMagmaArmor(ctx, 3), { categories: ['resource', 'other'] });
+    registerCustomActionHandler('magma-armor-3-resolve', (ctx) => resolveMagmaArmor(ctx, 3, 2), { categories: ['resource', 'other'] });
 
     registerCustomActionHandler('increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
     registerCustomActionHandler('pyro-increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
@@ -522,10 +528,12 @@ export function registerPyromancerCustomActions(): void {
     registerCustomActionHandler('pyro-blast-3-roll', (ctx) => createPyroBlastRollEvents(ctx, { diceCount: 2, maxRerollCount: 1, dieEffectKey: 'bonusDie.effect.pyroBlast3Die', rerollEffectKey: 'bonusDie.effect.pyroBlast3Reroll' }), { categories: ['dice', 'other'] });
 
     registerChoiceEffectHandler('pyro-spend-cp-for-fm-confirmed', (choiceCtx) => {
+        const cpToSpend = choiceCtx.value ?? 0;
+        if (cpToSpend <= 0) return undefined;
         const newState = { ...choiceCtx.state };
         const player = newState.players[choiceCtx.playerId];
         if (player) {
-            player.resources = resourceSystem.pay(player.resources, { [RESOURCE_IDS.CP]: 2 });
+            player.resources = resourceSystem.pay(player.resources, { [RESOURCE_IDS.CP]: cpToSpend });
         }
         return newState;
     });

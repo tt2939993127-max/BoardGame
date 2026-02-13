@@ -28,6 +28,7 @@ import {
 } from '../../../engine/primitives';
 import { createDeckByFactionId } from '../config/factions';
 import { buildGameDeckFromCustom } from '../config/deckBuilder';
+import { getBaseCardId, CARD_IDS } from './ids';
 
 // ============================================================================
 // 状态归约
@@ -266,8 +267,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
 
         // 不屈不挠检查：友方士兵被消灭时返回手牌（非自毁原因）
         const hasRelentless = ownerPlayer.activeEvents.some(ev => {
-          const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-          return baseId === 'goblin-relentless';
+          return getBaseCardId(ev.id) === CARD_IDS.GOBLIN_RELENTLESS;
         });
         const isCommon = destroyedCard.unitClass === 'common';
         const isSelfDestruct = reason === 'feed_beast' || reason === 'feed_beast_self' || reason === 'magic_addiction';
@@ -277,8 +277,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         // 圣洁审判：友方单位被消灭时移除1充能
         let updatedActiveEvents = ownerPlayer.activeEvents;
         const holyJudgmentIdx = updatedActiveEvents.findIndex(ev => {
-          const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-          return baseId === 'paladin-holy-judgment' && (ev.charges ?? 0) > 0;
+          return getBaseCardId(ev.id) === CARD_IDS.PALADIN_HOLY_JUDGMENT && (ev.charges ?? 0) > 0;
         });
         if (holyJudgmentIdx >= 0) {
           updatedActiveEvents = updatedActiveEvents.map((ev, i) => {
@@ -615,8 +614,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
 
         // 如果提供了绝对充能值则直接设置，否则+1
         const newCharges = fpAbsoluteCharges !== undefined ? fpAbsoluteCharges : (ev.charges ?? 0) + 1;
-        const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-        if (baseId === 'paladin-holy-judgment' && newCharges <= 0) {
+        if (getBaseCardId(ev.id) === CARD_IDS.PALADIN_HOLY_JUDGMENT && newCharges <= 0) {
           newDiscard = [...newDiscard, { ...ev, charges: newCharges }];
           continue;
         }

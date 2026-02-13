@@ -248,6 +248,28 @@ function registerNinjaOngoingEffects(): void {
         return false;
     });
 
+    // 烟雾弹：拥有者回合开始时自毁
+    registerTrigger('ninja_smoke_bomb', 'onTurnStart', (trigCtx) => {
+        const events: SmashUpEvent[] = [];
+        for (const base of trigCtx.state.bases) {
+            for (const ongoing of base.ongoingActions) {
+                if (ongoing.defId !== 'ninja_smoke_bomb') continue;
+                if (ongoing.ownerId !== trigCtx.playerId) continue;
+                events.push({
+                    type: SU_EVENTS.ONGOING_DETACHED,
+                    payload: {
+                        cardUid: ongoing.uid,
+                        defId: ongoing.defId,
+                        ownerId: ongoing.ownerId,
+                        reason: 'ninja_smoke_bomb_self_destruct',
+                    },
+                    timestamp: trigCtx.now,
+                });
+            }
+        }
+        return events;
+    });
+
     // 暗杀：回合结束时消灭目标随从（附着在随从上�?ongoing�?
     registerTrigger('ninja_assassination', 'onTurnEnd', (trigCtx) => {
         const events: SmashUpEvent[] = [];

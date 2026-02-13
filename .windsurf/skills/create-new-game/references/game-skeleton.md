@@ -90,14 +90,14 @@ export default entry;
 
 ## game.ts（参考 smashup 简洁风格）
 ```ts
-import { createDefaultSystems, createGameAdapter, createFlowSystem, createCheatSystem } from '../../engine';
+import { createBaseSystems, createGameAdapter, createFlowSystem, createCheatSystem } from '../../engine';
 import { <GameId>Domain, XX_COMMANDS } from './domain';
 import type { <GameId>Core } from './domain/types';
 import { flowHooks } from './domain/flowHooks';
 
 const systems = [
     createFlowSystem<<GameId>Core>({ hooks: flowHooks }),
-    ...createDefaultSystems<<GameId>Core>(),
+    ...createBaseSystems<<GameId>Core>(),
     createCheatSystem<<GameId>Core>(cheatModifier),
 ];
 

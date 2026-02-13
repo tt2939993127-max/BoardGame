@@ -9,7 +9,7 @@ import type { DiceThroneCore } from './domain';
 import type { PendingInteraction } from './domain/types';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
-import { GameDebugPanel } from '../../components/GameDebugPanel';
+import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { DiceThroneDebugConfig } from './debug-config';
 import {
     FlyingEffectsLayer,
@@ -17,11 +17,9 @@ import {
     getViewportCenter,
     getElementCenter,
 } from '../../components/common/animations/FlyingEffect';
-import { useShake } from '../../components/common/animations/ShakeContainer';
 import { usePulseGlow } from '../../components/common/animations/PulseGlow';
 import {
-    useHitStop,
-    getHitStopPresetByDamage,
+    useImpactFeedback,
 } from '../../components/common/animations';
 import { getLocalizedAssetPath } from '../../core';
 import { useToast } from '../../contexts/ToastContext';
@@ -54,6 +52,7 @@ import { useInteractionState } from './hooks/useInteractionState';
 import { useAnimationEffects } from './hooks/useAnimationEffects';
 import { useDiceInteractionConfig } from './hooks/useDiceInteractionConfig';
 import { useCardSpotlight } from './hooks/useCardSpotlight';
+import { useActiveModifiers } from './hooks/useActiveModifiers';
 import { useUIState } from './hooks/useUIState';
 import { useDiceThroneAudio } from './hooks/useDiceThroneAudio';
 import { playDeniedSound } from '../../lib/audio/useGameAudio';
@@ -61,6 +60,8 @@ import { computeViewModeState } from './ui/viewMode';
 import { resolveMoves, type DiceThroneMoveMap } from './ui/resolveMoves';
 import { LayoutSaveButton } from './ui/LayoutSaveButton';
 import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
+import { useAttackShowcase } from './hooks/useAttackShowcase';
+import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
 
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = BoardProps<DiceThroneMatchState>;
@@ -211,22 +212,41 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         currentPlayerId: rootPid,
         opponentName,
         isSpectator,
+        selectedCharacters: G.selectedCharacters,
+    });
+
+    // 追踪已激活的攻击修正卡
+    const { activeModifiers } = useActiveModifiers({
+        eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
+    });
+
+    // 防御阶段进攻技能特写
+    const attackerAbilityLevels = React.useMemo(() => {
+        const result: Record<string, Record<string, number>> = {};
+        for (const pid of Object.keys(G.players)) {
+            result[pid] = G.players[pid]?.abilityLevels ?? {};
+        }
+        return result;
+    }, [G.players]);
+
+    const {
+        isShowcaseVisible: isAttackShowcaseVisible,
+        showcaseData: attackShowcaseData,
+        dismissShowcase: dismissAttackShowcase,
+    } = useAttackShowcase({
+        currentPhase,
+        currentPlayerId: rootPid,
+        isSpectator,
+        selectedCharacters: G.selectedCharacters,
+        abilityLevels: attackerAbilityLevels,
+        pendingAttack: G.pendingAttack ?? null,
     });
 
     // 使用动画库 Hooks
     const { effects: flyingEffects, pushEffect: pushFlyingEffect, removeEffect: handleEffectComplete } = useFlyingEffects();
-    const { isShaking: isOpponentShaking, triggerShake: triggerOpponentShake } = useShake(500);
+    const opponentImpact = useImpactFeedback();
+    const selfImpact = useImpactFeedback();
     const { triggerGlow: triggerAbilityGlow } = usePulseGlow(800);
-    const {
-        isActive: isOpponentHitStopActive,
-        config: opponentHitStopConfig,
-        triggerHitStop: triggerOpponentHitStop,
-    } = useHitStop(80);
-    const {
-        isActive: isSelfHitStopActive,
-        config: selfHitStopConfig,
-        triggerHitStop: triggerSelfHitStop,
-    } = useHitStop(80);
 
     // DOM 引用
     const opponentHpRef = React.useRef<HTMLDivElement>(null);
@@ -286,12 +306,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     // 焦点玩家判断（统一的操作权判断）
     const isFocusPlayer = !isSpectator && access.focusPlayerId === rootPid;
     const hasPendingInteraction = Boolean(pendingInteraction);
+    // 阶段推进权限：从 useDiceThroneState 获取（领域校验 + 交互判断），叠加焦点玩家判断
+    // 进攻技能特写期间阻止所有操作
+    const canAdvancePhase = isFocusPlayer && access.canAdvancePhase && !isAttackShowcaseVisible;
+    const canResolveChoice = Boolean(choice.hasChoice && choice.playerId === rootPid);
+    const canInteractDice = canOperateView && isViewRolling && !isAttackShowcaseVisible;
 
     // 防御阶段进入时就应高亮可用的防御技能，不需要等投骰
     const canHighlightAbility = canOperateView && isViewRolling && isRollPhase
-        && (currentPhase === 'defensiveRoll' || hasRolled);
+        && (currentPhase === 'defensiveRoll' || hasRolled) && !isAttackShowcaseVisible;
     const canSelectAbility = canOperateView && isViewRolling && isRollPhase
-        && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed);
+        && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed) && !isAttackShowcaseVisible;
 
     // 响应窗口状态
     const responseWindow = access.responseWindow;
@@ -313,6 +338,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     // 注：只有当自己是活跃玩家时才执行（避免双方都发送 pass）
     React.useEffect(() => {
         if (isResponderOffline && isActivePlayer && currentResponderId && currentResponderId !== rootPid) {
+            console.warn('[Board] offline auto-pass triggered', { isResponderOffline, isActivePlayer, currentResponderId, rootPid });
             // 延迟一小段时间确保 UI 状态同步
             const timer = setTimeout(() => {
                 engineMoves.responsePass(currentResponderId);
@@ -325,6 +351,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     React.useEffect(() => {
         if (gameMode?.mode !== 'tutorial') return;
         if (!isResponseWindowOpen || !currentResponderId || currentResponderId === rootPid) return;
+        console.warn('[Board] tutorial auto-pass triggered', { gameMode: gameMode?.mode, currentResponderId, rootPid });
         const timer = setTimeout(() => {
             engineMoves.responsePass(currentResponderId);
         }, 100);
@@ -645,11 +672,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         },
         getEffectStartPos,
         pushFlyingEffect,
-        triggerOpponentShake,
-        triggerHitStop: triggerOpponentHitStop,
-        triggerSelfImpact: (damage) => {
-            triggerSelfHitStop(getHitStopPresetByDamage(damage));
-        },
+        triggerOpponentImpact: (damage) => opponentImpact.trigger(damage),
+        triggerSelfImpact: (damage) => selfImpact.trigger(damage),
         locale,
         statusIconAtlas,
         damageStreamEntry,
@@ -732,9 +756,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         opponent={opponent}
                         opponentName={opponentName}
                         viewMode={viewMode}
-                        isOpponentShaking={isOpponentShaking}
-                        hitStopActive={isOpponentHitStopActive}
-                        hitStopConfig={opponentHitStopConfig}
+                        isOpponentShaking={opponentImpact.shake.isShaking}
+                        hitStopActive={opponentImpact.hitStop.isActive}
+                        hitStopConfig={opponentImpact.hitStop.config}
                         shouldAutoObserve={shouldAutoObserve}
                         onToggleView={() => {
                             toggleViewMode();
@@ -745,6 +769,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         statusIconAtlas={statusIconAtlas}
                         locale={locale}
                         containerRef={opponentHeaderRef}
+                        tokenDefinitions={G.tokenDefinitions}
+                        damageFlashActive={opponentImpact.flash.isActive}
+                        damageFlashDamage={opponentImpact.flash.damage}
                     />
                 )}
 
@@ -757,14 +784,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         statusIconAtlas={statusIconAtlas}
                         selfBuffRef={selfBuffRef}
                         selfHpRef={selfHpRef}
-                        hitStopActive={isSelfHitStopActive}
-                        hitStopConfig={selfHitStopConfig}
+                        hitStopActive={selfImpact.hitStop.isActive}
+                        hitStopConfig={selfImpact.hitStop.config}
                         drawDeckRef={drawDeckRef}
                         onPurifyClick={() => openModal('purify')}
                         canUsePurify={canUsePurify}
                         tokenDefinitions={G.tokenDefinitions}
                         onKnockdownClick={() => openModal('removeKnockdown')}
                         canRemoveKnockdown={canRemoveKnockdown}
+                        isSelfShaking={selfImpact.shake.isShaking}
+                        selfDamageFlashActive={selfImpact.flash.isActive}
+                        selfDamageFlashDamage={selfImpact.flash.damage}
                     />
 
                     <CenterBoard
@@ -835,6 +865,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                         discardHighlighted={discardHighlighted}
                         sellButtonVisible={sellButtonVisible}
                         diceInteractionConfig={diceInteractionConfig}
+                        activeModifiers={activeModifiers}
                     />
                 </div>
 
@@ -890,6 +921,16 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     );
                 })()}
 
+                {/* 进攻技能特写（防御阶段入口） */}
+                {isAttackShowcaseVisible && attackShowcaseData && (
+                    <AttackShowcaseOverlay
+                        data={attackShowcaseData}
+                        locale={locale}
+                        opponentName={opponentName}
+                        onDismiss={dismissAttackShowcase}
+                    />
+                )}
+
                 <BoardOverlays
                     // 放大预览
                     isMagnifyOpen={isMagnifyOpen}
@@ -897,6 +938,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     magnifiedCard={magnify.card}
                     magnifiedCards={magnify.cards}
                     onCloseMagnify={closeMagnify}
+                    abilityLevels={viewPlayer.abilityLevels}
+                    viewCharacterId={viewPlayer.characterId}
 
                     // 弹窗状态
                     isConfirmingSkip={modals.confirmSkip}

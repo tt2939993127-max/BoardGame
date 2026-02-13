@@ -7,6 +7,7 @@ import type { MatchState } from '../../../engine/types';
 import type {
   SummonerWarsCore,
   PlayerId,
+  FactionId,
   UnitCard,
   EventCard,
   StructureCard,
@@ -34,6 +35,7 @@ import {
 } from './helpers';
 import { getPhaseDisplayName } from './execute';
 import { validateAbilityActivation } from './abilityValidation';
+import { VALID_FACTION_IDS, getBaseCardId, CARD_IDS } from './ids';
 
 // ============================================================================
 // 命令验证
@@ -54,8 +56,7 @@ export function validateCommand(
     case SW_COMMANDS.SELECT_FACTION: {
       if (core.hostStarted) return { valid: false, error: '游戏已开始，无法更改阵营' };
       const factionId = payload.factionId as string;
-      const validFactions = ['necromancer', 'trickster', 'paladin', 'goblin', 'frost', 'barbaric'];
-      if (!validFactions.includes(factionId)) return { valid: false, error: '无效的阵营 ID' };
+      if (!VALID_FACTION_IDS.includes(factionId as FactionId)) return { valid: false, error: '无效的阵营 ID' };
       return { valid: true };
     }
 
@@ -96,8 +97,7 @@ export function validateCommand(
       const player = core.players[playerId];
       // 重燃希望：允许在任意阶段召唤
       const hasRekindleHope = player.activeEvents.some(ev => {
-        const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-        return baseId === 'paladin-rekindle-hope';
+        return getBaseCardId(ev.id) === CARD_IDS.PALADIN_REKINDLE_HOPE;
       });
       if (core.phase !== 'summon' && !hasRekindleHope) return { valid: false, error: '当前不是召唤阶段' };
       const card = player.hand.find(c => c.id === cardId);
@@ -355,49 +355,6 @@ function validateActivateAbility(
   payload: Record<string, unknown>,
   _commandPlayerId?: string
 ): ValidationResult {
-  const abilityId = payload.abilityId as string;
-  
-  // 已迁移到数据驱动验证的技能（全部技能）
-  const migratedAbilities = [
-    'revive_undead',
-    'prepare',
-    'life_drain',
-    'healing',
-    'holy_arrow',
-    // 亡灵法师
-    'fire_sacrifice_summon',
-    'infection',
-    'soul_transfer',
-    // 欺心巫族
-    'mind_capture_resolve',
-    'telekinesis',
-    'high_telekinesis',
-    'mind_transmission',
-    'illusion',
-    // 洞穴地精
-    'vanish',
-    'blood_rune',
-    'feed_beast',
-    'magic_addiction',
-    'grab',
-    // 先锋军团
-    'fortress_power',
-    'guidance',
-    'judgment',
-    // 极地矮人
-    'structure_shift',
-    'ice_shards',
-    'frost_axe',
-    // 炽原精灵
-    'ancestral_bond',
-    'inspire',
-    'withdraw',
-    'spirit_bond',
-  ];
-  if (migratedAbilities.includes(abilityId)) {
-    return validateAbilityActivation(core, playerId, payload);
-  }
-  
-  // 所有技能已迁移完成，不应该到达这里
-  return { valid: false, error: '未知的技能' };
+  // 所有技能统一走数据驱动验证
+  return validateAbilityActivation(core, playerId, payload);
 }

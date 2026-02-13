@@ -11,8 +11,10 @@ import {
 import type { PlayerPanelData } from '../../../core/ui';
 import {
     HitStopContainer,
+    DamageFlash,
     type HitStopConfig,
 } from '../../../components/common/animations';
+import { ShakeContainer } from '../../../components/common/animations/ShakeContainer';
 
 /** 护盾图标组件 */
 const ShieldIcon = ({ value }: { value: number }) => (
@@ -35,11 +37,20 @@ export const PlayerStats = ({
     hpRef,
     hitStopActive,
     hitStopConfig,
+    isShaking,
+    damageFlashActive,
+    damageFlashDamage,
 }: {
     player: HeroState;
     hpRef?: RefObject<HTMLDivElement | null>;
     hitStopActive?: boolean;
     hitStopConfig?: HitStopConfig;
+    /** 是否正在震动（自己受击） */
+    isShaking?: boolean;
+    /** 受击 DamageFlash 是否激活 */
+    damageFlashActive?: boolean;
+    /** 受击伤害值 */
+    damageFlashDamage?: number;
 }) => {
     const { t } = useTranslation('game-dicethrone');
 
@@ -67,46 +78,55 @@ export const PlayerStats = ({
     }), [t]);
 
     return (
-        <HitStopContainer
-            isActive={!!hitStopActive}
-            {...(hitStopConfig ?? {})}
-            className="w-full"
-        >
-            <div className="relative overflow-visible">
-                <PlayerPanelSkeleton
-                    player={panelData}
-                    className={`${defaultPlayerPanelClassName} z-20 hover:bg-slate-900/90 transition-all duration-300 overflow-visible bg-slate-950/95 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.4)] rounded-[1.2vw] p-[0.6vw]`}
-                    renderResource={(key, value) => {
-                        // 血量条特殊处理：添加护盾图标
-                        if (key === 'health') {
-                            const content = (
-                                <div className="flex items-center gap-[0.5vw] group/resource">
-                                    <div className="flex-1 relative rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
-                                        {renderResource(key, value)}
-                                        {/* 3D Highlights - Optimized for softness */}
-                                        <div className="absolute inset-0 pointer-events-none">
-                                            <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/10 to-transparent" />
-                                            <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/20 to-transparent" />
+        <ShakeContainer isShaking={!!isShaking}>
+            <HitStopContainer
+                isActive={!!hitStopActive}
+                {...(hitStopConfig ?? {})}
+                className="w-full"
+            >
+                <div className="relative overflow-visible">
+                    <PlayerPanelSkeleton
+                        player={panelData}
+                        className={`${defaultPlayerPanelClassName} z-20 hover:bg-slate-900/90 transition-all duration-300 overflow-visible bg-slate-950/95 border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.4)] rounded-[1.2vw] p-[0.6vw]`}
+                        renderResource={(key, value) => {
+                            // 血量条特殊处理：添加护盾图标
+                            if (key === 'health') {
+                                const content = (
+                                    <div className="flex items-center gap-[0.5vw] group/resource">
+                                        <div className="flex-1 relative rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
+                                            {renderResource(key, value)}
+                                            {/* 3D Highlights - Optimized for softness */}
+                                            <div className="absolute inset-0 pointer-events-none">
+                                                <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/10 to-transparent" />
+                                                <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/20 to-transparent" />
+                                            </div>
                                         </div>
+                                        {shield > 0 && <ShieldIcon value={shield} />}
                                     </div>
-                                    {shield > 0 && <ShieldIcon value={shield} />}
+                                );
+                                return hpRef ? <div ref={hpRef}>{content}</div> : content;
+                            }
+                            return (
+                                <div className="relative group/resource rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
+                                    {renderResource(key, value)}
+                                    {/* 3D Highlights - Optimized for softness */}
+                                    <div className="absolute inset-0 pointer-events-none">
+                                        <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/10 to-transparent" />
+                                        <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/20 to-transparent" />
+                                    </div>
                                 </div>
                             );
-                            return hpRef ? <div ref={hpRef}>{content}</div> : content;
-                        }
-                        return (
-                            <div className="relative group/resource rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
-                                {renderResource(key, value)}
-                                {/* 3D Highlights - Optimized for softness */}
-                                <div className="absolute inset-0 pointer-events-none">
-                                    <div className="absolute top-0 left-0 right-0 h-[45%] bg-gradient-to-b from-white/10 to-transparent" />
-                                    <div className="absolute bottom-0 left-0 right-0 h-[40%] bg-gradient-to-t from-black/20 to-transparent" />
-                                </div>
-                            </div>
-                        );
-                    }}
-                />
-            </div>
-        </HitStopContainer>
+                        }}
+                    />
+                    {/* 受击时空裂隙 + 红脉冲 overlay */}
+                    <DamageFlash
+                        active={!!damageFlashActive}
+                        damage={damageFlashDamage ?? 1}
+                        intensity={(damageFlashDamage ?? 0) >= 5 ? 'strong' : 'normal'}
+                        showNumber={false}
+                    />
+                </div>
+            </HitStopContainer>
+        </ShakeContainer>
     );
 };

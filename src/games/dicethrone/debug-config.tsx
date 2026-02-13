@@ -3,7 +3,7 @@
  * 定义游戏专属的作弊指令 UI
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface DiceThroneDebugConfigProps {
@@ -31,6 +31,30 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
     // ========== 发牌作弊 ==========
     const [dealPlayer, setDealPlayer] = useState<string>('0');
     const [deckIndex, setDeckIndex] = useState<string>('0');
+
+    // 获取当前玩家牌库和手牌
+    const playerDeck: any[] = G?.core?.players?.[dealPlayer]?.deck ?? [];
+    const playerHand: any[] = G?.core?.players?.[dealPlayer]?.hand ?? [];
+
+    // 检查牌库中是否存在指定图集索引的卡牌
+    const cardInDeck = useMemo(() => {
+        const targetIndex = Number(deckIndex);
+        return playerDeck.find(
+            (c: any) => c.previewRef?.type === 'atlas' && c.previewRef.index === targetIndex
+        );
+    }, [playerDeck, deckIndex]);
+
+    // 获取卡牌显示名称（i18n 中文）
+    const getCardDisplayName = (card: any): string => {
+        return card.i18n?.['zh-CN']?.name || card.id;
+    };
+    const sortedDeckCards = useMemo(() => {
+        return [...playerDeck].sort((a: any, b: any) => {
+            const ai = a.previewRef?.type === 'atlas' ? a.previewRef.index : 999;
+            const bi = b.previewRef?.type === 'atlas' ? b.previewRef.index : 999;
+            return ai - bi;
+        });
+    }, [playerDeck]);
 
     // 更新骰子值
     const handleDieChange = (index: number, value: string) => {
@@ -247,34 +271,103 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                             />
                         </div>
                         <div className="text-[9px] text-green-600 mb-1">
-                            牌库剩余: {G?.core?.players?.[dealPlayer]?.deck?.length ?? 0} 张
-                            {(() => {
-                                const targetAtlasIndex = Number(deckIndex);
-                                const cardInDeck = G?.core?.players?.[dealPlayer]?.deck?.find(
-                                    (c: any) => c.previewRef?.type === 'atlas' && c.previewRef.index === targetAtlasIndex
-                                );
-                                return cardInDeck ? (
-                                    <span className="ml-1">| 牌库中存在: {cardInDeck.id}</span>
-                                ) : (
-                                    <span className="ml-1 text-red-400">| 牌库中不存在该索引</span>
-                                );
-                            })()}
+                            牌库剩余: {playerDeck.length} 张
+                            {cardInDeck ? (
+                                <span className="ml-1 text-green-700">| 牌库中存在: {getCardDisplayName(cardInDeck)}</span>
+                            ) : (
+                                <span className="ml-1 text-red-400">| 牌库中不存在该索引</span>
+                            )}
                         </div>
                         <button
                             onClick={() => {
-                                const atlasIdx = Number(deckIndex);
                                 moves.SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX({
                                     playerId: dealPlayer,
-                                    atlasIndex: atlasIdx,
+                                    atlasIndex: Number(deckIndex),
                                 });
                             }}
-                            className="w-full px-3 py-1.5 bg-green-500 text-white rounded text-xs font-bold hover:bg-green-600"
+                            disabled={!cardInDeck}
+                            className="w-full px-3 py-1.5 bg-green-500 text-white rounded text-xs font-bold hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
                         >
                             🎴 发指定牌 (Atlas)
                         </button>
                     </div>
                 </div>
             )}
+
+            {/* 卡牌索引速查表 */}
+            <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+                <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">
+                    牌库索引速查 (P{dealPlayer})
+                </h4>
+                <div className="max-h-40 overflow-y-auto">
+                    {sortedDeckCards.length === 0 ? (
+                        <div className="text-[10px] text-amber-400 text-center py-2">牌库为空</div>
+                    ) : (
+                        <div className="space-y-1">
+                            {sortedDeckCards.map((card, idx) => {
+                                const atlasIdx = card.previewRef?.type === 'atlas' ? card.previewRef.index : null;
+                                return (
+                                    <div
+                                        key={`${card.id}-${idx}`}
+                                        className="flex items-center gap-2 text-[10px] px-1 py-0.5 rounded cursor-pointer text-amber-700 hover:bg-amber-100"
+                                        onClick={() => {
+                                            if (atlasIdx != null) {
+                                                setDeckIndex(String(atlasIdx));
+                                                moves.SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX?.({
+                                                    playerId: dealPlayer,
+                                                    atlasIndex: atlasIdx,
+                                                });
+                                            }
+                                        }}
+                                    >
+                                        <span className="w-5 text-amber-500 font-mono">{atlasIdx ?? '-'}</span>
+                                        <span className={`px-1 rounded text-[8px] ${
+                                            card.type === 'upgrade' ? 'bg-amber-200 text-amber-800' : 'bg-purple-200 text-purple-800'
+                                        }`}>
+                                            {card.type === 'upgrade' ? '升级' : '行动'}
+                                        </span>
+                                        <span className="flex-1 truncate">{getCardDisplayName(card)}</span>
+                                        <span className="text-purple-500 text-[9px]">💎{card.cpCost}</span>
+                                        <span className="text-green-500 text-[8px]">✓ 可发</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* 手牌预览 */}
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <h4 className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-3">
+                    手牌预览 (P{dealPlayer})
+                </h4>
+                <div className="max-h-24 overflow-y-auto">
+                    {playerHand.length === 0 ? (
+                        <div className="text-[10px] text-slate-400 text-center py-2">手牌为空</div>
+                    ) : (
+                        <div className="space-y-1">
+                            {playerHand.map((card: any, idx: number) => (
+                                <div
+                                    key={`${card.id}-${idx}`}
+                                    className="flex items-center gap-2 text-[10px] text-slate-700 px-1 py-0.5 rounded"
+                                >
+                                    <span className="w-5 text-slate-400 font-mono">
+                                        {card.previewRef?.type === 'atlas' ? card.previewRef.index : '-'}
+                                    </span>
+                                    <span className={`px-1 rounded text-[8px] ${
+                                        card.type === 'upgrade' ? 'bg-amber-200 text-amber-800' : 'bg-purple-200 text-purple-800'
+                                    }`}>
+                                        {card.type === 'upgrade' ? '升级' : '行动'}
+                                    </span>
+                                    <span className="flex-1 truncate">{getCardDisplayName(card)}</span>
+                                    <span className="text-purple-500">💎{card.cpCost}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };

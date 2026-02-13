@@ -68,7 +68,7 @@ function killerPlantDeepRootsChecker(ctx: ProtectionCheckContext): boolean {
  * water_lily 触发：回合开始时控制者抽1�?
  */
 function killerPlantWaterLilyTrigger(ctx: TriggerContext): SmashUpEvent[] {
-    const events: SmashUpEvent[] = [];
+    // 规则：每回合只能使用一次浇花睡莲的能力（多张在场也只触发一次）
     for (const base of ctx.state.bases) {
         for (const m of base.minions) {
             if (m.defId !== 'killer_plant_water_lily') continue;
@@ -76,15 +76,17 @@ function killerPlantWaterLilyTrigger(ctx: TriggerContext): SmashUpEvent[] {
             const player = ctx.state.players[m.controller];
             if (!player || player.deck.length === 0) continue;
             const drawnUid = player.deck[0].uid;
-            events.push({
+            return [{
                 type: SU_EVENTS.CARDS_DRAWN,
                 payload: { playerId: m.controller, count: 1, cardUids: [drawnUid] },
                 timestamp: ctx.now,
-            } as CardsDrawnEvent);
+            } as CardsDrawnEvent];
         }
     }
-    return events;
+    return [];
 }
+
+
 
 /**
  * sprout 触发：控制者回合开始时消灭自身 + Prompt 搜索牌库力量�?随从打出

@@ -1,9 +1,9 @@
 /**
- * 大杀四方 - 扩展包基地能力（克苏�?/ AL9000 / Pretty Pretty�?
+ * 大杀四方 - 扩展包基地能力（克苏鲁 / AL9000 / Pretty Pretty）
  *
- * �?baseAbilities.ts 拆分，避免单文件超过 1000 行�?
- * �?registerBaseAbilities() 末尾调用 registerExpansionBaseAbilities()�?
- * �?registerBasePromptContinuations() 末尾调用 registerExpansionBasePromptContinuations()�?
+ * 从 baseAbilities.ts 拆分，避免单文件超过 1000 行。
+ * 在 registerBaseAbilities() 末尾调用 registerExpansionBaseAbilities()。
+ * 在 registerBaseInteractionHandlers() 末尾调用 registerExpansionBaseInteractionHandlers()。
  */
 
 import type { PlayerId } from '../../../engine/types';

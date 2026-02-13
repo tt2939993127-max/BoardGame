@@ -10,12 +10,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useDeferredRender } from '../../hooks/ui/useDeferredRender';
-import { useMatchRoomExit } from '../../contexts/MatchRoomExitContext';
-import { useGameMode } from '../../contexts/GameModeContext';
-import { VictoryParticles } from '../common/animations';
+import { useDeferredRender } from '../../../../hooks/ui/useDeferredRender';
+import { useMatchRoomExit } from '../../../../contexts/MatchRoomExitContext';
+import { useGameMode } from '../../../../contexts/GameModeContext';
+import { VictoryParticles } from '../../../common/animations';
 import { RematchActions, type RematchActionsProps } from './RematchActions';
-import { UI_Z_INDEX } from '../../core';
+import { UI_Z_INDEX } from '../../../../core';
 
 export interface GameOverResult {
     winner?: string;

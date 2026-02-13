@@ -54,8 +54,6 @@ export interface MinionCardDef {
     nameEn: string;
     faction: FactionId;
     power: number;
-    abilityText?: string;
-    abilityTextEn?: string;
     abilityTags?: AbilityTag[];
     /** 牌组中的数量 */
     count: number;
@@ -70,8 +68,6 @@ export interface ActionCardDef {
     name: string;
     nameEn: string;
     faction: FactionId;
-    effectText: string;
-    effectTextEn: string;
     abilityTags?: AbilityTag[];
     count: number;
     previewRef?: CardPreviewRef;
@@ -105,8 +101,6 @@ export interface BaseCardDef {
     breakpoint: number;
     /** VP 奖励：[1st, 2nd, 3rd] */
     vpAwards: [number, number, number];
-    abilityText?: string;
-    abilityTextEn?: string;
     /** 关联派系 */
     faction?: FactionId;
     previewRef?: CardPreviewRef;
@@ -390,8 +384,6 @@ export const SU_EVENTS = {
     CARD_TRANSFERRED: 'su:card_transferred',
     CARD_RECOVERED_FROM_DISCARD: 'su:card_recovered_from_discard',
     HAND_SHUFFLED_INTO_DECK: 'su:hand_shuffled_into_deck',
-    /** 能力选择请求（由事件系统转换为 Interaction） */
-    CHOICE_REQUESTED: 'su:choice_requested',
     /** 疯狂卡抽取（从疯狂牌库到玩家手牌） */
     MADNESS_DRAWN: 'su:madness_drawn',
     /** 疯狂卡返回（从玩家手牌回疯狂牌库） */
@@ -537,7 +529,6 @@ export type SmashUpEvent =
     | CardTransferredEvent
     | CardRecoveredFromDiscardEvent
     | HandShuffledIntoDeckEvent
-    | ChoiceRequestedEvent
     | MadnessDrawnEvent
     | MadnessReturnedEvent
     | BaseDeckReorderedEvent
@@ -692,26 +683,6 @@ export interface HandShuffledIntoDeckEvent extends GameEvent<typeof SU_EVENTS.HA
         /** 洗入后的牌库 uid 列表（确定性） */
         newDeckUids: string[];
         reason: string;
-    };
-}
-
-/** 能力选择请求事件：由事件系统转换为引擎层 Interaction */
-export interface ChoiceRequestedEvent extends GameEvent<typeof SU_EVENTS.CHOICE_REQUESTED> {
-    payload: {
-        /** 能力来源 ID（如 'pirate_dinghy'） */
-        abilityId: string;
-        /** 发起 Prompt 的玩家 */
-        playerId: PlayerId;
-        /** Prompt 配置 */
-        promptConfig: {
-            title: string;
-            options: PromptOption[];
-            multi?: PromptMultiConfig;
-        };
-        /** 能力特定上下文（跟随 Interaction descriptor 流转，交互解决后传回 continuation 函数） */
-        continuationContext?: Record<string, unknown>;
-        /** 由其他玩家做选择（如 shoggoth 让对手选择） */
-        targetPlayerId?: string;
     };
 }
 

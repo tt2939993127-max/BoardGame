@@ -5,7 +5,7 @@
  * - 黑熊骑兵：bear_cavalry_bear_cavalry, bear_cavalry_youre_screwed,
  *   bear_cavalry_bear_rides_you, bear_cavalry_youre_pretty_much_borscht,
  *   bear_cavalry_bear_necessities
- * - 米斯卡塔尼克大学：miskatonic_the_librarian, miskatonic_professor
+ * - 米斯卡塔尼克大学：miskatonic_librarian, miskatonic_professor
  * - 印斯茅斯：innsmouth_the_locals
  * - 幽灵：ghost_spirit
  */
@@ -23,15 +23,15 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
-import { makeMinion, makeCard, makePlayer, makeState, makeMatchState } from './helpers';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
+import { makeMinion, makeCard, makePlayer, makeState, makeMatchState, getInteractionsFromMS } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
     resetAbilityInit();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     initAllAbilities();
 });
 
@@ -75,8 +75,8 @@ describe('黑熊骑兵派系能力', () => {
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
                 defaultRandom
             );
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            const interactions = getInteractionsFromMS(state);
+            expect(interactions.length).toBe(1);
         });
 
         it('本基地无对手随从时不产生移动事件', () => {
@@ -120,8 +120,8 @@ describe('黑熊骑兵派系能力', () => {
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
                 defaultRandom
             );
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            const interactions = getInteractionsFromMS(state);
+            expect(interactions.length).toBe(1);
         });
 
         it('无己方随从时不产生移动事件', () => {
@@ -165,8 +165,8 @@ describe('黑熊骑兵派系能力', () => {
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
                 defaultRandom
             );
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            const interactions = getInteractionsFromMS(state);
+            expect(interactions.length).toBe(1);
         });
 
         it('无己方随从时不产生移动事件', () => {
@@ -214,8 +214,8 @@ describe('黑熊骑兵派系能力', () => {
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
                 defaultRandom
             );
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            const interactions = getInteractionsFromMS(state);
+            expect(interactions.length).toBe(1);
         });
     });
 
@@ -241,9 +241,9 @@ describe('黑熊骑兵派系能力', () => {
                 defaultRandom
             );
             // 多个目标时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('bear_cavalry_bear_necessities');
+            const interactions = getInteractionsFromMS(state);
+            expect(interactions.length).toBe(1);
+            expect(interactions[0].data.sourceId).toBe('bear_cavalry_bear_necessities');
         });
 
         it('单个对手随从时自动消灭', () => {
@@ -323,189 +323,113 @@ describe('黑熊骑兵派系能力', () => {
 // ============================================================================
 
 describe('米斯卡塔尼克大学派系能力', () => {
-    describe('miskatonic_the_librarian（图书管理员 onPlay）', () => {
-        it('弃牌堆有≥2张行动卡时取回2张', () => {
+    describe('miskatonic_librarian（图书管理员 talent）', () => {
+        it('手中有疯狂卡时弃掉并抽1张牌', () => {
+            const madnessCard = makeCard('mad1', 'special_madness', 'action', '0');
             const core = makeState({
                 players: {
                     '0': makePlayer('0', {
-                        hand: [makeCard('c1', 'miskatonic_the_librarian', 'minion', '0')],
-                        discard: [
-                            makeCard('d1', 'some_action_a', 'action', '0'),
-                            makeCard('d2', 'some_action_b', 'action', '0'),
-                            makeCard('d3', 'some_minion', 'minion', '0'),
-                        ],
-                    }),
-                    '1': makePlayer('1'),
-                },
-                bases: [
-                    { defId: 'base_a', minions: [], ongoingActions: [] },
-                ],
-            });
-            const state = makeMatchState(core);
-            const events = execute(state,
-                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
-            );
-            const recoverEvt = events.find(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-            expect(recoverEvt).toBeDefined();
-            expect(recoverEvt!.payload.cardUids).toHaveLength(2);
-            expect(recoverEvt!.payload.cardUids).toEqual(['d1', 'd2']);
-        });
-
-        it('弃牌堆行动卡不足2张时抽2张牌', () => {
-            const core = makeState({
-                players: {
-                    '0': makePlayer('0', {
-                        hand: [makeCard('c1', 'miskatonic_the_librarian', 'minion', '0')],
+                        hand: [madnessCard],
                         deck: [
                             makeCard('dk1', 'card_a', 'minion', '0'),
                             makeCard('dk2', 'card_b', 'action', '0'),
-                            makeCard('dk3', 'card_c', 'minion', '0'),
-                        ],
-                        discard: [
-                            makeCard('d1', 'some_action', 'action', '0'),
                         ],
                     }),
                     '1': makePlayer('1'),
                 },
                 bases: [
-                    { defId: 'base_a', minions: [], ongoingActions: [] },
+                    { defId: 'base_a', minions: [
+                        makeMinion('lib1', 'miskatonic_librarian', '0', 4),
+                    ], ongoingActions: [] },
                 ],
             });
             const state = makeMatchState(core);
             const events = execute(state,
-                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
+                { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'lib1', baseIndex: 0 } },
                 defaultRandom
             );
-            // 不应有取回事件
-            expect(events.find(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD)).toBeUndefined();
-            // 应有抽牌事件
+            // 应有弃牌事件（弃疯狂卡）和抽牌事件
+            const discardEvt = events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED);
+            expect(discardEvt).toBeDefined();
             const drawEvt = events.find(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvt).toBeDefined();
-            expect(drawEvt!.payload.count).toBe(2);
-            expect(drawEvt!.payload.cardUids).toEqual(['dk1', 'dk2']);
         });
 
-        it('牌库和弃牌堆都为空时不产生事件', () => {
+        it('手中无疯狂卡时不产生事件', () => {
             const core = makeState({
                 players: {
                     '0': makePlayer('0', {
-                        hand: [makeCard('c1', 'miskatonic_the_librarian', 'minion', '0')],
-                        deck: [],
-                        discard: [],
+                        hand: [makeCard('h1', 'some_card', 'minion', '0')],
+                        deck: [makeCard('dk1', 'card_a', 'minion', '0')],
                     }),
                     '1': makePlayer('1'),
                 },
                 bases: [
-                    { defId: 'base_a', minions: [], ongoingActions: [] },
+                    { defId: 'base_a', minions: [
+                        makeMinion('lib1', 'miskatonic_librarian', '0', 4),
+                    ], ongoingActions: [] },
                 ],
             });
             const state = makeMatchState(core);
             const events = execute(state,
-                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
+                { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'lib1', baseIndex: 0 } },
                 defaultRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD)).toBeUndefined();
+            expect(events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
             expect(events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
         });
     });
 
-    describe('miskatonic_professor（教授 onPlay）', () => {
-        it('单个力量≤3对手随从时创建 Prompt', () => {
+    describe('miskatonic_professor（教授 talent）', () => {
+        it('手中有疯狂卡时弃掉并获得额外行动+额外随从', () => {
+            const madnessCard = makeCard('mad1', 'special_madness', 'action', '0');
             const core = makeState({
                 players: {
                     '0': makePlayer('0', {
-                        hand: [makeCard('c1', 'miskatonic_professor', 'minion', '0')],
+                        hand: [madnessCard],
                     }),
                     '1': makePlayer('1'),
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m1', 'weak_minion', '1', 2),
-                        makeMinion('m2', 'strong_minion', '1', 5),
+                        makeMinion('prof1', 'miskatonic_professor', '0', 5),
                     ], ongoingActions: [] },
                 ],
             });
             const state = makeMatchState(core);
             const events = execute(state,
-                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
+                { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'prof1', baseIndex: 0 } },
                 defaultRandom
             );
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 应有弃牌事件（弃疯狂卡）
+            const discardEvt = events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED);
+            expect(discardEvt).toBeDefined();
+            // 应有额度修改事件（额外行动 + 额外随从）
+            const limitEvts = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            expect(limitEvts.length).toBe(2);
         });
 
-        it('多个力量≤3的对手随从时创建 Prompt', () => {
+        it('手中无疯狂卡时不产生事件', () => {
             const core = makeState({
                 players: {
                     '0': makePlayer('0', {
-                        hand: [makeCard('c1', 'miskatonic_professor', 'minion', '0')],
+                        hand: [makeCard('h1', 'some_card', 'minion', '0')],
                     }),
                     '1': makePlayer('1'),
                 },
                 bases: [
                     { defId: 'base_a', minions: [
-                        makeMinion('m1', 'weak_a', '1', 1),
-                        makeMinion('m2', 'weak_b', '1', 3),
-                        makeMinion('m3', 'weak_c', '1', 2),
+                        makeMinion('prof1', 'miskatonic_professor', '0', 5),
                     ], ongoingActions: [] },
                 ],
             });
             const state = makeMatchState(core);
             const events = execute(state,
-                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
+                { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'prof1', baseIndex: 0 } },
                 defaultRandom
             );
-            // 多个目标时应创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('miskatonic_professor');
-        });
-
-        it('单个力量≤3的对手随从时创建 Prompt（含强力随从）', () => {
-            const core = makeState({
-                players: {
-                    '0': makePlayer('0', {
-                        hand: [makeCard('c1', 'miskatonic_professor', 'minion', '0')],
-                    }),
-                    '1': makePlayer('1'),
-                },
-                bases: [
-                    { defId: 'base_a', minions: [
-                        makeMinion('m1', 'weak_minion', '1', 2),
-                        makeMinion('m2', 'strong_minion', '1', 5),
-                    ], ongoingActions: [] },
-                ],
-            });
-            const state = makeMatchState(core);
-            const events = execute(state,
-                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
-            );
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-        });
-
-        it('无力量≤3的对手随从时不产生事件', () => {
-            const core = makeState({
-                players: {
-                    '0': makePlayer('0', {
-                        hand: [makeCard('c1', 'miskatonic_professor', 'minion', '0')],
-                    }),
-                    '1': makePlayer('1'),
-                },
-                bases: [
-                    { defId: 'base_a', minions: [
-                        makeMinion('m1', 'strong', '1', 5),
-                    ], ongoingActions: [] },
-                ],
-            });
-            const state = makeMatchState(core);
-            const events = execute(state,
-                { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
-            );
-            expect(events.find(e => e.type === SU_EVENTS.MINION_RETURNED)).toBeUndefined();
+            expect(events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
+            expect(events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED)).toBeUndefined();
         });
     });
 });
@@ -665,8 +589,8 @@ describe('幽灵派系能力', () => {
                 defaultRandom
             );
             // 单个可消灭目标时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            const interactions = getInteractionsFromMS(state);
+            expect(interactions.length).toBe(1);
         });
 
         it('多个可消灭目标时创建 Prompt', () => {
@@ -697,9 +621,9 @@ describe('幽灵派系能力', () => {
                 defaultRandom
             );
             // 5张手牌（排除自身），两个目标都可消灭 → Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('ghost_spirit');
+            const interactions = getInteractionsFromMS(state);
+            expect(interactions.length).toBe(1);
+            expect(interactions[0].data.sourceId).toBe('ghost_spirit');
         });
 
         it('手牌不足以消灭任何对手随从时不产生事件', () => {

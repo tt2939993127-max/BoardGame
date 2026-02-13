@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { Trash2 } from 'lucide-react';
 import type { PendingInteraction, TurnPhase } from '../domain/types';
 import { UI_Z_INDEX } from '../../../core';
+import { GameButton } from './components/GameButton';
 
 export interface GameHintsProps {
     /** 是否处于弃牌模式 */
@@ -166,12 +167,14 @@ const ResponseWindowHint: React.FC<{
                 <span className="text-purple-300 text-[0.8vw] font-bold tracking-wider">
                     {t('response.yourTurn')}
                 </span>
-                <button
+                <GameButton
                     onClick={onResponsePass}
-                    className="px-[1vw] py-[0.3vw] rounded bg-purple-600 hover:bg-purple-500 text-white text-[0.7vw] font-bold transition-colors"
+                    variant="glass"
+                    size="sm"
+                    className="border-purple-500/50 hover:bg-purple-500/20 text-purple-100 text-[0.7vw] py-[0.3vw] px-[1vw] min-h-0"
                 >
                     {t('response.pass')}
-                </button>
+                </GameButton>
             </div>
         </div>
     );

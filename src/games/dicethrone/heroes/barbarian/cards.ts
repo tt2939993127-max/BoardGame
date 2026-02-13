@@ -87,7 +87,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         description: cardText('card-dizzy', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 3 },
         playCondition: {
-            requireDiceExists: false, // 占位
+            requireMinDamageDealt: 8,
         },
         effects: [
             inflictStatus(STATUS_IDS.CONCUSSION, 1, '施加脑震荡'),

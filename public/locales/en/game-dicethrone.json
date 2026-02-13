@@ -175,15 +175,24 @@
     "advancePhase": "Advance phase: {{phase}}",
     "abilityActivated": "Activate ability: {{abilityName}}",
     "abilityActivatedDefense": "Activate defensive ability: {{abilityName}}",
-    "damageTaken": "Took {{amount}} damage",
-    "damageDealt": "Dealt {{amount}} damage",
+    "damageTaken": "Took {{amount}} damage ({{source}})",
+    "damageTakenPlain": "Took {{amount}} damage",
+    "damageDealt": "Dealt {{amount}} damage to Player {{targetPlayerId}} with [{{source}}]",
+    "damageDealtPlain": "Dealt {{amount}} damage to Player {{targetPlayerId}}",
+    "damageSource": {
+      "upkeepBurn": "Burn",
+      "upkeepPoison": "Poison",
+      "retribution": "Retribution Reflect",
+      "ability": "{{abilityName}}",
+      "unknown": "Unknown"
+    },
     "damageOriginal": "(Original {{amount}})",
-    "healApplied": "Heal {{targetLabel}} for {{amount}}",
-    "statusApplied": "Applied status {{statusLabel}} to {{targetLabel}}",
+    "healApplied": "Heal Player {{targetPlayerId}} for {{amount}}",
+    "statusApplied": "Applied status {{statusLabel}} to Player {{targetPlayerId}}",
     "statusAppliedDelta": "(+{{stacks}}, now {{total}})",
-    "statusRemoved": "Removed status {{statusLabel}} from {{targetLabel}}",
+    "statusRemoved": "Removed status {{statusLabel}} from Player {{targetPlayerId}}",
     "statusRemovedDelta": "(-{{stacks}})",
-    "tokenGranted": "Granted {{tokenLabel}} x{{amount}} to {{targetLabel}}",
+    "tokenGranted": "Granted {{tokenLabel}} x{{amount}} to Player {{targetPlayerId}}",
     "tokenTotal": "(Now {{total}})",
     "tokenConsumed": "Consumed {{tokenLabel}} x{{amount}}",
     "tokenRemaining": "(Remaining {{total}})",
@@ -266,6 +275,11 @@
     "confirm": "Confirm",
     "skip": "Skip"
   },
+  "attackShowcase": {
+    "title": "Incoming Attack",
+    "attackerLabel": "{{name}} used an ability",
+    "continue": "Defend"
+  },
   "response": {
     "waitingOpponent": "Waiting for opponent to respond...",
     "yourTurn": "You may respond",
@@ -273,6 +287,10 @@
   },
   "waiting": {
     "thinkingMessage": "Thinking"
+  },
+  "modifierActive": {
+    "label": "Attack Modifier",
+    "tooltip": "Active attack modifier card, effect triggers during damage resolution"
   },
   "dice": {
     "waitingOpponent": "Opponent is thinking...",
@@ -352,7 +370,11 @@
       "sneakAttack": "Sneak Attack!",
       "explodingArrow": "Rolled {{value}}",
       "moonShadowStrike": "Rolled {{value}}",
-      "blinded": "Blinded Check"
+      "blinded": "Blinded Check",
+      "fire": "Fire: +3 Damage",
+      "magma": "Magma: Inflict Burn",
+      "fiery_soul": "Fiery Soul: Gain 2 Fire Mastery",
+      "meteor": "Meteor: Inflict Knockdown"
     },
     "selectToReroll": "Click a die to spend {{cost}} {{token}} to reroll",
     "noTokenToReroll": "No {{token}} tokens available to reroll",
@@ -441,8 +463,12 @@
       "skip": "Do not spend Taiji"
     },
     "pyroSpendCpForFM": {
-      "title": "Spend CP for Fire Mastery?",
-      "pay": "Spend 2 CP: Gain 1 Fire Mastery",
+      "title": "Spend CP for Fire Mastery (1 CP = 1 FM)",
+      "pay_1": "Spend 1 CP: Gain 1 Fire Mastery",
+      "pay_2": "Spend 2 CP: Gain 2 Fire Mastery",
+      "pay_3": "Spend 3 CP: Gain 3 Fire Mastery",
+      "pay_4": "Spend 4 CP: Gain 4 Fire Mastery",
+      "pay_5": "Spend 5 CP: Gain 5 Fire Mastery",
       "skip": "Skip"
     }
   },
@@ -746,13 +772,13 @@
     "fist-technique-3-4": {
       "effects": {
         "damage8": "Deal 8 damage",
-        "inflictStun": "Inflict 1 Knockdown token"
+        "inflictKnockdown": "Inflict 1 Knockdown token"
       }
     },
     "fist-technique-3-5": {
       "effects": {
         "damage9": "Deal 9 damage",
-        "inflictStun": "Inflict 1 Knockdown token"
+        "inflictKnockdown": "Inflict 1 Knockdown token"
       }
     },
     "fireball": {
@@ -1121,9 +1147,9 @@
     },
     "burn-down-2": {
       "name": "Burn Down II",
-      "description": "Gain 1 Fire Mastery. Activate Burn Down: each removed Fire Mastery deals 3 undefendable damage.",
+      "description": "Gain 1 Fire Mastery. Activate Burn Down: each removed Fire Mastery deals 4 undefendable damage.",
       "effects": {
-        "main": "Activate Burn Down: remove any number of Fire Mastery. Each removed deals 3 undefendable damage"
+        "main": "Activate Burn Down: remove any number of Fire Mastery. Each removed deals 4 undefendable damage"
       }
     },
     "ignite-2": {

@@ -5,11 +5,7 @@
 
 import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
 import { TOKEN_IDS, STATUS_IDS, DICE_FACE_IDS } from '../../domain/ids';
-
-// 游戏特定条件注册已移至 ../conditions.ts，由 domain/index.ts 统一调用
-
-const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
+import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 
 export const MONK_SFX_PUNCH_1 = 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_punch_swoosh_1';
 export const MONK_SFX_PUNCH_2 = 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_punch_swoosh_2';

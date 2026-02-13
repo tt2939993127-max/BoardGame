@@ -135,7 +135,7 @@ Command（玩家意图）→ validate → execute → Event[]（权威后果）�
 ```typescript
 export const DiceThrone = createGameAdapter({
     domain: DiceThroneDomain,
-    systems: [...createDefaultSystems(config), createFlowSystem(flowHooks)],
+    systems: [...createBaseSystems(config), createFlowSystem(flowHooks)],
     commandTypes: ['ROLL_DICE', 'USE_CARD', 'ATTACK', ...],
 });
 ```
@@ -198,7 +198,7 @@ interface EngineSystem<TCore> {
 ### 5.3 默认系统集合
 
 ```typescript
-function createDefaultSystems<TCore>(config?): EngineSystem<TCore>[] {
+function createBaseSystems<TCore>(config?): EngineSystem<TCore>[] {
     return [
         createLogSystem(),
         createActionLogSystem(config?.actionLog),

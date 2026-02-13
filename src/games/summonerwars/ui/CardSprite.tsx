@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { getSpriteAtlasSource, getSpriteAtlasStyle, getFrameAspectRatio } from './cardAtlas';
+import { isImagePreloaded } from '../../../core/AssetLoader';
 
 export interface CardSpriteProps {
   /** 精灵图源 ID */
@@ -34,7 +35,7 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
   style,
 }) => {
   const source = getSpriteAtlasSource(atlasId);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => !!source && isImagePreloaded(source.image));
   const imageUrlRef = useRef<string>('');
 
   // 预加载图片并监听加载状态
@@ -52,14 +53,20 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
     }
 
     imageUrlRef.current = imageUrl;
+
+    // 门禁已预加载，直接标记完成
+    if (isImagePreloaded(imageUrl)) {
+      setLoaded(true);
+      return;
+    }
+
     setLoaded(false);
 
     const img = new Image();
     img.onload = () => setLoaded(true);
-    img.onerror = () => setLoaded(true); // 加载失败也标记为完成，避免一直显示占位
+    img.onerror = () => setLoaded(true);
     img.src = imageUrl;
 
-    // 如果图片已在缓存中，立即标记为已加载
     if (img.complete) {
       setLoaded(true);
     }

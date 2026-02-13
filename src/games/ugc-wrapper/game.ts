@@ -13,7 +13,7 @@ import type {
     MatchState,
     ValidationResult,
 } from '../../engine/types';
-import { createDefaultSystems, createGameAdapter } from '../../engine';
+import { createBaseSystems, createGameAdapter } from '../../engine';
 import { createSandboxExecutor } from '../../ugc/server/sandbox';
 import type { UGCDomainCore } from '../../ugc/server/sandbox';
 
@@ -85,7 +85,7 @@ export const createUgcGame = async (options: UgcGameOptions): Promise<Game> => {
     }
 
     const domain = buildDomainCore(options.packageId, domainCore);
-    const systems = createDefaultSystems();
+    const systems = createBaseSystems();
 
     return createGameAdapter({
         domain,

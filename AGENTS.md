@@ -68,6 +68,12 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **单文件行数限制（强制）**：单个源码文件不得超过 1000 行，超过必须拆分。
 - **素材数据录入规范（强制）**：根据图片素材提取业务数据时，必须全口径核对、逻辑序列化、关键限定词显式核对，输出 Markdown 表格作为核对契约。
 - **框架复用优先（强制）**：禁止为特定游戏实现无法复用的系统。三层模型：`/core/ui/` 契约层 → `/components/game/framework/` 骨架层 → `/games/<gameId>/` 游戏层。新增组件/Hook 前必须搜索已有实现。详见 `docs/ai-rules/engine-systems.md`。
+- **文档同步交付（强制）**：代码变更涉及以下任一场景时，必须在同一次交付中同步更新相关文档（`docs/` 下对应文件、`AGENTS.md` 子文档、游戏 `rule/*.md`），不得拆到后续任务：
+  - **架构/框架变动**：引擎系统新增或重构、三层模型职责变化、adapter/pipeline 接口变更。
+  - **公共组件/Hook 增删改**：新增通用组件、修改已有 Hook 签名或返回值、废弃旧接口。
+  - **领域层契约变化**：core 状态字段增删、命令/事件类型变更、FlowHooks/系统配置项变化。
+  - **跨模块约定变更**：i18n namespace 调整、音频注册表结构变化、资源路径规范变更。
+  - **文档更新范围判定**：优先更新 `docs/ai-rules/` 下的规范文档（影响后续开发行为）；其次更新 `docs/framework/`、`docs/refactor/` 等架构文档；游戏规则变化更新 `src/games/<gameId>/rule/`。若不确定该更新哪个文档，先查 `docs/ai-rules/doc-index.md`。
 
 ### 1.1 证据链与排查规范（修bug时强制）
 - **事实/未知/假设**：提出方案前必须列出已知事实（来源）、未知但关键的信息、假设（含验证方法）。
@@ -91,6 +97,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **React Hooks（强制）**：禁止在条件语句或 return 之后调用 Hooks。`if (condition) return null` 必须放在所有 Hooks 之后。
 - **白屏排查（强制）**：白屏时禁止盲目修代码，必须先通过 E2E 测试或控制台日志获取证据。
 - **Vite SSR（强制）**：Vite SSR 将 `function` 声明转为变量赋值导致提升失效，注册函数放文件末尾。
+- **const/let 声明顺序（强制）**：`const`/`let` 不会提升，在声明前引用会触发 TDZ 导致白屏。新增/移动代码块时必须检查引用的变量是否已在上方声明。
 - **Auth（强制）**：禁止组件内直接读写 `localStorage`；Context `value` 必须 `useMemo`，方法用 `useCallback`。
 - **弹窗（强制）**：禁止 `window.prompt/alert/location.reload`，用 Modal + 状态更新。
 - **CSS 布局（强制）**：`overflow` 会被父级覆盖，修改前必须 `grep` 检查所有父容器。
@@ -186,7 +193,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **领域 ID 常量表**：所有稳定 ID 在 `domain/ids.ts` 定义（`as const`），禁止字符串字面量。
 - **三层模型**：`/core/ui/` 契约 → `/components/game/framework/` 骨架 → `/games/<gameId>/` 游戏层。
 - **禁止框架层 import 游戏层**；游戏特化下沉到 `games/<gameId>/`。
-- **特效/动画事件消费必须用 EventStreamSystem**，禁止用 LogSystem（刷新后重播历史）。
+- **特效/动画事件消费必须用 EventStreamSystem**，禁止用 LogSystem（刷新后重播历史）。**所有消费 EventStream 的 Hook/Effect 必须在首次挂载时跳过历史事件**（将消费指针推进到当前最新 entry.id），否则刷新后会重播。详见 `docs/ai-rules/engine-systems.md`「EventStreamSystem 使用规范」的两种强制模板和检查清单。
 - **Move payload 必须包装为对象**，禁止传裸值；命令使用常量（`UNDO_COMMANDS.*`）。
 - **新机制先查 `src/engine/primitives/` 或 `src/engine/systems/`** 是否已有能力，无则先在引擎层抽象。
 - **新游戏能力系统必须使用 `engine/primitives/ability.ts`**：禁止自行实现能力注册表，必须使用 `createAbilityRegistry()` + `createAbilityExecutorRegistry()`。详见 `docs/ai-rules/engine-systems.md`「通用能力框架」节。
@@ -196,6 +203,13 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - ❌ 禁止在 execute.ts 中硬编码特定技能的逻辑（如 rapid_fire）
   - ✅ 正确做法：在 `AbilityDef` 中声明 `validation` 和 `ui` 配置，使用通用验证函数和自动按钮渲染
   - 详见 `docs/ai-rules/engine-systems.md`「技能系统反模式清单」节
+- **技能定义单一数据源（强制）**：
+  - **`AbilityDef`（或等效的能力定义对象）是技能的唯一真实来源**，包含 id、name、description、validation、effects、ui 等全部元数据。
+  - ❌ 禁止在卡牌/单位配置中硬编码 `abilityText` 描述文本（与 `AbilityDef.description` 或 i18n 重复）。卡牌配置只保留 `abilities: ['ability_id']`（ID 引用数组），描述文本统一从 `abilityRegistry.get(id).description` 或 i18n key 获取。
+  - ❌ 禁止同一技能的描述文本出现在 3 个以上位置（卡牌配置 `abilityText` + `AbilityDef.description` + i18n JSON = 三重冗余）。
+  - ❌ 禁止 execute 层用 `switch (abilityId)` 巨型分发，必须使用 `AbilityExecutorRegistry` 或 `ActionHandlerRegistry` 注册模式。
+  - ✅ 新增技能时只需：① 在 `abilities-*.ts` 添加 `AbilityDef` ② 在 `abilityResolver.ts` 注册执行器 ③ 在 i18n JSON 添加文案。不得修改 validate.ts、execute.ts、UI 组件。
+  - **现有游戏的历史债务**：SummonerWars 和 SmashUp 的 abilityText 冗余已清理完毕（技能文本统一走 i18n，卡牌配置不再包含 abilityText 字段）。SummonerWars 的 execute 层 switch-case 已替换为 AbilityExecutorRegistry，UI 层已改为数据驱动。剩余轻微债务：SmashUp 的 `domain/abilityRegistry.ts` 自建注册表（模式合理但未使用引擎层）、DiceThrone 的 `CombatAbilityManager`（内部设计合理）。
 - **状态/buff/debuff 必须使用 `engine/primitives/tags.ts`**：禁止自行实现 statusEffects / tempAbilities，使用 `createTagContainer()` + `addTag/removeTag/matchTags/tickDurations`。支持层级前缀匹配和层数/持续时间。
 - **数值修改管线必须使用 `engine/primitives/modifier.ts`**：禁止自行实现 DamageModifier / PowerModifierFn，使用 `createModifierStack()` + `addModifier/applyModifiers/tickModifiers`。
 - **可被 buff 修改的属性必须使用 `engine/primitives/attribute.ts`**：使用 `createAttributeSet()` + `addAttributeModifier/getCurrent`。与 `resources.ts` 互补。
@@ -204,7 +218,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - **禁止写桥接系统**：不得创建“游戏事件→创建 Prompt/Interaction→解决后转回游戏事件”的桥接系统，应在 execute 中直接调用 `createSimpleChoice()` / `createInteraction()`。
   - **commandTypes 只列业务命令**：系统命令（UNDO/CHEAT/FLOW/INTERACTION/RESPONSE_WINDOW/TUTORIAL/REMATCH）由 adapter 自动合并，禁止手动添加。
   - **ResponseWindowSystem 配置注入**：响应窗口的命令/事件白名单必须通过 `createResponseWindowSystem({ allowedCommands, responseAdvanceEvents })` 注入，禁止修改引擎文件。
-  - **参考现有游戏时先检查模式时效性**：现有三个游戏仍有历史债务（SmashUp 的 promptContinuation、DiceThrone 的 pendingInteraction），这些是反模式，新游戏禁止模仿。
+  - **参考现有游戏时先检查模式时效性**：现有三个游戏仍有历史债务（DiceThrone 的 pendingInteraction），这些是反模式，新游戏禁止模仿。
 
 ### 领域层编码规范（强制）
 > **写任何游戏的 domain/ 代码时必须遵守**。目标：让第 100 个游戏的代码质量与第 1 个一样。
@@ -276,10 +290,11 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 
 ### 验证测试（Playwright 优先）
 - 详细规范见 `docs/automated-testing.md`。
-- **工具**：Playwright E2E / Vitest / GameTestRunner。
+- **工具**：Playwright E2E / Vitest / GameTestRunner / 引擎层审计工厂（`src/engine/testing/`）。
 - **命令**：`npm run test:e2e`（E2E）、`npm test -- <路径>`（Vitest）。
 - **截图规范**：禁止硬编码路径，必须用 `testInfo.outputPath('name.png')`。
 - **E2E 覆盖要求**：必须覆盖"关键交互面"（按钮/Modal/Tab/表单校验），不只是跑通 happy path。
+- **静态审计要求**：新增游戏时必须根据游戏特征选择引擎层审计工具创建对应测试。审计工具清单和选型指南见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
 
 ---
 
@@ -290,6 +305,8 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **PC-First**，移动端 Best-effort。
 - **深度感分级**：重点区域毛玻璃+软阴影，高频更新区域禁止毛玻璃。
 - **动态提示 UI 必须 `absolute/fixed`**，禁止占用布局空间。层级：提示 z-[100-150]，交互 z-[150-200]，Modal z-[200+]。
+- **临时/瞬态 UI 不得挤压已有布局（强制）**：攻击修正徽章、buff 提示、倒计时标签等"出现/消失"的临时 UI 元素，必须使用 `absolute`/`fixed` 定位，禁止插入 flex/grid 正常流导致其他元素位移。
 - **数据/逻辑/UI 分离**：UI 只负责展示与交互。
 - **游戏 UI 设计系统**：`design-system/game-ui/MASTER.md`（通用）+ `design-system/styles/`（风格）。
-- **大规模 UI 改动**（≥3 组件文件）须先读设计系统，详见 `docs/ai-rules/ui-ux.md` §0。
+- **新增 UI 元素必须配合现有风格（强制）**：即使只改一个文件，新增的按钮/面板/提示等 UI 元素必须复用同模块已有组件（如 `GameButton`）和现有样式变量，禁止手写不一致的原生样式。修 bug 和微调不受此约束。
+- **大规模 UI 改动**（≥3 组件文件 / 新增页面 / 全局风格调整）须先读设计系统，详见 `docs/ai-rules/ui-ux.md` §0。

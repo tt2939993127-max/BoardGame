@@ -1,0 +1,304 @@
+/**
+ * 大杀四方 - 能力行为审计测试
+ *
+ * 使用引擎层 abilityBehaviorAudit 框架，自动检测：
+ * 1. 描述关键词 → 代码行为映射（如"消灭本卡"→自毁触发器）
+ * 2. ongoing 行动卡注册覆盖（每张 ongoing 卡都有效果注册）
+ * 3. 能力标签执行器覆盖（有 abilityTag 的卡都有执行器）
+ * 4. 自毁行为完整性（描述含"消灭本卡"→代码有自毁逻辑）
+ */
+
+import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import type { AuditableEntity } from '../../../engine/testing/abilityBehaviorAudit';
+import { getAllCardDefs } from '../data/cards';
+import { initAllAbilities, resetAbilityInit } from '../abilities';
+import { clearRegistry, getRegisteredAbilityKeys } from '../domain/abilityRegistry';
+import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { getRegisteredOngoingEffectIds } from '../domain/ongoingEffects';
+import { getRegisteredModifierIds } from '../domain/ongoingModifiers';
+import type { CardDef, ActionCardDef } from '../domain/types';
+
+// ============================================================================
+// i18n 数据
+// ============================================================================
+
+const zhCN = JSON.parse(
+    readFileSync(resolve(__dirname, '../../../../public/locales/zh-CN/game-smashup.json'), 'utf-8'),
+);
+
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+function getCardDescription(defId: string, def: CardDef): string {
+    const i18n = zhCN.cards?.[defId];
+    if (!i18n) return '';
+    if (def.type === 'minion') return i18n.abilityText ?? '';
+    return i18n.effectText ?? '';
+}
+
+function buildEntities(): AuditableEntity[] {
+    return getAllCardDefs().map(def => ({
+        id: def.id,
+        name: zhCN.cards?.[def.id]?.name ?? def.nameEn ?? def.id,
+        descriptionText: getCardDescription(def.id, def),
+        entityType: def.type,
+        subtype: def.type === 'action' ? (def as ActionCardDef).subtype : undefined,
+        abilityTags: def.abilityTags as string[] | undefined,
+        meta: { faction: def.faction },
+    }));
+}
+
+/** 收集所有已注册的 ongoing 效果 ID（合并所有注册表） */
+function collectAllRegisteredIds(): Set<string> {
+    const { protectionIds, restrictionIds, triggerIds, interceptorIds } = getRegisteredOngoingEffectIds();
+    const { powerModifierIds, breakpointModifierIds } = getRegisteredModifierIds();
+    const all = new Set<string>();
+    for (const id of protectionIds) all.add(id);
+    for (const id of restrictionIds) all.add(id);
+    for (const id of triggerIds.keys()) all.add(id);
+    for (const id of interceptorIds) all.add(id);
+    for (const id of powerModifierIds) all.add(id);
+    for (const id of breakpointModifierIds) all.add(id);
+    return all;
+}
+
+/** 获取所有 ongoing 行动卡 ID */
+function getOngoingActionIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const def of getAllCardDefs()) {
+        if (def.type === 'action' && (def as ActionCardDef).subtype === 'ongoing') ids.add(def.id);
+    }
+    return ids;
+}
+
+// ============================================================================
+// 初始化
+// ============================================================================
+
+beforeAll(() => {
+    clearRegistry();
+    clearBaseAbilityRegistry();
+    resetAbilityInit();
+    initAllAbilities();
+});
+
+// ============================================================================
+// 测试套件
+// ============================================================================
+
+describe('SmashUp 能力行为审计', () => {
+
+    // ── 1. 关键词→行为映射 ──
+    describe('关键词→行为映射', () => {
+        it('描述含"回合开始时抽"的持续卡必须有 onTurnStart 触发器', () => {
+            const entities = buildEntities();
+            const { triggerIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (!/回合开始时.*抽|回合开始.*抽.*牌/.test(e.descriptionText)) continue;
+                if (!triggerIds.get(e.id)?.includes('onTurnStart')) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 onTurnStart 触发器`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含"回合结束时"效果的持续卡必须有 onTurnEnd 触发器', () => {
+            const entities = buildEntities();
+            const { triggerIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (!/回合结束时/.test(e.descriptionText)) continue;
+                if (!triggerIds.get(e.id)?.includes('onTurnEnd')) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 onTurnEnd 触发器`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含"不能被消灭"的持续卡必须有 destroy 保护注册', () => {
+            const entities = buildEntities();
+            const { protectionIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (!/不能被消灭|不可被消灭|无法被消灭/.test(e.descriptionText)) continue;
+                if (!protectionIds.has(e.id)) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 destroy 保护注册`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含"不能打出到此基地"的持续卡必须有 restriction 注册', () => {
+            const entities = buildEntities();
+            const { restrictionIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (!/不能.*打出.*到此基地|不能.*打出随从到此|不能.*打出战术到/.test(e.descriptionText)) continue;
+                if (!restrictionIds.has(e.id)) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 restriction 注册`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含"不受影响"的持续卡必须有 protection 注册', () => {
+            const entities = buildEntities();
+            const { protectionIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (!/不.*受.*影响|不会受到.*影响/.test(e.descriptionText)) continue;
+                if (!protectionIds.has(e.id)) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 protection 注册`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含力量修正的 ongoing 行动卡必须有 powerModifier 注册', () => {
+            const entities = buildEntities();
+            const { powerModifierIds } = getRegisteredModifierIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (e.subtype !== 'ongoing') continue;
+                if (!/[+＋]\d+力量|力量[+＋]\d+|-\d+力量|力量-\d+/.test(e.descriptionText)) continue;
+                if (!powerModifierIds.has(e.id)) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 powerModifier 注册`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含"打出随从到此基地时消灭"的持续卡必须有 onMinionPlayed 触发器', () => {
+            const entities = buildEntities();
+            const { triggerIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                // 精确匹配"当...打出随从到此/这...时，消灭它"模式
+                // 排除"不能打出随从到此基地"（restriction）+ 后续自毁的组合
+                if (!/当.*打出.*随从到此基地.*消灭|打出.*随从到这时.*消灭/.test(e.descriptionText)) continue;
+                if (!triggerIds.get(e.id)?.includes('onMinionPlayed')) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 onMinionPlayed 触发器`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含"随从移动到...消灭"的持续卡必须有 onMinionMoved 触发器', () => {
+            const entities = buildEntities();
+            const { triggerIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (!/随从移动到.*消灭|移动到这里.*消灭/.test(e.descriptionText)) continue;
+                if (!triggerIds.get(e.id)?.includes('onMinionMoved')) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 onMinionMoved 触发器`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+
+        it('描述含"随从被消灭后"触发效果的持续随从必须有 onDestroy 能力注册', () => {
+            const entities = buildEntities();
+            const abilityKeys = getRegisteredAbilityKeys();
+            const violations: string[] = [];
+            for (const e of entities) {
+                if (!e.descriptionText.includes('持续')) continue;
+                if (e.entityType !== 'minion') continue;
+                if (!/随从被消灭后|在.*随从被消灭后|在本随从被消灭后/.test(e.descriptionText)) continue;
+                // onDestroy 能力注册在 abilityRegistry 中，不在 ongoingEffects 触发器中
+                const key = `${e.id}::onDestroy`;
+                if (!abilityKeys.has(key)) {
+                    violations.push(`[${e.id}]（${e.name}）缺少 onDestroy 能力注册`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+    });
+
+    // ── 2. ongoing 行动卡注册覆盖 ──
+    describe('ongoing 行动卡注册覆盖', () => {
+        // 以下 ongoing 行动卡的效果通过 abilityRegistry 或特殊机制实现，
+        // 不在 ongoingEffects/ongoingModifiers 注册表中
+        const whitelist = new Set([
+            'cthulhu_altar',              // 祭坛：天赋效果由 abilityRegistry 处理
+            'cthulhu_complete_the_ritual', // 完成仪式：特殊效果
+            'innsmouth_sacred_circle',    // 神圣之环：天赋效果
+            'innsmouth_in_plain_sight',   // 众目睽睽：保护效果已注册
+            'steampunk_zeppelin',         // 飞艇：天赋效果由 abilityRegistry 处理
+            'ghost_make_contact',         // 交朋友：控制权转移由特殊逻辑处理
+        ]);
+
+        it('所有 ongoing 行动卡都有对应的效果注册', () => {
+            const ongoingIds = getOngoingActionIds();
+            const registeredIds = collectAllRegisteredIds();
+            const missing: string[] = [];
+            for (const id of ongoingIds) {
+                if (whitelist.has(id)) continue;
+                if (!registeredIds.has(id)) {
+                    missing.push(id);
+                }
+            }
+            expect(missing, '以下 ongoing 行动卡未注册任何效果').toEqual([]);
+        });
+    });
+
+    // ── 3. 能力标签执行器覆盖 ──
+    describe('能力标签执行器覆盖', () => {
+        // 以下标签由其他系统处理，不需要 abilityRegistry 执行器
+        const exemptTags = new Set(['ongoing', 'extra', 'special']);
+
+        it('所有非豁免能力标签都有对应的执行器注册', () => {
+            const entities = buildEntities();
+            const abilityKeys = getRegisteredAbilityKeys();
+            const missing: string[] = [];
+            for (const e of entities) {
+                if (!e.abilityTags) continue;
+                for (const tag of e.abilityTags) {
+                    if (exemptTags.has(tag)) continue;
+                    const key = `${e.id}::${tag}`;
+                    if (!abilityKeys.has(key)) {
+                        missing.push(`[${e.id}] tag="${tag}" → key="${key}" 未注册`);
+                    }
+                }
+            }
+            expect(missing, '以下能力标签缺少执行器注册').toEqual([]);
+        });
+    });
+
+    // ── 4. 自毁行为完整性 ──
+    describe('自毁行为完整性', () => {
+        const selfDestructPatterns = [
+            /在你.*回合开始.*消灭本卡/,
+            /在你.*回合开始.*消灭本战术/,
+            /回合开始时消灭本卡/,
+            /下回合开始时消灭本卡/,
+            /下回合开始.*消灭本卡/,
+        ];
+
+        it('描述中有"回合开始消灭本卡"的实体都有 onTurnStart 自毁触发器', () => {
+            const entities = buildEntities();
+            const { triggerIds } = getRegisteredOngoingEffectIds();
+            const violations: string[] = [];
+            for (const e of entities) {
+                const hasSelfDestructText = selfDestructPatterns.some(p => p.test(e.descriptionText));
+                if (!hasSelfDestructText) continue;
+                const timings = triggerIds.get(e.id);
+                if (!timings?.includes('onTurnStart')) {
+                    violations.push(`[${e.id}]（${e.name}）描述含"消灭本卡"但缺少 onTurnStart 触发器`);
+                }
+            }
+            expect(violations).toEqual([]);
+        });
+    });
+});

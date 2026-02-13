@@ -82,6 +82,8 @@ export interface GameAssets {
 export interface CriticalImageResolverResult {
     critical: string[];
     warm: string[];
+    /** 可选的阶段标识，变化时 CriticalImageGate 会重新触发预加载 */
+    phaseKey?: string;
 }
 
 /**

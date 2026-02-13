@@ -13,6 +13,7 @@ import type {
   GameContext,
   EffectResolutionConfig,
 } from './types';
+import { getCustomActionMeta } from '../effects';
 import type {
   AbilityContext,
   EffectCondition,
@@ -113,7 +114,17 @@ export class CombatAbilityManager {
   // --------------------------------------------------------------------------
 
   /**
+   * 纯非伤害分类集合 — 只包含这些分类的 custom action 可以在 preDefense 结算
+   */
+  private static readonly PRE_DEFENSE_CATEGORIES = new Set(['resource', 'status', 'token', 'choice']);
+
+  /**
    * 获取效果的实际触发时机
+   * 
+   * 规则：preDefense 只结算非伤害效果，包含伤害的效果必须在 withDamage 结算。
+   * 对于 custom action，通过注册时的 categories 元数据自动推断：
+   * - categories 全部为纯非伤害类（resource/status/token/choice）→ preDefense
+   * - 包含 damage/dice/other/defense/card 等可能产生伤害的分类 → withDamage
    */
   getEffectTiming(effect: AbilityEffect): EffectTiming {
     if (effect.timing) return effect.timing;
@@ -122,6 +133,16 @@ export class CombatAbilityManager {
     if (effect.action?.type === 'rollDie') return 'withDamage';
     // drawCard 效果需要 random（洗牌），必须在 withDamage 时机执行
     if (effect.action?.type === 'drawCard') return 'withDamage';
+    // custom action：根据注册的 categories 自动推断时机
+    if (effect.action?.type === 'custom' && effect.action.customActionId) {
+      const meta = getCustomActionMeta(effect.action.customActionId);
+      if (meta) {
+        const allPreDefense = meta.categories.every(c => CombatAbilityManager.PRE_DEFENSE_CATEGORIES.has(c));
+        return allPreDefense ? 'preDefense' : 'withDamage';
+      }
+      // 未注册的 custom action 保守处理，走 withDamage
+      return 'withDamage';
+    }
     return 'preDefense';
   }
 

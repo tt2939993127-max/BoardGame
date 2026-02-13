@@ -19,7 +19,7 @@ import type { SmashUpCore, SmashUpEvent, MinionOnBase, CardInstance, BaseInPlay 
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
@@ -98,7 +98,7 @@ describe('Prompt E2E: 确定性状态测试', () => {
     beforeAll(() => {
         clearRegistry();
         clearBaseAbilityRegistry();
-        clearPromptContinuationRegistry();
+        clearInteractionHandlers();
         resetAbilityInit();
         initAllAbilities();
     });
@@ -353,15 +353,17 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 bases: [makeBase('base1')],
             });
 
-            const events = execute(makeMatchState(state), {
+            const ms = makeMatchState(state);
+            const events = execute(ms, {
                 type: SU_COMMANDS.PLAY_MINION, playerId: '0',
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
             const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(recoverEvents.length).toBe(0);
-            expect(promptEvents.length).toBe(0);
+            // 弃牌堆只有行动卡，不应创建交互
+            const interaction = (ms.sys as any).interaction;
+            expect(interaction?.current).toBeUndefined();
         });
     });
 
@@ -389,11 +391,13 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const { events } = execPlayAction(state, '0', 'action1');
+            const { events, matchState } = execPlayAction(state, '0', 'action1');
 
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('alien_crop_circles');
+            // 迁移后通过 InteractionSystem 创建交互
+            const interaction = (matchState.sys as any).interaction;
+            const interactions = [interaction.current, ...(interaction.queue ?? [])].filter(Boolean);
+            expect(interactions.length).toBe(1);
+            expect(interactions[0].data.sourceId).toBe('alien_crop_circles');
         });
 
         it('只有一个有随从的基地时创建 Prompt', () => {
@@ -419,11 +423,12 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const { events } = execPlayAction(state, '0', 'action1');
+            const { events, matchState } = execPlayAction(state, '0', 'action1');
 
-            // 单个有随从的基地时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 单个有随从的基地时创建 Interaction
+            const interaction = (matchState.sys as any).interaction;
+            const interactions = [interaction.current, ...(interaction.queue ?? [])].filter(Boolean);
+            expect(interactions.length).toBe(1);
         });
     });
 });
@@ -432,27 +437,9 @@ describe('Prompt E2E: 状态变更验证', () => {
     beforeAll(() => {
         clearRegistry();
         clearBaseAbilityRegistry();
-        clearPromptContinuationRegistry();
+        clearInteractionHandlers();
         resetAbilityInit();
         initAllAbilities();
-    });
-
-    it('CHOICE_REQUESTED 事件被 reducer 正确处理（返回状态不变）', () => {
-        const state = makeState();
-
-        const event: SmashUpEvent = {
-            type: SU_EVENTS.CHOICE_REQUESTED,
-            payload: {
-                abilityId: 'test_ability',
-                playerId: '0',
-                promptConfig: { title: '测试', options: [] },
-            },
-            timestamp: Date.now(),
-        } as any;
-
-        const newState = reduce(state, event);
-        // CHOICE_REQUESTED 不修改 core 状态，交互由事件系统处理
-        expect(newState).toBe(state);
     });
 
     it('MINION_DESTROYED 事件后 reducer 从基地移除随从', () => {

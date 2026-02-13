@@ -112,6 +112,7 @@ export interface EventStreamState {
  * 操作日志片段
  * - text: 纯文本
  * - card: 卡牌片段（用于 hover 预览）
+ * - i18n: 延迟翻译片段（存储 key + params，渲染时翻译，支持服务端无 i18n 环境）
  */
 export type ActionLogSegment =
     | { type: 'text'; text: string }
@@ -119,6 +120,19 @@ export type ActionLogSegment =
           type: 'card';
           cardId: string;
           previewText?: string;
+          /** 可选：previewText 为 i18n key 时的 namespace，渲染时延迟翻译 */
+          previewTextNs?: string;
+      }
+    | {
+          type: 'i18n';
+          /** i18n namespace（如 'game-dicethrone'） */
+          ns: string;
+          /** i18n key（如 'actionLog.advancePhase'） */
+          key: string;
+          /** 插值参数 */
+          params?: Record<string, string | number>;
+          /** 需要先翻译的 params key 列表（值为同 ns 下的 i18n key） */
+          paramI18nKeys?: string[];
       };
 
 /**

@@ -53,7 +53,6 @@ export const SUMMONER_GOBLIN: UnitCard = {
   attackType: 'melee',
   attackRange: 1,
   abilities: ['vanish'],
-  abilityText: '神出鬼没：每回合一次，在你的攻击阶段，本单位可以和一个费用为0点的友方单位交换位置。',
   deckSymbols: [DECK_SYMBOLS.DOUBLE_AXE, DECK_SYMBOLS.CLAW, DECK_SYMBOLS.MASK], // ⚔️🐾🎭（双斧 + 阵营的2种符号）
   spriteIndex: 0,
   spriteAtlas: 'hero',
@@ -77,7 +76,6 @@ export const CHAMPION_UNITS_GOBLIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['blood_rune', 'power_boost'],
-    abilityText: '鲜血符文：在你的攻击阶段开始时，对本单位造成1点伤害，或者消耗1点魔力以将本单位充能。\n力量强化：本单位每有1点充能，则获得战力+1，至多为+5。',
     deckSymbols: [DECK_SYMBOLS.CLAW, DECK_SYMBOLS.MASK], // 🐾🎭
     spriteIndex: SPRITE_INDEX_GOBLIN.CHAMPION_BLARF,
     spriteAtlas: 'cards',
@@ -95,7 +93,6 @@ export const CHAMPION_UNITS_GOBLIN: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['magic_addiction', 'ferocity'],
-    abilityText: '魔力成瘾：在你的回合结束时，消耗1点魔力，或者弃除本单位。\n凶残：在你的攻击阶段，你可以选择本单位作为额外的攻击单位。',
     deckSymbols: [DECK_SYMBOLS.MASK], // 🎭
     spriteIndex: SPRITE_INDEX_GOBLIN.CHAMPION_SMIRG,
     spriteAtlas: 'cards',
@@ -113,7 +110,6 @@ export const CHAMPION_UNITS_GOBLIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['feed_beast'],
-    abilityText: '喂养巨食兽：在你的攻击阶段结束时，如果本单位在本回合没有消灭任何单位，则移除一个相邻友方单位，或者弃除本单位。',
     deckSymbols: [DECK_SYMBOLS.CLAW], // 🐾 (图片确认)
     spriteIndex: SPRITE_INDEX_GOBLIN.CHAMPION_GLUTTON,
     spriteAtlas: 'cards',
@@ -138,7 +134,6 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['climb'],
-    abilityText: '攀爬：当本单位移动时，可以额外移动1个区格，并且可以穿过建筑。',
     deckSymbols: [DECK_SYMBOLS.MASK], // 🎭 (图片确认)
     spriteIndex: SPRITE_INDEX_GOBLIN.COMMON_CLIMBER,
     spriteAtlas: 'cards',
@@ -156,7 +151,6 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['charge'],
-    abilityText: '冲锋：本单位可以移动1至4个直线视野区格，以代替正常移动。如果本单位移动了至少3个直线区格，则获得战力+1，直到回合结束。',
     deckSymbols: [DECK_SYMBOLS.MASK], // 🎭
     spriteIndex: SPRITE_INDEX_GOBLIN.COMMON_BEAST_RIDER,
     spriteAtlas: 'cards',
@@ -174,7 +168,6 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['ferocity'],
-    abilityText: '凶残：在你的攻击阶段，你可以选择本单位作为额外的攻击单位。',
     deckSymbols: [DECK_SYMBOLS.CLAW], // 🐾 (图片确认)
     spriteIndex: SPRITE_INDEX_GOBLIN.COMMON_SLINGER,
     spriteAtlas: 'cards',
@@ -192,7 +185,6 @@ export const COMMON_UNITS_GOBLIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['immobile', 'grab'],
-    abilityText: '禁足：本单位不能移动。\n抓附：当一个友方单位从本单位相邻的区格开始移动时，你可以在本次移动结束之后，将本单位放置到该单位相邻的区格。',
     deckSymbols: [DECK_SYMBOLS.MASK], // 🎭 (图片确认)
     spriteIndex: SPRITE_INDEX_GOBLIN.COMMON_GRABBER,
     spriteAtlas: 'cards',

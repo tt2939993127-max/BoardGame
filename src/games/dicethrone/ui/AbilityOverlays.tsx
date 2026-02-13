@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { saveDiceThroneAbilityLayout } from '../../../api/layout';
 import { UI_Z_INDEX } from '../../../core';
+import { playSound } from '../../../lib/audio/useGameAudio';
 import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
 import type { CardPreviewRef } from '../../../core';
 import type { AbilityCard } from '../types';
@@ -119,7 +120,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
 };
 
     // 获取槽位对应的基础技能 ID
-    const getSlotAbilityId = (characterId: string, slotId: string): string | undefined => {
+    export const getSlotAbilityId = (characterId: string, slotId: string): string | undefined => {
         return HERO_SLOT_TO_ABILITY[characterId]?.[slotId];
     };
 
@@ -130,7 +131,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
      * @param level 升级后的等级
      * @returns 对应升级卡的预览引用，未找到返回 undefined
      */
-    const getUpgradeCardPreviewRef = (characterId: string, abilityId: string, level: number): CardPreviewRef | undefined => {
+    export const getUpgradeCardPreviewRef = (characterId: string, abilityId: string, level: number): CardPreviewRef | undefined => {
         // 根据角色 ID 获取对应的卡牌定义
         const heroCards = HERO_CARDS_MAP[characterId];
         if (!heroCards) return undefined;
@@ -290,6 +291,8 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                             style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
                             onClick={() => {
                                 if (canClick && isResolved) {
+                                    // DiceThrone：选择技能统一使用 dialog_choice 点击音效
+                                    playSound('ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none');
                                     onSelectAbility(isResolved);
                                 } else if (!isEditing && shouldHighlight && !canSelect && onHighlightedAbilityClick) {
                                     onHighlightedAbilityClick();

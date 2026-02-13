@@ -53,7 +53,6 @@ export const SUMMONER_PALADIN: UnitCard = {
   attackType: 'ranged',
   attackRange: 3,
   abilities: ['fortress_power'],
-  abilityText: '城塞之力：在本单位攻击一个敌方单位之后，如果战场上有一个或更多友方城塞单位，则你可以从你的弃牌堆中拿取一张城塞单位，展示并且加入你的手牌。',
   deckSymbols: [DECK_SYMBOLS.DOUBLE_AXE, DECK_SYMBOLS.SHIELD, DECK_SYMBOLS.DIAMOND], // ⚔️🛡️💎（双斧 + 阵营的2种符号）
   spriteIndex: 0,
   spriteAtlas: 'hero',
@@ -77,7 +76,6 @@ export const CHAMPION_UNITS_PALADIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['guidance', 'fortress_elite'],
-    abilityText: '指引：在你的召唤阶段开始时，抓取两张卡牌。\n城塞精锐：本单位2个区格以内每有一个友方城塞单位，则获得战力+1。',
     deckSymbols: [DECK_SYMBOLS.SHIELD, DECK_SYMBOLS.DIAMOND], // 🛡️💎
     spriteIndex: SPRITE_INDEX_PALADIN.CHAMPION_VALENTINA,
     spriteAtlas: 'cards',
@@ -95,7 +93,6 @@ export const CHAMPION_UNITS_PALADIN: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['radiant_shot'],
-    abilityText: '辉光射击：你每拥有2点魔力，则本单位获得战力+1。',
     deckSymbols: [DECK_SYMBOLS.DIAMOND], // 💎
     spriteIndex: SPRITE_INDEX_PALADIN.CHAMPION_JACOB,
     spriteAtlas: 'cards',
@@ -113,7 +110,6 @@ export const CHAMPION_UNITS_PALADIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['divine_shield'],
-    abilityText: '神圣护盾：每当本单位3个区格以内的一个友方城塞单位成为攻击的目标时，投掷2个骰子。每掷出一个❤️，则攻击单位在本次攻击的战力-1，战力最少为1点。',
     deckSymbols: [DECK_SYMBOLS.SHIELD], // 🛡️ (Step 153图片确认：单符号)
     spriteIndex: SPRITE_INDEX_PALADIN.CHAMPION_CORIN,
     spriteAtlas: 'cards',
@@ -138,7 +134,6 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['healing'],
-    abilityText: '治疗：在本单位攻击一个友方士兵或英雄之前，你可以从你的手牌弃除一张卡牌。如果你这样做，则本次攻击掷出的每个⚔️或❤️会从目标上移除1点伤害，以代替造成伤害。',
     deckSymbols: [DECK_SYMBOLS.SHIELD], // 🛡️ (图片确认：单符号)
     spriteIndex: SPRITE_INDEX_PALADIN.COMMON_TEMPLE_PRIEST,
     spriteAtlas: 'cards',
@@ -156,7 +151,6 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['judgment'],
-    abilityText: '裁决：在本单位攻击一个敌方单位之后，抓取数量等于所掷出❤️数量的卡牌。',
     deckSymbols: [DECK_SYMBOLS.DIAMOND], // 💎 (图片确认：单符号)
     spriteIndex: SPRITE_INDEX_PALADIN.COMMON_FORTRESS_WARRIOR,
     spriteAtlas: 'cards',
@@ -174,7 +168,6 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['entangle', 'guardian'],
-    abilityText: '缠斗：每当一个相邻敌方单位因为移动或被推拉而远离本单位时，立刻对该单位造成1点伤害。\n守卫：当一个相邻敌方单位攻击时，必须指定一个具有守卫技能的单位为目标。',
     deckSymbols: [DECK_SYMBOLS.SHIELD], // 🛡️ (图片确认)
     spriteIndex: SPRITE_INDEX_PALADIN.COMMON_FORTRESS_KNIGHT,
     spriteAtlas: 'cards',
@@ -192,7 +185,6 @@ export const COMMON_UNITS_PALADIN: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['holy_arrow'],
-    abilityText: '圣光箭：在本单位攻击之前，从你的手牌展示并弃除任意数量的非同名单位。每以此法弃除一张卡牌，则获得1点魔力并且本单位在本次攻击获得战力+1。',
     deckSymbols: [DECK_SYMBOLS.DIAMOND], // 💎 (图片确认：单符号)
     spriteIndex: SPRITE_INDEX_PALADIN.COMMON_FORTRESS_ARCHER,
     spriteAtlas: 'cards',

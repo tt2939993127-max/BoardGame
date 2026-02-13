@@ -17,7 +17,7 @@
 ## 引擎与系统
 - `src/engine/adapter.ts`：`createGameAdapter`（Boardgame.io 适配器，自动合并系统命令）
 - `src/engine/systems/`：引擎系统（Flow/Undo/Interaction/Log/Rematch/Tutorial/ResponseWindow/EventStream/ActionLog/Cheat）
-- `src/engine/systems/index.ts`：`createDefaultSystems` 入口
+- `src/engine/systems/index.ts`：`createBaseSystems` 入口
 - `src/engine/primitives/`：引擎原语（expression/condition/target/effects/zones/dice/resources/grid）
 
 ## 清单生成

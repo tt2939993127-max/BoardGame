@@ -96,25 +96,32 @@ function steampunkOrnateDomeChecker(ctx: RestrictionCheckContext): boolean {
 /**
  * difference_engine 触发：回合结束时控制者多�?�?
  */
+/**
+ * difference_engine 触发：回合结束时，如果拥有者在此基地有随从，多抽一张牌
+ */
 function steampunkDifferenceEngineTrigger(ctx: TriggerContext): SmashUpEvent[] {
-    const events: SmashUpEvent[] = [];
-    for (const base of ctx.state.bases) {
-        for (const m of base.minions) {
-            if (m.defId !== 'steampunk_difference_engine') continue;
-            if (m.controller !== ctx.playerId) continue;
-            const player = ctx.state.players[m.controller];
+    // difference_engine 是 ongoing action，在 base.ongoingActions 中查找
+    for (let i = 0; i < ctx.state.bases.length; i++) {
+        const base = ctx.state.bases[i];
+        for (const ongoing of base.ongoingActions) {
+            if (ongoing.defId !== 'steampunk_difference_engine') continue;
+            if (ongoing.ownerId !== ctx.playerId) continue;
+            // 检查拥有者在此基地是否有随从
+            const hasMinion = base.minions.some(m => m.controller === ongoing.ownerId);
+            if (!hasMinion) continue;
+            const player = ctx.state.players[ongoing.ownerId];
             if (!player || player.deck.length === 0) continue;
             const drawnUid = player.deck[0].uid;
-            const evt: CardsDrawnEvent = {
+            return [{
                 type: SU_EVENTS.CARDS_DRAWN,
-                payload: { playerId: m.controller, count: 1, cardUids: [drawnUid] },
+                payload: { playerId: ongoing.ownerId, count: 1, cardUids: [drawnUid] },
                 timestamp: ctx.now,
-            };
-            events.push(evt);
+            } as CardsDrawnEvent];
         }
     }
-    return events;
+    return [];
 }
+
 
 /**
  * escape_hatch 触发：己方随从被消灭时回手牌（而非进弃牌堆�?

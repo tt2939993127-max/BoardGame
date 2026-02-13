@@ -31,15 +31,15 @@ import type { EngineSystem } from './types';
 import type { ActionLogSystemConfig } from './ActionLogSystem';
 import type { UndoSystemConfig } from './UndoSystem';
 
-export interface DefaultSystemsConfig {
+export interface BaseSystemsConfig {
     actionLog?: ActionLogSystemConfig;
     undo?: UndoSystemConfig;
 }
 
 /**
- * 创建默认系统集合
+ * 创建基础系统集合
  */
-export function createDefaultSystems<TCore>(config: DefaultSystemsConfig = {}): EngineSystem<TCore>[] {
+export function createBaseSystems<TCore>(config: BaseSystemsConfig = {}): EngineSystem<TCore>[] {
     const { actionLog, undo } = config;
     return [
         createLogSystem(),

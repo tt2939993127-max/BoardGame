@@ -28,6 +28,7 @@ import {
   emitDestroyWithTriggers,
   createAbilityTriggeredEvent,
 } from './helpers';
+import { getBaseCardId, CARD_IDS } from '../ids';
 
 export function executePlayEvent(
   events: GameEvent[],
@@ -52,8 +53,8 @@ export function executePlayEvent(
       });
     }
     
-    const baseId = eventCard.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-    const isAttachment = baseId === 'necro-hellfire-blade';
+    const cardBaseId = getBaseCardId(eventCard.id);
+    const isAttachment = cardBaseId === CARD_IDS.NECRO_HELLFIRE_BLADE;
     const summoner = getSummoner(core, playerId);
     
     events.push({
@@ -65,8 +66,8 @@ export function executePlayEvent(
       timestamp,
     });
 
-    switch (baseId) {
-      case 'necro-hellfire-blade': {
+    switch (cardBaseId) {
+      case CARD_IDS.NECRO_HELLFIRE_BLADE: {
         if (targets && targets.length > 0) {
           events.push({
             type: SW_EVENTS.EVENT_ATTACHED,

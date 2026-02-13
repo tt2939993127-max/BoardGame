@@ -18,7 +18,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
 import { reduce } from '../domain/reducer';
@@ -31,7 +31,7 @@ import type { GameEvent, MatchState, RandomFn } from '../../../engine/types';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import {
     makeMinion, makePlayer, makeCard, makeBase,
-    makeState, makeMatchState,
+    makeState, makeMatchState, getInteractionsFromMS,
 } from './helpers';
 
 const mockRandom: RandomFn = {
@@ -42,7 +42,7 @@ const mockRandom: RandomFn = {
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });
@@ -197,8 +197,9 @@ describe('三基地同时达标', () => {
         expect(exitResult.halt).toBe(true);
 
         const events = exitResult.events ?? [];
-        const promptEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        // 迁移后：交互通过 InteractionSystem 创建，不再生成 CHOICE_REQUESTED 事件
+        const interactions = getInteractionsFromMS(exitResult.updatedState as any);
+        expect(interactions.length).toBe(1);
     });
 });
 

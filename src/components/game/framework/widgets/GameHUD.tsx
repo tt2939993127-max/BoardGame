@@ -17,23 +17,23 @@ import {
     ListOrdered
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useUndo, useUndoStatus } from '../../contexts/UndoContext';
-import { UI_Z_INDEX } from '../../core';
-import { FabMenu, type FabAction } from '../system/FabMenu';
-import { UNDO_COMMANDS } from '../../engine';
+import { useUndo, useUndoStatus } from '../../../../contexts/UndoContext';
+import { UI_Z_INDEX } from '../../../../core';
+import { FabMenu, type FabAction } from '../../../system/FabMenu';
+import { UNDO_COMMANDS } from '../../../../engine';
 import { AudioControlSection } from './AudioControlSection';
-import { AboutModal } from '../system/AboutModal';
-import { FeedbackModal } from '../system/FeedbackModal';
-import { useToast } from '../../contexts/ToastContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { matchSocket, type MatchChatMessage } from '../../services/matchSocket';
-import { MAX_CHAT_LENGTH, MAX_CHAT_MESSAGES } from '../../shared/chat';
-import { useModalStack } from '../../contexts/ModalStackContext';
-import { FriendsChatModal } from '../social/FriendsChatModal';
-import { useSocial } from '../../contexts/SocialContext';
-import { buildActionLogRows } from './utils/actionLogFormat';
+import { AboutModal } from '../../../system/AboutModal';
+import { FeedbackModal } from '../../../system/FeedbackModal';
+import { useToast } from '../../../../contexts/ToastContext';
+import { useAuth } from '../../../../contexts/AuthContext';
+import { matchSocket, type MatchChatMessage } from '../../../../services/matchSocket';
+import { MAX_CHAT_LENGTH, MAX_CHAT_MESSAGES } from '../../../../shared/chat';
+import { useModalStack } from '../../../../contexts/ModalStackContext';
+import { FriendsChatModal } from '../../../social/FriendsChatModal';
+import { useSocial } from '../../../../contexts/SocialContext';
+import { buildActionLogRows } from '../../utils/actionLogFormat';
 import { ActionLogSegments } from './ActionLogSegments';
-import { getCardPreviewGetter } from './registry/cardPreviewRegistry';
+import { getCardPreviewGetter } from '../../registry/cardPreviewRegistry';
 
 interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
@@ -454,11 +454,7 @@ export const GameHUD = ({
         });
     }
 
-    if (useChatAsMain) {
-        items.push(actionLogAction);
-    }
-
-    // 定义设置按钮（稍后在正确位置添加）
+    // 定义设置按钮
     const settingsAction: FabAction = {
         id: 'settings',
         icon: <Settings size={20} />,
@@ -525,14 +521,8 @@ export const GameHUD = ({
         )
     };
 
-    // 在本地模式下，设置作为主按钮；在联机模式下，设置作为卫星按钮（稍后添加）
-    if (!useChatAsMain) {
-        items.push(settingsAction);
-    }
-
-    if (!useChatAsMain) {
-        items.push(actionLogAction);
-    }
+    // ===== 联机模式卫星按钮顺序（push 顺序 = 从上到下显示顺序） =====
+    // 目标：退出 → 反馈 → 社交 → 全屏 → 设置 → 撤回 → 操作日志 → 聊天(主按钮)
 
     const exitAction: FabAction = {
         id: 'exit',
@@ -540,7 +530,6 @@ export const GameHUD = ({
         label: t('hud.actions.exit'),
         content: (
             <div className="space-y-3">
-                {/* 房主：显示"结束游戏"（销毁房间） */}
                 {isOnline && isHost && (
                     <button
                         onClick={handleDestroy}
@@ -554,7 +543,6 @@ export const GameHUD = ({
                         </div>
                     </button>
                 )}
-                {/* 非房主：显示"离开房间"（彻底离开） */}
                 {isOnline && !isHost && (
                     <button
                         onClick={handleLeave}
@@ -568,7 +556,6 @@ export const GameHUD = ({
                         </div>
                     </button>
                 )}
-                {/* 所有人：显示"暂时离开"（断开连接但保留位置） */}
                 {isOnline && (
                     <button
                         onClick={() => {
@@ -585,7 +572,6 @@ export const GameHUD = ({
                         </div>
                     </button>
                 )}
-                {/* 无凭证兜底：清理本地并返回大厅 */}
                 {isOnline && !credentials && (
                     <button
                         onClick={handleForceExit}
@@ -599,7 +585,6 @@ export const GameHUD = ({
                         </div>
                     </button>
                 )}
-                {/* 本地模式：显示"返回大厅" */}
                 {!isOnline && (
                     <button
                         onClick={() => {
@@ -620,7 +605,58 @@ export const GameHUD = ({
         )
     };
 
-    // 撤回通知（动态位置）
+    // 1. 退出
+    items.push(exitAction);
+
+    // 2. 反馈
+    items.push({
+        id: 'feedback',
+        icon: <MessageSquareWarning size={20} />,
+        label: t('hud.actions.feedback'),
+        onClick: () => setShowFeedback(true),
+    });
+
+    // 3. 社交（仅登录用户）
+    const totalBadge = unreadTotal + requests.length;
+    if (user) {
+        items.push({
+            id: 'social',
+            icon: <Users size={20} />,
+            label: t('hud.actions.social'),
+            active: totalBadge > 0,
+            onClick: () => {
+                if (socialModalId) {
+                    closeModal(socialModalId);
+                    return;
+                }
+                const id = openModal({
+                    id: 'game_hud_social',
+                    closeOnBackdrop: true,
+                    closeOnEsc: true,
+                    onClose: () => setSocialModalId(null),
+                    render: ({ close }) => (
+                        <FriendsChatModal isOpen onClose={close} />
+                    ),
+                });
+                setSocialModalId(id);
+            },
+        });
+    }
+
+    // 4. 全屏
+    items.push({
+        id: 'fullscreen',
+        icon: isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />,
+        label: isFullscreen ? t('hud.actions.exitFullscreen') : t('hud.actions.fullscreen'),
+        onClick: toggleFullscreen,
+    });
+
+    // 5. 设置
+    if (useChatAsMain) {
+        items.push(settingsAction);
+    }
+
+    // 6. 撤回
     if (!isSpectator) {
         if (!undoState) {
             items.push({
@@ -697,54 +733,16 @@ export const GameHUD = ({
         }
     }
 
-
-    // 全屏按钮
-    items.push({
-        id: 'fullscreen',
-        icon: isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />,
-        label: isFullscreen ? t('hud.actions.exitFullscreen') : t('hud.actions.fullscreen'),
-        onClick: toggleFullscreen,
-    });
-
-    const totalBadge = unreadTotal + requests.length;
-    if (user) {
-        items.push({
-            id: 'social',
-            icon: <Users size={20} />,
-            label: t('hud.actions.social'),
-            active: totalBadge > 0,
-            onClick: () => {
-                if (socialModalId) {
-                    closeModal(socialModalId);
-                    return;
-                }
-                const id = openModal({
-                    id: 'game_hud_social',
-                    closeOnBackdrop: true,
-                    closeOnEsc: true,
-                    onClose: () => setSocialModalId(null),
-                    render: ({ close }) => (
-                        <FriendsChatModal isOpen onClose={close} />
-                    ),
-                });
-                setSocialModalId(id);
-            },
-        });
-    }
-
-    items.push({
-        id: 'feedback',
-        icon: <MessageSquareWarning size={20} />,
-        label: t('hud.actions.feedback'),
-        onClick: () => setShowFeedback(true),
-    });
-
-    // 在联机模式下，设置按钮放在退出之前（反转后会显示在倒数第二位）
+    // 7. 操作日志
     if (useChatAsMain) {
-        items.push(settingsAction);
+        items.push(actionLogAction);
     }
 
-    items.push(exitAction);
+    // ===== 本地模式卫星按钮顺序 =====
+    if (!useChatAsMain) {
+        items.push(settingsAction);
+        items.push(actionLogAction);
+    }
 
     return (
         <>

@@ -10,14 +10,13 @@ import { SmashUpDomain } from '../domain';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
+import { createFlowSystem, createBaseSystems } from '../../../engine';
 import { smashUpFlowHooks } from '../domain/index';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { createSmashUpEventSystem } from '../domain/systems';
-import { resolvePromptContinuation } from '../domain/promptContinuation';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
 const PLAYER_IDS = ['0', '1'];
@@ -27,7 +26,7 @@ function createRunner() {
         domain: SmashUpDomain,
         systems: [
             createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-            ...createDefaultSystems<SmashUpCore>(),
+            ...createBaseSystems<SmashUpCore>(),
             createSmashUpEventSystem(),
         ],
         playerIds: PLAYER_IDS,
@@ -52,7 +51,7 @@ describe('P7: PromptSystem 集成', () => {
     beforeAll(() => {
         clearRegistry();
         clearBaseAbilityRegistry();
-        clearPromptContinuationRegistry();
+        clearInteractionHandlers();
         resetAbilityInit();
         initAllAbilities();
     });
@@ -113,13 +112,13 @@ describe('P7: PromptSystem 集成', () => {
 
     describe('Prompt 继续函数注册表', () => {
         it('alien_crop_circles 继续函数已注册', () => {
-            const fn = resolvePromptContinuation('alien_crop_circles');
+            const fn = getInteractionHandler('alien_crop_circles');
             expect(fn).toBeDefined();
             expect(typeof fn).toBe('function');
         });
 
         it('未注册的 abilityId 返回 undefined', () => {
-            const fn = resolvePromptContinuation('nonexistent_ability');
+            const fn = getInteractionHandler('nonexistent_ability');
             expect(fn).toBeUndefined();
         });
     });

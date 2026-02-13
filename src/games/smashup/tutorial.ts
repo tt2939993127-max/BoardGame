@@ -10,7 +10,7 @@
  * - 通过 MERGE_STATE 设置玩家手牌为教学指定卡牌
  *
  * 教学手牌设计（P0）：
- * - 研究员 (miskatonic_fellow, 力量3, 天赋) — 天赋随从，用于演示打出随从 + 激活天赋
+ * - 心理学家 (miskatonic_psychologist, 力量3, onPlay) — onPlay 随从，用于演示打出随从
  * - 机能强化 (dino_augmentation, 标准行动) — 简单行动卡，用于演示打出行动
  * - 战争猛禽 (dino_war_raptor, 力量2) — 备用随从，丰富手牌
  */
@@ -67,7 +67,7 @@ export {
  * uid 使用 'tut-' 前缀避免与游戏生成的 uid 冲突
  */
 const TUTORIAL_HAND: CardInstance[] = [
-    { uid: 'tut-1', defId: 'miskatonic_fellow', type: 'minion', owner: '0' },
+    { uid: 'tut-1', defId: 'miskatonic_psychologist', type: 'minion', owner: '0' },
     { uid: 'tut-2', defId: 'dino_augmentation', type: 'action', owner: '0' },
     { uid: 'tut-3', defId: 'dino_war_raptor', type: 'minion', owner: '0' },
 ];

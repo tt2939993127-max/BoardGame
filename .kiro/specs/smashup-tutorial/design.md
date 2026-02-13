@@ -158,7 +158,7 @@ import { smashUpCheatModifier } from './cheatModifier';
 
 const systems = [
     createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-    ...createDefaultSystems<SmashUpCore>(),
+    ...createBaseSystems<SmashUpCore>(),
     createSmashUpPromptBridge(),
     createCheatSystem<SmashUpCore>(smashUpCheatModifier), // 新增
 ];

@@ -34,6 +34,8 @@ export interface CardSpotlightItem {
         timestamp: number;
         effectKey?: string;
         effectParams?: Record<string, string | number>;
+        /** 骰子所属角色（用于图集选择） */
+        characterId?: string;
     }>;
 }
 
@@ -126,6 +128,7 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
                                 effectParams={die.effectParams}
                                 locale={locale}
                                 size="10vw"
+                                characterId={die.characterId}
                             />
                         ))}
                     </div>

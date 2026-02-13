@@ -1,33 +1,15 @@
 /**
  * SmashUp - ActionLog 格式化测试
+ * 
+ * 验证 formatSmashUpActionEntry 生成正确的 i18n segment（延迟翻译）。
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActionLogEntry, Command, GameEvent, MatchState } from '../../../engine/types';
+import { describe, expect, it } from 'vitest';
+import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState } from '../../../engine/types';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type { SmashUpCore } from '../domain/types';
 import { formatSmashUpActionEntry } from '../actionLog';
 import { makeBase, makeMatchState, makeStateWithBases } from './helpers';
-import i18n from '../../../lib/i18n';
-
-const formatMockText = (key: string, params?: Record<string, string | number>) => {
-    if (!params || Object.keys(params).length === 0) return String(key);
-    const serialized = Object.entries(params)
-        .map(([paramKey, value]) => `${paramKey}=${value}`)
-        .join(',');
-    return `${key}:${serialized}`;
-};
-
-beforeEach(() => {
-    vi.spyOn(i18n, 't').mockImplementation((...args) => {
-        const [key, params] = args as [unknown, Record<string, string | number> | undefined];
-        return formatMockText(String(key), params);
-    });
-});
-
-afterEach(() => {
-    vi.restoreAllMocks();
-});
 
 const normalizeEntries = (result: ActionLogEntry | ActionLogEntry[] | null): ActionLogEntry[] => {
     if (!result) return [];
@@ -39,8 +21,18 @@ const createMatchState = (): MatchState<SmashUpCore> => {
     return makeMatchState(core);
 };
 
+/** 从 segments 中提取所有 i18n segment 的 key */
+const getI18nKeys = (segments: ActionLogSegment[]): string[] =>
+    segments.filter(s => s.type === 'i18n').map(s => (s as { key: string }).key);
+
+/** 查找指定 key 的 i18n segment */
+const findI18nSegment = (segments: ActionLogSegment[], key: string) =>
+    segments.find(s => s.type === 'i18n' && (s as { key: string }).key === key) as
+    | { type: 'i18n'; ns: string; key: string; params?: Record<string, string | number>; paramI18nKeys?: string[] }
+    | undefined;
+
 describe('formatSmashUpActionEntry', () => {
-    it('PLAY_MINION 使用 MINION_PLAYED 事件生成基地提示', () => {
+    it('PLAY_MINION 生成 i18n segment + card segment', () => {
         const command: Command = {
             type: SU_COMMANDS.PLAY_MINION,
             playerId: '0',
@@ -62,15 +54,16 @@ describe('formatSmashUpActionEntry', () => {
 
         const commandEntry = entries.find((entry) => entry.kind === SU_COMMANDS.PLAY_MINION);
         expect(commandEntry).toBeTruthy();
+        // 应包含 i18n segment（playMinion）和 card segment
+        const i18nKeys = getI18nKeys(commandEntry!.segments);
+        expect(i18nKeys).toContain('actionLog.playMinion');
         const cardSegments = commandEntry?.segments.filter(segment => segment.type === 'card');
         expect(cardSegments?.[0]).toMatchObject({ cardId: 'pirate_king' });
-        const text = commandEntry?.segments
-            .map(segment => (segment.type === 'text' ? segment.text : ''))
-            .join('');
-        expect(text).toContain('家园');
+        // 应包含 onBase i18n segment
+        expect(i18nKeys).toContain('actionLog.onBase');
     });
 
-    it('BASE_SCORED 记录排名与 VP', () => {
+    it('BASE_SCORED 生成排名 i18n segment', () => {
         const command: Command = {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
@@ -99,18 +92,20 @@ describe('formatSmashUpActionEntry', () => {
         const scoredEntry = entries.find((entry) => entry.kind === SU_EVENTS.BASE_SCORED);
 
         expect(scoredEntry).toBeTruthy();
-        const text = scoredEntry?.segments
-            .map(segment => (segment.type === 'text' ? segment.text : ''))
-            .join('');
-        const expectedRanking = i18n.t('game-smashup:actionLog.baseScoredRanking', {
-            player: i18n.t('game-smashup:actionLog.playerLabel', { playerId: '0' }),
-            vp: 3,
-        });
-        expect(text).toContain(i18n.t('game-smashup:actionLog.baseScored'));
-        expect(text).toContain(expectedRanking);
+        const i18nKeys = getI18nKeys(scoredEntry!.segments);
+        expect(i18nKeys).toContain('actionLog.baseScored');
+        expect(i18nKeys).toContain('actionLog.baseScoredRanking');
+
+        // 验证排名参数
+        const rankingSegs = scoredEntry!.segments.filter(
+            s => s.type === 'i18n' && (s as { key: string }).key === 'actionLog.baseScoredRanking'
+        ) as { params?: Record<string, string | number> }[];
+        expect(rankingSegs).toHaveLength(2);
+        expect(rankingSegs[0].params?.playerId).toBe('0');
+        expect(rankingSegs[0].params?.vp).toBe(3);
     });
 
-    it('MINION_MOVED 使用 from/to 基地文案', () => {
+    it('MINION_MOVED 生成 fromTo i18n segment', () => {
         const command: Command = {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
@@ -137,17 +132,12 @@ describe('formatSmashUpActionEntry', () => {
         const entries = normalizeEntries(result);
         const movedEntry = entries.find((entry) => entry.kind === SU_EVENTS.MINION_MOVED);
         expect(movedEntry).toBeTruthy();
-        const expectedFromTo = i18n.t('game-smashup:actionLog.fromTo', {
-            from: '家园',
-            to: '家园',
-        });
-        const text = movedEntry?.segments
-            .map(segment => (segment.type === 'text' ? segment.text : ''))
-            .join('');
-        expect(text).toContain(expectedFromTo);
+        const i18nKeys = getI18nKeys(movedEntry!.segments);
+        expect(i18nKeys).toContain('actionLog.minionMoved');
+        expect(i18nKeys).toContain('actionLog.fromTo');
     });
 
-    it('VP_AWARDED 追加原因说明', () => {
+    it('VP_AWARDED 追加原因 i18n segment', () => {
         const command: Command = {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
@@ -168,9 +158,15 @@ describe('formatSmashUpActionEntry', () => {
         const entries = normalizeEntries(result);
         const vpEntry = entries.find((entry) => entry.kind === SU_EVENTS.VP_AWARDED);
         expect(vpEntry).toBeTruthy();
-        const text = vpEntry?.segments
-            .map(segment => (segment.type === 'text' ? segment.text : ''))
-            .join('');
-        expect(text).toContain(i18n.t('game-smashup:actionLog.reasonSuffix', { reason: 'test-reason' }));
+        const i18nKeys = getI18nKeys(vpEntry!.segments);
+        expect(i18nKeys).toContain('actionLog.vpAwarded');
+        expect(i18nKeys).toContain('actionLog.reasonSuffix');
+
+        const vpSeg = findI18nSegment(vpEntry!.segments, 'actionLog.vpAwarded');
+        expect(vpSeg?.params?.playerId).toBe('0');
+        expect(vpSeg?.params?.amount).toBe(2);
+
+        const reasonSeg = findI18nSegment(vpEntry!.segments, 'actionLog.reasonSuffix');
+        expect(reasonSeg?.params?.reason).toBe('test-reason');
     });
 });

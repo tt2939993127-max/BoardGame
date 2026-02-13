@@ -32,6 +32,7 @@ import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { triggerBaseAbilityWithMS, getInteractionsFromResult } from './helpers';
 
 // ============================================================================
 // 初始化
@@ -108,7 +109,7 @@ function makeCtx(overrides: Partial<BaseAbilityContext>): BaseAbilityContext {
 
 describe('base_the_asylum: 疯人院 - 返回疯狂卡', () => {
     it('有疯狂卡时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_the_asylum', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_the_asylum')],
                 madnessDeck: Array(MADNESS_DECK_SIZE).fill(MADNESS_CARD_DEF_ID),
@@ -123,14 +124,14 @@ describe('base_the_asylum: 疯人院 - 返回疯狂卡', () => {
             minionUid: 'm1',
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_the_asylum');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_the_asylum');
     });
 
     it('无疯狂卡时不触发', () => {
-        const events = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_the_asylum')],
                 madnessDeck: Array(10).fill(MADNESS_CARD_DEF_ID),
@@ -147,7 +148,7 @@ describe('base_the_asylum: 疯人院 - 返回疯狂卡', () => {
     });
 
     it('无疯狂牌库时不触发', () => {
-        const events = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_the_asylum')],
                 // 无 madnessDeck
@@ -162,7 +163,7 @@ describe('base_the_asylum: 疯人院 - 返回疯狂卡', () => {
 
 describe('base_innsmouth_base: 印斯茅斯 - 弃牌堆卡入牌库底', () => {
     it('弃牌堆有卡时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_innsmouth_base', 'onMinionPlayed', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_innsmouth_base', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_innsmouth_base')],
                 players: {
@@ -176,14 +177,14 @@ describe('base_innsmouth_base: 印斯茅斯 - 弃牌堆卡入牌库底', () => {
             minionUid: 'm1',
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_innsmouth_base');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_innsmouth_base');
     });
 
     it('所有弃牌堆为空时不触发', () => {
-        const events = triggerBaseAbility('base_innsmouth_base', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_innsmouth_base', 'onMinionPlayed', makeCtx({
             state: makeState({ bases: [makeBase('base_innsmouth_base')] }),
             baseDefId: 'base_innsmouth_base',
             minionUid: 'm1',
@@ -195,7 +196,7 @@ describe('base_innsmouth_base: 印斯茅斯 - 弃牌堆卡入牌库底', () => {
 
 describe('base_mountains_of_madness: 疯狂山脉 - 抽疯狂卡', () => {
     it('有疯狂牌库时生成 MADNESS_DRAWN 事件', () => {
-        const events = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_mountains_of_madness')],
                 madnessDeck: Array(10).fill(MADNESS_CARD_DEF_ID),
@@ -211,7 +212,7 @@ describe('base_mountains_of_madness: 疯狂山脉 - 抽疯狂卡', () => {
     });
 
     it('疯狂牌库为空时不触发', () => {
-        const events = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_mountains_of_madness')],
                 madnessDeck: [],
@@ -226,7 +227,7 @@ describe('base_mountains_of_madness: 疯狂山脉 - 抽疯狂卡', () => {
 
 describe('base_miskatonic_university_base: 密大基地 - 计分后返回疯狂卡', () => {
     it('有随从且有疯狂卡的玩家生成 Prompt', () => {
-        const events = triggerBaseAbility('base_miskatonic_university_base', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_miskatonic_university_base', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_miskatonic_university_base', {
                     minions: [makeMinion('m1', '0', 3)],
@@ -243,15 +244,15 @@ describe('base_miskatonic_university_base: 密大基地 - 计分后返回疯狂�
             rankings: [{ playerId: '0', power: 3, vp: 4 }],
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_miskatonic_university_base');
-        expect(continuation.playerId).toBe('0');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_miskatonic_university_base');
+        expect(interactions[0].playerId).toBe('0');
     });
 
     it('无疯狂牌库时不触发', () => {
-        const events = triggerBaseAbility('base_miskatonic_university_base', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_miskatonic_university_base', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_miskatonic_university_base', {
                     minions: [makeMinion('m1', '0', 3)],
@@ -267,7 +268,7 @@ describe('base_miskatonic_university_base: 密大基地 - 计分后返回疯狂�
 
 describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
     it('手牌有同名随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_plateau_of_leng', 'onMinionPlayed', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_plateau_of_leng', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_plateau_of_leng')],
                 players: {
@@ -282,14 +283,14 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
             minionDefId: 'alien_collector', // 刚打出的随从
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_plateau_of_leng');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_plateau_of_leng');
     });
 
     it('手牌无同名随从时不触发', () => {
-        const events = triggerBaseAbility('base_plateau_of_leng', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_plateau_of_leng', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_plateau_of_leng')],
                 players: {
@@ -314,7 +315,7 @@ describe('base_plateau_of_leng: 冷原高地 - 打同名随从', () => {
 
 describe('base_greenhouse: 温室 - 计分后从牌库打随从', () => {
     it('冠军牌库有随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_greenhouse', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_greenhouse', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_greenhouse')],
                 players: {
@@ -328,15 +329,15 @@ describe('base_greenhouse: 温室 - 计分后从牌库打随从', () => {
             rankings: [{ playerId: '0', power: 5, vp: 4 }],
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_greenhouse');
-        expect(continuation.playerId).toBe('0');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_greenhouse');
+        expect(interactions[0].playerId).toBe('0');
     });
 
     it('冠军牌库无随从时不触发', () => {
-        const events = triggerBaseAbility('base_greenhouse', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_greenhouse', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_greenhouse')],
                 players: {
@@ -356,7 +357,7 @@ describe('base_greenhouse: 温室 - 计分后从牌库打随从', () => {
 
 describe('base_secret_garden: 神秘花园 - 回合开始额外随从', () => {
     it('回合开始时获得额外随从额度', () => {
-        const events = triggerBaseAbility('base_secret_garden', 'onTurnStart', makeCtx({
+        const { events } = triggerBaseAbility('base_secret_garden', 'onTurnStart', makeCtx({
             state: makeState({ bases: [makeBase('base_secret_garden')] }),
             baseDefId: 'base_secret_garden',
         }));
@@ -371,7 +372,7 @@ describe('base_secret_garden: 神秘花园 - 回合开始额外随从', () => {
 
 describe('base_inventors_salon: 发明家沙龙 - 计分后取回行动卡', () => {
     it('冠军弃牌堆有行动卡时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_inventors_salon', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_inventors_salon', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_inventors_salon')],
                 players: {
@@ -385,14 +386,14 @@ describe('base_inventors_salon: 发明家沙龙 - 计分后取回行动卡', () 
             rankings: [{ playerId: '0', power: 5, vp: 4 }],
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_inventors_salon');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_inventors_salon');
     });
 
     it('冠军弃牌堆无行动卡时不触发', () => {
-        const events = triggerBaseAbility('base_inventors_salon', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_inventors_salon', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_inventors_salon')],
                 players: {
@@ -416,7 +417,7 @@ describe('base_inventors_salon: 发明家沙龙 - 计分后取回行动卡', () 
 
 describe('base_cat_fanciers_alley: 诡猫巷 - 消灭己方随从抽牌', () => {
     it('有己方随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_cat_fanciers_alley', 'onTurnStart', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_cat_fanciers_alley', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [makeBase('base_cat_fanciers_alley', {
                     minions: [makeMinion('m1', '0', 2)],
@@ -426,14 +427,14 @@ describe('base_cat_fanciers_alley: 诡猫巷 - 消灭己方随从抽牌', () => 
             baseIndex: 0,
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_cat_fanciers_alley');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_cat_fanciers_alley');
     });
 
     it('无己方随从时不触发', () => {
-        const events = triggerBaseAbility('base_cat_fanciers_alley', 'onTurnStart', makeCtx({
+        const { events } = triggerBaseAbility('base_cat_fanciers_alley', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [makeBase('base_cat_fanciers_alley', {
                     minions: [makeMinion('m1', '1', 2)], // 对手随从
@@ -449,7 +450,7 @@ describe('base_cat_fanciers_alley: 诡猫巷 - 消灭己方随从抽牌', () => 
 
 describe('base_enchanted_glade: 魔法林地 - 附着行动卡抽牌', () => {
     it('附着行动卡到此基地随从时抽 1 卡', () => {
-        const events = triggerBaseAbility('base_enchanted_glade', 'onActionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_enchanted_glade', 'onActionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_enchanted_glade')],
                 players: {
@@ -468,7 +469,7 @@ describe('base_enchanted_glade: 魔法林地 - 附着行动卡抽牌', () => {
     });
 
     it('非附着行动卡（无目标随从）时不触发', () => {
-        const events = triggerBaseAbility('base_enchanted_glade', 'onActionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_enchanted_glade', 'onActionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_enchanted_glade')],
                 players: {
@@ -485,7 +486,7 @@ describe('base_enchanted_glade: 魔法林地 - 附着行动卡抽牌', () => {
     });
 
     it('牌库为空时不抽牌', () => {
-        const events = triggerBaseAbility('base_enchanted_glade', 'onActionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_enchanted_glade', 'onActionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_enchanted_glade')],
                 players: {
@@ -504,7 +505,7 @@ describe('base_enchanted_glade: 魔法林地 - 附着行动卡抽牌', () => {
 
 describe('base_fairy_ring: 仙灵圈 - 首次打随从额外额度', () => {
     it('首次打出随从（基地上该玩家仅 1 个随从）时获得额外额度', () => {
-        const events = triggerBaseAbility('base_fairy_ring', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_fairy_ring', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_fairy_ring', {
                     minions: [makeMinion('m1', '0', 3)], // 刚打出的这一个
@@ -528,7 +529,7 @@ describe('base_fairy_ring: 仙灵圈 - 首次打随从额外额度', () => {
     });
 
     it('非首次打出（基地上该玩家已有 2 个随从）不触发', () => {
-        const events = triggerBaseAbility('base_fairy_ring', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_fairy_ring', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_fairy_ring', {
                     minions: [
@@ -548,7 +549,7 @@ describe('base_fairy_ring: 仙灵圈 - 首次打随从额外额度', () => {
 
 describe('base_land_of_balance: 平衡之地 - 移动己方随从到此', () => {
     it('其他基地有己方随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_land_of_balance', 'onMinionPlayed', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_land_of_balance', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [
                     makeBase('base_land_of_balance'), // 索引 0
@@ -562,16 +563,16 @@ describe('base_land_of_balance: 平衡之地 - 移动己方随从到此', () => 
             minionUid: 'm1',
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_land_of_balance');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_land_of_balance');
         // skip + 1 个己方随从
-        expect(continuation.data.promptConfig.options.length).toBe(2);
+        expect(interactions[0].data.options.length).toBe(2);
     });
 
     it('其他基地无己方随从时不触发', () => {
-        const events = triggerBaseAbility('base_land_of_balance', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_land_of_balance', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [
                     makeBase('base_land_of_balance'),
@@ -589,7 +590,7 @@ describe('base_land_of_balance: 平衡之地 - 移动己方随从到此', () => 
     });
 
     it('只有平衡之地一个基地时不触发', () => {
-        const events = triggerBaseAbility('base_land_of_balance', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_land_of_balance', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_land_of_balance')],
             }),

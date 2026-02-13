@@ -2,16 +2,18 @@
  * SummonerWars 实体交互链完整性测试
  *
  * 验证 AbilityDef 中所有 custom actionId 引用都有对应的处理器。
- * 三条合法路径：
+ * 四条合法路径：
  * 1. swCustomActionRegistry → abilityResolver case 'custom' 直接调用 handler
  * 2. HANDLED_BY_UI_EVENTS → fallback ABILITY_TRIGGERED 被 useGameEvents.ts 消费
- * 3. HANDLED_BY_EXECUTE → 父技能通过 ACTIVATE_ABILITY 命令进入 execute.ts switch
+ * 3. HANDLED_BY_EXECUTORS → 父技能通过 executors/ 注册表执行器处理
+ * 4. HANDLED_BY_COMMAND_FLOW / HANDLED_BY_PASSIVE → execute.ts 命令流或被动计算
  *
  * 不在任何集合中的 actionId → 断链（测试失败）
  */
 
 import { abilityRegistry } from '../domain/abilities';
 import { swCustomActionRegistry } from '../domain/customActionHandlers';
+import { abilityExecutorRegistry } from '../domain/executors';
 import type { AbilityDef, AbilityEffect } from '../domain/abilities';
 import {
     createRegistryIntegritySuite,
@@ -37,47 +39,57 @@ const HANDLED_BY_UI_EVENTS = new Set([
 ]);
 
 /**
- * 父技能整体由 execute.ts ACTIVATE_ABILITY switch 处理，
- * custom effect 声明仅用于 AbilityDef 数据完整性，不走 abilityResolver
- * 修改后必须同步更新 execute.ts executeActivateAbility()
+ * 父技能通过 executors/ 注册表执行器处理的子 actionId。
+ * 这些 actionId 是 AbilityDef 中 custom effect 的声明，
+ * 实际逻辑在对应的 executors/*.ts 文件中作为父技能的一部分执行。
  */
-const HANDLED_BY_EXECUTE = new Set([
+const HANDLED_BY_EXECUTORS = new Set([
     // 堕落王国
-    'soul_transfer_request',  // → execute case 'soul_transfer'
+    'soul_transfer_request',    // → executors/necromancer 'soul_transfer'
+    'fire_sacrifice_summon',    // → executors/necromancer 'fire_sacrifice_summon'
     // 欺心巫族
-    'mind_capture_check',     // → execute case 'mind_capture_resolve'
-    'mind_capture_resolve',   // → execute case 'mind_capture_resolve'（决策分支）
-    'vanish_swap',            // → execute case 'vanish'
+    'mind_capture_check',       // → executors/trickster 'mind_capture_resolve'
+    'mind_capture_resolve',     // → executors/trickster 'mind_capture_resolve'（决策分支）
+    'vanish_swap',              // → executors/goblin 'vanish'
     // 洞穴地精
-    'ferocity_extra_attack',  // → execute 攻击后检查
-    'grab_follow',            // → execute MOVE_UNIT 中的抓附检查
-    'magic_addiction_check',  // → execute case 'magic_addiction'
-    'immobile_check',         // → validate/helpers 移动校验
+    'magic_addiction_check',    // → executors/goblin 'magic_addiction'
     // 先锋军团
-    'fortress_power_retrieve', // → execute case 'fortress_power'
-    'fortress_elite_boost',    // → onDamageCalculation 被动
-    'guardian_force_target',   // → execute 被动检查
-    'holy_arrow_discard',      // → execute case 'holy_arrow'
-    'radiant_shot_boost',      // → execute 攻击前被动
-    // 圣骑士
-    'healing_convert',         // → swCustomActionRegistry (也在此列以保持审计完整)
-    'divine_shield_check',     // → swCustomActionRegistry
+    'fortress_power_retrieve',  // → executors/paladin 'fortress_power'
+    'holy_arrow_discard',       // → executors/paladin 'holy_arrow'
     // 极地矮人
+    'frost_axe_action',         // → executors/frost 'frost_axe'
+    'structure_shift_push_pull', // → executors/frost 'structure_shift'
+    // 炽原精灵
+    'ancestral_bond_transfer',  // → executors/barbaric 'ancestral_bond'
+    'withdraw_push_pull',       // → executors/barbaric 'withdraw'
+    'spirit_bond_action',       // → executors/barbaric 'spirit_bond'
+]);
+
+/**
+ * 在 execute.ts 命令流中处理的 actionId（MOVE_UNIT/DECLARE_ATTACK 等主命令的子逻辑）。
+ * 非 ACTIVATE_ABILITY 路径，而是嵌入在其他命令的执行流程中。
+ */
+const HANDLED_BY_COMMAND_FLOW = new Set([
+    'ferocity_extra_attack',  // → execute DECLARE_ATTACK afterAttack 检查
+    'grab_follow',            // → execute MOVE_UNIT 抓附跟随
+    'guardian_force_target',  // → execute DECLARE_ATTACK 被动守护
+    'radiant_shot_boost',     // → execute DECLARE_ATTACK beforeAttack 被动
+    'charge_line_move',       // → execute MOVE_UNIT 冲锋加成
+    'speed_up_extra_move',    // → execute/helpers 移动增强
+]);
+
+/**
+ * 被动计算/校验中处理的 actionId。
+ * 这些 actionId 在 abilityResolver（onDamageCalculation）、validate/helpers 等被动路径中生效。
+ */
+const HANDLED_BY_PASSIVE = new Set([
+    'fortress_elite_boost',    // → onDamageCalculation 被动
     'cold_snap_aura',          // → onDamageCalculation 被动
     'frost_bolt_boost',        // → onDamageCalculation 被动
     'greater_frost_bolt_boost', // → onDamageCalculation 被动
-    'frost_axe_action',        // → execute case 'frost_axe' 或被动
-    'charge_line_move',        // → execute MOVE_UNIT 冲锋检查
     'aerial_strike_aura',      // → onDamageCalculation 被动
-    // 亡灵法师
-    'fire_sacrifice_summon',   // → execute case 'fire_sacrifice_summon'
-    'structure_shift_push_pull', // → execute case 'structure_shift'
+    'immobile_check',          // → validate/helpers 移动校验
     'extended_range',          // → helpers 攻击范围计算
-    // 炽原精灵
-    'ancestral_bond_transfer', // → execute case 'ancestral_bond'
-    'withdraw_push_pull',      // → execute case 'withdraw'
-    'speed_up_extra_move',     // → execute/helpers 移动增强
-    'spirit_bond_action',      // → execute case 'spirit_bond'
     'stable_immunity',         // → abilityResolver pushPull 免疫检查
 ]);
 
@@ -119,7 +131,9 @@ const registeredIds = swCustomActionRegistry.getRegisteredIds();
 const allHandledIds = new Set([
     ...registeredIds,
     ...HANDLED_BY_UI_EVENTS,
-    ...HANDLED_BY_EXECUTE,
+    ...HANDLED_BY_EXECUTORS,
+    ...HANDLED_BY_COMMAND_FLOW,
+    ...HANDLED_BY_PASSIVE,
 ]);
 
 createRefChainSuite<AbilityDef>({
@@ -131,7 +145,9 @@ createRefChainSuite<AbilityDef>({
     orphanCheck: { label: 'swCustomActionRegistry', registeredIds },
     staleWhitelists: [
         { label: 'HANDLED_BY_UI_EVENTS', ids: HANDLED_BY_UI_EVENTS },
-        { label: 'HANDLED_BY_EXECUTE', ids: HANDLED_BY_EXECUTE },
+        { label: 'HANDLED_BY_EXECUTORS', ids: HANDLED_BY_EXECUTORS },
+        { label: 'HANDLED_BY_COMMAND_FLOW', ids: HANDLED_BY_COMMAND_FLOW },
+        { label: 'HANDLED_BY_PASSIVE', ids: HANDLED_BY_PASSIVE },
     ],
 });
 
@@ -205,5 +221,42 @@ describe('swCustomActionRegistry 健康检查', () => {
         expect(swCustomActionRegistry.has('guidance_draw')).toBe(true);
         expect(swCustomActionRegistry.has('divine_shield_check')).toBe(true);
         expect(swCustomActionRegistry.has('healing_convert')).toBe(true);
+    });
+});
+
+// ============================================================================
+// 5. abilityExecutorRegistry 与 abilityRegistry 双向一致性
+// ============================================================================
+
+describe('abilityExecutorRegistry 一致性', () => {
+    const executorIds = abilityExecutorRegistry.getRegisteredIds();
+    const abilityIds = abilityRegistry.getRegisteredIds();
+
+    it('所有注册的执行器都有对应的 AbilityDef', () => {
+        const orphanExecutors: string[] = [];
+        for (const id of executorIds) {
+            if (!abilityIds.has(id)) {
+                orphanExecutors.push(id);
+            }
+        }
+        expect(orphanExecutors).toEqual([]);
+    });
+
+    it('所有 activated 技能都有对应的执行器', () => {
+        const activatedDefs = abilityRegistry.getByTrigger('activated');
+        const missingExecutors: string[] = [];
+        for (const def of activatedDefs) {
+            if (!executorIds.has(def.id)) {
+                missingExecutors.push(def.id);
+            }
+        }
+        expect(missingExecutors).toEqual([]);
+    });
+
+    it('执行器数量与 activated 技能数量一致', () => {
+        const activatedCount = abilityRegistry.getByTrigger('activated').length;
+        // 执行器可能多于 activated（包含非 activated 但需要 ACTIVATE_ABILITY 命令的技能）
+        // 但不应少于 activated 数量
+        expect(executorIds.size).toBeGreaterThanOrEqual(activatedCount);
     });
 });

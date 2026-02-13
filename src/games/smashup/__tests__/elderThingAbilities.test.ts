@@ -75,7 +75,7 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
+    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
 }
 
 const defaultRandom: RandomFn = {
@@ -85,18 +85,33 @@ const defaultRandom: RandomFn = {
     range: (_min: number, _max: number) => _min,
 };
 
+let lastMatchState: MatchState<SmashUpCore>;
+
 function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number, random?: RandomFn): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+    const ms = makeMatchState(state);
+    lastMatchState = ms;
+    return execute(ms, {
         type: SU_COMMANDS.PLAY_MINION, playerId,
         payload: { cardUid, baseIndex },
     } as any, random ?? defaultRandom);
 }
 
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+    const ms = makeMatchState(state);
+    lastMatchState = ms;
+    return execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
+}
+
+function getLastInteractions(): any[] {
+    const interaction = (lastMatchState?.sys as any)?.interaction;
+    if (!interaction) return [];
+    const list: any[] = [];
+    if (interaction.current) list.push(interaction.current);
+    if (interaction.queue?.length) list.push(...interaction.queue);
+    return list;
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -402,9 +417,9 @@ describe('远古之物派系能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            // 单个弃牌堆随从时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 单个弃牌堆随从时创建 Interaction
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
         });
 
         it('弃牌堆无随从时只给额外行动', () => {

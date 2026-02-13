@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CardPreview } from '../common/media/CardPreview';
-import { UI_Z_INDEX, type CardPreviewRef } from '../../core';
+import { CardPreview } from '../../../common/media/CardPreview';
+import { UI_Z_INDEX, type CardPreviewRef } from '../../../../core';
 
 interface CardPreviewTooltipProps {
     /** 卡牌预览引用 */

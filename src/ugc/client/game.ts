@@ -13,7 +13,7 @@ import type {
     MatchState,
     ValidationResult,
 } from '../../engine/types';
-import { createDefaultSystems, createGameAdapter } from '../../engine';
+import { createBaseSystems, createGameAdapter } from '../../engine';
 import { RuntimeDomainExecutor, type RuntimeDomainCore } from '../runtime/domainExecutor';
 import type { UGCGameState } from '../sdk/types';
 import { loadUgcRuntimeConfig, type UgcRuntimeConfig } from './loader';
@@ -140,7 +140,7 @@ const createGameFromRules = async (options: CreateGameFromRulesOptions): Promise
     }
 
     const domain = buildDomainCore(packageId, domainCore);
-    const systems = createDefaultSystems<UGCGameState>();
+    const systems = createBaseSystems<UGCGameState>();
 
     return createGameAdapter({
         domain,

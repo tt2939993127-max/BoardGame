@@ -5,7 +5,7 @@ import { Client } from 'boardgame.io/react';
 import { GAME_IMPLEMENTATIONS } from '../games/registry';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { getGameById } from '../config/games.config';
-import { GameHUD } from '../components/game/GameHUD';
+import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { useState } from 'react';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';

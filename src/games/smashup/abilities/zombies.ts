@@ -15,7 +15,7 @@ import type {
     MinionCardDef,
     MinionPlayedEvent,
 } from '../domain/types';
-import { recoverCardsFromDiscard, grantExtraMinion, requestChoice, buildBaseTargetOptions } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions } from '../domain/abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerRestriction, registerTrigger } from '../domain/ongoingEffects';
@@ -269,8 +269,9 @@ function zombieOverrunSelfDestruct(ctx: TriggerContext): SmashUpEvent[] {
 // 它们为你而来 (ongoing)：回合开始时可从弃牌堆打随从到此基地
 // ============================================================================
 
-/** 它们为你而来触发：回合开始时 Prompt 选弃牌堆随从打到此基�?*/
+/** 它们为你而来触发：回合开始时从弃牌堆打随从到此基地 */
 function zombieTheyreComingTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    if (!ctx.matchState) return [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         const ongoing = base.ongoingActions.find(
@@ -286,47 +287,47 @@ function zombieTheyreComingTrigger(ctx: TriggerContext): SmashUpEvent[] {
             const power = def?.power ?? 0;
             return { id: `card-${idx}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
         });
-        // 加一个“跳过”选项
         options.push({ id: 'skip', label: '跳过', value: { cardUid: '', defId: '', power: 0 } });
-        return [requestChoice({
-            abilityId: 'zombie_theyre_coming_to_get_you',
-            playerId: ctx.playerId,
-            promptConfig: { title: '它们为你而来：选择从弃牌堆打出的随从到此基地', options },
-                        continuationContext: { baseIndex: i, },
-        }, ctx.now)];
+        const interaction = createSimpleChoice(
+            `zombie_theyre_coming_${ctx.now}`, ctx.playerId,
+            '它们为你而来：选择从弃牌堆打出的随从到此基地', options, 'zombie_theyre_coming_to_get_you',
+        );
+        const extended = {
+            ...interaction,
+            data: { ...interaction.data, continuationContext: { baseIndex: i } },
+        };
+        queueInteraction(ctx.matchState, extended);
+        return [];
     }
     return [];
 }
-
 // ============================================================================
 // 顽强丧尸：回合开始时可从弃牌堆打出（每回合限1次）
 // ============================================================================
 
-/** 顽强丧尸触发：回合开始时检查弃牌堆是否�?tenacious_z */
+/** 顽强丧尸触发：回合开始时检查弃牌堆是否有 tenacious_z */
 function zombieTenaciousZTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    if (!ctx.matchState) return [];
     const player = ctx.state.players[ctx.playerId];
     if (!player) return [];
     const tenaciousInDiscard = player.discard.filter(c => c.defId === 'zombie_tenacious_z');
     if (tenaciousInDiscard.length === 0) return [];
-    // 只取第一张（每回合限�?次）
     const card = tenaciousInDiscard[0];
     const def = getCardDef(card.defId) as MinionCardDef | undefined;
     const name = def?.name ?? card.defId;
     const power = def?.power ?? 0;
-    return [requestChoice({
-        abilityId: 'zombie_tenacious_z',
-        playerId: ctx.playerId,
-        promptConfig: {
-                title: `顽强丧尸在弃牌堆，是否作为额外随从打出？`,
-                options: [
-                    { id: 'play', label: `打出 ${name} (力量 ${power})`, value: { cardUid: card.uid, defId: card.defId, power, action: 'play' } },
-                    { id: 'skip', label: '跳过', value: { action: 'skip' } },
-                ],
-            },
-                        continuationContext: {},
-    }, ctx.now)];
+    const interaction = createSimpleChoice(
+        `zombie_tenacious_z_${ctx.now}`, ctx.playerId,
+        '顽强丧尸在弃牌堆，是否作为额外随从打出？',
+        [
+            { id: 'play', label: `打出 ${name} (力量 ${power})`, value: { cardUid: card.uid, defId: card.defId, power, action: 'play' } },
+            { id: 'skip', label: '跳过', value: { action: 'skip' } },
+        ],
+        'zombie_tenacious_z',
+    );
+    queueInteraction(ctx.matchState, interaction);
+    return [];
 }
-
 
 // ============================================================================
 // 交互解决处理函数（InteractionHandler）
@@ -428,7 +429,7 @@ export function registerZombieInteractionHandlers(): void {
         };
     });
 
-    // 它们为你而来：选弃牌堆随从后打到指定基地（触发器产生，TODO: 触发器迁移后移除 requestChoice 依赖）
+    // 它们为你而来：选弃牌堆随从后打到指定基地
     registerInteractionHandler('zombie_theyre_coming_to_get_you', (state, playerId, value, iData, _random, timestamp) => {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         if (!cardUid) return { state, events: [] };
@@ -444,7 +445,7 @@ export function registerZombieInteractionHandlers(): void {
         };
     });
 
-    // 顽强丧尸：选择打出或跳过（触发器产生，TODO: 触发器迁移后移除 requestChoice 依赖）
+    // 顽强丧尸：选择打出或跳过
     registerInteractionHandler('zombie_tenacious_z', (state, playerId, value, _iData, _random, timestamp) => {
         const val = value as { action: string; cardUid?: string; defId?: string; power?: number };
         if (val.action === 'skip') return { state, events: [] };

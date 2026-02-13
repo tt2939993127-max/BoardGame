@@ -10,7 +10,7 @@
  * 纯函数设计：查询时传入当前状态，不持有可变状态。
  */
 
-import type { PlayerId, RandomFn } from '../../../engine/types';
+import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
 import type { SmashUpCore, SmashUpEvent, MinionOnBase } from './types';
 import { getBaseDef } from '../data/cards';
 
@@ -88,6 +88,8 @@ export type TriggerTiming =
 /** 触发上下文 */
 export interface TriggerContext {
     state: SmashUpCore;
+    /** 完整的 match 状态，用于调用 queueInteraction（触发器需要创建交互时使用） */
+    matchState?: MatchState<SmashUpCore>;
     timing: TriggerTiming;
     /** 触发相关的玩家 */
     playerId: PlayerId;
@@ -199,6 +201,28 @@ export function getOngoingEffectRegistrySize(): {
         trigger: triggerRegistry.length,
         interceptor: interceptorRegistry.length,
     };
+}
+
+/** 获取所有已注册的 sourceDefId（用于能力行为审计） */
+export function getRegisteredOngoingEffectIds(): {
+    protectionIds: Set<string>;
+    restrictionIds: Set<string>;
+    triggerIds: Map<string, TriggerTiming[]>;
+    interceptorIds: Set<string>;
+} {
+    const protectionIds = new Set(protectionRegistry.map(e => e.sourceDefId));
+    const restrictionIds = new Set(restrictionRegistry.map(e => e.sourceDefId));
+    const interceptorIds = new Set(interceptorRegistry.map(e => e.sourceDefId));
+
+    // trigger 需要保留 timing 信息，用于更精确的审计
+    const triggerIds = new Map<string, TriggerTiming[]>();
+    for (const entry of triggerRegistry) {
+        const existing = triggerIds.get(entry.sourceDefId) ?? [];
+        existing.push(entry.timing);
+        triggerIds.set(entry.sourceDefId, existing);
+    }
+
+    return { protectionIds, restrictionIds, triggerIds, interceptorIds };
 }
 
 

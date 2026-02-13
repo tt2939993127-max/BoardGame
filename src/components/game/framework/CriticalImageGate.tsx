@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingScreen } from '../../system/LoadingScreen';
 import { preloadCriticalImages, preloadWarmImages } from '../../../core';
+import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
 
 export interface CriticalImageGateProps {
     gameId?: string;
@@ -14,6 +15,9 @@ export interface CriticalImageGateProps {
 /**
  * 关键图片预加载门禁
  * 在关键资源加载完成前，阻塞棋盘渲染。
+ *
+ * 通过 resolver 返回的 phaseKey 感知游戏阶段变化，
+ * 阶段切换时会重新触发预加载（如 setup → playing）。
  */
 export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     gameId,
@@ -26,35 +30,48 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     const [ready, setReady] = useState(!enabled);
     const inFlightRef = useRef(false);
     const lastReadyKeyRef = useRef<string | null>(null);
+    const gameStateRef = useRef(gameState);
+    const stateKey = gameState ? 'ready' : 'empty';
+
+    const phaseKey = useMemo(() => {
+        if (!enabled || !gameId || !gameState) return '';
+        const resolved = resolveCriticalImages(gameId, gameState, locale);
+        return resolved.phaseKey ?? '';
+    }, [enabled, gameId, gameState, locale]);
+
+    const runKey = `${gameId ?? ''}:${locale ?? ''}:${phaseKey}:${stateKey}`;
 
     useEffect(() => {
-        console.warn(`[CriticalImageGate] effect enabled=${enabled} gameId=${gameId} hasGameState=${!!gameState} inFlight=${inFlightRef.current}`);
+        gameStateRef.current = gameState;
+    }, [gameState]);
+
+    useEffect(() => {
         if (!enabled || !gameId) {
-            console.warn(`[CriticalImageGate] disabled or no gameId, setting ready=true`);
             setReady(true);
             inFlightRef.current = false;
             lastReadyKeyRef.current = null;
             return;
         }
-        if (!gameState) {
-            console.warn(`[CriticalImageGate] no gameState, waiting...`);
+        if (stateKey !== 'ready') {
             return;
         }
         if (inFlightRef.current) {
-            console.warn(`[CriticalImageGate] preload already in flight, skipping`);
             return;
         }
 
-        const runKey = `${gameId}:${locale ?? ''}`;
         if (lastReadyKeyRef.current === runKey) {
-            console.warn(`[CriticalImageGate] already loaded for key=${runKey}, skipping`);
             return;
         }
 
-        console.warn(`[CriticalImageGate] starting preload for gameId=${gameId}`);
+        const currentState = gameStateRef.current;
+        if (!currentState) {
+            return;
+        }
+
+        console.warn(`[CriticalImageGate] starting preload for gameId=${gameId} phaseKey=${phaseKey}`);
         inFlightRef.current = true;
         setReady(false);
-        preloadCriticalImages(gameId, gameState, locale)
+        preloadCriticalImages(gameId, currentState, locale)
             .then((warmPaths) => {
                 console.warn(`[CriticalImageGate] preload complete, setting ready=true`);
                 lastReadyKeyRef.current = runKey;
@@ -69,14 +86,11 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             .finally(() => {
                 inFlightRef.current = false;
             });
-        // 不需要 cleanup 取消：inFlightRef 控制并发，
-        // lastReadyKeyRef 保证同一游戏已完成后不会重复触发。
-    }, [enabled, gameId, gameState, locale]);
+    }, [enabled, gameId, locale, phaseKey, runKey, stateKey]);
 
     if (!ready) {
         return <LoadingScreen description={loadingDescription} />;
     }
 
-    console.warn(`[CriticalImageGate] ready=true gameId=${gameId} rendering children`);
     return <>{children}</>;
 };

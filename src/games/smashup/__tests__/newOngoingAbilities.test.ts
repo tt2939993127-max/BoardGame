@@ -32,7 +32,7 @@ import { resolveAbility } from '../domain/abilityRegistry';
 import type { AbilityContext } from '../domain/abilityRegistry';
 import { validate } from '../domain/commands';
 import { SU_COMMANDS } from '../domain/types';
-import { resolvePromptContinuation, clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { RandomFn } from '../../../engine/types';
 
@@ -81,7 +81,7 @@ beforeAll(() => {
     clearBaseAbilityRegistry();
     clearPowerModifierRegistry();
     clearOngoingEffectRegistry();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });
@@ -896,22 +896,24 @@ describe('elder_thing_elder_thing onPlay', () => {
         expect(evt.payload.cardUid).toBe('et-1');
     });
 
-    it('≥2个其他随从→产生 Prompt 选择', () => {
+    it('≥2个其他随从→产生 Interaction 选择', () => {
         const elderThing = makeMinion('et-1', 'elder_thing_elder_thing', '0', 10);
         const ally1 = makeMinion('a1', 'test_minion', '0', 3);
         const ally2 = makeMinion('a2', 'test_minion', '0', 3);
         const base = makeBase({ minions: [elderThing, ally1, ally2] });
         const state = makeState({ bases: [base] });
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
         const executor = resolveAbility('elder_thing_elder_thing', 'onPlay');
         expect(executor).toBeDefined();
         const result = executor!({
-            state, playerId: '0', cardUid: 'et-1', defId: 'elder_thing_elder_thing',
+            state, matchState: ms, playerId: '0', cardUid: 'et-1', defId: 'elder_thing_elder_thing',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(1);
-        // 应产生 PROMPT_CONTINUATION 事件
-        expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
+        // 迁移后通过 Interaction 而非 CHOICE_REQUESTED 事件
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('elder_thing_elder_thing_choice');
     });
 
     it('CARD_TO_DECK_BOTTOM reducer 从基地移除随从到牌库底', () => {
@@ -975,7 +977,7 @@ describe('elder_thing_shoggoth 打出限制', () => {
 });
 
 describe('elder_thing_shoggoth onPlay', () => {
-    it('产生第一个对手的 Prompt', () => {
+    it('产生第一个对手的 Interaction', () => {
         const shoggoth = makeMinion('sh-1', 'elder_thing_shoggoth', '0', 6);
         const base = makeBase({ minions: [shoggoth] });
         const state = makeState({
@@ -987,18 +989,18 @@ describe('elder_thing_shoggoth onPlay', () => {
                 '2': makePlayer('2'),
             },
         });
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
         const executor = resolveAbility('elder_thing_shoggoth', 'onPlay');
         expect(executor).toBeDefined();
         const result = executor!({
-            state, playerId: '0', cardUid: 'sh-1', defId: 'elder_thing_shoggoth',
+            state, matchState: ms, playerId: '0', cardUid: 'sh-1', defId: 'elder_thing_shoggoth',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(1);
-        expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        // payload 应包含 targetPlayerId
-        const contEvt = result.events[0] as any;
-        expect(contEvt.payload.targetPlayerId).toBe('1');
+        // 迁移后通过 Interaction
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('elder_thing_shoggoth_opponent');
     });
 
     it('无对手时不产生事件', () => {
@@ -1025,7 +1027,7 @@ describe('elder_thing_shoggoth onPlay', () => {
 // ============================================================================
 
 describe('killer_plant_venus_man_trap 搜索牌库', () => {
-    it('牌库有多个力量≤2随从→产生 Prompt', () => {
+    it('牌库有多个力量≤2随从→产生 Interaction', () => {
         const trap = makeMinion('trap', 'killer_plant_venus_man_trap', '0', 5);
         const base = makeBase({ minions: [trap] });
         // 牌库中放入两个 power≤2 的随从卡
@@ -1038,12 +1040,14 @@ describe('killer_plant_venus_man_trap 搜索牌库', () => {
 
         const executor = resolveAbility('killer_plant_venus_man_trap', 'talent');
         expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
         const result = executor!({
-            state, playerId: '0', cardUid: 'trap', defId: 'killer_plant_venus_man_trap',
+            state, matchState: ms, playerId: '0', cardUid: 'trap', defId: 'killer_plant_venus_man_trap',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(1);
-        expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
+        // 迁移后通过 Interaction 而非 CHOICE_REQUESTED 事件
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
     });
 
     it('牌库只有一个力量≤2随从→自动抽取+额外随从+洗牌', () => {
@@ -1088,19 +1092,20 @@ describe('killer_plant_venus_man_trap 搜索牌库', () => {
 });
 
 describe('killer_plant_budding 选择场上随从', () => {
-    it('场上有随从→产生 Prompt', () => {
+    it('场上有随从→产生 Interaction', () => {
         const ally = makeMinion('a1', 'test_minion', '0', 3);
         const base = makeBase({ minions: [ally] });
         const state = makeState({ bases: [base] });
 
         const executor = resolveAbility('killer_plant_budding', 'onPlay');
         expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
         const result = executor!({
-            state, playerId: '0', cardUid: 'bud-1', defId: 'killer_plant_budding',
+            state, matchState: ms, playerId: '0', cardUid: 'bud-1', defId: 'killer_plant_budding',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(1);
-        expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
     });
 
     it('场上无随从→不产生事件', () => {
@@ -1244,19 +1249,19 @@ describe('pirate_full_sail onPlay', () => {
 // ============================================================================
 
 describe('special_madness onPlay', () => {
-    it('产生2选1 Prompt（抽卡 / 返回牌堆）', () => {
+    it('产生2选1 Interaction（抽卡 / 返回牌堆）', () => {
         const state = makeState();
         const executor = resolveAbility('special_madness', 'onPlay');
         expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
         const result = executor!({
-            state, playerId: '0', cardUid: 'mad-1', defId: 'special_madness',
+            state, matchState: ms, playerId: '0', cardUid: 'mad-1', defId: 'special_madness',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(1);
-        expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const contEvt = result.events[0] as any;
-        expect(contEvt.payload.abilityId).toBe('special_madness');
-        const options = contEvt.payload.promptConfig.options;
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('special_madness');
+        const options = current?.data?.options;
         expect(options.length).toBe(2);
         expect(options.some((o: any) => o.value.action === 'draw')).toBe(true);
         expect(options.some((o: any) => o.value.action === 'return')).toBe(true);
@@ -1271,34 +1276,26 @@ describe('special_madness onPlay', () => {
                 '1': makePlayer('1'),
             },
         });
-        const contFn = resolvePromptContinuation('special_madness');
-        expect(contFn).toBeDefined();
-        const events = contFn!({
-            state, playerId: '0',
-            selectedValue: { action: 'draw' },
-            data: { cardUid: 'mad-1' },
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
-        const drawEvt = events[0] as CardsDrawnEvent;
+        const handler = getInteractionHandler('special_madness');
+        expect(handler).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = handler!(ms, '0', { action: 'draw' }, { continuationContext: { cardUid: 'mad-1' } }, dummyRandom, 0);
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
+        const drawEvt = result.events[0] as CardsDrawnEvent;
         expect(drawEvt.payload.count).toBe(2);
         expect(drawEvt.payload.cardUids).toEqual(['d1', 'd2']);
     });
 
     it('选择返回→产生 MADNESS_RETURNED 事件', () => {
         const state = makeState();
-        const contFn = resolvePromptContinuation('special_madness');
-        expect(contFn).toBeDefined();
-        const events = contFn!({
-            state, playerId: '0',
-            selectedValue: { action: 'return' },
-            data: { cardUid: 'mad-1' },
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.MADNESS_RETURNED);
-        const retEvt = events[0] as MadnessReturnedEvent;
+        const handler = getInteractionHandler('special_madness');
+        expect(handler).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = handler!(ms, '0', { action: 'return' }, { continuationContext: { cardUid: 'mad-1' } }, dummyRandom, 0);
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_RETURNED);
+        const retEvt = result.events[0] as MadnessReturnedEvent;
         expect(retEvt.payload.playerId).toBe('0');
         expect(retEvt.payload.cardUid).toBe('mad-1');
     });
@@ -1338,8 +1335,8 @@ describe('疯狂卡终局 VP 扣减', () => {
 // 基地能力 Prompt 化测试
 // ============================================================================
 
-describe('base_haunted_house_al9000 鬼屋 Prompt 化', () => {
-    it('多张手牌→产生 Prompt', () => {
+describe('base_haunted_house_al9000 鬼屋 Interaction 化', () => {
+    it('多张手牌→产生 Interaction', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -1352,15 +1349,15 @@ describe('base_haunted_house_al9000 鬼屋 Prompt 化', () => {
             },
             bases: [makeBase({ defId: 'base_haunted_house_al9000' })],
         });
-        const events = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', {
-            state, baseIndex: 0, baseDefId: 'base_haunted_house_al9000',
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_haunted_house_al9000',
             playerId: '0', minionUid: 'm1', now: 0,
         });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const cont = (events[0] as any).payload;
-        expect(cont.abilityId).toBe('base_haunted_house_al9000');
-        expect(cont.promptConfig.options.length).toBe(2);
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('base_haunted_house_al9000');
+        expect(current?.data?.options.length).toBe(2);
     });
 
     it('只有1张手牌→自动弃掉', () => {
@@ -1373,84 +1370,76 @@ describe('base_haunted_house_al9000 鬼屋 Prompt 化', () => {
             },
             bases: [makeBase({ defId: 'base_haunted_house_al9000' })],
         });
-        const events = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', {
-            state, baseIndex: 0, baseDefId: 'base_haunted_house_al9000',
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_haunted_house_al9000', 'onMinionPlayed', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_haunted_house_al9000',
             playerId: '0', minionUid: 'm1', now: 0,
         });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
-        expect((events[0] as CardsDiscardedEvent).payload.cardUids).toEqual(['h1']);
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
+        expect((result.events[0] as CardsDiscardedEvent).payload.cardUids).toEqual(['h1']);
     });
 
-    it('continuation 执行弃牌', () => {
-        const contFn = resolvePromptContinuation('base_haunted_house_al9000');
-        expect(contFn).toBeDefined();
-        const events = contFn!({
-            state: makeState(), playerId: '0',
-            selectedValue: { cardUid: 'h2' },
-            data: {},
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
-        expect((events[0] as CardsDiscardedEvent).payload.cardUids).toEqual(['h2']);
+    it('handler 执行弃牌', () => {
+        const handler = getInteractionHandler('base_haunted_house_al9000');
+        expect(handler).toBeDefined();
+        const ms = { core: makeState(), sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = handler!(ms, '0', { cardUid: 'h2' }, undefined, dummyRandom, 0);
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
+        expect((result.events[0] as CardsDiscardedEvent).payload.cardUids).toEqual(['h2']);
     });
 });
 
 describe('base_rlyeh 拉莱耶 onTurnStart', () => {
-    it('有己方随从→产生 Prompt（含不消灭选项）', () => {
+    it('有己方随从→产生 Interaction（含不消灭选项）', () => {
         const m1 = makeMinion('m1', 'test_minion', '0', 3);
         const base = makeBase({ defId: 'base_rlyeh', minions: [m1] });
         const state = makeState({ bases: [base] });
-        const events = triggerBaseAbility('base_rlyeh', 'onTurnStart', {
-            state, baseIndex: 0, baseDefId: 'base_rlyeh', playerId: '0', now: 0,
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_rlyeh', 'onTurnStart', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_rlyeh', playerId: '0', now: 0,
         });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const cont = (events[0] as any).payload;
-        expect(cont.abilityId).toBe('base_rlyeh');
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('base_rlyeh');
         // 应有 skip + 1个随从选项
-        expect(cont.promptConfig.options.length).toBe(2);
-        expect(cont.promptConfig.options[0].value.skip).toBe(true);
+        expect(current?.data?.options.length).toBe(2);
+        expect(current?.data?.options[0].value.skip).toBe(true);
     });
 
     it('无己方随从→不产生事件', () => {
         const enemy = makeMinion('e1', 'test_minion', '1', 3);
         const base = makeBase({ defId: 'base_rlyeh', minions: [enemy] });
         const state = makeState({ bases: [base] });
-        const events = triggerBaseAbility('base_rlyeh', 'onTurnStart', {
-            state, baseIndex: 0, baseDefId: 'base_rlyeh', playerId: '0', now: 0,
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_rlyeh', 'onTurnStart', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_rlyeh', playerId: '0', now: 0,
         });
-        expect(events.length).toBe(0);
+        expect(result.events.length).toBe(0);
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeUndefined();
     });
 
-    it('continuation 选择消灭→产生 MINION_DESTROYED + VP_AWARDED', () => {
+    it('handler 选择消灭→产生 MINION_DESTROYED + VP_AWARDED', () => {
         const m1 = makeMinion('m1', 'test_minion', '0', 3);
         const base = makeBase({ defId: 'base_rlyeh', minions: [m1] });
         const state = makeState({ bases: [base] });
-        const contFn = resolvePromptContinuation('base_rlyeh');
-        expect(contFn).toBeDefined();
-        const events = contFn!({
-            state, playerId: '0',
-            selectedValue: { minionUid: 'm1', baseIndex: 0 },
-            data: {},
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(2);
-        expect(events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
-        expect(events[1].type).toBe(SU_EVENTS.VP_AWARDED);
+        const handler = getInteractionHandler('base_rlyeh');
+        expect(handler).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = handler!(ms, '0', { minionUid: 'm1', baseIndex: 0 }, undefined, dummyRandom, 0);
+        expect(result.events.length).toBe(2);
+        expect(result.events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
+        expect(result.events[1].type).toBe(SU_EVENTS.VP_AWARDED);
     });
 
-    it('continuation 选择不消灭→不产生事件', () => {
+    it('handler 选择不消灭→不产生事件', () => {
         const state = makeState({ bases: [makeBase({ defId: 'base_rlyeh' })] });
-        const contFn = resolvePromptContinuation('base_rlyeh');
-        const events = contFn!({
-            state, playerId: '0',
-            selectedValue: { skip: true },
-            data: {},
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(0);
+        const handler = getInteractionHandler('base_rlyeh');
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = handler!(ms, '0', { skip: true }, undefined, dummyRandom, 0);
+        expect(result.events.length).toBe(0);
     });
 });
 
@@ -1461,24 +1450,26 @@ describe('base_mountains_of_madness 疯狂之山', () => {
             madnessDeck: ['madness_1', 'madness_2'],
             nextUid: 100,
         } as Partial<SmashUpCore>);
-        const events = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', {
-            state, baseIndex: 0, baseDefId: 'base_mountains_of_madness',
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_mountains_of_madness',
             playerId: '0', minionUid: 'm1', now: 0,
         });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.MADNESS_DRAWN);
-        expect((events[0] as MadnessDrawnEvent).payload.count).toBe(1);
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_DRAWN);
+        expect((result.events[0] as MadnessDrawnEvent).payload.count).toBe(1);
     });
 
     it('无疯狂牌库→不产生事件', () => {
         const state = makeState({
             bases: [makeBase({ defId: 'base_mountains_of_madness' })],
         });
-        const events = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', {
-            state, baseIndex: 0, baseDefId: 'base_mountains_of_madness',
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_mountains_of_madness', 'onMinionPlayed', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_mountains_of_madness',
             playerId: '0', minionUid: 'm1', now: 0,
         });
-        expect(events.length).toBe(0);
+        expect(result.events.length).toBe(0);
     });
 });
 
@@ -1487,86 +1478,79 @@ describe('base_the_homeworld 母星', () => {
         const state = makeState({
             bases: [makeBase({ defId: 'base_the_homeworld' })],
         });
-        const events = triggerBaseAbility('base_the_homeworld', 'onMinionPlayed', {
-            state, baseIndex: 0, baseDefId: 'base_the_homeworld',
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_the_homeworld', 'onMinionPlayed', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_the_homeworld',
             playerId: '0', minionUid: 'm1', now: 0,
         });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
-        const evt = events[0] as LimitModifiedEvent;
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
+        const evt = result.events[0] as LimitModifiedEvent;
         expect(evt.payload.limitType).toBe('minion');
         expect(evt.payload.delta).toBe(1);
     });
 });
 
 describe('base_the_mothership 母舰 afterScoring', () => {
-    it('冠军有力量≤3随从→产生 Prompt', () => {
+    it('冠军有力量≤3随从→产生 Interaction', () => {
         const m1 = makeMinion('m1', 'test_minion', '0', 2);
         const m2 = makeMinion('m2', 'test_minion', '0', 5);
         const base = makeBase({ defId: 'base_the_mothership', minions: [m1, m2] });
         const state = makeState({ bases: [base] });
-        const events = triggerBaseAbility('base_the_mothership', 'afterScoring', {
-            state, baseIndex: 0, baseDefId: 'base_the_mothership',
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_the_mothership', 'afterScoring', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_the_mothership',
             playerId: '0', rankings: [{ playerId: '0', power: 7, vp: 3 }], now: 0,
         });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const cont = (events[0] as any).payload;
-        expect(cont.abilityId).toBe('base_the_mothership');
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('base_the_mothership');
         // skip + m1(力量2) — m2(力量5) 不符合条件
-        expect(cont.promptConfig.options.length).toBe(2);
+        expect(current?.data?.options.length).toBe(2);
     });
 
-    it('continuation 收回随从→产生 MINION_RETURNED', () => {
+    it('handler 收回随从→产生 MINION_RETURNED', () => {
         const state = makeState({ bases: [makeBase({ defId: 'base_the_mothership' })] });
-        const contFn = resolvePromptContinuation('base_the_mothership');
-        expect(contFn).toBeDefined();
-        const events = contFn!({
-            state, playerId: '0',
-            selectedValue: { minionUid: 'm1', minionDefId: 'test_minion' },
-            data: { baseIndex: 0 },
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.MINION_RETURNED);
-        const ret = events[0] as MinionReturnedEvent;
+        const handler = getInteractionHandler('base_the_mothership');
+        expect(handler).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = handler!(ms, '0', { minionUid: 'm1', minionDefId: 'test_minion' }, { continuationContext: { baseIndex: 0 } }, dummyRandom, 0);
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.MINION_RETURNED);
+        const ret = result.events[0] as MinionReturnedEvent;
         expect(ret.payload.minionUid).toBe('m1');
         expect(ret.payload.toPlayerId).toBe('0');
     });
 });
 
 describe('base_ninja_dojo 忍者道场 afterScoring', () => {
-    it('基地有随从→产生 Prompt（含不消灭选项）', () => {
+    it('基地有随从→产生 Interaction（含不消灭选项）', () => {
         const m1 = makeMinion('m1', 'test_minion', '0', 3);
         const m2 = makeMinion('m2', 'test_minion', '1', 4);
         const base = makeBase({ defId: 'base_ninja_dojo', minions: [m1, m2] });
         const state = makeState({ bases: [base] });
-        const events = triggerBaseAbility('base_ninja_dojo', 'afterScoring', {
-            state, baseIndex: 0, baseDefId: 'base_ninja_dojo',
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = triggerBaseAbility('base_ninja_dojo', 'afterScoring', {
+            state, matchState: ms, baseIndex: 0, baseDefId: 'base_ninja_dojo',
             playerId: '0', rankings: [{ playerId: '0', power: 3, vp: 3 }], now: 0,
         });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const cont = (events[0] as any).payload;
-        expect(cont.abilityId).toBe('base_ninja_dojo');
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('base_ninja_dojo');
         // skip + 2个随从
-        expect(cont.promptConfig.options.length).toBe(3);
+        expect(current?.data?.options.length).toBe(3);
     });
 
-    it('continuation 消灭随从→产生 MINION_DESTROYED', () => {
+    it('handler 消灭随从→产生 MINION_DESTROYED', () => {
         const m1 = makeMinion('m1', 'test_minion', '1', 4);
         const base = makeBase({ defId: 'base_ninja_dojo', minions: [m1] });
         const state = makeState({ bases: [base] });
-        const contFn = resolvePromptContinuation('base_ninja_dojo');
-        expect(contFn).toBeDefined();
-        const events = contFn!({
-            state, playerId: '0',
-            selectedValue: { minionUid: 'm1', baseIndex: 0, minionDefId: 'test_minion', ownerId: '1' },
-            data: {},
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(1);
-        expect(events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
-        expect((events[0] as MinionDestroyedEvent).payload.minionUid).toBe('m1');
+        const handler = getInteractionHandler('base_ninja_dojo');
+        expect(handler).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
+        const result = handler!(ms, '0', { minionUid: 'm1', baseIndex: 0, minionDefId: 'test_minion', ownerId: '1' }, undefined, dummyRandom, 0);
+        expect(result.events.length).toBe(1);
+        expect(result.events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
+        expect((result.events[0] as MinionDestroyedEvent).payload.minionUid).toBe('m1');
     });
 });

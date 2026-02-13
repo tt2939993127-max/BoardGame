@@ -118,7 +118,7 @@ src/
   - `assetsPath` / `getOptimizedImageUrls` / `buildOptimizedImageSet`
   - 资源注册表 API（可选）：`registerGameAssets` / `preloadGameAssets`
 - **引擎管线与系统**：`src/engine/`（Flow/Prompt/Undo/ResponseWindow/Rematch 等）
-- **撤销系统**：`src/engine/systems/UndoSystem.ts`（通过 `createDefaultSystems` 启用）
+- **撤销系统**：`src/engine/systems/UndoSystem.ts`（通过 `createBaseSystems` 启用）
 - **引擎原语**：`src/engine/primitives/`（condition/effects/dice/resources/target/zones/expression）
 - **动画组件库**：`src/components/common/animations/`
   - `FlyingEffect` / `ShakeContainer` / `PulseGlow` / `variants` / `VictoryParticles` / `BurstParticles`

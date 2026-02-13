@@ -11,7 +11,7 @@ import { smashUpFlowHooks } from '../domain/index';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry, resolvePromptContinuation } from '../domain/promptContinuation';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { SmashUpCore, MinionOnBase, PlayerState } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -21,7 +21,7 @@ import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });
@@ -50,6 +50,10 @@ const mockRandom: RandomFn = {
     shuffle: <T>(arr: T[]) => [...arr],
     random: () => 0.5,
 } as any;
+
+function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
+    return { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, interaction: { current: undefined, queue: [] } } as any } as any;
+}
 
 const mockCommand: Command = { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined } as any;
 
@@ -100,17 +104,25 @@ describe('Property 14: 多基地记分提示', () => {
         expect(exitResult.halt).toBe(true);
 
         const events = exitResult.events ?? [];
-        const promptEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('multi_base_scoring');
+        // 迁移后：交互通过 InteractionSystem 创建
+        const interactions = (() => {
+            const interaction = (exitResult.updatedState?.sys as any)?.interaction;
+            if (!interaction) return [];
+            const list: any[] = [];
+            if (interaction.current) list.push(interaction.current);
+            if (interaction.queue?.length) list.push(...interaction.queue);
+            return list;
+        })();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('multi_base_scoring');
 
         // 不应有 BASE_SCORED 事件（等待玩家选择）
         const scoredEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.BASE_SCORED);
         expect(scoredEvents.length).toBe(0);
     });
 
-    it('multi_base_scoring 继续函数已注册', () => {
-        const fn = resolvePromptContinuation('multi_base_scoring');
+    it('multi_base_scoring 交互处理函数已注册', () => {
+        const fn = getInteractionHandler('multi_base_scoring');
         expect(fn).toBeDefined();
         expect(typeof fn).toBe('function');
     });
@@ -132,14 +144,10 @@ describe('Property 14: 多基地记分提示', () => {
             nextUid: 100,
         };
 
-        const fn = resolvePromptContinuation('multi_base_scoring')!;
-        const events = fn({
-            state: core,
-            playerId: '0',
-            selectedValue: { baseIndex: 1 }, // 选择 base_tar_pits
-            random: mockRandom,
-            now: 1000,
-        });
+        const fn = getInteractionHandler('multi_base_scoring')!;
+        const ms = makeMatchState(core);
+        const result = fn(ms, '0', { baseIndex: 1 }, undefined, mockRandom, 1000);
+        const events = result?.events ?? [];
 
         const scoredEvents = events.filter((e: GameEvent) => e.type === SU_EVENTS.BASE_SCORED);
         expect(scoredEvents.length).toBe(1);
@@ -176,14 +184,10 @@ describe('Property 15: 多基地记分循环', () => {
         expect((result1 as PhaseExitResult).halt).toBe(true);
 
         // 模拟玩家选择 base_the_jungle（index=0）
-        const fn = resolvePromptContinuation('multi_base_scoring')!;
-        const scoringEvents = fn({
-            state: core,
-            playerId: '0',
-            selectedValue: { baseIndex: 0 },
-            random: mockRandom,
-            now: 1000,
-        });
+        const fn = getInteractionHandler('multi_base_scoring')!;
+        const ms = makeMatchState(core);
+        const handlerResult = fn(ms, '0', { baseIndex: 0 }, undefined, mockRandom, 1000);
+        const scoringEvents = handlerResult?.events ?? [];
         const scored1 = scoringEvents.filter((e: GameEvent) => e.type === SU_EVENTS.BASE_SCORED);
         expect(scored1.length).toBe(1);
         expect((scored1[0] as any).payload.baseDefId).toBe('base_the_jungle');

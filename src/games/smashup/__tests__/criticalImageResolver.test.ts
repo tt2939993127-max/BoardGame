@@ -8,69 +8,59 @@ const BASE_ATLAS_PATHS = [
     'smashup/base/base4',
 ];
 
-const makeState = (playerFactions: [string, string][], takenFactions?: string[]) => ({
-    core: {
-        players: Object.fromEntries(
-            playerFactions.map(([f1, f2], i) => [
-                String(i),
-                { id: String(i), factions: [f1, f2] },
-            ]),
-        ),
-        factionSelection: takenFactions
-            ? { takenFactions, playerSelections: {}, completedPlayers: [] }
-            : undefined,
-    },
-});
+const CARD_ATLAS_PATHS = [
+    'smashup/cards/cards1',
+    'smashup/cards/cards2',
+    'smashup/cards/cards3',
+    'smashup/cards/cards4',
+];
 
 describe('smashUpCriticalImageResolver', () => {
-    it('无 core 时返回所有基地为关键、所有卡牌图集为暖', () => {
+    it('无 core 时返回所有卡牌图集为关键、所有基地图集为暖', () => {
         const result = smashUpCriticalImageResolver(undefined);
-        expect(result.critical).toEqual(BASE_ATLAS_PATHS);
+        expect(result.critical).toEqual(CARD_ATLAS_PATHS);
+        expect(result.warm).toEqual(BASE_ATLAS_PATHS);
+    });
+
+    it('有 core 时仍返回所有卡牌图集为关键（派系选择界面需要全部展示）', () => {
+        const state = {
+            core: {
+                players: {
+                    '0': { id: '0', factions: ['pirates', 'ninjas'] },
+                    '1': { id: '1', factions: ['aliens', 'dinosaurs'] },
+                },
+            },
+        };
+        const result = smashUpCriticalImageResolver(state);
+        expect(result.critical).toEqual(CARD_ATLAS_PATHS);
+        expect(result.warm).toEqual(BASE_ATLAS_PATHS);
+    });
+
+    it('关键列表包含全部 4 个卡牌图集', () => {
+        const result = smashUpCriticalImageResolver(undefined);
+        for (const atlas of CARD_ATLAS_PATHS) {
+            expect(result.critical).toContain(atlas);
+        }
+        expect(result.critical).toHaveLength(4);
+    });
+
+    it('暖列表包含全部 4 个基地图集', () => {
+        const result = smashUpCriticalImageResolver(undefined);
+        for (const base of BASE_ATLAS_PATHS) {
+            expect(result.warm).toContain(base);
+        }
         expect(result.warm).toHaveLength(4);
     });
 
-    it('玩家选了同一图集的派系时，关键图集去重', () => {
-        const state = makeState([['pirates', 'ninjas'], ['aliens', 'dinosaurs']]);
-        const result = smashUpCriticalImageResolver(state);
-        // All four factions are in CARDS1
-        expect(result.critical).toContain('smashup/cards/cards1');
-        expect(result.critical.filter(p => p === 'smashup/cards/cards1')).toHaveLength(1);
-        // Other 3 card atlases should be warm
-        expect(result.warm).toHaveLength(3);
-    });
-
-    it('跨图集的派系选择正确分类', () => {
-        // pirates (CARDS1) + ghosts (CARDS3)
-        const state = makeState([['pirates', 'ghosts']]);
-        const result = smashUpCriticalImageResolver(state);
-        expect(result.critical).toContain('smashup/cards/cards1');
-        expect(result.critical).toContain('smashup/cards/cards3');
-        expect(result.warm).toContain('smashup/cards/cards2');
-        expect(result.warm).toContain('smashup/cards/cards4');
-    });
-
-    it('所有 4 个图集都被选中时暖列表为空', () => {
-        const state = makeState([
-            ['pirates', 'minions_of_cthulhu'],
-            ['ghosts', 'wizards'],
-        ]);
-        const result = smashUpCriticalImageResolver(state);
-        expect(result.warm).toHaveLength(0);
-        expect(result.critical).toContain('smashup/cards/cards1');
-        expect(result.critical).toContain('smashup/cards/cards2');
-        expect(result.critical).toContain('smashup/cards/cards3');
-        expect(result.critical).toContain('smashup/cards/cards4');
-    });
-
-    it('基地图集始终在关键列表中', () => {
-        const state = makeState([['pirates', 'ninjas']]);
-        const result = smashUpCriticalImageResolver(state);
-        for (const base of BASE_ATLAS_PATHS) {
-            expect(result.critical).toContain(base);
+    it('关键列表和暖列表无重叠', () => {
+        const result = smashUpCriticalImageResolver(undefined);
+        const criticalSet = new Set(result.critical);
+        for (const warm of result.warm) {
+            expect(criticalSet.has(warm)).toBe(false);
         }
     });
 
-    it('派系选择阶段（无已确认派系）时回退到 factionSelection.takenFactions', () => {
+    it('派系选择阶段也返回全部卡牌图集（需要展示所有派系供选择）', () => {
         const state = {
             core: {
                 players: {
@@ -84,7 +74,7 @@ describe('smashUpCriticalImageResolver', () => {
             },
         };
         const result = smashUpCriticalImageResolver(state);
-        expect(result.critical).toContain('smashup/cards/cards1');
-        expect(result.critical).toContain('smashup/cards/cards3');
+        expect(result.critical).toEqual(CARD_ATLAS_PATHS);
+        expect(result.warm).toEqual(BASE_ATLAS_PATHS);
     });
 });

@@ -54,7 +54,7 @@ export interface DyingEntity {
 /** 技能模式状态 */
 export interface AbilityModeState {
   abilityId: string;
-  step: 'selectCard' | 'selectPosition' | 'selectUnit' | 'selectCards' | 'selectAttachTarget';
+  step: 'selectCard' | 'selectPosition' | 'selectUnit' | 'selectCards' | 'selectAttachTarget' | 'selectNewPosition';
   sourceUnitId: string;
   selectedCardId?: string;
   selectedCardIds?: string[];
@@ -245,6 +245,12 @@ export function useGameEvents({
       pendingDestroyRef.current = [];
       setDiceResult(null);
       setDyingEntities([]);
+      // 撤回导致 EventStream 回退时，清理所有 UI 交互状态
+      // 防止撤回后残留的技能按钮仍可点击（如锻造师 frost_axe 充能）
+      setAbilityMode(null);
+      setSoulTransferMode(null);
+      setMindCaptureMode(null);
+      setAfterAttackAbilityMode(null);
       gateRef.current.reset();
     }
 

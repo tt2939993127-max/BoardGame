@@ -327,17 +327,31 @@ function registerTricksterOngoingEffects(): void {
             if (!trap || i !== trigCtx.baseIndex) continue;
             // 只对其他玩家触发
             if (trap.ownerId === trigCtx.playerId) continue;
-            return [{
-                type: SU_EVENTS.MINION_DESTROYED,
-                payload: {
-                    minionUid: trigCtx.triggerMinionUid,
-                    minionDefId: trigCtx.triggerMinionDefId,
-                    fromBaseIndex: i,
-                    ownerId: trigCtx.playerId,
-                    reason: 'trickster_flame_trap',
+            return [
+                // 消灭打出的随从
+                {
+                    type: SU_EVENTS.MINION_DESTROYED,
+                    payload: {
+                        minionUid: trigCtx.triggerMinionUid,
+                        minionDefId: trigCtx.triggerMinionDefId,
+                        fromBaseIndex: i,
+                        ownerId: trigCtx.playerId,
+                        reason: 'trickster_flame_trap',
+                    },
+                    timestamp: trigCtx.now,
                 },
-                timestamp: trigCtx.now,
-            }];
+                // 消灭火焰陷阱本身
+                {
+                    type: SU_EVENTS.ONGOING_DETACHED,
+                    payload: {
+                        cardUid: trap.uid,
+                        defId: trap.defId,
+                        ownerId: trap.ownerId,
+                        reason: 'trickster_flame_trap_self_destruct',
+                    },
+                    timestamp: trigCtx.now,
+                },
+            ];
         }
         return [];
     });

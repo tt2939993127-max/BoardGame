@@ -18,7 +18,7 @@
 
 - `engine/systems/` - Flow/Interaction/Undo/Log/EventStream/ResponseWindow/Tutorial/Rematch/Cheat/ActionLog 等跨游戏系统
 - `engine/primitives/` - condition/effects/dice/resources/target/zones/expression/visual/actionRegistry/ability/tags/modifier/attribute/uiHints 等引擎原语模块（纯函数/注册器）
-  - `ability.ts` — **AbilityRegistry + AbilityExecutorRegistry**：通用能力定义注册表和执行器注册表，替代各游戏独立实现的 abilityRegistry/abilityResolver/CombatAbilityManager 中的注册+查找部分。附带 `checkAbilityCost`、`filterByTags`、`checkAbilityCondition` 可用性工具。新游戏必须使用此框架而非自行实现。
+  - `ability.ts` — **AbilityRegistry + AbilityExecutorRegistry**：通用能力定义注册表和执行器注册表，替代各游戏独立实现的 abilityRegistry/abilityResolver/CombatAbilityManager 中的注册+查找部分。附带 `checkAbilityCost`、`filterByTags`、`checkAbilityCondition` 可用性工具，以及 `abilityText(id, field)` / `abilityEffectText(id, field)` i18n key 生成辅助函数。新游戏必须使用此框架而非自行实现。
   - `tags.ts` — **层级 Tag 系统**：带层数/持续时间的 tag 容器 + 层级前缀匹配（`Status.Debuff` 匹配 `Status.Debuff.Stun`）。替代 DiceThrone 的 `statusEffects` + `TokenInstance`、SummonerWars 的 `boosts` + `tempAbilities`。API：`createTagContainer/addTag/removeTag/hasTag/matchTags/tickDurations/getRemovable`。
   - `modifier.ts` — **Modifier 管线**：通用数值修改器栈（flat/percent/override/compute），按优先级排序执行。替代 DiceThrone 的 `DamageModifier`、SmashUp 的 `PowerModifierFn`。API：`createModifierStack/addModifier/applyModifiers/computeModifiedValue/tickModifiers`。
   - `attribute.ts` — **AttributeSet**：base value + ModifierStack → current value 的属性系统，支持 min/max 钳制。与 `resources.ts` 互补（resources 管消耗品，attribute 管可被 buff 修改的属性）。API：`createAttributeSet/getBase/setBase/getCurrent/addAttributeModifier/tickAttributeModifiers`。
@@ -28,6 +28,10 @@
 - `engine/testing/` - 测试工具
   - `referenceValidator.ts` — **validateReferences + extractRefChains**：实体引用链完整性验证，检测定义与注册表之间的断裂引用
   - `entityIntegritySuite.ts` — **createRegistryIntegritySuite / createRefChainSuite / createTriggerPathSuite / createEffectContractSuite**：四个测试套件工厂，生成标准化 describe/it 测试块，用于数据定义的自动化契约验证
+  - `interactionChainAudit.ts` — **createInteractionChainAuditSuite**：交互链完整性审计套件工厂（模式 A：UI 状态机），验证多步交互技能的 UI 步骤是否覆盖执行器所需 payload 字段。三类检查：声明完整性、步骤覆盖、契约对齐
+  - `interactionCompletenessAudit.ts` — **createInteractionCompletenessAuditSuite**：交互完整性审计套件工厂（模式 B：Interaction 链），验证所有创建 Interaction 的能力都有对应 handler 注册。三类检查：Handler 注册覆盖、链式完整性、孤儿 Handler
+  - `abilityBehaviorAudit.ts` — **createAbilityBehaviorAuditSuite**：能力行为审计套件工厂，验证"i18n 描述说了 X 但代码没做 X"的不一致。五类检查：关键词→行为映射、ongoing 注册覆盖、能力标签执行器覆盖、自毁行为完整性、条件语句完整性
+  - `cardCompletenessAudit.ts` — **createCardCompletenessAuditSuite**：卡牌完整性审计套件工厂，静态分析卡牌定义的常见遗漏。三类检查：描述条件性语言检测、卡牌结构完整性、占位符检测
 - `FxSystem` (`src/engine/fx/`) - 视觉特效调度（Cue 注册表 + 事件总线 + 渲染层 + WebGL Shader 子系统 + FeedbackPack 反馈包），游戏侧通过 `fxSetup.ts` 注册渲染器并声明反馈包（音效 + 震动）。`useFxBus` 接受 `{ playSound, triggerShake }` 选项注入反馈能力，push 事件时自动触发 `timing='immediate'` 反馈，渲染器调用 `onImpact()` 时自动触发 `timing='on-impact'` 反馈。Shader 包装组件在模块顶层调用 `registerShader()` 自注册到预编译队列，`useFxBus` 挂载时调用 `flushRegisteredShaders()` 自动预编译所有已注册的 shader（`ShaderPrecompile`）。Shader 管线（`src/engine/fx/shader/`）提供 `ShaderCanvas` + `ShaderMaterial` + `ShaderPrecompile` + GLSL 噪声库，用于逐像素流体特效。
 
 ---
@@ -58,6 +62,8 @@
 - **`checkAbilityCost(def, resources)`** — 检查资源是否满足消耗。
 - **`filterByTags(defs, blockedTags)`** — 过滤被标签阻塞的能力。
 - **`checkAbilityCondition(def, ctx, registry?)`** — 委托 `primitives/condition` 评估能力条件。
+- **`abilityText(id, field)`** — 生成技能 i18n key（如 `abilityText('frost_axe', 'name')` → `'abilities.frost_axe.name'`）。所有游戏共用，禁止在游戏层重复定义。
+- **`abilityEffectText(id, field)`** — 生成技能效果 i18n key（如 `abilityEffectText('slash', 'damage')` → `'abilities.slash.effects.damage'`）。
 
 ### 强制要求
 
@@ -65,7 +71,7 @@
 - **禁止全局单例**：每个游戏创建自己的注册表实例，通过构造函数传入 label 以区分。
 - **`getRegisteredIds()` 用于契约测试**：在 `entity-chain-integrity.test.ts` 中验证所有数据定义引用的 abilityId 均已注册。
 - **条件评估复用 `primitives/condition`**：`AbilityDef.condition` 使用 `ConditionNode` 类型，通过 `checkAbilityCondition()` 评估，不再自行实现条件系统。
-- **现有三个游戏是历史实现**：DiceThrone 的 `CombatAbilityManager`、SmashUp 的 `abilityRegistry.ts`、SummonerWars 的 `AbilityRegistry` 是引擎框架出现前的实现，新游戏禁止模仿。
+- **现有游戏迁移状态**：SummonerWars 已完成迁移（使用引擎层 `AbilityRegistry` + `AbilityExecutorRegistry`）。DiceThrone 的 `CombatAbilityManager`、SmashUp 的 `abilityRegistry.ts` 是引擎框架出现前的实现，内部设计合理但未使用引擎层，新游戏禁止模仿。
 
 ### 两种执行模式
 
@@ -282,17 +288,97 @@ function executeAttack(core, attacker, target) {
 
 ---
 
+### ❌ 禁止：技能描述文本多源冗余（卡牌配置中的 abilityText）
+
+**反模式示例**：
+```typescript
+// ❌ 禁止！卡牌配置中硬编码技能描述文本
+// config/factions/frost.ts
+const ICE_SMITH: UnitCardDef = {
+  id: 'frost-ice-smith',
+  abilities: ['frost_axe'],
+  abilityText: '冰霜战斧：在本单位移动之后，你可以将其充能...', // ❌ 硬编码中文
+};
+
+// domain/abilities-frost.ts — 同一段文本又写了一遍
+const FROST_AXE: AbilityDef = {
+  id: 'frost_axe',
+  name: '冰霜战斧',
+  description: '在本单位移动之后，你可以将其充能...', // ❌ 重复！
+};
+
+// public/locales/zh-CN/game-summonerwars.json — 第三遍
+// "statusBanners.ability.frostAxe": "冰霜战斧：充能或消耗充能附加" // ❌ 又一遍！
+```
+
+**问题**：
+- 修改技能描述需要同步 3 个位置，极易遗漏导致不一致
+- 卡牌配置中的 `abilityText` 无法走 i18n 多语言流程
+- 违反 DRY 原则，增加维护成本
+
+**正确做法**：
+```typescript
+// ✅ 卡牌配置只保留 ID 引用
+const ICE_SMITH: UnitCardDef = {
+  id: 'frost-ice-smith',
+  abilities: ['frost_axe'],
+  // 无 abilityText 字段！描述从 abilityRegistry 或 i18n 获取
+};
+
+// ✅ AbilityDef 中 description 存储 i18n key
+const FROST_AXE: AbilityDef = {
+  id: 'frost_axe',
+  name: 'abilities.frost_axe.name',        // i18n key
+  description: 'abilities.frost_axe.desc',  // i18n key
+};
+
+// ✅ 使用引擎层 abilityText() 辅助函数（从 engine/primitives/ability 导入）
+import { abilityText } from '../../../engine/primitives/ability';
+const FROST_AXE: AbilityDef = {
+  id: 'frost_axe',
+  name: abilityText('frost_axe', 'name'),
+  description: abilityText('frost_axe', 'description'),
+};
+
+// ✅ UI 层获取描述文本
+function getAbilityDescription(abilityId: string): string {
+  const def = abilityRegistry.get(abilityId);
+  return def ? t(def.description) : '';
+}
+```
+
+---
+
 ### 强制要求总结
 
 1. **技能验证必须数据驱动**：在 `AbilityDef.validation` 中声明规则，通用函数自动验证
 2. **技能按钮必须自动生成**：在 `AbilityDef.ui` 中声明元数据，通用组件自动渲染
 3. **技能逻辑必须注册**：复杂逻辑在 `abilityResolver.ts` 或 `customActionHandlers.ts` 中注册，不得在 execute.ts 中硬编码
 4. **新增技能只需添加配置**：不得修改 validate.ts、execute.ts、UI 组件
+5. **技能定义单一数据源**：`AbilityDef` 是技能元数据的唯一真实来源（Single Source of Truth），卡牌/单位配置只保留 `abilities: ['id']` 引用，禁止硬编码 `abilityText` 描述文本
+6. **技能描述文本禁止多源冗余**：描述文本只允许存在于 i18n JSON 中（通过 `AbilityDef.description` 存储 i18n key），禁止在卡牌配置、AbilityDef、i18n 三处同时维护相同文本
 
 **参考实现**：
 - ✅ DiceThrone 的 `CombatAbilityManager`（虽然是历史实现，但验证逻辑在能力定义中）
+- ✅ 引擎层 `abilityText()` / `abilityEffectText()` 辅助函数（`engine/primitives/ability.ts` 导出，所有游戏共用，返回 i18n key）
 - ✅ SmashUp 的 `registerAbility()` 注册表模式
-- ❌ SummonerWars 的 validate.ts / AbilityButtonsPanel.tsx（反面教材）
+- ✅ SummonerWars 的 `AbilityExecutorRegistry` 执行器注册（已完成迁移）
+- ✅ SmashUp 的 `resolveCardText(def, t)` 从 i18n 获取卡牌文本（已完成迁移）
+- ✅ SummonerWars 的 `domain/executors/` 按派系注册执行器（已完成迁移）
+
+### 现有游戏技能架构债务清单
+
+> 以下是已知的历史债务状态。已清理的标记为 ✅，剩余的新游戏禁止模仿。
+
+| 游戏 | 问题 | 状态 | 说明 |
+|------|------|------|------|
+| SummonerWars | `config/factions/*.ts` 硬编码 `abilityText` | ✅ 已清理 | 字段已删除，技能文本统一走 i18n |
+| SummonerWars | `execute/abilities.ts` 巨型 switch-case | ✅ 已清理 | 已替换为 `AbilityExecutorRegistry`，按派系拆分到 `executors/` |
+| SummonerWars | `domain/abilities.ts` 自建 `AbilityRegistry` 类 | ✅ 已清理 | 已改用引擎层 `AbilityRegistry<AbilityDef>` |
+| SummonerWars | UI 层硬编码技能按钮 | ✅ 已清理 | `AbilityButtonsPanel` 已改为数据驱动（遍历 `AbilityDef.ui` 配置） |
+| SmashUp | `data/cards.ts` + `data/factions/*.ts` 硬编码 `abilityText` | ✅ 已清理 | 字段已删除，卡牌文本统一走 i18n，`resolveCardText` 从 i18n 获取 |
+| SmashUp | `domain/abilityRegistry.ts` 自建注册表 | 🟡 轻微 | 未使用引擎层，但模式本身合理（函数注册表） |
+| DiceThrone | `CombatAbilityManager` 自建管理器 | 🟡 轻微 | 未使用引擎层，但内部设计合理（i18n key + 数据驱动） |
 
 ---
 
@@ -363,6 +449,308 @@ createEffectContractSuite({
 
 ---
 
+## 交互链完整性审计规范（强制）
+
+> **多步交互技能（UI 需要 ≥2 步用户输入才能构建完整 payload）必须声明 `interactionChain`**
+
+### 背景
+
+静态引用链测试（`entityIntegritySuite`）和行为审计（`abilityBehaviorAudit`）只能检测"引用是否存在"和"关键词-行为映射"，无法检测"UI 多步交互链断裂"——例如 `structure_shift` 技能 UI 选了建筑但没有第二步选方向，导致 `payload.newPosition` 为 `undefined`，执行器静默返回空事件。
+
+### 核心类型（`engine/primitives/ability.ts`）
+
+```typescript
+/** 交互步骤声明 */
+interface InteractionStep {
+  step: string;           // 步骤 ID（如 'selectBuilding'）
+  inputType: 'unit' | 'position' | 'card' | 'direction' | 'choice' | 'cards';
+  producesField: string;  // 此步骤产出的 payload 字段名
+  optional?: boolean;     // 是否可跳过
+}
+
+/** Payload 契约声明 */
+interface PayloadContract {
+  required: string[];     // 执行器必需的 payload 字段
+  optional?: string[];    // 可选字段
+}
+
+/** 交互链声明 */
+interface InteractionChain {
+  steps: InteractionStep[];
+  payloadContract: PayloadContract;
+}
+```
+
+### 使用方式
+
+#### 1. AbilityDef 中声明 `interactionChain`
+
+```typescript
+// domain/abilities-frost.ts
+{
+  id: 'structure_shift',
+  trigger: 'activated',
+  interactionChain: {
+    steps: [
+      { step: 'selectBuilding', inputType: 'position', producesField: 'targetPosition' },
+      { step: 'selectDirection', inputType: 'direction', producesField: 'newPosition' },
+    ],
+    payloadContract: { required: ['targetPosition', 'newPosition'] },
+  },
+}
+```
+
+#### 2. 执行器注册时声明 `payloadContract`
+
+```typescript
+// executors/frost.ts
+abilityExecutorRegistry.register('structure_shift', handler, {
+  payloadContract: { required: ['targetPosition', 'newPosition'] },
+});
+```
+
+#### 3. 测试文件使用工厂函数
+
+```typescript
+// __tests__/interactionChainAudit.test.ts
+import { createInteractionChainAuditSuite } from '../../../engine/testing/interactionChainAudit';
+
+createInteractionChainAuditSuite({
+  suiteName: 'SummonerWars 交互链完整性',
+  abilities: buildAuditableAbilities(),
+  requiresMultiStep,
+  declarationWhitelist: new Set(['mind_capture_resolve']),
+});
+```
+
+### 三类检查
+
+| 检查 | 说明 | 检测的 bug |
+|------|------|-----------|
+| 声明完整性 | 多步交互技能是否都声明了 `interactionChain` | 新增多步技能忘记声明 |
+| 步骤覆盖 | `steps` 产出 ⊇ `payloadContract.required` | UI 缺少某个交互步骤（如缺少"选方向"） |
+| 契约对齐 | AbilityDef 的 `payloadContract` 与执行器的 `payloadContract` 双向一致 | 两端字段不同步 |
+
+### 循环依赖注意事项
+
+`executors/index.ts` 使用副作用导入模式，与 `abilities.ts` 存在模块初始化顺序问题。测试文件中使用手动 `EXECUTOR_CONTRACTS` Map 而非动态导入 `abilityExecutorRegistry`。执行器上的 `payloadContract` 仍然注册（供未来运行时校验使用）。
+
+### 强制要求
+
+- **新增多步交互技能**：必须在 `AbilityDef` 中声明 `interactionChain`，在执行器 `register()` 中声明 `payloadContract`
+- **新增游戏**：如有多步交互技能，必须创建 `interactionChainAudit.test.ts`
+- **白名单**：由特殊系统处理的多步技能（如 Modal 决策驱动）可加入 `declarationWhitelist`，但必须注释原因
+
+### 参考实现
+
+- 引擎层工厂：`src/engine/testing/interactionChainAudit.ts`
+- 引擎层类型：`src/engine/primitives/ability.ts`（`InteractionStep`、`PayloadContract`、`InteractionChain`）
+- SummonerWars 测试：`src/games/summonerwars/__tests__/interactionChainAudit.test.ts`
+- SummonerWars 声明示例：`src/games/summonerwars/domain/abilities-frost.ts`（`structure_shift`、`frost_axe`）
+
+---
+
+## 交互完整性审计规范 — 模式 B：Interaction 链（强制）
+
+> **使用 InteractionSystem（createSimpleChoice + InteractionHandler）的游戏必须创建此审计**
+
+### 背景
+
+SmashUp 风格的游戏使用 `createSimpleChoice(sourceId)` 创建交互 → 玩家选择 → `registerInteractionHandler(sourceId)` 处理。风险点：
+- 能力创建了 Interaction 但没注册对应 handler → 选择后无响应
+- 多步链中间步骤的 handler 缺失 → 链断裂
+
+### 三类检查
+
+| 检查 | 说明 | 检测的 bug |
+|------|------|-----------|
+| Handler 注册覆盖 | 所有 sourceId 都有对应 handler | 能力创建了交互但没注册处理函数 |
+| 链式完整性 | handler 产出的后续 sourceId 也有对应 handler | 多步链中间断裂 |
+| 孤儿 Handler | 注册了 handler 但无能力引用 | 死代码/重构遗留 |
+
+### 使用方式
+
+```typescript
+// __tests__/interactionCompletenessAudit.test.ts
+import { createInteractionCompletenessAuditSuite } from '../../../engine/testing/interactionCompletenessAudit';
+
+const INTERACTION_SOURCES = [
+  { id: 'alien_supreme_overlord', name: '外星霸主', interactionSourceIds: ['alien_supreme_overlord'] },
+  // ...
+];
+
+const HANDLER_CHAINS = [
+  { sourceId: 'zombie_lord_choose_minion', producesSourceIds: ['zombie_lord_choose_base'] },
+  // ...
+];
+
+createInteractionCompletenessAuditSuite({
+  suiteName: 'SmashUp 交互完整性',
+  sources: INTERACTION_SOURCES,
+  registeredHandlerIds: getRegisteredInteractionHandlerIds(),
+  chains: HANDLER_CHAINS,
+});
+```
+
+### 与模式 A 的关系
+
+两种模式覆盖不同的交互风险：
+- **模式 A（interactionChainAudit）**：UI 状态机逐步收集 payload → 执行器。检查 payload 字段覆盖。
+- **模式 B（interactionCompletenessAudit）**：执行器创建 Interaction → handler 处理。检查 handler 注册覆盖。
+
+一个游戏可以同时使用两种模式（如果同时有两种交互风格）。
+
+### 参考实现
+
+- 引擎层工厂：`src/engine/testing/interactionCompletenessAudit.ts`
+- SmashUp 测试：`src/games/smashup/__tests__/interactionCompletenessAudit.test.ts`
+
+---
+
+## 能力行为审计规范（推荐）
+
+> **卡牌/能力数量多的游戏（≥30 张卡或 ≥15 个能力）推荐创建此审计**
+
+### 背景
+
+卡牌的 i18n 描述文本说了某个效果（比如"回合开始时抽牌"），但代码里忘了注册对应的触发器/执行器。在卡牌数量多的游戏里很容易出现。`abilityBehaviorAudit` 通过声明式规则自动扫描描述→代码的一致性。
+
+### 五类检查
+
+| 检查 | 说明 | 检测的 bug |
+|------|------|-----------|
+| 关键词→行为映射 | 描述匹配正则 → 验证对应行为已注册 | 描述说"回合开始时抽牌"但没注册 onTurnStart 触发器 |
+| ongoing 注册覆盖 | subtype=ongoing 的行动卡必须在注册表中有条目 | ongoing 卡没注册任何效果（trigger/protection/restriction/modifier） |
+| 能力标签执行器覆盖 | 有 abilityTags 的卡必须有对应执行器 | 卡牌定义了 onPlay 标签但 abilityRegistry 没有执行器 |
+| 自毁行为完整性 | 描述含"消灭本卡"→ 必须有自毁触发器 | 描述说消灭自己但代码没实现 |
+| 条件语句完整性 | 描述含"如果你有随从"→ 代码有条件检查 | 描述有条件但代码无条件分支 |
+
+### 使用方式
+
+```typescript
+import { createAbilityBehaviorAuditSuite } from '../../../engine/testing';
+
+createAbilityBehaviorAuditSuite({
+  suiteName: 'SmashUp 能力行为审计',
+  keywordBehavior: {
+    entities: auditableEntities,
+    rules: [
+      {
+        name: '回合开始触发器',
+        keywordPattern: /回合开始时/,
+        checkBehavior: (id) => triggerRegistry.has(id),
+        violationMessage: (id) => `描述含"回合开始时"但未注册 onTurnStart 触发器`,
+      },
+    ],
+  },
+  ongoingCollection: { ongoingActionIds, registeredOngoingIds },
+  abilityTagCoverage: { entities, registeredAbilityIds, makeRegistryKey: (id, tag) => `${id}::${tag}` },
+  selfDestruct: { entities, selfDestructPatterns: [/消灭本卡/], hasSelfDestructBehavior: (id) => ... },
+  condition: { entities, rules: [...] },
+});
+```
+
+### 参考实现
+
+- 引擎层工厂：`src/engine/testing/abilityBehaviorAudit.ts`
+- 输入接口：`AuditableEntity`（id + name + descriptionText + entityType + subtype + abilityTags）
+
+---
+
+## 卡牌完整性审计规范（推荐）
+
+> **有卡牌系统的游戏（行动卡/升级卡/装备卡等）推荐创建此审计**
+
+### 背景
+
+卡牌定义中的常见遗漏：描述暗示了打出条件但 `playCondition` 未实现、效果结构不完整、占位符配置未清理。`cardCompletenessAudit` 通过声明式规则自动检测这些问题。
+
+### 三类检查
+
+| 检查 | 说明 | 检测的 bug |
+|------|------|-----------|
+| 描述条件性语言检测 | i18n 描述匹配条件模式 → 验证 playCondition 有对应字段 | 描述说"造成至少3伤害后"但没有 requireMinDamageDealt |
+| 卡牌结构完整性 | 声明式结构规则（appliesTo + check） | 升级卡缺少 replaceAbility、行动卡无效果、骰子卡缺前置条件 |
+| 占位符检测 | 检测无效/占位配置 | playCondition 只有 `requireDiceExists: false`（占位） |
+
+### 使用方式
+
+```typescript
+import { createCardCompletenessAuditSuite, type AuditableCard } from '../../../engine/testing';
+
+// 游戏层适配：将游戏卡牌类型映射为 AuditableCard
+const auditableCards: AuditableCard[] = gameCards.map(card => ({
+  id: card.id,
+  type: card.type,
+  timing: card.timing,
+  effects: card.effects?.map(e => ({ description: e.description, action: e.action })),
+  playCondition: card.playCondition,
+}));
+
+createCardCompletenessAuditSuite({
+  suiteName: 'DiceThrone 卡牌完整性审计',
+  descriptionCondition: {
+    cards: actionCards,
+    getDescriptions: (id) => [zhDesc[id], enDesc[id]].filter(Boolean),
+    rules: [
+      { name: '伤害条件', patterns: [/造成.*至少.*\d+.*伤害/], requiredConditionField: 'requireMinDamageDealt' },
+    ],
+  },
+  cardStructure: {
+    cards: auditableCards,
+    rules: [
+      { name: '升级卡必须有效果', appliesTo: c => c.type === 'upgrade', check: c => ..., describeViolation: c => ... },
+    ],
+  },
+  placeholder: {
+    cards: auditableCards,
+    patterns: [
+      { name: '占位 playCondition', isPlaceholder: c => ... },
+    ],
+  },
+});
+```
+
+### 与 abilityBehaviorAudit 的关系
+
+两者互补：
+- `abilityBehaviorAudit`：面向能力/卡牌的**行为注册**（触发器、执行器、ongoing 效果），检测"描述说了但代码没注册"
+- `cardCompletenessAudit`：面向卡牌的**定义结构**（playCondition、effects、timing），检测"配置不完整或有占位符"
+
+一个游戏可以同时使用两者。
+
+### 参考实现
+
+- 引擎层工厂：`src/engine/testing/cardCompletenessAudit.ts`
+- DiceThrone 测试：`src/games/dicethrone/__tests__/card-completeness-audit.test.ts`
+
+---
+
+## 引擎测试工具总览
+
+> 新增游戏时，根据游戏特征选择需要的审计工具。
+
+| 工具 | 文件 | 适用场景 | 已使用的游戏 |
+|------|------|---------|-------------|
+| GameTestRunner | `index.ts` | 命令序列执行 + 状态断言 | DiceThrone、SummonerWars、SmashUp |
+| entityIntegritySuite | `entityIntegritySuite.ts` | 数据定义契约（注册表完整性/引用链/触发路径/效果契约） | SmashUp、DiceThrone |
+| referenceValidator | `referenceValidator.ts` | 实体引用链提取与验证 | SmashUp |
+| abilityBehaviorAudit | `abilityBehaviorAudit.ts` | 描述→代码一致性（关键词行为/ongoing/标签/自毁/条件） | SmashUp |
+| cardCompletenessAudit | `cardCompletenessAudit.ts` | 卡牌定义结构（playCondition/效果/占位符） | DiceThrone |
+| interactionChainAudit | `interactionChainAudit.ts` | UI 状态机 payload 覆盖（模式 A） | SummonerWars |
+| interactionCompletenessAudit | `interactionCompletenessAudit.ts` | Interaction handler 注册覆盖（模式 B） | SmashUp |
+
+### 新游戏选型指南
+
+- 有多步 UI 交互（逐步收集 payload）→ `interactionChainAudit`
+- 有 InteractionSystem（createSimpleChoice + handler）→ `interactionCompletenessAudit`
+- 有卡牌系统（行动卡/升级卡）→ `cardCompletenessAudit`
+- 卡牌/能力数量多（≥30）→ `abilityBehaviorAudit`
+- 有注册表 + 数据定义 → `entityIntegritySuite`
+- 所有游戏 → `GameTestRunner`
+
+---
+
 ## 禁止 if/else 硬编码 actionId 分发（强制）
 
 - 处理多个 actionId/effectType/customId 时，**禁止**使用 if/else 或 switch-case 硬编码分发。
@@ -382,7 +770,7 @@ createEffectContractSuite({
 - **禁止**：框架层 import 游戏层模块；框架默认注册/启用游戏特定功能；用 `@deprecated` 标记保留耦合代码。
 - **正确做法**：框架提供通用接口与注册表，游戏层显式注册扩展（如 `conditionRegistry.register('diceSet', ...)`）。
 - **发现耦合时**：立即报告并将游戏特定代码迁移到 `games/<gameId>/`，不得以"后续处理"搪塞。
-- **系统注册**：新系统必须在 `src/engine/systems/` 实现，并在 `src/engine/systems/index.ts` 导出；如需默认启用，必须加入 `createDefaultSystems()`。
+- **系统注册**：新系统必须在 `src/engine/systems/` 实现，并在 `src/engine/systems/index.ts` 导出；如需默认启用，必须加入 `createBaseSystems()`。
 - **状态结构**：系统新增状态必须写入 `SystemState` 并由系统 `setup()` 初始化；禁止把系统状态塞进 `core`。
 - **命令可枚举**：系统命令（FLOW/UNDO/REMATCH/INTERACTION/TUTORIAL/RESPONSE_WINDOW/CHEAT）**由 adapter 自动合并**到 `commandTypes`，游戏层只需列出业务命令，禁止手动添加系统命令。
 - **Move payload 必须包装**：UI 调用 move 时必须传 payload 对象，结构与 domain types 保持一致（如 `toggleDieLock({ dieId })`），禁止传裸值。
@@ -428,8 +816,73 @@ createEffectContractSuite({
 
 - UI 层消费事件驱动特效/动画/音效时，**必须**使用 `getEventStreamEntries(G)`（`EventStreamSystem`），**禁止**使用 `getEvents(G)`（`LogSystem`）。
 - **原因**：`LogSystem` 是持久化全量日志，刷新后完整恢复；`EventStreamSystem` 是实时消费通道，每条 entry 带稳定自增 `id`，撤销时会清空（避免重播）。用 LogSystem + `useRef(0)` 做消费指针，刷新后指针归零会导致历史事件全部重演。
-- **正确模式**：用 `lastSeenEventId = useRef(-1)` 追踪已消费的 `entry.id`；首次挂载时将指针推进到末尾（跳过历史）；后续只处理 `entry.id > lastSeenEventId` 的新事件。
-- **参考实现**：`src/games/summonerwars/Board.tsx` 的事件消费 effect、`src/lib/audio/useGameAudio.ts` 的音效去重。
+
+### 首次挂载跳过历史事件（强制模板）
+
+> **所有消费 EventStream 的 Hook/Effect 都必须遵循此模式，无一例外。**
+> 刷新后 `eventStream.entries` 仍包含历史事件，若不在首次挂载时跳过，后续任何 state 变化都会导致历史事件被当作新事件触发动画/音效。
+
+**模式 A：过滤式消费（推荐，适用于需要处理多条新事件的场景）**
+
+```typescript
+const lastSeenIdRef = useRef<number>(-1);
+const isFirstMountRef = useRef(true);
+
+// 首次挂载：将指针推进到末尾，跳过所有历史事件
+useEffect(() => {
+    if (isFirstMountRef.current && eventStreamEntries.length > 0) {
+        lastSeenIdRef.current = eventStreamEntries[eventStreamEntries.length - 1].id;
+        isFirstMountRef.current = false;
+    }
+}, [eventStreamEntries]);
+
+// 后续：只处理 id > lastSeenId 的新事件
+useEffect(() => {
+    if (isFirstMountRef.current) return;
+    const newEntries = eventStreamEntries.filter(e => e.id > lastSeenIdRef.current);
+    if (newEntries.length === 0) return;
+    // ... 处理 newEntries
+    lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
+}, [eventStreamEntries]);
+```
+
+**模式 B：单条最新事件消费（适用于只关心最近一条特定事件的场景）**
+
+```typescript
+// ⚠️ 关键：初始值必须用当前最新事件的 id，而非 null/-1
+const lastProcessedIdRef = useRef<number | null>(latestEntry?.id ?? null);
+
+useEffect(() => {
+    if (!latestEntry) return;
+    if (lastProcessedIdRef.current === latestEntry.id) return;
+    lastProcessedIdRef.current = latestEntry.id;
+    // ... 处理 latestEntry
+}, [latestEntry]);
+```
+
+**禁止的写法**：
+```typescript
+// ❌ 禁止！初始值为 null/-1 且无首次挂载跳过逻辑
+const lastIdRef = useRef<number | null>(null);
+useEffect(() => {
+    if (lastIdRef.current === entry.id) return; // 首次渲染时 null !== 历史id，会触发重播
+    // ...
+}, [entry]);
+
+// ❌ 禁止！仅靠 mountedRef 守卫但遗漏了某些 effect
+// mountedRef 只能挡住首帧，后续 state 变化导致 entries 引用变化时仍会重播历史事件
+```
+
+**检查清单（新增消费 EventStream 的代码时必须逐项确认）**：
+1. ✅ 是否在首次挂载时将消费指针推进到当前最新事件？
+2. ✅ 后续 effect 是否只处理 `id > lastSeenId` 的事件？
+3. ✅ 如果用模式 B（单条消费），`useRef` 初始值是否为 `currentEntry?.id ?? null`？
+4. ✅ 是否所有消费同一 EventStream 的 effect 都遵循了相同模式？（同一 Hook 内不能混用有守卫和无守卫的 effect）
+
+- **参考实现**：
+  - 模式 A：`src/games/dicethrone/hooks/useCardSpotlight.ts`、`src/games/dicethrone/hooks/useActiveModifiers.ts`
+  - 模式 B：`src/games/dicethrone/hooks/useAnimationEffects.ts` 的 `lastDamageEventIdRef`
+  - 音效去重：`src/lib/audio/useGameAudio.ts`
 
 ---
 
@@ -467,6 +920,16 @@ createEffectContractSuite({
 - **对测试的影响**：`createInitializedState`（通过 `applySetupCommands` 调用 `executePipeline`）返回的状态仍然是 **upkeep**（不是 main1），测试中仍需手动 `cmd('ADVANCE_PHASE')` 推进 upkeep → main1。
 - **回合切换后**：`discard → upkeep` 的手动推进会触发 upkeep 自动推进到 income，因此测试中 `// upkeep -> income` 的手动推进需要删除，但 `// income -> main1` 仍需保留。
 - **详见**：`docs/refactor/dicethrone-auto-advance-upkeep-income.md`
+
+---
+
+## 阶段推进权限的 UI 消费规范（强制）
+
+- **领域层**（`rules.ts`）定义 `canAdvancePhase(core, phase)` 做规则校验（选角门禁、防御阶段 rollConfirmed、弃牌超限等）。
+- **FlowSystem** 通过 `flowHooks.canAdvance` 调用领域层校验，作为服务端兜底。
+- **UI 层**禁止重复实现领域校验逻辑（如手动检查 `rollConfirmed`），应复用领域层函数。
+- **正确模式**：在游戏状态 Hook（如 `useDiceThroneState`）中计算 `canAdvancePhase`，组合领域校验 + 交互状态判断（`!hasPendingInteraction`），Board 叠加 `isFocusPlayer` 后直接消费。
+- **参考实现**：`src/games/dicethrone/hooks/useDiceThroneState.ts` 的 `canAdvancePhase` 字段。
 
 ---
 

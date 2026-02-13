@@ -157,19 +157,21 @@ describe('幽灵 ongoing 能力', () => {
     });
 
     describe('ghost_make_contact: 控制对手随从', () => {
-        test('单目标时创建 Prompt', () => {
+        test('单目标时创建 Interaction', () => {
             const oppMinion = makeMinion({ defId: 'opp_m', uid: 'om-1', controller: '1', owner: '1', basePower: 5 });
             const base = makeBase({ minions: [oppMinion] });
             const state = makeState([base]);
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
             const executor = resolveAbility('ghost_make_contact', 'onPlay')!;
             const result = executor({
-                state, playerId: '0', cardUid: 'mc-1', defId: 'ghost_make_contact',
+                state, matchState: ms, playerId: '0', cardUid: 'mc-1', defId: 'ghost_make_contact',
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
-            expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
+            const current = (result.matchState?.sys as any)?.interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('ghost_make_contact');
         });
     });
 });
@@ -226,9 +228,12 @@ describe('蒸汽朋克 ongoing 能力', () => {
     });
 
     describe('steampunk_difference_engine: 差分机', () => {
-        test('控制者回合结束时抽1牌', () => {
-            const engine = makeMinion({ defId: 'steampunk_difference_engine', uid: 'de-1', controller: '0' });
-            const base = makeBase({ minions: [engine] });
+        test('控制者回合结束时且基地有随从时抽1牌', () => {
+            const minion = makeMinion({ defId: 'steampunk_a', uid: 'sa-1', controller: '0', owner: '0' });
+            const base = makeBase({
+                minions: [minion],
+                ongoingActions: [{ uid: 'de-1', defId: 'steampunk_difference_engine', ownerId: '0' }],
+            });
             const state = makeState([base]);
 
             const events = fireTriggers(state, 'onTurnEnd', {
@@ -241,12 +246,28 @@ describe('蒸汽朋克 ongoing 能力', () => {
         });
 
         test('非控制者回合不触发', () => {
-            const engine = makeMinion({ defId: 'steampunk_difference_engine', uid: 'de-1', controller: '0' });
-            const base = makeBase({ minions: [engine] });
+            const minion = makeMinion({ defId: 'steampunk_a', uid: 'sa-1', controller: '0', owner: '0' });
+            const base = makeBase({
+                minions: [minion],
+                ongoingActions: [{ uid: 'de-1', defId: 'steampunk_difference_engine', ownerId: '0' }],
+            });
             const state = makeState([base]);
 
             const events = fireTriggers(state, 'onTurnEnd', {
                 state, playerId: '1', random: dummyRandom, now: 1000,
+            });
+
+            expect(events).toHaveLength(0);
+        });
+
+        test('基地上没有拥有者随从时不触发', () => {
+            const base = makeBase({
+                ongoingActions: [{ uid: 'de-1', defId: 'steampunk_difference_engine', ownerId: '0' }],
+            });
+            const state = makeState([base]);
+
+            const events = fireTriggers(state, 'onTurnEnd', {
+                state, playerId: '0', random: dummyRandom, now: 1000,
             });
 
             expect(events).toHaveLength(0);
@@ -292,21 +313,23 @@ describe('蒸汽朋克 ongoing 能力', () => {
     });
 
     describe('steampunk_mechanic: 机械师', () => {
-        test('单张行动卡时创建 Prompt', () => {
+        test('单张行动卡时创建 Interaction', () => {
             const base = makeBase();
             const state = makeState([base]);
             state.players['0'].discard = [
                 makeCard('dis-1', 'some_action', 'action', '0', SMASHUP_FACTION_IDS.STEAMPUNKS),
             ];
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
             const executor = resolveAbility('steampunk_mechanic', 'onPlay')!;
             const result = executor({
-                state, playerId: '0', cardUid: 'mech-1', defId: 'steampunk_mechanic',
+                state, matchState: ms, playerId: '0', cardUid: 'mech-1', defId: 'steampunk_mechanic',
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
-            expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
+            const current = (result.matchState?.sys as any)?.interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('steampunk_mechanic');
         });
     });
 
@@ -375,6 +398,21 @@ describe('食人花 ongoing 能力', () => {
             });
 
             expect(events).toHaveLength(0);
+        });
+
+        test('多张睡莲在场每回合也只触发一次', () => {
+            const lily1 = makeMinion({ defId: 'killer_plant_water_lily', uid: 'wl-1', controller: '0' });
+            const lily2 = makeMinion({ defId: 'killer_plant_water_lily', uid: 'wl-2', controller: '0' });
+            const lily3 = makeMinion({ defId: 'killer_plant_water_lily', uid: 'wl-3', controller: '0' });
+            const base = makeBase({ minions: [lily1, lily2, lily3] });
+            const state = makeState([base]);
+
+            const events = fireTriggers(state, 'onTurnStart', {
+                state, playerId: '0', random: dummyRandom, now: 1000,
+            });
+
+            expect(events).toHaveLength(1);
+            expect(events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
         });
     });
 
@@ -528,30 +566,27 @@ describe('米斯卡塔尼克 新增能力', () => {
         registerMiskatonicAbilities();
     });
 
-    describe('miskatonic_student: 学生', () => {
-        test('special 能力已注册', () => {
-            const executor = resolveAbility('miskatonic_student', 'special');
+    describe('miskatonic_researcher: 研究员', () => {
+        test('onPlay 能力已注册', () => {
+            const executor = resolveAbility('miskatonic_researcher', 'onPlay');
             expect(executor).toBeDefined();
         });
 
-        test('手中有疯狂卡时转移给对手', () => {
+        test('抽1张疯狂卡', () => {
             const base = makeBase();
             const state = makeState([base], {
                 madnessDeck: [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID],
             });
-            state.players['0'].hand.push(
-                makeCard('m-hand', MADNESS_CARD_DEF_ID, 'action', '0', SMASHUP_FACTION_IDS.MADNESS)
-            );
 
-            const executor = resolveAbility('miskatonic_student', 'special')!;
+            const executor = resolveAbility('miskatonic_researcher', 'onPlay')!;
             const result = executor({
-                state, playerId: '0', cardUid: 'stu-1', defId: 'miskatonic_student',
+                state, playerId: '0', cardUid: 'res-1', defId: 'miskatonic_researcher',
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
             expect(result.events.length).toBeGreaterThanOrEqual(1);
-            // 第一个事件：返回疯狂卡
-            expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_RETURNED);
+            // 研究员 onPlay：抽1张疯狂卡
+            expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_DRAWN);
         });
     });
 

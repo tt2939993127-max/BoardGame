@@ -195,16 +195,16 @@
     "structureDamaged": "Structure took {{amount}} damage:",
     "structureHealed": "Structure healed {{amount}}:",
     "structureDestroyed": "Structure destroyed:",
-    "magicChanged": "{{player}} magic {{delta}}",
-    "cardDrawn": "{{player}} draws {{count}}",
-    "cardDiscarded": "{{player}} discards:",
+    "magicChanged": "Player {{playerId}} magic {{delta}}",
+    "cardDrawn": "Player {{playerId}} draws {{count}}",
+    "cardDiscarded": "Player {{playerId}} discards:",
     "abilityTriggered": "Ability triggered: {{abilityName}}",
     "strengthModified": "Strength multiplier ×{{multiplier}}:",
     "damageReduced": "Damage reduced {{amount}}:",
     "unitPushed": "Push:",
     "unitPulled": "Pull:",
     "unitsSwapped": "Swap positions:",
-    "controlTransferred": "Control transferred to {{player}}:",
+    "controlTransferred": "Control transferred to Player {{playerId}}:",
     "controlTransferredTemporary": "(temporary)",
     "eventAttached": "Event attached:",
     "funeralPyreCharged": "Funeral Pyre charge {{amount}}:",
@@ -435,7 +435,17 @@
     "spiritBondSelf": "✨ Spirit Bond (Charge self)",
     "spiritBondTransfer": "➡️ Spirit Bond (Transfer charge)",
     "withdraw": "🏃 Withdraw (Spend charge/magic to move)",
-    "vanish": "👻 Vanish (Swap with 0-cost ally)"
+    "vanish": "👻 Vanish (Swap with 0-cost ally)",
+    "frostAxe": "❄️ Frost Axe (Charge or spend charges to attach)",
+    "iceShards": "❄️ Ice Shards (Spend charge to damage enemies near buildings)",
+    "highTelekinesis": "🌀 High Telekinesis (Push/pull soldier or hero within 3)",
+    "mindTransmission": "🧠 Mind Transmission (Ally soldier extra attack)",
+    "telekinesis": "🌀 Telekinesis (Push/pull soldier or hero within 2)",
+    "illusion": "🎭 Illusion (Copy abilities of soldier within 3)",
+    "guidance": "📖 Guidance (Draw two cards)",
+    "bloodRune": "🩸 Blood Rune (Self-damage or spend magic to charge)",
+    "feedBeast": "🍖 Feed Beast (Remove adjacent ally or self-destroy)",
+    "inspire": "✨ Inspire (Charge adjacent allies)"
   },
   "status": {
     "yourTurn": "Your Turn",
@@ -459,5 +469,271 @@
     "cannotMoveThere": "Cannot move there",
     "cannotSummonThere": "Cannot summon there",
     "cannotBuildThere": "Cannot build there"
+  },
+  "abilities": {
+    "revive_undead": {
+      "name": "Revive Undead",
+      "description": "Once per turn, during your Summon phase, you may deal 2 damage to this unit to take an Undead unit from your discard pile and place it adjacent to this unit."
+    },
+    "fire_sacrifice_passive": {
+      "name": "Fire Sacrifice (Passive)",
+      "description": "When you pay the cost to summon this unit, you must also destroy a friendly unit and replace it with this unit."
+    },
+    "life_drain": {
+      "name": "Life Drain",
+      "description": "Before this unit attacks, you may destroy a friendly unit within 2 spaces. If you do, this unit's attack strength is doubled."
+    },
+    "rage": {
+      "name": "Rage",
+      "description": "This unit gains +1 strength for each point of damage on it."
+    },
+    "blood_rage": {
+      "name": "Blood Rage",
+      "description": "Whenever a unit is destroyed during your turn, charge this unit. At the end of your turn, remove 2 charges from this unit."
+    },
+    "power_boost": {
+      "name": "Power Boost",
+      "description": "This unit gains +1 strength for each charge on it, up to +5."
+    },
+    "blood_rage_decay": {
+      "name": "Blood Rage Decay",
+      "description": "At the end of your turn, remove 2 charges from this unit."
+    },
+    "sacrifice": {
+      "name": "Sacrifice",
+      "description": "After this unit is destroyed, deal 1 damage to each adjacent enemy unit."
+    },
+    "soulless": {
+      "name": "Soulless",
+      "description": "When this unit destroys an enemy unit, you do not gain magic."
+    },
+    "infection": {
+      "name": "Infection",
+      "description": "After this unit destroys a unit, you may replace the destroyed unit with a Plague Zombie from your discard pile."
+    },
+    "soul_transfer": {
+      "name": "Soul Transfer",
+      "description": "After this unit destroys a unit within 3 spaces, you may replace the destroyed unit with this unit."
+    },
+    "fire_sacrifice_summon": {
+      "name": "Fire Sacrifice",
+      "description": "During your Summon phase, you may destroy a friendly unit instead of paying magic to summon a unit."
+    },
+    "mind_capture": {
+      "name": "Mind Capture",
+      "description": "When this unit attacks an enemy unit, if the damage dealt is enough to destroy the target, you may ignore the damage and take control of the target instead."
+    },
+    "mind_capture_resolve": {
+      "name": "Mind Capture Decision",
+      "description": "Choose to take control of the target unit or deal damage."
+    },
+    "flying": {
+      "name": "Flying",
+      "description": "When this unit moves, it may move 1 extra space and pass through other cards."
+    },
+    "aerial_strike": {
+      "name": "Aerial Strike",
+      "description": "Friendly soldiers that start moving within 2 spaces of this unit gain Flying during that move."
+    },
+    "high_telekinesis": {
+      "name": "High Telekinesis",
+      "description": "After this unit attacks, or instead of attacking, you may target a soldier or champion within 3 spaces and push or pull it 1 space."
+    },
+    "stable": {
+      "name": "Stable",
+      "description": "This unit cannot be pushed or pulled."
+    },
+    "mind_transmission": {
+      "name": "Mind Transmission",
+      "description": "After this unit attacks an enemy card, you may target a friendly soldier within 3 spaces. That soldier makes an extra attack."
+    },
+    "swift": {
+      "name": "Swift",
+      "description": "When this unit moves, it may move 1 extra space."
+    },
+    "ranged": {
+      "name": "Ranged",
+      "description": "This unit may attack targets up to 4 straight-line spaces away."
+    },
+    "telekinesis": {
+      "name": "Telekinesis",
+      "description": "After this unit attacks, or instead of attacking, you may target a soldier or champion within 2 spaces and push or pull it 1 space."
+    },
+    "illusion": {
+      "name": "Illusion",
+      "description": "At the start of your Move phase, you may target a soldier within 3 spaces. This unit gains all of the target's abilities until end of turn."
+    },
+    "evasion": {
+      "name": "Evasion",
+      "description": "When an adjacent enemy unit attacks, if it rolls one or more ✦, the damage from this attack is reduced by 1."
+    },
+    "rebound": {
+      "name": "Rebound",
+      "description": "Whenever an adjacent enemy unit moves or is pushed/pulled away from this unit, deal 1 damage to that unit."
+    },
+    "fortress_power": {
+      "name": "Fortress Power",
+      "description": "After this unit attacks an enemy unit, if there is one or more friendly Fortress units on the battlefield, you may take a Fortress unit from your discard pile into your hand."
+    },
+    "guidance": {
+      "name": "Guidance",
+      "description": "At the start of your Summon phase, draw two cards."
+    },
+    "fortress_elite": {
+      "name": "Fortress Elite",
+      "description": "This unit gains +1 strength for each friendly Fortress unit within 2 spaces."
+    },
+    "radiant_shot": {
+      "name": "Radiant Shot",
+      "description": "This unit gains +1 strength for every 2 magic you have."
+    },
+    "divine_shield": {
+      "name": "Divine Shield",
+      "description": "Whenever a friendly Fortress unit within 3 spaces is targeted by an attack, roll 2 dice. For each ❤️ rolled, the attacking unit gets -1 strength for this attack (minimum 1)."
+    },
+    "healing": {
+      "name": "Healing",
+      "description": "Before this unit attacks a friendly soldier or champion, you may discard a card from your hand. If you do, each ⚔️ or ❤️ rolled removes 1 damage from the target instead of dealing damage."
+    },
+    "judgment": {
+      "name": "Judgment",
+      "description": "After this unit attacks an enemy unit, draw cards equal to the number of ❤️ rolled."
+    },
+    "entangle": {
+      "name": "Entangle",
+      "description": "Whenever an adjacent enemy unit moves or is pushed/pulled away from this unit, deal 1 damage to that unit."
+    },
+    "guardian": {
+      "name": "Guardian",
+      "description": "When an adjacent enemy unit attacks, it must target a unit with Guardian."
+    },
+    "holy_arrow": {
+      "name": "Holy Arrow",
+      "description": "Before this unit attacks, reveal and discard any number of non-same-name units from your hand. For each card discarded, gain 1 magic and this unit gets +1 strength for this attack."
+    },
+    "vanish": {
+      "name": "Vanish",
+      "description": "Once per turn, during your Attack phase, this unit may swap positions with a friendly unit that costs 0."
+    },
+    "blood_rune": {
+      "name": "Blood Rune",
+      "description": "At the start of your Attack phase, deal 1 damage to this unit, or spend 1 magic to charge this unit."
+    },
+    "magic_addiction": {
+      "name": "Magic Addiction",
+      "description": "At the end of your turn, spend 1 magic, or discard this unit."
+    },
+    "ferocity": {
+      "name": "Ferocity",
+      "description": "During your Attack phase, you may choose this unit as an additional attacker."
+    },
+    "feed_beast": {
+      "name": "Feed the Beast",
+      "description": "At the end of your Attack phase, if this unit did not destroy any units this turn, remove an adjacent friendly unit, or discard this unit."
+    },
+    "climb": {
+      "name": "Climb",
+      "description": "When this unit moves, it may move 1 extra space and pass through structures."
+    },
+    "charge": {
+      "name": "Charge",
+      "description": "This unit may move 1 to 4 straight-line spaces with line of sight instead of normal movement. If it moved at least 3 spaces, it gains +1 strength until end of turn."
+    },
+    "immobile": {
+      "name": "Immobile",
+      "description": "This unit cannot move."
+    },
+    "grab": {
+      "name": "Grab",
+      "description": "When a friendly unit starts moving from a space adjacent to this unit, you may place this unit adjacent to that unit after it finishes moving."
+    },
+    "structure_shift": {
+      "name": "Structure Shift",
+      "description": "After this unit moves, you may target a friendly structure within 3 spaces. Push or pull the target 1 space."
+    },
+    "cold_snap": {
+      "name": "Cold Snap",
+      "description": "Friendly structures within 3 spaces of this unit gain +1 life."
+    },
+    "imposing": {
+      "name": "Imposing",
+      "description": "Once per turn, after this unit attacks an enemy unit, charge this unit."
+    },
+    "ice_shards": {
+      "name": "Ice Shards",
+      "description": "At the end of your Build phase, you may spend 1 charge to deal 1 damage to each enemy unit adjacent to a structure you control."
+    },
+    "greater_frost_bolt": {
+      "name": "Greater Frost Bolt",
+      "description": "This unit gains +1 strength for each friendly structure within 2 spaces."
+    },
+    "frost_bolt": {
+      "name": "Frost Bolt",
+      "description": "This unit gains +1 strength for each adjacent friendly structure."
+    },
+    "trample": {
+      "name": "Trample",
+      "description": "When this unit moves, it may pass through soldiers. After moving, deal 1 damage to each soldier it passed through."
+    },
+    "frost_axe": {
+      "name": "Frost Axe",
+      "description": "After this unit moves, you may charge it, or spend all its charges (at least 1) to place it under a friendly soldier within 3 spaces. When that soldier attacks, ⚔️=‼️."
+    },
+    "living_gate": {
+      "name": "Living Gate",
+      "description": "This card counts as a gate."
+    },
+    "mobile_structure": {
+      "name": "Mobile Structure",
+      "description": "This card counts as a structure but can move."
+    },
+    "slow": {
+      "name": "Slow",
+      "description": "This unit must move 1 fewer space."
+    },
+    "ancestral_bond": {
+      "name": "Ancestral Bond",
+      "description": "After this unit moves, you may target a friendly unit within 3 spaces. Charge the target and move all charges from this unit to the target."
+    },
+    "power_up": {
+      "name": "Power Up",
+      "description": "This unit gains +1 strength for each charge on it, up to +5."
+    },
+    "prepare": {
+      "name": "Prepare",
+      "description": "You may charge this unit instead of moving it."
+    },
+    "rapid_fire": {
+      "name": "Rapid Fire",
+      "description": "Once per turn, after this unit attacks, you may spend 1 charge to make an extra attack."
+    },
+    "inspire": {
+      "name": "Inspire",
+      "description": "After this unit moves, charge all adjacent friendly units."
+    },
+    "withdraw": {
+      "name": "Withdraw",
+      "description": "After this unit attacks, you may spend 1 charge or magic. If you do, push or pull this unit 1 to 2 spaces."
+    },
+    "intimidate": {
+      "name": "Intimidate",
+      "description": "Once per turn, after this unit attacks an enemy unit, charge this unit."
+    },
+    "life_up": {
+      "name": "Life Up",
+      "description": "This unit gains +1 life for each charge on it, up to +5."
+    },
+    "speed_up": {
+      "name": "Speed Up",
+      "description": "This unit gains +1 movement for each charge on it when moving, up to +5 extra spaces."
+    },
+    "gather_power": {
+      "name": "Gather Power",
+      "description": "After this unit is summoned, charge it."
+    },
+    "spirit_bond": {
+      "name": "Spirit Bond",
+      "description": "After this unit moves, charge it, or spend 1 charge to charge a friendly unit within 3 spaces."
+    }
   }
 }

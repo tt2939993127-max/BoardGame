@@ -28,7 +28,7 @@
     "src/games/**/game.ts",
     "src/games/**/manifest.ts",
     "src/games/manifest.server*.ts"
-  ],
+, "src/engine/primitives/__tests__/mulligan.test.ts"  ],
   "exclude": [
     "**/__tests__/**",
     "**/*.test.*",

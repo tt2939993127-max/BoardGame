@@ -1,15 +1,17 @@
 /**
  * 单位操作面板（主动技能按钮）
  *
- * 从 Board.tsx 提取，在选中己方单位时显示可用的主动技能按钮。
+ * 数据驱动：从 AbilityDef.ui 配置自动渲染按钮，
+ * 不再逐技能 if 硬编码。新增技能只需在 AbilityDef 中配置 ui 字段。
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SummonerWarsCore } from '../domain';
 import { SW_COMMANDS, SummonerWarsDomain } from '../domain';
-import type { UnitCard, PlayerId } from '../domain/types';
-import { getPlayerUnits } from '../domain/helpers';
+import type { PlayerId } from '../domain/types';
+import { abilityRegistry } from '../domain/abilities';
+import type { AbilityDef, AbilityUIContext } from '../domain/abilities';
 import { GameButton } from './GameButton';
 
 interface AbilityMode {
@@ -42,6 +44,7 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
 }) => {
   const { t } = useTranslation('game-summonerwars');
 
+  // 前置条件：无其他模式激活、有选中单位、是自己的回合
   if (abilityMode || bloodSummonMode || eventTargetMode || !core.selectedUnit || !isMyTurn) return null;
 
   const cell = core.board[core.selectedUnit.row]?.[core.selectedUnit.col];
@@ -49,131 +52,70 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
   if (!unit || unit.owner !== myPlayerId) return null;
 
   const abilities = unit.card.abilities ?? [];
+  const playerId = myPlayerId as PlayerId;
+
+  // 构建 UI 上下文
+  const uiCtx: AbilityUIContext = { core, unit, playerId, myHand };
+
+  // 收集需要渲染的按钮
   const buttons: React.ReactNode[] = [];
 
-  if (abilities.includes('revive_undead') && currentPhase === 'summon') {
-    const hasUndeadInDiscard = core.players[myPlayerId as PlayerId]?.discard.some(c =>
-      c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === 'necromancer')
-    );
-    if (hasUndeadInDiscard) {
-      buttons.push(
-        <GameButton key="revive_undead" onClick={() => setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: unit.cardId })} variant="primary" size="md">
-          {t('abilityButtons.reviveUndead')}
-        </GameButton>
+  for (const abilityId of abilities) {
+    const def = abilityRegistry.get(abilityId);
+    if (!def?.ui?.requiresButton) continue;
+
+    const { ui } = def;
+
+    // 阶段匹配
+    if (ui.buttonPhase && ui.buttonPhase !== currentPhase) continue;
+
+    // 额外前置条件
+    if (ui.extraCondition && !ui.extraCondition(uiCtx)) continue;
+
+    // 快速可用性检查
+    if (ui.quickCheck && !ui.quickCheck(uiCtx)) continue;
+
+    // 按钮点击处理
+    const handleClick = () => {
+      if (ui.activationType === 'directExecute') {
+        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({ abilityId, sourceUnitId: unit.cardId });
+      } else if (ui.activationType === 'withdrawMode') {
+        setWithdrawMode({ sourceUnitId: unit.cardId, step: 'selectCost' });
+      } else {
+        // 默认：进入 abilityMode
+        setAbilityMode({
+          abilityId,
+          step: ui.activationStep ?? 'selectUnit',
+          sourceUnitId: unit.cardId,
+          context: ui.activationContext,
+          selectedCardIds: ui.activationStep === 'selectCards' ? [] : undefined,
+        });
+      }
+    };
+
+    // validate 控制 disabled 状态
+    let disabled = false;
+    let title: string | undefined;
+    if (ui.useValidateForDisabled) {
+      const result = SummonerWarsDomain.validate(
+        { core, sys: {} as never },
+        { type: SW_COMMANDS.ACTIVATE_ABILITY, payload: { abilityId, sourceUnitId: unit.cardId }, playerId: myPlayerId, timestamp: Date.now() },
       );
+      disabled = !result.valid;
+      title = result.valid ? undefined : result.error;
     }
-  }
-  if (abilities.includes('fire_sacrifice_summon') && currentPhase === 'summon') {
-    const hasOtherUnits = getPlayerUnits(core, myPlayerId as '0' | '1').some(u => u.cardId !== unit.cardId);
-    if (hasOtherUnits) {
-      buttons.push(
-        <GameButton key="fire_sacrifice_summon" onClick={() => setAbilityMode({ abilityId: 'fire_sacrifice_summon', step: 'selectUnit', sourceUnitId: unit.cardId })} variant="secondary" size="md">
-          {t('abilityButtons.fireSacrificeSummon')}
-        </GameButton>
-      );
-    }
-  }
-  if (abilities.includes('life_drain') && currentPhase === 'attack') {
-    const nearbyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
-      .filter(u => {
-        if (u.cardId === unit.cardId) return false;
-        const dist = Math.abs(u.position.row - core.selectedUnit!.row) + Math.abs(u.position.col - core.selectedUnit!.col);
-        return dist <= 2;
-      });
-    if (nearbyUnits.length > 0) {
-      buttons.push(
-        <GameButton key="life_drain" onClick={() => setAbilityMode({ abilityId: 'life_drain', step: 'selectUnit', sourceUnitId: unit.cardId, context: 'beforeAttack' })} variant="secondary" size="md">
-          {t('abilityButtons.lifeDrain')}
-        </GameButton>
-      );
-    }
-  }
-  if (abilities.includes('holy_arrow') && currentPhase === 'attack') {
-    const hasValidDiscard = myHand.some(card => card.cardType === 'unit' && card.name !== unit.card.name);
-    if (hasValidDiscard) {
-      buttons.push(
-        <GameButton key="holy_arrow" onClick={() => setAbilityMode({ abilityId: 'holy_arrow', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
-          {t('abilityButtons.holyArrow')}
-        </GameButton>
-      );
-    }
-  }
-  if (abilities.includes('healing') && currentPhase === 'attack') {
-    const hasDiscard = myHand.length > 0;
-    if (hasDiscard) {
-      buttons.push(
-        <GameButton key="healing" onClick={() => setAbilityMode({ abilityId: 'healing', step: 'selectCards', sourceUnitId: unit.cardId, context: 'beforeAttack', selectedCardIds: [] })} variant="secondary" size="md">
-          {t('abilityButtons.healing')}
-        </GameButton>
-      );
-    }
-  }
-  if (abilities.includes('prepare') && currentPhase === 'move' && !unit.hasMoved) {
-    // 使用通用的可用性判断（包含使用次数限制）
-    const fullState = { core, sys: {} as any };
-    const validationResult = SummonerWarsDomain.validate(fullState, {
-      type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'prepare', sourceUnitId: unit.cardId },
-      playerId: myPlayerId,
-      timestamp: Date.now(),
-    });
-    
+
     buttons.push(
-      <GameButton 
-        key="prepare" 
-        onClick={() => {
-          moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({ abilityId: 'prepare', sourceUnitId: unit.cardId });
-        }} 
-        variant="secondary" 
+      <GameButton
+        key={abilityId}
+        onClick={handleClick}
+        variant={ui.buttonVariant ?? 'secondary'}
         size="md"
-        disabled={!validationResult.valid}
-        title={validationResult.valid ? undefined : validationResult.error}
+        disabled={disabled}
+        title={title}
       >
-        {t('abilityButtons.prepare')}
-      </GameButton>
-    );
-  }
-  if (abilities.includes('fortress_power') && currentPhase === 'attack') {
-    const hasFortressInDiscard = core.players[myPlayerId as PlayerId]?.discard.some(c => c.cardType === 'unit' && c.id.includes('fortress'));
-    if (hasFortressInDiscard) {
-      buttons.push(
-        <GameButton key="fortress_power" onClick={() => setAbilityMode({ abilityId: 'fortress_power', step: 'selectCard', sourceUnitId: unit.cardId })} variant="secondary" size="md">
-          {t('abilityButtons.fortressPower')}
-        </GameButton>
-      );
-    }
-  }
-  // structure_shift / ancestral_bond / spirit_bond:
-  // 已由 afterMove 管道自动触发 → 移动后 ABILITY_TRIGGERED → abilityMode
-  // 静态按钮已移除
-  if (abilities.includes('vanish') && currentPhase === 'attack') {
-    const hasZeroCostAlly = getPlayerUnits(core, myPlayerId as '0' | '1')
-      .some(u => u.cardId !== unit.cardId && u.card.cost === 0);
-    if (hasZeroCostAlly) {
-      buttons.push(
-        <GameButton key="vanish" onClick={() => setAbilityMode({ abilityId: 'vanish', step: 'selectUnit', sourceUnitId: unit.cardId })} variant="secondary" size="md">
-          {t('abilityButtons.vanish')}
-        </GameButton>
-      );
-    }
-  }
-  if (abilities.includes('withdraw') && currentPhase === 'attack') {
-    // withdraw 需要充能或魔力，检查是否至少有一个可用
-    const hasCharge = (unit.boosts ?? 0) >= 1;
-    const hasMagic = core.players[myPlayerId as PlayerId].magic >= 1;
-    const canUseWithdraw = hasCharge || hasMagic;
-    
-    buttons.push(
-      <GameButton 
-        key="withdraw" 
-        onClick={() => setWithdrawMode({ sourceUnitId: unit.cardId, step: 'selectCost' })} 
-        variant="secondary" 
-        size="md"
-        disabled={!canUseWithdraw}
-        title={!canUseWithdraw ? '需要至少1点充能或1点魔力' : undefined}
-      >
-        {t('abilityButtons.withdraw')}
-      </GameButton>
+        {t(ui.buttonLabel ?? `abilities.${abilityId}.name`)}
+      </GameButton>,
     );
   }
 

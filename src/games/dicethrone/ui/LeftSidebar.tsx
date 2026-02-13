@@ -25,6 +25,9 @@ export const LeftSidebar = ({
     tokenDefinitions,
     onKnockdownClick,
     canRemoveKnockdown,
+    isSelfShaking,
+    selfDamageFlashActive,
+    selfDamageFlashDamage,
 }: {
     currentPhase: TurnPhase;
     viewPlayer: HeroState;
@@ -45,6 +48,12 @@ export const LeftSidebar = ({
     onKnockdownClick?: () => void;
     /** 是否可以移除击倒（有击倒状态且 CP >= 2 且在正确阶段） */
     canRemoveKnockdown?: boolean;
+    /** 自己是否正在震动（受击） */
+    isSelfShaking?: boolean;
+    /** 自己受击 DamageFlash 是否激活 */
+    selfDamageFlashActive?: boolean;
+    /** 自己受击伤害值 */
+    selfDamageFlashDamage?: number;
 }) => {
     return (
         <div
@@ -70,6 +79,8 @@ export const LeftSidebar = ({
                         className="flex-wrap-reverse justify-start gap-[0.3vw]"
                         locale={locale}
                         atlas={statusIconAtlas}
+                        tokenDefinitions={tokenDefinitions}
+                        tokenStackLimits={viewPlayer.tokenStackLimits}
                         onTokenClick={(tokenId) => {
                             // 从定义中查找该 Token 是否有 removeDebuff 效果（即净化类 Token）
                             const tokenDef = tokenDefinitions?.find(def => def.id === tokenId);
@@ -103,6 +114,9 @@ export const LeftSidebar = ({
                         hpRef={selfHpRef}
                         hitStopActive={hitStopActive}
                         hitStopConfig={hitStopConfig}
+                        isShaking={isSelfShaking}
+                        damageFlashActive={selfDamageFlashActive}
+                        damageFlashDamage={selfDamageFlashDamage}
                     />
                 </div>
                 <div className="w-full px-[1vw] pt-[0.5vw]" data-tutorial-id="draw-deck">

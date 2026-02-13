@@ -4,7 +4,7 @@
  * 职责：setup 初始化、FlowSystem 钩子、playerView、isGameOver
  */
 
-import type { DomainCore, GameEvent, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
+import type { DomainCore, GameEvent, GameOverResult, PlayerId, RandomFn, MatchState } from '../../../engine/types';
 import { processDestroyTriggers, processMoveTriggers } from './reducer';
 import type { FlowHooks } from '../../../engine/systems/FlowSystem';
 import type {
@@ -381,6 +381,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // 触发 ongoing 效果 onTurnStart
             const onTurnStartEvents = fireTriggers(core, 'onTurnStart', {
                 state: core,
+                matchState: state,
                 playerId: nextPlayerId,
                 random,
                 now,
@@ -594,9 +595,12 @@ function postProcessSystemEvents(
     // 当前玩家作为 trigger 的 sourcePlayerId
     const pid = getCurrentPlayerId(state);
 
+    // processDestroyTriggers / processMoveTriggers 需要 MatchState，包装 core
+    const ms = { core: state, sys: { interaction: { current: undefined, queue: [] } } } as MatchState<SmashUpCore>;
+
     // 依次执行保护过滤 + trigger 后处理
-    const afterDestroy = processDestroyTriggers(events, state, pid, random, now);
-    return processMoveTriggers(afterDestroy, state, pid, random, now);
+    const afterDestroy = processDestroyTriggers(events, ms, pid, random, now);
+    return processMoveTriggers(afterDestroy, ms, pid, random, now);
 }
 
 // ============================================================================

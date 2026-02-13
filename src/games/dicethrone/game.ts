@@ -39,7 +39,6 @@ import { getNextPhase } from './domain/rules';
 import { findPlayerAbility } from './domain/abilityLookup';
 import { diceThroneCheatModifier } from './domain/cheatModifier';
 import { diceThroneFlowHooks } from './domain/flowHooks';
-import i18n from '../../lib/i18n';
 
 // ============================================================================
 // ActionLog 共享白名单 + 格式化
@@ -61,6 +60,32 @@ const UNDO_ALLOWLIST = [
     'ADVANCE_PHASE',
 ] as const;
 
+const DT_NS = 'game-dicethrone';
+
+/** 将 sourceAbilityId 解析为可读的 i18n 来源标签 */
+function resolveAbilitySourceLabel(
+    sourceAbilityId: string | undefined,
+    core: DiceThroneCore,
+    _playerId: PlayerId,
+): { label: string; isI18n: boolean } | null {
+    if (!sourceAbilityId) return null;
+    // 系统来源映射
+    switch (sourceAbilityId) {
+        case 'upkeep-burn': return { label: 'actionLog.damageSource.upkeepBurn', isI18n: true };
+        case 'upkeep-poison': return { label: 'actionLog.damageSource.upkeepPoison', isI18n: true };
+        case 'retribution-reflect': return { label: 'actionLog.damageSource.retribution', isI18n: true };
+    }
+    // 从双方玩家技能表中查找（支持变体 ID）
+    for (const pid of Object.keys(core.players)) {
+        const found = findPlayerAbility(core, pid, sourceAbilityId);
+        if (found?.ability.name) {
+            return { label: found.ability.name, isI18n: found.ability.name.includes('.') };
+        }
+    }
+    // fallback：用 sourceAbilityId 本身作为文本
+    return { label: sourceAbilityId, isI18n: false };
+}
+
 function formatDiceThroneActionEntry({
     command,
     state,
@@ -74,30 +99,52 @@ function formatDiceThroneActionEntry({
     const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
     const entries: ActionLogEntry[] = [];
     const tokenDefinitions = core.tokenDefinitions ?? [];
-    const t = (key: string, params?: Record<string, string | number>) => (
-        i18n.t(`game-dicethrone:${key}`, params)
-    );
-    const formatI18nText = (value?: string) => {
-        if (!value) return '';
-        if (!value.includes('.')) return value;
-        return i18n.t(`game-dicethrone:${value}`);
-    };
-    const formatTokenLabel = (tokenId: string) => {
+
+    // i18n segment 工厂：延迟翻译，渲染时由客户端 useTranslation 翻译
+    const i18nSeg = (
+        key: string,
+        params?: Record<string, string | number>,
+        paramI18nKeys?: string[],
+    ) => ({
+        type: 'i18n' as const,
+        ns: DT_NS,
+        key,
+        ...(params ? { params } : {}),
+        ...(paramI18nKeys ? { paramI18nKeys } : {}),
+    });
+
+    const getTokenI18nKey = (tokenId: string): string => {
         const def = tokenDefinitions.find(item => item.id === tokenId);
-        if (!def) return tokenId;
-        return formatI18nText(def.name) || tokenId;
+        if (!def?.name) return tokenId;
+        // 如果 name 包含 '.'，说明是 i18n key（如 'token.shield.name'）
+        if (def.name.includes('.')) return def.name;
+        return def.name;
     };
-    const formatPlayerLabel = (playerId: PlayerId) => t('actionLog.playerLabel', { playerId });
-    const formatAbilityLabel = (value?: string) => formatI18nText(value) || value || '';
+
+    const getAbilityI18nKey = (rawName?: string): string => {
+        if (!rawName) return '';
+        // 如果包含 '.'，说明是 i18n key
+        if (rawName.includes('.')) return rawName;
+        return rawName;
+    };
 
     if (command.type === 'PLAY_CARD' || command.type === 'PLAY_UPGRADE_CARD') {
         const cardId = (command.payload as { cardId: string }).cardId;
         const card = findDiceThroneCard(core, cardId, command.playerId);
         if (!card || !card.previewRef) return null;
 
-        const actionText = command.type === 'PLAY_UPGRADE_CARD'
-            ? t('actionLog.playUpgradeCard')
-            : t('actionLog.playCard');
+        const actionKey = command.type === 'PLAY_UPGRADE_CARD'
+            ? 'actionLog.playUpgradeCard'
+            : 'actionLog.playCard';
+
+        // card segment：如果 card.name 是 i18n key（含 .），存原始 key + ns，渲染时翻译
+        const isI18nKey = card.name?.includes('.');
+        const cardSegment: ActionLogSegment = {
+            type: 'card',
+            cardId: card.id,
+            previewText: card.name ?? cardId,
+            ...(isI18nKey ? { previewTextNs: DT_NS } : {}),
+        };
 
         entries.push({
             id: `${command.type}-${command.playerId}-${timestamp}`,
@@ -105,12 +152,8 @@ function formatDiceThroneActionEntry({
             actorId: command.playerId,
             kind: command.type,
             segments: [
-                { type: 'text', text: actionText },
-                {
-                    type: 'card',
-                    cardId: card.id,
-                    previewText: formatI18nText(card.name),
-                },
+                i18nSeg(actionKey),
+                cardSegment,
             ],
         });
     }
@@ -123,17 +166,13 @@ function formatDiceThroneActionEntry({
             | undefined;
         const currentPhase = (state as MatchState<DiceThroneCore>).sys?.phase as TurnPhase | undefined;
         const nextPhase = phaseChanged?.payload?.to ?? (currentPhase ? getNextPhase(core, currentPhase) : undefined);
-        const phaseLabel = nextPhase
-            ? t('actionLog.advancePhase', {
-                phase: i18n.t(`game-dicethrone:phase.${nextPhase}.label`, { defaultValue: nextPhase }),
-            })
-            : t('actionLog.advancePhase', { phase: '' });
+        const phaseI18nKey = nextPhase ? `phase.${nextPhase}.label` : '';
         entries.push({
             id: `${command.type}-${command.playerId}-${timestamp}`,
             timestamp,
             actorId: command.playerId,
             kind: command.type,
-            segments: [{ type: 'text', text: phaseLabel }],
+            segments: [i18nSeg('actionLog.advancePhase', { phase: phaseI18nKey }, ['phase'])],
         });
     }
 
@@ -146,16 +185,21 @@ function formatDiceThroneActionEntry({
         const playerId = abilityEvent?.payload.playerId ?? command.playerId;
         if (abilityId && playerId) {
             const rawAbilityName = findPlayerAbility(core, playerId, abilityId)?.ability.name ?? abilityId;
-            const abilityName = formatAbilityLabel(rawAbilityName) || abilityId;
-            const abilityText = abilityEvent?.payload.isDefense
-                ? t('actionLog.abilityActivatedDefense', { abilityName })
-                : t('actionLog.abilityActivated', { abilityName });
+            const abilityNameKey = getAbilityI18nKey(rawAbilityName) || abilityId;
+            const isI18nKey = abilityNameKey.includes('.');
+            const actionKey = abilityEvent?.payload.isDefense
+                ? 'actionLog.abilityActivatedDefense'
+                : 'actionLog.abilityActivated';
             entries.push({
                 id: `${command.type}-${playerId}-${timestamp}`,
                 timestamp,
                 actorId: playerId,
                 kind: command.type,
-                segments: [{ type: 'text', text: abilityText }],
+                segments: [i18nSeg(
+                    actionKey,
+                    { abilityName: abilityNameKey },
+                    isI18nKey ? ['abilityName'] : undefined,
+                )],
             });
         }
     }
@@ -179,14 +223,34 @@ function formatDiceThroneActionEntry({
                 }
             }
             const dealt = actualDamage ?? amount ?? 0;
-            const segments = [
-                { type: 'text' as const, text: actorId === targetId
-                    ? t('actionLog.damageTaken', { amount: dealt })
-                    : t('actionLog.damageDealt', { amount: dealt })
-                },
-            ];
+            const isSelfDamage = actorId === targetId;
+
+            // 解析来源技能名
+            const effectiveSourceId = sourceAbilityId ?? attackResolved?.payload.sourceAbilityId;
+            const source = resolveAbilitySourceLabel(effectiveSourceId, core, actorId);
+
+            let segments: ReturnType<typeof i18nSeg>[];
+            if (isSelfDamage) {
+                if (source) {
+                    segments = [i18nSeg('actionLog.damageTaken', {
+                        amount: dealt, source: source.label,
+                    }, source.isI18n ? ['source'] : undefined)];
+                } else {
+                    segments = [i18nSeg('actionLog.damageTakenPlain', { amount: dealt })];
+                }
+            } else {
+                if (source) {
+                    segments = [i18nSeg('actionLog.damageDealt', {
+                        amount: dealt, targetPlayerId: targetId, source: source.label,
+                    }, source.isI18n ? ['source'] : undefined)];
+                } else {
+                    segments = [i18nSeg('actionLog.damageDealtPlain', {
+                        amount: dealt, targetPlayerId: targetId,
+                    })];
+                }
+            }
             if (amount !== undefined && actualDamage !== undefined && amount !== actualDamage) {
-                segments.push({ type: 'text' as const, text: t('actionLog.damageOriginal', { amount }) });
+                segments.push(i18nSeg('actionLog.damageOriginal', { amount }));
             }
             entries.push({
                 id: `DAMAGE_DEALT-${targetId}-${entryTimestamp}-${index}`,
@@ -206,10 +270,7 @@ function formatDiceThroneActionEntry({
                 timestamp: entryTimestamp,
                 actorId: command.playerId,
                 kind: 'HEAL_APPLIED',
-                segments: [{
-                    type: 'text' as const,
-                    text: t('actionLog.healApplied', { targetLabel: formatPlayerLabel(targetId), amount }),
-                }],
+                segments: [i18nSeg('actionLog.healApplied', { targetPlayerId: targetId, amount })],
             });
             return;
         }
@@ -217,18 +278,19 @@ function formatDiceThroneActionEntry({
         if (event.type === 'STATUS_APPLIED') {
             const statusEvent = event as StatusAppliedEvent;
             const { targetId, statusId, stacks, newTotal } = statusEvent.payload;
-            const statusLabel = formatTokenLabel(statusId);
+            const tokenKey = getTokenI18nKey(statusId);
+            const isI18nKey = tokenKey.includes('.');
             entries.push({
                 id: `STATUS_APPLIED-${targetId}-${entryTimestamp}-${index}`,
                 timestamp: entryTimestamp,
                 actorId: command.playerId,
                 kind: 'STATUS_APPLIED',
                 segments: [
-                    { type: 'text' as const, text: t('actionLog.statusApplied', {
-                        targetLabel: formatPlayerLabel(targetId),
-                        statusLabel,
-                    }) },
-                    { type: 'text' as const, text: t('actionLog.statusAppliedDelta', { stacks, total: newTotal }) },
+                    i18nSeg('actionLog.statusApplied', {
+                        targetPlayerId: targetId,
+                        statusLabel: tokenKey,
+                    }, isI18nKey ? ['statusLabel'] : undefined),
+                    i18nSeg('actionLog.statusAppliedDelta', { stacks, total: newTotal }),
                 ],
             });
             return;
@@ -237,18 +299,19 @@ function formatDiceThroneActionEntry({
         if (event.type === 'STATUS_REMOVED') {
             const statusEvent = event as StatusRemovedEvent;
             const { targetId, statusId, stacks } = statusEvent.payload;
-            const statusLabel = formatTokenLabel(statusId);
+            const tokenKey = getTokenI18nKey(statusId);
+            const isI18nKey = tokenKey.includes('.');
             entries.push({
                 id: `STATUS_REMOVED-${targetId}-${entryTimestamp}-${index}`,
                 timestamp: entryTimestamp,
                 actorId: command.playerId,
                 kind: 'STATUS_REMOVED',
                 segments: [
-                    { type: 'text' as const, text: t('actionLog.statusRemoved', {
-                        targetLabel: formatPlayerLabel(targetId),
-                        statusLabel,
-                    }) },
-                    { type: 'text' as const, text: t('actionLog.statusRemovedDelta', { stacks }) },
+                    i18nSeg('actionLog.statusRemoved', {
+                        targetPlayerId: targetId,
+                        statusLabel: tokenKey,
+                    }, isI18nKey ? ['statusLabel'] : undefined),
+                    i18nSeg('actionLog.statusRemovedDelta', { stacks }),
                 ],
             });
             return;
@@ -257,19 +320,20 @@ function formatDiceThroneActionEntry({
         if (event.type === 'TOKEN_GRANTED') {
             const tokenEvent = event as TokenGrantedEvent;
             const { targetId, tokenId, amount, newTotal } = tokenEvent.payload;
-            const tokenLabel = formatTokenLabel(tokenId);
+            const tokenKey = getTokenI18nKey(tokenId);
+            const isI18nKey = tokenKey.includes('.');
             entries.push({
                 id: `TOKEN_GRANTED-${targetId}-${entryTimestamp}-${index}`,
                 timestamp: entryTimestamp,
                 actorId: command.playerId,
                 kind: 'TOKEN_GRANTED',
                 segments: [
-                    { type: 'text' as const, text: t('actionLog.tokenGranted', {
-                        targetLabel: formatPlayerLabel(targetId),
-                        tokenLabel,
+                    i18nSeg('actionLog.tokenGranted', {
+                        targetPlayerId: targetId,
+                        tokenLabel: tokenKey,
                         amount,
-                    }) },
-                    { type: 'text' as const, text: t('actionLog.tokenTotal', { total: newTotal }) },
+                    }, isI18nKey ? ['tokenLabel'] : undefined),
+                    i18nSeg('actionLog.tokenTotal', { total: newTotal }),
                 ],
             });
             return;
@@ -278,15 +342,16 @@ function formatDiceThroneActionEntry({
         if (event.type === 'TOKEN_CONSUMED') {
             const tokenEvent = event as TokenConsumedEvent;
             const { playerId, tokenId, amount, newTotal } = tokenEvent.payload;
-            const tokenLabel = formatTokenLabel(tokenId);
+            const tokenKey = getTokenI18nKey(tokenId);
+            const isI18nKey = tokenKey.includes('.');
             entries.push({
                 id: `TOKEN_CONSUMED-${playerId}-${entryTimestamp}-${index}`,
                 timestamp: entryTimestamp,
                 actorId: playerId,
                 kind: 'TOKEN_CONSUMED',
                 segments: [
-                    { type: 'text' as const, text: t('actionLog.tokenConsumed', { tokenLabel, amount }) },
-                    { type: 'text' as const, text: t('actionLog.tokenRemaining', { total: newTotal }) },
+                    i18nSeg('actionLog.tokenConsumed', { tokenLabel: tokenKey, amount }, isI18nKey ? ['tokenLabel'] : undefined),
+                    i18nSeg('actionLog.tokenRemaining', { total: newTotal }),
                 ],
             });
             return;
@@ -295,37 +360,30 @@ function formatDiceThroneActionEntry({
         if (event.type === 'TOKEN_USED') {
             const tokenEvent = event as TokenUsedEvent;
             const { playerId, tokenId, effectType, damageModifier, evasionRoll } = tokenEvent.payload;
-            const tokenLabel = formatTokenLabel(tokenId);
-            const effectLabel = effectType === 'damageBoost'
-                ? t('actionLog.tokenEffect.damageBoost')
-                : effectType === 'damageReduction'
-                    ? t('actionLog.tokenEffect.damageReduction')
-                    : effectType === 'evasionAttempt'
-                        ? t('actionLog.tokenEffect.evasionAttempt')
-                        : t('actionLog.tokenEffect.removeDebuff');
-            const segments: Array<{ type: 'text'; text: string }> = [
-                { type: 'text', text: t('actionLog.tokenUsed', { tokenLabel, effectLabel }) },
+            const tokenKey = getTokenI18nKey(tokenId);
+            const isTokenI18n = tokenKey.includes('.');
+            const effectLabelKey = `actionLog.tokenEffect.${effectType}`;
+            const paramI18nKeys = ['effectLabel'];
+            if (isTokenI18n) paramI18nKeys.push('tokenLabel');
+            const segments = [
+                i18nSeg('actionLog.tokenUsed', { tokenLabel: tokenKey, effectLabel: effectLabelKey }, paramI18nKeys),
             ];
             if (typeof damageModifier === 'number') {
-                segments.push({ type: 'text', text: t('actionLog.tokenModifier', { amount: damageModifier }) });
+                segments.push(i18nSeg('actionLog.tokenModifier', { amount: damageModifier }));
             }
             if (evasionRoll) {
-                segments.push({
-                    type: 'text',
-                    text: t('actionLog.tokenEvasion', {
-                        value: evasionRoll.value,
-                        result: evasionRoll.success
-                            ? t('actionLog.tokenEvasionSuccess')
-                            : t('actionLog.tokenEvasionFail'),
-                    }),
-                });
+                const resultKey = evasionRoll.success ? 'actionLog.tokenEvasionSuccess' : 'actionLog.tokenEvasionFail';
+                segments.push(i18nSeg('actionLog.tokenEvasion', {
+                    value: evasionRoll.value,
+                    result: resultKey,
+                }, ['result']));
             }
             entries.push({
                 id: `TOKEN_USED-${playerId}-${entryTimestamp}-${index}`,
                 timestamp: entryTimestamp,
                 actorId: playerId,
                 kind: 'TOKEN_USED',
-                segments: segments.map(segment => ({ ...segment, type: 'text' as const })),
+                segments,
             });
         }
     });

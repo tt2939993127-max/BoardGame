@@ -55,7 +55,6 @@ export const SUMMONER_FROST: UnitCard = {
   attackType: 'ranged',
   attackRange: 3,
   abilities: ['structure_shift'],
-  abilityText: '结构变换：在本单位移动之后，可以指定其3个区格以内一个友方建筑为目标。将目标推拉1个区格。',
   deckSymbols: [DECK_SYMBOLS.DOUBLE_AXE, DECK_SYMBOLS.SNOWFLAKE, DECK_SYMBOLS.DROPLET], // 
   spriteIndex: 0,
   spriteAtlas: 'hero',
@@ -78,7 +77,6 @@ export const CHAMPION_UNITS_FROST: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['cold_snap'],
-    abilityText: '寒流：本单位3个区格以内的友方建筑获得生命+1。',
     deckSymbols: [DECK_SYMBOLS.SNOWFLAKE], // 
     spriteIndex: SPRITE_INDEX_FROST.CHAMPION_OLEG,
     spriteAtlas: 'cards',
@@ -95,7 +93,6 @@ export const CHAMPION_UNITS_FROST: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['imposing', 'ice_shards'],
-    abilityText: '威势：每回合一次，在本单位攻击一个敌方单位之后，将本单位充能。\n寒冰碎屑：在你的建造阶段结束时，你可以消耗1点充能，以对每个和你所控制建筑相邻的敌方单位造成1点伤害。',
     deckSymbols: [DECK_SYMBOLS.DROPLET, DECK_SYMBOLS.SNOWFLAKE], // 
     spriteIndex: SPRITE_INDEX_FROST.CHAMPION_JARMUND,
     spriteAtlas: 'cards',
@@ -112,7 +109,6 @@ export const CHAMPION_UNITS_FROST: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['greater_frost_bolt'],
-    abilityText: '高阶冰霜飞弹：本单位2个区格以内每有一个友方建筑，则获得战力+1。',
     deckSymbols: [DECK_SYMBOLS.DROPLET], // 
     spriteIndex: SPRITE_INDEX_FROST.CHAMPION_NATIANA,
     spriteAtlas: 'cards',
@@ -137,7 +133,6 @@ export const COMMON_UNITS_FROST: UnitCard[] = [
     attackType: 'ranged',
     attackRange: 3,
     abilities: ['frost_bolt'],
-    abilityText: '冰霜飞弹：本单位相邻每有一个友方建筑，则获得战力+1。',
     deckSymbols: [DECK_SYMBOLS.DROPLET], // 
     spriteIndex: SPRITE_INDEX_FROST.COMMON_FROST_MAGE,
     spriteAtlas: 'cards',
@@ -155,7 +150,6 @@ export const COMMON_UNITS_FROST: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['trample'],
-    abilityText: '践踏：当本单位移动时，可以穿过士兵。在本单位移动之后，对每个被穿过的士兵造成1点伤害。',
     deckSymbols: [DECK_SYMBOLS.DROPLET], // 
     spriteIndex: SPRITE_INDEX_FROST.COMMON_BEAR_CAVALRY,
     spriteAtlas: 'cards',
@@ -173,7 +167,6 @@ export const COMMON_UNITS_FROST: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['frost_axe'],
-    abilityText: '冰霜战斧：在本单位移动之后，你可以将其充能，或者消耗其所有充能（至少1点）以将其放置到3个区格以内一个友方士兵的底层。当该士兵攻击时，=‼️。',
     deckSymbols: [DECK_SYMBOLS.SNOWFLAKE], // 
     spriteIndex: SPRITE_INDEX_FROST.COMMON_ICE_SMITH,
     spriteAtlas: 'cards',
@@ -191,7 +184,6 @@ export const COMMON_UNITS_FROST: UnitCard[] = [
     attackType: 'melee',
     attackRange: 1,
     abilities: ['living_gate', 'mobile_structure', 'slow'],
-    abilityText: '活体传送门：本卡牌视为传送门。\n活体结构：本卡牌视为建筑，但可以移动。\n缓慢：本单位必须减少移动1个区格。',
     deckSymbols: [DECK_SYMBOLS.SNOWFLAKE], // 
     spriteIndex: SPRITE_INDEX_FROST.COMMON_ICE_GOLEM,
     spriteAtlas: 'cards',

@@ -11,6 +11,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { CardPreview } from '../../../components/common/media/CardPreview';
+import { GameButton } from './GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { getCardDef, resolveCardName } from '../data/cards';
 import type { SmashUpCore } from '../domain/types';
@@ -70,7 +71,7 @@ export const CardRevealOverlay: React.FC<Props> = ({ pendingReveal, playerID, on
                             <div className="flex gap-3 snap-x snap-mandatory min-w-min justify-center">
                                 {cards.map((card) => {
                                     const def = getCardDef(card.defId);
-                                    const name = def ? resolveCardName(def, i18n.language) : card.defId;
+                                    const name = def ? resolveCardName(def, t) : card.defId;
                                     return (
                                         <div key={card.uid} className="flex flex-col items-center gap-1 snap-center shrink-0" data-testid={`reveal-card-${card.uid}`}>
                                             <div className="w-[120px] aspect-[0.714] rounded-lg overflow-hidden border-2 border-slate-300 shadow-md bg-slate-200">
@@ -107,13 +108,14 @@ export const CardRevealOverlay: React.FC<Props> = ({ pendingReveal, playerID, on
                     {/* 底部确认按钮 */}
                     <div className="bg-slate-100 p-3 text-center border-t border-slate-200">
                         {isViewer ? (
-                            <button
+                            <GameButton
+                                variant="primary"
+                                size="sm"
                                 onClick={onDismiss}
                                 data-testid="reveal-dismiss-btn"
-                                className="px-6 py-2 bg-slate-900 text-white rounded font-black text-sm uppercase tracking-widest hover:bg-black transition-all border-2 border-slate-900"
                             >
                                 {t('ui.confirm', { defaultValue: '确认' })}
-                            </button>
+                            </GameButton>
                         ) : (
                             <span className="text-xs text-slate-400 font-mono uppercase tracking-widest">
                                 {t('ui.prompt_wait', { defaultValue: '等待对方确认…' })}

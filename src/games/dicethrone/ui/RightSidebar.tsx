@@ -4,6 +4,8 @@ import { DiceActions, DiceTray, type DiceInteractionConfig } from './DiceTray';
 import { DiscardPile } from './DiscardPile';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
+import { ActiveModifierBadge } from './ActiveModifierBadge';
+import type { ActiveModifier } from '../hooks/useActiveModifiers';
 
 export const RightSidebar = ({
     dice,
@@ -31,6 +33,7 @@ export const RightSidebar = ({
     discardHighlighted,
     sellButtonVisible,
     diceInteractionConfig,
+    activeModifiers,
 }: {
     dice: Die[];
     rollCount: number;
@@ -59,6 +62,8 @@ export const RightSidebar = ({
     sellButtonVisible: boolean;
     /** 骰子交互模式配置 */
     diceInteractionConfig?: DiceInteractionConfig;
+    /** 已激活的攻击修正卡 */
+    activeModifiers?: ActiveModifier[];
 }) => {
     return (
         <div
@@ -66,7 +71,13 @@ export const RightSidebar = ({
             style={{ zIndex: UI_Z_INDEX.hud }}
         >
             <div className="flex-grow" />
-            <div className="w-full flex flex-col items-center gap-[0.75vw]">
+            <div className="relative w-full flex flex-col items-center gap-[0.75vw]">
+                {/* 攻击修正徽章：absolute 定位，不挤压骰子区域布局 */}
+                {activeModifiers && activeModifiers.length > 0 && (
+                    <div className="absolute -top-[2.2vw] left-1/2 -translate-x-1/2 z-10">
+                        <ActiveModifierBadge modifiers={activeModifiers} />
+                    </div>
+                )}
                 <DiceTray
                     dice={dice}
                     onToggleLock={(id) => {

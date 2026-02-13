@@ -23,21 +23,19 @@ import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomAc
 // ============================================================================
 
 /**
- * 压制 (Suppress)：投掷3骰，按剑骰面数造成伤害
+ * 压制 (Suppress)：投掷3骰，造成点数总和的伤害；若总数>14，施加脑震荡
  */
 function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
 
-    // 投掷3个骰子
-    let swordCount = 0;
+    // 投掷3个骰子，累加点数总和
+    let total = 0;
     for (let i = 0; i < 3; i++) {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        if (face === FACES.SWORD) {
-            swordCount++;
-        }
+        total += value;
         dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
@@ -54,18 +52,33 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
         } as BonusDieRolledEvent);
     }
 
-    // 造成剑骰面数量的伤害
-    if (swordCount > 0) {
+    // 造成点数总和的伤害
+    if (total > 0) {
         const target = state.players[targetId];
         const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(swordCount, targetHp) : 0;
+        const actualDamage = target ? Math.min(total, targetHp) : 0;
         ctx.damageDealt += actualDamage;
         events.push({
             type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: swordCount, actualDamage, sourceAbilityId },
+            payload: { targetId, amount: total, actualDamage, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as DamageDealtEvent);
+    }
+
+    // 若总数>14，施加脑震荡
+    if (total > 14) {
+        const opponent = state.players[targetId];
+        const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
+        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
+        const maxStacks = def?.stackLimit || 1;
+        const newTotal = Math.min(currentStacks + 1, maxStacks);
+        events.push({
+            type: 'STATUS_APPLIED',
+            payload: { targetId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as StatusAppliedEvent);
     }
 
     // 多骰展示
@@ -75,11 +88,64 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
 }
 
 /**
- * 压制 II (Suppress II)：投掷3骰，按剑骰面数造成伤害（与基础版相同）
+ * 压制 II (Suppress II) 力量变体：投掷3骰，造成点数总和伤害；若总数>9，施加脑震荡
  */
-function handleBarbarianSuppress2Roll(context: CustomActionContext): DiceThroneEvent[] {
-    // 压制 II 的力量变体与基础版机制相同
-    return handleBarbarianSuppressRoll(context);
+function handleBarbarianSuppress2Roll({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+    if (!random) return [];
+    const events: DiceThroneEvent[] = [];
+    const dice: BonusDieInfo[] = [];
+
+    let total = 0;
+    for (let i = 0; i < 3; i++) {
+        const value = random.d(6);
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        total += value;
+        dice.push({ index: i, value, face });
+        events.push({
+            type: 'BONUS_DIE_ROLLED',
+            payload: {
+                value,
+                face,
+                playerId: attackerId,
+                targetPlayerId: targetId,
+                effectKey: 'bonusDie.effect.barbarianSuppress',
+                effectParams: { value, index: i },
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + i,
+        } as BonusDieRolledEvent);
+    }
+
+    if (total > 0) {
+        const target = state.players[targetId];
+        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
+        const actualDamage = target ? Math.min(total, targetHp) : 0;
+        ctx.damageDealt += actualDamage;
+        events.push({
+            type: 'DAMAGE_DEALT',
+            payload: { targetId, amount: total, actualDamage, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DamageDealtEvent);
+    }
+
+    // 升级版阈值降低到 >9
+    if (total > 9) {
+        const opponent = state.players[targetId];
+        const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
+        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
+        const maxStacks = def?.stackLimit || 1;
+        const newTotal = Math.min(currentStacks + 1, maxStacks);
+        events.push({
+            type: 'STATUS_APPLIED',
+            payload: { targetId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as StatusAppliedEvent);
+    }
+
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp));
+    return events;
 }
 
 /**
@@ -93,21 +159,23 @@ function handleBarbarianThickSkin({ targetId, sourceAbilityId, state, timestamp 
     const faceCounts = getFaceCounts(getActiveDice(state));
     const heartCount = faceCounts[FACES.HEART] ?? 0;
 
-    if (heartCount > 0) {
-        events.push({
-            type: 'HEAL_APPLIED',
-            payload: { targetId, amount: heartCount, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as HealAppliedEvent);
-    }
+    // 治疗 2 × 心骰面数量
+    const healAmount = heartCount * 2;
+
+    // 始终生成治疗事件（即使 heartCount=0），确保 UI 播放防御技能反馈
+    events.push({
+        type: 'HEAL_APPLIED',
+        payload: { targetId, amount: healAmount, sourceAbilityId },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as HealAppliedEvent);
 
     return events;
 }
 
 /**
  * 厚皮 II (Thick Skin II)：根据心骰面数治疗 + 防止1个状态效果
- * 防御阶段投掷骰子后，每个心骰面治疗1点，并防止1个即将受到的状态效果
+ * 防御阶段投掷骰子后，恢复 2 × 心面数量 的生命值，并防止1个即将受到的状态效果
  */
 function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
@@ -116,24 +184,26 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
     const faceCounts = getFaceCounts(getActiveDice(state));
     const heartCount = faceCounts[FACES.HEART] ?? 0;
 
-    if (heartCount > 0) {
-        events.push({
-            type: 'HEAL_APPLIED',
-            payload: { targetId, amount: heartCount, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as HealAppliedEvent);
-    }
+    // 治疗 2 × 心骰面数量
+    const healAmount = heartCount * 2;
 
-    // 授予伤害护盾（用于防止状态效果）
-    // 注意：这里使用 grantDamageShield 的变体来实现"防止状态效果"
-    // 实际实现中可能需要专用的 statusShield 机制，这里暂用护盾模拟
+    // 始终生成治疗事件（即使 heartCount=0），确保 UI 播放防御技能反馈
     events.push({
-        type: 'DAMAGE_SHIELD_GRANTED',
-        payload: { targetId, value: 1, sourceId: sourceAbilityId, preventStatus: true },
+        type: 'HEAL_APPLIED',
+        payload: { targetId, amount: healAmount, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
-    } as DamageShieldGrantedEvent);
+    } as HealAppliedEvent);
+
+    // 若投出 2 个或以上心面，授予状态防护
+    if (heartCount >= 2) {
+        events.push({
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: { targetId, value: 1, sourceId: sourceAbilityId, preventStatus: true },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DamageShieldGrantedEvent);
+    }
 
     return events;
 }

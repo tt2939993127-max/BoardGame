@@ -55,6 +55,16 @@ function setupWithBreakpoint(ids: PlayerId[], random: RandomFn): MatchState<Smas
         }));
         core.bases[0] = { ...core.bases[0], minions: [...core.bases[0].minions, ...fakeMinions] };
     }
+    // 给每个玩家一张 special 行动卡，使 Me First! 响应窗口不会因无可响应内容而自动关闭
+    for (const pid of ids) {
+        const player = core.players[pid];
+        if (player) {
+            player.hand = [
+                ...player.hand,
+                { uid: `special-${pid}`, defId: 'ninja_hidden_ninja', type: 'action', owner: pid },
+            ];
+        }
+    }
     return { sys, core };
 }
 

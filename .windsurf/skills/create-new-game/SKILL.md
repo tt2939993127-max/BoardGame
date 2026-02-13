@@ -160,7 +160,7 @@ export const <GameId>Domain: DomainCore<<GameId>Core> = {
 ### 1.6 game.ts（引擎适配器占位）
 
 ```ts
-import { createGameAdapter, createDefaultSystems, createFlowSystem } from '../../engine';
+import { createGameAdapter, createBaseSystems, createFlowSystem } from '../../engine';
 import { <GameId>Domain } from './domain';
 import type { <GameId>Core } from './domain/types';
 
@@ -173,7 +173,7 @@ const flowHooks = {
 
 const systems = [
     createFlowSystem<<GameId>Core>({ hooks: flowHooks }),
-    ...createDefaultSystems<<GameId>Core>(),
+    ...createBaseSystems<<GameId>Core>(),
 ];
 
 export const <GameId> = createGameAdapter<<GameId>Core>({
@@ -236,13 +236,38 @@ npm run dev                   # 编译无报错（游戏可在大厅列表看到
 
 ---
 
-## 阶段 2：规则分析 → 类型与数据定义
+## 阶段 2：数据录入（规则文档 + 游戏数据 + 类型定义）
 
-**目标**：完成核心类型定义与静态数据配置，不写业务逻辑。
+**目标**：完成规则文档录入、静态游戏数据录入、核心类型定义，不写业务逻辑。需要新增引擎原语的部分可标记延后。
 
-### 2.1 阅读规则文档
+### 2.0 数据缺失处理规范（强制）
 
-阅读 `src/games/<gameId>/rule/` 下的规则文档，拆解为：
+> **核心原则：不猜测、不编造、不跳过。缺什么问什么，问清楚再录。**
+
+1. **规则文档不完整或有歧义时**：
+   - 列出具体缺失/歧义项（如"火球术的伤害是3还是3+骰子数？规则书第X页描述模糊"）
+   - 回问用户确认，不自行推断
+   - 若用户暂时无法确认，标记 `// TODO: 待确认 — <具体问题>`，不填默认值
+
+2. **数据量大、用户只提供了部分时**：
+   - 先录入已有数据，每批录入后输出 Markdown 核对表（实体名/关键属性/数量）
+   - 明确告知用户"已录入 X 条，还缺 Y 条"，列出缺失清单
+   - 用户补充后继续录入，不等全部数据到齐才开始（已有数据先落地）
+
+3. **素材数据核对（强制，遵循 AGENTS.md）**：
+   - 根据图片/规则书提取数据时，必须全口径核对、逻辑序列化
+   - 关键限定词显式核对（如"每回合一次"vs"每场一次"、"相邻"vs"同行"）
+   - 输出 Markdown 表格作为核对契约，用户确认后才算录入完成
+
+4. **需要新增引擎原语的数据**：
+   - 若某些游戏机制在 `src/engine/primitives/` 中没有现成实现
+   - 先在数据层标记 `// DEFERRED: 需新增引擎原语 <xxx>，暂用占位`
+   - 记录到阶段验收的"延后清单"中，在阶段3或阶段4补充实现
+   - 不因缺少原语而阻塞整个数据录入流程
+
+### 2.1 录入规则文档
+
+将规则书/规则图片内容结构化录入 `src/games/<gameId>/rule/` 下的 Markdown 文件，拆解为：
 
 1. **阶段流程**：回合结构、阶段顺序、阶段间切换条件
 2. **核心实体**：卡牌/单位/骰子/资源的类型与属性
@@ -250,44 +275,102 @@ npm run dev                   # 编译无报错（游戏可在大厅列表看到
 4. **结算规则**：积分/伤害/胜利条件
 5. **特殊机制**：如 faction 选择、deck building、技能触发
 
-### 2.2 完善 domain/types.ts
+**规则文档质量要求**：
+- 每条规则必须可追溯到规则书原文位置（页码/章节）
+- 数值必须精确（"3点伤害"而非"一些伤害"）
+- 条件触发必须完整（触发时机 + 触发条件 + 效果 + 持续时间）
 
-根据规则分析，补充：
-- 完整的 `PlayerState`（手牌/牌库/弃牌/资源/状态效果等）
-  - **状态效果建议用 `TagContainer` 表达**（`engine/primitives/tags.ts`），避免散落的 `statusEffects: Record<string, number>` / `tempAbilities: string[]`
-- 完整的 `<GameId>Core`（玩家状态/回合信息/棋盘/选择状态等）
-- 所有命令类型（`XX_COMMANDS` 常量对象）
-- 所有事件类型（`XX_EVENTS` 常量对象）
-- 卡牌/单位等静态数据类型
+### 2.2 录入游戏静态数据
 
-### 2.3 创建数据配置
+根据规则文档，将所有实体数据录入代码。**不只是名称+描述，必须录入影响游戏机制的全部必要信息**。
 
-根据游戏复杂度选择结构：
+#### "必要信息"判断原则（强制）
 
-**简单游戏**（如 tictactoe）：直接在 domain 中定义。
+> 未来的游戏机制不可预知，不预设具体字段清单。用以下原则判断一条信息是否必须录入：
 
-**中等游戏**（如 smashup）：
+1. **规则判定依赖**：如果 `validate()` / `execute()` / `reduce()` / `isGameOver()` 需要读取该信息来做决策，则必须录入。
+   - 例：攻击力、生命值、费用、射程、触发条件、效果数值、冷却回合、使用限制
+2. **状态区分依赖**：如果该信息用于区分不同实体的行为差异，则必须录入。
+   - 例：近战vs远程、一次性vs持续、主动vs被动、阵营归属
+3. **UI 渲染依赖**：如果界面需要该信息来正确展示实体，则必须录入。
+   - 例：精灵图索引/图集坐标、素材文件引用、牌背符号、中英文名称
+4. **引用关系依赖**：如果该信息建立实体间的引用链（A拥有B、A触发B），则必须录入。
+   - 例：技能ID列表、效果引用、目标选择规则
+5. **数量/分布依赖**：如果该信息影响游戏的随机性或资源分配，则必须录入。
+   - 例：牌组中的数量、骰面分布、初始资源
+
+**反面判断——可以不录入的**：
+- 纯风味文本（不影响任何规则判定的背景故事）
+- 可从其他已录入数据推导出的冗余信息
+- 仅在开发调试时使用、不进入生产的临时标记
+
+#### 录入完整性自检（逐字段，强制）
+
+> **核心问题：素材/规则书上的每一条信息，是否都已在代码中有对应字段？**
+> AI 容易漏录"不好结构化"的信息（如图标表示的触发条件、符号表示的骰面组合）。必须逐项核对，不能只录"好录的"。
+
+每录入一个实体类型，执行以下自检：
+
+1. **素材全信息提取**：将素材（卡牌图片/规则书条目）上的所有可见信息逐条列出，包括：
+   - 文字信息（名称、描述、数值）
+   - 图标/符号信息（骰面图标、元素符号、阵营标记）→ 必须转化为结构化数据
+   - 位置/布局隐含信息（卡牌分区暗示的阶段归属、颜色暗示的稀有度）
+2. **逐条比对**：将提取的信息列表与已定义的 TypeScript 字段逐条比对，确认每条信息都有对应字段承接
+3. **缺字段立即补**：发现素材上有信息但代码中无对应字段 → 补字段，不跳过
+4. **引用完整性**：该实体引用的其他实体 ID 是否都已定义？（断链 → 补或标记 TODO）
+
+**典型漏录场景（警示）**：
+- ❌ 技能卡只录了名称+效果描述，漏了触发骰面组合 → `validate()` 无法判断触发条件
+- ❌ 单位卡只录了攻击力+生命值，漏了移动范围 → 棋盘交互无法校验合法移动
+- ❌ 卡牌只录了效果文本，漏了费用/冷却 → 资源消耗逻辑无数据源
+
+#### 目录结构选择
+
+按游戏复杂度选择合适的数据组织方式：
+
+**简单游戏**：直接在 domain 中定义。
+
+**中等游戏**：
 ```
 data/
-  cards.ts           # 卡牌定义与查询函数
-  factions/          # 按 faction 组织数据
-    aliens.ts
-    dinosaurs.ts
-    ...
+  cards.ts           # 实体定义与查询函数
+  factions/          # 按分组组织数据
 ```
 
-**复杂游戏**（如 summonerwars）：
+**复杂游戏**：
 ```
-config/
-  board.ts           # 棋盘配置
-  dice.ts            # 骰子配置
-  heroes.ts          # 英雄/召唤师配置
-  factions/          # 阵营数据
-    necromancer.ts
-    ...
+config/ 或 heroes/   # 按实体大类拆分
+  factions/          # 按阵营/角色进一步拆分
 ```
 
-### 2.4 检查系统需求
+具体目录名和文件拆分方式由游戏的实体结构决定，不预设。
+
+#### 录入流程
+
+1. 按实体类别分批录入（如先录基础实体，再录依赖它们的复合实体）
+2. 每批录入后输出核对表，**核对表的列必须覆盖该实体类型的所有必要字段，不只是名称**
+   - 列的选择依据：上述"必要信息判断原则"中命中的字段
+   - 数值字段直接列出数值，引用字段列出引用目标，布尔/枚举字段列出取值
+   - 最后一列标注录入状态（✅ 已录入 / ❌ 缺数据 / ⚠️ 待确认）
+3. 用户确认核对表后，该批数据视为"已验收"
+4. 所有稳定 ID 录入 `domain/ids.ts`（`as const`），禁止字符串字面量
+5. **全量数据确认（阶段门禁）**：所有批次录入完成后，输出一份汇总清单，包含：
+   - 各实体类别的数量统计（如"单位 24 张、技能 18 个、事件 12 种"）
+   - 仍有 `TODO: 待确认` 的条目列表
+   - 标记 `DEFERRED` 的引擎原语需求列表
+   - 用户明确回复"确认"后才可进入阶段 3，否则继续补充
+
+### 2.3 完善类型定义
+
+根据录入的数据，补充 domain/types.ts（或拆分文件）：
+- 完整的 `PlayerState`（根据游戏需要的状态字段）
+  - **状态效果建议用 `TagContainer` 表达**（`engine/primitives/tags.ts`），避免散落的 `statusEffects: Record<string, number>` / `tempAbilities: string[]`
+- 完整的 `<GameId>Core`（玩家状态/回合信息/游戏特有状态等）
+- 所有命令类型（`XX_COMMANDS` 常量对象）
+- 所有事件类型（`XX_EVENTS` 常量对象）
+- 实体定义的 TypeScript 接口
+
+### 2.4 检查系统需求与引擎原语选型
 
 对照规则，在引擎层检索可复用实现：
 - 骰子 → `src/engine/primitives/dice.ts`
@@ -304,13 +387,17 @@ config/
 **强制要求（新游戏）**：
 - 禁止自行实现 statusEffects / tempAbilities / DamageModifier / PowerModifierFn / abilityRegistry；必须复用上述 primitives（详见 `AGENTS.md` 与 `docs/ai-rules/engine-systems.md`）。
 
-**若缺口存在**：优先补充 `src/engine/primitives/`（通用工具函数）；领域语义放在游戏层（`src/games/<gameId>/domain/`）。
+**若缺口存在**：优先补充 `src/engine/primitives/`（通用工具函数）；领域语义放在游戏层（`src/games/<gameId>/domain/`）。若工作量大，记入延后清单，在后续阶段补充。
 
 ### 验收
 
+- 规则文档完整录入 `rule/*.md`，覆盖所有阶段/实体/操作/结算/特殊机制
+- 静态数据全部录入代码，核对表已获用户确认
 - types.ts 中所有类型能覆盖规则文档描述的实体
+- ids.ts 常量表覆盖所有稳定 ID
 - 数据文件可正常导入，无循环依赖
 - 冒烟测试仍通过
+- **延后清单**（若有）：列出需要新增引擎原语的项目及预计补充阶段
 
 ---
 
@@ -488,7 +575,7 @@ const systems = [
     createCheatSystem<Core>(cheatModifier),
 
     // 方式 B：默认集合（smashup 风格，简洁）
-    // ...createDefaultSystems<Core>(),
+    // ...createBaseSystems<Core>(),
     // createCheatSystem<Core>(cheatModifier),
 ];
 
@@ -731,8 +818,8 @@ npm run dev                         # 大厅可见、可创建对局、可完整
 
 ### 系统组装最小提醒
 
-- `createDefaultSystems()` 默认包含：EventStream + Log + ActionLog + Undo + Interaction + Rematch + ResponseWindow + Tutorial
-- `createDefaultSystems()` **不包含** FlowSystem / CheatSystem：需要自行追加
+- `createBaseSystems()` 默认包含：EventStream + Log + ActionLog + Undo + Interaction + Rematch + ResponseWindow + Tutorial
+- `createBaseSystems()` **不包含** FlowSystem / CheatSystem：需要自行追加
 - `commandTypes` **只列业务命令**：系统命令由 adapter 自动合并
 - ResponseWindowSystem **必须配置注入**：`allowedCommands` / `responseAdvanceEvents`（禁止改引擎文件）
 

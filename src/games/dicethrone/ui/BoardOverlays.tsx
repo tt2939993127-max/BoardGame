@@ -19,7 +19,7 @@ import { CardSpotlightOverlay } from './CardSpotlightOverlay';
 import { TokenResponseModal } from './TokenResponseModal';
 import { PurifyModal } from './PurifyModal';
 import { InteractionOverlay } from './InteractionOverlay';
-import { EndgameOverlay } from '../../../components/game/EndgameOverlay';
+import { EndgameOverlay } from '../../../components/game/framework/widgets/EndgameOverlay';
 import type { StatusAtlases } from './statusEffects';
 import type { AbilityCard, DieFace, HeroState, PendingInteraction, TokenResponsePhase, PendingBonusDiceSettlement, CharacterId, TurnPhase } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -27,6 +27,8 @@ import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
 import type { TokenDef } from '../domain/tokenTypes';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
+import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import { getSlotAbilityId, getUpgradeCardPreviewRef } from './AbilityOverlays';
 
 export interface BoardOverlaysProps {
     // 放大预览
@@ -35,6 +37,10 @@ export interface BoardOverlaysProps {
     magnifiedCard: AbilityCard | null;
     magnifiedCards: AbilityCard[];
     onCloseMagnify: () => void;
+    /** 当前视角玩家的技能等级（用于放大预览叠加升级卡） */
+    abilityLevels?: Record<string, number>;
+    /** 当前视角玩家的角色 ID */
+    viewCharacterId?: string;
 
     // 弹窗状态
     isConfirmingSkip: boolean;
@@ -71,6 +77,8 @@ export interface BoardOverlaysProps {
         effectKey?: string;
         effectParams?: Record<string, string | number>;
         show: boolean;
+        /** 骰子所属角色（用于图集选择） */
+        characterId?: string;
     };
     onBonusDieClose: () => void;
 
@@ -123,10 +131,48 @@ export interface BoardOverlaysProps {
     hostPlayerId: PlayerId;
 }
 
+/**
+ * 放大预览时叠加升级卡图层
+ * 复用 AbilityOverlays 的槽位布局和升级卡查找逻辑
+ */
+const MagnifyUpgradeOverlay: React.FC<{
+    characterId: string;
+    abilityLevels: Record<string, number>;
+    locale: string;
+}> = ({ characterId, abilityLevels, locale }) => {
+    return (
+        <div className="absolute inset-0 pointer-events-none">
+            {DEFAULT_ABILITY_SLOT_LAYOUT.map((slot) => {
+                if (slot.id === 'ultimate') return null;
+                const baseAbilityId = getSlotAbilityId(characterId, slot.id);
+                const level = baseAbilityId ? (abilityLevels[baseAbilityId] ?? 1) : 1;
+                if (!baseAbilityId || level <= 1) return null;
+                const previewRef = getUpgradeCardPreviewRef(characterId, baseAbilityId, level);
+                if (!previewRef) return null;
+                return (
+                    <div
+                        key={slot.id}
+                        className="absolute"
+                        style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
+                    >
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <CardPreview
+                                previewRef={previewRef}
+                                locale={locale}
+                                className="h-full aspect-[0.61] rounded-lg"
+                            />
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     const { t } = useTranslation('game-dicethrone');
 
-    const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('monk-player-board'));
+    const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
     const magnifyContainerClassName = `
         group/modal
@@ -168,12 +214,22 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                                 locale={props.locale}
                             />
                         ) : (
-                            <OptimizedImage
-                                src={getLocalizedAssetPath(props.magnifiedImage ?? '', props.locale)}
-                                fallbackSrc={props.magnifiedImage ?? ''}
-                                className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
-                                alt="Preview"
-                            />
+                            <div className="relative">
+                                <OptimizedImage
+                                    src={getLocalizedAssetPath(props.magnifiedImage ?? '', props.locale)}
+                                    fallbackSrc={props.magnifiedImage ?? ''}
+                                    className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
+                                    alt="Preview"
+                                />
+                                {/* 玩家面板放大时叠加升级卡预览 */}
+                                {isPlayerBoardPreview && props.viewCharacterId && props.abilityLevels && (
+                                    <MagnifyUpgradeOverlay
+                                        characterId={props.viewCharacterId}
+                                        abilityLevels={props.abilityLevels}
+                                        locale={props.locale}
+                                    />
+                                )}
+                            </div>
                         )}
                     </MagnifyOverlay>
                 )}
@@ -282,6 +338,11 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         rerollCostAmount={props.pendingBonusDiceSettlement?.rerollCostAmount}
                         rerollCostTokenId={props.pendingBonusDiceSettlement?.rerollCostTokenId}
                         displayOnly={props.pendingBonusDiceSettlement?.displayOnly}
+                        characterId={
+                            props.pendingBonusDiceSettlement
+                                ? props.selectedCharacters[props.pendingBonusDiceSettlement.attackerId]
+                                : props.bonusDie.characterId
+                        }
                     />
                 )}
 

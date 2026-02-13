@@ -97,7 +97,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 
 项目采用**两阶段预加载**策略，防止进入对局时出现白屏/闪烁：
 
-- **关键图片（critical）**：阻塞渲染，加载完成前显示 LoadingScreen，5 秒超时后放行
+- **关键图片（critical）**：阻塞渲染，加载完成前显示 LoadingScreen，10 秒超时后放行
 - **暖图片（warm）**：后台异步加载，不阻塞对局渲染
 
 门禁落在 `MatchRoom`/`LocalMatchRoom` 入口层，各游戏通过 `criticalImageResolver.ts` 提供动态解析。
@@ -109,6 +109,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 3. **按需加载的图片放 warm**：未选角色/派系的资源、非首屏展示的图集。
 4. **路径格式与图片引用一致**：相对于 `/assets/`，不含 `compressed/`（预加载 API 内部自动处理）。
 5. **解析器必须按游戏阶段动态返回**：选角/选派系阶段 vs 游戏进行阶段，关键资源不同。
+6. **phaseKey 必须稳定**：`CriticalImageGate` 依据 `phaseKey` 判断是否重新预加载，未变化时不会重复触发。
 
 ### 解析器模板
 
@@ -121,7 +122,11 @@ export const <gameId>CriticalImageResolver: CriticalImageResolver = (
     // 1. 无状态时：预加载选择界面所需资源
     // 2. 选择阶段：所有可选项的预览图为 critical
     // 3. 游戏进行中：已选项的完整资源为 critical，未选项放 warm
-    return { critical: [...], warm: [...] };
+    return {
+        critical: [...],
+        warm: [...],
+        phaseKey: 'setup',
+    };
 };
 ```
 

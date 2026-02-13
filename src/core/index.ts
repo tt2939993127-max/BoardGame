@@ -17,6 +17,7 @@ export {
     // 两阶段预加载 API
     preloadCriticalImages,
     preloadWarmImages,
+    isImagePreloaded,
     // 便捷工具 API
     assetsPath,
     getOptimizedImageUrls,

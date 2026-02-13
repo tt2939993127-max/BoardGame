@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchChatMessage } from '../../services/matchSocket';
-import { getLatestIncomingMessage, isSelfChatMessage, trimChatMessages } from '../game/GameHUD';
+import { getLatestIncomingMessage, isSelfChatMessage, trimChatMessages } from '../game/framework/widgets/GameHUD';
 
 const buildMessage = (override: Partial<MatchChatMessage> = {}): MatchChatMessage => ({
     id: 'msg-1',

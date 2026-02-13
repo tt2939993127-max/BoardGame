@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import type { HeroState } from '../types';
 import { RESOURCE_IDS } from '../domain/resources';
+import type { TokenDef } from '../domain/tokenTypes';
 import { ShakeContainer } from '../../../components/common/animations/ShakeContainer';
 import {
     HitStopContainer,
+    DamageFlash,
     type HitStopConfig,
 } from '../../../components/common/animations';
 import { StatusEffectsContainer, TokensContainer, type StatusAtlases } from './statusEffects';
@@ -28,6 +30,9 @@ export const OpponentHeader = ({
     statusIconAtlas,
     locale,
     containerRef,
+    tokenDefinitions,
+    damageFlashActive,
+    damageFlashDamage,
 }: {
     opponent: HeroState;
     opponentName: string;
@@ -44,6 +49,12 @@ export const OpponentHeader = ({
     locale?: string;
     /** 对手悬浮窗容器引用（用于卡牌特写动画起点） */
     containerRef?: RefObject<HTMLDivElement | null>;
+    /** Token 定义列表（用于显示堆叠上限） */
+    tokenDefinitions?: TokenDef[];
+    /** 受击 DamageFlash 是否激活 */
+    damageFlashActive?: boolean;
+    /** 受击伤害值（用于 DamageFlash 强度） */
+    damageFlashDamage?: number;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const heroLabel = t(`hero.${opponent.characterId}`);
@@ -122,6 +133,8 @@ export const OpponentHeader = ({
                                         maxPerRow={10}
                                         locale={locale}
                                         atlas={statusIconAtlas}
+                                        tokenDefinitions={tokenDefinitions}
+                                        tokenStackLimits={opponent.tokenStackLimits}
                                     />
                                     <StatusEffectsContainer
                                         effects={opponent.statusEffects || {}}
@@ -135,6 +148,13 @@ export const OpponentHeader = ({
 
                         </div>
                     </HitStopContainer>
+                    {/* 受击时空裂隙 + 红脉冲 overlay */}
+                    <DamageFlash
+                        active={!!damageFlashActive}
+                        damage={damageFlashDamage ?? 1}
+                        intensity={(damageFlashDamage ?? 0) >= 5 ? 'strong' : 'normal'}
+                        showNumber={false}
+                    />
                 </ShakeContainer>
             </div>
         </div>

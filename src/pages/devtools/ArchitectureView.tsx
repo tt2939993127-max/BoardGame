@@ -12,7 +12,9 @@ import {
   SVG_W, SVG_H, nodeRect, bandRect, edgePath,
   TRUNK_EDGE_IDS, STORY_EDGE_IDS, storyEdgeColor,
   PRIMITIVE_ITEMS, PIPELINE_STEPS, SYSTEM_ITEMS,
-  TEST_FLOW_STEPS, E2E_TEST_STEPS, INTEGRITY_TEST_STEPS, USER_STORY_STEPS,
+  TEST_FLOW_STEPS, E2E_TEST_STEPS, INTEGRITY_TEST_STEPS,
+  BEHAVIOR_AUDIT_STEPS, INTERACTION_AUDIT_STEPS,
+  USER_STORY_STEPS,
   C4_CONTEXT, C4_CONTEXT_LINKS, CONTAINER_LINKS, LAYER_SUMMARIES,
   OVERVIEW_LAYERS, OVERVIEW_FLOW, OVERVIEW_CROSS_LINKS,
 } from './arch/archData';
@@ -321,7 +323,7 @@ const ArchitectureView: React.FC = () => {
         <p className="text-xs text-slate-500 mb-2">点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 100px)' }}>
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
-          <text x={padX} y={padY - 8} fontSize={12} fontWeight={700} fill="#3fb950">默认启用（8 个）— createDefaultSystems() 自动包含</text>
+          <text x={padX} y={padY - 8} fontSize={12} fontWeight={700} fill="#3fb950">默认启用（8 个）— createBaseSystems() 自动包含</text>
           {defaults.map((item, i) => renderRow(item, i, padY + i * (rowH + 4), false))}
           {(() => {
             const optY = padY + defaults.length * (rowH + 4) + 30;
@@ -352,33 +354,38 @@ const ArchitectureView: React.FC = () => {
   }
 
   // ========================================================================
-  // L3: 测试框架 — 三轨并列（Vitest + 实体完整性 + E2E）
+  // L3: 测试框架 — 五轨并列
   // ========================================================================
   if (viewMode === 'sub-testing') {
     const vitestRec = TEST_FLOW_STEPS.filter(s => s.phase === 'record');
     const vitestVer = TEST_FLOW_STEPS.filter(s => s.phase === 'verify');
     const e2eSteps = E2E_TEST_STEPS;
     const integritySteps = INTEGRITY_TEST_STEPS;
-    const stepH = 64, stepW = 280, gap = 12;
-    const trackGap = 30;
-    const maxSteps = Math.max(vitestRec.length + vitestVer.length, integritySteps.length, e2eSteps.length);
-    const sx = 30, sy = 90;
-    const trackW = stepW + 20;
-    const vw = sx + trackW * 3 + trackGap * 2 + 30;
-    const vh = sy + maxSteps * (stepH + gap) + 120;
+    const behaviorSteps = BEHAVIOR_AUDIT_STEPS;
+    const interactionSteps = INTERACTION_AUDIT_STEPS;
+    const stepH = 60, stepW = 220, gap = 10;
+    const trackGap = 14;
+    const allVitest = [...vitestRec, ...vitestVer];
+    const maxSteps = Math.max(allVitest.length, integritySteps.length, behaviorSteps.length, interactionSteps.length, e2eSteps.length);
+    const sx = 16, sy = 90;
+    const trackW = stepW + 12;
+    const vw = sx + trackW * 5 + trackGap * 4 + 16;
+    const vh = sy + maxSteps * (stepH + gap) + 140;
     const vitestColor = '#3fb950';
     const integrityColor = '#bc8cff';
+    const behaviorColor = '#f0883e';
+    const interactionColor = '#f778ba';
     const e2eColor = '#58a6ff';
 
     const renderStepBox = (emoji: string, label: string, desc: string, example: string | undefined,
       i: number, x: number, y: number, color: string, circled: string, delay: number, total: number) => (
       <g key={`${label}-${i}`} style={{ animation: `archFadeIn 0.4s ease ${delay}s both` }}>
-        <rect x={x} y={y} width={stepW} height={stepH} rx={10}
+        <rect x={x} y={y} width={stepW} height={stepH} rx={8}
           fill="#161b22" stroke={color} strokeWidth={1.2} />
-        <text x={x + 14} y={y + 20} fontSize={16} fill={color}>{emoji}</text>
-        <text x={x + 38} y={y + 20} fontSize={11} fontWeight={700} fill={color}>{circled} {label}</text>
-        <text x={x + 38} y={y + 38} fontSize={9} fill="#8b949e">{desc}</text>
-        {example && <text x={x + 38} y={y + 52} fontSize={7.5} fill="#e3b341">{example}</text>}
+        <text x={x + 10} y={y + 17} fontSize={13} fill={color}>{emoji}</text>
+        <text x={x + 30} y={y + 17} fontSize={9.5} fontWeight={700} fill={color}>{circled} {label}</text>
+        <text x={x + 10} y={y + 33} fontSize={8} fill="#8b949e">{desc.length > 32 ? desc.slice(0, 32) + '…' : desc}</text>
+        {example && <text x={x + 10} y={y + 47} fontSize={7} fill="#e3b341">{example.length > 38 ? example.slice(0, 38) + '…' : example}</text>}
         {i < total - 1 && (
           <line x1={x + stepW / 2} y1={y + stepH} x2={x + stepW / 2} y2={y + stepH + gap}
             stroke={color} strokeWidth={2}
@@ -387,85 +394,84 @@ const ArchitectureView: React.FC = () => {
       </g>
     );
 
-    // Vitest: 先录制 4 步，再验证 4 步，中间有分隔
-    const allVitest = [...vitestRec, ...vitestVer];
     const circledNums = '\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467';
+    const trackX = (idx: number) => sx + idx * (trackW + trackGap);
 
-    const track2X = sx + trackW + trackGap;
-    const track3X = sx + (trackW + trackGap) * 2;
+    const renderTrackTitle = (x: number, label: string, color: string, delay: number) => (
+      <g style={{ animation: `archFadeIn 0.3s ease ${delay}s both` }}>
+        <rect x={x - 4} y={sy - 42} width={trackW} height={28} rx={6}
+          fill={color} fillOpacity={0.1} stroke={color} strokeOpacity={0.3} strokeWidth={1} />
+        <text x={x + trackW / 2 - 4} y={sy - 22} textAnchor="middle" fontSize={10} fontWeight={700} fill={color}>
+          {label}
+        </text>
+      </g>
+    );
 
     return (
       <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
         <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
-        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 — 三轨并列</h2>
-        <p className="text-xs text-slate-500 mb-2">左: Vitest 命令驱动 · 中: 实体链完整性 · 右: Playwright E2E · 点击任意位置返回</p>
+        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 — 五轨并列</h2>
+        <p className="text-xs text-slate-500 mb-2">命令驱动 · 实体完整性 · 行为审计 · 交互完整性 · E2E截图 · 点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
           <style>{`
             @keyframes archFadeIn { from { opacity: 0 } }
             @keyframes archDraw { to { stroke-dashoffset: 0 } }
           `}</style>
 
-          {/* 左列标题: Vitest 命令驱动 */}
-          <g style={{ animation: 'archFadeIn 0.3s ease both' }}>
-            <rect x={sx - 4} y={sy - 42} width={trackW} height={28} rx={6}
-              fill={vitestColor} fillOpacity={0.1} stroke={vitestColor} strokeOpacity={0.3} strokeWidth={1} />
-            <text x={sx + trackW / 2 - 4} y={sy - 22} textAnchor="middle" fontSize={12} fontWeight={700} fill={vitestColor}>
-              🧪 Vitest 命令驱动测试
-            </text>
-          </g>
+          {/* 五列标题 */}
+          {renderTrackTitle(trackX(0), '🧪 命令驱动测试', vitestColor, 0)}
+          {renderTrackTitle(trackX(1), '🔗 实体链完整性', integrityColor, 0.05)}
+          {renderTrackTitle(trackX(2), '🔍 行为审计', behaviorColor, 0.1)}
+          {renderTrackTitle(trackX(3), '🎯 交互完整性', interactionColor, 0.15)}
+          {renderTrackTitle(trackX(4), '🌐 E2E 截图', e2eColor, 0.2)}
 
-          {/* 中列标题: 实体链完整性 */}
-          <g style={{ animation: 'archFadeIn 0.3s ease 0.1s both' }}>
-            <rect x={track2X - 4} y={sy - 42} width={trackW} height={28} rx={6}
-              fill={integrityColor} fillOpacity={0.1} stroke={integrityColor} strokeOpacity={0.3} strokeWidth={1} />
-            <text x={track2X + trackW / 2 - 4} y={sy - 22} textAnchor="middle" fontSize={12} fontWeight={700} fill={integrityColor}>
-              🔗 实体链完整性测试
-            </text>
-          </g>
-
-          {/* 右列标题: Playwright E2E */}
-          <g style={{ animation: 'archFadeIn 0.3s ease 0.2s both' }}>
-            <rect x={track3X - 4} y={sy - 42} width={trackW} height={28} rx={6}
-              fill={e2eColor} fillOpacity={0.1} stroke={e2eColor} strokeOpacity={0.3} strokeWidth={1} />
-            <text x={track3X + trackW / 2 - 4} y={sy - 22} textAnchor="middle" fontSize={12} fontWeight={700} fill={e2eColor}>
-              🌐 Playwright E2E 截图
-            </text>
-          </g>
-
-          {/* 左列: Vitest 步骤 */}
+          {/* 第1列: Vitest 步骤 */}
           {allVitest.map((step, i) => {
             const y = sy + i * (stepH + gap);
-            // 录制→验证分界线
             const isBoundary = i === vitestRec.length;
             return (
               <React.Fragment key={`vt${i}`}>
                 {isBoundary && (
                   <g style={{ animation: `archFadeIn 0.3s ease ${i * 0.08 + 0.1}s both` }}>
-                    <line x1={sx} y1={y - gap / 2} x2={sx + stepW} y2={y - gap / 2}
+                    <line x1={trackX(0)} y1={y - gap / 2} x2={trackX(0) + stepW} y2={y - gap / 2}
                       stroke={vitestColor} strokeWidth={1} strokeDasharray="4,3" strokeOpacity={0.4} />
-                    <text x={sx + stepW / 2} y={y - gap / 2 - 4} textAnchor="middle" fontSize={8} fill={vitestColor} opacity={0.6}>
+                    <text x={trackX(0) + stepW / 2} y={y - gap / 2 - 4} textAnchor="middle" fontSize={7} fill={vitestColor} opacity={0.6}>
                       ── 代码修改后触发 ──
                     </text>
                   </g>
                 )}
                 {renderStepBox(step.emoji, step.label, step.desc, step.example,
-                  i, sx, y, vitestColor, circledNums[i] ?? '', i * 0.08, allVitest.length)}
+                  i, trackX(0), y, vitestColor, circledNums[i] ?? '', i * 0.08, allVitest.length)}
               </React.Fragment>
             );
           })}
 
-          {/* 中列: 实体链完整性步骤 */}
+          {/* 第2列: 实体链完整性 */}
           {integritySteps.map((step, i) => {
             const y = sy + i * (stepH + gap);
             return renderStepBox(step.emoji, step.label, step.desc, step.example,
-              i, track2X, y, integrityColor, circledNums[i] ?? '', 0.1 + i * 0.08, integritySteps.length);
+              i, trackX(1), y, integrityColor, circledNums[i] ?? '', 0.05 + i * 0.08, integritySteps.length);
           })}
 
-          {/* 右列: E2E 步骤 */}
+          {/* 第3列: 行为审计 */}
+          {behaviorSteps.map((step, i) => {
+            const y = sy + i * (stepH + gap);
+            return renderStepBox(step.emoji, step.label, step.desc, step.example,
+              i, trackX(2), y, behaviorColor, circledNums[i] ?? '', 0.1 + i * 0.08, behaviorSteps.length);
+          })}
+
+          {/* 第4列: 交互完整性 */}
+          {interactionSteps.map((step, i) => {
+            const y = sy + i * (stepH + gap);
+            return renderStepBox(step.emoji, step.label, step.desc, step.example,
+              i, trackX(3), y, interactionColor, circledNums[i] ?? '', 0.15 + i * 0.08, interactionSteps.length);
+          })}
+
+          {/* 第5列: E2E 步骤 */}
           {e2eSteps.map((step, i) => {
             const y = sy + i * (stepH + gap);
             return renderStepBox(step.emoji, step.label, step.desc, step.example,
-              i, track3X, y, e2eColor, circledNums[i] ?? '', 0.2 + i * 0.08, e2eSteps.length);
+              i, trackX(4), y, e2eColor, circledNums[i] ?? '', 0.2 + i * 0.08, e2eSteps.length);
           })}
 
           {/* 底部总结 */}
@@ -473,16 +479,22 @@ const ArchitectureView: React.FC = () => {
             const bottomY = sy + maxSteps * (stepH + gap) + 10;
             return (
               <g style={{ animation: 'archFadeIn 0.5s ease 0.8s both' }}>
-                <rect x={sx - 4} y={bottomY} width={vw - sx * 2 + 8} height={68} rx={8}
+                <rect x={sx - 4} y={bottomY} width={vw - sx * 2 + 8} height={104} rx={8}
                   fill="#161b22" stroke="#30363d" strokeWidth={1} />
-                <text x={sx + 10} y={bottomY + 18} fontSize={10} fill={vitestColor} fontWeight={600}>
-                  🧪 Vitest: 纯函数引擎 + 确定性管线 → 命令回放即可验证规则正确性
+                <text x={sx + 10} y={bottomY + 18} fontSize={9} fill={vitestColor} fontWeight={600}>
+                  🧪 命令驱动: 纯函数引擎 + 确定性管线 → 命令回放验证规则正确性
                 </text>
-                <text x={sx + 10} y={bottomY + 36} fontSize={10} fill={integrityColor} fontWeight={600}>
-                  🔗 实体完整性: 注册表 + 引用链 + 触发路径 + 效果契约 → 确保实体交互无断链
+                <text x={sx + 10} y={bottomY + 36} fontSize={9} fill={integrityColor} fontWeight={600}>
+                  🔗 实体完整性: 注册表 + 引用链 + 触发路径 + 效果契约 → 确保数据定义无断链
                 </text>
-                <text x={sx + 10} y={bottomY + 54} fontSize={10} fill={e2eColor} fontWeight={600}>
-                  🌐 Playwright: 无头浏览器 + 截图对比 → 防止 UI 视觉回归
+                <text x={sx + 10} y={bottomY + 54} fontSize={9} fill={behaviorColor} fontWeight={600}>
+                  🔍 行为审计: 描述关键词→代码行为 + ongoing/标签/自毁/条件 → 确保描述与实现一致
+                </text>
+                <text x={sx + 10} y={bottomY + 72} fontSize={9} fill={interactionColor} fontWeight={600}>
+                  🎯 交互完整性: Mode A(UI状态机payload) + Mode B(Handler注册链) → 确保交互链无断裂
+                </text>
+                <text x={sx + 10} y={bottomY + 90} fontSize={9} fill={e2eColor} fontWeight={600}>
+                  🌐 E2E截图: 无头浏览器 + 像素对比 → 防止 UI 视觉回归
                 </text>
               </g>
             );
@@ -507,9 +519,9 @@ const ArchitectureView: React.FC = () => {
       <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
         <div className="mb-3 flex items-center gap-3">
           <button className="text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
-          <h1 className="text-lg font-bold text-white">📖 用户故事 — 如何用框架开发一个游戏</h1>
+          <h1 className="text-lg font-bold text-white">📖 用户故事 — 创建新游戏的 6 个阶段</h1>
         </div>
-        <p className="text-xs text-slate-500 mb-2">以骰子王座为例，展示从零开始到上线的 7 步 · 点击任意位置返回</p>
+        <p className="text-xs text-slate-500 mb-2">基于 create-new-game 技能，数据录入合并为一个阶段 · 每阶段独立可验证 · 点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
           <style>{`
             @keyframes archFadeIn { from { opacity:0 } }
@@ -524,7 +536,7 @@ const ArchitectureView: React.FC = () => {
 
           {/* 标题装饰 */}
           <text x={sx} y={sy - 30} fontSize={11} fontWeight={600} fill="#e3b341">
-            🎲 示例: 骰子王座 — 2人对战·6英雄·骰子+卡牌+技能
+            🎲 工作流: 骨架 → 数据录入(规则+实体+类型) → 领域内核 → 系统组装 → UI交互 → 收尾上线
           </text>
 
           {steps.map((step, i) => {
@@ -590,7 +602,7 @@ const ArchitectureView: React.FC = () => {
             return (
               <g style={{ animation: 'archFadeIn 0.5s ease 0.9s both' }}>
                 <text x={sx} y={bottomY} fontSize={10} fill="#6e7681">
-                  💡 核心理念: 游戏只需回答 4 个问题(开局摆什么/能不能做/做了会怎样/怎么改状态) + 选用基础能力 → 引擎负责其余一切
+                  💡 核心原则: 每阶段独立可验证·独立可提交 → 游戏只需回答4个问题 + 选用基础能力 → 引擎负责其余一切
                 </text>
               </g>
             );
@@ -620,14 +632,14 @@ const ArchitectureView: React.FC = () => {
     const boxW = 200, boxH = 80;
 
     return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4">
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
         <div className="mb-3 flex items-center gap-3">
-          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setViewMode('overview')}>← 返回</button>
+          <button className="text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
           <h1 className="text-lg font-bold text-white">🏛️ C4 Model — L1 System Context</h1>
           <button className="ml-auto text-sm px-3 py-1 rounded bg-purple-900/40 text-purple-400 border border-purple-700/40 hover:bg-purple-900/60"
-            onClick={() => setViewMode('c4-container')}>📦 L2 容器视图 →</button>
+            onClick={e => { e.stopPropagation(); setViewMode('c4-container'); }}>📦 L2 容器视图 →</button>
         </div>
-        <p className="text-xs text-slate-500 mb-2">最高层视角：系统边界 · 外部依赖 · 用户交互</p>
+        <p className="text-xs text-slate-500 mb-2">最高层视角：系统边界 · 外部依赖 · 用户交互 · 点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
           <defs>
@@ -730,14 +742,14 @@ const ArchitectureView: React.FC = () => {
     });
 
     return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4">
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
         <div className="mb-3 flex items-center gap-3">
-          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setViewMode('overview')}>← 返回</button>
+          <button className="text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
           <h1 className="text-lg font-bold text-white">📦 C4 Model — L2 Container</h1>
           <button className="ml-auto text-sm px-3 py-1 rounded bg-blue-900/40 text-blue-400 border border-blue-700/40 hover:bg-blue-900/60"
-            onClick={() => setViewMode('c4-context')}>← L1 全景视图</button>
+            onClick={e => { e.stopPropagation(); setViewMode('c4-context'); }}>← L1 全景视图</button>
         </div>
-        <p className="text-xs text-slate-500 mb-2">容器级视角：5 个核心层 · 层间依赖 · 数据/事件流向</p>
+        <p className="text-xs text-slate-500 mb-2">容器级视角：5 个核心层 · 层间依赖 · 数据/事件流向 · 点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
           <defs>
@@ -862,11 +874,11 @@ const ArchitectureView: React.FC = () => {
     const popW = 460;
 
     return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={closePop}>
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => { if (selectedNode) closePop(); else setViewMode('overview'); }}>
         <div className="mb-3 flex items-center gap-3">
           <button className="text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
           <h1 className="text-lg font-bold text-white">{layerInfo?.emoji} {layerInfo?.label} — 组件详情</h1>
-          <span className="text-xs text-slate-500">{layerNodes.length} 个组件 · 点击查看接口和案例</span>
+          <span className="text-xs text-slate-500">{layerNodes.length} 个组件 · 点击查看接口和案例 · 点击空白返回</span>
         </div>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>

@@ -378,8 +378,8 @@ describe('恐龙派系能力', () => {
         const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(0);
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(0);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeUndefined();
     });
 
     it('dino_wild_rampage: 目标基地己方随从+2力量', () => {
@@ -581,7 +581,7 @@ describe('诡术师派系能力', () => {
         expect((discardEvents[0] as any).payload.cardUids.length).toBe(1);
     });
 
-    it('trickster_disenchant: 单个基地持续行动卡时创建 Prompt', () => {
+    it('trickster_disenchant: 单个基地持续行动卡时创建 Interaction', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -596,11 +596,12 @@ describe('诡术师派系能力', () => {
         });
 
         const { events, matchState } = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('trickster_disenchant');
     });
 
-    it('trickster_disenchant: 单个随从附着行动卡时创建 Prompt', () => {
+    it('trickster_disenchant: 单个随从附着行动卡时创建 Interaction', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -619,8 +620,9 @@ describe('诡术师派系能力', () => {
         });
 
         const { events, matchState } = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('trickster_disenchant');
     });
 });
 

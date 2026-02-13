@@ -73,7 +73,7 @@
     - 重构为直接调用 `createSimpleChoice()` 和 `queueInteraction()`
     - 更新返回类型为 `AbilityExecuteResult`
     - _Requirements: 3.2_
-    - ⚠️ 注意：触发器相关的 `theyre_coming_to_get_you` 和 `tenacious_z` 仍使用 `requestChoice`（有 TODO 标记）
+    - ✅ 触发器 `theyre_coming_to_get_you` 和 `tenacious_z` 已迁移为 `createSimpleChoice` + `queueInteraction`
   
   - [x] 6.2 注册僵尸交互解决处理函数
     - 将原 `registerPromptContinuation` 调用改为 `registerInteractionHandler`
@@ -322,16 +322,18 @@
 
 ### 阶段 6：清理和最终验证
 
-- [ ] 29. 移除废弃代码
-  - [ ] 29.1 删除 promptContinuation.ts
+- [x] 29. 移除废弃代码
+  - [x] 29.1 删除 promptContinuation.ts
     - 删除 `src/games/smashup/domain/promptContinuation.ts` 文件
-    - 移除所有对该文件的 import 引用（13+ 个测试文件仍在引用）
+    - 移除所有对该文件的 import 引用（13+ 个测试文件已更新）
     - _Requirements: 3.1, 8.1_
   
-  - [ ] 29.2 移除 CHOICE_REQUESTED 事件定义
+  - [x] 29.2 移除 CHOICE_REQUESTED 事件定义
     - 在 `src/games/smashup/domain/types.ts` 中删除 `SU_EVENTS.CHOICE_REQUESTED` 常量
     - 删除 `ChoiceRequestedEvent` 接口
-    - 移除相关的类型导出
+    - 移除 SmashUpEvent 联合类型中的引用
+    - 移除 `reduce.ts` 中的 case 分支
+    - 移除 `audio.config.ts` 中的音效映射
     - _Requirements: 3.1, 8.1_
   
   - [x] 29.3 完全移除 systems.ts 中的桥接逻辑
@@ -340,12 +342,10 @@
     - 确保只保留 `SYS_INTERACTION_RESOLVED` 的分发逻辑
     - _Requirements: 3.1, 8.1_
 
-- [ ] 30. 更新辅助函数
-  - [ ] 30.1 重构 abilityHelpers.ts
-    - 移除或重构 `requestChoice()` 函数
-    - ⚠️ zombies.ts 触发器仍依赖 `requestChoice`（有 TODO 标记）
-    - 如果保留，改为返回 `InteractionDescriptor` 而非事件
-    - 更新所有使用该函数的代码
+- [x] 30. 更新辅助函数
+  - [x] 30.1 重构 abilityHelpers.ts
+    - 移除 `requestChoice()` 函数及其相关类型导入
+    - 僵尸触发器已迁移为直接使用 `createSimpleChoice` + `queueInteraction`
     - _Requirements: 3.2_
 
 - [ ] 31. 运行完整测试套件
@@ -377,10 +377,9 @@
     - 对每个交互能力验证完整流程：创建 → 响应 → 解决 → 最终状态
     - _Requirements: 8.2_
 
-- [ ] 32. 代码质量检查
-  - [ ] 32.1 TypeScript 编译检查
-    - 运行 `npm run build` 或 `tsc --noEmit`
-    - 确保没有编译错误
+- [x] 32. 代码质量检查
+  - [x] 32.1 TypeScript 编译检查
+    - 运行 `tsc --noEmit` 通过，零错误
     - _Requirements: 8.1_
   
   - [ ] 32.2 ESLint 检查
@@ -388,8 +387,8 @@
     - 修复所有 lint 错误和警告
     - _Requirements: 8.1_
   
-  - [ ] 32.3 代码审查
-    - 检查代码注释是否清晰
+  - [x] 32.3 代码审查
+    - 检查代码注释是否清晰（已修复 baseAbilities_expansion.ts 头部注释）
     - 验证命名一致性
     - 确保符合项目编码规范
     - _Requirements: 8.3_

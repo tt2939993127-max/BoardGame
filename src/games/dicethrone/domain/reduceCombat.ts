@@ -141,6 +141,11 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
 
 /**
  * 处理治疗事件
+ *
+ * 规则 §3.6 Step 6 同时结算：攻击结算期间（pendingAttack 存在），
+ * 防御方的治疗不受 HP 上限限制（允许临时超上限），
+ * 等 ATTACK_RESOLVED 时再钳制回上限。
+ * 这样治疗和伤害的事件保持原始数值，动画正常播放。
  */
 export const handleHealApplied: EventHandler<Extract<DiceThroneEvent, { type: 'HEAL_APPLIED' }>> = (
     state,
@@ -150,12 +155,23 @@ export const handleHealApplied: EventHandler<Extract<DiceThroneEvent, { type: 'H
     const target = state.players[targetId];
     if (!target) return state;
 
-    const result = resourceSystem.modify(target.resources, RESOURCE_IDS.HP, amount);
+    // 攻击结算期间，防御方治疗跳过 HP 上限（同时结算）
+    const isDefenderDuringAttack = state.pendingAttack && targetId === state.pendingAttack.defenderId;
+    let newResources;
+    if (isDefenderDuringAttack) {
+        // 不传 bounds，HP 可临时超上限
+        const currentHp = target.resources[RESOURCE_IDS.HP] ?? 0;
+        newResources = { ...target.resources, [RESOURCE_IDS.HP]: currentHp + amount };
+    } else {
+        const result = resourceSystem.modify(target.resources, RESOURCE_IDS.HP, amount);
+        newResources = result.pool;
+    }
+
     return {
         ...state,
         players: {
             ...state.players,
-            [targetId]: { ...target, resources: result.pool },
+            [targetId]: { ...target, resources: newResources },
         },
         lastEffectSourceByPlayerId: sourceAbilityId
             ? { ...(state.lastEffectSourceByPlayerId || {}), [targetId]: sourceAbilityId }
@@ -183,11 +199,15 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
             isUltimate,
             attackDiceFaceCounts: attackFaceCounts,
         },
+        lastResolvedAttackDamage: undefined,
     };
 };
 
 /**
  * 处理攻击结算事件
+ *
+ * 规则 §3.6 Step 6 同时结算收尾：
+ * 攻击结算完成后，将防御方 HP 钳制回上限（消除临时超上限）。
  */
 export const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type: 'ATTACK_RESOLVED' }>> = (
     state,
@@ -207,11 +227,28 @@ export const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type:
         }
     }
 
+    // 同时结算收尾：将防御方 HP 钳制回上限
+    const currentDefender = players[defenderId];
+    if (currentDefender) {
+        const result = resourceSystem.setValue(
+            currentDefender.resources,
+            RESOURCE_IDS.HP,
+            currentDefender.resources[RESOURCE_IDS.HP] ?? 0
+        );
+        if (result.capped) {
+            players = {
+                ...players,
+                [defenderId]: { ...currentDefender, resources: result.pool },
+            };
+        }
+    }
+
     return {
         ...state,
         activatingAbilityId: sourceAbilityId || defenseAbilityId,
         players,
         pendingAttack: null,
+        lastResolvedAttackDamage: event.payload.totalDamage,
     };
 };
 

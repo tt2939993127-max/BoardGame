@@ -107,3 +107,14 @@ export function getRegistrySize(): number {
     }
     return count;
 }
+
+/** 获取所有已注册的 defId::tag 键（用于能力行为审计） */
+export function getRegisteredAbilityKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const [defId, tagMap] of registry.entries()) {
+        for (const tag of tagMap.keys()) {
+            keys.add(`${defId}::${tag}`);
+        }
+    }
+    return keys;
+}

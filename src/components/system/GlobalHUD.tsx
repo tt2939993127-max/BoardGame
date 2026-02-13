@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { FriendsChatModal } from '../social/FriendsChatModal';
 import { FabMenu, type FabAction } from './FabMenu';
-import { AudioControlSection } from '../game/AudioControlSection';
+import { AudioControlSection } from '../game/framework/widgets/AudioControlSection';
 import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { AboutModal } from './AboutModal';

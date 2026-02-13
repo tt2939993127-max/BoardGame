@@ -23,6 +23,7 @@ import type { BoardCell } from '../types';
 import { getEffectiveLife, triggerAbilities, triggerAllUnitsAbilities } from '../abilityResolver';
 import type { AbilityContext } from '../abilityResolver';
 import { reduceEvent } from '../reduce';
+import { getBaseCardId, CARD_IDS } from '../ids';
 
 // ============================================================================
 // 棋盘查询
@@ -262,7 +263,7 @@ export function getFuneralPyreChargeEvents(core: SummonerWarsCore, timestamp: nu
   for (const pid of ['0', '1'] as PlayerId[]) {
     const player = core.players[pid];
     for (const ev of player.activeEvents) {
-      if (ev.name === '殉葬火堆' || ev.id.includes('funeral-pyre')) {
+      if (ev.name === '殉葬火堆' || getBaseCardId(ev.id) === CARD_IDS.NECRO_FUNERAL_PYRE) {
         events.push({
           type: SW_EVENTS.FUNERAL_PYRE_CHARGED,
           payload: { playerId: pid, cardId: ev.id },

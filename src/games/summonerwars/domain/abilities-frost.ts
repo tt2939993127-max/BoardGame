@@ -19,7 +19,7 @@
 
 import type { AbilityDef } from './abilities';
 import { getStructureAt, getUnitAt } from './helpers';
-
+import { abilityText } from './abilityTextHelper';
 export const FROST_ABILITIES: AbilityDef[] = [
   // ============================================================================
   // 召唤师 - 丝瓦拉
@@ -27,8 +27,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'structure_shift',
-    name: '结构变换',
-    description: '在本单位移动之后，可以指定其3个区格以内一个友方建筑为目标。将目标推拉1个区格。',
+    name: abilityText('structure_shift', 'name'),
+    description: abilityText('structure_shift', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v1',
     trigger: 'activated',
     effects: [
@@ -39,6 +39,15 @@ export const FROST_ABILITIES: AbilityDef[] = [
       type: 'position',
       count: 1,
     },
+    interactionChain: {
+      steps: [
+        { step: 'selectBuilding', inputType: 'position', producesField: 'targetPosition' },
+        { step: 'selectDirection', inputType: 'direction', producesField: 'newPosition' },
+      ],
+      payloadContract: {
+        required: ['targetPosition', 'newPosition'],
+      },
+    },
     validation: {
       requiredPhase: 'move',
       customValidator: (ctx) => {
@@ -47,8 +56,13 @@ export const FROST_ABILITIES: AbilityDef[] = [
           return { valid: false, error: '必须选择目标建筑' };
         }
         
+        // 检查真实建筑或活体结构单位（如寒冰魔像）
         const ssStructure = getStructureAt(ctx.core, ssTargetPos);
-        if (!ssStructure || ssStructure.owner !== ctx.playerId) {
+        const ssUnit = getUnitAt(ctx.core, ssTargetPos);
+        const isAllyStructure = (ssStructure && ssStructure.owner === ctx.playerId)
+          || (ssUnit && ssUnit.owner === ctx.playerId
+            && (ssUnit.card.abilities ?? []).includes('mobile_structure'));
+        if (!isAllyStructure) {
           return { valid: false, error: '必须选择友方建筑' };
         }
         
@@ -61,10 +75,11 @@ export const FROST_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.structureShift',
       buttonVariant: 'secondary',
+      activationStep: 'selectUnit',
     },
   },
 
@@ -74,8 +89,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'cold_snap',
-    name: '寒流',
-    description: '本单位3个区格以内的友方建筑获得生命+1。',
+    name: abilityText('cold_snap', 'name'),
+    description: abilityText('cold_snap', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v2',
     trigger: 'passive',
     effects: [
@@ -89,8 +104,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'imposing',
-    name: '威势',
-    description: '每回合一次，在本单位攻击一个敌方单位之后，将本单位充能。',
+    name: abilityText('imposing', 'name'),
+    description: abilityText('imposing', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v3',
     trigger: 'afterAttack',
     effects: [
@@ -101,8 +116,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'ice_shards',
-    name: '寒冰碎屑',
-    description: '在你的建造阶段结束时，你可以消耗1点充能，以对每个和你所控制建筑相邻的敌方单位造成1点伤害。',
+    name: abilityText('ice_shards', 'name'),
+    description: abilityText('ice_shards', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v3',
     trigger: 'onPhaseEnd',
     effects: [
@@ -125,6 +140,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
       buttonPhase: 'build',
       buttonLabel: 'abilityButtons.iceShards',
       buttonVariant: 'secondary',
+      activationType: 'directExecute',
+      quickCheck: ({ unit }) => (unit.boosts ?? 0) >= 1,
     },
   },
 
@@ -134,8 +151,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'greater_frost_bolt',
-    name: '高阶冰霜飞弹',
-    description: '本单位2个区格以内每有一个友方建筑，则获得战力+1。',
+    name: abilityText('greater_frost_bolt', 'name'),
+    description: abilityText('greater_frost_bolt', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v2',
     trigger: 'onDamageCalculation',
     effects: [
@@ -149,8 +166,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'frost_bolt',
-    name: '冰霜飞弹',
-    description: '本单位相邻每有一个友方建筑，则获得战力+1。',
+    name: abilityText('frost_bolt', 'name'),
+    description: abilityText('frost_bolt', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v1',
     trigger: 'onDamageCalculation',
     effects: [
@@ -164,8 +181,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'trample',
-    name: '践踏',
-    description: '当本单位移动时，可以穿过士兵。在本单位移动之后，对每个被穿过的士兵造成1点伤害。',
+    name: abilityText('trample', 'name'),
+    description: abilityText('trample', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v2',
     trigger: 'onMove',
     effects: [
@@ -179,8 +196,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'frost_axe',
-    name: '冰霜战斧',
-    description: '在本单位移动之后，你可以将其充能，或者消耗其所有充能（至少1点）以将其放置到3个区格以内一个友方士兵的底层。当该士兵攻击时，⚔️=‼️。',
+    name: abilityText('frost_axe', 'name'),
+    description: abilityText('frost_axe', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v3',
     trigger: 'activated',
     effects: [
@@ -190,6 +207,16 @@ export const FROST_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'unit',
       count: 1,
+    },
+    interactionChain: {
+      steps: [
+        { step: 'selectChoice', inputType: 'choice', producesField: 'choice' },
+        { step: 'selectAttachTarget', inputType: 'position', producesField: 'targetPosition', optional: true },
+      ],
+      payloadContract: {
+        required: ['choice'],
+        optional: ['targetPosition'],
+      },
     },
     validation: {
       requiredPhase: 'move',
@@ -242,6 +269,7 @@ export const FROST_ABILITIES: AbilityDef[] = [
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.frostAxe',
       buttonVariant: 'secondary',
+      activationStep: 'selectChoice',
     },
   },
 
@@ -251,8 +279,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'living_gate',
-    name: '活体传送门',
-    description: '本卡牌视为传送门。',
+    name: abilityText('living_gate', 'name'),
+    description: abilityText('living_gate', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v1',
     trigger: 'passive',
     effects: [],
@@ -260,8 +288,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'mobile_structure',
-    name: '活体结构',
-    description: '本卡牌视为建筑，但可以移动。',
+    name: abilityText('mobile_structure', 'name'),
+    description: abilityText('mobile_structure', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v2',
     trigger: 'passive',
     effects: [],
@@ -269,8 +297,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
 
   {
     id: 'slow',
-    name: '缓慢',
-    description: '本单位必须减少移动1个区格。',
+    name: abilityText('slow', 'name'),
+    description: abilityText('slow', 'description'),
     sfxKey: 'fantasy.elemental_sword_iceattack_v3',
     trigger: 'onMove',
     effects: [

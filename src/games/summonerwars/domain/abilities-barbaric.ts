@@ -21,6 +21,7 @@
 import type { AbilityDef } from './abilities';
 import { getUnitAt, manhattanDistance, isCellEmpty } from './helpers';
 import type { CellCoord } from './types';
+import { abilityText } from './abilityTextHelper';
 
 export const BARBARIC_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -29,8 +30,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'ancestral_bond',
-    name: '祖灵羁绊',
-    description: '在本单位移动之后，可以指定其3个区格以内的一个友方单位为目标。将目标充能并且将本单位的所有充能移动到目标上。',
+    name: abilityText('ancestral_bond', 'name'),
+    description: abilityText('ancestral_bond', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_01',
     trigger: 'activated',
     effects: [
@@ -71,10 +72,11 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.ancestralBond',
       buttonVariant: 'secondary',
+      activationStep: 'selectUnit',
     },
   },
 
@@ -84,8 +86,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'power_up',
-    name: '力量强化',
-    description: '本单位每有1点充能，则获得战力+1，至多为+5。',
+    name: abilityText('power_up', 'name'),
+    description: abilityText('power_up', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_02',
     trigger: 'onDamageCalculation',
     effects: [
@@ -105,8 +107,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'prepare',
-    name: '预备',
-    description: '你可以将本单位充能，以代替本单位的移动。',
+    name: abilityText('prepare', 'name'),
+    description: abilityText('prepare', 'description'),
     sfxKey: 'fantasy.elemental_sword_earthattack_01',
     trigger: 'activated',
     effects: [
@@ -127,13 +129,16 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.prepare',
       buttonVariant: 'secondary',
+      activationType: 'directExecute',
+      useValidateForDisabled: true,
+      extraCondition: ({ unit }) => !unit.hasMoved,
     },
   },
 
   {
     id: 'rapid_fire',
-    name: '连续射击',
-    description: '每回合一次，在本单位攻击之后，你可以消耗1点充能以使其进行一次额外的攻击。',
+    name: abilityText('rapid_fire', 'name'),
+    description: abilityText('rapid_fire', 'description'),
     sfxKey: 'fantasy.elemental_bow_fireattack_01',
     trigger: 'afterAttack',
     effects: [
@@ -157,8 +162,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'inspire',
-    name: '启悟',
-    description: '在本单位移动之后，将其相邻的所有友方单位充能。',
+    name: abilityText('inspire', 'name'),
+    description: abilityText('inspire', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_01',
     trigger: 'activated',
     effects: [
@@ -172,18 +177,28 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.inspire',
       buttonVariant: 'secondary',
+      activationType: 'directExecute',
     },
   },
 
   {
     id: 'withdraw',
-    name: '撤退',
-    description: '在本单位攻击之后，你可以消耗1点充能或魔力。如果你这样做，则将本单位推拉1至2个区格。',
+    name: abilityText('withdraw', 'name'),
+    description: abilityText('withdraw', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_02',
     trigger: 'afterAttack',
     effects: [
       { type: 'custom', actionId: 'withdraw_push_pull' },
     ],
+    interactionChain: {
+      steps: [
+        { step: 'selectCostType', inputType: 'choice', producesField: 'costType' },
+        { step: 'selectPosition', inputType: 'position', producesField: 'targetPosition' },
+      ],
+      payloadContract: {
+        required: ['costType', 'targetPosition'],
+      },
+    },
     validation: {
       requiredPhase: 'attack',
       customValidator: (ctx) => {
@@ -222,6 +237,12 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.withdraw',
       buttonVariant: 'secondary',
+      activationType: 'withdrawMode',
+      quickCheck: ({ core, unit, playerId }) => {
+        const hasCharge = (unit.boosts ?? 0) >= 1;
+        const hasMagic = core.players[playerId].magic >= 1;
+        return hasCharge || hasMagic;
+      },
     },
   },
 
@@ -231,8 +252,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'intimidate',
-    name: '威势',
-    description: '每回合一次，在本单位攻击一个敌方单位之后，将本单位充能。',
+    name: abilityText('intimidate', 'name'),
+    description: abilityText('intimidate', 'description'),
     sfxKey: 'fantasy.elemental_sword_earthattack_01',
     trigger: 'afterAttack',
     effects: [
@@ -243,8 +264,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'life_up',
-    name: '生命强化',
-    description: '本单位每有1点充能，则获得生命+1，至多+5。',
+    name: abilityText('life_up', 'name'),
+    description: abilityText('life_up', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_01',
     trigger: 'passive',
     effects: [
@@ -262,8 +283,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'speed_up',
-    name: '速度强化',
-    description: '本单位每有1点充能，则当本单位移动时，可以额外移动1个区格，至多额外移动5个区格。',
+    name: abilityText('speed_up', 'name'),
+    description: abilityText('speed_up', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_02',
     trigger: 'onMove',
     effects: [
@@ -277,8 +298,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'gather_power',
-    name: '聚能',
-    description: '在召唤本单位之后，将其充能。',
+    name: abilityText('gather_power', 'name'),
+    description: abilityText('gather_power', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_01',
     trigger: 'onSummon',
     effects: [
@@ -288,8 +309,8 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
 
   {
     id: 'spirit_bond',
-    name: '祖灵交流',
-    description: '在本单位移动之后，将其充能，或者消耗1点充能以将其3个区格以内的一个友方单位充能。',
+    name: abilityText('spirit_bond', 'name'),
+    description: abilityText('spirit_bond', 'description'),
     sfxKey: 'fantasy.elemental_sword_earthattack_01',
     trigger: 'activated',
     effects: [
@@ -299,6 +320,16 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'unit',
       count: 1,
+    },
+    interactionChain: {
+      steps: [
+        { step: 'selectChoice', inputType: 'choice', producesField: 'choice' },
+        { step: 'selectTarget', inputType: 'position', producesField: 'targetPosition', optional: true },
+      ],
+      payloadContract: {
+        required: ['choice'],
+        optional: ['targetPosition'],
+      },
     },
     validation: {
       requiredPhase: 'move',
@@ -341,10 +372,11 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.spiritBond',
       buttonVariant: 'secondary',
+      activationStep: 'selectChoice',
     },
   },
 ];

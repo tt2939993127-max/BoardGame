@@ -55,8 +55,8 @@ const ActionCardShowOverlay: React.FC<{
 }> = ({ effect, onComplete }) => {
   const { t, i18n } = useTranslation('game-smashup');
   const def = getCardDef(effect.defId);
-  const resolvedName = resolveCardName(def, i18n.language) || effect.defId;
-  const resolvedText = resolveCardText(def, i18n.language);
+  const resolvedName = resolveCardName(def, t) || effect.defId;
+  const resolvedText = resolveCardText(def, t);
 
   useEffect(() => {
     const timer = setTimeout(onComplete, 800);

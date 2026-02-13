@@ -298,6 +298,16 @@ export function clearGameAssetsCache(gameId: string): void {
     }
 }
 
+/**
+ * 查询图片是否已被预加载（供渲染组件跳过 shimmer）
+ * 接受原始资源路径（自动转换）或已转换的 optimized URL
+ */
+export function isImagePreloaded(src: string): boolean {
+    if (preloadedImages.has(src)) return true;
+    const { avif, webp } = getOptimizedImageUrls(src);
+    return preloadedImages.has(avif) || preloadedImages.has(webp);
+}
+
 // ============================================================================
 // 内部辅助函数
 // ============================================================================

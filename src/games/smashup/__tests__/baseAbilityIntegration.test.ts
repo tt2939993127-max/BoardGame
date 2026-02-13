@@ -14,7 +14,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
+import { createFlowSystem, createBaseSystems } from '../../../engine';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS, getCurrentPlayerId } from '../domain/types';
 import { initAllAbilities } from '../abilities';
@@ -36,7 +36,7 @@ function createRunner() {
         domain: SmashUpDomain,
         systems: [
             createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-            ...createDefaultSystems<SmashUpCore>(),
+            ...createBaseSystems<SmashUpCore>(),
         ],
         playerIds: PLAYER_IDS,
         silent: true,
@@ -179,11 +179,11 @@ describe('base_rhodes_plaza: 计分时每个随从 1VP', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_rhodes_plaza', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_rhodes_plaza', 'beforeScoring', ctx);
         expect(events.length).toBe(2); // P0 得 2VP，P1 得 1VP
 
-        const p0Event = events.find(e => e.type === SU_EVENTS.VP_AWARDED && (e as any).payload.playerId === '0');
-        const p1Event = events.find(e => e.type === SU_EVENTS.VP_AWARDED && (e as any).payload.playerId === '1');
+        const p0Event = events.find((e) => e.type === SU_EVENTS.VP_AWARDED && (e as any).payload.playerId === '0');
+        const p1Event = events.find((e) => e.type === SU_EVENTS.VP_AWARDED && (e as any).payload.playerId === '1');
         expect(p0Event).toBeDefined();
         expect(p1Event).toBeDefined();
         expect((p0Event as any).payload.amount).toBe(2);
@@ -221,7 +221,7 @@ describe('base_the_factory: 冠军每5力量1VP', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
         expect(events.length).toBe(1);
         expect((events[0] as any).payload.playerId).toBe('0');
         expect((events[0] as any).payload.amount).toBe(2); // 10 / 5 = 2
@@ -251,7 +251,7 @@ describe('base_the_factory: 冠军每5力量1VP', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
         expect(events.length).toBe(1);
         expect((events[0] as any).payload.amount).toBe(1); // 7 / 5 = 1
     });
@@ -277,7 +277,7 @@ describe('base_the_factory: 冠军每5力量1VP', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -324,7 +324,7 @@ describe('base_locker_room: 回合开始抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
+        const { events } = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
         expect((events[0] as any).payload.playerId).toBe('0');
@@ -364,7 +364,7 @@ describe('base_locker_room: 回合开始抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
+        const { events } = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
         expect(events.length).toBe(0);
     });
 
@@ -400,7 +400,7 @@ describe('base_locker_room: 回合开始抽牌', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
+        const { events } = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -431,7 +431,7 @@ describe('base_cave_of_shinies: 随从被消灭获得1VP', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_cave_of_shinies', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_cave_of_shinies', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.VP_AWARDED);
         expect((events[0] as any).payload.playerId).toBe('0');
@@ -459,7 +459,7 @@ describe('base_cave_of_shinies: 随从被消灭获得1VP', () => {
             now: 1000,
         };
 
-        const events = triggerExtendedBaseAbility('base_the_jungle', 'onMinionDestroyed', ctx);
+        const { events } = triggerExtendedBaseAbility('base_the_jungle', 'onMinionDestroyed', ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -510,7 +510,7 @@ describe('Property 17: 基地能力事件顺序', () => {
             now: 1000,
         };
 
-        const baseEvents = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
+        const { events: baseEvents } = triggerBaseAbility('base_locker_room', 'onTurnStart', ctx);
         for (const e of baseEvents) triggered.push(e.type);
 
         // TURN_STARTED 在基地能力事件之前
@@ -546,7 +546,7 @@ describe('Property 17: 基地能力事件顺序', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_rhodes_plaza', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_rhodes_plaza', 'beforeScoring', ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.VP_AWARDED);
         // 在实际 FlowHooks 中，这些事件会在 BASE_SCORED 之前被 push

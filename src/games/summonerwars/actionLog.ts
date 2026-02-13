@@ -1,5 +1,7 @@
 /**
  * SummonerWars - ActionLog 格式化
+ * 
+ * 使用 i18n segment 延迟翻译，避免服务端无 i18n 环境导致显示 raw key。
  */
 
 import type {
@@ -16,7 +18,6 @@ import { SW_COMMANDS, SW_EVENTS } from './domain';
 import type { SummonerWarsCore } from './domain/types';
 import { abilityRegistry } from './domain/abilities';
 import { getSummonerWarsCardPreviewMeta } from './ui/cardPreviewHelper';
-import i18n from '../../lib/i18n';
 
 // ============================================================================
 // ActionLog 共享白名单
@@ -36,7 +37,60 @@ export const ACTION_ALLOWLIST = [
     FLOW_COMMANDS.ADVANCE_PHASE,
 ] as const;
 
+const SW_NS = 'game-summonerwars';
+
+/** i18n segment 工厂 */
+const i18nSeg = (
+    key: string,
+    params?: Record<string, string | number>,
+    paramI18nKeys?: string[],
+): ActionLogSegment => ({
+    type: 'i18n' as const,
+    ns: SW_NS,
+    key,
+    ...(params ? { params } : {}),
+    ...(paramI18nKeys ? { paramI18nKeys } : {}),
+});
+
 const textSegment = (text: string): ActionLogSegment => ({ type: 'text', text });
+
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+const formatDelta = (delta: number) => (delta >= 0 ? `+${delta}` : `${delta}`);
+
+const formatAbilityName = (abilityId?: string) => (
+    abilityId ? (abilityRegistry.get(abilityId)?.name ?? abilityId) : ''
+);
+
+const buildCardSegment = (cardId?: string): ActionLogSegment | null => {
+    if (!cardId) return null;
+    const meta = getSummonerWarsCardPreviewMeta(cardId);
+    if (!meta?.name) return textSegment(cardId);
+    const isI18nKey = meta.name.includes('.');
+    if (meta.previewRef) {
+        return {
+            type: 'card',
+            cardId,
+            previewText: meta.name,
+            ...(isI18nKey ? { previewTextNs: SW_NS } : {}),
+        };
+    }
+    if (isI18nKey) {
+        return i18nSeg(meta.name);
+    }
+    return textSegment(meta.name);
+};
+
+const withCardSegments = (i18nKey: string, cardId?: string, params?: Record<string, string | number>, paramI18nKeys?: string[]): ActionLogSegment[] => {
+    const segments: ActionLogSegment[] = [i18nSeg(i18nKey, params, paramI18nKeys)];
+    const cardSegment = buildCardSegment(cardId);
+    if (cardSegment) segments.push(cardSegment);
+    return segments;
+};
+
+const buildPositionKey = (pos?: { row: number; col: number }) => (pos ? `${pos.row},${pos.col}` : '');
 
 // ============================================================================
 // ActionLog 格式化
@@ -56,52 +110,13 @@ export function formatSummonerWarsActionEntry({
     const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
     const actorId = command.playerId;
     const entries: ActionLogEntry[] = [];
-    const t = (key: string, params?: Record<string, string | number>) => (
-        i18n.t(`game-summonerwars:${key}`, params)
-    );
-    const formatCell = (cell?: { row: number; col: number }) => {
-        if (!cell) return t('actionLog.positionUnknown');
-        return t('actionLog.position', { row: cell.row + 1, col: cell.col + 1 });
-    };
-    const formatDelta = (delta: number) => (delta >= 0 ? `+${delta}` : `${delta}`);
-    const formatAbilityName = (abilityId?: string) => (
-        abilityId ? (abilityRegistry.get(abilityId)?.name ?? abilityId) : ''
-    );
-    const formatPlayerLabel = (playerId: PlayerId) => (
-        t('actionLog.playerLabel', { playerId })
-    );
-    const buildCardSegment = (cardId?: string): ActionLogSegment | null => {
-        if (!cardId) return null;
-        const meta = getSummonerWarsCardPreviewMeta(cardId);
-        if (meta?.previewRef) {
-            return {
-                type: 'card',
-                cardId,
-                previewText: meta.name,
-            };
-        }
-        if (meta?.name) {
-            return { type: 'text', text: meta.name };
-        }
-        return { type: 'text', text: cardId };
-    };
-    const withCardSegments = (prefix: string, cardId?: string): ActionLogSegment[] => {
-        const segments: ActionLogSegment[] = [];
-        segments.push(textSegment(prefix));
-        const cardSegment = buildCardSegment(cardId);
-        if (cardSegment) segments.push(cardSegment);
-        return segments;
-    };
-    const formatPhaseLabel = (phase?: string) => {
-        if (!phase) return '';
-        return i18n.t(`game-summonerwars:phase.${phase}`, { defaultValue: phase });
-    };
+
     const pushEntry = (
         kind: string,
         segments: ActionLogSegment[],
         entryActorId: PlayerId = actorId,
         entryTimestamp: number = timestamp,
-        index = entries.length
+        index = entries.length,
     ) => {
         entries.push({
             id: `${kind}-${entryActorId}-${entryTimestamp}-${index}`,
@@ -111,7 +126,8 @@ export function formatSummonerWarsActionEntry({
             segments,
         });
     };
-    const buildPositionKey = (pos?: { row: number; col: number }) => (pos ? `${pos.row},${pos.col}` : '');
+
+    // 预扫描被摧毁的单位/建筑，用于后续事件解析
     const destroyedUnitByPosition = new Map<string, string>();
     const destroyedStructureByPosition = new Map<string, string>();
     events.forEach((event) => {
@@ -126,6 +142,7 @@ export function formatSummonerWarsActionEntry({
             if (key && payload.cardId) destroyedStructureByPosition.set(key, payload.cardId);
         }
     });
+
     const resolveUnitCardId = (pos?: { row: number; col: number }, fallbackId?: string) => {
         if (fallbackId) return fallbackId;
         if (!pos) return undefined;
@@ -141,171 +158,158 @@ export function formatSummonerWarsActionEntry({
         return destroyedStructureByPosition.get(buildPositionKey(pos));
     };
 
+    // ========================================================================
+    // 命令格式化
+    // ========================================================================
     const commandEntry = (() => {
         switch (command.type) {
             case SW_COMMANDS.SUMMON_UNIT: {
                 const payload = command.payload as { cardId?: string; position?: { row: number; col: number } };
-                const positionLabel = formatCell(payload.position);
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
+                    timestamp, actorId, kind: command.type,
                     segments: [
-                        ...withCardSegments(t('actionLog.summonUnit'), payload.cardId),
-                        textSegment(` → ${positionLabel}`),
+                        ...withCardSegments('actionLog.summonUnit', payload.cardId),
+                        textSegment(' → '),
+                        payload.position
+                            ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                            : i18nSeg('actionLog.positionUnknown'),
                     ],
                 };
             }
             case SW_COMMANDS.MOVE_UNIT: {
                 const payload = command.payload as { from?: { row: number; col: number }; to?: { row: number; col: number } };
-                const fromLabel = formatCell(payload.from);
-                const toLabel = formatCell(payload.to);
-                const moveEvent = [...events].reverse().find((event) => event.type === SW_EVENTS.UNIT_MOVED) as
-                    | { payload?: { unitId?: string } }
-                    | undefined;
+                const moveEvent = [...events].reverse().find((e) => e.type === SW_EVENTS.UNIT_MOVED) as
+                    | { payload?: { unitId?: string } } | undefined;
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
+                    timestamp, actorId, kind: command.type,
                     segments: [
-                        ...withCardSegments(t('actionLog.moveUnit'), moveEvent?.payload?.unitId),
-                        textSegment(` ${fromLabel} → ${toLabel}`),
+                        ...withCardSegments('actionLog.moveUnit', moveEvent?.payload?.unitId),
+                        textSegment(' '),
+                        ...(payload.from
+                            ? [i18nSeg('actionLog.position', { row: payload.from.row + 1, col: payload.from.col + 1 })]
+                            : [i18nSeg('actionLog.positionUnknown')]),
+                        textSegment(' → '),
+                        ...(payload.to
+                            ? [i18nSeg('actionLog.position', { row: payload.to.row + 1, col: payload.to.col + 1 })]
+                            : [i18nSeg('actionLog.positionUnknown')]),
                     ],
                 };
             }
             case SW_COMMANDS.DECLARE_ATTACK: {
-                const attackEvent = [...events].reverse().find((event) => event.type === SW_EVENTS.UNIT_ATTACKED) as
-                    | { payload?: { hits?: number; target?: { row: number; col: number }; attackerId?: string } }
-                    | undefined;
+                const attackEvent = [...events].reverse().find((e) => e.type === SW_EVENTS.UNIT_ATTACKED) as
+                    | { payload?: { hits?: number; target?: { row: number; col: number }; attackerId?: string } } | undefined;
                 const hits = attackEvent?.payload?.hits;
-                const targetLabel = formatCell(attackEvent?.payload?.target);
-                const detail = hits === undefined
-                    ? t('actionLog.attackDeclared')
-                    : t('actionLog.attackHits', { hits });
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
+                    timestamp, actorId, kind: command.type,
                     segments: [
-                        ...withCardSegments(t('actionLog.attackUnit'), attackEvent?.payload?.attackerId),
-                        textSegment(` → ${targetLabel} ${detail}`),
+                        ...withCardSegments('actionLog.attackUnit', attackEvent?.payload?.attackerId),
+                        textSegment(' → '),
+                        ...(attackEvent?.payload?.target
+                            ? [i18nSeg('actionLog.position', { row: attackEvent.payload.target.row + 1, col: attackEvent.payload.target.col + 1 })]
+                            : [i18nSeg('actionLog.positionUnknown')]),
+                        textSegment(' '),
+                        hits === undefined
+                            ? i18nSeg('actionLog.attackDeclared')
+                            : i18nSeg('actionLog.attackHits', { hits }),
                     ],
                 };
             }
             case SW_COMMANDS.BUILD_STRUCTURE: {
                 const payload = command.payload as { cardId?: string; position?: { row: number; col: number } };
-                const positionLabel = formatCell(payload.position);
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
+                    timestamp, actorId, kind: command.type,
                     segments: [
-                        ...withCardSegments(t('actionLog.buildStructure'), payload.cardId),
-                        textSegment(` → ${positionLabel}`),
+                        ...withCardSegments('actionLog.buildStructure', payload.cardId),
+                        textSegment(' → '),
+                        payload.position
+                            ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                            : i18nSeg('actionLog.positionUnknown'),
                     ],
                 };
             }
             case SW_COMMANDS.END_PHASE: {
-                const phaseEvent = [...events].reverse().find((event) => event.type === SW_EVENTS.PHASE_CHANGED) as
-                    | { payload?: { to?: string } }
-                    | undefined;
+                const phaseEvent = [...events].reverse().find((e) => e.type === SW_EVENTS.PHASE_CHANGED) as
+                    | { payload?: { to?: string } } | undefined;
                 const phaseSuffix = phaseEvent?.payload?.to
-                    ? `：${formatPhaseLabel(phaseEvent.payload.to)}`
+                    ? `：${phaseEvent.payload.to}`
                     : '';
-                const phaseLabel = t('actionLog.endPhase', { phase: phaseSuffix });
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments: [textSegment(phaseLabel)],
+                    timestamp, actorId, kind: command.type,
+                    segments: [
+                        phaseEvent?.payload?.to
+                            ? i18nSeg('actionLog.endPhase', { phase: `：${phaseEvent.payload.to}` })
+                            : i18nSeg('actionLog.endPhase', { phase: '' }),
+                    ],
                 };
             }
             case FLOW_COMMANDS.ADVANCE_PHASE: {
-                const phaseEvent = [...events].reverse().find((event) => event.type === FLOW_EVENTS.PHASE_CHANGED) as
-                    | { payload?: { to?: string } }
-                    | undefined;
-                const phaseLabel = phaseEvent?.payload?.to
-                    ? formatPhaseLabel(phaseEvent.payload.to)
-                    : '';
+                const phaseEvent = [...events].reverse().find((e) => e.type === FLOW_EVENTS.PHASE_CHANGED) as
+                    | { payload?: { to?: string } } | undefined;
+                const phaseLabel = phaseEvent?.payload?.to ?? '';
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments: [textSegment(t('actionLog.advancePhase', { phase: phaseLabel }))],
+                    timestamp, actorId, kind: command.type,
+                    segments: [i18nSeg('actionLog.advancePhase', { phase: phaseLabel })],
                 };
             }
             case SW_COMMANDS.DISCARD_FOR_MAGIC: {
                 const payload = command.payload as { cardIds?: string[] };
                 const cardIds = payload.cardIds ?? [];
-                const segments: ActionLogSegment[] = [];
-                segments.push(textSegment(t('actionLog.discardForMagic')));
+                const segments: ActionLogSegment[] = [i18nSeg('actionLog.discardForMagic')];
                 if (cardIds.length === 0) {
-                    segments.push(textSegment(t('actionLog.none')));
+                    segments.push(i18nSeg('actionLog.none'));
                 } else {
                     cardIds.forEach((cardId, index) => {
                         const cardSegment = buildCardSegment(cardId);
-                        if (cardSegment) {
-                            segments.push(cardSegment);
-                        }
+                        if (cardSegment) segments.push(cardSegment);
                         if (index < cardIds.length - 1) {
-                            segments.push(textSegment(t('actionLog.cardSeparator')));
+                            segments.push(i18nSeg('actionLog.cardSeparator'));
                         }
                     });
                 }
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments,
+                    timestamp, actorId, kind: command.type, segments,
                 };
             }
             case SW_COMMANDS.PLAY_EVENT: {
                 const payload = command.payload as { cardId?: string };
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments: [
-                        ...withCardSegments(t('actionLog.playEvent'), payload.cardId),
-                    ],
+                    timestamp, actorId, kind: command.type,
+                    segments: withCardSegments('actionLog.playEvent', payload.cardId),
                 };
             }
             case SW_COMMANDS.BLOOD_SUMMON_STEP: {
                 const payload = command.payload as { summonCardId?: string; summonPosition?: { row: number; col: number } };
-                const positionLabel = formatCell(payload.summonPosition);
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
+                    timestamp, actorId, kind: command.type,
                     segments: [
-                        ...withCardSegments(t('actionLog.bloodSummon'), payload.summonCardId),
-                        textSegment(` → ${positionLabel}`),
+                        ...withCardSegments('actionLog.bloodSummon', payload.summonCardId),
+                        textSegment(' → '),
+                        payload.summonPosition
+                            ? i18nSeg('actionLog.position', { row: payload.summonPosition.row + 1, col: payload.summonPosition.col + 1 })
+                            : i18nSeg('actionLog.positionUnknown'),
                     ],
                 };
             }
             case SW_COMMANDS.FUNERAL_PYRE_HEAL: {
                 const payload = command.payload as { cardId?: string; targetPosition?: { row: number; col: number }; skip?: boolean };
-                const positionLabel = payload.targetPosition ? formatCell(payload.targetPosition) : '';
-                const actionText = payload.skip ? t('actionLog.funeralPyreSkip') : t('actionLog.funeralPyreHeal');
-                const segments: ActionLogSegment[] = [...withCardSegments(actionText, payload.cardId)];
+                const actionKey = payload.skip ? 'actionLog.funeralPyreSkip' : 'actionLog.funeralPyreHeal';
+                const segments: ActionLogSegment[] = withCardSegments(actionKey, payload.cardId);
                 if (payload.targetPosition) {
-                    segments.push(textSegment(` → ${positionLabel}`));
+                    segments.push(textSegment(' → '));
+                    segments.push(i18nSeg('actionLog.position', { row: payload.targetPosition.row + 1, col: payload.targetPosition.col + 1 }));
                 }
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments,
+                    timestamp, actorId, kind: command.type, segments,
                 };
             }
             case SW_COMMANDS.ACTIVATE_ABILITY: {
@@ -317,53 +321,49 @@ export function formatSummonerWarsActionEntry({
                     targetPosition?: { row: number; col: number };
                 };
                 const abilityName = formatAbilityName(payload.abilityId) || payload.abilityId;
-                const segments: ActionLogSegment[] = [textSegment(t('actionLog.activateAbility', { abilityName }))];
-
+                const segments: ActionLogSegment[] = [i18nSeg('actionLog.activateAbility', { abilityName }, ['abilityName'])];
                 if (payload.sourceUnitId) {
-                    segments.push(textSegment(t('actionLog.activateAbilitySource')));
+                    segments.push(i18nSeg('actionLog.activateAbilitySource'));
                     const sourceSegment = buildCardSegment(payload.sourceUnitId);
                     if (sourceSegment) segments.push(sourceSegment);
                 }
-
                 if (payload.targetCardId || payload.targetUnitId) {
-                    segments.push(textSegment(t('actionLog.activateAbilityTarget')));
+                    segments.push(i18nSeg('actionLog.activateAbilityTarget'));
                     const targetSegment = buildCardSegment(payload.targetCardId ?? payload.targetUnitId);
                     if (targetSegment) segments.push(targetSegment);
                 } else if (payload.targetPosition) {
-                    segments.push(textSegment(
-                        t('actionLog.activateAbilityTargetPosition', { position: formatCell(payload.targetPosition) })
-                    ));
+                    const posStr = `${payload.targetPosition.row + 1},${payload.targetPosition.col + 1}`;
+                    segments.push(i18nSeg('actionLog.activateAbilityTargetPosition', { position: posStr }));
                 }
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
-                    timestamp,
-                    actorId,
-                    kind: command.type,
-                    segments,
+                    timestamp, actorId, kind: command.type, segments,
                 };
             }
-            default: {
+            default:
                 return null;
-            }
         }
     })();
 
-    if (commandEntry) {
-        entries.push(commandEntry);
-    }
+    if (commandEntry) entries.push(commandEntry);
 
+    // ========================================================================
+    // 事件格式化
+    // ========================================================================
     events.forEach((event, index) => {
         const entryTimestamp = typeof event.timestamp === 'number' ? event.timestamp : timestamp;
         switch (event.type) {
             case SW_EVENTS.UNIT_SUMMONED: {
                 const payload = event.payload as { cardId?: string; position?: { row: number; col: number }; fromDiscard?: boolean };
-                const positionLabel = formatCell(payload.position);
-                const segments = [
-                    ...withCardSegments(t('actionLog.unitSummoned'), payload.cardId),
-                    textSegment(` → ${positionLabel}`),
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.unitSummoned', payload.cardId),
+                    textSegment(' → '),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
                 ];
                 if (payload.fromDiscard) {
-                    segments.push(textSegment(t('actionLog.unitSummonedFromDiscard')));
+                    segments.push(i18nSeg('actionLog.unitSummonedFromDiscard'));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -371,127 +371,160 @@ export function formatSummonerWarsActionEntry({
             case SW_EVENTS.UNIT_MOVED: {
                 const payload = event.payload as { from?: { row: number; col: number }; to?: { row: number; col: number }; unitId?: string };
                 const cardId = resolveUnitCardId(payload.from ?? payload.to, payload.unitId);
-                const fromLabel = formatCell(payload.from);
-                const toLabel = formatCell(payload.to);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.unitMoved'), cardId),
-                    textSegment(` ${fromLabel} → ${toLabel}`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.unitMoved', cardId),
+                    textSegment(' '),
+                    ...(payload.from
+                        ? [i18nSeg('actionLog.position', { row: payload.from.row + 1, col: payload.from.col + 1 })]
+                        : [i18nSeg('actionLog.positionUnknown')]),
+                    textSegment(' → '),
+                    ...(payload.to
+                        ? [i18nSeg('actionLog.position', { row: payload.to.row + 1, col: payload.to.col + 1 })]
+                        : [i18nSeg('actionLog.positionUnknown')]),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.UNIT_DAMAGED: {
                 const payload = event.payload as { position?: { row: number; col: number }; damage: number; cardId?: string };
                 const cardId = resolveUnitCardId(payload.position, payload.cardId);
-                const positionLabel = formatCell(payload.position);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.unitDamaged', { amount: payload.damage }), cardId),
-                    textSegment(` (${positionLabel})`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.unitDamaged', cardId, { amount: payload.damage }),
+                    textSegment(' ('),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
+                    textSegment(')'),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.UNIT_HEALED: {
                 const payload = event.payload as { position?: { row: number; col: number }; amount: number; cardId?: string };
                 const cardId = resolveUnitCardId(payload.position, payload.cardId);
-                const positionLabel = formatCell(payload.position);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.unitHealed', { amount: payload.amount }), cardId),
-                    textSegment(` (${positionLabel})`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.unitHealed', cardId, { amount: payload.amount }),
+                    textSegment(' ('),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
+                    textSegment(')'),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.UNIT_DESTROYED: {
                 const payload = event.payload as { position?: { row: number; col: number }; cardId?: string };
                 const cardId = resolveUnitCardId(payload.position, payload.cardId);
-                const positionLabel = formatCell(payload.position);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.unitDestroyed'), cardId),
-                    textSegment(` (${positionLabel})`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.unitDestroyed', cardId),
+                    textSegment(' ('),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
+                    textSegment(')'),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.UNIT_CHARGED: {
                 const payload = event.payload as { position?: { row: number; col: number }; delta?: number; newValue?: number; sourceAbilityId?: string };
                 const cardId = resolveUnitCardId(payload.position);
-                const segments = [
-                    ...withCardSegments(t('actionLog.unitCharged', { amount: formatDelta(payload.delta ?? 0) }), cardId),
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.unitCharged', cardId, { amount: formatDelta(payload.delta ?? 0) }),
                 ];
                 if (payload.newValue !== undefined) {
-                    segments.push(textSegment(t('actionLog.unitChargeTotal', { total: payload.newValue })));
+                    segments.push(i18nSeg('actionLog.unitChargeTotal', { total: payload.newValue }));
                 }
                 if (payload.sourceAbilityId) {
-                    segments.push(textSegment(t('actionLog.sourceAbility', { abilityName: formatAbilityName(payload.sourceAbilityId) })));
+                    segments.push(i18nSeg('actionLog.sourceAbility', { abilityName: formatAbilityName(payload.sourceAbilityId) }, ['abilityName']));
                 }
                 if (payload.position) {
-                    segments.push(textSegment(` (${formatCell(payload.position)})`));
+                    segments.push(textSegment(' ('));
+                    segments.push(i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 }));
+                    segments.push(textSegment(')'));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.STRUCTURE_BUILT: {
                 const payload = event.payload as { cardId?: string; position?: { row: number; col: number } };
-                const positionLabel = formatCell(payload.position);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.structureBuilt'), payload.cardId),
-                    textSegment(` → ${positionLabel}`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.structureBuilt', payload.cardId),
+                    textSegment(' → '),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.STRUCTURE_DAMAGED: {
                 const payload = event.payload as { position?: { row: number; col: number }; damage: number; cardId?: string };
                 const cardId = resolveStructureCardId(payload.position, payload.cardId);
-                const positionLabel = formatCell(payload.position);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.structureDamaged', { amount: payload.damage }), cardId),
-                    textSegment(` (${positionLabel})`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.structureDamaged', cardId, { amount: payload.damage }),
+                    textSegment(' ('),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
+                    textSegment(')'),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.STRUCTURE_HEALED: {
                 const payload = event.payload as { position?: { row: number; col: number }; amount: number; cardId?: string };
                 const cardId = resolveStructureCardId(payload.position, payload.cardId);
-                const positionLabel = formatCell(payload.position);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.structureHealed', { amount: payload.amount }), cardId),
-                    textSegment(` (${positionLabel})`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.structureHealed', cardId, { amount: payload.amount }),
+                    textSegment(' ('),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
+                    textSegment(')'),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.STRUCTURE_DESTROYED: {
                 const payload = event.payload as { position?: { row: number; col: number }; cardId?: string };
                 const cardId = resolveStructureCardId(payload.position, payload.cardId);
-                const positionLabel = formatCell(payload.position);
-                pushEntry(event.type, [
-                    ...withCardSegments(t('actionLog.structureDestroyed'), cardId),
-                    textSegment(` (${positionLabel})`),
-                ], actorId, entryTimestamp, index);
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.structureDestroyed', cardId),
+                    textSegment(' ('),
+                    payload.position
+                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
+                        : i18nSeg('actionLog.positionUnknown'),
+                    textSegment(')'),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.MAGIC_CHANGED: {
                 const payload = event.payload as { playerId?: PlayerId; delta?: number };
                 if (payload.delta !== undefined && payload.playerId) {
-                    pushEntry(event.type, [textSegment(t('actionLog.magicChanged', {
-                        player: formatPlayerLabel(payload.playerId),
-                        delta: formatDelta(payload.delta),
-                    }))], payload.playerId, entryTimestamp, index);
+                    pushEntry(event.type, [
+                        i18nSeg('actionLog.magicChanged', { playerId: payload.playerId, delta: formatDelta(payload.delta) }),
+                    ], payload.playerId, entryTimestamp, index);
                 }
                 break;
             }
             case SW_EVENTS.CARD_DRAWN: {
                 const payload = event.payload as { playerId?: PlayerId; count?: number };
                 if (payload.playerId && payload.count) {
-                    pushEntry(event.type, [textSegment(t('actionLog.cardDrawn', {
-                        player: formatPlayerLabel(payload.playerId),
-                        count: payload.count,
-                    }))], payload.playerId, entryTimestamp, index);
+                    pushEntry(event.type, [
+                        i18nSeg('actionLog.cardDrawn', { playerId: payload.playerId, count: payload.count }),
+                    ], payload.playerId, entryTimestamp, index);
                 }
                 break;
             }
             case SW_EVENTS.CARD_DISCARDED: {
                 const payload = event.payload as { playerId?: PlayerId; cardId?: string };
                 if (payload.playerId) {
-                    const segments: ActionLogSegment[] = [textSegment(t('actionLog.cardDiscarded', {
-                        player: formatPlayerLabel(payload.playerId),
-                    }))];
+                    const segments: ActionLogSegment[] = [
+                        i18nSeg('actionLog.cardDiscarded', { playerId: payload.playerId }),
+                    ];
                     const cardSegment = buildCardSegment(payload.cardId);
                     if (cardSegment) segments.push(cardSegment);
                     pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
@@ -501,7 +534,7 @@ export function formatSummonerWarsActionEntry({
             case SW_EVENTS.ABILITY_TRIGGERED: {
                 const payload = event.payload as { abilityId?: string; abilityName?: string; sourceUnitId?: string };
                 const abilityName = payload.abilityName ?? formatAbilityName(payload.abilityId);
-                const segments: ActionLogSegment[] = [textSegment(t('actionLog.abilityTriggered', { abilityName }))];
+                const segments: ActionLogSegment[] = [i18nSeg('actionLog.abilityTriggered', { abilityName }, ['abilityName'])];
                 if (payload.sourceUnitId) {
                     const sourceSegment = buildCardSegment(payload.sourceUnitId);
                     if (sourceSegment) segments.push(sourceSegment);
@@ -513,13 +546,15 @@ export function formatSummonerWarsActionEntry({
                 const payload = event.payload as { position?: { row: number; col: number }; multiplier: number; sourceAbilityId?: string };
                 const cardId = resolveUnitCardId(payload.position);
                 const segments: ActionLogSegment[] = [
-                    ...withCardSegments(t('actionLog.strengthModified', { multiplier: payload.multiplier }), cardId),
+                    ...withCardSegments('actionLog.strengthModified', cardId, { multiplier: payload.multiplier }),
                 ];
                 if (payload.sourceAbilityId) {
-                    segments.push(textSegment(t('actionLog.sourceAbility', { abilityName: formatAbilityName(payload.sourceAbilityId) })));
+                    segments.push(i18nSeg('actionLog.sourceAbility', { abilityName: formatAbilityName(payload.sourceAbilityId) }, ['abilityName']));
                 }
                 if (payload.position) {
-                    segments.push(textSegment(` (${formatCell(payload.position)})`));
+                    segments.push(textSegment(' ('));
+                    segments.push(i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 }));
+                    segments.push(textSegment(')'));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -527,10 +562,10 @@ export function formatSummonerWarsActionEntry({
             case SW_EVENTS.DAMAGE_REDUCED: {
                 const payload = event.payload as { value: number; sourceAbilityId?: string; sourceUnitId?: string };
                 const segments: ActionLogSegment[] = [
-                    ...withCardSegments(t('actionLog.damageReduced', { amount: payload.value }), payload.sourceUnitId),
+                    ...withCardSegments('actionLog.damageReduced', payload.sourceUnitId, { amount: payload.value }),
                 ];
                 if (payload.sourceAbilityId) {
-                    segments.push(textSegment(t('actionLog.sourceAbility', { abilityName: formatAbilityName(payload.sourceAbilityId) })));
+                    segments.push(i18nSeg('actionLog.sourceAbility', { abilityName: formatAbilityName(payload.sourceAbilityId) }, ['abilityName']));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -541,29 +576,38 @@ export function formatSummonerWarsActionEntry({
                 const cardId = payload.isStructure
                     ? resolveStructureCardId(payload.targetPosition)
                     : resolveUnitCardId(payload.targetPosition);
-                const fromLabel = formatCell(payload.targetPosition);
-                const toLabel = formatCell(payload.newPosition);
                 const actionKey = event.type === SW_EVENTS.UNIT_PUSHED
-                    ? 'actionLog.unitPushed'
-                    : 'actionLog.unitPulled';
-                pushEntry(event.type, [
-                    ...withCardSegments(t(actionKey), cardId),
-                    textSegment(` ${fromLabel} → ${toLabel}`),
-                ], actorId, entryTimestamp, index);
+                    ? 'actionLog.unitPushed' : 'actionLog.unitPulled';
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments(actionKey, cardId),
+                    textSegment(' '),
+                    ...(payload.targetPosition
+                        ? [i18nSeg('actionLog.position', { row: payload.targetPosition.row + 1, col: payload.targetPosition.col + 1 })]
+                        : [i18nSeg('actionLog.positionUnknown')]),
+                    textSegment(' → '),
+                    ...(payload.newPosition
+                        ? [i18nSeg('actionLog.position', { row: payload.newPosition.row + 1, col: payload.newPosition.col + 1 })]
+                        : [i18nSeg('actionLog.positionUnknown')]),
+                ];
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.UNITS_SWAPPED: {
                 const payload = event.payload as { positionA?: { row: number; col: number }; positionB?: { row: number; col: number }; unitIdA?: string; unitIdB?: string };
                 const cardA = resolveUnitCardId(payload.positionA, payload.unitIdA);
                 const cardB = resolveUnitCardId(payload.positionB, payload.unitIdB);
-                const segments: ActionLogSegment[] = [textSegment(t('actionLog.unitsSwapped'))];
+                const segments: ActionLogSegment[] = [i18nSeg('actionLog.unitsSwapped')];
                 const cardSegmentA = buildCardSegment(cardA);
                 const cardSegmentB = buildCardSegment(cardB);
                 if (cardSegmentA) segments.push(cardSegmentA);
                 segments.push(textSegment(' ↔ '));
                 if (cardSegmentB) segments.push(cardSegmentB);
                 if (payload.positionA && payload.positionB) {
-                    segments.push(textSegment(` (${formatCell(payload.positionA)} ↔ ${formatCell(payload.positionB)})`));
+                    segments.push(textSegment(' ('));
+                    segments.push(i18nSeg('actionLog.position', { row: payload.positionA.row + 1, col: payload.positionA.col + 1 }));
+                    segments.push(textSegment(' ↔ '));
+                    segments.push(i18nSeg('actionLog.position', { row: payload.positionB.row + 1, col: payload.positionB.col + 1 }));
+                    segments.push(textSegment(')'));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -572,10 +616,10 @@ export function formatSummonerWarsActionEntry({
                 const payload = event.payload as { targetPosition?: { row: number; col: number }; targetUnitId?: string; newOwner: PlayerId; temporary?: boolean };
                 const cardId = resolveUnitCardId(payload.targetPosition, payload.targetUnitId);
                 const segments: ActionLogSegment[] = [
-                    ...withCardSegments(t('actionLog.controlTransferred', { player: formatPlayerLabel(payload.newOwner) }), cardId),
+                    ...withCardSegments('actionLog.controlTransferred', cardId, { playerId: payload.newOwner }),
                 ];
                 if (payload.temporary) {
-                    segments.push(textSegment(t('actionLog.controlTransferredTemporary')));
+                    segments.push(i18nSeg('actionLog.controlTransferredTemporary'));
                 }
                 pushEntry(event.type, segments, payload.newOwner, entryTimestamp, index);
                 break;
@@ -583,9 +627,7 @@ export function formatSummonerWarsActionEntry({
             case SW_EVENTS.EVENT_ATTACHED: {
                 const payload = event.payload as { cardId?: string; targetPosition?: { row: number; col: number } };
                 const targetCardId = resolveUnitCardId(payload.targetPosition);
-                const segments: ActionLogSegment[] = [
-                    ...withCardSegments(t('actionLog.eventAttached'), payload.cardId),
-                ];
+                const segments: ActionLogSegment[] = withCardSegments('actionLog.eventAttached', payload.cardId);
                 if (targetCardId) {
                     segments.push(textSegment(' → '));
                     const targetSegment = buildCardSegment(targetCardId);
@@ -599,9 +641,9 @@ export function formatSummonerWarsActionEntry({
                 const targetCardId = payload.eventCardId ?? payload.cardId;
                 const segments: ActionLogSegment[] = [];
                 if (payload.charges === undefined) {
-                    segments.push(...withCardSegments(t('actionLog.funeralPyreCharged', { amount: '+1' }), targetCardId));
+                    segments.push(...withCardSegments('actionLog.funeralPyreCharged', targetCardId, { amount: '+1' }));
                 } else {
-                    segments.push(...withCardSegments(t('actionLog.funeralPyreChargeSet', { total: payload.charges }), targetCardId));
+                    segments.push(...withCardSegments('actionLog.funeralPyreChargeSet', targetCardId, { total: payload.charges }));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -610,7 +652,7 @@ export function formatSummonerWarsActionEntry({
                 const payload = event.payload as { sourceUnitId?: string; targetUnitId?: string; targetPosition?: { row: number; col: number } };
                 const sourceSegment = buildCardSegment(payload.sourceUnitId);
                 const targetSegment = buildCardSegment(payload.targetUnitId ?? resolveUnitCardId(payload.targetPosition));
-                const segments: ActionLogSegment[] = [textSegment(t('actionLog.abilitiesCopied'))];
+                const segments: ActionLogSegment[] = [i18nSeg('actionLog.abilitiesCopied')];
                 if (sourceSegment) segments.push(sourceSegment);
                 segments.push(textSegment(' ← '));
                 if (targetSegment) segments.push(targetSegment);
@@ -620,7 +662,7 @@ export function formatSummonerWarsActionEntry({
             case SW_EVENTS.UNIT_ATTACHED: {
                 const payload = event.payload as { sourceUnitId?: string; targetPosition?: { row: number; col: number } };
                 const targetCardId = resolveUnitCardId(payload.targetPosition);
-                const segments: ActionLogSegment[] = [textSegment(t('actionLog.unitAttached'))];
+                const segments: ActionLogSegment[] = [i18nSeg('actionLog.unitAttached')];
                 const sourceSegment = buildCardSegment(payload.sourceUnitId);
                 if (sourceSegment) segments.push(sourceSegment);
                 if (targetCardId) {
@@ -634,20 +676,18 @@ export function formatSummonerWarsActionEntry({
             case SW_EVENTS.HEALING_MODE_SET: {
                 const payload = event.payload as { unitId?: string; position?: { row: number; col: number } };
                 const cardId = resolveUnitCardId(payload.position, payload.unitId);
-                const segments: ActionLogSegment[] = [
-                    ...withCardSegments(t('actionLog.healingModeSet'), cardId),
-                ];
+                const segments: ActionLogSegment[] = withCardSegments('actionLog.healingModeSet', cardId);
                 if (payload.position) {
-                    segments.push(textSegment(` (${formatCell(payload.position)})`));
+                    segments.push(textSegment(' ('));
+                    segments.push(i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 }));
+                    segments.push(textSegment(')'));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SW_EVENTS.HYPNOTIC_LURE_MARKED: {
                 const payload = event.payload as { cardId?: string; targetUnitId?: string };
-                const segments: ActionLogSegment[] = [
-                    ...withCardSegments(t('actionLog.hypnoticLureMarked'), payload.cardId),
-                ];
+                const segments: ActionLogSegment[] = withCardSegments('actionLog.hypnoticLureMarked', payload.cardId);
                 if (payload.targetUnitId) {
                     segments.push(textSegment(' → '));
                     const targetSegment = buildCardSegment(payload.targetUnitId);

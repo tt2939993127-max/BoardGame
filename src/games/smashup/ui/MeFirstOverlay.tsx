@@ -6,6 +6,7 @@ import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { CheckCircle } from 'lucide-react';
+import { GameButton } from './GameButton';
 import type { MatchState } from '../../../engine/types';
 import type { SmashUpCore, ActionCardDef } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
@@ -81,29 +82,32 @@ export const MeFirstOverlay: React.FC<{
                             <div className="flex flex-wrap gap-2 justify-center mb-2" data-testid="me-first-special-cards">
                                 {specialCards.map(card => {
                                     const def = getCardDef(card.defId);
-                                    const resolvedName = resolveCardName(def, i18n.language) || card.defId;
+                                    const resolvedName = resolveCardName(def, t) || card.defId;
                                     return (
-                                        <button
+                                        <GameButton
                                             key={card.uid}
+                                            variant="danger"
+                                            size="sm"
                                             onClick={() => handlePlaySpecial(card.uid)}
-                                            className="bg-purple-600 text-white px-3 py-2 rounded shadow-md font-bold text-sm hover:bg-purple-700 hover:scale-105 transition-all border-2 border-purple-300"
                                             data-testid={`me-first-card-${card.uid}`}
                                         >
                                             {resolvedName}
-                                        </button>
+                                        </GameButton>
                                     );
                                 })}
                             </div>
                         )}
 
                         {/* 让过按钮 */}
-                        <button
-                            onClick={handlePass}
-                            className="bg-slate-700 text-white px-6 py-3 rounded shadow-lg font-black uppercase tracking-wider hover:bg-slate-800 hover:scale-105 transition-all mx-auto"
-                            data-testid="me-first-pass-button"
-                        >
-                            {t('ui.me_first_pass')}
-                        </button>
+                        <div className="flex justify-center">
+                            <GameButton
+                                variant="secondary"
+                                onClick={handlePass}
+                                data-testid="me-first-pass-button"
+                            >
+                                {t('ui.me_first_pass')}
+                            </GameButton>
+                        </div>
                     </div>
                 )}
 

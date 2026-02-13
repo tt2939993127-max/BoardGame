@@ -387,7 +387,7 @@ const handleChoiceResolved: EventHandler<Extract<DiceThroneEvent, { type: 'CHOIC
     if (customId) {
         const handler = getChoiceEffectHandler(customId);
         if (handler) {
-            const result = handler({ state: resultState, playerId, customId, sourceAbilityId });
+            const result = handler({ state: resultState, playerId, customId, sourceAbilityId, value });
             if (result) {
                 resultState = { ...resultState, ...result };
             }
@@ -412,7 +412,7 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
     event
 ) => {
     const { nextPlayerId, turnNumber } = event.payload;
-    return { ...state, activePlayerId: nextPlayerId, turnNumber };
+    return { ...state, activePlayerId: nextPlayerId, turnNumber, lastResolvedAttackDamage: undefined };
 };
 
 /**

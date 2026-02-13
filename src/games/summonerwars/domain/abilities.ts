@@ -11,12 +11,15 @@
  */
 
 import type { CellCoord } from './types';
-import { isCellEmpty } from './helpers';
+import { isCellEmpty, getPlayerUnits } from './helpers';
+import { isUndeadCard } from './ids';
 import { TRICKSTER_ABILITIES } from './abilities-trickster';
 import { GOBLIN_ABILITIES } from './abilities-goblin';
 import { PALADIN_ABILITIES } from './abilities-paladin';
 import { FROST_ABILITIES } from './abilities-frost';
 import { BARBARIC_ABILITIES } from './abilities-barbaric';
+import { abilityText } from './abilityTextHelper';
+import type { InteractionChain } from '../../../engine/primitives/ability';
 
 // ============================================================================
 // 技能触发时机
@@ -128,6 +131,20 @@ export type AbilityCondition =
   | { type: 'not'; condition: AbilityCondition };
 
 // ============================================================================
+// UI 上下文类型
+// ============================================================================
+
+/**
+ * 技能 UI 按钮可用性检查上下文
+ */
+export interface AbilityUIContext {
+  core: import('./types').SummonerWarsCore;
+  unit: import('./types').BoardUnit;
+  playerId: import('./types').PlayerId;
+  myHand: Array<{ cardType: string; name: string; id: string }>;
+}
+
+// ============================================================================
 // 技能定义
 // ============================================================================
 
@@ -165,6 +182,8 @@ export interface AbilityDef {
   usesPerTurn?: number;
   /** 音效 key */
   sfxKey?: string;
+  /** 交互链声明（多步交互技能必填，用于契约校验） */
+  interactionChain?: InteractionChain;
   /** 验证规则（用于主动技能） */
   validation?: {
     /** 必须在指定阶段使用 */
@@ -182,6 +201,18 @@ export interface AbilityDef {
     buttonLabel?: string;
     /** 按钮样式 */
     buttonVariant?: 'primary' | 'secondary' | 'danger';
+    /** 快速可用性检查（返回 false 则不显示按钮） */
+    quickCheck?: (ctx: AbilityUIContext) => boolean;
+    /** 激活模式的初始步骤（默认 'selectUnit'） */
+    activationStep?: string;
+    /** 激活模式的上下文标记 */
+    activationContext?: string;
+    /** 激活类型：'abilityMode'（默认）| 'directExecute' | 'withdrawMode' */
+    activationType?: 'abilityMode' | 'directExecute' | 'withdrawMode';
+    /** 是否使用 validate 结果控制 disabled 状态（而非隐藏） */
+    useValidateForDisabled?: boolean;
+    /** 额外的前置条件（如 !unit.hasMoved），返回 false 则不显示 */
+    extraCondition?: (ctx: AbilityUIContext) => boolean;
   };
 }
 
@@ -205,37 +236,27 @@ export interface ValidationResult {
 }
 
 // ============================================================================
-// 技能注册表
+// 技能注册表（使用引擎层 AbilityRegistry）
 // ============================================================================
+
+import { AbilityRegistry } from '../../../engine/primitives/ability';
 
 /**
  * 技能注册表
+ *
+ * 使用引擎层通用 AbilityRegistry 替代自建实现，
+ * 获得 has/getByTag/getRegisteredIds 等能力。
+ *
+ * 注：SW 的 AbilityDef 与引擎层 AbilityDef 的 condition/cost 类型不兼容，
+ * 因此使用 `as any` 实例化。运行时行为完全一致（registry 内部只用 id/trigger/tags）。
  */
-class AbilityRegistry {
-  private definitions = new Map<string, AbilityDef>();
-
-  register(def: AbilityDef): void {
-    this.definitions.set(def.id, def);
-  }
-
-  registerAll(defs: AbilityDef[]): void {
-    defs.forEach(def => this.register(def));
-  }
-
-  get(id: string): AbilityDef | undefined {
-    return this.definitions.get(id);
-  }
-
-  getAll(): AbilityDef[] {
-    return Array.from(this.definitions.values());
-  }
-
-  getByTrigger(trigger: AbilityTrigger): AbilityDef[] {
-    return this.getAll().filter(def => def.trigger === trigger);
-  }
-}
-
-export const abilityRegistry = new AbilityRegistry();
+export const abilityRegistry = new AbilityRegistry<AbilityDef>('sw-abilities') as AbilityRegistry<AbilityDef> & {
+  register(def: AbilityDef): void;
+  registerAll(defs: AbilityDef[]): void;
+  get(id: string): AbilityDef | undefined;
+  getAll(): AbilityDef[];
+  getByTrigger(trigger: AbilityTrigger): AbilityDef[];
+};
 
 // ============================================================================
 // 亡灵法师阵营技能定义
@@ -248,8 +269,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 召唤师 - 复活死灵
   {
     id: 'revive_undead',
-    name: '复活死灵',
-    description: '每回合一次，在你的召唤阶段，你可以对本单位造成2点伤害，以从你的弃牌堆中拿取一张亡灵单位并且放置到本单位相邻的区格。',
+    name: abilityText('revive_undead', 'name'),
+    description: abilityText('revive_undead', 'description'),
     sfxKey: 'magic.dark.29.dark_resurrection',
     trigger: 'activated',
     condition: {
@@ -269,6 +290,15 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       type: 'card',
       filter: { type: 'isUnitType', target: 'self', unitType: 'undead' },
     },
+    interactionChain: {
+      steps: [
+        { step: 'selectCard', inputType: 'card', producesField: 'targetCardId' },
+        { step: 'selectPosition', inputType: 'position', producesField: 'targetPosition' },
+      ],
+      payloadContract: {
+        required: ['targetCardId', 'targetPosition'],
+      },
+    },
     validation: {
       requiredPhase: 'summon',
       customValidator: (ctx) => {
@@ -284,8 +314,7 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
           return { valid: false, error: '弃牌堆中没有该单位卡' };
         }
         
-        const isUndead = card.id.includes('undead') || card.name.includes('亡灵') || (card as import('./types').UnitCard).faction === 'necromancer';
-        if (!isUndead) return { valid: false, error: '只能复活亡灵单位' };
+        if (!isUndeadCard(card)) return { valid: false, error: '只能复活亡灵单位' };
         
         // 检查是否相邻
         const isAdjacent = Math.abs(ctx.sourcePosition.row - targetPosition.row) + Math.abs(ctx.sourcePosition.col - targetPosition.col) === 1;
@@ -307,6 +336,9 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       buttonPhase: 'summon',
       buttonLabel: 'abilityButtons.reviveUndead',
       buttonVariant: 'primary',
+      activationStep: 'selectCard',
+      quickCheck: ({ core, playerId }) =>
+        core.players[playerId]?.discard.some(c => c.cardType === 'unit' && isUndeadCard(c)) ?? false,
     },
   },
 
@@ -314,8 +346,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 注意：实际执行逻辑由下方主动版本 fire_sacrifice_summon 的 custom actionId 驱动
   {
     id: 'fire_sacrifice_passive',
-    name: '火祀召唤（被动）',
-    description: '当你为召唤本单位支付费用时，还必须消灭一个友方单位，并且使用本单位替换被消灭的单位。',
+    name: abilityText('fire_sacrifice_passive', 'name'),
+    description: abilityText('fire_sacrifice_passive', 'description'),
     sfxKey: 'fantasy.elemental_sword_fireattack_01',
     trigger: 'onSummon',
     effects: [
@@ -334,8 +366,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 德拉戈斯 - 吸取生命
   {
     id: 'life_drain',
-    name: '吸取生命',
-    description: '在本单位攻击之前，可以消灭其2个区格以内的一个友方单位。如果你这样做，则本次攻击战力翻倍。',
+    name: abilityText('life_drain', 'name'),
+    description: abilityText('life_drain', 'description'),
     sfxKey: 'fantasy.dark_sword_steallife',
     trigger: 'beforeAttack',
     condition: { type: 'always' },
@@ -396,14 +428,25 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.lifeDrain',
       buttonVariant: 'secondary',
+      activationStep: 'selectUnit',
+      activationContext: 'beforeAttack',
+      quickCheck: ({ core, unit, playerId }) => {
+        const pos = core.selectedUnit;
+        if (!pos) return false;
+        return getPlayerUnits(core, playerId).some(u => {
+          if (u.cardId === unit.cardId) return false;
+          const dist = Math.abs(u.position.row - pos.row) + Math.abs(u.position.col - pos.col);
+          return dist <= 2;
+        });
+      },
     },
   },
 
   // 古尔-达斯 - 暴怒
   {
     id: 'rage',
-    name: '暴怒',
-    description: '本单位每有1点伤害，则获得战力+1。',
+    name: abilityText('rage', 'name'),
+    description: abilityText('rage', 'description'),
     sfxKey: 'magic.dark.32.dark_spell_01',
     trigger: 'onDamageCalculation',
     effects: [
@@ -418,8 +461,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 亡灵战士 - 血腥狂怒
   {
     id: 'blood_rage',
-    name: '血腥狂怒',
-    description: '每当一个单位在你的回合中被消灭时，将本单位充能。在你的回合结束时，从本单位上移除2点充能。',
+    name: abilityText('blood_rage', 'name'),
+    description: abilityText('blood_rage', 'description'),
     sfxKey: 'fantasy.dark_sword_attack_withblood_01',
     trigger: 'onUnitDestroyed',
     condition: { type: 'always' }, // 任意单位被消灭
@@ -431,8 +474,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 亡灵战士 - 力量强化（被动）
   {
     id: 'power_boost',
-    name: '力量强化',
-    description: '本单位每有1点充能，则获得战力+1，至多为+5。',
+    name: abilityText('power_boost', 'name'),
+    description: abilityText('power_boost', 'description'),
     sfxKey: 'magic.dark.32.dark_spell_02',
     trigger: 'onDamageCalculation',
     effects: [
@@ -451,8 +494,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 亡灵战士 - 回合结束充能衰减
   {
     id: 'blood_rage_decay',
-    name: '血腥狂怒衰减',
-    description: '在你的回合结束时，从本单位上移除2点充能。',
+    name: abilityText('blood_rage_decay', 'name'),
+    description: abilityText('blood_rage_decay', 'description'),
     sfxKey: 'fantasy.dark_sword_attack_withblood_02',
     trigger: 'onTurnEnd',
     condition: { type: 'hasCharge', target: 'self', minStacks: 1 },
@@ -464,8 +507,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 地狱火教徒 - 献祭
   {
     id: 'sacrifice',
-    name: '献祭',
-    description: '在本单位被消灭之后，对其相邻的每个敌方单位造成1点伤害。',
+    name: abilityText('sacrifice', 'name'),
+    description: abilityText('sacrifice', 'description'),
     sfxKey: 'fantasy.elemental_sword_fireattack_02',
     trigger: 'onDeath',
     effects: [
@@ -476,8 +519,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 亡灵疫病体 - 无魂
   {
     id: 'soulless',
-    name: '无魂',
-    description: '当本单位消灭敌方单位时，你不会获得魔力。',
+    name: abilityText('soulless', 'name'),
+    description: abilityText('soulless', 'description'),
     sfxKey: 'magic.dark.32.dark_spell_03',
     trigger: 'onKill',
     effects: [
@@ -488,8 +531,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 亡灵疫病体 - 感染
   {
     id: 'infection',
-    name: '感染',
-    description: '在本单位消灭一个单位之后，你可以使用你的弃牌堆中一个疫病体单位替换被消灭的单位。',
+    name: abilityText('infection', 'name'),
+    description: abilityText('infection', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_blight_curse_001',
     trigger: 'onKill',
     condition: { type: 'hasCardInDiscard', cardType: 'plagueZombie' },
@@ -500,6 +543,15 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'card',
       filter: { type: 'isUnitType', target: 'self', unitType: 'common' },
+    },
+    interactionChain: {
+      steps: [
+        { step: 'selectPosition', inputType: 'position', producesField: 'targetPosition' },
+        { step: 'selectCard', inputType: 'card', producesField: 'targetCardId' },
+      ],
+      payloadContract: {
+        required: ['targetCardId', 'targetPosition'],
+      },
     },
     validation: {
       customValidator: (ctx) => {
@@ -533,8 +585,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
   // 亡灵弓箭手 - 灵魂转移
   {
     id: 'soul_transfer',
-    name: '灵魂转移',
-    description: '当本单位消灭3个区格以内的一个单位后，你可使用本单位替换被消灭的单位。',
+    name: abilityText('soul_transfer', 'name'),
+    description: abilityText('soul_transfer', 'description'),
     sfxKey: 'magic.general.spells_variations_vol_2.unholy_echo.magevil_unholy_echo_01_krst_none',
     trigger: 'onKill',
     condition: { type: 'isInRange', target: 'victim', range: 3 },
@@ -565,8 +617,8 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
 
   {
     id: 'fire_sacrifice_summon',
-    name: '火祀召唤',
-    description: '在你的召唤阶段，你可以消灭一个友方单位，以代替支付魔力费用来召唤一个单位。',
+    name: abilityText('fire_sacrifice_summon', 'name'),
+    description: abilityText('fire_sacrifice_summon', 'description'),
     sfxKey: 'fantasy.elemental_sword_fireattack_01',
     trigger: 'activated',
     effects: [
@@ -604,6 +656,9 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       buttonPhase: 'summon',
       buttonLabel: 'abilityButtons.fireSacrificeSummon',
       buttonVariant: 'secondary',
+      activationStep: 'selectUnit',
+      quickCheck: ({ core, unit, playerId }) =>
+        getPlayerUnits(core, playerId).some(u => u.cardId !== unit.cardId),
     },
   },
 ];

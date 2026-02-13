@@ -35,6 +35,7 @@ import { getFactionMeta } from './ui/factionMeta';
 import { PLAYER_CONFIG } from './ui/playerConfig';
 import { BaseZone } from './ui/BaseZone';
 import { MeFirstOverlay } from './ui/MeFirstOverlay';
+import { GameButton as SmashUpGameButton } from './ui/GameButton';
 import { DeckDiscardZone } from './ui/DeckDiscardZone';
 import { SMASHUP_AUDIO_CONFIG } from './audio.config';
 import { useTutorialBridge, useTutorial } from '../../contexts/TutorialContext';
@@ -510,7 +511,8 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                                 <div className="bg-white p-6 rotate-1 shadow-2xl max-w-md text-center border-4 border-red-500 border-dashed">
                                     <h2 className="text-2xl font-black text-red-600 uppercase mb-2 transform -rotate-1">{t('ui.too_many_cards')}</h2>
                                     <p className="font-bold text-slate-700 mb-4">{t('ui.discard_desc', { count: discardCount })}</p>
-                                    <button
+                                    <SmashUpGameButton
+                                        variant="primary"
                                         onClick={() => {
                                             if (discardSelection.size === discardCount) {
                                                 moves[SU_COMMANDS.DISCARD_TO_LIMIT]?.({ cardUids: Array.from(discardSelection) });
@@ -518,10 +520,9 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                                             }
                                         }}
                                         disabled={discardSelection.size !== discardCount}
-                                        className="bg-slate-800 text-white font-black px-6 py-3 rounded shadow-lg hover:bg-black hover:scale-105 transition-all uppercase tracking-widest disabled:opacity-50"
                                     >
                                         {t('ui.throw_away')}
-                                    </button>
+                                    </SmashUpGameButton>
                                 </div>
                             </div>
                         )}
@@ -662,11 +663,11 @@ const CardDetailOverlay: React.FC<{
     type: 'minion' | 'base' | 'action';
     onClose: () => void;
 }> = ({ defId, type, onClose }) => {
-    const { i18n } = useTranslation('game-smashup');
+    const { t } = useTranslation('game-smashup');
     const def = type === 'base' ? getBaseDef(defId) : getCardDef(defId);
     if (!def) return null;
-    const resolvedName = resolveCardName(def, i18n.language) || defId;
-    const resolvedText = resolveCardText(def, i18n.language);
+    const resolvedName = resolveCardName(def, t) || defId;
+    const resolvedText = resolveCardText(def, t);
 
     return (
         <motion.div

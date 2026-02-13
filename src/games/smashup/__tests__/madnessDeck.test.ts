@@ -8,7 +8,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { reduce } from '../domain/reducer';
 import {
     SU_EVENTS,
@@ -35,7 +35,7 @@ import {
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
-    clearPromptContinuationRegistry();
+    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });

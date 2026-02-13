@@ -10,6 +10,7 @@ import { SummonerWarsDomain } from './index';
 import { abilityRegistry } from './abilities';
 import type { AbilityTrigger, ValidationContext } from './abilities';
 import { getUnitAbilities } from './helpers';
+import { isUndeadCard } from './ids';
 
 /**
  * 获取单位在当前阶段可主动激活的技能
@@ -126,10 +127,7 @@ export function canActivateAbility(
   // 特殊检查：复活死灵需要弃牌堆有亡灵单位
   if (abilityId === 'revive_undead') {
     const player = core.players[playerId];
-    return player.discard.some(c =>
-      c.cardType === 'unit' && 
-      (c.id.includes('undead') || c.name.includes('亡灵') || (c as import('./types').UnitCard).faction === 'necromancer')
-    );
+    return player.discard.some(c => isUndeadCard(c));
   }
 
   if (abilityDef.validation?.customValidator && !abilityDef.requiresTargetSelection) {

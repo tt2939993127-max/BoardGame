@@ -1,8 +1,6 @@
 import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
 import { STATUS_IDS, TOKEN_IDS, PYROMANCER_DICE_FACE_IDS } from '../../domain/ids';
-
-const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
+import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 
 const PYROMANCER_SFX_FIREBALL = 'magic.general.simple_magic_sound_fx_pack_vol.fire.small_fireball_cast_a';
 const PYROMANCER_SFX_SOUL_BURN = 'magic.general.simple_magic_sound_fx_pack_vol.fire.combustion';
@@ -23,14 +21,14 @@ const damage = (value: number, description: string, opts?: { timing?: EffectTimi
 const inflictStatus = (statusId: string, value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
     description,
     action: { type: 'grantStatus', target: 'opponent', statusId, value },
-    timing: opts?.timing ?? 'immediate',
+    timing: opts?.timing,
     condition: opts?.condition,
 });
 
 const grantToken = (tokenId: string, value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition }): AbilityEffect => ({
     description,
     action: { type: 'grantToken', target: 'self', tokenId, value },
-    timing: opts?.timing ?? 'immediate',
+    timing: opts?.timing,
     condition: opts?.condition,
 });
 
@@ -122,7 +120,7 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('pyro-blast', 'description'),
         sfxKey: PYROMANCER_SFX_PYRO_BLAST,
-        trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIRE]: 3, [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 1 } },
+        trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIRE]: 3, [PYROMANCER_DICE_FACE_IDS.METEOR]: 1 } },
         effects: [
             damage(6, abilityEffectText('pyro-blast', 'damage6')),
             {
@@ -325,7 +323,7 @@ export const METEOR_2: AbilityDef = {
             id: 'meteor-2',
             trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.METEOR]: 4 } },
             effects: [
-                grantToken(TOKEN_IDS.FIRE_MASTERY, 2, abilityEffectText('meteor-2', 'gainFM2')),
+                // FM 获得由 meteor-resolve 内部处理（先获得FM再基于FM算伤害）
                 inflictStatus(STATUS_IDS.STUN, 1, abilityEffectText('meteor-2', 'inflictStun')),
                 {
                     description: abilityEffectText('meteor-2', 'unblockable'),
@@ -345,7 +343,7 @@ export const PYRO_BLAST_2: AbilityDef = {
     type: 'offensive',
     description: abilityText('pyro-blast-2', 'description'),
     sfxKey: PYROMANCER_SFX_PYRO_BLAST,
-    trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIRE]: 3, [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 1 } },
+    trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIRE]: 3, [PYROMANCER_DICE_FACE_IDS.METEOR]: 1 } },
     effects: [
         damage(6, abilityEffectText('pyro-blast-2', 'damage6')),
         {
@@ -366,7 +364,7 @@ export const PYRO_BLAST_3: AbilityDef = {
     type: 'offensive',
     description: abilityText('pyro-blast-3', 'description'),
     sfxKey: PYROMANCER_SFX_PYRO_BLAST,
-    trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIRE]: 3, [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 1 } },
+    trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIRE]: 3, [PYROMANCER_DICE_FACE_IDS.METEOR]: 1 } },
     effects: [
         damage(6, abilityEffectText('pyro-blast-3', 'damage6')),
         {
@@ -398,7 +396,7 @@ export const BURN_DOWN_2: AbilityDef = {
     },
     tags: ['unblockable'],
     effects: [
-        grantToken(TOKEN_IDS.FIRE_MASTERY, 1, abilityEffectText('burn-down', 'gainFM1')),
+        // FM 获得由 burn-down-2-resolve 内部处理（先获得FM再消耗FM算伤害）
         {
             description: abilityEffectText('burn-down-2', 'main'),
             action: { type: 'custom', target: 'self', customActionId: 'burn-down-2-resolve' }
@@ -414,7 +412,7 @@ export const IGNITE_2: AbilityDef = {
     sfxKey: PYROMANCER_SFX_IGNITE,
     trigger: { type: 'largeStraight' },
     effects: [
-        grantToken(TOKEN_IDS.FIRE_MASTERY, 2, abilityEffectText('ignite-2', 'gainFM2')),
+        // FM 获得由 ignite-2-resolve 内部处理（先获得FM再基于FM算伤害）
         inflictStatus(STATUS_IDS.BURN, 1, abilityEffectText('ignite-2', 'inflictBurn')),
         {
             description: abilityEffectText('ignite-2', 'main'),

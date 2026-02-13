@@ -2,7 +2,7 @@
  * 大杀四方 - 天赋能力测试
  *
  * 覆盖：
- * - 米斯卡塔尼克大学：miskatonic_fellow（研究员 talent）
+ * - 米斯卡塔尼克大学：miskatonic_psychologist（研究员 talent）
  * - 克苏鲁之仆：cthulhu_star_spawn（星之眷族 talent）
  * - 克苏鲁之仆：cthulhu_servitor（仆人 talent）
  */
@@ -19,7 +19,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { makeMinion, makeCard, makePlayer, makeState, makeMatchState } from './helpers';
+import { makeMinion, makeCard, makePlayer, makeState, makeMatchState, getInteractionsFromMS } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -46,23 +46,25 @@ const defaultRandom: RandomFn = {
 };
 
 // ============================================================================
-// 米斯卡塔尼克大学：研究员 talent
+// 米斯卡塔尼克大学：教授 talent
 // ============================================================================
 
-describe('miskatonic_fellow（研究员 talent）', () => {
-    it('使用天赋：抽1张牌 + 额外行动', () => {
+describe('miskatonic_professor（教授 talent）', () => {
+    it('手中有疯狂卡时：弃疯狂卡 + 额外行动 + 额外随从', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
+                    hand: [
+                        makeCard('mad1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                    ],
                     deck: [
                         makeCard('d1', 'test_card_a', 'action', '0'),
-                        makeCard('d2', 'test_card_b', 'minion', '0'),
                     ],
                 }),
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'base_a', minions: [makeMinion('m1', 'miskatonic_fellow', '0', 3)], ongoingActions: [] },
+                { defId: 'base_a', minions: [makeMinion('m1', 'miskatonic_professor', '0', 5)], ongoingActions: [] },
             ],
         });
 
@@ -72,31 +74,33 @@ describe('miskatonic_fellow（研究员 talent）', () => {
             payload: { minionUid: 'm1', baseIndex: 0 },
         }, defaultRandom);
 
-        // 应有 TALENT_USED + CARDS_DRAWN + LIMIT_MODIFIED
+        // 应有 TALENT_USED + CARDS_DISCARDED + LIMIT_MODIFIED(action) + LIMIT_MODIFIED(minion)
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        expect(types).toContain(SU_EVENTS.CARDS_DRAWN);
-        expect(types).toContain(SU_EVENTS.LIMIT_MODIFIED);
+        expect(types).toContain(SU_EVENTS.CARDS_DISCARDED);
 
-        // 抽1张牌
-        const drawEvt = events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)!;
-        expect((drawEvt as any).payload.count).toBe(1);
-        expect((drawEvt as any).payload.cardUids).toEqual(['d1']);
+        // 弃掉疯狂卡
+        const discardEvt = events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)!;
+        expect((discardEvt as any).payload.cardUids).toEqual(['mad1']);
 
-        // 额外行动
-        const limitEvt = events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED)!;
-        expect((limitEvt as any).payload.limitType).toBe('action');
-        expect((limitEvt as any).payload.delta).toBe(1);
+        // 额外行动 + 额外随从
+        const limitEvts = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvts.length).toBe(2);
+        const limitTypes = limitEvts.map(e => (e as any).payload.limitType);
+        expect(limitTypes).toContain('action');
+        expect(limitTypes).toContain('minion');
     });
 
-    it('牌库为空时仍给额外行动', () => {
+    it('手中无疯狂卡时无效果', () => {
         const core = makeState({
             players: {
-                '0': makePlayer('0', { deck: [] }),
+                '0': makePlayer('0', {
+                    hand: [makeCard('c1', 'test_card', 'minion', '0')],
+                }),
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'base_a', minions: [makeMinion('m1', 'miskatonic_fellow', '0', 3)], ongoingActions: [] },
+                { defId: 'base_a', minions: [makeMinion('m1', 'miskatonic_professor', '0', 5)], ongoingActions: [] },
             ],
         });
 
@@ -108,8 +112,9 @@ describe('miskatonic_fellow（研究员 talent）', () => {
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        expect(types).not.toContain(SU_EVENTS.CARDS_DRAWN);
-        expect(types).toContain(SU_EVENTS.LIMIT_MODIFIED);
+        // 无疯狂卡，不应有弃牌或额外行动事件
+        expect(types).not.toContain(SU_EVENTS.CARDS_DISCARDED);
+        expect(types).not.toContain(SU_EVENTS.LIMIT_MODIFIED);
     });
 
     it('天赋已使用时不能再次使用', () => {
@@ -117,7 +122,7 @@ describe('miskatonic_fellow（研究员 talent）', () => {
             bases: [
                 {
                     defId: 'base_a',
-                    minions: [makeMinion('m1', 'miskatonic_fellow', '0', 3, { talentUsed: true })],
+                    minions: [makeMinion('m1', 'miskatonic_professor', '0', 5, { talentUsed: true })],
                     ongoingActions: [],
                 },
             ],
@@ -125,7 +130,6 @@ describe('miskatonic_fellow（研究员 talent）', () => {
 
         // 天赋已使用的随从，execute 不会被调用（由 validate 拦截）
         // 但 execute 层面如果直接调用，minion 存在但 talentUsed=true
-        // 这里测试 execute 仍然会生成事件（validate 是在 commands.ts 中）
         const events = execute(makeMatchState(core), {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
@@ -159,7 +163,8 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
             madnessDeck: ['madness_def_1', 'madness_def_2', 'madness_def_3'],
         });
 
-        const events = execute(makeMatchState(core), {
+        const ms = makeMatchState(core);
+        const events = execute(ms, {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
             payload: { minionUid: 'm1', baseIndex: 0 },
@@ -167,8 +172,9 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        // 单张疯狂卡时创建 Prompt
-        expect(types).toContain(SU_EVENTS.CHOICE_REQUESTED);
+        // 单张疯狂卡时创建 Interaction（不再生成 CHOICE_REQUESTED）
+        const interactions = getInteractionsFromMS(ms);
+        expect(interactions.length).toBe(1);
         expect(types).not.toContain(SU_EVENTS.MADNESS_RETURNED);
         expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
     });
@@ -214,7 +220,8 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
             madnessDeck: [],
         });
 
-        const events = execute(makeMatchState(core), {
+        const ms2 = makeMatchState(core);
+        const events = execute(ms2, {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
             payload: { minionUid: 'm1', baseIndex: 0 },
@@ -222,8 +229,9 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        // 单张疯狂卡时创建 Prompt
-        expect(types).toContain(SU_EVENTS.CHOICE_REQUESTED);
+        // 单张疯狂卡时创建 Interaction
+        const interactions2 = getInteractionsFromMS(ms2);
+        expect(interactions2.length).toBe(1);
         expect(types).not.toContain(SU_EVENTS.MADNESS_RETURNED);
         expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
     });
@@ -255,7 +263,8 @@ describe('cthulhu_servitor（仆人 talent）', () => {
             ],
         });
 
-        const events = execute(makeMatchState(core), {
+        const ms3 = makeMatchState(core);
+        const events = execute(ms3, {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
             payload: { minionUid: 'm1', baseIndex: 0 },
@@ -264,8 +273,9 @@ describe('cthulhu_servitor（仆人 talent）', () => {
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
         expect(types).toContain(SU_EVENTS.MINION_DESTROYED);
-        // 单张行动卡时创建 Prompt 而非直接放牌库顶
-        expect(types).toContain(SU_EVENTS.CHOICE_REQUESTED);
+        // 单张行动卡时创建 Interaction（不再生成 CHOICE_REQUESTED）
+        const interactions3 = getInteractionsFromMS(ms3);
+        expect(interactions3.length).toBe(1);
         expect(types).not.toContain(SU_EVENTS.DECK_RESHUFFLED);
 
         // 消灭的是自身
@@ -343,19 +353,17 @@ describe('cthulhu_servitor（仆人 talent）', () => {
             ],
         });
 
-        const events = execute(makeMatchState(core), {
+        const ms4 = makeMatchState(core);
+        const events = execute(ms4, {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
             payload: { minionUid: 'm1', baseIndex: 0 },
         }, defaultRandom);
 
-        // 多张行动卡时应创建 Prompt（不自动选择）
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        const cont = (promptEvents[0] as any).payload;
-        expect(cont.abilityId).toBe('cthulhu_servitor');
-        // 应有2个选项（dis1 和 dis2，不包含 minion_c）
-        expect(cont.promptConfig.options.length).toBe(2);
+        // 多张行动卡时应创建 Interaction（不再生成 CHOICE_REQUESTED）
+        const interactions4 = getInteractionsFromMS(ms4);
+        expect(interactions4.length).toBe(1);
+        expect(interactions4[0].data.sourceId).toBe('cthulhu_servitor');
     });
 });
 

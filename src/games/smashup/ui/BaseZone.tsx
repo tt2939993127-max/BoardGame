@@ -31,10 +31,10 @@ export const BaseZone: React.FC<{
     tokenRef?: (el: HTMLDivElement | null) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
 }> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMyTurn, myPlayerId, moves, onClick, onViewMinion, onViewAction, tokenRef, isTutorialTargetAllowed }) => {
-    const { i18n } = useTranslation('game-smashup');
+    const { t } = useTranslation('game-smashup');
     const baseDef = getBaseDef(base.defId);
-    const baseName = resolveCardName(baseDef, i18n.language) || base.defId;
-    const baseText = resolveCardText(baseDef, i18n.language);
+    const baseName = resolveCardName(baseDef, t) || base.defId;
+    const baseText = resolveCardText(baseDef, t);
     const totalPower = getTotalEffectivePowerOnBase(core, base, baseIndex);
     const breakpoint = baseDef?.breakpoint || 20;
     const ratio = totalPower / breakpoint;
@@ -57,7 +57,7 @@ export const BaseZone: React.FC<{
                 <div className="absolute -top-[6vw] left-1/2 -translate-x-1/2 flex items-center gap-[0.4vw] z-30">
                     {base.ongoingActions.map((oa, idx) => {
                         const actionDef = getCardDef(oa.defId);
-                        const actionName = resolveCardName(actionDef, i18n.language) || oa.defId;
+                        const actionName = resolveCardName(actionDef, t) || oa.defId;
                         const pConf = PLAYER_CONFIG[parseInt(oa.ownerId) % PLAYER_CONFIG.length];
                         return (
                             <motion.div
@@ -242,9 +242,9 @@ const MinionCard: React.FC<{
     onView: () => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
 }> = ({ minion, index, pid, baseIndex, isMyTurn, myPlayerId, moves, onView, isTutorialTargetAllowed }) => {
-    const { t, i18n } = useTranslation('game-smashup');
+    const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
-    const resolvedName = resolveCardName(def, i18n.language) || minion.defId;
+    const resolvedName = resolveCardName(def, t) || minion.defId;
     const conf = PLAYER_CONFIG[parseInt(pid) % PLAYER_CONFIG.length];
 
     // 天赋判定：有 talent 标签 + 本回合未使用 + 是我的随从 + 轮到我 + 教程允许

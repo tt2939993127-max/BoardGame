@@ -18,3 +18,5 @@ export * from './RedPulse';
 export * from './DamageNumber';
 export * from './ShatterEffect';
 export * from './canvasParticleEngine';
+export * from './useDamageFlash';
+export * from './useImpactFeedback';

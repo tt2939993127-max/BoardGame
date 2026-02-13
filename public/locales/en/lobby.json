@@ -36,8 +36,8 @@
     "spectate": "Spectate",
     "destroy": "Destroy",
     "leave": "Leave",
-    "forceExit": "Clear & Return",
-    "forceExitHint": "Clear local data and return to lobby",
+    "forceExit": "Force Clear",
+    "forceExitHint": "Clear local data (room may still exist on server)",
     "reconnect": "Reconnect",
     "reconnectEnter": "Rejoin",
     "join": "Join",
@@ -145,7 +145,7 @@
       "failed": "Failed to destroy the room: backend did not respond or the request failed. Please try again.",
       "forceExitTitle": "Unable to destroy room",
       "forceExitDescription": "Destroy failed and may keep you stuck here. You can clear local data and return to the lobby (the room may still exist on the server).",
-      "forceExitConfirm": "Clear & Return"
+      "forceExitConfirm": "Force Clear"
     },
     "autoExit": {
       "message": "Host left, the room is closed. Returning to lobby…",
@@ -170,6 +170,12 @@
     },
     "error": {
       "matchMissing": "Room not found or already deleted"
+    },
+    "connectionTimeout": {
+      "title": "Connection Timeout",
+      "description": "Unable to connect to the game server. Please check your network or server status.",
+      "retry": "Retry",
+      "backToLobby": "Back to Lobby"
     },
     "ugc": {
       "loading": "Loading UGC runtime…",

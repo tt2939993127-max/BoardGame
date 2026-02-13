@@ -114,14 +114,15 @@ export const DiceTray = ({
                 {dice.map((d, i) => {
                     const selected = isSelected(d.id);
                     const isModified = modifiedDice.includes(String(d.id));
-                    const showRerollButton = isInteractionMode && interaction?.type === 'selectDie';
                     // adjust 模式：选中后显示 +/- 按钮
                     const showAdjustButtons = isInteractionMode && isAdjustMode && selected;
                     // any 模式：已修改的骰子始终显示控件，未修改的骰子在未达到上限时显示控件（也用 +/- 按钮）
                     const showAnyModeButtons = isInteractionMode && isAnyMode &&
                         (isModified || modifiedDice.length < maxModifyCount);
+                    // selectDie 模式下，isKept 的骰子（未参与本阶段投掷）不可选择
+                    const isInactiveDie = interaction?.type === 'selectDie' && d.isKept;
                     const clickable = isInteractionMode
-                        ? (isAnyMode ? false : (canSelectMore || selected))  // any 模式不需要点选骰子，直接操作 +/-
+                        ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
                         : canInteract;
 
                     return (
@@ -177,21 +178,6 @@ export const DiceTray = ({
                                         </div>
                                     )}
                                 </div>
-                                {showRerollButton && (
-                                    <button
-                                        type="button"
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            if (clickable) handleDieClick(d.id);
-                                        }}
-                                        disabled={!clickable}
-                                        className={`px-[0.6vw] py-[0.15vw] rounded-full text-[0.6vw] font-bold transition-[background-color,transform] duration-150 border ${selected
-                                            ? 'bg-amber-500 text-black border-amber-200/80'
-                                            : 'bg-slate-800 text-slate-200 border-white/10'} ${!clickable ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
-                                    >
-                                        {selected ? t('dice.rerollSelected', '已选') : t('dice.reroll', '重投')}
-                                    </button>
-                                )}
                             </div>
 
                             {/* 右侧 - 加号按钮（adjust 模式和 any 模式） */}

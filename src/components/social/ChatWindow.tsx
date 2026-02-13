@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Send, Gamepad2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import type { Message } from '../../types/social';
+import type { Message } from '../../services/social.types';
 import { socialSocket, SOCIAL_EVENTS, type NewMessagePayload } from '../../services/socialSocket';
 
 // NOTE: 该组件是“好友私聊”窗口，不是局内聊天。局内聊天在 `src/components/game/GameHUD.tsx`。

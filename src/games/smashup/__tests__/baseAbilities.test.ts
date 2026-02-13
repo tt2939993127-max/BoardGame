@@ -68,9 +68,9 @@ describe('基地能力注册表', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_test', 'onMinionPlayed', ctx);
-        expect(events).toHaveLength(1);
-        expect(events[0]).toBe(mockEvent);
+        const result = triggerBaseAbility('base_test', 'onMinionPlayed', ctx);
+        expect(result.events).toHaveLength(1);
+        expect(result.events[0]).toBe(mockEvent);
     });
 
     it('触发未注册的基地能力返回空数组', () => {
@@ -82,8 +82,8 @@ describe('基地能力注册表', () => {
             now: 1000,
         };
 
-        const events = triggerBaseAbility('base_unknown', 'onMinionPlayed', ctx);
-        expect(events).toHaveLength(0);
+        const result = triggerBaseAbility('base_unknown', 'onMinionPlayed', ctx);
+        expect(result.events).toHaveLength(0);
     });
 
     it('triggerAllBaseAbilities 只触发 onMinionPlayed 所在基地', () => {

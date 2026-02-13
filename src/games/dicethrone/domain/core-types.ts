@@ -124,6 +124,8 @@ export interface CardPlayCondition {
     requireNotRollConfirmed?: boolean;
     /** 必须有至少指定数量的骰子 */
     requireMinDiceCount?: number;
+    /** 必须本回合已对对手造成至少指定伤害（检查 lastResolvedAttackDamage） */
+    requireMinDamageDealt?: number;
 }
 
 /** 卡牌多语言文案 */
@@ -394,6 +396,12 @@ export interface DiceThroneCore {
     pendingDamage?: PendingDamage;
     /** 待结算的奖励骰（等待重掷交互） */
     pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
+    /**
+     * 最近一次攻击结算的实际伤害值
+     * 由 ATTACK_RESOLVED 写入，TURN_CHANGED / ATTACK_INITIATED 时清除
+     * 用于 card-dizzy 等需要"造成至少 N 伤害"条件的卡牌
+     */
+    lastResolvedAttackDamage?: number;
     /**
      * 额外攻击进行中标志（晕眩 daze 触发）
      * 当攻击方有 daze 时，攻击结算后对手获得一次额外攻击机会

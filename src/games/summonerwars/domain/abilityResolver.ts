@@ -35,6 +35,7 @@ import {
   type ConditionNode as PrimitiveConditionNode,
   type ExpressionNode as PrimitiveExpressionNode,
 } from '../../../engine/primitives';
+import { getBaseCardId, isUndeadCard, CARD_IDS } from './ids';
 
 // ============================================================================
 // 效果解析上下文
@@ -179,9 +180,7 @@ registerConditionHandler(swConditionRegistry, 'isUnitType', (params, ctx) => {
   const units = resolveTargetUnits(target, abilityCtx);
   return units.some(u => {
     if (unitType === 'undead') {
-      return u.card.id.includes('undead') ||
-        u.card.name.includes('亡灵') ||
-        u.card.faction === 'necromancer';
+      return isUndeadCard(u.card);
     }
     return u.card.unitClass === unitType;
   });
@@ -212,8 +211,7 @@ registerConditionHandler(swConditionRegistry, 'hasCardInDiscard', (params, ctx) 
   const player = abilityCtx.state.players[abilityCtx.ownerId];
   return player.discard.some(card => {
     if (cardType === 'undead') {
-      return card.cardType === 'unit' &&
-        (card.id.includes('undead') || card.name?.includes('亡灵'));
+      return isUndeadCard(card);
     }
     if (cardType === 'plagueZombie') {
       return card.id.includes('plague-zombie') || card.name?.includes('疫病体');
@@ -689,8 +687,7 @@ export function calculateEffectiveStrength(
   // 附加事件卡加成（如狱火铸剑 +2）
   if (unit.attachedCards) {
     for (const attached of unit.attachedCards) {
-      const baseId = attached.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-      if (baseId === 'necro-hellfire-blade') {
+      if (getBaseCardId(attached.id) === CARD_IDS.NECRO_HELLFIRE_BLADE) {
         strength += 2;
       }
     }
@@ -700,8 +697,7 @@ export function calculateEffectiveStrength(
   if (targetUnit && unit.card.unitClass === 'summoner') {
     const player = state.players[unit.owner];
     for (const ev of player.activeEvents) {
-      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-      if (baseId === 'trickster-hypnotic-lure' && ev.targetUnitId === targetUnit.cardId) {
+      if (getBaseCardId(ev.id) === CARD_IDS.TRICKSTER_HYPNOTIC_LURE && ev.targetUnitId === targetUnit.cardId) {
         strength += 1;
       }
     }
@@ -746,8 +742,7 @@ export function calculateEffectiveStrength(
   if (targetUnit) {
     const player = state.players[unit.owner];
     const hasSwarm = player.activeEvents.some(ev => {
-      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-      return baseId === 'goblin-swarm';
+      return getBaseCardId(ev.id) === CARD_IDS.GOBLIN_SWARM;
     });
     if (hasSwarm) {
       // 计算与目标相邻的其它友方单位数量
@@ -836,8 +831,7 @@ export function calculateEffectiveStrength(
   if (unit.card.unitClass === 'common') {
     const player = state.players[unit.owner];
     const hasHolyJudgment = player.activeEvents.some(ev => {
-      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-      return baseId === 'paladin-holy-judgment' && (ev.charges ?? 0) > 0;
+      return getBaseCardId(ev.id) === CARD_IDS.PALADIN_HOLY_JUDGMENT && (ev.charges ?? 0) > 0;
     });
     if (hasHolyJudgment) {
       strength += 1;
@@ -870,8 +864,7 @@ export function getStrengthBoostForDisplay(
 export function hasHellfireBlade(unit: UnitInstance): boolean {
   if (!unit.attachedCards) return false;
   return unit.attachedCards.some(c => {
-    const baseId = c.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-    return baseId === 'necro-hellfire-blade';
+    return getBaseCardId(c.id) === CARD_IDS.NECRO_HELLFIRE_BLADE;
   });
 }
 

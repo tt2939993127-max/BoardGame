@@ -12,6 +12,8 @@ export interface ChoiceEffectContext {
     playerId: string;
     customId: string;
     sourceAbilityId?: string;
+    /** CHOICE_RESOLVED 事件中的 value（选项携带的数值） */
+    value?: number;
 }
 
 /**

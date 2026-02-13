@@ -10,6 +10,10 @@ vi.mock('../../../core', () => ({
     preloadWarmImages,
 }));
 
+vi.mock('../../../../core/CriticalImageResolverRegistry', () => ({
+    resolveCriticalImages: vi.fn().mockReturnValue({ critical: [], warm: [] }),
+}));
+
 vi.mock('../../../system/LoadingScreen', () => ({
     LoadingScreen: ({ description }: { description?: string }) => (
         <div data-loading="true">{description ?? 'loading'}</div>

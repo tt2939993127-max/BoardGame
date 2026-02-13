@@ -21,6 +21,7 @@ import {
   findOnGrid,
   collectOnGrid,
 } from '../../../engine/primitives/grid';
+import { getBaseCardId, CARD_IDS } from './ids';
 
 // ============================================================================
 // 常量
@@ -487,8 +488,7 @@ export function getStormAssaultReduction(state: SummonerWarsCore): number {
     const player = state.players[pid];
     if (!player) continue;
     for (const ev of player.activeEvents) {
-      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-      if (baseId === 'trickster-storm-assault') return 1;
+      if (getBaseCardId(ev.id) === CARD_IDS.TRICKSTER_STORM_ASSAULT) return 1;
     }
   }
   return 0;

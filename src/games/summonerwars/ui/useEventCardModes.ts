@@ -14,6 +14,7 @@ import {
   getStructureAt, isValidCoord, getSummoner, findUnitPosition,
 } from '../domain/helpers';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
+import { getBaseCardId, CARD_IDS } from '../domain/ids';
 import type { SoulTransferModeState, MindCaptureModeState, AfterAttackAbilityModeState } from './useGameEvents';
 import type { BloodSummonModeState, AnnihilateModeState, FuneralPyreModeState } from './StatusBanners';
 import type {
@@ -515,7 +516,7 @@ export function useEventCardModes({
     const card = myHand.find(c => c.id === cardId);
     if (!card || card.cardType !== 'event') return;
     const eventCard = card as EventCard;
-    const baseId = eventCard.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+    const baseId = getBaseCardId(eventCard.id);
 
     switch (baseId) {
       case 'necro-hellfire-blade': {
@@ -716,8 +717,8 @@ export function useEventCardModes({
     const player = core.players[myPlayerId as '0' | '1'];
     if (!player) return;
     for (const ev of player.activeEvents) {
-      const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-      if (baseId === 'necro-funeral-pyre' && (ev.charges ?? 0) > 0) {
+      const baseId = getBaseCardId(ev.id);
+      if (baseId === CARD_IDS.NECRO_FUNERAL_PYRE && (ev.charges ?? 0) > 0) {
         // eslint-disable-next-line react-hooks/set-state-in-effect -- sync game state to UI mode
         setFuneralPyreMode({ cardId: ev.id, charges: ev.charges ?? 0 });
         return;

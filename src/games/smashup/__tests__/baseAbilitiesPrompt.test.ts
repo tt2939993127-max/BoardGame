@@ -27,6 +27,7 @@ import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { triggerBaseAbilityWithMS, getInteractionsFromResult } from './helpers';
 
 // ============================================================================
 // 初始化
@@ -99,7 +100,7 @@ function makeCtx(overrides: Partial<BaseAbilityContext>): BaseAbilityContext {
 
 describe('base_the_homeworld: 随从入场额外随从额度', () => {
     it('打出随从后获得 +1 随从额度', () => {
-        const events = triggerBaseAbility('base_the_homeworld', 'onMinionPlayed', makeCtx({
+        const { events } = triggerBaseAbility('base_the_homeworld', 'onMinionPlayed', makeCtx({
             state: makeState({ bases: [makeBase('base_the_homeworld')] }),
             baseDefId: 'base_the_homeworld',
             minionUid: 'm1',
@@ -122,7 +123,7 @@ describe('base_the_homeworld: 随从入场额外随从额度', () => {
 
 describe('base_the_mothership: 计分后冠军收回随从', () => {
     it('有力量≤3的随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_the_mothership', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_the_mothership', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_the_mothership', {
                     minions: [
@@ -139,19 +140,19 @@ describe('base_the_mothership: 计分后冠军收回随从', () => {
             ],
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_the_mothership');
-        expect(continuation.playerId).toBe('0'); // 冠军
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_the_mothership');
+        expect(interactions[0].playerId).toBe('0'); // 冠军
         // 只有 m1 (power=2) 符合条件（≤3且为冠军控制）
-        const options = continuation.data.promptConfig.options;
+        const options = interactions[0].data.options;
         // 应有 skip + 1 个随从选项
         expect(options.length).toBe(2);
     });
 
     it('冠军无力量≤3的随从时不生成 Prompt', () => {
-        const events = triggerBaseAbility('base_the_mothership', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_the_mothership', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_the_mothership', {
                     minions: [makeMinion('m1', '0', 5)],
@@ -165,7 +166,7 @@ describe('base_the_mothership: 计分后冠军收回随从', () => {
     });
 
     it('无排名信息时不触发', () => {
-        const events = triggerBaseAbility('base_the_mothership', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_the_mothership', 'afterScoring', makeCtx({
             state: makeState({ bases: [makeBase('base_the_mothership')] }),
             baseDefId: 'base_the_mothership',
         }));
@@ -180,7 +181,7 @@ describe('base_the_mothership: 计分后冠军收回随从', () => {
 
 describe('base_ninja_dojo: 计分后冠军消灭随从', () => {
     it('有随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_ninja_dojo', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_ninja_dojo', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_ninja_dojo', {
                     minions: [
@@ -196,17 +197,17 @@ describe('base_ninja_dojo: 计分后冠军消灭随从', () => {
             ],
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_ninja_dojo');
-        expect(continuation.playerId).toBe('0'); // 冠军
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_ninja_dojo');
+        expect(interactions[0].playerId).toBe('0'); // 冠军
         // skip + 2 个随从选项（可消灭任意随从）
-        expect(continuation.data.promptConfig.options.length).toBe(3);
+        expect(interactions[0].data.options.length).toBe(3);
     });
 
     it('无随从时不生成 Prompt', () => {
-        const events = triggerBaseAbility('base_ninja_dojo', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_ninja_dojo', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_ninja_dojo')],
             }),
@@ -224,7 +225,7 @@ describe('base_ninja_dojo: 计分后冠军消灭随从', () => {
 
 describe('base_pirate_cove: 计分后非冠军移动随从', () => {
     it('非冠军有随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_pirate_cove', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_pirate_cove', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_pirate_cove', {
                     minions: [
@@ -241,15 +242,15 @@ describe('base_pirate_cove: 计分后非冠军移动随从', () => {
         }));
 
         // 只有玩家1（非冠军）生成 Prompt
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_pirate_cove');
-        expect(continuation.playerId).toBe('1');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_pirate_cove');
+        expect(interactions[0].playerId).toBe('1');
     });
 
     it('冠军不生成 Prompt', () => {
-        const events = triggerBaseAbility('base_pirate_cove', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_pirate_cove', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_pirate_cove', {
                     minions: [makeMinion('m1', '0', 5)], // 只有冠军有随从
@@ -263,7 +264,7 @@ describe('base_pirate_cove: 计分后非冠军移动随从', () => {
     });
 
     it('非冠军无随从时不生成 Prompt', () => {
-        const events = triggerBaseAbility('base_pirate_cove', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_pirate_cove', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_pirate_cove', {
                     minions: [makeMinion('m1', '0', 5)],
@@ -286,7 +287,7 @@ describe('base_pirate_cove: 计分后非冠军移动随从', () => {
 
 describe('base_tortuga: 计分后亚军移动随从', () => {
     it('亚军有随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_tortuga', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_tortuga', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_tortuga', {
                     minions: [
@@ -302,15 +303,15 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
             ],
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_tortuga');
-        expect(continuation.playerId).toBe('1'); // 亚军
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_tortuga');
+        expect(interactions[0].playerId).toBe('1'); // 亚军
     });
 
     it('排名不足2人时不触发', () => {
-        const events = triggerBaseAbility('base_tortuga', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_tortuga', 'afterScoring', makeCtx({
             state: makeState({ bases: [makeBase('base_tortuga')] }),
             baseDefId: 'base_tortuga',
             rankings: [{ playerId: '0', power: 5, vp: 4 }],
@@ -320,7 +321,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
     });
 
     it('亚军在此无随从时不触发', () => {
-        const events = triggerBaseAbility('base_tortuga', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_tortuga', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_tortuga', {
                     minions: [makeMinion('m1', '0', 5)],
@@ -343,7 +344,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
 
 describe('base_wizard_academy: 计分后冠军重排基地牌库', () => {
     it('基地牌库有牌时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_wizard_academy', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_wizard_academy', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_wizard_academy')],
                 baseDeck: ['base_a', 'base_b', 'base_c', 'base_d'],
@@ -352,18 +353,19 @@ describe('base_wizard_academy: 计分后冠军重排基地牌库', () => {
             rankings: [{ playerId: '0', power: 5, vp: 3 }],
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_wizard_academy');
-        expect(continuation.playerId).toBe('0');
+        expect(result.events).toHaveLength(0);
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_wizard_academy');
+        expect(interactions[0].playerId).toBe('0');
         // 查看顶部最多 3 张
-        expect(continuation.data.topCards).toHaveLength(3);
-        expect(continuation.data.topCards).toEqual(['base_a', 'base_b', 'base_c']);
+        const ctx = (interactions[0].data as any).continuationContext;
+        expect(ctx.topCards).toHaveLength(3);
+        expect(ctx.topCards).toEqual(['base_a', 'base_b', 'base_c']);
     });
 
     it('基地牌库只有1张时也能触发', () => {
-        const events = triggerBaseAbility('base_wizard_academy', 'afterScoring', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_wizard_academy', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_wizard_academy')],
                 baseDeck: ['base_x'],
@@ -372,13 +374,13 @@ describe('base_wizard_academy: 计分后冠军重排基地牌库', () => {
             rankings: [{ playerId: '0', power: 5, vp: 3 }],
         }));
 
-        expect(events).toHaveLength(1);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.data.topCards).toHaveLength(1);
+        expect(result.events).toHaveLength(0);
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(1);
     });
 
     it('基地牌库为空时不触发', () => {
-        const events = triggerBaseAbility('base_wizard_academy', 'afterScoring', makeCtx({
+        const { events } = triggerBaseAbility('base_wizard_academy', 'afterScoring', makeCtx({
             state: makeState({
                 bases: [makeBase('base_wizard_academy')],
                 baseDeck: [],
@@ -397,7 +399,7 @@ describe('base_wizard_academy: 计分后冠军重排基地牌库', () => {
 
 describe('base_mushroom_kingdom: 回合开始移动对手随从', () => {
     it('其他基地有对手随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_mushroom_kingdom', 'onTurnStart', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_mushroom_kingdom', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [
                     makeBase('base_mushroom_kingdom'), // 索引 0
@@ -410,17 +412,17 @@ describe('base_mushroom_kingdom: 回合开始移动对手随从', () => {
             baseDefId: 'base_mushroom_kingdom',
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_mushroom_kingdom');
-        expect(continuation.playerId).toBe('0');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_mushroom_kingdom');
+        expect(interactions[0].playerId).toBe('0');
         // skip + 1 个对手随从
-        expect(continuation.data.promptConfig.options.length).toBe(2);
+        expect(interactions[0].data.options.length).toBe(2);
     });
 
     it('只有己方随从时不生成 Prompt', () => {
-        const events = triggerBaseAbility('base_mushroom_kingdom', 'onTurnStart', makeCtx({
+        const { events } = triggerBaseAbility('base_mushroom_kingdom', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [
                     makeBase('base_mushroom_kingdom'),
@@ -437,7 +439,7 @@ describe('base_mushroom_kingdom: 回合开始移动对手随从', () => {
     });
 
     it('蘑菇王国自身的对手随从不计入选项', () => {
-        const events = triggerBaseAbility('base_mushroom_kingdom', 'onTurnStart', makeCtx({
+        const { events } = triggerBaseAbility('base_mushroom_kingdom', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [
                     makeBase('base_mushroom_kingdom', {
@@ -460,7 +462,7 @@ describe('base_mushroom_kingdom: 回合开始移动对手随从', () => {
 
 describe('base_rlyeh: 回合开始消灭己方随从获1VP', () => {
     it('有己方随从时生成 Prompt', () => {
-        const events = triggerBaseAbility('base_rlyeh', 'onTurnStart', makeCtx({
+        const result = triggerBaseAbilityWithMS('base_rlyeh', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [makeBase('base_rlyeh', {
                     minions: [makeMinion('m1', '0', 3)],
@@ -470,17 +472,17 @@ describe('base_rlyeh: 回合开始消灭己方随从获1VP', () => {
             baseDefId: 'base_rlyeh',
         }));
 
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const continuation = (events[0] as any).payload;
-        expect(continuation.abilityId).toBe('base_rlyeh');
-        expect(continuation.playerId).toBe('0');
+        expect(result.events).toHaveLength(0);
+            const interactions = getInteractionsFromResult(result);
+            expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_rlyeh');
+        expect(interactions[0].playerId).toBe('0');
         // skip + 己方随从
-        expect(continuation.data.promptConfig.options.length).toBe(2);
+        expect(interactions[0].data.options.length).toBe(2);
     });
 
     it('无己方随从时不生成 Prompt', () => {
-        const events = triggerBaseAbility('base_rlyeh', 'onTurnStart', makeCtx({
+        const { events } = triggerBaseAbility('base_rlyeh', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [makeBase('base_rlyeh', {
                     minions: [makeMinion('m1', '1', 3)], // 对手随从
@@ -494,7 +496,7 @@ describe('base_rlyeh: 回合开始消灭己方随从获1VP', () => {
     });
 
     it('基地为空时不生成 Prompt', () => {
-        const events = triggerBaseAbility('base_rlyeh', 'onTurnStart', makeCtx({
+        const { events } = triggerBaseAbility('base_rlyeh', 'onTurnStart', makeCtx({
             state: makeState({
                 bases: [makeBase('base_rlyeh')],
             }),

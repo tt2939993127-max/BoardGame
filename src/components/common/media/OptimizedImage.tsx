@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ImgHTMLAttributes } from 'react';
-import { getOptimizedImageUrls } from '../../../core/AssetLoader';
+import { getOptimizedImageUrls, isImagePreloaded } from '../../../core/AssetLoader';
 
 type OptimizedImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
     src: string;
@@ -21,7 +21,8 @@ export const SHIMMER_BG: React.CSSProperties = {
 
 export const OptimizedImage = ({ src, fallbackSrc, alt, onError, onLoad: onLoadProp, style: styleProp, placeholder = true, className, ...rest }: OptimizedImageProps) => {
     const [useFallback, setUseFallback] = React.useState(false);
-    const [loaded, setLoaded] = React.useState(false);
+    const [loaded, setLoaded] = React.useState(() => isImagePreloaded(src));
+    const [errored, setErrored] = React.useState(false);
     const imgRef = React.useRef<HTMLImageElement>(null);
 
     const primaryUrls = getOptimizedImageUrls(src);
@@ -34,10 +35,14 @@ export const OptimizedImage = ({ src, fallbackSrc, alt, onError, onLoad: onLoadP
     React.useLayoutEffect(() => {
         if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
             setLoaded(true);
+        } else if (isImagePreloaded(src)) {
+            // 门禁已预加载，浏览器缓存尚未同步到 img 元素，保持 loaded
+            setLoaded(true);
         } else {
             setLoaded(false);
         }
-    }, [currentSrc]);
+        setErrored(false);
+    }, [currentSrc, src]);
 
     const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
         setLoaded(true);
@@ -47,7 +52,8 @@ export const OptimizedImage = ({ src, fallbackSrc, alt, onError, onLoad: onLoadP
         if (fallbackUrls && !useFallback) {
             setUseFallback(true);
         } else {
-            // 无备选源，显示错误状态而非空白
+            // 无备选源，标记错误状态，隐藏破碎图标
+            setErrored(true);
             setLoaded(true);
         }
         onError?.(event);
@@ -57,11 +63,12 @@ export const OptimizedImage = ({ src, fallbackSrc, alt, onError, onLoad: onLoadP
 
     // 合并样式：shimmer 背景 + 淡入
     // placeholder 开启时保持 opacity:1（让 shimmer 背景可见），关闭时用 opacity:0 隐藏
+    // errored 时隐藏 img 避免浏览器破碎图标
     const imgStyle: React.CSSProperties = {
         ...styleProp,
         ...(showShimmer ? SHIMMER_BG : {}),
         transition: [styleProp?.transition, 'opacity 0.3s ease'].filter(Boolean).join(', '),
-        opacity: loaded ? (styleProp?.opacity ?? 1) : (placeholder ? 1 : 0),
+        opacity: errored ? 0 : loaded ? (styleProp?.opacity ?? 1) : (placeholder ? 1 : 0),
     };
 
     if (isSvg) {

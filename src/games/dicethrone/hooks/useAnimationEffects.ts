@@ -28,10 +28,6 @@ import type { StatusAtlases } from '../ui/statusEffects';
 import { getStatusEffectIconNode } from '../ui/statusEffects';
 import { STATUS_EFFECT_META, TOKEN_META } from '../domain/statusEffects';
 import { getElementCenter } from '../../../components/common/animations/FlyingEffect';
-import {
-    getHitStopPresetByDamage,
-    type HitStopConfig
-} from '../../../components/common/animations';
 import { RESOURCE_IDS } from '../domain/resources';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { resolveDamageImpactKey, IMPACT_SFX } from '../audio.config';
@@ -71,11 +67,9 @@ export interface AnimationEffectsConfig {
         /** 飞行体到达目标（冲击帧）时触发的回调，用于同步播放音效/震屏等 */
         onImpact?: () => void;
     }) => void;
-    /** 触发对手震动效果的函数（可选） */
-    triggerOpponentShake?: () => void;
-    /** 触发钝帧效果的函数（可选） */
-    triggerHitStop?: (config: HitStopConfig) => void;
-    /** 触发自己受击效果的函数（可选） */
+    /** 触发对手受击全套反馈（震动+钝帧+裂隙闪光） */
+    triggerOpponentImpact?: (damage: number) => void;
+    /** 触发自己受击全套反馈（震动+钝帧+裂隙闪光） */
     triggerSelfImpact?: (damage: number) => void;
     /** 当前语言 */
     locale?: string;
@@ -98,8 +92,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         refs,
         getEffectStartPos,
         pushFlyingEffect,
-        triggerOpponentShake,
-        triggerHitStop,
+        triggerOpponentImpact,
         triggerSelfImpact,
         locale,
         statusIconAtlas,
@@ -119,7 +112,8 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
     // 追踪上一次的 Token
     const prevOpponentTokensRef = useRef<Record<string, number>>({ ...(opponent?.tokens || {}) });
     const prevPlayerTokensRef = useRef<Record<string, number>>({ ...(player?.tokens || {}) });
-    const lastDamageEventIdRef = useRef<number | null>(null);
+    // 首次挂载时将指针推进到当前最新伤害事件，跳过历史事件（防止刷新重播）
+    const lastDamageEventIdRef = useRef<number | null>(damageStreamEntry?.id ?? null);
 
     // 首次挂载后标记为已就绪，后续 effect 才允许触发动画
     useEffect(() => {
@@ -154,8 +148,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 endPos: getElementCenter(refs.opponentHp.current),
                 onImpact: () => {
                     playSound(impactKey);
-                    triggerOpponentShake?.();
-                    triggerHitStop?.(getHitStopPresetByDamage(damage));
+                    triggerOpponentImpact?.(damage);
                 },
             });
             return;
@@ -183,8 +176,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         refs.selfHp,
         getEffectStartPos,
         pushFlyingEffect,
-        triggerOpponentShake,
-        triggerHitStop,
+        triggerOpponentImpact,
         triggerSelfImpact,
     ]);
 
@@ -208,8 +200,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                     startPos: getEffectStartPos(opponentId),
                     endPos: getElementCenter(refs.opponentHp.current),
                     onImpact: () => {
-                        triggerOpponentShake?.();
-                        triggerHitStop?.(getHitStopPresetByDamage(damage));
+                        triggerOpponentImpact?.(damage);
                     },
                 });
             }
@@ -233,8 +224,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         opponent,
         damageStreamEntry,
         pushFlyingEffect,
-        triggerOpponentShake,
-        triggerHitStop,
+        triggerOpponentImpact,
         getEffectStartPos,
         opponentId,
         refs.opponentHp,

@@ -29,7 +29,7 @@ import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from './types';
 import { getMinionDef, getCardDef, getBaseDefIdsForFactions } from '../data/cards';
 import type { ActionCardDef } from './types';
 import { buildDeck, drawCards } from './utils';
-import { autoMulligan } from '../../../shared/mulligan';
+import { autoMulligan } from '../../../engine/primitives/mulligan';
 import { resolveOnPlay, resolveTalent, resolveOnDestroy } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
 import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
@@ -138,6 +138,7 @@ function executeCommand(
             const coreAfterPlayed = reduce(core, playedEvt);
             const ongoingTriggerEvents = fireTriggers(coreAfterPlayed, 'onMinionPlayed', {
                 state: coreAfterPlayed,
+                matchState: state,
                 playerId: command.playerId,
                 baseIndex,
                 triggerMinionUid: card.uid,
@@ -480,6 +481,7 @@ export function processDestroyTriggers(
         // 3. 触发 ongoing 拦截器 onMinionDestroyed（如逃生舱回手牌）
         const ongoingDestroyEvents = fireTriggers(core, 'onMinionDestroyed', {
             state: core,
+            matchState: state,
             playerId: ownerId,
             baseIndex: fromBaseIndex,
             triggerMinionUid: minionUid,
@@ -552,6 +554,7 @@ export function processMoveTriggers(
         const { minionUid, minionDefId, toBaseIndex } = me.payload;
         const ongoingMoveEvents = fireTriggers(core, 'onMinionMoved', {
             state: core,
+            matchState: state,
             playerId,
             baseIndex: toBaseIndex,
             triggerMinionUid: minionUid,

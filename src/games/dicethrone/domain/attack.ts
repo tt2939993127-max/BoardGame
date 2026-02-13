@@ -82,6 +82,8 @@ export const resolveAttack = (
     const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = pending;
     const bonusDamage = pending.bonusDamage ?? 0;
 
+    // 收集防御方事件（用于后续同时结算）
+    const defenseEvents: DiceThroneEvent[] = [];
     if (defenseAbilityId) {
         const defenseEffects = getPlayerAbilityEffects(state, defenderId, defenseAbilityId);
         // 防御技能的上下文：防御者是 "attacker"，原攻击者是 "defender"
@@ -94,10 +96,13 @@ export const resolveAttack = (
             timestamp,
         };
 
-        events.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
-        events.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
+        defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
+        defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
     }
+    events.push(...defenseEvents);
 
+    // 收集攻击方事件
+    const attackEvents: DiceThroneEvent[] = [];
     let totalDamage = 0;
     if (sourceAbilityId) {
         const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
@@ -111,7 +116,7 @@ export const resolveAttack = (
         };
 
         // withDamage 时机的效果（包括 rollDie 和 damage）统一通过效果系统处理
-        events.push(...resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
+        attackEvents.push(...resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
             bonusDamage,
             bonusDamageOnce: true,
             random,
@@ -119,14 +124,16 @@ export const resolveAttack = (
         
         // 如果有 Token 响应请求，提前返回，不生成 ATTACK_RESOLVED 事件
         // 等待 Token 响应完成后再继续攻击结算
-        const hasTokenResponse = events.some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
+        const hasTokenResponse = [...events, ...attackEvents].some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
         if (hasTokenResponse) {
+            events.push(...attackEvents);
             return events;
         }
         
-        events.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
+        attackEvents.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
         totalDamage = attackCtx.damageDealt;
     }
+    events.push(...attackEvents);
 
     const resolvedEvent: AttackResolvedEvent = {
         type: 'ATTACK_RESOLVED',

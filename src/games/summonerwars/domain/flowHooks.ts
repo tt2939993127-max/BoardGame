@@ -12,6 +12,7 @@ import { getSummoner, HAND_SIZE } from './helpers';
 import { triggerAllUnitsAbilities, resolveAbilityEffects } from './abilityResolver';
 import { abilityRegistry } from './abilities';
 import { getUnitAbilities } from './helpers';
+import { getBaseCardId, CARD_IDS } from './ids';
 
 export const PHASE_START_ABILITIES: Record<GamePhase, string[]> = {
   factionSelect: [],
@@ -183,12 +184,12 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
       // 殉葬火堆有充能时不自动弃置，等待玩家选择治疗目标（由 UI 触发 FUNERAL_PYRE_HEAL 命令）
       const currentPlayer = core.players[playerId];
       for (const activeEvent of currentPlayer.activeEvents) {
-        const baseId = activeEvent.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-        if (baseId === 'necro-funeral-pyre' && (activeEvent.charges ?? 0) > 0) {
+        const cardBaseId = getBaseCardId(activeEvent.id);
+        if (cardBaseId === CARD_IDS.NECRO_FUNERAL_PYRE && (activeEvent.charges ?? 0) > 0) {
           // 有充能的殉葬火堆：不自动弃置，由 UI 处理
           continue;
         }
-        if (baseId === 'paladin-holy-judgment' && (activeEvent.charges ?? 0) > 0) {
+        if (cardBaseId === CARD_IDS.PALADIN_HOLY_JUDGMENT && (activeEvent.charges ?? 0) > 0) {
           // 圣洁审判有充能时：消耗1充能代替弃置
           events.push({
             type: SW_EVENTS.FUNERAL_PYRE_CHARGED,

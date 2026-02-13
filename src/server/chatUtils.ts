@@ -1,4 +1,5 @@
-export const MAX_CHAT_LENGTH = 200;
+import { MAX_CHAT_LENGTH } from '../shared/chat';
+export { MAX_CHAT_LENGTH };
 
 export const sanitizeChatText = (raw: string): string | null => {
     const text = raw.trim();

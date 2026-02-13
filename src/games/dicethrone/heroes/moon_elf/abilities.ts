@@ -3,16 +3,13 @@
  */
 import type { AbilityDef, AbilityEffect, EffectTiming } from '../../domain/combat';
 import { MOON_ELF_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../../domain/ids';
+import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 
 const FACE = MOON_ELF_DICE_FACE_IDS;
 
 export const MOON_ELF_SFX_SHOT = 'combat.general.mini_games_sound_effects_and_music_pack.bow.sfx_weapon_bow_shoot_1';
 export const MOON_ELF_SFX_HIT = 'combat.general.mini_games_sound_effects_and_music_pack.bow.sfx_weapon_bow_hit_2';
 export const MOON_ELF_SFX_ULTIMATE = 'fantasy.shooting_thunder_arrow_noreverb_01';
-
-// 文本辅助
-const abilityText = (id: string, field: 'name' | 'description') => `abilities.${id}.${field}`;
-const abilityEffectText = (id: string, field: string) => `abilities.${id}.effects.${field}`;
 
 // 辅助函数
 const damage = (value: number | string, description: string): AbilityEffect => ({

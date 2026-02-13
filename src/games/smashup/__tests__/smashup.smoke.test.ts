@@ -8,7 +8,7 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
-import { createFlowSystem, createDefaultSystems } from '../../../engine';
+import { createFlowSystem, createBaseSystems } from '../../../engine';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS, getCurrentPlayerId } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -25,7 +25,7 @@ function createRunner() {
         domain: SmashUpDomain,
         systems: [
             createFlowSystem<SmashUpCore>({ hooks: smashUpFlowHooks }),
-            ...createDefaultSystems<SmashUpCore>(),
+            ...createBaseSystems<SmashUpCore>(),
         ],
         playerIds: PLAYER_IDS,
         silent: true,

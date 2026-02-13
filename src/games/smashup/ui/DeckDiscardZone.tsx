@@ -25,7 +25,7 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
     const [showDiscard, setShowDiscard] = useState(false);
     const topCard = discard.length > 0 ? discard[discard.length - 1] : null;
     const topDef = topCard ? getCardDef(topCard.defId) : null;
-    const topName = resolveCardName(topDef ?? undefined, i18n.language) || topCard?.defId;
+    const topName = resolveCardName(topDef ?? undefined, t) || topCard?.defId;
 
     const handleDiscardClick = () => {
         if (!isMyTurn) {
@@ -202,7 +202,7 @@ const DiscardListOverlay: React.FC<{
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                         {matches.map((card) => {
                             const def = getCardDef(card.defId);
-                            const resolvedName = resolveCardName(def, i18n.language) || card.defId;
+                            const resolvedName = resolveCardName(def, t) || card.defId;
                             return (
                                 <div
                                     key={card.uid}
