@@ -31,9 +31,9 @@ import { MAX_CHAT_LENGTH, MAX_CHAT_MESSAGES } from '../../shared/chat';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { FriendsChatModal } from '../social/FriendsChatModal';
 import { useSocial } from '../../contexts/SocialContext';
-import { buildActionLogRows } from './actionLogFormat';
+import { buildActionLogRows } from './utils/actionLogFormat';
 import { ActionLogSegments } from './ActionLogSegments';
-import { getCardPreviewGetter } from './cardPreviewRegistry';
+import { getCardPreviewGetter } from './registry/cardPreviewRegistry';
 
 interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
@@ -458,8 +458,8 @@ export const GameHUD = ({
         items.push(actionLogAction);
     }
 
-    // [1] 设置（音频/工具） - 本地主按钮，联机次按钮
-    items.push({
+    // 定义设置按钮（稍后在正确位置添加）
+    const settingsAction: FabAction = {
         id: 'settings',
         icon: <Settings size={20} />,
         label: t('hud.actions.settings'),
@@ -523,7 +523,12 @@ export const GameHUD = ({
                 <AudioControlSection isDark={true} />
             </div>
         )
-    });
+    };
+
+    // 在本地模式下，设置作为主按钮；在联机模式下，设置作为卫星按钮（稍后添加）
+    if (!useChatAsMain) {
+        items.push(settingsAction);
+    }
 
     if (!useChatAsMain) {
         items.push(actionLogAction);
@@ -733,6 +738,11 @@ export const GameHUD = ({
         label: t('hud.actions.feedback'),
         onClick: () => setShowFeedback(true),
     });
+
+    // 在联机模式下，设置按钮放在退出之前（反转后会显示在倒数第二位）
+    if (useChatAsMain) {
+        items.push(settingsAction);
+    }
 
     items.push(exitAction);
 

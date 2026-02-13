@@ -6,13 +6,15 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, destroyMinion, getMinionPower, requestChoice, buildMinionTargetOptions, buildBaseTargetOptions } from '../domain/abilityHelpers';
+import { grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { DeckReshuffledEvent, SmashUpEvent } from '../domain/types';
+import type { DeckReshuffledEvent, SmashUpEvent, SmashUpCore } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
-import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getCardDef, getBaseDef } from '../data/cards';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import type { MatchState } from '../../../engine/types';
 
 /** 注册机器人派系所有能�?*/
 export function registerRobotAbilities(): void {
@@ -47,13 +49,11 @@ function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'robot_microbot_guard',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要消灭的随从（力量低于己方随从数量）', options: buildMinionTargetOptions(options) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `robot_microbot_guard_${ctx.now}`, ctx.playerId,
+        '选择要消灭的随从（力量低于己方随从数量）', buildMinionTargetOptions(options), 'robot_microbot_guard',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 微型机修理�?onPlay：如果是本回合第一个随从，额外出牌 */
@@ -131,13 +131,11 @@ function robotTechCenter(ctx: AbilityContext): AbilityResult {
     }
     if (candidates.length === 0) return { events: [] };
     // Prompt 选择
-    return {
-        events: [requestChoice({
-            abilityId: 'robot_tech_center',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个基地（按该基地上你的随从数抽牌）', options: buildBaseTargetOptions(candidates) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `robot_tech_center_${ctx.now}`, ctx.playerId,
+        '选择一个基地（按该基地上你的随从数抽牌）', buildBaseTargetOptions(candidates), 'robot_tech_center',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 /** 核弹机器人
 /** 核弹机器�?onDestroy：被消灭后消灭同基地其他玩家所有随�?*/
@@ -156,64 +154,55 @@ function robotNukebotOnDestroy(ctx: AbilityContext): AbilityResult {
     };
 }
 
-// robot_microbot_alpha (ongoing) - 已通过 ongoingModifiers 系统实现力量修正
-
 // ============================================================================
-// Prompt 继续函数
+// 交互解决处理函数（InteractionHandler）
 // ============================================================================
 
-/** 注册机器人派系的 Prompt 继续函数 */
-export function registerRobotPromptContinuations(): void {
-    // 微型机守护者：选择目标后消�?
-    registerPromptContinuation('robot_microbot_guard', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+/** 注册机器人派系的交互解决处理函数 */
+export function registerRobotInteractionHandlers(): void {
+    // 微型机守护者：选择目标后消灭
+    registerInteractionHandler('robot_microbot_guard', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
-        if (!target) return [];
-        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'robot_microbot_guard', ctx.now)];
+        if (!target) return undefined;
+        return { state, events: [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'robot_microbot_guard', timestamp)] };
     });
 
-    // 技术中心：选择基地后按随从数抽�?
-    registerPromptContinuation('robot_tech_center', (ctx) => {
-        const { baseIndex } = ctx.selectedValue as { baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
-        const count = base.minions.filter(m => m.controller === ctx.playerId).length;
-        if (count === 0) return [];
-        const player = ctx.state.players[ctx.playerId];
-        if (!player || player.deck.length === 0) return [];
+    // 技术中心：选择基地后按随从数抽牌
+    registerInteractionHandler('robot_tech_center', (state, playerId, value, _iData, _random, timestamp) => {
+        const { baseIndex } = value as { baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
+        const count = base.minions.filter(m => m.controller === playerId).length;
+        if (count === 0) return undefined;
+        const player = state.core.players[playerId];
+        if (!player || player.deck.length === 0) return undefined;
         const actualDraw = Math.min(count, player.deck.length);
         const drawnUids = player.deck.slice(0, actualDraw).map(c => c.uid);
-        return [{
+        return { state, events: [{
             type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: ctx.playerId, count: actualDraw, cardUids: drawnUids },
-            timestamp: ctx.now,
-        }];
+            payload: { playerId, count: actualDraw, cardUids: drawnUids },
+            timestamp,
+        }] };
     });
 
-    // 高速机器人：选择要额外打出的力量�?随从
-    registerPromptContinuation('robot_zapbot', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const player = ctx.state.players[ctx.playerId];
+    // 高速机器人：选择要额外打出的力量≤随从
+    registerInteractionHandler('robot_zapbot', (state, playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const player = state.core.players[playerId];
         const card = player.hand.find(c => c.uid === minionUid);
-        if (!card) return [];
+        if (!card) return undefined;
         const def = getCardDef(card.defId) as MinionCardDef | undefined;
-        if (!def || def.type !== 'minion') return [];
-        return [{
+        if (!def || def.type !== 'minion') return undefined;
+        return { state, events: [{
             type: SU_EVENTS.MINION_PLAYED,
-            payload: {
-                playerId: ctx.playerId,
-                cardUid: card.uid,
-                defId: card.defId,
-                baseIndex,
-                power: def.power,
-            },
-            timestamp: ctx.now,
-        }];
+            payload: { playerId, cardUid: card.uid, defId: card.defId, baseIndex, power: def.power },
+            timestamp,
+        }] };
     });
 }
-
 
 // ============================================================================
 // Ongoing 拦截器注�?

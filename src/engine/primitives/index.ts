@@ -15,3 +15,8 @@ export * from './resources';
 export * from './grid';
 export * from './visual';
 export * from './actionRegistry';
+export * from './ability';
+export * from './tags';
+export * from './modifier';
+export * from './attribute';
+export * from './uiHints';

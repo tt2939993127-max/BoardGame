@@ -37,9 +37,10 @@ import { getAllBaseDefIds, getBaseDef } from '../data/cards';
 import { drawCards } from './utils';
 import { countMadnessCards, madnessVpPenalty } from './abilityHelpers';
 import { triggerAllBaseAbilities, triggerBaseAbility } from './baseAbilities';
-import { openMeFirstWindow, requestChoice, buildBaseTargetOptions } from './abilityHelpers';
+import { openMeFirstWindow, buildBaseTargetOptions } from './abilityHelpers';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
-import { registerPromptContinuation } from './promptContinuation';
+import { registerInteractionHandler } from './abilityInteractionHandlers';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 
 // ============================================================================
 // 基地记分辅助函数（供 FlowHooks 和 Prompt 继续函数共用）
@@ -77,7 +78,8 @@ function scoreOneBase(
         playerId: pid,
         now,
     };
-    events.push(...triggerBaseAbility(base.defId, 'beforeScoring', beforeCtx));
+    const beforeResult = triggerBaseAbility(base.defId, 'beforeScoring', beforeCtx);
+    events.push(...beforeResult.events);
 
     // 触发 ongoing beforeScoring（如 pirate_king 移动到该基地、cthulhu_chosen +2力量）
     const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
@@ -131,7 +133,8 @@ function scoreOneBase(
         rankings,
         now,
     };
-    events.push(...triggerBaseAbility(base.defId, 'afterScoring', afterCtx));
+    const afterResult = triggerBaseAbility(base.defId, 'afterScoring', afterCtx);
+    events.push(...afterResult.events);
 
     // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
     const afterScoringEvents = fireTriggers(core, 'afterScoring', {
@@ -163,12 +166,12 @@ function scoreOneBase(
     return { events, newBaseDeck };
 }
 
-/** 注册多基地计分的 Prompt 继续函数 */
-export function registerMultiBaseScoringContinuation(): void {
-    registerPromptContinuation('multi_base_scoring', (ctx) => {
-        const { baseIndex } = ctx.selectedValue as { baseIndex: number };
-        const { events } = scoreOneBase(ctx.state, baseIndex, ctx.state.baseDeck, ctx.playerId, ctx.now, ctx.random);
-        return events;
+/** 注册多基地计分的交互解决处理函数 */
+export function registerMultiBaseScoringInteractionHandler(): void {
+    registerInteractionHandler('multi_base_scoring', (state, playerId, value, _iData, random, timestamp) => {
+        const { baseIndex } = value as { baseIndex: number };
+        const { events } = scoreOneBase(state.core, baseIndex, state.core.baseDeck, playerId, timestamp, random);
+        return { state, events };
     });
 }
 
@@ -303,22 +306,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     };
                 });
 
-                const promptEvents: GameEvent[] = [
-                    requestChoice(
-                        {
-                            abilityId: 'multi_base_scoring',
-                            playerId: pid,
-                            promptConfig: {
-                                title: '选择先记分的基地',
-                                options: buildBaseTargetOptions(candidates),
-                            },
-                        },
-                        now
-                    ),
-                ];
+                const interaction = createSimpleChoice(
+                    `multi_base_scoring_${now}`, pid,
+                    '选择先记分的基地', buildBaseTargetOptions(candidates) as any[], 'multi_base_scoring',
+                );
+                const updatedState = queueInteraction(state, interaction);
 
                 // halt=true：不切换阶段，等待交互解决后再继续
-                return { events: promptEvents, halt: true } as PhaseExitResult;
+                return { events: [], halt: true, updatedState } as PhaseExitResult;
             }
 
             // 1 个基地达标（或 Prompt 已解决后的后续循环）→ 直接记分
@@ -380,8 +375,8 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             events.push(turnStarted);
 
             // 触发基地 onTurnStart 能力（如更衣室：有随从则抽牌）
-            const baseEvents = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now);
-            events.push(...baseEvents);
+            const baseResult = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now);
+            events.push(...baseResult.events);
 
             // 触发 ongoing 效果 onTurnStart
             const onTurnStartEvents = fireTriggers(core, 'onTurnStart', {

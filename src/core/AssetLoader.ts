@@ -244,7 +244,7 @@ export async function preloadCriticalImages(
         .filter(Boolean)
         .map((p) => preloadOptimizedImage(p));
 
-    // Promise.allSettled + 5s 超时竞争
+    // Promise.allSettled + 10s 超时竞争
     await Promise.race([
         Promise.allSettled(promises),
         new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),

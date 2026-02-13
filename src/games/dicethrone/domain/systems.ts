@@ -3,9 +3,10 @@
  * 处理领域事件到系统状态的映射
  */
 
-import type { GameEvent, PromptOption } from '../../../engine/types';
+import type { GameEvent } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { INTERACTION_EVENTS, queueInteraction, resolveInteraction, createSimpleChoice } from '../../../engine/systems/InteractionSystem';
+import type { PromptOption } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type {
     DiceThroneCore,

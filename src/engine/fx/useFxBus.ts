@@ -14,7 +14,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { FxRegistry } from './FxRegistry';
 import type { FxCue, FxContext, FxParams, FxEvent, FxEventInput } from './types';
 import { flushRegisteredShaders } from './shader/ShaderPrecompile';
-import { playDeferredSound } from '../../lib/audio/DeferredSoundMap';
+import { resolveDevFlag } from '../env';
 
 // ============================================================================
 // ID 生成
@@ -110,28 +110,11 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
     const { sound, shake } = entry.feedback;
     if (sound?.timing === 'on-impact') {
       const source = sound.source ?? 'key';
-      console.log('[FxBus] fireImpact 音效:', { id, cue: meta.cue, source, key: sound.key, fallbackKey: sound.fallbackKey, eventId: event?.params?.eventId });
-      
-      if (source === 'deferred') {
-        // 从 DeferredSoundMap 读取音效（需要 params.eventId）
-        const eventId = event?.params?.eventId as number | undefined;
-        if (eventId !== undefined) {
-          const key = playDeferredSound(eventId);
-          console.log('[FxBus] playDeferredSound 结果:', { eventId, key });
-          // 如果 DeferredSoundMap 中没有音效，且提供了 fallbackKey，则播放 fallback
-          if (!key && sound.fallbackKey) {
-            console.log('[FxBus] 使用 fallbackKey:', sound.fallbackKey);
-            playSoundRef.current?.(sound.fallbackKey);
-          }
-        } else if (sound.fallbackKey) {
-          // 没有 eventId（预览模式），直接使用 fallback
-          console.log('[FxBus] 预览模式，使用 fallbackKey:', sound.fallbackKey);
-          playSoundRef.current?.(sound.fallbackKey);
-        }
-      } else if (sound.key) {
-        // 使用固定的音效 key
-        console.log('[FxBus] 使用固定 key:', sound.key);
-        playSoundRef.current?.(sound.key);
+      const resolvedKey = source === 'params'
+        ? (event?.params?.soundKey as string | undefined) ?? sound.key
+        : sound.key;
+      if (resolvedKey) {
+        playSoundRef.current?.(resolvedKey);
       }
     }
     const shakeTiming = shake?.timing ?? 'on-impact';
@@ -146,7 +129,7 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
   const pushEvent = useCallback((input: FxEventInput): string | null => {
     const entry = registry.resolve(input.cue);
     if (!entry) {
-      if (process.env.NODE_ENV === 'development') {
+      if (resolveDevFlag()) {
         console.warn(`[FxBus] 未注册的 cue: "${input.cue}"`);
       }
       return null;
@@ -202,22 +185,11 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
       const { sound, shake } = entry.feedback;
       if (sound?.timing === 'immediate') {
         const source = sound.source ?? 'key';
-        if (source === 'deferred') {
-          // 从 DeferredSoundMap 读取音效（需要 params.eventId）
-          const eventId = input.params?.eventId as number | undefined;
-          if (eventId !== undefined) {
-            const key = playDeferredSound(eventId);
-            // 如果 DeferredSoundMap 中没有音效，且提供了 fallbackKey，则播放 fallback
-            if (!key && sound.fallbackKey) {
-              playSoundRef.current?.(sound.fallbackKey);
-            }
-          } else if (sound.fallbackKey) {
-            // 没有 eventId（预览模式），直接使用 fallback
-            playSoundRef.current?.(sound.fallbackKey);
-          }
-        } else if (sound.key) {
-          // 使用固定的音效 key
-          playSoundRef.current?.(sound.key);
+        const resolvedKey = source === 'params'
+          ? (input.params?.soundKey as string | undefined) ?? sound.key
+          : sound.key;
+        if (resolvedKey) {
+          playSoundRef.current?.(resolvedKey);
         }
       }
       const shakeTiming = shake?.timing ?? 'on-impact';

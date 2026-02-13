@@ -139,12 +139,13 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
     const state = gameState as MatchState<DiceThroneCore>;
     const core = state?.core;
 
-    // 无状态时，预加载所有角色的 player-board
+    // 无状态时，预加载所有角色的 player-board（准备进入选择阶段）
+    // 骰子图集为暖加载
     if (!core) {
         const allPlayerBoards = IMPLEMENTED_CHARACTERS.map(getPlayerBoardPath);
         return {
             critical: [...COMMON_CRITICAL_PATHS, ...allPlayerBoards],
-            warm: [],
+            warm: IMPLEMENTED_CHARACTERS.map(getDicePath),
         };
     }
 
@@ -153,12 +154,13 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
 
     if (inSetup) {
         // 角色选择阶段：player-board 和 tip-board 为关键（选择界面需要预览）
+        // 通用资源（骰子、状态图标）为暖加载
         const allPlayerBoards = IMPLEMENTED_CHARACTERS.map(getPlayerBoardPath);
         const allTipBoards = IMPLEMENTED_CHARACTERS.map(getTipBoardPath);
 
         return {
             critical: [...COMMON_CRITICAL_PATHS, ...allPlayerBoards, ...allTipBoards],
-            warm: [],
+            warm: IMPLEMENTED_CHARACTERS.map(getDicePath),
         };
     }
 
@@ -178,7 +180,6 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
         criticalPaths.push(getPlayerBoardPath(charId));
         criticalPaths.push(getTipBoardPath(charId));
         criticalPaths.push(getAbilityCardsPath(charId));
-        criticalPaths.push(getDicePath(charId));
         criticalPaths.push(getStatusIconsPath(charId));
     }
 
@@ -189,6 +190,7 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
     const warmPaths: string[] = [];
     for (const charId of unselectedCharacters) {
         warmPaths.push(getAbilityCardsPath(charId));
+        warmPaths.push(getDicePath(charId));
     }
 
     return {

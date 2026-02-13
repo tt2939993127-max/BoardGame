@@ -432,34 +432,14 @@ export function executePipeline<
     }
 
     // 3. Core.execute -> 产生 Events
-    let events = domain.execute(currentState, command, random);
-
-    // 3.5. 后处理：状态检测，注入派生事件（类似万智牌 SBA）
-    if (domain.postProcess) {
-        events = domain.postProcess(currentState.core, events);
-    }
+    const events = domain.execute(currentState, command, random);
 
     // 4. 逐个 Reduce events -> 更新 state.core（含事件拦截/替换）
-    let core = currentState.core;
-    const appliedEvents: TEvent[] = [];
-    for (const event of events) {
-        if (domain.interceptEvent) {
-            const result = domain.interceptEvent(core, event);
-            if (result === null) continue; // 事件被吞噬
-            const batch = Array.isArray(result) ? result : [result];
-            for (const ev of batch) {
-                core = domain.reduce(core, ev);
-                appliedEvents.push(ev);
-            }
-        } else {
-            core = domain.reduce(core, event);
-            appliedEvents.push(event);
-        }
-    }
-    currentState = { ...currentState, core };
+    const reduced = reduceEventsToCore(domain, currentState.core, events as unknown as GameEvent[]);
+    currentState = { ...currentState, core: reduced.core };
     ctx.state = currentState;
-    ctx.events = [...preCommandEvents, ...appliedEvents] as GameEvent[];
-    allEvents.push(...appliedEvents);
+    ctx.events = [...preCommandEvents, ...reduced.appliedEvents];
+    allEvents.push(...reduced.appliedEvents);
 
     // 5. 执行 Systems.afterEvents hooks -> 更新 state.sys（多轮迭代）
     currentState = runAfterEventsRounds({

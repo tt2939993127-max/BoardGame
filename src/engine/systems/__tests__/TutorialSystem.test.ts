@@ -25,7 +25,7 @@ const createTestState = (): MatchState<TestCore> => ({
     sys: {
         schemaVersion: 1,
         undo: { snapshots: [], maxSnapshots: 50 },
-        prompt: { queue: [] },
+        interaction: { queue: [] },
         log: { entries: [], maxEntries: 1000 },
         eventStream: { entries: [], maxEntries: 200, nextId: 1 },
         actionLog: { entries: [], maxEntries: 50 },

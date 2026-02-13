@@ -33,6 +33,7 @@ import type { AbilityContext } from '../domain/abilityRegistry';
 import { validate } from '../domain/commands';
 import { SU_COMMANDS } from '../domain/types';
 import { resolvePromptContinuation, clearPromptContinuationRegistry } from '../domain/promptContinuation';
+import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { RandomFn } from '../../../engine/types';
 
 // ============================================================================
@@ -1192,16 +1193,18 @@ describe('pirate_full_sail onPlay', () => {
 
         const executor = resolveAbility('pirate_full_sail', 'onPlay');
         expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { queue: [] } } } as any;
         const result = executor!({
-            state, playerId: '0', cardUid: 'fs-1', defId: 'pirate_full_sail',
+            state, matchState: ms, playerId: '0', cardUid: 'fs-1', defId: 'pirate_full_sail',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(1);
-        expect(result.events[0].type).toBe(SU_EVENTS.CHOICE_REQUESTED);
-        const contEvt = result.events[0] as any;
-        expect(contEvt.payload.abilityId).toBe('pirate_full_sail_choose_minion');
+        expect(result.events.length).toBe(0);
+        // 迁移后直接创建 Interaction
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('pirate_full_sail_choose_minion');
         // 应包含 "完成移动" 选项
-        const promptOptions = contEvt.payload.promptConfig.options;
+        const promptOptions = (current?.data as any)?.options;
         expect(promptOptions.some((o: any) => o.value.done === true)).toBe(true);
     });
 
@@ -1212,11 +1215,13 @@ describe('pirate_full_sail onPlay', () => {
 
         const executor = resolveAbility('pirate_full_sail', 'onPlay');
         expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { queue: [] } } } as any;
         const result = executor!({
-            state, playerId: '0', cardUid: 'fs-1', defId: 'pirate_full_sail',
+            state, matchState: ms, playerId: '0', cardUid: 'fs-1', defId: 'pirate_full_sail',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
         expect(result.events.length).toBe(0);
+        expect(result.matchState).toBeUndefined();
     });
 
     it('选择完成→不产生移动事件', () => {
@@ -1225,15 +1230,12 @@ describe('pirate_full_sail onPlay', () => {
         const base = makeBase({ minions: [m1] });
         const state = makeState({ bases: [base, makeBase()] });
 
-        const contFn = resolvePromptContinuation('pirate_full_sail_choose_minion');
-        expect(contFn).toBeDefined();
-        const events = contFn!({
-            state, playerId: '0',
-            selectedValue: { done: true },
-            data: { movedUids: [] },
-            random: dummyRandom, now: 0,
-        });
-        expect(events.length).toBe(0);
+        const handler = getInteractionHandler('pirate_full_sail_choose_minion');
+        expect(handler).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { queue: [] } } } as any;
+        const result = handler!(ms, '0', { done: true }, { continuationContext: { movedUids: [] } }, dummyRandom, 0);
+        // 选择完成时不产生移动事件
+        expect(result?.events.length).toBe(0);
     });
 });
 

@@ -189,7 +189,17 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **特效/动画事件消费必须用 EventStreamSystem**，禁止用 LogSystem（刷新后重播历史）。
 - **Move payload 必须包装为对象**，禁止传裸值；命令使用常量（`UNDO_COMMANDS.*`）。
 - **新机制先查 `src/engine/primitives/` 或 `src/engine/systems/`** 是否已有能力，无则先在引擎层抽象。
-- **面向百游戏设计（强制）**：每个设计决策必须考虑「如果 100 个游戏都这样做会怎样」。具体红线：
+- **新游戏能力系统必须使用 `engine/primitives/ability.ts`**：禁止自行实现能力注册表，必须使用 `createAbilityRegistry()` + `createAbilityExecutorRegistry()`。详见 `docs/ai-rules/engine-systems.md`「通用能力框架」节。
+- **禁止技能系统硬编码（强制）**：
+  - ❌ 禁止在 validate.ts 中用 switch-case 硬编码技能验证（每个技能一个 case）
+  - ❌ 禁止在 UI 组件中用 if 语句硬编码技能按钮（每个技能一个 if）
+  - ❌ 禁止在 execute.ts 中硬编码特定技能的逻辑（如 rapid_fire）
+  - ✅ 正确做法：在 `AbilityDef` 中声明 `validation` 和 `ui` 配置，使用通用验证函数和自动按钮渲染
+  - 详见 `docs/ai-rules/engine-systems.md`「技能系统反模式清单」节
+- **状态/buff/debuff 必须使用 `engine/primitives/tags.ts`**：禁止自行实现 statusEffects / tempAbilities，使用 `createTagContainer()` + `addTag/removeTag/matchTags/tickDurations`。支持层级前缀匹配和层数/持续时间。
+- **数值修改管线必须使用 `engine/primitives/modifier.ts`**：禁止自行实现 DamageModifier / PowerModifierFn，使用 `createModifierStack()` + `addModifier/applyModifiers/tickModifiers`。
+- **可被 buff 修改的属性必须使用 `engine/primitives/attribute.ts`**：使用 `createAttributeSet()` + `addAttributeModifier/getCurrent`。与 `resources.ts` 互补。
+- **面向百游戏设计（强制）**
   - **禁止在 core 中存放交互状态**：`pendingXxx` 等“等待玩家输入”状态必须用 `sys.interaction`（InteractionSystem），不得放在 core 上。
   - **禁止写桥接系统**：不得创建“游戏事件→创建 Prompt/Interaction→解决后转回游戏事件”的桥接系统，应在 execute 中直接调用 `createSimpleChoice()` / `createInteraction()`。
   - **commandTypes 只列业务命令**：系统命令（UNDO/CHEAT/FLOW/INTERACTION/RESPONSE_WINDOW/TUTORIAL/REMATCH）由 adapter 自动合并，禁止手动添加。
@@ -252,13 +262,13 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - **游戏配置**（`audio.config.ts`）：定义事件→音效的映射规则（`feedbackResolver`），使用通用注册表中的 key。
   - **FX 系统**（`fxSetup.ts`）：直接使用通用注册表中的 key 定义 `FeedbackPack`，不依赖游戏配置常量。
   - **禁止重复定义**：音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用 key 字符串，不再定义常量。
-- **音效四条路径（强制）**：
-  - **路径①（EventStream + immediate）**：无动画事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `{ key, timing: 'immediate' }` 即时播放，key 来自通用注册表。
-  - **路径②（EventStream + on-impact + DeferredSoundMap）**：有动画但无 FX 特效的事件音（伤害/治疗数字飞行）`feedbackResolver` 返回 `{ key, timing: 'on-impact' }` 写入 `DeferredSoundMap`，`FlyingEffect.onImpact` 冲击帧调用 `playDeferredSound(eventId)`，key 来自通用注册表。
-  - **路径③（FX 系统 + FeedbackPack）**：有 FX 特效的事件音（召唤光柱/攻击气浪/充能旋涡）通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 自动在 push（immediate）或渲染器 `onImpact()`（on-impact）时触发。**优先使用此路径**，音效与视觉完全同步。key 直接使用通用注册表中的完整 key 字符串。
-  - **路径④（UI 交互音）**：UI 点击音走 `GameButton`，拒绝音走 `playDeniedSound()`，key 来自通用注册表。
-  - **选择原则**：有 FX 特效 → 路径③；有动画无特效 → 路径②；无动画 → 路径①；UI 交互 → 路径④。
-  - **避免重复**：同一事件只能选择一条路径，禁止在 `feedbackResolver` 和 `FeedbackPack` 中同时配置音效。
+- **音效两条路径 + UI 交互音（强制）**：
+  - **路径① 即时播放（feedbackResolver）**：无动画的事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `SoundKey`（纯字符串）即时播放。有动画的事件（伤害/状态/Token）`feedbackResolver` 返回 `null`，由动画层 `onImpact` 回调直接调用 `playSound(key)`。
+  - **路径② 动画驱动（params.soundKey / onImpact）**：有 FX 特效的事件音（召唤光柱/攻击气浪/充能旋涡）通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 在 push 时从 `event.params.soundKey` 读取。飞行动画（伤害数字/状态增减/Token 获得消耗）在 `onImpact` 回调中直接 `playSound(resolvedKey)`。
+  - **UI 交互音**：UI 点击音走 `GameButton`，拒绝音走 `playDeniedSound()`，key 来自通用注册表。
+  - **选择原则**：有 FX 特效 → 路径②（FeedbackPack）；有飞行动画无特效 → 路径②（onImpact 回调）；无动画 → 路径①；UI 交互 → UI 交互音。
+  - **避免重复**：同一事件只能选择一条路径，有动画的事件 `feedbackResolver` 必须返回 `null`。
+  - **已废弃**：`DeferredSoundMap` 已删除，`AudioTiming`/`EventSoundResult` 已移除，`feedbackResolver` 不再返回 `{ key, timing }` 对象。
 
 ---
 

@@ -34,7 +34,7 @@ import {
 } from '../../../components/common/animations';
 import { RESOURCE_IDS } from '../domain/resources';
 import { playSound } from '../../../lib/audio/useGameAudio';
-import { playDeferredSound } from '../../../lib/audio/DeferredSoundMap';
+import { resolveDamageImpactKey, IMPACT_SFX } from '../audio.config';
 
 
 /**
@@ -142,6 +142,9 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         const damage = event.payload.actualDamage ?? 0;
         if (damage <= 0) return;
 
+        // 解析伤害音效 key，嵌入 onImpact 回调直接播放
+        const impactKey = resolveDamageImpactKey(damage, event.payload.targetId, currentPlayerId);
+
         if (event.payload.targetId === opponentId && opponent) {
             pushFlyingEffect({
                 type: 'damage',
@@ -150,7 +153,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 startPos: getEffectStartPos(opponentId),
                 endPos: getElementCenter(refs.opponentHp.current),
                 onImpact: () => {
-                    playDeferredSound(damageStreamEntry.id);
+                    playSound(impactKey);
                     triggerOpponentShake?.();
                     triggerHitStop?.(getHitStopPresetByDamage(damage));
                 },
@@ -166,7 +169,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                 startPos: getEffectStartPos(currentPlayerId),
                 endPos: getElementCenter(refs.selfHp.current),
                 onImpact: () => {
-                    playDeferredSound(damageStreamEntry.id);
+                    playSound(impactKey);
                     triggerSelfImpact?.(damage);
                 },
             });
@@ -311,7 +314,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(opponentId),
                         endPos: getElementCenter(refs.opponentBuff.current),
-                        onImpact: () => { /* 状态音效由 DeferredSoundMap 消费，状态变化路径无事件 ID */ },
+                    onImpact: () => { playSound(IMPACT_SFX.STATUS_GAIN); },
                     });
                 }
             });
@@ -330,7 +333,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.opponentBuff.current),
                         endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
-                    onImpact: () => { /* 状态移除音效由 DeferredSoundMap 消费 */ },
+                    onImpact: () => { playSound(IMPACT_SFX.STATUS_REMOVE); },
                     });
                 }
             });
@@ -362,7 +365,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(currentPlayerId),
                         endPos: getElementCenter(refs.selfBuff.current),
-                        onImpact: () => { },
+                        onImpact: () => { playSound(IMPACT_SFX.STATUS_GAIN); },
                     });
                 }
             });
@@ -380,7 +383,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.selfBuff.current),
                         endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
-                    onImpact: () => { },
+                    onImpact: () => { playSound(IMPACT_SFX.STATUS_REMOVE); },
                     });
                 }
             });
@@ -413,7 +416,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(opponentId),
                         endPos: getElementCenter(refs.opponentBuff.current),
-                        onImpact: () => { },
+                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_GAIN); },
                     });
                 }
             });
@@ -431,7 +434,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.opponentBuff.current),
                         endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
-                        onImpact: () => { },
+                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_REMOVE); },
                     });
                 }
             });
@@ -462,7 +465,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: info.color,
                         startPos: getEffectStartPos(currentPlayerId),
                         endPos: getElementCenter(refs.selfBuff.current),
-                        onImpact: () => { },
+                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_GAIN); },
                     });
                 }
             });
@@ -480,7 +483,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.selfBuff.current),
                         endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
-                        onImpact: () => { },
+                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_REMOVE); },
                     });
                 }
             });

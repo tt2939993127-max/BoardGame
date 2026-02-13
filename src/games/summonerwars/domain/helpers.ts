@@ -584,6 +584,39 @@ export function getUnitMoveEnhancements(
 }
 
 /**
+ * 计算单位的动态移动增强量（用于 UI 显示）
+ * 只返回外部因素（光环、事件卡等）带来的增强，排除印刷技能和蓝点已展示的速度强化
+ */
+export function getDynamicMoveBoostForDisplay(
+  state: SummonerWarsCore,
+  unitPos: CellCoord
+): number {
+  const unit = getUnitAt(state, unitPos);
+  if (!unit) return 0;
+
+  const enhancements = getUnitMoveEnhancements(state, unitPos);
+  if (enhancements.isImmobileUnit) return 0;
+
+  const abilityIds = getUnitAbilities(unit);
+
+  // 扣除印刷技能自带的 extraDistance
+  let innateExtra = 0;
+  for (const id of abilityIds) {
+    if (id === 'flying' || id === 'swift' || id === 'climb') {
+      innateExtra += 1;
+    }
+  }
+
+  let dynamicExtra = enhancements.extraDistance - innateExtra;
+  // 速度强化的 boosts 已由蓝点展示，扣除
+  if (abilityIds.includes('speed_up') && unit.boosts > 0) {
+    dynamicExtra = Math.max(0, dynamicExtra - Math.min(unit.boosts, 5));
+  }
+
+  return Math.max(0, dynamicExtra);
+}
+
+/**
  * 增强版移动验证（考虑飞行/迅捷/攀爬/冲锋/禁足等技能）
  */
 export function canMoveToEnhanced(

@@ -129,15 +129,13 @@ export type FxRenderer = React.FC<FxRendererProps>;
  * - timing: 'immediate' — 事件推入时立即播放
  * - timing: 'on-impact' — 延迟到渲染器触发 onImpact 回调时播放
  * - source: 'key' — 使用固定的音效 key
- * - source: 'deferred' — 从 DeferredSoundMap 读取（需要 params.eventId），如果读取失败且提供了 fallbackKey，则播放 fallbackKey
+ * - source: 'params' — 从 event.params.soundKey 读取（由推送方在 push 时注入）
  */
 export interface FxSoundConfig {
   /** 音效来源（默认 'key'） */
-  source?: 'key' | 'deferred';
-  /** 音效 key（source='key' 时必填） */
+  source?: 'key' | 'params';
+  /** 音效 key（source='key' 时必填，source='params' 时作为 fallback） */
   key?: string;
-  /** fallback 音效 key（source='deferred' 时可选，当 DeferredSoundMap 中没有对应音效时使用） */
-  fallbackKey?: string;
   /** 播放时机 */
   timing: 'immediate' | 'on-impact';
 }

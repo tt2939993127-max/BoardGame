@@ -9,10 +9,11 @@ import { getFactionCards, resolveCardName, resolveCardText, getCardDef, getBaseD
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { X, Check, Search, Layers, ZoomIn, Pencil, Lock } from 'lucide-react';
 import { UI_Z_INDEX } from '../../../core';
+import { GameButton } from './GameButton';
 
 interface Props {
     core: SmashUpCore;
-    moves: Record<string, any>;
+    moves: Record<string, (payload?: Record<string, unknown>) => void>;
     playerID: PlayerId | null;
 }
 
@@ -55,48 +56,56 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
             {/* Subtle Vignette */}
             <div className="absolute inset-0 z-0 pointer-events-none shadow-[inset_0_0_200px_rgba(0,0,0,0.8)]" />
 
-            {/* HEADLINE AREA */}
+            {/* HEADLINE AREA - 紧凑布局 */}
             <motion.div
                 initial={{ y: -50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                className="text-center pt-10 pb-4 relative z-20 w-full max-w-4xl mx-auto flex flex-col items-center"
+                className="text-center pt-6 pb-3 relative z-20 w-full max-w-4xl mx-auto flex flex-col items-center"
             >
-                {/* Turn Status: Stuck Note Style */}
-                <div className="mb-10 h-16 relative flex items-center justify-center">
+                <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter drop-shadow-[0_4px_0_rgba(0,0,0,0.5)] mb-1 uppercase italic">
+                    {t('ui.select_factions_title')}
+                </h1>
+
+                <p className="text-amber-100/60 text-xs max-w-lg mx-auto font-bold uppercase tracking-tight mb-3">
+                    {t('ui.select_factions_desc')}
+                </p>
+
+                {/* Turn Status: 紧凑便签样式 */}
+                <div className="h-10 relative flex items-center justify-center">
                     <AnimatePresence mode="wait">
                         {isMyTurn ? (
                             <motion.div
                                 key="my-turn"
-                                initial={{ rotate: -15, scale: 0.5, opacity: 0, y: -50 }}
+                                initial={{ rotate: -15, scale: 0.5, opacity: 0, y: -30 }}
                                 animate={{ rotate: -2, scale: 1, opacity: 1, y: 0 }}
                                 exit={{ rotate: 5, scale: 0.8, opacity: 0 }}
-                                className="relative bg-[#fef3c7] py-3 px-10 shadow-[4px_4px_10px_rgba(0,0,0,0.4)] border-b-2 border-slate-800/10 rounded-sm flex items-center clip-path-jagged"
+                                className="relative bg-[#fef3c7] py-1.5 px-6 shadow-[3px_3px_8px_rgba(0,0,0,0.4)] border-b-2 border-slate-800/10 rounded-sm flex items-center clip-path-jagged"
                             >
                                 {/* Pin icon */}
-                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-red-500 opacity-60 shadow-inner" />
+                                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-red-500 opacity-60 shadow-inner" />
 
-                                <span className="text-slate-800 font-black tracking-tight uppercase text-xl italic drop-shadow-sm">
+                                <span className="text-slate-800 font-black tracking-tight uppercase text-sm italic drop-shadow-sm">
                                     {t('ui.your_turn_prompt')}
                                 </span>
 
                                 <motion.div
                                     animate={{ rotate: [0, -2, 2, 0] }}
                                     transition={{ repeat: Infinity, duration: 2 }}
-                                    className="absolute -right-2 -top-2 bg-amber-500 rounded-full p-1.5 shadow-lg"
+                                    className="absolute -right-1.5 -top-1.5 bg-amber-500 rounded-full p-1 shadow-lg"
                                 >
-                                    <Pencil size={16} className="text-white" strokeWidth={3} />
+                                    <Pencil size={12} className="text-white" strokeWidth={3} />
                                 </motion.div>
                             </motion.div>
                         ) : (
                             <motion.div
                                 key="waiting"
-                                initial={{ opacity: 0, y: -20 }}
+                                initial={{ opacity: 0, y: -15 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="relative bg-[#e0f2fe] py-2 px-6 shadow-[2px_2px_8px_rgba(0,0,0,0.3)] border-l-4 border-blue-400 rotate-1 clip-path-jagged"
+                                className="relative bg-[#e0f2fe] py-1 px-4 shadow-[2px_2px_6px_rgba(0,0,0,0.3)] border-l-4 border-blue-400 rotate-1 clip-path-jagged"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                                    <span className="text-slate-800 font-bold uppercase text-xs tracking-widest">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                    <span className="text-slate-800 font-bold uppercase text-[10px] tracking-widest">
                                         {t('ui.waiting_for_player', { id: currentPlayerId })}
                                     </span>
                                 </div>
@@ -104,19 +113,11 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                         )}
                     </AnimatePresence>
                 </div>
-
-                <h1 className="text-5xl md:text-6xl font-black text-white tracking-tighter drop-shadow-[0_4px_0_rgba(0,0,0,0.5)] mb-2 uppercase italic">
-                    {t('ui.select_factions_title')}
-                </h1>
-
-                <p className="text-amber-100/60 text-sm max-w-lg mx-auto font-bold uppercase tracking-tight">
-                    {t('ui.select_factions_desc')}
-                </p>
             </motion.div>
 
-            {/* FACTION GRID */}
-            <div className="flex-1 w-full max-w-7xl overflow-y-auto px-6 py-8 relative z-10 custom-scrollbar">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 pb-32">
+            {/* FACTION GRID - 增加垂直空间 */}
+            <div className="flex-1 w-full max-w-7xl overflow-y-auto px-6 py-4 relative z-10 custom-scrollbar">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 pb-28">
                     {FACTION_METADATA.map((faction, idx) => {
                         const isTaken = takenFactions.has(faction.id);
                         const isSelectedByMe = mySelections.includes(faction.id);
@@ -280,21 +281,17 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                                         {t('ui.taken_by_other')}
                                                     </div>
                                                 ) : (
-                                                    <button
+                                                    <GameButton
                                                         onClick={() => handleConfirmSelect(meta.id)}
                                                         disabled={!canSelect}
-                                                        className={`
-                                                            w-full py-4 rounded font-black text-xl tracking-tighter uppercase transition-all
-                                                            flex items-center justify-center gap-2 shadow-lg border-b-4
-                                                            ${canSelect
-                                                                ? 'bg-slate-900 border-slate-700 hover:bg-black text-white active:translate-y-1 active:border-b-0 active:shadow-none'
-                                                                : 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed border-b-0'}
-                                                        `}
+                                                        variant="primary"
+                                                        size="lg"
+                                                        fullWidth
                                                     >
                                                         {isMyTurn
                                                             ? (mySelections.length >= 2 ? t('ui.faction_full') : t('ui.confirm_selection'))
                                                             : t('ui.wait_turn')}
-                                                    </button>
+                                                    </GameButton>
                                                 )}
                                             </div>
                                         </>
@@ -337,7 +334,7 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
                                                             {resolveCardName(card, i18n.language)}
                                                         </div>
                                                         <div className="text-[8px] text-amber-400 font-bold uppercase tracking-widest">
-                                                            {card.type === 'minion' ? `${t('ui.minion')}: ${(card as any).power}` : t('ui.action')}
+                                                            {card.type === 'minion' ? `${t('ui.minion')}: ${(card as import('../domain/types').MinionCardDef).power}` : t('ui.action')}
                                                         </div>
                                                     </div>
                                                 </div>

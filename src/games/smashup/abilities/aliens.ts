@@ -8,9 +8,11 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS } from '../domain/types';
 import type { MinionReturnedEvent, VpAwardedEvent, SmashUpEvent, SmashUpCore, CardsDrawnEvent, MinionCardDef, OngoingDetachedEvent, BaseReplacedEvent } from '../domain/types';
-import { requestChoice, buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower } from '../domain/abilityHelpers';
-import { registerPromptContinuation } from '../domain/promptContinuation';
+import { buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower } from '../domain/abilityHelpers';
 import { getBaseDef, getCardDef } from '../data/cards';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import type { MatchState } from '../../../engine/types';
 import { registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { RestrictionCheckContext, TriggerContext } from '../domain/ongoingEffects';
 
@@ -61,13 +63,11 @@ function alienSupremeOverlord(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_supreme_overlord',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要返回手牌的随从', options: buildMinionTargetOptions(options) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_supreme_overlord_${ctx.now}`, ctx.playerId,
+        '选择要返回手牌的随从', buildMinionTargetOptions(options), 'alien_supreme_overlord',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 采集�?onPlay：收回本基地一个力量≤3的对手随�?*/
@@ -84,13 +84,11 @@ function alienCollector(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_collector',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要收回的力量≤3的对手随从', options: buildMinionTargetOptions(options) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_collector_${ctx.now}`, ctx.playerId,
+        '选择要收回的力量≤3的对手随从', buildMinionTargetOptions(options), 'alien_collector',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 侵略�?onPlay：获�?VP */
@@ -121,13 +119,11 @@ function alienDisintegrate(ctx: AbilityContext): AbilityResult {
     }
     if (targets.length === 0) return { events: [] };
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_disintegrate',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要返回手牌的力量≤3的随从', options: buildMinionTargetOptions(options) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_disintegrate_${ctx.now}`, ctx.playerId,
+        '选择要返回手牌的力量≤3的随从', buildMinionTargetOptions(options), 'alien_disintegrate',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 麦田怪圈 onPlay：将一个基地的所有随从返回手牌（通过 Prompt 选择基地�?*/
@@ -147,22 +143,11 @@ function alienCropCircles(ctx: AbilityContext): AbilityResult {
     if (candidates.length === 0) return { events: [] };
 
     // Prompt 让玩家选择
-    return {
-        events: [
-            requestChoice(
-                {
-                    abilityId: 'alien_crop_circles',
-                    playerId: ctx.playerId,
-                    promptConfig: {
-                            title: '选择一个效果基地，将其所有随从返回手牌',
-                            options: buildBaseTargetOptions(candidates),
-                        },
-                        continuationContext: {},
-                },
-                ctx.now
-            ),
-        ],
-    };
+    const interaction = createSimpleChoice(
+        `alien_crop_circles_${ctx.now}`, ctx.playerId,
+        '选择一个效果基地，将其所有随从返回手牌', buildBaseTargetOptions(candidates), 'alien_crop_circles',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 
@@ -182,13 +167,11 @@ function alienProbe(ctx: AbilityContext): AbilityResult {
         return buildProbeRevealEvents(ctx, opponents[0].pid);
     }
     const options = opponents.map((o, i) => ({ id: `opp-${i}`, label: o.label, value: { pid: o.pid } }));
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_probe_choose_opponent',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个效果对手查看其手牌', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_probe_${ctx.now}`, ctx.playerId,
+        '选择一个效果对手查看其手牌', options as any[], 'alien_probe_choose_opponent',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 构建 Probe 展示手牌事件 */
@@ -224,13 +207,11 @@ function alienScoutShip(ctx: AbilityContext): AbilityResult {
         return buildScoutShipDeckTopReveal(ctx, players[0].pid);
     }
     const options = players.map((p, i) => ({ id: `p-${i}`, label: p.label, value: { pid: p.pid } }));
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_scout_ship_choose_player',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个效果玩家展示其牌库顶顶', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_scout_ship_${ctx.now}`, ctx.playerId,
+        '选择一个效果玩家展示其牌库顶顶', options as any[], 'alien_scout_ship_choose_player',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 构建侦察船牌库顶展示事件 */
@@ -267,13 +248,11 @@ function alienScoutShipHand(ctx: AbilityContext): AbilityResult {
         return buildScoutShipHandReveal(ctx, players[0].pid);
     }
     const options = players.map((p, i) => ({ id: `p-${i}`, label: p.label, value: { pid: p.pid } }));
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_scout_ship_hand_choose_opponent',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个效果对手展示其手牌', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_scout_ship_hand_${ctx.now}`, ctx.playerId,
+        '选择一个效果对手展示其手牌', options as any[], 'alien_scout_ship_hand_choose_opponent',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 构建侦察船手牌展示事�?*/
@@ -336,13 +315,11 @@ function alienTerraform(ctx: AbilityContext): AbilityResult {
         candidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
     }
     if (candidates.length === 0) return { events: [] };
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_terraform',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要替换的基地（上面的卡片会保留）', options: buildBaseTargetOptions(candidates) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_terraform_${ctx.now}`, ctx.playerId,
+        '选择要替换的基地（上面的卡片会保留）', buildBaseTargetOptions(candidates), 'alien_terraform',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 侦察�?onPlay：搜索牌库找一个随从放入手牌，然后洗牌�?*/
@@ -354,15 +331,13 @@ function alienScout(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         const name = def?.name ?? c.defId;
         const power = def?.power ?? 0;
-        return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid } };
+        return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId } };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_scout',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个效果随从放入手牌', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_scout_${ctx.now}`, ctx.playerId,
+        '选择一个效果随从放入手牌', options as any[], 'alien_scout',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 射线传�?onPlay：选择一个效果对手，展示其随机手牌，选择放回牌库顶顶或保留 */
@@ -377,13 +352,11 @@ function alienBeamingDown(ctx: AbilityContext): AbilityResult {
     }
     if (opponents.length === 0) return { events: [] };
     const options = opponents.map((o, i) => ({ id: `opp-${i}`, label: o.label, value: { pid: o.pid } }));
-    return {
-        events: [requestChoice({
-            abilityId: 'alien_beaming_down_choose_opponent',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个效果对手展示其随机手牌', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `alien_beaming_down_${ctx.now}`, ctx.playerId,
+        '选择一个效果对手展示其随机手牌', options as any[], 'alien_beaming_down_choose_opponent',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // ============================================================================
@@ -416,171 +389,149 @@ function returnAllMinionsFromBase(
     return events;
 }
 
-/** 注册外星人派系的 Prompt 继续函数 */
-export function registerAlienPromptContinuations(): void {
-    // 麦田怪圈：选择基地后，返回该基地所有随�?
-    registerPromptContinuation('alien_crop_circles', (ctx) => {
-        const { baseIndex } = ctx.selectedValue as { baseIndex: number };
-        return returnAllMinionsFromBase(ctx.state, baseIndex, ctx.now);
+/** 注册外星人派系的交互解决处理函数 */
+export function registerAlienInteractionHandlers(): void {
+    // 麦田怪圈：选择基地后，返回该基地所有随从
+    registerInteractionHandler('alien_crop_circles', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { baseIndex } = value as { baseIndex: number };
+        return { state, events: returnAllMinionsFromBase(state.core, baseIndex, timestamp) };
     });
 
-    // 外星霸主：选择目标后返回手�?
-    registerPromptContinuation('alien_supreme_overlord', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+    // 外星霸主：选择目标后返回手牌
+    registerInteractionHandler('alien_supreme_overlord', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
-        if (!target) return [];
-        return [{
+        if (!target) return undefined;
+        return { state, events: [{
             type: SU_EVENTS.MINION_RETURNED,
             payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'alien_supreme_overlord' },
-            timestamp: ctx.now,
-        } as MinionReturnedEvent];
+            timestamp,
+        } as MinionReturnedEvent] };
     });
 
-    // 采集者：选择目标后返回手�?
-    registerPromptContinuation('alien_collector', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+    // 采集者：选择目标后返回手牌
+    registerInteractionHandler('alien_collector', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
-        if (!target) return [];
-        return [{
+        if (!target) return undefined;
+        return { state, events: [{
             type: SU_EVENTS.MINION_RETURNED,
             payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'alien_collector' },
-            timestamp: ctx.now,
-        } as MinionReturnedEvent];
+            timestamp,
+        } as MinionReturnedEvent] };
     });
 
-    // 解体：选择目标后返回手�?
-    registerPromptContinuation('alien_disintegrate', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+    // 解体：选择目标后返回手牌
+    registerInteractionHandler('alien_disintegrate', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
-        if (!target) return [];
-        return [{
+        if (!target) return undefined;
+        return { state, events: [{
             type: SU_EVENTS.MINION_RETURNED,
             payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'alien_disintegrate' },
-            timestamp: ctx.now,
-        } as MinionReturnedEvent];
+            timestamp,
+        } as MinionReturnedEvent] };
     });
 
     // 侦察兵：选择随从放入手牌
-    registerPromptContinuation('alien_scout', (ctx) => {
-        const { cardUid } = ctx.selectedValue as { cardUid: string };
-        return [{
+    registerInteractionHandler('alien_scout', (state, playerId, value, _iData, _random, timestamp) => {
+        const { cardUid } = value as { cardUid: string };
+        return { state, events: [{
             type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: ctx.playerId, count: 1, cardUids: [cardUid] },
-            timestamp: ctx.now,
-        } as CardsDrawnEvent];
+            payload: { playerId, count: 1, cardUids: [cardUid] },
+            timestamp,
+        } as CardsDrawnEvent] };
     });
 
-    // 射线传递：选择对手后随机展示手�?
-    registerPromptContinuation('alien_beaming_down_choose_opponent', (ctx) => {
-        const { pid } = ctx.selectedValue as { pid: string };
-        const opponent = ctx.state.players[pid];
-        if (!opponent || opponent.hand.length === 0) return [];
-        const idx = Math.floor(ctx.random.random() * opponent.hand.length);
+    // 射线传递：选择对手后随机展示手牌，链式选择处理方式
+    registerInteractionHandler('alien_beaming_down_choose_opponent', (state, playerId, value, _iData, random, timestamp) => {
+        const { pid } = value as { pid: string };
+        const opponent = state.core.players[pid];
+        if (!opponent || opponent.hand.length === 0) return undefined;
+        const idx = Math.floor(random.random() * opponent.hand.length);
         const card = opponent.hand[idx];
         const def = getCardDef(card.defId);
         const cardName = def?.name ?? card.defId;
-        return [requestChoice({
-            abilityId: 'alien_beaming_down_decide',
-            playerId: ctx.playerId,
-            promptConfig: {
-                    title: `对手 ${pid} 的随机手牌是「${cardName}」，选择处理方式`,
-                    options: [
-                        { id: 'to_deck', label: '放回牌库顶顶', value: { action: 'to_deck' } },
-                        { id: 'keep', label: '保留在手牌', value: { action: 'keep' } },
-                    ],
-                },
-                        continuationContext: { cardUid: card.uid, defId: card.defId, ownerId: pid, },
-        }, ctx.now)];
+        const next = createSimpleChoice(
+            `alien_beaming_down_decide_${timestamp}`, playerId,
+            `对手 ${pid} 的随机手牌是「${cardName}」，选择处理方式`,
+            [
+                { id: 'to_deck', label: '放回牌库顶', value: { action: 'to_deck' } },
+                { id: 'keep', label: '保留在手牌', value: { action: 'keep' } },
+            ] as any[],
+            'alien_beaming_down_decide',
+        );
+        return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { cardUid: card.uid, defId: card.defId, ownerId: pid } } }), events: [] };
     });
 
-    // 射线传递：选择放回牌库顶顶或保留
-    registerPromptContinuation('alien_beaming_down_decide', (ctx) => {
-        const { action } = ctx.selectedValue as { action: 'to_deck' | 'keep' };
-        if (action === 'keep') return [];
-        const data = ctx.data as { cardUid: string; defId: string; ownerId: string };
-        return [{
+    // 射线传递：选择放回牌库顶或保留
+    registerInteractionHandler('alien_beaming_down_decide', (state, _playerId, value, iData, _random, timestamp) => {
+        const { action } = value as { action: 'to_deck' | 'keep' };
+        if (action === 'keep') return { state, events: [] };
+        const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string; ownerId: string };
+        if (!ctx) return undefined;
+        return { state, events: [{
             type: SU_EVENTS.CARD_TO_DECK_TOP,
-            payload: { cardUid: data.cardUid, defId: data.defId, ownerId: data.ownerId, reason: 'alien_beaming_down' },
-            timestamp: ctx.now,
-        } as SmashUpEvent];
+            payload: { cardUid: ctx.cardUid, defId: ctx.defId, ownerId: ctx.ownerId, reason: 'alien_beaming_down' },
+            timestamp,
+        } as SmashUpEvent] };
     });
 
     // 地球化：选择基地后替换为基地牌库顶的基地（卡片保留）
-    registerPromptContinuation('alien_terraform', (ctx) => {
-        const { baseIndex } = ctx.selectedValue as { baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
-        if (ctx.state.baseDeck.length === 0) return [];
-        return [{
+    registerInteractionHandler('alien_terraform', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { baseIndex } = value as { baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
+        if (state.core.baseDeck.length === 0) return undefined;
+        return { state, events: [{
             type: SU_EVENTS.BASE_REPLACED,
-            payload: {
-                baseIndex,
-                oldBaseDefId: base.defId,
-                newBaseDefId: ctx.state.baseDeck[0],
-                keepCards: true,
-            },
-            timestamp: ctx.now,
-        } as BaseReplacedEvent];
+            payload: { baseIndex, oldBaseDefId: base.defId, newBaseDefId: state.core.baseDeck[0], keepCards: true },
+            timestamp,
+        } as BaseReplacedEvent] };
     });
 
-    // 射线探测：选择对手后展示手�?
-    registerPromptContinuation('alien_probe_choose_opponent', (ctx) => {
-        const { pid } = ctx.selectedValue as { pid: string };
-        const target = ctx.state.players[pid];
-        if (!target || target.hand.length === 0) return [];
+    // 射线探测：选择对手后展示手牌
+    registerInteractionHandler('alien_probe_choose_opponent', (state, playerId, value, _iData, _random, timestamp) => {
+        const { pid } = value as { pid: string };
+        const target = state.core.players[pid];
+        if (!target || target.hand.length === 0) return undefined;
         const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
-        return [{
+        return { state, events: [{
             type: SU_EVENTS.REVEAL_HAND,
-            payload: {
-                targetPlayerId: pid,
-                viewerPlayerId: ctx.playerId,
-                cards,
-                reason: 'alien_probe',
-            },
-            timestamp: ctx.now,
-        } as SmashUpEvent];
+            payload: { targetPlayerId: pid, viewerPlayerId: playerId, cards, reason: 'alien_probe' },
+            timestamp,
+        } as SmashUpEvent] };
     });
 
     // 侦察船一：选择玩家后展示牌库顶
-    registerPromptContinuation('alien_scout_ship_choose_player', (ctx) => {
-        const { pid } = ctx.selectedValue as { pid: string };
-        const target = ctx.state.players[pid];
-        if (!target || target.deck.length === 0) return [];
+    registerInteractionHandler('alien_scout_ship_choose_player', (state, playerId, value, _iData, _random, timestamp) => {
+        const { pid } = value as { pid: string };
+        const target = state.core.players[pid];
+        if (!target || target.deck.length === 0) return undefined;
         const topCard = target.deck[0];
-        return [{
+        return { state, events: [{
             type: SU_EVENTS.REVEAL_DECK_TOP,
-            payload: {
-                targetPlayerId: pid,
-                viewerPlayerId: ctx.playerId,
-                cards: [{ uid: topCard.uid, defId: topCard.defId }],
-                count: 1,
-                reason: 'alien_scout_ship',
-            },
-            timestamp: ctx.now,
-        } as SmashUpEvent];
+            payload: { targetPlayerId: pid, viewerPlayerId: playerId, cards: [{ uid: topCard.uid, defId: topCard.defId }], count: 1, reason: 'alien_scout_ship' },
+            timestamp,
+        } as SmashUpEvent] };
     });
 
-    // 侦察船二：选择对手后展示手�?
-    registerPromptContinuation('alien_scout_ship_hand_choose_opponent', (ctx) => {
-        const { pid } = ctx.selectedValue as { pid: string };
-        const target = ctx.state.players[pid];
-        if (!target || target.hand.length === 0) return [];
+    // 侦察船二：选择对手后展示手牌
+    registerInteractionHandler('alien_scout_ship_hand_choose_opponent', (state, playerId, value, _iData, _random, timestamp) => {
+        const { pid } = value as { pid: string };
+        const target = state.core.players[pid];
+        if (!target || target.hand.length === 0) return undefined;
         const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
-        return [{
+        return { state, events: [{
             type: SU_EVENTS.REVEAL_HAND,
-            payload: {
-                targetPlayerId: pid,
-                viewerPlayerId: ctx.playerId,
-                cards,
-                reason: 'alien_scout_ship',
-            },
-            timestamp: ctx.now,
-        } as SmashUpEvent];
+            payload: { targetPlayerId: pid, viewerPlayerId: playerId, cards, reason: 'alien_scout_ship' },
+            timestamp,
+        } as SmashUpEvent] };
     });
 }

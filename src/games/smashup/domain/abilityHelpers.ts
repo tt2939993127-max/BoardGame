@@ -5,7 +5,8 @@
  * 所有函数返回事件数组，由 reducer 统一归约。
  */
 
-import type { PlayerId, PromptMultiConfig } from '../../../engine/types';
+import type { PlayerId } from '../../../engine/types';
+import type { PromptMultiConfig, PromptOption as EnginePromptOption } from '../../../engine/systems/InteractionSystem';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -217,7 +218,6 @@ export function shuffleHandIntoDeck(
 
 import type { GameEvent } from '../../../engine/types';
 import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
-import type { PromptOption as EnginePromptOption } from '../../../engine/types';
 import type { ChoiceRequestedEvent } from './types';
 
 // ============================================================================

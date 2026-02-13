@@ -75,41 +75,6 @@ export interface UndoState {
 }
 
 /**
- * @deprecated 使用 InteractionSystem 替代。此类型保留仅为历史兼容，将在下个主版本删除。
- */
-export interface PromptOption<T = unknown> {
-    id: string;
-    label: string;
-    value: T;
-    disabled?: boolean;
-}
-
-/**
- * @deprecated 使用 InteractionSystem 替代。
- */
-export interface PromptMultiConfig {
-    min?: number;
-    max?: number;
-}
-
-/**
- * @deprecated 使用 InteractionSystem (sys.interaction) 替代。
- * 新游戏禁止使用此类型，应使用 createSimpleChoice() / queueInteraction()。
- */
-export interface PromptState<T = unknown> {
-    current?: {
-        id: string;
-        playerId: PlayerId;
-        title: string;
-        options: PromptOption<T>[];
-        sourceId?: string;
-        timeout?: number;
-        multi?: PromptMultiConfig;
-    };
-    queue: PromptState<T>['current'][];
-}
-
-/**
  * 日志条目
  */
 export interface LogEntry {
@@ -187,12 +152,9 @@ export interface RematchState {
 }
 
 /**
- * 响应窗口类型
- * - afterRollConfirmed: 确认骰面后（所有有骰子相关卡牌的玩家可响应）
- * - afterCardPlayed: 卡牌打出后（受影响玩家可响应）
- * - thenBreakpoint: "然后"断点（所有玩家可响应）
+ * 响应窗口类型（引擎层为通用 string，由各游戏自定义具体值）
  */
-export type ResponseWindowType = 'afterRollConfirmed' | 'afterCardPlayed' | 'thenBreakpoint' | 'meFirst';
+export type ResponseWindowType = string;
 
 /**
  * 响应窗口状态
@@ -299,13 +261,12 @@ export interface TutorialState {
     /** manifest 级别配置（用于步骤推进时复用） */
     manifestAllowManualSkip?: boolean;
     manifestRandomPolicy?: TutorialRandomPolicy;
-    allowedCommands?: string[];
-    advanceOnEvents?: TutorialEventMatcher[];
+    /** 派生值：结合 step + manifest 得出的有效随机策略 */
     randomPolicy?: TutorialRandomPolicy;
+    /** 可变运行时：AI 动作队列（消费后清除） */
     aiActions?: TutorialAiAction[];
+    /** 派生值：结合 step + manifest 得出的是否允许手动跳过 */
     allowManualSkip?: boolean;
-    /** 是否等待动画完成后才推进到下一步 */
-    waitForAnimation?: boolean;
     /** 动画等待：事件已匹配，正在等待动画完成 */
     pendingAnimationAdvance?: boolean;
 }
@@ -394,15 +355,6 @@ export interface DomainCore<
 
     /** 应用事件，返回新状态（确定性 reducer，仅作用于 core） */
     reduce(state: TState, event: TEvent): TState;
-
-    /**
-     * 可选：execute 后、reduce 前的事件后处理（派生事件、状态检测）
-     * 
-     * 典型用途：类似万智牌 State-Based Actions（SBA），
-     * 扫描事件流自动注入派生事件（如伤害→死亡检测）。
-     * 支持连锁：注入的事件会被后续处理继续检测。
-     */
-    postProcess?(state: TState, events: TEvent[]): TEvent[];
 
     /**
      * 可选：系统事件后处理（afterEvents 轮中，reduce 前）

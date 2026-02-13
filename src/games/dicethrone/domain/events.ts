@@ -2,7 +2,8 @@
  * DiceThrone 事件类型定义
  */
 
-import type { GameEvent, PlayerId, ResponseWindowType } from '../../../engine/types';
+import type { GameEvent, PlayerId } from '../../../engine/types';
+import type { DtResponseWindowType } from './core-types';
 import type {
     DieFace,
     SelectableCharacterId,
@@ -381,7 +382,7 @@ export interface ResponseWindowOpenedEvent extends GameEvent<'RESPONSE_WINDOW_OP
         windowId: string;
         /** 响应者队列（按顺序轮询） */
         responderQueue: PlayerId[];
-        windowType: ResponseWindowType;
+        windowType: DtResponseWindowType;
         /** 来源卡牌/技能 ID */
         sourceId?: string;
     };

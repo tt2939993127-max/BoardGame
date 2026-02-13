@@ -5,7 +5,7 @@
  * 每个派系独立注册能力执行函数，在游戏初始化时调用。
  */
 
-import type { PlayerId, RandomFn } from '../../../engine/types';
+import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
 import type { SmashUpCore, SmashUpEvent, AbilityTag, PromptConfig } from './types';
 
 // ============================================================================
@@ -15,6 +15,8 @@ import type { SmashUpCore, SmashUpEvent, AbilityTag, PromptConfig } from './type
 /** 能力执行上下文 */
 export interface AbilityContext {
     state: SmashUpCore;
+    /** 完整的 match 状态，用于调用 queueInteraction */
+    matchState: MatchState<SmashUpCore>;
     playerId: PlayerId;
     cardUid: string;
     defId: string;
@@ -29,6 +31,8 @@ export interface AbilityContext {
 /** 能力执行结果 */
 export interface AbilityResult {
     events: SmashUpEvent[];
+    /** 如果能力修改了 matchState（如创建了 Interaction），返回更新后的 matchState */
+    matchState?: MatchState<SmashUpCore>;
     /** 需要 Prompt 时返回 prompt 配置 */
     prompt?: PromptConfig;
 }

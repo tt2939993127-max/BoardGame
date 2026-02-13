@@ -52,7 +52,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const resolveKey = (event: AudioEvent, ctx: any = { G: {}, ctx: {}, meta: {} }): string | null => {
-    return DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, ctx)?.key ?? null;
+    return DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, ctx);
 };
 
 const CP_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
@@ -113,9 +113,7 @@ describe('DiceThrone 音效配置属性测试', () => {
     });
 
     describe('属性 2：技能音效正确性', () => {
-        it('DAMAGE_DEALT 应返回 on-impact 通用伤害音效（技能 sfxKey 由冲击帧消费）', () => {
-            // 当前架构：DAMAGE_DEALT 统一返回 on-impact 通用伤害音效，
-            // 技能专属 sfxKey 由 DeferredSoundMap 在动画冲击帧 playDeferredSound(eventId) 消费
+        it('DAMAGE_DEALT 应返回 null（音效由动画层 onImpact 播放）', () => {
             const event: AudioEvent = {
                 type: 'DAMAGE_DEALT',
                 payload: {
@@ -137,10 +135,7 @@ describe('DiceThrone 音效配置属性测试', () => {
             } as any;
 
             const result = DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, mockContext);
-            expect(result).toBeDefined();
-            expect(result!.timing).toBe('on-impact');
-            // 通用轻击音效（damage < 8）
-            expect(result!.key).toBe('combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst');
+            expect(result).toBeNull();
         });
 
         it('所有攻击型技能应配置 sfxKey', () => {

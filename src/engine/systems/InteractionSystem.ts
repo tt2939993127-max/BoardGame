@@ -13,12 +13,33 @@
 import type {
     MatchState,
     PlayerId,
-    PromptOption,
-    PromptMultiConfig,
     GameEvent,
 } from '../types';
+import { resolveCommandTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
+
+// ============================================================================
+// 交互选项类型（原属 types.ts，逻辑上归属交互系统）
+// ============================================================================
+
+/**
+ * 交互选项（simple-choice 的单个选项）
+ */
+export interface PromptOption<T = unknown> {
+    id: string;
+    label: string;
+    value: T;
+    disabled?: boolean;
+}
+
+/**
+ * 多选配置
+ */
+export interface PromptMultiConfig {
+    min?: number;
+    max?: number;
+}
 
 // ============================================================================
 // 核心类型
@@ -182,13 +203,6 @@ export interface InteractionSystemConfig {
 }
 
 // ============================================================================
-// 内部工具
-// ============================================================================
-
-const resolveCommandTimestamp = (command: { timestamp?: number }): number =>
-    typeof command.timestamp === 'number' ? command.timestamp : 0;
-
-// ============================================================================
 // 创建交互系统
 // ============================================================================
 
@@ -197,7 +211,7 @@ export function createInteractionSystem<TCore>(
 ): EngineSystem<TCore> {
     void config;
     return {
-        id: SYSTEM_IDS.PROMPT, // 复用 PROMPT 的 system ID 以保持 priority 兼容
+        id: SYSTEM_IDS.INTERACTION,
         name: '交互系统',
         priority: 20,
 

@@ -293,7 +293,8 @@ const mockContext = {
 const resolveKey = (event: AudioEvent): string | undefined => {
     const resolver = SMASHUP_AUDIO_CONFIG.feedbackResolver;
     if (!resolver) throw new Error('feedbackResolver 未定义');
-    return resolver(event, mockContext)?.key;
+    const result = resolver(event, mockContext);
+    return result ?? undefined;
 };
 
 describe('Smash Up 音效配置', () => {

@@ -55,6 +55,7 @@ interface PendingBeforeAttack {
 interface StatusBannersProps {
   currentPhase: GamePhase;
   isMyTurn: boolean;
+  core: import('../domain/types').SummonerWarsCore; // 添加 core 用于检查单位状态
   // 模式状态
   abilityMode: AbilityModeState | null;
   pendingBeforeAttack: PendingBeforeAttack | null;
@@ -169,7 +170,7 @@ const StunBanner: React.FC<{
 // ============================================================================
 
 export const StatusBanners: React.FC<StatusBannersProps> = ({
-  currentPhase, isMyTurn,
+  currentPhase, isMyTurn, core,
   abilityMode, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
   mindControlMode, chantEntanglementMode, sneakMode, glacialShiftMode, withdrawMode, stunMode, hypnoticLureMode,
   mindCaptureMode, afterAttackAbilityMode, telekinesisTargetMode,
@@ -190,6 +191,21 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   onFrostAxeAttach,
 }) => {
   const { t } = useTranslation('game-summonerwars');
+
+  // 获取源单位的充能数（用于检查按钮是否应该禁用）
+  let sourceUnitBoosts = 0;
+  if (abilityMode?.sourceUnitId && core.board) {
+    outerLoop: for (let row = 0; row < core.board.length; row++) {
+      for (let col = 0; col < (core.board[0]?.length ?? 0); col++) {
+        const unit = core.board[row]?.[col]?.unit;
+        if (unit && unit.cardId === abilityMode.sourceUnitId) {
+          sourceUnitBoosts = unit.boosts ?? 0;
+          break outerLoop;
+        }
+      }
+    }
+  }
+
   if (abilityMode) {
     return (
       <div className="bg-amber-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-amber-500/40 flex items-center gap-3 shadow-lg">
@@ -219,12 +235,28 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         {abilityMode.abilityId === 'blood_rune' && (
           <>
             <GameButton onClick={() => onConfirmBloodRune('damage')} variant="secondary" size="sm">{t('actions.bloodRuneDamage')}</GameButton>
-            <GameButton onClick={() => onConfirmBloodRune('charge')} variant="primary" size="sm">{t('actions.bloodRuneCharge')}</GameButton>
+            <GameButton 
+              onClick={() => onConfirmBloodRune('charge')} 
+              variant="primary" 
+              size="sm"
+              disabled={core.players[core.currentPlayer].magic < 1}
+              title={core.players[core.currentPlayer].magic < 1 ? '魔力不足' : undefined}
+            >
+              {t('actions.bloodRuneCharge')}
+            </GameButton>
           </>
         )}
         {abilityMode.abilityId === 'ice_shards' && (
           <>
-            <GameButton onClick={onConfirmIceShards} variant="primary" size="sm">{t('actions.confirm')}</GameButton>
+            <GameButton 
+              onClick={onConfirmIceShards} 
+              variant="primary" 
+              size="sm"
+              disabled={sourceUnitBoosts < 1}
+              title={sourceUnitBoosts < 1 ? '需要至少1点充能' : undefined}
+            >
+              {t('actions.confirm')}
+            </GameButton>
             <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
           </>
         )}
@@ -235,7 +267,15 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
           <GameButton onClick={onAfterMoveSelfCharge} variant="primary" size="sm">{t('actions.chargeSelf')}</GameButton>
         )}
         {abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget' && (
-          <GameButton onClick={onFrostAxeAttach} variant="primary" size="sm">{t('actions.attachToSoldier')}</GameButton>
+          <GameButton 
+            onClick={onFrostAxeAttach} 
+            variant="primary" 
+            size="sm"
+            disabled={sourceUnitBoosts < 1}
+            title={sourceUnitBoosts < 1 ? '需要至少1点充能' : undefined}
+          >
+            {t('actions.attachToSoldier')}
+          </GameButton>
         )}
         {['spirit_bond', 'ancestral_bond', 'structure_shift'].includes(abilityMode.abilityId) && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
@@ -384,6 +424,19 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   }
 
   if (withdrawMode) {
+    // 获取源单位的充能数和玩家魔力
+    let withdrawUnitBoosts = 0;
+    withdrawSearch: for (let row = 0; row < core.board.length; row++) {
+      for (let col = 0; col < (core.board[0]?.length ?? 0); col++) {
+        const unit = core.board[row]?.[col]?.unit;
+        if (unit && unit.cardId === withdrawMode.sourceUnitId) {
+          withdrawUnitBoosts = unit.boosts ?? 0;
+          break withdrawSearch;
+        }
+      }
+    }
+    const playerMagic = core.players[core.currentPlayer].magic;
+
     return (
       <div className="bg-amber-900/95 px-4 py-2 rounded-lg border border-amber-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-amber-200 text-sm font-bold">
@@ -393,8 +446,24 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         </span>
         {withdrawMode.step === 'selectCost' && (
           <>
-            <GameButton onClick={() => onWithdrawCostSelect('charge')} variant="primary" size="sm">{t('actions.withdrawCharge')}</GameButton>
-            <GameButton onClick={() => onWithdrawCostSelect('magic')} variant="secondary" size="sm">{t('actions.withdrawMagic')}</GameButton>
+            <GameButton 
+              onClick={() => onWithdrawCostSelect('charge')} 
+              variant="primary" 
+              size="sm"
+              disabled={withdrawUnitBoosts < 1}
+              title={withdrawUnitBoosts < 1 ? '需要至少1点充能' : undefined}
+            >
+              {t('actions.withdrawCharge')}
+            </GameButton>
+            <GameButton 
+              onClick={() => onWithdrawCostSelect('magic')} 
+              variant="secondary" 
+              size="sm"
+              disabled={playerMagic < 1}
+              title={playerMagic < 1 ? '魔力不足' : undefined}
+            >
+              {t('actions.withdrawMagic')}
+            </GameButton>
           </>
         )}
         <GameButton onClick={onCancelWithdraw} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>

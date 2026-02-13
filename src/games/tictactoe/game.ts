@@ -14,7 +14,6 @@ import {
     createResponseWindowSystem,
     createTutorialSystem,
     createUndoSystem,
-    UNDO_COMMANDS,
 } from '../../engine';
 import { TicTacToeDomain } from './domain';
 
@@ -72,10 +71,6 @@ export const TicTacToe = createGameAdapter({
     maxPlayers: 2,
     commandTypes: [
         'CLICK_CELL',
-        UNDO_COMMANDS.REQUEST_UNDO,
-        UNDO_COMMANDS.APPROVE_UNDO,
-        UNDO_COMMANDS.REJECT_UNDO,
-        UNDO_COMMANDS.CANCEL_UNDO,
     ],
 });
 

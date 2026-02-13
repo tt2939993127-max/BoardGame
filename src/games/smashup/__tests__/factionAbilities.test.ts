@@ -71,28 +71,30 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
     return {
         core,
-        sys: { phase: 'playCards' } as any,
+        sys: { phase: 'playCards', interaction: { queue: [] } } as any,
     } as any;
 }
 
 const defaultRandom: RandomFn = { shuffle: (arr: any[]) => [...arr], random: () => 0.5 };
 
-function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number): SmashUpEvent[] {
+function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number) {
     const matchState = makeMatchState(state);
-    return execute(matchState, {
+    const events = execute(matchState, {
         type: SU_COMMANDS.PLAY_MINION,
         playerId,
         payload: { cardUid, baseIndex },
     } as any, defaultRandom);
+    return { events, matchState };
 }
 
-function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, targetMinionUid?: string): SmashUpEvent[] {
+function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, targetMinionUid?: string) {
     const matchState = makeMatchState(state);
-    return execute(matchState, {
+    const events = execute(matchState, {
         type: SU_COMMANDS.PLAY_ACTION,
         playerId,
         payload: { cardUid, targetBaseIndex, targetMinionUid },
     } as any, defaultRandom);
+    return { events, matchState };
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -122,10 +124,11 @@ describe('海盗派系能力', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1', 0);
-        // 单个基地时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1', 0);
+        // 单个基地时创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('pirate_broadside');
     });
 
     it('pirate_cannon: 多目标时创建 Prompt 选择', () => {
@@ -142,11 +145,11 @@ describe('海盗派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        // 多个力量≤2目标时应创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('pirate_cannon_choose_first');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 多个力量≤2目标时创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('pirate_cannon_choose_first');
     });
 
     it('pirate_cannon: 单目标时创建 Prompt', () => {
@@ -163,9 +166,10 @@ describe('海盗派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('pirate_cannon_choose_first');
     });
 
     it('pirate_swashbuckling: 所有己方随从+1力量', () => {
@@ -182,7 +186,7 @@ describe('海盗派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
         const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
         // 只有己方随从 m0 和 m2 获得 +1
         expect(powerEvents.length).toBe(2);
@@ -211,9 +215,10 @@ describe('忍者派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('ninja_seeing_stars');
     });
 });
 
@@ -235,9 +240,10 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_wild_stuffing');
     });
 
     it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {
@@ -253,11 +259,11 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        // 多个己方随从时应创建 Prompt 而非自动选择
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('dino_augmentation');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 多个己方随从时应创建 Interaction 而非自动选择
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_augmentation');
     });
 
     it('dino_augmentation: 单个己方随从时创建 Prompt', () => {
@@ -273,9 +279,10 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_augmentation');
     });
 
     it('dino_howl: 所有己方随从+1力量', () => {
@@ -291,7 +298,7 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
         const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
         expect(powerEvents.length).toBe(1); // 只有己方 m0
         expect((powerEvents[0] as any).payload.minionUid).toBe('m0');
@@ -316,9 +323,10 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1', 0);
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1', 0);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_natural_selection_choose_mine');
     });
 
     it('dino_natural_selection: 多个可消灭目标时创建 Prompt', () => {
@@ -340,14 +348,13 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1', 0);
-        // 多个目标时不直接消灭，而是创建 Prompt 让玩家选择
+        const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
+        // 多个目标时不直接消灭，而是创建 Interaction 让玩家选择
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(0);
-        // 应该有 PROMPT_CONTINUATION 事件
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('dino_natural_selection_choose_mine');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_natural_selection_choose_mine');
     });
 
     it('dino_natural_selection: 无合法目标时无事件', () => {
@@ -368,7 +375,7 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1', 0);
+        const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         expect(destroyEvents.length).toBe(0);
         const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
@@ -394,7 +401,7 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1', 0);
+        const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
         const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
         expect(powerEvents.length).toBe(2); // m0 和 m1
         expect((powerEvents[0] as any).payload.amount).toBe(2);
@@ -424,7 +431,7 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         // m1(力量2) 和 m2(力量2) 都是最低力量
         expect(destroyEvents.length).toBe(2);
@@ -451,7 +458,7 @@ describe('机器人派系能力', () => {
             bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
+        const { events, matchState } = execPlayMinion(state, '0', 'm1', 0);
         const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(limitEvents.length).toBe(1);
         expect((limitEvents[0] as any).payload.limitType).toBe('minion');
@@ -478,9 +485,10 @@ describe('机器人派系能力', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('robot_tech_center');
     });
 });
 
@@ -501,10 +509,10 @@ describe('巫师派系能力', () => {
             bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('wizard_neophyte');
+        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('wizard_neophyte');
     });
 
     it('wizard_neophyte: 牌库顶不是行动卡时不产生事件', () => {
@@ -519,7 +527,7 @@ describe('巫师派系能力', () => {
             bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
+        const { events, matchState } = execPlayMinion(state, '0', 'm1', 0);
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
         expect(drawEvents.length).toBe(0);
     });
@@ -547,7 +555,7 @@ describe('诡术师派系能力', () => {
             bases: [],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
         const discardEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DISCARDED);
         expect(discardEvents.length).toBe(1);
         expect((discardEvents[0] as any).payload.playerId).toBe('1');
@@ -567,7 +575,7 @@ describe('诡术师派系能力', () => {
             bases: [],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
         const discardEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DISCARDED);
         expect(discardEvents.length).toBe(1);
         expect((discardEvents[0] as any).payload.cardUids.length).toBe(1);
@@ -587,7 +595,7 @@ describe('诡术师派系能力', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
         const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
     });
@@ -610,7 +618,7 @@ describe('诡术师派系能力', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
         const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
         expect(promptEvents.length).toBe(1);
     });
@@ -632,7 +640,7 @@ describe('外星人派系能力', () => {
             bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
+        const { events, matchState } = execPlayMinion(state, '0', 'm1', 0);
         const vpEvents = events.filter(e => e.type === SU_EVENTS.VP_AWARDED);
         expect(vpEvents.length).toBe(1);
         expect((vpEvents[0] as any).payload.amount).toBe(1);
@@ -655,9 +663,10 @@ describe('外星人派系能力', () => {
             }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('alien_collector');
     });
 
     it('alien_disintegrate: 单个力量≤3随从时创建 Prompt', () => {
@@ -675,9 +684,10 @@ describe('外星人派系能力', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('alien_disintegrate');
     });
 
     it('alien_crop_circles: 单个基地有随从时创建 Prompt', () => {
@@ -697,8 +707,9 @@ describe('外星人派系能力', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('alien_crop_circles');
     });
 });

@@ -24,7 +24,9 @@ import {
     executePipeline,
     type PipelineConfig,
 } from './pipeline';
+import { resolveDevFlag } from './env';
 import { dispatchEngineNotification } from './notifications';
+import { resolveNextCommandTimestamp } from './utils';
 import { UNDO_COMMANDS } from './systems/UndoSystem';
 import { REMATCH_COMMANDS } from './systems/RematchSystem';
 import { INTERACTION_COMMANDS } from './systems/InteractionSystem';
@@ -45,11 +47,64 @@ const ALL_SYSTEM_COMMANDS: string[] = [
 ];
 
 const RANDOM_SEQUENCE_MAX = 1000000;
-const isDev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
+const isDev = resolveDevFlag();
 type ClientGlobals = { __BG_GAME_MODE__?: string; __BG_IS_SPECTATOR__?: boolean; window?: unknown };
 const getClientGlobals = (): ClientGlobals => (
     typeof globalThis !== 'undefined' ? (globalThis as ClientGlobals) : {}
 );
+
+const resolveClientFlags = (globals: ClientGlobals) => {
+    const isClient = typeof globals.window !== 'undefined';
+    const globalMode = isClient ? globals.__BG_GAME_MODE__ : undefined;
+    const isSpectator = isClient ? globals.__BG_IS_SPECTATOR__ === true : false;
+    const isLocalLikeMode = globalMode === 'local' || globalMode === 'tutorial';
+    return { isClient, globalMode, isSpectator, isLocalLikeMode };
+};
+
+const resolveTutorialOverride = (payload: unknown, isLocalLikeMode: boolean) => {
+    if (!isLocalLikeMode || !payload || typeof payload !== 'object') {
+        return { payload, overrideId: undefined };
+    }
+    if (!('__tutorialPlayerId' in (payload as Record<string, unknown>))) {
+        return { payload, overrideId: undefined };
+    }
+    const { __tutorialPlayerId: overrideId, ...cleanPayload } = payload as Record<string, unknown>;
+    return {
+        payload: cleanPayload,
+        overrideId: typeof overrideId === 'string' ? overrideId : undefined,
+    };
+};
+
+const resolvePlayerId = (params: {
+    isLocalLikeMode: boolean;
+    coreCurrentPlayer?: string;
+    ctxCurrentPlayer?: string;
+    playerID?: string | null;
+    overrideId?: string;
+}): string | null | undefined => {
+    if (params.isLocalLikeMode) {
+        return params.overrideId ?? (params.coreCurrentPlayer ?? params.ctxCurrentPlayer);
+    }
+    return params.playerID;
+};
+
+const normalizePlayerId = (playerId: string | number | null | undefined): string =>
+    playerId !== null && playerId !== undefined ? String(playerId) : '';
+
+const shouldBlockSpectator = (
+    flags: { isClient: boolean; isSpectator: boolean; isLocalLikeMode: boolean },
+    commandType: string,
+    warnedSpectatorRef: { value: boolean }
+): boolean => {
+    if (!flags.isLocalLikeMode && flags.isSpectator) {
+        if (flags.isClient && isDev && !warnedSpectatorRef.value) {
+            console.warn('[Spectate][Adapter] blocked command', { commandType });
+            warnedSpectatorRef.value = true;
+        }
+        return true;
+    }
+    return false;
+};
 
 const normalizePolicyValue = (value: number, max: number): number => {
     if (!Number.isFinite(value) || max <= 0) return 1;
@@ -177,74 +232,49 @@ export function createGameAdapter<
 
     // 生成通用 move 处理器
     const createMoveHandler = (commandType: string): Move<MatchState<TCore>> => {
-        let warnedSpectator = false;
+        const warnedSpectatorRef = { value: false };
         return ({ G, ctx, random, playerID }, payload: unknown) => {
             const coreCurrentPlayer = (G as { core?: { currentPlayer?: string } }).core?.currentPlayer;
             const globals = getClientGlobals();
-            const isClient = typeof globals.window !== 'undefined';
-
-            const globalMode = isClient ? globals.__BG_GAME_MODE__ : undefined;
-            const isSpectator = isClient ? globals.__BG_IS_SPECTATOR__ === true : false;
-            const isLocalLikeMode = globalMode === 'local' || globalMode === 'tutorial';
-            if (!isLocalLikeMode && isSpectator) {
-                if (isClient && isDev && !warnedSpectator) {
-                    console.warn('[Spectate][Adapter] blocked command', { commandType });
-                    warnedSpectator = true;
-                }
-                return;
-            }
+            const flags = resolveClientFlags(globals);
+            if (shouldBlockSpectator(flags, commandType, warnedSpectatorRef)) return;
 
             // 重要：在 online 模式下，缺失 playerID 时不能允许用 ctx.currentPlayer 行动。
             // 否则旁观者可能修改状态。
             const isMissingPlayer = playerID === null || playerID === undefined;
-            if (!isLocalLikeMode && isMissingPlayer) {
+            if (!flags.isLocalLikeMode && isMissingPlayer) {
                 // 在服务端所有对局都是 online；在客户端这表示旁观者模式。
                 return;
             }
 
             // 仅 local/tutorial 可跳过校验。
-            const shouldSkipValidation = isLocalLikeMode;
+            const shouldSkipValidation = flags.isLocalLikeMode;
 
             // 解析实际行动者 playerId。
             // - local/tutorial：hotseat 模式下由当前回合玩家行动（忽略 boardgame.io 的 playerID，避免永远是 P0）。
             // - online：要求显式 playerID。
             // - tutorial aiAction 可通过 payload.__tutorialPlayerId 强制指定执行者（用于阵营选择等需要多玩家操作的场景）。
-            let resolvedPlayerId = isLocalLikeMode
-                ? (coreCurrentPlayer ?? ctx.currentPlayer)
-                : playerID;
-
-            // 教程模式下支持 aiAction 指定 playerId
-            if (isLocalLikeMode && payload && typeof payload === 'object' && '__tutorialPlayerId' in (payload as Record<string, unknown>)) {
-                const overrideId = (payload as Record<string, unknown>).__tutorialPlayerId;
-                if (typeof overrideId === 'string') {
-                    resolvedPlayerId = overrideId;
-                    // 从 payload 中移除内部字段，避免传递给领域层
-                    const { __tutorialPlayerId: _, ...cleanPayload } = payload as Record<string, unknown>;
-                    payload = cleanPayload;
-                }
-            }
-
-            const normalizedPlayerId = resolvedPlayerId !== null && resolvedPlayerId !== undefined
-                ? String(resolvedPlayerId)
-                : '';
+            const tutorialOverride = resolveTutorialOverride(payload, flags.isLocalLikeMode);
+            const resolvedPlayerId = resolvePlayerId({
+                isLocalLikeMode: flags.isLocalLikeMode,
+                coreCurrentPlayer,
+                ctxCurrentPlayer: ctx.currentPlayer,
+                playerID,
+                overrideId: tutorialOverride.overrideId,
+            });
+            const normalizedPlayerId = normalizePlayerId(resolvedPlayerId);
+            payload = tutorialOverride.payload;
 
             const isUndoCommand = undoCommandTypes.has(commandType);
             if (disableUndo && isUndoCommand) {
                 return;
             }
 
-            const resolveCommandTimestamp = (): number => {
-                const entries = (G as MatchState<TCore>).sys?.log?.entries ?? [];
-                const last = entries[entries.length - 1];
-                const lastTimestamp = typeof last?.timestamp === 'number' ? last.timestamp : -1;
-                return lastTimestamp + 1;
-            };
-
             const command: Command = {
                 type: commandType,
                 playerId: normalizedPlayerId,
                 payload,
-                timestamp: resolveCommandTimestamp(),
+                timestamp: resolveNextCommandTimestamp(G as MatchState<TCore>),
                 skipValidation: shouldSkipValidation,
             };
 

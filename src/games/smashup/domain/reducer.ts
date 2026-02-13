@@ -53,19 +53,31 @@ export function execute(
         return [];
     }
 
-    const events = executeCommand(core, command, random, now);
+    const { events, updatedState } = executeCommand(state, command, random, now);
+    
+    // 如果能力修改了 matchState（如 queueInteraction 创建了 Interaction），
+    // 通过引用赋值将 sys 更新传递给 pipeline
+    if (updatedState) {
+        state.sys = updatedState.sys;
+    }
+    
     // 后处理：onDestroy 触发 → onMove 触发
-    const afterDestroy = processDestroyTriggers(events, core, command.playerId, random, now);
-    return processMoveTriggers(afterDestroy, core, command.playerId, random, now);
+    const afterDestroy = processDestroyTriggers(events, state, command.playerId, random, now);
+    return processMoveTriggers(afterDestroy, state, command.playerId, random, now);
 }
 
 /** 内部命令执行（不含后处理） */
 function executeCommand(
-    core: SmashUpCore,
+    state: MatchState<SmashUpCore>,
     command: SmashUpCommand,
     random: RandomFn,
     now: number
-): SmashUpEvent[] {
+): { events: SmashUpEvent[]; updatedState?: MatchState<SmashUpCore> } {
+    // 防御性初始化：确保 sys.interaction 存在（测试环境可能未初始化）
+    if (!state.sys.interaction) {
+        state = { ...state, sys: { ...state.sys, interaction: { queue: [] } } };
+    }
+    const core = state.core;
 
     switch (command.type) {
         case SU_COMMANDS.PLAY_MINION: {
@@ -74,6 +86,7 @@ function executeCommand(
             const minionDef = getMinionDef(card.defId);
             const baseIndex = command.payload.baseIndex;
             const events: SmashUpEvent[] = [];
+            let updatedState: MatchState<SmashUpCore> | undefined;
 
             const playedEvt: MinionPlayedEvent = {
                 type: SU_EVENTS.MINION_PLAYED,
@@ -94,6 +107,7 @@ function executeCommand(
             if (executor) {
                 const ctx: AbilityContext = {
                     state: core,
+                    matchState: state,
                     playerId: command.playerId,
                     cardUid: card.uid,
                     defId: card.defId,
@@ -103,10 +117,13 @@ function executeCommand(
                 };
                 const result = executor(ctx);
                 events.push(...result.events);
+                if (result.matchState) {
+                    updatedState = result.matchState;
+                }
             }
 
             // 基地能力触发：onMinionPlayed（如中央大脑 +1 力量）
-            const baseAbilityEvents = triggerAllBaseAbilities(
+            const baseAbilityResult = triggerAllBaseAbilities(
                 'onMinionPlayed', core, command.playerId, now,
                 {
                     baseIndex,
@@ -115,7 +132,7 @@ function executeCommand(
                     minionPower: minionDef?.power ?? 0,
                 }
             );
-            events.push(...baseAbilityEvents);
+            events.push(...baseAbilityResult.events);
 
             // ongoing 触发：onMinionPlayed（如火焰陷阱消灭入场随从）
             const coreAfterPlayed = reduce(core, playedEvt);
@@ -130,7 +147,7 @@ function executeCommand(
             });
             events.push(...ongoingTriggerEvents);
 
-            return events;
+            return updatedState ? { events, updatedState } : { events };
         }
 
         case SU_COMMANDS.PLAY_ACTION: {
@@ -138,6 +155,7 @@ function executeCommand(
             const card = player.hand.find(c => c.uid === command.payload.cardUid)!;
             const def = getCardDef(card.defId) as ActionCardDef | undefined;
             const events: SmashUpEvent[] = [];
+            let updatedState: MatchState<SmashUpCore> | undefined;
 
             const event: ActionPlayedEvent = {
                 type: SU_EVENTS.ACTION_PLAYED,
@@ -173,6 +191,7 @@ function executeCommand(
                 if (executor) {
                     const ctx: AbilityContext = {
                         state: core,
+                        matchState: state,
                         playerId: command.playerId,
                         cardUid: card.uid,
                         defId: card.defId,
@@ -183,6 +202,9 @@ function executeCommand(
                     };
                     const result = executor(ctx);
                     events.push(...result.events);
+                    if (result.matchState) {
+                        updatedState = result.matchState;
+                    }
                 }
             }
 
@@ -200,12 +222,12 @@ function executeCommand(
                         actionTargetMinionUid: command.payload.targetMinionUid,
                         now,
                     };
-                    const bEvents = triggerBaseAbility(base.defId, 'onActionPlayed', baseCtx);
-                    events.push(...bEvents);
+                    const bResult = triggerBaseAbility(base.defId, 'onActionPlayed', baseCtx);
+                    events.push(...bResult.events);
                 }
             }
 
-            return events;
+            return updatedState ? { events, updatedState } : { events };
         }
 
         case SU_COMMANDS.DISCARD_TO_LIMIT: {
@@ -218,7 +240,7 @@ function executeCommand(
                 sourceCommandType: command.type,
                 timestamp: now,
             };
-            return [event];
+            return { events: [event] };
         }
 
         case SU_COMMANDS.SELECT_FACTION: {
@@ -316,14 +338,14 @@ function executeCommand(
                 events.push(allSelectedEvt);
             }
 
-            return events;
+            return { events };
         }
 
         case SU_COMMANDS.USE_TALENT: {
             const { minionUid, baseIndex } = command.payload;
             const base = core.bases[baseIndex];
             const minion = base?.minions.find(m => m.uid === minionUid);
-            if (!minion) return [];
+            if (!minion) return { events: [] };
 
             const events: SmashUpEvent[] = [];
             const talentEvt: TalentUsedEvent = {
@@ -344,6 +366,7 @@ function executeCommand(
             if (executor) {
                 const ctx: AbilityContext = {
                     state: core,
+                    matchState: state,
                     playerId: command.playerId,
                     cardUid: minionUid,
                     defId: minion.defId,
@@ -353,23 +376,26 @@ function executeCommand(
                 };
                 const result = executor(ctx);
                 events.push(...result.events);
+                if (result.matchState) {
+                    return { events, updatedState: result.matchState };
+                }
             }
 
-            return events;
+            return { events };
         }
 
         case SU_COMMANDS.DISMISS_REVEAL: {
-            return [{
+            return { events: [{
                 type: SU_EVENTS.REVEAL_DISMISSED,
                 payload: {},
                 sourceCommandType: command.type,
                 timestamp: now,
-            }];
+            }] };
         }
 
         default:
             // RESPONSE_PASS 由引擎 ResponseWindowSystem.beforeCommand 处理，领域层不生成事件
-            return [];
+            return { events: [] };
     }
 }
 
@@ -396,11 +422,12 @@ export function filterProtectedDestroyEvents(
 
 export function processDestroyTriggers(
     events: SmashUpEvent[],
-    core: SmashUpCore,
+    state: MatchState<SmashUpCore>,
     playerId: PlayerId,
     random: RandomFn,
     now: number
 ): SmashUpEvent[] {
+    const core = state.core;
     // 保护检查：过滤掉受保护的随从的消灭事件
     const filteredEvents = filterProtectedDestroyEvents(events, core, playerId);
 
@@ -421,6 +448,7 @@ export function processDestroyTriggers(
             // 查找被消灭随从在基地上的信息（消灭前的状态）
             const ctx: AbilityContext = {
                 state: core,
+                matchState: state,
                 playerId: destroyerId,
                 cardUid: minionUid,
                 defId: minionDefId,
@@ -445,8 +473,8 @@ export function processDestroyTriggers(
                 destroyerId,
                 now,
             };
-            const baseEvents = triggerExtendedBaseAbility(base.defId, 'onMinionDestroyed', baseCtx);
-            localEvents.push(...(baseEvents as SmashUpEvent[]));
+            const baseResult = triggerExtendedBaseAbility(base.defId, 'onMinionDestroyed', baseCtx);
+            localEvents.push(...baseResult.events);
         }
 
         // 3. 触发 ongoing 拦截器 onMinionDestroyed（如逃生舱回手牌）
@@ -505,11 +533,12 @@ export function filterProtectedMoveEvents(
 /** 后处理：触发 onMinionMoved 拦截器 */
 export function processMoveTriggers(
     events: SmashUpEvent[],
-    core: SmashUpCore,
+    state: MatchState<SmashUpCore>,
     playerId: PlayerId,
     random: RandomFn,
     now: number
 ): SmashUpEvent[] {
+    const core = state.core;
     // 保护检查：过滤掉受 move 保护的随从的移动事件
     const filteredEvents = filterProtectedMoveEvents(events, core, playerId);
 

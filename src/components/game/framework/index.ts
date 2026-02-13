@@ -74,6 +74,13 @@ export type {
     SpotlightPresetOptions,
 } from './presets';
 
+// 动态增益指示器
+export { BoostIndicator } from './widgets/BoostIndicator';
+export type { BoostEntry, BoostPosition } from './widgets/BoostIndicator';
+
+// Buff 系统
+// (BuffSystem 已有独立导入路径，此处不重复导出)
+
 // 类型导出
 export type {
     PhaseIndicatorSkeletonProps,

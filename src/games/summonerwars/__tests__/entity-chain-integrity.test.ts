@@ -46,6 +46,7 @@ const HANDLED_BY_EXECUTE = new Set([
     'soul_transfer_request',  // → execute case 'soul_transfer'
     // 欺心巫族
     'mind_capture_check',     // → execute case 'mind_capture_resolve'
+    'mind_capture_resolve',   // → execute case 'mind_capture_resolve'（决策分支）
     'vanish_swap',            // → execute case 'vanish'
     // 洞穴地精
     'ferocity_extra_attack',  // → execute 攻击后检查
@@ -68,6 +69,8 @@ const HANDLED_BY_EXECUTE = new Set([
     'frost_axe_action',        // → execute case 'frost_axe' 或被动
     'charge_line_move',        // → execute MOVE_UNIT 冲锋检查
     'aerial_strike_aura',      // → onDamageCalculation 被动
+    // 亡灵法师
+    'fire_sacrifice_summon',   // → execute case 'fire_sacrifice_summon'
     'structure_shift_push_pull', // → execute case 'structure_shift'
     'extended_range',          // → helpers 攻击范围计算
     // 炽原精灵
@@ -155,6 +158,8 @@ const ACTIVATED_UI_CONFIRMED = new Map<string, string>([
     // 手动触发（Board.tsx 静态按钮 → ACTIVATE_ABILITY）
     ['prepare',        'button:move   — Board.tsx 移动阶段按钮'],
     ['revive_undead',  'button:summon — Board.tsx 召唤阶段按钮 + CardSelectorOverlay'],
+    ['fire_sacrifice_summon', 'button:summon — AbilityButtonsPanel 召唤阶段按钮 + cell interaction 选友方单位'],
+    ['mind_capture_resolve', 'modal:decision — mind_capture 触发后的决策 Modal（控制/伤害）'],
 ]);
 
 /**

@@ -7,6 +7,20 @@ description: "为本项目创建新游戏。当用户要求新增游戏时使用
 
 > **核心原则**：每个阶段独立可验证、独立可提交。阶段之间不留 TODO 缺口。AI 必须在完成当前阶段验收后才能进入下一阶段。
 
+## 必读索引（单一权威来源，避免本文档过时）
+
+> 本 skill 只做“分阶段流程 + 验收门禁 + 最小闭环”。
+> 任何**规范/红线/最佳实践**若在下列文档中已有定义，必须以它们为准；本 skill 不重复展开。
+
+- 总则：`AGENTS.md`
+- 引擎/系统/move/command：`docs/ai-rules/engine-systems.md`
+- UI/布局/组件：`docs/ai-rules/ui-ux.md`
+- React 白屏/渲染错误/Hook 规则：`docs/ai-rules/golden-rules.md`
+- 动画/特效：`docs/ai-rules/animation-effects.md`
+- 图片/音频资源接入：`docs/ai-rules/asset-pipeline.md`
+- 音频细则：`docs/audio/audio-usage.md`（新增音频资产流程：`docs/audio/add-audio.md`）
+- 不确定该读哪份：`docs/ai-rules/doc-index.md`
+
 ## 前置：信息收集（启动门禁）
 
 收集以下信息后才能开始。**已有信息直接使用，缺失项回问用户，不猜测**：
@@ -240,6 +254,7 @@ npm run dev                   # 编译无报错（游戏可在大厅列表看到
 
 根据规则分析，补充：
 - 完整的 `PlayerState`（手牌/牌库/弃牌/资源/状态效果等）
+  - **状态效果建议用 `TagContainer` 表达**（`engine/primitives/tags.ts`），避免散落的 `statusEffects: Record<string, number>` / `tempAbilities: string[]`
 - 完整的 `<GameId>Core`（玩家状态/回合信息/棋盘/选择状态等）
 - 所有命令类型（`XX_COMMANDS` 常量对象）
 - 所有事件类型（`XX_EVENTS` 常量对象）
@@ -276,11 +291,18 @@ config/
 
 对照规则，在引擎层检索可复用实现：
 - 骰子 → `src/engine/primitives/dice.ts`
-- 资源 → `src/engine/primitives/resources.ts`
+- 资源（消耗品）→ `src/engine/primitives/resources.ts`
+- 状态/buff/debuff（层数/持续时间/净化/层级匹配）→ `src/engine/primitives/tags.ts`
+- 数值修改管线（flat/percent/override/compute + priority）→ `src/engine/primitives/modifier.ts`
+- 可被 buff 修改的属性（base + modifier → current）→ `src/engine/primitives/attribute.ts`
+- 能力系统骨架（注册/查找/执行器分发/可用性检查）→ `src/engine/primitives/ability.ts`
 - 卡牌/区域 → `src/engine/primitives/zones.ts`
 - 条件/表达式 → `src/engine/primitives/condition.ts` + `expression.ts`
 - 目标解析 → `src/engine/primitives/target.ts`
 - 效果执行 → `src/engine/primitives/effects.ts`
+
+**强制要求（新游戏）**：
+- 禁止自行实现 statusEffects / tempAbilities / DamageModifier / PowerModifierFn / abilityRegistry；必须复用上述 primitives（详见 `AGENTS.md` 与 `docs/ai-rules/engine-systems.md`）。
 
 **若缺口存在**：优先补充 `src/engine/primitives/`（通用工具函数）；领域语义放在游戏层（`src/games/<gameId>/domain/`）。
 
@@ -483,65 +505,17 @@ const commandTypes = [
 - `setPhase`
 - `dealCardByIndex`（如有牌库）
 
-### 4.4 实现 ActionLog 格式化与卡牌预览注册
+### 4.4 ActionLog + 卡牌预览（避免重复说明，按权威实现做）
 
-**ActionLog 格式化**：为核心命令提供人类可读的日志格式。需要在 `game.ts` 中配置 `createActionLogSystem` 的 `formatEntry` 和 `commandAllowlist`。
+**强制先读（权威单一来源）**：
+- `docs/ai-rules/engine-systems.md`（ActionLogSystem 使用规范）
+- `evidence/action-log-card-preview.md`（卡牌预览注册表模式 + 数据流说明）
 
-```ts
-// game.ts 中配置 ActionLogSystem（若使用 createDefaultSystems 则需单独配置）
-import { createActionLogSystem } from '../../engine/systems/ActionLogSystem';
-import type { ActionLogEntry } from '../../engine/types';
+**你在新游戏里只需要做这些（最小闭环）**：
+1. 在 `game.ts` 配置 `createActionLogSystem({ commandAllowlist, formatEntry })`，`formatEntry` 产出包含 `segments` 的 `ActionLogEntry`。
+2. 若游戏有卡牌：实现 `ui/cardPreviewHelper.ts` 提供 `cardId → CardPreviewRef` 查询，并在 `game.ts` **文件末尾**调用 `registerCardPreviewGetter(gameId, getter)` 注册。
 
-// 命令白名单（哪些命令需要记录日志）
-const ACTION_ALLOWLIST = Object.values(XX_COMMANDS);
-
-// 日志格式化函数
-function formatEntry({ command, state, events }): ActionLogEntry | null {
-    const segments: ActionLogSegment[] = [];
-    switch (command.type) {
-        case XX_COMMANDS.PLAY_CARD: {
-            const cardId = command.payload?.cardId;
-            const cardName = getCardName(cardId);  // 从配置中查找
-            segments.push(
-                { type: 'text', text: '打出：' },
-                { type: 'card', cardId, previewText: cardName },
-            );
-            break;
-        }
-        // ...其他命令类型
-        default:
-            return null;
-    }
-    return {
-        id: `${command.type}-${Date.now()}`,
-        timestamp: Date.now(),
-        actorId: command.playerId,
-        kind: command.type,
-        segments,
-    };
-}
-```
-
-**卡牌预览注册**（若游戏有卡牌）：让日志中的卡牌名称支持 hover 预览图片。
-
-```ts
-// ui/cardPreviewHelper.ts
-import type { CardPreviewRef } from '../../../systems/CardSystem';
-import { registerCardPreviewGetter } from '../../../components/game/cardPreviewRegistry';
-
-// 构建 cardId → CardPreviewRef 的映射
-export function get<GameId>CardPreviewRef(cardId: string): CardPreviewRef | null {
-    // 从卡牌配置中查找对应的精灵图/图片引用
-    // 横向卡牌需要设置 aspectRatio（如 1044/729）
-    return { type: 'atlas', atlasId: '...', index: spriteIndex, aspectRatio: W/H };
-    // 或 { type: 'image', src: 'path/to/card', aspectRatio: W/H };
-}
-
-// game.ts 末尾注册（注意 Vite SSR 函数提升陷阱，放文件末尾）
-registerCardPreviewGetter('<gameId>', get<GameId>CardPreviewRef);
-```
-
-**`aspectRatio` 说明**：`CardPreviewRef` 的 `aspectRatio` 字段（宽/高）控制日志预览的尺寸比例。竖向卡牌（如 DiceThrone）可不传（默认竖向），横向卡牌（如 SummonerWars 1044:729）必须传。
+> 关键点：Vite SSR 的函数提升陷阱与“注册必须放文件末尾”的原因，详见 `AGENTS.md` / `docs/ai-rules/golden-rules.md`。
 
 ### 4.5 补充 FlowHooks 测试
 
@@ -564,6 +538,11 @@ npm run dev                  # 游戏可从大厅创建对局，基础回合可�
 **目标**：提供最小可玩 UI，完成交互闭环。
 
 ### 5.0 UI 设计规范生成（强制前置）
+
+**强制先读（权威单一来源）**：
+- `docs/ai-rules/ui-ux.md`
+- 若涉及动画/特效：`docs/ai-rules/animation-effects.md`
+- 若出现白屏/渲染错误/函数未定义：`docs/ai-rules/golden-rules.md`
 
 > 每个游戏的视觉风格各不相同，**禁止直接复用已有游戏的样式规范**。必须为新游戏生成独立的设计规范。
 
@@ -678,66 +657,37 @@ UI 侧使用 `TutorialSelectionGate`（框架组件）或自定义选择组件�
 2. UI 介绍步骤：逐个高亮 UI 元素（`highlightTarget` + `blockedCommands`）
 3. 操作教学步骤：`requireAction: true` + `allowedCommands` + `advanceOnEvents`
 
-### 6.3 音频配置
+### 6.3 音频配置（已重构，避免重复造轮子）
 
-参考 smashup/audio.config.ts：
-- 定义 `GameAudioConfig` 包含 BGM 列表和事件音效解析
-- 音效 key 来自 `public/assets/common/audio/registry.json`
-- `criticalSounds` 列表：列出进入游戏后立即需要的高频音效（5-15 个），消除首次播放延迟
+**强制先读**（权威单一来源，避免本文档过时）：
+- `AGENTS.md`「音频资源架构（强制）」
+- `docs/ai-rules/asset-pipeline.md`「🔊 音频资源规范」
+- `docs/audio/audio-usage.md`（新增音频资产流程见 `docs/audio/add-audio.md`）
+
+**你在新游戏里只需要做这些（最小闭环）**：
+1. 创建 `src/games/<gameId>/audio.config.ts`，导出 `GameAudioConfig`：
+   - `feedbackResolver(event): SoundKey | null`：无动画事件返回 SoundKey；有动画事件返回 `null`，音效交给动画层 `onImpact()` 播放
+   - `criticalSounds`：进入游戏后立即预加载的高频音效 key（建议 5~15）
+   - （可选）`contextualPreloadKeys`：根据上下文增量预热
+   - BGM 列表按现有游戏格式配置（具体规则以 `docs/audio/audio-usage.md` 为准）
+2. **音效 key 的唯一来源**：`public/assets/common/audio/registry.json`。
+   - 禁止在游戏层声明 `basePath/sounds`
+   - 禁止手写 `compressed/`
+   - 禁止定义短 key（如 `click/dice_roll`），必须使用 registry 的完整 key
+3. **避免重复播放**：同一动作只能走一条路径（`feedbackResolver` / FX `FeedbackPack` / 动画 `onImpact` / UI `GameButton` / `playDeniedSound()`）。
+
+> 参考实现：`src/games/smashup/audio.config.ts` / `src/games/summonerwars/audio.config.ts`。
 
 ### 6.4 关键图片预加载（若游戏有精灵图/图集）
 
-当游戏使用精灵图集（如卡牌图集、角色图集）时，需要实现关键图片解析器，防止首屏渲染闪烁。
+**强制先读（权威单一来源）**：
+- `docs/ai-rules/asset-pipeline.md`（critical/warm 规则、路径格式、门禁与验收清单）
 
-**创建 `criticalImageResolver.ts`**：
+**你在新游戏里只需要做这些（最小闭环）**：
+1. 实现 `criticalImageResolver.ts`，返回 `{ critical, warm }`，并按“选择阶段 vs 游戏阶段”动态解析。
+2. 在 `game.ts`（或游戏入口约定的位置）注册 resolver。
 
-```ts
-import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
-import type { <GameId>Core } from './domain/types';
-import type { MatchState } from '../../engine/types';
-
-export const <gameId>CriticalImageResolver: CriticalImageResolver = (
-    gameState: unknown,
-): CriticalImageResolverResult => {
-    const state = gameState as MatchState<<GameId>Core>;
-    const core = state?.core;
-
-    // 无状态时（刚进入对局）
-    if (!core) {
-        return {
-            critical: ['<gameId>/images/base-atlas'],  // 必须立即加载的图集
-            warm: [],  // 后台预取的图集
-        };
-    }
-
-    // 根据游戏阶段/玩家选择动态决定关键资源
-    // 例如：阵营选择阶段 → 预加载所有阵营头像
-    //       游戏进行中 → 预加载已选阵营的卡牌图集
-    
-    return {
-        critical: [...selectedAtlasPaths],
-        warm: [...unselectedAtlasPaths],
-    };
-};
-```
-
-**在 `game.ts` 末尾注册**：
-
-```ts
-import { registerCriticalImageResolver } from '../../core';
-import { <gameId>CriticalImageResolver } from './criticalImageResolver';
-
-registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
-```
-
-**两阶段预加载策略**：
-- **关键图片（critical）**：阻塞渲染，10 秒超时后放行
-- **暖图片（warm）**：后台异步加载，不阻塞
-
-**参考实现**：
-- `src/games/smashup/criticalImageResolver.ts` — 按派系图集分组
-- `src/games/summonerwars/criticalImageResolver.ts` — 按阵营 + 游戏阶段动态解析
-- `src/games/dicethrone/criticalImageResolver.ts` — 按角色动态解析
+> 参考实现：`src/games/smashup/criticalImageResolver.ts` / `src/games/summonerwars/criticalImageResolver.ts` / `src/games/dicethrone/criticalImageResolver.ts`。
 
 ### 6.5 debug-config（可选）
 
@@ -775,50 +725,23 @@ npm run dev                         # 大厅可见、可创建对局、可完整
 
 ---
 
-## 系统选型速查
+## 系统与红线速查（只保留本 skill 的最小提醒）
 
-| 需求 | 系统 | 说明 |
-|------|------|------|
-| 多阶段回合制 | FlowSystem | 必选。所有游戏都使用 |
-| 撤销/重做 | UndoSystem | 默认包含。配置 snapshotCommandAllowlist |
-| 玩家选择/输入 | InteractionSystem | `createSimpleChoice()` 单步选择、多步交互（kind 扩展）。替代旧 PromptSystem |
-| 响应窗口 | ResponseWindowSystem | 对手操作后玩家可响应。**必须配置注入** `allowedCommands` / `responseAdvanceEvents` |
-| 日志记录 | LogSystem + ActionLogSystem | 默认包含 |
-| 事件流消费 | EventStreamSystem | UI 消费事件驱动动画/音效时必选 |
-| 教学 | TutorialSystem | 教学模式必选 |
-| 重赛 | RematchSystem | 默认包含 |
-| 调试作弊 | CheatSystem | 开发模式必选，需实现 CheatResourceModifier |
-| 角色/阵营选择 | CharacterSelectionSystem | 或自行在 domain 中实现（三个游戏都是自行实现） |
+**权威来源**：系统清单/红线/反模式以 `AGENTS.md` + `docs/ai-rules/engine-systems.md` 为准，本节不再重复抄写。
 
-### 默认系统组合
+### 系统组装最小提醒
 
-```ts
-createDefaultSystems()  // = EventStream + Log + ActionLog + Undo + Interaction + Rematch + ResponseWindow + Tutorial
-```
+- `createDefaultSystems()` 默认包含：EventStream + Log + ActionLog + Undo + Interaction + Rematch + ResponseWindow + Tutorial
+- `createDefaultSystems()` **不包含** FlowSystem / CheatSystem：需要自行追加
+- `commandTypes` **只列业务命令**：系统命令由 adapter 自动合并
+- ResponseWindowSystem **必须配置注入**：`allowedCommands` / `responseAdvanceEvents`（禁止改引擎文件）
 
-**注意**：`createDefaultSystems` 不包含 FlowSystem 和 CheatSystem，需额外添加。
+### 新架构强制复用（新游戏）
 
-### 系统命令自动合并
-
-`adapter` 自动将所有系统命令（FLOW、UNDO、REMATCH、INTERACTION、TUTORIAL、RESPONSE_WINDOW、CHEAT）合并到 `commandTypes`。**游戏层 commandTypes 只需列出业务命令**，禁止手动添加系统命令。
-
----
-
-## 关键约束（必须遵守）
-
-1. **三层复用模型**：`/core/ui/` 类型契约 → `/components/game/framework/` 骨架组件 → `/games/<id>/` 游戏实现
-2. **命令驱动**：UI 不直接改 core，必须通过 Command → Event → Reduce
-3. **清单自动生成**：不要手改 `manifest.*.generated`
-4. **领域 ID 常量表**：所有稳定 ID 在 `domain/ids.ts` 定义，禁止字符串字面量
-5. **系统层禁止游戏特化**：通用系统只做通用骨架，游戏特化下沉到 `/games/<id>/`
-6. **单文件不超过 1000 行**：超过时拆分到 `ui/` 或子模块
-7. **测试伴随**：新规则必须有测试覆盖
-8. **i18n 双语齐全**：新增文案必须同步 `zh-CN` 与 `en`
-9. **sys.phase 单一权威**：阶段信息以 `G.sys.phase` 为准，不在 core 中重复维护阶段状态
-10. **事件消费用 EventStreamSystem**：UI 动画/音效消费事件用 `getEventStreamEntries(G)`，不用 LogSystem
-11. **commandTypes 只列业务命令**：系统命令（UNDO/CHEAT/FLOW/INTERACTION/RESPONSE_WINDOW/TUTORIAL/REMATCH）由 adapter 自动合并，禁止手动添加
-12. **InteractionSystem 替代 PromptSystem**：所有玩家选择/多步交互使用 `createSimpleChoice()` 或 `createInteraction()`，不使用已废弃的 PromptSystem
-13. **ResponseWindowSystem 配置注入**：响应窗口的 `allowedCommands`、`responseAdvanceEvents`、`interactionLock` 必须通过配置注入，禁止修改引擎文件
+- 能力系统：必须使用 `engine/primitives/ability.ts`
+- 状态/buff/debuff：必须使用 `engine/primitives/tags.ts`
+- 数值修改：必须使用 `engine/primitives/modifier.ts`
+- 可被 buff 修改的属性：必须使用 `engine/primitives/attribute.ts`（纯资源消耗仍用 `resources.ts`）
 
 ---
 

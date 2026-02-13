@@ -13,8 +13,9 @@
  */
 
 import { useMemo, useRef } from 'react';
+import { resolveDevFlag } from '../env';
 
-const isDev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
+const isDev = resolveDevFlag();
 
 /**
  * 观察者 moves 包装配置

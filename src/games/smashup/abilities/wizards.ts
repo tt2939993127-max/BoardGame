@@ -12,14 +12,14 @@ import {
     destroyMinion,
     shuffleHandIntoDeck,
     getMinionPower,
-    requestChoice,
     buildMinionTargetOptions,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, SmashUpEvent, DeckReshuffledEvent, MinionCardDef } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerTrigger } from '../domain/ongoingEffects';
-import { registerPromptContinuation } from '../domain/promptContinuation';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { getCardDef, getBaseDef } from '../data/cards';
 
 /** 时间法师 onPlay：额外打出一个行�?*/
@@ -79,23 +79,21 @@ function wizardNeophyte(ctx: AbilityContext): AbilityResult {
     }
     const def = getCardDef(topCard.defId);
     const cardName = def?.name ?? topCard.defId;
-    return {
-        events: [requestChoice({
-            abilityId: 'wizard_neophyte',
-            playerId: ctx.playerId,
-            promptConfig: {
-                    title: `牌库顶是行动卡�?{cardName}」，选择处理方式`,
-                    options: [
-                        { id: 'to_hand', label: '放入手牌', value: { action: 'to_hand' } },
-                        { id: 'play_extra', label: '作为额外行动打出', value: { action: 'play_extra' } },
-                    ],
-                },
-                        continuationContext: { cardUid: topCard.uid, },
-        }, ctx.now)],
+    const interaction = createSimpleChoice(
+        `wizard_neophyte_${ctx.now}`, ctx.playerId,
+        `牌库顶是行动卡「${cardName}」，选择处理方式`,
+        [
+            { id: 'to_hand', label: '放入手牌', value: { action: 'to_hand' } },
+            { id: 'play_extra', label: '作为额外行动打出', value: { action: 'play_extra' } },
+        ],
+        'wizard_neophyte',
+    );
+    const extended = {
+        ...interaction,
+        data: { ...interaction.data, continuationContext: { cardUid: topCard.uid } },
     };
+    return { events: [], matchState: queueInteraction(ctx.matchState, extended) };
 }
-
-// wizard_archmage (ongoing) - 每回合额外打出一个行动，通过 onTurnStart 触发器实�?
 
 /** 聚集秘术 onPlay：展示每个对手牌库顶，选择其中一张行动卡作为额外行动打出 */
 function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
@@ -114,13 +112,11 @@ function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
     }
     if (actionCandidates.length === 0) return { events: [] };
     const options = actionCandidates.map((c, i) => ({ id: `card-${i}`, label: c.label, value: { cardUid: c.uid, defId: c.defId, pid: c.pid } }));
-    return {
-        events: [requestChoice({
-            abilityId: 'wizard_mass_enchantment',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一张行动卡作为额外行动打出', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `wizard_mass_enchantment_${ctx.now}`, ctx.playerId,
+        '选择一张行动卡作为额外行动打出', options, 'wizard_mass_enchantment',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 注册巫师派系所有能�?*/
@@ -191,15 +187,13 @@ function wizardScry(ctx: AbilityContext): AbilityResult {
     const options = actionCards.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'wizard_scry',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一张行动卡放入手牌', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `wizard_scry_${ctx.now}`, ctx.playerId,
+        '选择一张行动卡放入手牌', options, 'wizard_scry',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 变化之风 onPlay：洗手牌回牌库抽5张，额外打出一个行�?*/
@@ -255,32 +249,16 @@ function wizardSacrifice(ctx: AbilityContext): AbilityResult {
     }
     if (myMinions.length === 0) return { events: [] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
-    return {
-        events: [requestChoice({
-            abilityId: 'wizard_sacrifice',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要牺牲的随从（抽取等量力量的牌）', options: buildMinionTargetOptions(options) },
-        }, ctx.now)],
-    };
-}
-
-/** 献祭执行：消灭随�?+ 抽牌 */
-function executeSacrifice(ctx: AbilityContext, chosen: { uid: string; defId: string; power: number; baseIndex: number; ownerId: string }): AbilityResult {
-    const events: SmashUpEvent[] = [];
-    events.push(destroyMinion(chosen.uid, chosen.defId, chosen.baseIndex, chosen.ownerId, 'wizard_sacrifice', ctx.now));
-    if (chosen.power > 0) {
-        const player = ctx.state.players[ctx.playerId];
-        const { drawnUids } = drawCards(player, chosen.power, ctx.random);
-        if (drawnUids.length > 0) {
-            events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: ctx.playerId, count: drawnUids.length, cardUids: drawnUids }, timestamp: ctx.now } as CardsDrawnEvent);
-        }
-    }
-    return { events };
+    const interaction = createSimpleChoice(
+        `wizard_sacrifice_${ctx.now}`, ctx.playerId,
+        '选择要牺牲的随从（抽取等量力量的牌）', buildMinionTargetOptions(options), 'wizard_sacrifice',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 
 // ============================================================================
-// Ongoing 拦截器注�?
+// Ongoing 拦截器注册
 // ============================================================================
 
 /** 注册巫师派系�?ongoing 拦截�?*/
@@ -315,67 +293,80 @@ function registerWizardOngoingEffects(): void {
 
 
 // ============================================================================
-// Prompt 继续函数
+// 交互解决处理函数（InteractionHandler）
 // ============================================================================
 
-/** 注册巫师派系�?Prompt 继续函数 */
-export function registerWizardPromptContinuations(): void {
+/** 注册巫师派系的交互解决处理函数 */
+export function registerWizardInteractionHandlers(): void {
     // 学徒：选择放入手牌 or 作为额外行动打出
-    registerPromptContinuation('wizard_neophyte', (ctx) => {
-        const { action } = ctx.selectedValue as { action: 'to_hand' | 'play_extra' };
-        const data = ctx.data as { cardUid: string };
-        const cardUid = data.cardUid;
+    registerInteractionHandler('wizard_neophyte', (state, playerId, value, iData, _random, timestamp) => {
+        const { action } = value as { action: 'to_hand' | 'play_extra' };
+        const cardUid = (iData as Record<string, unknown>)?.continuationContext
+            ? ((iData as Record<string, unknown>).continuationContext as { cardUid: string }).cardUid
+            : '';
         if (action === 'to_hand') {
-            return [{
-                type: SU_EVENTS.CARDS_DRAWN,
-                payload: { playerId: ctx.playerId, count: 1, cardUids: [cardUid] },
-                timestamp: ctx.now,
-            } as SmashUpEvent];
+            return {
+                state,
+                events: [{
+                    type: SU_EVENTS.CARDS_DRAWN,
+                    payload: { playerId, count: 1, cardUids: [cardUid] },
+                    timestamp,
+                } as SmashUpEvent],
+            };
         }
         // play_extra: 放入手牌 + 额外行动
-        return [
-            { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: ctx.playerId, count: 1, cardUids: [cardUid] }, timestamp: ctx.now } as SmashUpEvent,
-            grantExtraAction(ctx.playerId, 'wizard_neophyte', ctx.now),
-        ];
+        return {
+            state,
+            events: [
+                { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as SmashUpEvent,
+                grantExtraAction(playerId, 'wizard_neophyte', timestamp),
+            ],
+        };
     });
 
     // 聚集秘术：选择对手行动卡→转移 + 额外行动
-    registerPromptContinuation('wizard_mass_enchantment', (ctx) => {
-        const { cardUid, defId, pid } = ctx.selectedValue as { cardUid: string; defId: string; pid: string };
-        return [
-            { type: SU_EVENTS.CARD_TRANSFERRED, payload: { cardUid, defId, fromPlayerId: pid, toPlayerId: ctx.playerId, reason: 'wizard_mass_enchantment' }, timestamp: ctx.now } as SmashUpEvent,
-            grantExtraAction(ctx.playerId, 'wizard_mass_enchantment', ctx.now),
-        ];
+    registerInteractionHandler('wizard_mass_enchantment', (state, playerId, value, _iData, _random, timestamp) => {
+        const { cardUid, defId, pid } = value as { cardUid: string; defId: string; pid: string };
+        return {
+            state,
+            events: [
+                { type: SU_EVENTS.CARD_TRANSFERRED, payload: { cardUid, defId, fromPlayerId: pid, toPlayerId: playerId, reason: 'wizard_mass_enchantment' }, timestamp } as SmashUpEvent,
+                grantExtraAction(playerId, 'wizard_mass_enchantment', timestamp),
+            ],
+        };
     });
 
     // 占卜：选择行动卡→放入手牌
-    registerPromptContinuation('wizard_scry', (ctx) => {
-        const { cardUid } = ctx.selectedValue as { cardUid: string };
-        return [{
-            type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: ctx.playerId, count: 1, cardUids: [cardUid] },
-            timestamp: ctx.now,
-        } as SmashUpEvent];
+    registerInteractionHandler('wizard_scry', (state, playerId, value, _iData, _random, timestamp) => {
+        const { cardUid } = value as { cardUid: string };
+        return {
+            state,
+            events: [{
+                type: SU_EVENTS.CARDS_DRAWN,
+                payload: { playerId, count: 1, cardUids: [cardUid] },
+                timestamp,
+            } as SmashUpEvent],
+        };
     });
 
-    // 献祭：选择随从→消�?+ 抽牌
-    registerPromptContinuation('wizard_sacrifice', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+    // 献祭：选择随从→消灭 + 抽牌
+    registerInteractionHandler('wizard_sacrifice', (state, playerId, value, _iData, random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const minion = base.minions.find(m => m.uid === minionUid);
-        if (!minion) return [];
-        const power = getMinionPower(ctx.state, minion, baseIndex);
+        if (!minion) return undefined;
+        const power = getMinionPower(state.core, minion, baseIndex);
         const events: SmashUpEvent[] = [
-            destroyMinion(minion.uid, minion.defId, baseIndex, minion.owner, 'wizard_sacrifice', ctx.now),
+            destroyMinion(minion.uid, minion.defId, baseIndex, minion.owner, 'wizard_sacrifice', timestamp),
         ];
         if (power > 0) {
-            const player = ctx.state.players[ctx.playerId];
-            const { drawnUids } = drawCards(player, power, ctx.random);
+            const player = state.core.players[playerId];
+            const { drawnUids } = drawCards(player, power, random);
             if (drawnUids.length > 0) {
-                events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: ctx.playerId, count: drawnUids.length, cardUids: drawnUids }, timestamp: ctx.now } as SmashUpEvent);
+                events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: drawnUids.length, cardUids: drawnUids }, timestamp } as SmashUpEvent);
             }
         }
-        return events;
+        return { state, events };
     });
 }

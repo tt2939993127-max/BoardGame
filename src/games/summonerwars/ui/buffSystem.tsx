@@ -5,7 +5,7 @@
  */
 
 import type { BoardUnit, EventCard } from '../domain/types';
-import { BuffRegistry, type BuffDetector, type BuffRegistration } from '../../../components/game/framework/BuffSystem';
+import { BuffRegistry, type BuffDetector, type BuffRegistration } from '../../../components/game/framework/widgets/BuffSystem';
 import {
   HealingIcon,
   SparkleIcon,

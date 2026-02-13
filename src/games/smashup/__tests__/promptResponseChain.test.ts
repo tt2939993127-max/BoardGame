@@ -20,6 +20,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearPromptContinuationRegistry, resolvePromptContinuation } from '../domain/promptContinuation';
+import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { createSmashUpEventSystem } from '../domain/systems';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
@@ -58,18 +59,33 @@ describe('Prompt 响应链集成测试', () => {
         it('关键能力的继续函数已注册', () => {
             // 只测试实际注册了继续函数的能力（多目标选择类）
             // 注意：一些能力用 MVP 自动选择模式，不需要继续函数
-            const abilities = [
+            // 仍使用 promptContinuation 的能力
+            // 已迁移到 InteractionHandler 的能力
+            const interactionAbilities = [
                 'alien_crop_circles',
                 'zombie_grave_digger',
-                'zombie_grave_robbing',        // 盗墓
-                'zombie_not_enough_bullets',   // 子弹不够
-                'pirate_cannon_choose_first',  // 加农炮第一个目标
-                'pirate_shanghai_choose_minion', // 上海选随从
-                'pirate_powderkeg',            // 炸药桶
+                'zombie_grave_robbing',
+                'zombie_not_enough_bullets',
+                'pirate_cannon_choose_first',
+                'pirate_shanghai_choose_minion',
+                'pirate_powderkeg',
+                'ninja_master',
+                'ninja_tiger_assassin',
+                'ninja_seeing_stars',
+                'ninja_way_of_deception_choose_minion',
+                'ninja_disguise_choose_return',
+                'ninja_hidden_ninja',
+                'dino_laser_triceratops',
+                'dino_wild_stuffing',
+                'dino_augmentation',
+                'dino_natural_selection_choose_mine',
+                'robot_microbot_guard',
+                'robot_tech_center',
+                'robot_zapbot',
             ];
-            for (const id of abilities) {
-                const fn = resolvePromptContinuation(id);
-                expect(fn, `${id} 继续函数应已注册`).toBeDefined();
+            for (const id of interactionAbilities) {
+                const handler = getInteractionHandler(id);
+                expect(handler, `${id} 交互处理函数应已注册`).toBeDefined();
             }
         });
     });
@@ -170,46 +186,46 @@ describe('能力特定的 Prompt 流程', () => {
     });
 
     describe('pirate_cannon (加农炮)', () => {
-        it('第一次选择的继续函数存在', () => {
-            const fn = resolvePromptContinuation('pirate_cannon_choose_first');
-            expect(fn).toBeDefined();
-            expect(typeof fn).toBe('function');
+        it('第一次选择的交互处理函数存在', () => {
+            const handler = getInteractionHandler('pirate_cannon_choose_first');
+            expect(handler).toBeDefined();
+            expect(typeof handler).toBe('function');
         });
 
-        it('第二次选择的继续函数存在', () => {
-            const fn = resolvePromptContinuation('pirate_cannon_choose_second');
-            expect(fn).toBeDefined();
-            expect(typeof fn).toBe('function');
+        it('第二次选择的交互处理函数存在', () => {
+            const handler = getInteractionHandler('pirate_cannon_choose_second');
+            expect(handler).toBeDefined();
+            expect(typeof handler).toBe('function');
         });
     });
 
     describe('zombie_grave_digger (掘墓人)', () => {
-        it('继续函数存在且为函数类型', () => {
-            const fn = resolvePromptContinuation('zombie_grave_digger');
-            expect(fn).toBeDefined();
-            expect(typeof fn).toBe('function');
+        it('交互处理函数存在且为函数类型', () => {
+            const handler = getInteractionHandler('zombie_grave_digger');
+            expect(handler).toBeDefined();
+            expect(typeof handler).toBe('function');
         });
     });
 
     describe('pirate_shanghai (上海)', () => {
-        it('选择随从的继续函数存在', () => {
-            const fn = resolvePromptContinuation('pirate_shanghai_choose_minion');
-            expect(fn).toBeDefined();
-            expect(typeof fn).toBe('function');
+        it('选择随从的交互处理函数存在', () => {
+            const handler = getInteractionHandler('pirate_shanghai_choose_minion');
+            expect(handler).toBeDefined();
+            expect(typeof handler).toBe('function');
         });
 
-        it('选择基地的继续函数存在', () => {
-            const fn = resolvePromptContinuation('pirate_shanghai_choose_base');
-            expect(fn).toBeDefined();
-            expect(typeof fn).toBe('function');
+        it('选择基地的交互处理函数存在', () => {
+            const handler = getInteractionHandler('pirate_shanghai_choose_base');
+            expect(handler).toBeDefined();
+            expect(typeof handler).toBe('function');
         });
     });
 
     describe('alien_crop_circles (麦田怪圈)', () => {
-        it('继续函数存在且为函数类型', () => {
-            const fn = resolvePromptContinuation('alien_crop_circles');
-            expect(fn).toBeDefined();
-            expect(typeof fn).toBe('function');
+        it('交互处理函数存在且为函数类型', () => {
+            const handler = getInteractionHandler('alien_crop_circles');
+            expect(handler).toBeDefined();
+            expect(typeof handler).toBe('function');
         });
     });
 });

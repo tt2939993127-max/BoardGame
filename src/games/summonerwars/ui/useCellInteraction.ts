@@ -18,6 +18,8 @@ import {
   getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
   manhattanDistance, getStructureAt, findUnitPosition,
 } from '../domain/helpers';
+import { getSummonerWarsUIHints } from '../domain/uiHints';
+import { extractPositions } from '../../../engine/primitives/uiHints';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import type { AbilityModeState, SoulTransferModeState, MindCaptureModeState, AfterAttackAbilityModeState } from './useGameEvents';
 import { useToast } from '../../../contexts/ToastContext';
@@ -257,62 +259,27 @@ export function useCellInteraction({
   // 可以使用技能的单位（青色 + 波纹）
   const abilityReadyPositions = useMemo(() => {
     if (!isMyTurn) return [];
-    const pid = myPlayerId as '0' | '1';
-    const player = core.players[pid];
-    const units = getPlayerUnits(core, pid);
-    const positions: CellCoord[] = [];
-    if (currentPhase === 'summon') {
-      for (const u of units) {
-        const abilities = u.card.abilities ?? [];
-        if (abilities.includes('revive_undead')) {
-          const hasUndead = player.discard.some(c =>
-            c.cardType === 'unit' && (c.id.includes('undead') || c.name.includes('亡灵') || (c as UnitCard).faction === 'necromancer')
-          );
-          if (hasUndead) positions.push(u.position);
-        }
-      }
-    }
-    // 临时调试
-    if (positions.length > 0) {
-      console.log('[abilityReadyPositions] 找到可使用技能的单位:', positions, '当前阶段:', currentPhase);
-    }
-    return positions;
+    
+    const hints = getSummonerWarsUIHints(core, {
+      types: ['ability'],
+      playerId: myPlayerId,
+      phase: currentPhase,
+    });
+    
+    return extractPositions(hints);
   }, [core, currentPhase, isMyTurn, myPlayerId]);
 
   // 可以移动/攻击的单位（绿色边框）
   const actionableUnitPositions = useMemo(() => {
     if (!isMyTurn) return [];
-    const pid = myPlayerId as '0' | '1';
-    const player = core.players[pid];
-    const units = getPlayerUnits(core, pid);
-    const positions: CellCoord[] = [];
-    switch (currentPhase) {
-      case 'move': {
-        const remainingMoves = MAX_MOVES_PER_TURN - player.moveCount;
-        if (remainingMoves > 0) {
-          for (const u of units) {
-            if (!u.hasMoved && !isImmobile(u) && getValidMoveTargetsEnhanced(core, u.position).length > 0) {
-              positions.push(u.position);
-              if (positions.length >= remainingMoves) break;
-            }
-          }
-        }
-        break;
-      }
-      case 'attack': {
-        const remainingAttacks = MAX_ATTACKS_PER_TURN - player.attackCount;
-        if (remainingAttacks > 0) {
-          for (const u of units) {
-            if (!u.hasAttacked && getValidAttackTargetsEnhanced(core, u.position).length > 0) {
-              positions.push(u.position);
-              if (positions.length >= remainingAttacks) break;
-            }
-          }
-        }
-        break;
-      }
-    }
-    return positions;
+    
+    const hints = getSummonerWarsUIHints(core, {
+      types: ['actionable'],
+      playerId: myPlayerId,
+      phase: currentPhase,
+    });
+    
+    return extractPositions(hints);
   }, [core, currentPhase, isMyTurn, myPlayerId]);
 
   // 攻击前技能状态

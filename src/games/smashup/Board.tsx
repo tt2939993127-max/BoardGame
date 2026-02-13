@@ -17,7 +17,8 @@ import type { MatchState } from '../../engine/types';
 import type { SmashUpCore, CardInstance, ActionCardDef } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
-import { getCardDef, resolveCardName, resolveCardText } from './data/cards';
+import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
+import { getCardDef, getBaseDef, resolveCardName, resolveCardText } from './data/cards';
 import { useGameAudio, playDeniedSound } from '../../lib/audio/useGameAudio';
 import { CardPreview, registerCardAtlasSource } from '../../components/common/media/CardPreview';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -74,6 +75,20 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     const autoAdvancePhaseRef = useRef<string | null>(null);
     const needDiscard = phase === 'discard' && isMyTurn && myPlayer != null && myPlayer.hand.length > HAND_LIMIT;
     const discardCount = needDiscard ? myPlayer!.hand.length - HAND_LIMIT : 0;
+
+    // 手牌弃牌交互检测：当前 interaction 的所有选项都对应手牌时，用手牌区直接选择
+    const currentInteraction = G.sys.interaction?.current;
+    const currentPrompt = useMemo(() => asSimpleChoice(currentInteraction), [currentInteraction]);
+    const isHandDiscardPrompt = useMemo(() => {
+        if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
+        if (!myPlayer || myPlayer.hand.length === 0) return false;
+        const handUids = new Set(myPlayer.hand.map(c => c.uid));
+        return currentPrompt.options.length > 0 &&
+            currentPrompt.options.every(opt => {
+                const val = opt.value as { cardUid?: string } | undefined;
+                return val?.cardUid && handUids.has(val.cardUid);
+            });
+    }, [currentPrompt, playerID, myPlayer]);
 
     // 事件流消费 → 动画驱动
     const myPid = playerID || '0';
@@ -211,6 +226,17 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
+        // 手牌弃牌交互优先：直接响应 interaction
+        if (isHandDiscardPrompt && currentPrompt) {
+            const option = currentPrompt.options.find(
+                opt => (opt.value as { cardUid?: string })?.cardUid === card.uid
+            );
+            if (option) {
+                moves[INTERACTION_COMMANDS.RESPOND]?.({ optionId: option.id });
+            }
+            return;
+        }
+
         // Validation for play phase / turn
         if (!isMyTurn || phase !== 'playCards') {
             playDeniedSound();
@@ -256,7 +282,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                 setSelectedCardMode('minion');
             }
         }
-    }, [isMyTurn, phase, moves, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid]);
+    }, [isMyTurn, phase, moves, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
         setViewingCard({ defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' });
@@ -500,11 +526,26 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                             </div>
                         )}
 
+                        {/* 手牌弃牌交互提示横幅 */}
+                        {isHandDiscardPrompt && currentPrompt && (
+                            <div className="absolute top-0 inset-x-0 z-50 flex justify-center pointer-events-none">
+                                <motion.div
+                                    initial={{ y: -40, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="bg-red-600/90 text-white px-6 py-2 rounded-b-lg shadow-lg border-2 border-red-400 border-t-0 pointer-events-auto"
+                                >
+                                    <span className="font-black text-lg uppercase tracking-wide">
+                                        {currentPrompt.title}
+                                    </span>
+                                </motion.div>
+                            </div>
+                        )}
+
                         <HandArea
                             hand={myPlayer.hand}
                             selectedCardUid={selectedCardUid}
                             onCardSelect={handleCardClick}
-                            isDiscardMode={needDiscard}
+                            isDiscardMode={needDiscard || isHandDiscardPrompt}
                             discardSelection={discardSelection}
                             // 教学模式下，当不允许打出随从和行动时禁用手牌交互（摇头反馈）
                             disableInteraction={
@@ -584,12 +625,14 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                 )}
             </AnimatePresence>
 
-            {/* PROMPT OVERLAY */}
-            <PromptOverlay
-                interaction={G.sys.interaction?.current}
-                moves={moves}
-                playerID={playerID}
-            />
+            {/* PROMPT OVERLAY（手牌弃牌交互时隐藏，由手牌区直接处理） */}
+            {!isHandDiscardPrompt && (
+                <PromptOverlay
+                    interaction={G.sys.interaction?.current}
+                    moves={moves}
+                    playerID={playerID}
+                />
+            )}
 
             {/* 卡牌展示覆盖层 */}
             <CardRevealOverlay

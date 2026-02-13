@@ -6,12 +6,13 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { addPowerCounter, grantExtraMinion, drawMadnessCards, getMinionPower, requestChoice } from '../domain/abilityHelpers';
+import { addPowerCounter, grantExtraMinion, drawMadnessCards, getMinionPower } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, DeckReshuffledEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
 import { registerProtection } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext } from '../domain/ongoingEffects';
-import { registerPromptContinuation } from '../domain/promptContinuation';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
 /** 注册印斯茅斯派系所有能�?*/
 export function registerInnsmouthAbilities(): void {
@@ -184,10 +185,6 @@ function innsmouthTheLocals(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-// ============================================================================
-// 新增能力实现
-// ============================================================================
-
 /**
  * 深潜者的秘密 onPlay：如果你在一个基地有3+同名随从，抽3张牌�?
  * 之后可选额外抽2张牌�?张疯狂卡�?
@@ -227,13 +224,11 @@ function innsmouthMysteriesOfTheDeep(ctx: AbilityContext): AbilityResult {
         { id: 'yes', label: '是 - 额外抽2张牌+2张疯狂卡', value: { accept: true } },
         { id: 'no', label: '否 - 不收回额外抽牌', value: { accept: false } },
     ];
-    events.push(requestChoice({
-        abilityId: 'innsmouth_mysteries_of_the_deep',
-        playerId: ctx.playerId,
-        promptConfig: { title: '是否额外抽2张牌+2张疯狂卡？', options },
-    }, ctx.now));
-
-    return { events };
+    const interaction = createSimpleChoice(
+        `innsmouth_mysteries_of_the_deep_${ctx.now}`, ctx.playerId,
+        '是否额外抽2张牌+2张疯狂卡？', options as any[], 'innsmouth_mysteries_of_the_deep',
+    );
+    return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /**
@@ -294,26 +289,23 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
 // Prompt 继续函数
 // ============================================================================
 
-/** 注册印斯茅斯派系�?Prompt 继续函数 */
-export function registerInnsmouthPromptContinuations(): void {
-    // 深潜者的秘密：选择是否额外�?张牌+2张疯狂卡
-    registerPromptContinuation('innsmouth_mysteries_of_the_deep', (ctx) => {
-        const { accept } = ctx.selectedValue as { accept: boolean };
-        if (!accept) return [];
+/** 注册印斯茅斯派系的交互解决处理函数 */
+export function registerInnsmouthInteractionHandlers(): void {
+    registerInteractionHandler('innsmouth_mysteries_of_the_deep', (state, playerId, value, _iData, _random, timestamp) => {
+        const { accept } = value as { accept: boolean };
+        if (!accept) return { state, events: [] };
         const events: SmashUpEvent[] = [];
-        // 额外�?张牌
-        const player = ctx.state.players[ctx.playerId];
+        const player = state.core.players[playerId];
         const topTwo = player.deck.slice(0, 2);
         if (topTwo.length > 0) {
             events.push({
                 type: SU_EVENTS.CARDS_DRAWN,
-                payload: { playerId: ctx.playerId, count: topTwo.length, cardUids: topTwo.map(c => c.uid) },
-                timestamp: ctx.now,
+                payload: { playerId, count: topTwo.length, cardUids: topTwo.map(c => c.uid) },
+                timestamp,
             } as CardsDrawnEvent);
         }
-        // �?张疯狂卡
-        const madnessEvt = drawMadnessCards(ctx.playerId, 2, ctx.state, 'innsmouth_mysteries_of_the_deep', ctx.now);
+        const madnessEvt = drawMadnessCards(playerId, 2, state.core, 'innsmouth_mysteries_of_the_deep', timestamp);
         if (madnessEvt) events.push(madnessEvt);
-        return events;
+        return { state, events };
     });
 }

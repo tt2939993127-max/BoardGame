@@ -9,7 +9,7 @@
 
 - **动画库已接入**：项目使用 **framer-motion**（`motion` / `AnimatePresence`）。
 - **通用动效组件**：`src/components/common/animations/` 下已有 `FlyingEffect`、`ShakeContainer`、`PulseGlow` 与 `variants`。
-- **冲击帧音效绑定（强制）**：有动画的事件（伤害/治疗/状态/Token）音效必须通过 `FlyingEffectData.onImpact` 回调在动画到达时播放，禁止在事件生成时立即播放。音效 key 由 `feedbackResolver` 返回 `{ key, timing: 'on-impact' }` 写入 `DeferredSoundMap`，动画层在冲击帧调用 `playDeferredSound(eventId)` 消费。
+- **冲击帧音效绑定（强制）**：有动画的事件（伤害/治疗/状态/Token）音效必须通过 `FlyingEffectData.onImpact`（或 FX 渲染器 `onImpact`）在动画到达时播放，禁止在事件生成时立即播放。此类事件的 `feedbackResolver` **必须返回 `null`**；音效 key 由动画层在 `onImpact` 回调中直接 `playSound(resolvedKey)`，或由 FX 系统通过 `FeedbackPack.sound`（`source: 'params'`）从 `event.params.soundKey` 读取并播放。
 - **优先复用原则**：新增动画优先复用/扩展上述组件或 framer-motion 变体，避免重复造轮子或引入平行动画库。
 - **性能友好（强制）**：
   - **禁止 `transition-all` / `transition-colors`**：会导致 `border-color` 等不可合成属性触发主线程渲染。改用具体属性：`transition-[background-color]`、`transition-[opacity,transform]`。

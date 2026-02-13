@@ -57,7 +57,7 @@ import { useCellInteraction } from './ui/useCellInteraction';
 import { StatusBanners } from './ui/StatusBanners';
 import { BoardGrid, getCellPosition } from './ui/BoardGrid';
 import { AbilityButtonsPanel } from './ui/AbilityButtonsPanel';
-import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound } from './audio.config';
+import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey, resolveDamageSoundKey } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';
 
 type Props = BoardProps<MatchState<SummonerWarsCore>>;
@@ -310,7 +310,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         pendingRangedDamagesRef.current = [...attackSnapshot.damages];
         pendingRangedShakeRef.current = attackSnapshot.hits >= 3;
         // 远程攻击音 + 震动：由 COMBAT_SHOCKWAVE 的 FeedbackPack 自动处理
-        fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: attackSnapshot.target, intensity: hitIntensity }, { attackType: attackSnapshot.attackType, source: attackSnapshot.attacker, eventId: attackSnapshot.attackEventId });
+        const attackSoundKey = resolveAttackSoundKey(attackSnapshot.attackType, core, attackSnapshot.attacker);
+        fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: attackSnapshot.target, intensity: hitIntensity }, { attackType: attackSnapshot.attackType, source: attackSnapshot.attacker, soundKey: attackSoundKey });
         // 伤害特效和 flushPendingDestroys 由 handleFxComplete 在气浪完成时触发
       }, 180);
     } else {
@@ -326,10 +327,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
     const hitIntensity = pending.hits >= 3 ? 'strong' : 'normal';
     // 近战攻击音 + 震动：由 COMBAT_SHOCKWAVE 的 FeedbackPack 自动处理
-    fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: pending.target, intensity: hitIntensity }, { attackType: pending.attackType, source: pending.attacker, eventId: pending.attackEventId });
+    const attackSoundKey = resolveAttackSoundKey(pending.attackType, core, pending.attacker);
+    fxBus.push(SW_FX.COMBAT_SHOCKWAVE, { cell: pending.target, intensity: hitIntensity }, { attackType: pending.attackType, source: pending.attacker, soundKey: attackSoundKey });
     for (const dmg of pending.damages) {
       // 受伤音：由 COMBAT_DAMAGE 的 FeedbackPack 自动处理
-      fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, eventId: dmg.eventId });
+      const damageSoundKey = resolveDamageSoundKey(dmg.damage);
+      fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, soundKey: damageSoundKey });
     }
   }, [pendingAttackRef, fxBus]);
 
@@ -346,7 +349,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       waitingForShockwaveRef.current = false;
       // 气浪到达目标：播放伤害特效（音效 + 震动由 FeedbackPack 自动处理）
       for (const dmg of pendingRangedDamagesRef.current) {
-        fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, eventId: dmg.eventId });
+        const damageSoundKey = resolveDamageSoundKey(dmg.damage);
+        fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, soundKey: damageSoundKey });
       }
       pendingRangedDamagesRef.current = [];
       pendingRangedShakeRef.current = false;
@@ -765,6 +769,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   <StatusBanners
                     currentPhase={currentPhase}
                     isMyTurn={isMyTurn}
+                    core={G}
                     abilityMode={abilityMode}
                     pendingBeforeAttack={interaction.pendingBeforeAttack}
                     bloodSummonMode={interaction.bloodSummonMode}

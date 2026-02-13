@@ -18,6 +18,7 @@
  */
 
 import type { AbilityDef } from './abilities';
+import { getStructureAt, getUnitAt } from './helpers';
 
 export const FROST_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -37,6 +38,33 @@ export const FROST_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'position',
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'move',
+      customValidator: (ctx) => {
+        const ssTargetPos = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!ssTargetPos) {
+          return { valid: false, error: '必须选择目标建筑' };
+        }
+        
+        const ssStructure = getStructureAt(ctx.core, ssTargetPos);
+        if (!ssStructure || ssStructure.owner !== ctx.playerId) {
+          return { valid: false, error: '必须选择友方建筑' };
+        }
+        
+        const ssDist = Math.abs(ctx.sourcePosition.row - ssTargetPos.row) + Math.abs(ctx.sourcePosition.col - ssTargetPos.col);
+        if (ssDist > 3) {
+          return { valid: false, error: '目标必须在3格以内' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'move',
+      buttonLabel: 'abilityButtons.structureShift',
+      buttonVariant: 'secondary',
     },
   },
 
@@ -82,6 +110,21 @@ export const FROST_ABILITIES: AbilityDef[] = [
     ],
     cost: {
       magic: 0,
+    },
+    validation: {
+      requiredPhase: 'build',
+      customValidator: (ctx) => {
+        if ((ctx.sourceUnit.boosts ?? 0) < 1) {
+          return { valid: false, error: '没有充能可消耗' };
+        }
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'build',
+      buttonLabel: 'abilityButtons.iceShards',
+      buttonVariant: 'secondary',
     },
   },
 
@@ -147,6 +190,58 @@ export const FROST_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'unit',
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'move',
+      customValidator: (ctx) => {
+        const fxChoice = ctx.payload.choice as string | undefined;
+        if (fxChoice === 'self') {
+          return { valid: true };
+        }
+        
+        if (fxChoice === 'attach') {
+          if ((ctx.sourceUnit.boosts ?? 0) < 1) {
+            return { valid: false, error: '充能不足' };
+          }
+          
+          const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+          if (!targetPosition) {
+            return { valid: false, error: '必须选择目标士兵' };
+          }
+          
+          const fxDist = Math.abs(ctx.sourcePosition.row - targetPosition.row) + Math.abs(ctx.sourcePosition.col - targetPosition.col);
+          if (fxDist > 3) {
+            return { valid: false, error: '目标必须在3格以内' };
+          }
+          
+          const fxTarget = getUnitAt(ctx.core, targetPosition);
+          if (!fxTarget) {
+            return { valid: false, error: '目标位置没有单位' };
+          }
+          
+          if (fxTarget.owner !== ctx.playerId) {
+            return { valid: false, error: '必须选择友方单位' };
+          }
+          
+          if (fxTarget.card.unitClass !== 'common') {
+            return { valid: false, error: '只能附加到士兵' };
+          }
+          
+          if (fxTarget.cardId === ctx.sourceUnit.cardId) {
+            return { valid: false, error: '不能附加到自身' };
+          }
+          
+          return { valid: true };
+        }
+        
+        return { valid: false, error: '无效选择' };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'move',
+      buttonLabel: 'abilityButtons.frostAxe',
+      buttonVariant: 'secondary',
     },
   },
 

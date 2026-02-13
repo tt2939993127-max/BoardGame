@@ -8,7 +8,7 @@
 import React from 'react';
 import type { BoardUnit, EventCard, PlayerId } from '../domain/types';
 import { summonerWarsBuffRegistry } from './buffSystem';
-import { BuffIcons as GenericBuffIcons, BuffDetailsPanel as GenericBuffDetailsPanel, generateBuffGlowStyles } from '../../../components/game/framework/BuffSystem';
+import { BuffIcons as GenericBuffIcons, BuffDetailsPanel as GenericBuffDetailsPanel, generateBuffGlowStyles } from '../../../components/game/framework/widgets/BuffSystem';
 
 // 从独立文件导入图标组件，避免循环依赖
 export { HealingIcon, SparkleIcon, SwordIcon, TargetIcon, FlameIcon } from './BuffIconComponents';

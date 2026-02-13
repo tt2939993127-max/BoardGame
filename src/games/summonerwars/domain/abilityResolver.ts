@@ -627,6 +627,16 @@ export function triggerAbilities(
   
   const events: GameEvent[] = [];
   for (const ability of matchingAbilities) {
+    // 检查使用次数限制（usesPerTurn）
+    if (ability.usesPerTurn !== undefined) {
+      const usageKey = `${ctx.sourceUnit.cardId}:${ability.id}`;
+      const usageCount = ctx.state.abilityUsageCount[usageKey] ?? 0;
+      if (usageCount >= ability.usesPerTurn) {
+        // 已达到使用次数上限，跳过
+        continue;
+      }
+    }
+    
     events.push(...resolveAbilityEffects(ability, ctx));
   }
   
@@ -835,6 +845,23 @@ export function calculateEffectiveStrength(
   }
 
   return Math.max(0, strength);
+}
+
+/**
+ * 计算单位的战力增幅量（用于 UI 显示）
+ * 返回有效战力与基础战力的差值，排除已有蓝点指示器展示的冲锋加成
+ */
+export function getStrengthBoostForDisplay(
+  unit: UnitInstance,
+  state: SummonerWarsCore
+): number {
+  const effective = calculateEffectiveStrength(unit, state);
+  let delta = Math.max(0, effective - unit.card.strength);
+  // 冲锋加成已由蓝点指示器展示，扣除
+  if ((unit.card.abilities ?? []).includes('charge') && unit.boosts > 0) {
+    delta = Math.max(0, delta - unit.boosts);
+  }
+  return delta;
 }
 
 /**

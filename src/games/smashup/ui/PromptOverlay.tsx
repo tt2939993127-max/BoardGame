@@ -6,6 +6,8 @@ import { Check } from 'lucide-react';
 import { INTERACTION_COMMANDS, asSimpleChoice, type InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { PlayerId } from '../../../engine/types';
 import { UI_Z_INDEX } from '../../../core';
+import { CardPreview } from '../../../components/common/media/CardPreview';
+import { getCardDef, getBaseDef, resolveCardName } from '../data/cards';
 
 interface Props {
     interaction: InteractionDescriptor | undefined;
@@ -13,9 +15,26 @@ interface Props {
     playerID: PlayerId | null;
 }
 
+/** 从选项 value 中提取 defId（卡牌/随从/基地） */
+function extractDefId(value: unknown): string | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const v = value as Record<string, unknown>;
+    if (typeof v.defId === 'string') return v.defId;
+    if (typeof v.baseDefId === 'string') return v.baseDefId;
+    return undefined;
+}
+
+/** 判断选项是否为卡牌类型（有 defId 且能找到预览图） */
+function isCardOption(value: unknown): boolean {
+    const defId = extractDefId(value);
+    if (!defId) return false;
+    const def = getCardDef(defId) ?? getBaseDef(defId);
+    return !!def?.previewRef;
+}
+
 export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID }) => {
     const prompt = asSimpleChoice(interaction);
-    const { t } = useTranslation('game-smashup');
+    const { t, i18n } = useTranslation('game-smashup');
 
     const isMyPrompt = !!prompt && prompt.playerId === playerID;
     const isMulti = !!prompt?.multi && isMyPrompt;
@@ -32,6 +51,13 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
         if (!isMyPrompt) return false;
         return selectedIds.length >= minSelections;
     }, [isMyPrompt, minSelections, selectedIds.length]);
+
+    // 检测是否应使用卡牌展示模式：超过半数选项有可展示的卡牌预览
+    const useCardMode = useMemo(() => {
+        if (!prompt || !hasOptions) return false;
+        const cardCount = prompt.options.filter(opt => isCardOption(opt.value)).length;
+        return cardCount > 0 && cardCount >= prompt.options.length / 2;
+    }, [prompt, hasOptions]);
 
     if (!prompt) return null;
 
@@ -54,6 +80,142 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
         });
     };
 
+    // ====== 卡牌展示模式 ======
+    if (useCardMode) {
+        // 分离卡牌选项和文本选项（如"跳过"）
+        const cardOptions = prompt.options.filter(opt => isCardOption(opt.value));
+        const textOptions = prompt.options.filter(opt => !isCardOption(opt.value));
+
+        return (
+            <AnimatePresence>
+                <motion.div
+                    key="prompt-overlay-card"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-auto"
+                    style={{ zIndex: UI_Z_INDEX.overlay }}
+                >
+                    {/* 标题 */}
+                    <h2 className="text-2xl font-black text-amber-100 uppercase tracking-wide mb-6 drop-shadow-lg">
+                        {prompt.title}
+                    </h2>
+
+                    {!isMyPrompt && (
+                        <div className="mb-4 bg-yellow-500/20 text-yellow-300 px-4 py-2 rounded text-sm font-bold uppercase border border-yellow-500/50 animate-pulse">
+                            {t('ui.waiting_for_player', { id: prompt.playerId })}
+                        </div>
+                    )}
+
+                    {/* 卡牌横排 */}
+                    {isMyPrompt && (
+                        <div className="flex gap-4 overflow-x-auto max-w-[90vw] px-8 py-4 no-scrollbar">
+                            {cardOptions.map((option, idx) => {
+                                const defId = extractDefId(option.value);
+                                const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
+                                const previewRef = def?.previewRef;
+                                const name = def ? resolveCardName(def, i18n.language) : option.label;
+                                const isSelected = selectedIds.includes(option.id);
+
+                                return (
+                                    <motion.div
+                                        key={`card-${idx}-${option.id}`}
+                                        initial={{ y: 40, opacity: 0 }}
+                                        animate={{ y: 0, opacity: 1 }}
+                                        transition={{ delay: idx * 0.05, type: 'spring', stiffness: 400, damping: 25 }}
+                                        onClick={() => isMulti
+                                            ? handleToggleMulti(option.id, option.disabled)
+                                            : handleOptionSelect(option.id)
+                                        }
+                                        className={`
+                                            flex-shrink-0 cursor-pointer relative group transition-all duration-200
+                                            ${option.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                            ${isSelected ? 'scale-110 z-10' : 'hover:scale-105 hover:z-10'}
+                                        `}
+                                    >
+                                        <div className={`
+                                            rounded-lg shadow-xl transition-all duration-200 overflow-hidden
+                                            ${isSelected
+                                                ? 'ring-4 ring-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.5)]'
+                                                : 'ring-2 ring-white/20 group-hover:ring-white/60 group-hover:shadow-2xl'}
+                                        `}>
+                                            {previewRef ? (
+                                                <CardPreview
+                                                    previewRef={previewRef}
+                                                    className="w-[140px] aspect-[0.714] bg-slate-900 rounded-lg"
+                                                />
+                                            ) : (
+                                                <div className="w-[140px] aspect-[0.714] bg-slate-800 rounded-lg flex items-center justify-center p-2">
+                                                    <span className="text-white text-sm font-bold text-center">{option.label}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* 卡牌名称 */}
+                                        <div className={`
+                                            mt-2 text-center text-xs font-bold truncate max-w-[140px] px-1
+                                            ${isSelected ? 'text-amber-300' : 'text-white/80'}
+                                        `}>
+                                            {name || option.label}
+                                        </div>
+                                        {/* 多选勾选标记 */}
+                                        {isMulti && isSelected && (
+                                            <div className="absolute -top-2 -right-2 w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center shadow-lg">
+                                                <Check size={14} strokeWidth={3} className="text-black" />
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* 文本选项（如"跳过"）*/}
+                    {isMyPrompt && textOptions.length > 0 && (
+                        <div className="flex gap-3 mt-6">
+                            {textOptions.map((option, idx) => (
+                                <button
+                                    key={`text-${idx}`}
+                                    onClick={() => isMulti
+                                        ? handleToggleMulti(option.id, option.disabled)
+                                        : handleOptionSelect(option.id)
+                                    }
+                                    disabled={option.disabled}
+                                    className="px-5 py-2 rounded-lg bg-white/10 text-white font-bold border border-white/30 hover:bg-white/20 hover:border-white/60 transition-all disabled:opacity-40"
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* 多选确认按钮 */}
+                    {isMyPrompt && isMulti && (
+                        <div className="mt-6">
+                            <button
+                                onClick={() => moves[INTERACTION_COMMANDS.RESPOND]?.({ optionIds: selectedIds })}
+                                disabled={!canSubmitMulti}
+                                className={`px-8 py-3 rounded-lg text-sm font-black uppercase tracking-widest transition-all border-2
+                                    ${canSubmitMulti
+                                        ? 'bg-amber-400 text-black border-amber-300 hover:bg-amber-300 shadow-lg'
+                                        : 'bg-white/10 text-white/40 border-white/20 cursor-not-allowed'
+                                    }
+                                `}
+                            >
+                                {t('ui.confirm', { defaultValue: '确认' })}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* 底部提示 */}
+                    <div className="mt-4 text-xs text-white/40 uppercase tracking-widest">
+                        {isMyPrompt ? t('ui.prompt_select_option') : t('ui.prompt_wait')}
+                    </div>
+                </motion.div>
+            </AnimatePresence>
+        );
+    }
+
+    // ====== 文本列表模式（原有逻辑） ======
     return (
         <AnimatePresence>
             <motion.div
@@ -136,7 +298,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                         )}
                     </div>
 
-                    {/* Footer (Cancel/Details could go here if design allowed cancelling) */}
+                    {/* Footer */}
                     <div className="bg-slate-100 p-3 text-center text-xs text-slate-400 font-mono border-t border-slate-200 uppercase tracking-widest">
                         {isMyPrompt && isMulti ? (
                             <div className="flex items-center justify-between gap-3">

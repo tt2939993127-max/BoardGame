@@ -18,6 +18,7 @@ import type { AnnihilateModeState } from './StatusBanners';
 import { AbilityReadyIndicator } from './AbilityReadyIndicator';
 import { BuffIcons, getBuffGlowStyle, BuffDetailsPanel } from './BuffIcons';
 import { abilityRegistry } from '../domain/abilities';
+import { StrengthBoostIndicator } from './StrengthBoostIndicator';
 
 // ============================================================================
 // 辅助函数
@@ -526,6 +527,8 @@ const UnitCell: React.FC<{
             </div>
           );
         })()}
+        {/* 战力增幅指示器 - 右下角，需跳过附加卡名条区域 */}
+        <StrengthBoostIndicator unit={unit} core={core} attachedCount={unit.attachedCards?.length ?? 0} />
         {/* 放大镜按钮 */}
         <button
           onClick={(e) => { e.stopPropagation(); props.onMagnifyUnit(unit); }}

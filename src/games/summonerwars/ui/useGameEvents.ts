@@ -15,7 +15,8 @@ import type { DiceFace } from '../config/dice';
 import { getDestroySpriteConfig } from './spriteHelpers';
 import type { FxBus } from '../../../engine/fx';
 import { SW_FX } from './fxSetup';
-import { playDeferredSound } from '../../../lib/audio/DeferredSoundMap';
+import { playSound } from '../../../lib/audio/useGameAudio';
+import { resolveDamageSoundKey, resolveDestroySoundKey } from '../audio.config';
 import type { UseVisualSequenceGateReturn } from '../../../components/game/framework/hooks/useVisualSequenceGate';
 
 // ============================================================================
@@ -53,7 +54,7 @@ export interface DyingEntity {
 /** 技能模式状态 */
 export interface AbilityModeState {
   abilityId: string;
-  step: 'selectCard' | 'selectPosition' | 'selectUnit' | 'selectCards';
+  step: 'selectCard' | 'selectPosition' | 'selectUnit' | 'selectCards' | 'selectAttachTarget';
   sourceUnitId: string;
   selectedCardId?: string;
   selectedCardIds?: string[];
@@ -188,8 +189,8 @@ export function useGameEvents({
   // 待播放的攻击效果队列
   const pendingAttackRef = useRef<PendingAttack | null>(null);
 
-  // 待延迟播放的摧毁效果（含 isGate 标记用于音效区分）
-  const pendingDestroyRef = useRef<(DestroyEffectData & { isGate?: boolean; destroyEventId: number })[]>([]);
+  // 待延迟播放的摧毁效果（含音效 key）
+  const pendingDestroyRef = useRef<(DestroyEffectData & { isGate?: boolean; destroyEventId: number; soundKey?: string })[]>([]);
 
   // ============================================================================
   // 回调函数稳定化（避免 useLayoutEffect 因回调引用变化而重复执行）
@@ -294,10 +295,11 @@ export function useGameEvents({
         if (pendingAttackRef.current) {
           pendingAttackRef.current.damages.push({ position: p.position, damage: p.damage, eventId: entry.id });
         } else {
+          const soundKey = resolveDamageSoundKey(p.damage);
           fxBusRef.current.push(SW_FX.COMBAT_DAMAGE, {
             cell: p.position,
             intensity: p.damage >= 3 ? 'strong' : 'normal',
-          }, { damageAmount: p.damage });
+          }, { damageAmount: p.damage, soundKey });
         }
       }
 
@@ -506,7 +508,7 @@ export function useGameEvents({
   };
 
   /** 处理摧毁事件（单位/建筑通用） */
-  function handleDestroyEvent(payload: Record<string, unknown>, type: 'unit' | 'structure', entryId: number) {
+  function handleDestroyEvent(payload: Record<string, unknown>, type: 'unit' | 'structure', _entryId: number) {
     const position = payload.position as CellCoord;
     const cardName = payload.cardName as string;
     const cardId = payload.cardId as string | undefined;
@@ -533,8 +535,11 @@ export function useGameEvents({
       || pending.damages.some(d => d.position.row === position.row && d.position.col === position.col)
     );
 
+    // 解析摧毁音效 key
+    const destroySoundKey = resolveDestroySoundKey(type, isGate);
+
     if (shouldDelay) {
-      pendingDestroyRef.current.push({ ...destroyEffect, isGate, destroyEventId: entryId });
+      pendingDestroyRef.current.push({ ...destroyEffect, isGate, destroyEventId: 0, soundKey: destroySoundKey });
       if (atlasId !== undefined && frameIndex !== undefined) {
         setDyingEntities(prev => ([
           ...prev,
@@ -550,9 +555,7 @@ export function useGameEvents({
       }
     } else {
       pushDestroyEffectRef.current({ position, cardName, type, atlasId, frameIndex });
-      // 非延迟摧毁：等 useEffect 将音效写入 DeferredSoundMap 后消费
-      const eid = entryId;
-      setTimeout(() => playDeferredSound(eid), 0);
+      playSound(destroySoundKey);
     }
   }
 
@@ -575,7 +578,9 @@ export function useGameEvents({
           position: effect.position, cardName: effect.cardName, type: effect.type,
           atlasId: effect.atlasId, frameIndex: effect.frameIndex,
         });
-        playDeferredSound(effect.destroyEventId);
+        if (effect.soundKey) {
+          playSound(effect.soundKey);
+        }
       }
       pendingDestroyRef.current = [];
       setDyingEntities([]);

@@ -475,8 +475,8 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         return {
           ...core,
           abilityUsageCount: {
-            ...core.abilityUsageCount,
-            [usageKey]: (core.abilityUsageCount[usageKey] ?? 0) + 1,
+            ...(core.abilityUsageCount ?? {}),
+            [usageKey]: ((core.abilityUsageCount ?? {})[usageKey] ?? 0) + 1,
           },
         };
       }

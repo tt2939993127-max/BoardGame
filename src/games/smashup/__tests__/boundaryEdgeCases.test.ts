@@ -120,7 +120,7 @@ describe('baseDeck 耗尽时基地记分', () => {
 
         const mockCommand = { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined } as any;
         const result = smashUpFlowHooks.onPhaseExit!({
-            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, prompt: { queue: [] } } } as any,
+            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, interaction: { queue: [] } } } as any,
             from: 'scoreBases',
             to: 'draw',
             command: mockCommand,
@@ -184,7 +184,7 @@ describe('三基地同时达标', () => {
 
         const mockCommand = { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined } as any;
         const result = smashUpFlowHooks.onPhaseExit!({
-            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, prompt: { queue: [] } } } as any,
+            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, interaction: { queue: [] } } } as any,
             from: 'scoreBases',
             to: 'draw',
             command: mockCommand,
@@ -257,8 +257,8 @@ describe('VP 平局胜利判定', () => {
     it('疯狂卡惩罚影响平局判定：原始 VP 相同但惩罚后不同', () => {
         // P0: 16 VP, 2 张疯狂卡 → 最终 15
         // P1: 16 VP, 0 张疯狂卡 → 最终 16
-        const madnessCard = makeCard('mad1', 'special_madness', '0', 'action');
-        const madnessCard2 = makeCard('mad2', 'special_madness', '0', 'action');
+        const madnessCard = makeCard('mad1', 'special_madness', 'action', '0');
+        const madnessCard2 = makeCard('mad2', 'special_madness', 'action', '0');
         const core = makeState({
             players: {
                 '0': makePlayer('0', { vp: 16, hand: [madnessCard, madnessCard2] }),
@@ -304,7 +304,7 @@ describe('额度用完时出牌被拒', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
-                    hand: [makeCard('h1', 'test_action', '0', 'action')],
+                    hand: [makeCard('h1', 'test_action', 'action', '0')],
                     actionsPlayed: 1,
                     actionLimit: 1,
                 }),
@@ -373,7 +373,7 @@ describe('无效 cardUid 出牌', () => {
     it('PLAY_ACTION 传入不存在的 cardUid 被拒绝', () => {
         const core = makeState({
             players: {
-                '0': makePlayer('0', { hand: [makeCard('h1', 'test', '0', 'action')] }),
+                '0': makePlayer('0', { hand: [makeCard('h1', 'test', 'action', '0')] }),
                 '1': makePlayer('1'),
             },
         });
@@ -510,7 +510,7 @@ describe('单人基地记分', () => {
 
         const mockCommand = { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined } as any;
         const result = smashUpFlowHooks.onPhaseExit!({
-            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, prompt: { queue: [] } } } as any,
+            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, interaction: { queue: [] } } } as any,
             from: 'scoreBases',
             to: 'draw',
             command: mockCommand,
@@ -539,7 +539,7 @@ describe('单人基地记分', () => {
 
         const mockCommand = { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined } as any;
         const result = smashUpFlowHooks.onPhaseExit!({
-            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, prompt: { queue: [] } } } as any,
+            state: { core, sys: { phase: 'scoreBases', responseWindow: { current: undefined }, interaction: { queue: [] } } } as any,
             from: 'scoreBases',
             to: 'draw',
             command: mockCommand,

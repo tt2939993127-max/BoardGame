@@ -91,7 +91,6 @@ export const COMMON_AUDIO_CONFIG: GameAudioConfig = {
     },
 
     feedbackResolver: (event: AudioEvent): EventSoundResult | null => {
-        const key = COMMON_EVENT_SFX[event.type as keyof typeof COMMON_EVENT_SFX];
-        return key ? { key, timing: 'immediate' } : null;
+        return COMMON_EVENT_SFX[event.type as keyof typeof COMMON_EVENT_SFX] ?? null;
     },
 };

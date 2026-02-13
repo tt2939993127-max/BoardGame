@@ -19,6 +19,8 @@
  */
 
 import type { AbilityDef } from './abilities';
+import { getUnitAt, manhattanDistance, isCellEmpty } from './helpers';
+import type { CellCoord } from './types';
 
 export const BARBARIC_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -38,6 +40,41 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'unit',
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'move',
+      customValidator: (ctx) => {
+        const targetPosition = ctx.payload.targetPosition as CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择目标友方单位' };
+        }
+        
+        const abTarget = getUnitAt(ctx.core, targetPosition);
+        if (!abTarget) {
+          return { valid: false, error: '目标位置没有单位' };
+        }
+        
+        if (abTarget.owner !== ctx.playerId) {
+          return { valid: false, error: '必须选择友方单位' };
+        }
+        
+        if (abTarget.cardId === ctx.sourceUnit.cardId) {
+          return { valid: false, error: '不能选择自己' };
+        }
+        
+        const abDist = manhattanDistance(ctx.sourcePosition, targetPosition);
+        if (abDist > 3) {
+          return { valid: false, error: '目标必须在3格以内' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'move',
+      buttonLabel: 'abilityButtons.ancestralBond',
+      buttonVariant: 'secondary',
     },
   },
 
@@ -75,6 +112,22 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     effects: [
       { type: 'addCharge', target: 'self', value: 1 },
     ],
+    usesPerTurn: 1,
+    validation: {
+      requiredPhase: 'move',
+      customValidator: (ctx) => {
+        if (ctx.sourceUnit.hasMoved) {
+          return { valid: false, error: '该单位本回合已移动' };
+        }
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'move',
+      buttonLabel: 'abilityButtons.prepare',
+      buttonVariant: 'secondary',
+    },
   },
 
   {
@@ -87,6 +140,15 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
       { type: 'custom', actionId: 'rapid_fire_extra_attack' },
     ],
     usesPerTurn: 1,
+    validation: {
+      customValidator: (ctx) => {
+        // 检查充能是否足够
+        if ((ctx.sourceUnit.boosts ?? 0) < 1) {
+          return { valid: false, error: '没有充能可消耗' };
+        }
+        return { valid: true };
+      },
+    },
   },
 
   // ============================================================================
@@ -102,6 +164,15 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     effects: [
       { type: 'addCharge', target: 'adjacentAllies', value: 1 },
     ],
+    validation: {
+      requiredPhase: 'move',
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'move',
+      buttonLabel: 'abilityButtons.inspire',
+      buttonVariant: 'secondary',
+    },
   },
 
   {
@@ -113,6 +184,45 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     effects: [
       { type: 'custom', actionId: 'withdraw_push_pull' },
     ],
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const wdCostType = ctx.payload.costType as string | undefined;
+        if (!wdCostType || (wdCostType !== 'charge' && wdCostType !== 'magic')) {
+          return { valid: false, error: '必须选择消耗充能或魔力' };
+        }
+        
+        if (wdCostType === 'charge' && (ctx.sourceUnit.boosts ?? 0) < 1) {
+          return { valid: false, error: '没有充能可消耗' };
+        }
+        
+        if (wdCostType === 'magic' && ctx.core.players[ctx.playerId].magic < 1) {
+          return { valid: false, error: '魔力不足' };
+        }
+        
+        const targetPosition = ctx.payload.targetPosition as CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择移动目标位置' };
+        }
+        
+        const wdDist = manhattanDistance(ctx.sourcePosition, targetPosition);
+        if (wdDist < 1 || wdDist > 2) {
+          return { valid: false, error: '必须移动1-2格' };
+        }
+        
+        if (!isCellEmpty(ctx.core, targetPosition)) {
+          return { valid: false, error: '目标位置必须为空' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.withdraw',
+      buttonVariant: 'secondary',
+    },
   },
 
   // ============================================================================
@@ -189,6 +299,52 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'unit',
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'move',
+      customValidator: (ctx) => {
+        const sbChoice = ctx.payload.choice as string | undefined;
+        if (!sbChoice || (sbChoice !== 'self' && sbChoice !== 'transfer')) {
+          return { valid: false, error: '必须选择充能自身或转移充能' };
+        }
+        
+        if (sbChoice === 'transfer') {
+          if ((ctx.sourceUnit.boosts ?? 0) < 1) {
+            return { valid: false, error: '没有充能可消耗' };
+          }
+          
+          const targetPosition = ctx.payload.targetPosition as CellCoord | undefined;
+          if (!targetPosition) {
+            return { valid: false, error: '必须选择目标友方单位' };
+          }
+          
+          const sbTarget = getUnitAt(ctx.core, targetPosition);
+          if (!sbTarget) {
+            return { valid: false, error: '目标位置没有单位' };
+          }
+          
+          if (sbTarget.owner !== ctx.playerId) {
+            return { valid: false, error: '必须选择友方单位' };
+          }
+          
+          if (sbTarget.cardId === ctx.sourceUnit.cardId) {
+            return { valid: false, error: '不能选择自己' };
+          }
+          
+          const sbDist = manhattanDistance(ctx.sourcePosition, targetPosition);
+          if (sbDist > 3) {
+            return { valid: false, error: '目标必须在3格以内' };
+          }
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'move',
+      buttonLabel: 'abilityButtons.spiritBond',
+      buttonVariant: 'secondary',
     },
   },
 ];

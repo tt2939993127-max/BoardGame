@@ -6,13 +6,14 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { recoverCardsFromDiscard, grantExtraAction, moveMinion, requestChoice } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraAction, moveMinion } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
 import { registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, RestrictionCheckContext, TriggerContext } from '../domain/ongoingEffects';
-import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getCardDef, getBaseDef } from '../data/cards';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
 /** 注册蒸汽朋克派系所有能�?*/
 export function registerSteampunkAbilities(): void {
@@ -46,15 +47,13 @@ function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'steampunk_scrap_diving',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要从弃牌堆取回的行动卡', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `steampunk_scrap_diving_${ctx.now}`, ctx.playerId,
+        '选择要从弃牌堆取回的行动卡', options as any[], 'steampunk_scrap_diving',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // steampunk_steam_man (ongoing) - 已通过 ongoingModifiers 系统实现力量修正（按行动卡数+力量�?
@@ -164,15 +163,13 @@ function steampunkMechanic(ctx: AbilityContext): AbilityResult {
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid } };
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'steampunk_mechanic',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要从弃牌堆打出的行动卡', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `steampunk_mechanic_${ctx.now}`, ctx.playerId,
+        '选择要从弃牌堆打出的行动卡', options as any[], 'steampunk_mechanic',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /**
@@ -198,13 +195,11 @@ function steampunkChangeOfVenue(ctx: AbilityContext): AbilityResult {
     const options = myOngoings.map((o, i) => ({
         id: `ongoing-${i}`, label: o.label, value: { cardUid: o.uid, defId: o.defId, ownerId: o.ownerId },
     }));
-    return {
-        events: [requestChoice({
-            abilityId: 'steampunk_change_of_venue',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要取回的持续行动卡', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `steampunk_change_of_venue_${ctx.now}`, ctx.playerId,
+        '选择要取回的持续行动卡', options as any[], 'steampunk_change_of_venue',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /**
@@ -287,45 +282,39 @@ function steampunkZeppelin(ctx: AbilityContext): AbilityResult {
 
     if (candidates.length === 0) return { events: [] };
 
-    return {
-        events: [requestChoice({
-            abilityId: 'steampunk_zeppelin',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要移动的随从', options: candidates },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `steampunk_zeppelin_${ctx.now}`, ctx.playerId,
+        '选择要移动的随从', candidates as any[], 'steampunk_zeppelin',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // ============================================================================
 // Prompt 继续函数
 // ============================================================================
 
-/** 注册蒸汽朋克派系�?Prompt 继续函数 */
-export function registerSteampunkPromptContinuations(): void {
-    // 废物利用：选择弃牌堆行动卡后取�?
-    registerPromptContinuation('steampunk_scrap_diving', (ctx) => {
-        const { cardUid } = ctx.selectedValue as { cardUid: string };
-        return [recoverCardsFromDiscard(ctx.playerId, [cardUid], 'steampunk_scrap_diving', ctx.now)];
+/** 注册蒸汽朋克派系的交互解决处理函数 */
+export function registerSteampunkInteractionHandlers(): void {
+    registerInteractionHandler('steampunk_scrap_diving', (state, playerId, value, _iData, _random, timestamp) => {
+        const { cardUid } = value as { cardUid: string };
+        return { state, events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_scrap_diving', timestamp)] };
     });
 
-    // 机械师：选择弃牌堆行动卡后取�?
-    registerPromptContinuation('steampunk_mechanic', (ctx) => {
-        const { cardUid } = ctx.selectedValue as { cardUid: string };
-        return [recoverCardsFromDiscard(ctx.playerId, [cardUid], 'steampunk_mechanic', ctx.now)];
+    registerInteractionHandler('steampunk_mechanic', (state, playerId, value, _iData, _random, timestamp) => {
+        const { cardUid } = value as { cardUid: string };
+        return { state, events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp)] };
     });
 
-    // 换场：选择 ongoing 行动卡后取回 + 额外行动
-    registerPromptContinuation('steampunk_change_of_venue', (ctx) => {
-        const { cardUid, defId, ownerId } = ctx.selectedValue as { cardUid: string; defId: string; ownerId: string };
-        return [
-            { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'steampunk_change_of_venue' }, timestamp: ctx.now },
-            grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now),
-        ];
+    registerInteractionHandler('steampunk_change_of_venue', (state, playerId, value, _iData, _random, timestamp) => {
+        const { cardUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
+        return { state, events: [
+            { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'steampunk_change_of_venue' }, timestamp },
+            grantExtraAction(playerId, 'steampunk_change_of_venue', timestamp),
+        ] };
     });
 
-    // 齐柏林飞艇：选择要移动的随从
-    registerPromptContinuation('steampunk_zeppelin', (ctx) => {
-        const { minionUid, minionDefId, fromBase, toBase } = ctx.selectedValue as { minionUid: string; minionDefId: string; fromBase: number; toBase: number };
-        return [moveMinion(minionUid, minionDefId, fromBase, toBase, 'steampunk_zeppelin', ctx.now)];
+    registerInteractionHandler('steampunk_zeppelin', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, minionDefId, fromBase, toBase } = value as { minionUid: string; minionDefId: string; fromBase: number; toBase: number };
+        return { state, events: [moveMinion(minionUid, minionDefId, fromBase, toBase, 'steampunk_zeppelin', timestamp)] };
     });
 }

@@ -1363,3 +1363,139 @@ describe('雌狮 - 生命强化 (life_up) 集成', () => {
     expect(newState.board[4][3].unit?.damage).toBe(3);
   });
 });
+
+
+// ============================================================================
+// 充能验证测试
+// ============================================================================
+
+describe('充能验证', () => {
+  it('withdraw - 充能不足且魔力不足时应拒绝', () => {
+    const core = createBarbaricState();
+    core.phase = 'attack';
+    core.currentPlayer = '0';
+    core.players['0'].magic = 0; // 没有魔力
+
+    const keru: BoardUnit = {
+      cardId: 'barbaric-keru-champion-0-0',
+      owner: '0',
+      life: 3,
+      boosts: 0, // 没有充能
+      card: {
+        id: 'barbaric-keru-champion',
+        name: '凯鲁尊者',
+        faction: 'barbaric',
+        cardType: 'unit',
+        unitType: 'champion',
+        cost: 2,
+        strength: 2,
+        life: 3,
+        move: 2,
+        abilities: ['inspire', 'withdraw'],
+      } as UnitCard,
+    };
+    core.board[3][3] = { unit: keru, structure: null };
+
+    const fullState = { core, sys: {} as any };
+    
+    // 尝试用充能支付
+    const resultCharge = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'withdraw',
+        sourceUnitId: 'barbaric-keru-champion-0-0',
+        costType: 'charge',
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+
+    expect(resultCharge.valid).toBe(false);
+    expect(resultCharge.error).toContain('充能');
+  });
+
+  it('withdraw - 有充能时应允许用充能支付', () => {
+    const core = createBarbaricState();
+    core.phase = 'attack';
+    core.currentPlayer = '0';
+
+    const keru: BoardUnit = {
+      cardId: 'barbaric-keru-champion-0-0',
+      owner: '0',
+      life: 3,
+      boosts: 2, // 有充能
+      card: {
+        id: 'barbaric-keru-champion',
+        name: '凯鲁尊者',
+        faction: 'barbaric',
+        cardType: 'unit',
+        unitType: 'champion',
+        cost: 2,
+        strength: 2,
+        life: 3,
+        move: 2,
+        abilities: ['inspire', 'withdraw'],
+      } as UnitCard,
+    };
+    core.board[3][3] = { unit: keru, structure: null };
+
+    const fullState = { core, sys: {} as any };
+    
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'withdraw',
+        sourceUnitId: 'barbaric-keru-champion-0-0',
+        costType: 'charge',
+        targetPosition: { row: 3, col: 4 }, // 移动1格
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('withdraw - 魔力不足时应拒绝用魔力支付', () => {
+    const core = createBarbaricState();
+    core.phase = 'attack';
+    core.currentPlayer = '0';
+    core.players['0'].magic = 0; // 没有魔力
+
+    const keru: BoardUnit = {
+      cardId: 'barbaric-keru-champion-0-0',
+      owner: '0',
+      life: 3,
+      boosts: 0,
+      card: {
+        id: 'barbaric-keru-champion',
+        name: '凯鲁尊者',
+        faction: 'barbaric',
+        cardType: 'unit',
+        unitType: 'champion',
+        cost: 2,
+        strength: 2,
+        life: 3,
+        move: 2,
+        abilities: ['inspire', 'withdraw'],
+      } as UnitCard,
+    };
+    core.board[3][3] = { unit: keru, structure: null };
+
+    const fullState = { core, sys: {} as any };
+    
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'withdraw',
+        sourceUnitId: 'barbaric-keru-champion-0-0',
+        costType: 'magic',
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('魔力');
+  });
+});

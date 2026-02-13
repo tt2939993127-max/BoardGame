@@ -2,10 +2,10 @@
  * DiceThrone 音频配置
  * 仅保留事件解析/规则，音效资源统一来自 registry
  */
-import type { AudioEvent, AudioRuntimeContext, EventSoundResult, GameAudioConfig } from '../../lib/audio/types';
-import { pickDiceRollSoundKey, pickRandomSoundKey } from '../../lib/audio/audioUtils';
+import type { AudioEvent, AudioRuntimeContext, GameAudioConfig, SoundKey } from '../../lib/audio/types';
+import { pickDiceRollSoundKey } from '../../lib/audio/audioUtils';
+import type { DiceThroneCore, TurnPhase, SelectableCharacterId } from './domain/types';
 import { findPlayerAbility } from './domain/abilityLookup';
-import type { DiceThroneCore, TurnPhase } from './domain/types';
 import { findHeroCard } from './heroes';
 
 const resolveTokenSfx = (state: DiceThroneCore, tokenId?: string): string | null => {
@@ -21,7 +21,7 @@ const resolveTokenSfx = (state: DiceThroneCore, tokenId?: string): string | null
 /** 重击阈值（伤害 >= 此值使用重击音效） */
 const HEAVY_HIT_THRESHOLD = 8;
 
-const IMPACT_SFX = {
+export const IMPACT_SFX = {
     HEAVY_HIT: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst',
     LIGHT_HIT: 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst',
     SELF_HIT: 'combat.general.mini_games_sound_effects_and_music_pack.body_hit.sfx_body_hit_generic_small_1',
@@ -32,8 +32,8 @@ const IMPACT_SFX = {
     TOKEN_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
 } as const;
 
-/** 根据伤害值和目标解析命中音效 */
-const resolveDamageImpactKey = (
+/** 根据伤害值和目标解析命中音效（供动画层调用） */
+export const resolveDamageImpactKey = (
     damage: number,
     targetId: string | undefined,
     currentPlayerId: string | undefined
@@ -128,31 +128,29 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             BGM_FIREBORN_INTENSE_KEY,
         ],
     },
-    feedbackResolver: (event, context): EventSoundResult | null => {
+    feedbackResolver: (event, context): SoundKey | null => {
         const runtime = context as AudioRuntimeContext<
             DiceThroneCore,
             { currentPhase: TurnPhase; isGameOver: boolean; isWinner?: boolean },
             { currentPlayerId: string }
         >;
-        const { G, meta } = runtime;
-        const I = (key: string): EventSoundResult => ({ key, timing: 'immediate' });
-        const ON_IMPACT = (key: string): EventSoundResult => ({ key, timing: 'on-impact' });
+        const { G } = runtime;
 
         if (event.type === 'DICE_ROLLED') {
             const results = (event as AudioEvent & { payload?: { results?: number[] } }).payload?.results ?? [];
-            return I(pickDiceRollSoundKey(
+            return pickDiceRollSoundKey(
                 'dicethrone.dice_roll',
                 results.length,
                 { single: DICE_ROLL_SINGLE_KEY, multiple: DICE_ROLL_MULTI_KEYS },
                 { minGap: 1 }
-            ));
+            );
         }
 
         if (event.type === 'CP_CHANGED') {
             const delta = (event as AudioEvent & { payload?: { delta?: number } }).payload?.delta ?? 0;
-            return I(delta >= 0
+            return delta >= 0
                 ? 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001'
-                : 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001');
+                : 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
         }
 
         if (event.type === 'CARD_PLAYED') {
@@ -160,108 +158,101 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             const card = findCardById(G, cardId);
             const hasEffectSfx = card?.effects?.some(effect => effect.sfxKey);
             if (hasEffectSfx) return null;
-            return I(card?.sfxKey ?? 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001');
+            return card?.sfxKey ?? 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
         }
 
         if (event.type === 'ABILITY_ACTIVATED') {
             return null;
         }
 
-        // DAMAGE_DEALT：音效由动画冲击帧驱动，框架写入 DeferredSoundMap
-        if (event.type === 'DAMAGE_DEALT') {
-            const payload = (event as AudioEvent & {
-                payload?: { actualDamage?: number; targetId?: string }
-            }).payload;
-            const damage = payload?.actualDamage ?? 0;
-            if (damage <= 0) return null;
-            return ON_IMPACT(resolveDamageImpactKey(damage, payload?.targetId, meta?.currentPlayerId));
-        }
+        // DAMAGE_DEALT：音效由动画层在 onImpact 播放，feedbackResolver 不处理
+        if (event.type === 'DAMAGE_DEALT') return null;
 
         const type = event.type;
 
         if (type === 'CHARACTER_SELECTED') {
-            return I('ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none');
+            return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
         }
 
         if (type === 'PLAYER_READY') {
-            return I('ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a');
+            return 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
         }
 
         if (type === 'HOST_STARTED') {
-            return I('ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003');
+            return 'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003';
         }
 
         if (type === 'SYS_PHASE_CHANGED') {
-            return I('fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002');
+            return 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
         }
 
         if (type === 'TURN_CHANGED') {
-            return I('ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a');
+            return 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
         }
 
         if (type.startsWith('BONUS_')) {
             if (type.includes('REROLL')) {
-                return I('dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_002');
+                return 'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_002';
             }
-            return I('dice.decks_and_cards_sound_fx_pack.single_die_roll_001');
+            return 'dice.decks_and_cards_sound_fx_pack.single_die_roll_001';
         }
 
         if (type.startsWith('DIE_')) {
             if (type.includes('LOCK')) {
-                return I('dice.decks_and_cards_sound_fx_pack.single_die_roll_005');
+                return 'dice.decks_and_cards_sound_fx_pack.single_die_roll_005';
             }
             if (type.includes('MODIFIED')) {
-                return I('dice.decks_and_cards_sound_fx_pack.single_die_roll_005');
+                return 'dice.decks_and_cards_sound_fx_pack.single_die_roll_005';
             }
             if (type.includes('REROLL')) {
-                return I('dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_002');
+                return 'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_002';
             }
         }
 
         if (type.startsWith('ROLL_')) {
             if (type.includes('CONFIRM') || type.includes('LIMIT')) {
-                return I('ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.buttons.tab_switching_button.uiclick_tab_switching_button_01_krst_none');
+                return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.buttons.tab_switching_button.uiclick_tab_switching_button_01_krst_none';
             }
         }
 
-        // STATUS / TOKEN 事件：有飞行动画，由动画冲击帧消费
-        if (type === 'STATUS_APPLIED') return ON_IMPACT(IMPACT_SFX.STATUS_GAIN);
-        if (type === 'STATUS_REMOVED') return ON_IMPACT(IMPACT_SFX.STATUS_REMOVE);
-        if (type === 'TOKEN_GRANTED') return ON_IMPACT(IMPACT_SFX.TOKEN_GAIN);
-        if (type === 'TOKEN_USED' || type === 'TOKEN_CONSUMED') return ON_IMPACT(IMPACT_SFX.TOKEN_REMOVE);
+        // STATUS / TOKEN 事件：有飞行动画，音效由动画层 onImpact 播放，feedbackResolver 不处理
+        if (type === 'STATUS_APPLIED') return null;
+        if (type === 'STATUS_REMOVED') return null;
+        if (type === 'TOKEN_GRANTED') return null;
+        if (type === 'TOKEN_USED' || type === 'TOKEN_CONSUMED') return null;
 
         if (type.startsWith('TOKEN_')) {
             if (type.includes('RESPONSE_CLOSED')) {
-                return I('ui.general.ui_menu_sound_fx_pack_vol.signals.negative.signal_negative_spring_a');
+                return 'ui.general.ui_menu_sound_fx_pack_vol.signals.negative.signal_negative_spring_a';
             }
             if (type.includes('RESPONSE_REQUESTED')) {
-                return I('status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a');
+                return 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a';
             }
         }
 
         if (type.startsWith('CHOICE_')) {
             if (type.includes('RESOLVED')) {
-                return I('ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a');
+                return 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
             }
-            return I('status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a');
+            return 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a';
         }
 
         if (type.startsWith('RESPONSE_WINDOW_')) {
             if (type.includes('OPEN')) {
-                return I('ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_spring_a');
+                return 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_spring_a';
             }
             if (type.includes('CLOSED')) {
-                return I('ui.general.ui_menu_sound_fx_pack_vol.signals.negative.signal_negative_spring_a');
+                return 'ui.general.ui_menu_sound_fx_pack_vol.signals.negative.signal_negative_spring_a';
             }
             return null;
         }
 
         if (type === 'DAMAGE_SHIELD_GRANTED') {
-            return I('magic.water.10.water_shield');
+            return 'magic.water.10.water_shield';
         }
 
         if (type === 'DAMAGE_PREVENTED') {
-            return I('fantasy.medieval_fantasy_sound_fx_pack_vol.armor.shield_impact_a');
+            return 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.shield_impact_a';
         }
 
         if (type.startsWith('ATTACK_')) {
@@ -272,10 +263,10 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
                     const explicitKey = match?.variant?.sfxKey ?? match?.ability?.sfxKey;
                     if (explicitKey) return null;
                 }
-                return I('combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1');
+                return 'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1';
             }
             if (type.includes('PRE_DEFENSE')) {
-                return I('combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_small_1');
+                return 'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_small_1';
             }
         }
 
@@ -288,8 +279,7 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
                 CARD_REORDERED: 'card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001',
                 DECK_SHUFFLED: 'card.handling.decks_and_cards_sound_fx_pack.cards_shuffle_fast_001',
             };
-            const mapped = cardSoundMap[type];
-            if (mapped) return I(mapped);
+            return cardSoundMap[type] ?? null;
         }
 
         return null;
@@ -324,6 +314,46 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             },
         },
     ],
+    contextualPreloadKeys: (context) => {
+        const core = context.G as DiceThroneCore | undefined;
+        if (!core) return [];
+        const selected = new Set<SelectableCharacterId>();
+        for (const charId of Object.values(core.selectedCharacters ?? {})) {
+            if (charId && charId !== 'unselected') {
+                selected.add(charId as SelectableCharacterId);
+            }
+        }
+        if (selected.size === 0) return [];
+
+        const keys = new Set<string>();
+
+        // 通用战斗音效（选角后立即预加载，消除首次攻击延迟）
+        const MELEE_LIGHT_KEYS = [
+            'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_small_1',
+            'combat.general.mini_games_sound_effects_and_music_pack.weapon_swoosh.sfx_weapon_melee_swoosh_sword_1',
+        ];
+        const MELEE_HEAVY_KEYS = [
+            'fantasy.dark_sword_whoosh_01',
+            'fantasy.dark_sword_whoosh_02',
+            'fantasy.dark_sword_whoosh_03',
+        ];
+        const DAMAGE_HEAVY_KEY = 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst';
+        const DAMAGE_LIGHT_KEY = 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst';
+        const UNIT_DESTROY_KEY = 'combat.general.fight_fury_vol_2.body_hitting_the_ground_with_blood.fghtbf_body_hitting_the_ground_with_blood_01_krst';
+
+        MELEE_LIGHT_KEYS.forEach(key => keys.add(key));
+        MELEE_HEAVY_KEYS.forEach(key => keys.add(key));
+        keys.add(DAMAGE_HEAVY_KEY);
+        keys.add(DAMAGE_LIGHT_KEY);
+        keys.add(UNIT_DESTROY_KEY);
+
+        // 已选角色的专属音效（如果有）
+        for (const charId of selected) {
+            // 这里可以添加角色专属音效，目前 DiceThrone 暂无角色专属音效配置
+        }
+
+        return Array.from(keys);
+    },
 };
 
 const findCardById = (state: DiceThroneCore, cardId?: string) => {

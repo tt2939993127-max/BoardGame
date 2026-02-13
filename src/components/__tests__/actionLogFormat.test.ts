@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActionLogEntry } from '../../engine/types';
-import { buildActionLogRows, formatActionLogSegments } from '../game/actionLogFormat';
+import { buildActionLogRows, formatActionLogSegments } from '../game/utils/actionLogFormat';
 
 describe('actionLogFormat', () => {
     it('formatActionLogSegments 拼接文本与卡牌预览', () => {

@@ -33,6 +33,7 @@ import {
   getUnitAbilities,
 } from './helpers';
 import { getPhaseDisplayName } from './execute';
+import { validateAbilityActivation } from './abilityValidation';
 
 // ============================================================================
 // 命令验证
@@ -355,365 +356,48 @@ function validateActivateAbility(
   _commandPlayerId?: string
 ): ValidationResult {
   const abilityId = payload.abilityId as string;
-  const sourceUnitId = payload.sourceUnitId as string;
-  const targetCardId = payload.targetCardId as string | undefined;
-  const targetPosition = payload.targetPosition as CellCoord | undefined;
-  const targetUnitId = payload.targetUnitId as string | undefined;
   
-  let sourceUnit: BoardUnit | undefined;
-  let sourcePosition: CellCoord | undefined;
-  for (let row = 0; row < BOARD_ROWS; row++) {
-    for (let col = 0; col < BOARD_COLS; col++) {
-      const unit = core.board[row]?.[col]?.unit;
-      if (unit && unit.cardId === sourceUnitId) {
-        sourceUnit = unit;
-        sourcePosition = { row, col };
-        break;
-      }
-    }
-    if (sourceUnit) break;
+  // 已迁移到数据驱动验证的技能（全部技能）
+  const migratedAbilities = [
+    'revive_undead',
+    'prepare',
+    'life_drain',
+    'healing',
+    'holy_arrow',
+    // 亡灵法师
+    'fire_sacrifice_summon',
+    'infection',
+    'soul_transfer',
+    // 欺心巫族
+    'mind_capture_resolve',
+    'telekinesis',
+    'high_telekinesis',
+    'mind_transmission',
+    'illusion',
+    // 洞穴地精
+    'vanish',
+    'blood_rune',
+    'feed_beast',
+    'magic_addiction',
+    'grab',
+    // 先锋军团
+    'fortress_power',
+    'guidance',
+    'judgment',
+    // 极地矮人
+    'structure_shift',
+    'ice_shards',
+    'frost_axe',
+    // 炽原精灵
+    'ancestral_bond',
+    'inspire',
+    'withdraw',
+    'spirit_bond',
+  ];
+  if (migratedAbilities.includes(abilityId)) {
+    return validateAbilityActivation(core, playerId, payload);
   }
   
-  if (!sourceUnit || !sourcePosition) return { valid: false, error: '技能源单位未找到' };
-  if (sourceUnit.owner !== playerId) return { valid: false, error: '只能发动自己单位的技能' };
-  if (!getUnitAbilities(sourceUnit).includes(abilityId)) return { valid: false, error: '该单位没有此技能' };
-
-  switch (abilityId) {
-    case 'revive_undead': {
-      if (core.phase !== 'summon') return { valid: false, error: '复活死灵只能在召唤阶段使用' };
-      if (!targetCardId) return { valid: false, error: '必须选择弃牌堆中的卡牌' };
-      if (!targetPosition) return { valid: false, error: '必须选择放置位置' };
-      const player = core.players[playerId];
-      const card = player.discard.find(c => c.id === targetCardId);
-      if (!card || card.cardType !== 'unit') return { valid: false, error: '弃牌堆中没有该单位卡' };
-      const isUndead = card.id.includes('undead') || card.name.includes('亡灵') || (card as UnitCard).faction === 'necromancer';
-      if (!isUndead) return { valid: false, error: '只能复活亡灵单位' };
-      if (!isAdjacent(sourcePosition, targetPosition)) return { valid: false, error: '必须放置到召唤师相邻的位置' };
-      if (!isCellEmpty(core, targetPosition)) return { valid: false, error: '放置位置必须为空' };
-      return { valid: true };
-    }
-
-    case 'fire_sacrifice_summon': {
-      if (!targetUnitId) return { valid: false, error: '必须选择要消灭的友方单位' };
-      let targetUnit: BoardUnit | undefined;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (unit && unit.cardId === targetUnitId) { targetUnit = unit; break; }
-        }
-        if (targetUnit) break;
-      }
-      if (!targetUnit || targetUnit.owner !== playerId) return { valid: false, error: '必须选择一个友方单位' };
-      return { valid: true };
-    }
-
-    case 'life_drain': {
-      if (core.phase !== 'attack') return { valid: false, error: '吸取生命只能在攻击阶段使用' };
-      if (!targetUnitId) return { valid: false, error: '必须选择要消灭的友方单位' };
-      let targetUnit: BoardUnit | undefined;
-      let targetPos: CellCoord | undefined;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const unit = core.board[row]?.[col]?.unit;
-          if (unit && unit.cardId === targetUnitId) { targetUnit = unit; targetPos = { row, col }; break; }
-        }
-        if (targetUnit) break;
-      }
-      if (!targetUnit || !targetPos || targetUnit.owner !== playerId) return { valid: false, error: '必须选择一个友方单位' };
-      const dist = Math.abs(sourcePosition.row - targetPos.row) + Math.abs(sourcePosition.col - targetPos.col);
-      if (dist > 2) return { valid: false, error: '目标必须在2格以内' };
-      return { valid: true };
-    }
-
-    case 'infection': {
-      if (!targetCardId || !targetPosition) return { valid: false, error: '必须选择弃牌堆中的疫病体和放置位置' };
-      const player = core.players[playerId];
-      const card = player.discard.find(c => c.id === targetCardId);
-      if (!card || card.cardType !== 'unit') return { valid: false, error: '弃牌堆中没有该单位卡' };
-      const isPlagueZombie = card.id.includes('plague-zombie') || card.name.includes('疫病体');
-      if (!isPlagueZombie) return { valid: false, error: '只能召唤疫病体' };
-      if (!isCellEmpty(core, targetPosition)) return { valid: false, error: '放置位置必须为空' };
-      return { valid: true };
-    }
-
-    case 'soul_transfer': {
-      if (!targetPosition) return { valid: false, error: '必须指定目标位置' };
-      if (!isCellEmpty(core, targetPosition)) return { valid: false, error: '目标位置必须为空' };
-      return { valid: true };
-    }
-
-    case 'mind_capture_resolve': {
-      const choice = payload.choice as string | undefined;
-      if (!choice || (choice !== 'control' && choice !== 'damage')) return { valid: false, error: '必须选择控制或伤害' };
-      return { valid: true };
-    }
-
-    case 'telekinesis':
-    case 'high_telekinesis': {
-      if (core.phase !== 'attack') return { valid: false, error: '念力只能在攻击阶段使用' };
-      if (!targetPosition) return { valid: false, error: '必须选择推拉目标' };
-      const maxRange = abilityId === 'high_telekinesis' ? 3 : 2;
-      const dist = Math.abs(sourcePosition.row - targetPosition.row) + Math.abs(sourcePosition.col - targetPosition.col);
-      if (dist > maxRange) return { valid: false, error: `目标必须在${maxRange}格以内` };
-      const tkTarget = getUnitAt(core, targetPosition);
-      if (!tkTarget) return { valid: false, error: '目标位置没有单位' };
-      if (tkTarget.card.unitClass === 'summoner') return { valid: false, error: '不能推拉召唤师' };
-      return { valid: true };
-    }
-
-    case 'mind_transmission': {
-      if (core.phase !== 'attack') return { valid: false, error: '读心传念只能在攻击阶段使用' };
-      if (!targetPosition) return { valid: false, error: '必须选择额外攻击目标' };
-      const mtDist = Math.abs(sourcePosition.row - targetPosition.row) + Math.abs(sourcePosition.col - targetPosition.col);
-      if (mtDist > 3) return { valid: false, error: '目标必须在3格以内' };
-      const mtTarget = getUnitAt(core, targetPosition);
-      if (!mtTarget) return { valid: false, error: '目标位置没有单位' };
-      if (mtTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
-      if (mtTarget.card.unitClass !== 'common') return { valid: false, error: '只能选择士兵' };
-      return { valid: true };
-    }
-
-    // ============ 洞穴地精技能验证 ============
-
-    case 'vanish': {
-      if (core.phase !== 'attack') return { valid: false, error: '神出鬼没只能在攻击阶段使用' };
-      if (!targetPosition) return { valid: false, error: '必须选择交换目标' };
-      const vanishTarget = getUnitAt(core, targetPosition);
-      if (!vanishTarget) return { valid: false, error: '目标位置没有单位' };
-      if (vanishTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
-      if (vanishTarget.card.cost !== 0) return { valid: false, error: '只能与费用为0的友方单位交换' };
-      if (vanishTarget.cardId === sourceUnitId) return { valid: false, error: '不能与自己交换' };
-      return { valid: true };
-    }
-
-    case 'illusion': {
-      // 幻化：移动阶段开始时，复制3格内一个士兵的所有技能
-      if (core.phase !== 'move') return { valid: false, error: '幻化只能在移动阶段使用' };
-      const illusionTargetPos = payload.targetPosition as CellCoord | undefined;
-      if (!illusionTargetPos) return { valid: false, error: '必须选择目标士兵' };
-      const illusionTarget = getUnitAt(core, illusionTargetPos);
-      if (!illusionTarget) return { valid: false, error: '目标位置没有单位' };
-      if (illusionTarget.card.unitClass !== 'common') return { valid: false, error: '只能选择士兵' };
-      const illusionDist = manhattanDistance(sourcePosition, illusionTargetPos);
-      if (illusionDist > 3 || illusionDist === 0) return { valid: false, error: '目标必须在3格以内' };
-      return { valid: true };
-    }
-
-    case 'blood_rune': {
-      if (core.phase !== 'attack') return { valid: false, error: '鲜血符文只能在攻击阶段使用' };
-      const brChoice = payload.choice as string | undefined;
-      if (!brChoice || (brChoice !== 'damage' && brChoice !== 'charge')) return { valid: false, error: '必须选择自伤或充能' };
-      if (brChoice === 'charge' && core.players[playerId].magic < 1) return { valid: false, error: '魔力不足' };
-      return { valid: true };
-    }
-
-    case 'feed_beast': {
-      // 喂养巨食兽：选择相邻友方单位移除，或不选则自毁
-      if (core.phase !== 'attack') return { valid: false, error: '喂养巨食兽只能在攻击阶段使用' };
-      const fbChoice = payload.choice as string | undefined;
-      if (fbChoice === 'self_destroy') return { valid: true };
-      if (!targetPosition) return { valid: false, error: '必须选择相邻友方单位或自毁' };
-      const fbTarget = getUnitAt(core, targetPosition);
-      if (!fbTarget) return { valid: false, error: '目标位置没有单位' };
-      if (fbTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
-      if (fbTarget.cardId === sourceUnitId) return { valid: false, error: '不能选择自己' };
-      const fbDist = Math.abs(sourcePosition.row - targetPosition.row) + Math.abs(sourcePosition.col - targetPosition.col);
-      if (fbDist !== 1) return { valid: false, error: '必须选择相邻的友方单位' };
-      return { valid: true };
-    }
-
-    case 'magic_addiction': {
-      // 魔力成瘾：自动处理，无需玩家选择
-      return { valid: true };
-    }
-
-    case 'grab': {
-      // 抓附：将抓附手放置到移动后友方单位相邻的空格
-      if (!targetPosition) return { valid: false, error: '必须选择放置位置' };
-      if (!isCellEmpty(core, targetPosition)) return { valid: false, error: '目标位置必须为空' };
-      return { valid: true };
-    }
-
-    // ============ 先锋军团技能验证 ============
-
-    case 'fortress_power': {
-      if (core.phase !== 'attack') return { valid: false, error: '城塞之力只能在攻击阶段使用' };
-      if (!targetCardId) return { valid: false, error: '必须选择弃牌堆中的城塞单位' };
-      // 检查战场上是否有友方城塞单位
-      let hasFortressOnBoard = false;
-      for (let row = 0; row < BOARD_ROWS; row++) {
-        for (let col = 0; col < BOARD_COLS; col++) {
-          const u = core.board[row]?.[col]?.unit;
-          if (u && u.owner === playerId && u.card.id.includes('fortress')) {
-            hasFortressOnBoard = true;
-            break;
-          }
-        }
-        if (hasFortressOnBoard) break;
-      }
-      if (!hasFortressOnBoard) return { valid: false, error: '战场上没有友方城塞单位' };
-      const fpPlayer = core.players[playerId];
-      const fpCard = fpPlayer.discard.find(c => c.id === targetCardId);
-      if (!fpCard || fpCard.cardType !== 'unit') return { valid: false, error: '弃牌堆中没有该单位卡' };
-      if (!(fpCard as import('./types').UnitCard).id.includes('fortress')) return { valid: false, error: '只能拿取城塞单位' };
-      return { valid: true };
-    }
-
-    case 'guidance': {
-      if (core.phase !== 'summon') return { valid: false, error: '指引只能在召唤阶段使用' };
-      const guidancePlayer = core.players[playerId];
-      if (guidancePlayer.deck.length === 0) return { valid: false, error: '牌组为空' };
-      return { valid: true };
-    }
-
-    case 'holy_arrow': {
-      if (core.phase !== 'attack') return { valid: false, error: '圣光箭只能在攻击阶段使用' };
-      const discardCardIds = payload.discardCardIds as string[] | undefined;
-      if (!discardCardIds || discardCardIds.length === 0) return { valid: false, error: '必须选择要弃除的卡牌' };
-      const haPlayer = core.players[playerId];
-      // 检查所有卡牌是否在手牌中且为非同名单位
-      const names = new Set<string>();
-      for (const cardId of discardCardIds) {
-        const card = haPlayer.hand.find(c => c.id === cardId);
-        if (!card || card.cardType !== 'unit') return { valid: false, error: '只能弃除单位卡' };
-        const unitCard = card as import('./types').UnitCard;
-        if (unitCard.name === sourceUnit!.card.name) return { valid: false, error: '不能弃除同名单位' };
-        if (names.has(unitCard.name)) return { valid: false, error: '不能弃除多张同名单位' };
-        names.add(unitCard.name);
-      }
-      return { valid: true };
-    }
-
-    case 'healing': {
-      if (core.phase !== 'attack') return { valid: false, error: '治疗只能在攻击阶段使用' };
-      // 检查手牌中是否有可弃除的卡牌
-      const healDiscardId = payload.targetCardId as string | undefined;
-      if (!healDiscardId) return { valid: false, error: '必须选择要弃除的手牌' };
-      const healPlayer = core.players[playerId];
-      const healCard = healPlayer.hand.find(c => c.id === healDiscardId);
-      if (!healCard) return { valid: false, error: '手牌中没有该卡牌' };
-      // 检查目标是否为友方士兵或英雄（冠军）
-      const healTargetPos = payload.targetPosition as CellCoord | undefined;
-      if (!healTargetPos) return { valid: false, error: '必须选择攻击目标' };
-      const healTarget = getUnitAt(core, healTargetPos);
-      if (!healTarget || healTarget.owner !== playerId) return { valid: false, error: '目标必须是友方单位' };
-      if (healTarget.card.unitClass !== 'common' && healTarget.card.unitClass !== 'champion') {
-        return { valid: false, error: '目标必须是士兵或英雄' };
-      }
-      return { valid: true };
-    }
-
-    case 'judgment': {
-      // 裁决是 afterAttack 被动触发，不需要主动验证
-      return { valid: true };
-    }
-
-    // ============ 极地矮人技能验证 ============
-
-    case 'structure_shift': {
-      if (core.phase !== 'move') return { valid: false, error: '结构变换只能在移动阶段使用' };
-      const ssTargetPos = payload.targetPosition as CellCoord | undefined;
-      if (!ssTargetPos) return { valid: false, error: '必须选择目标建筑' };
-      const ssStructure = getStructureAt(core, ssTargetPos);
-      if (!ssStructure || ssStructure.owner !== playerId) return { valid: false, error: '必须选择友方建筑' };
-      const ssDist = manhattanDistance(sourcePosition!, ssTargetPos);
-      if (ssDist > 3) return { valid: false, error: '目标必须在3格以内' };
-      return { valid: true };
-    }
-
-    case 'ice_shards': {
-      if (core.phase !== 'build') return { valid: false, error: '寒冰碎屑只能在建造阶段使用' };
-      if ((sourceUnit!.boosts ?? 0) < 1) return { valid: false, error: '没有充能可消耗' };
-      return { valid: true };
-    }
-
-    // ============ 炽原精灵技能验证 ============
-
-    case 'ancestral_bond': {
-      if (core.phase !== 'move') return { valid: false, error: '祖灵羁绊只能在移动阶段使用' };
-      if (!targetPosition) return { valid: false, error: '必须选择目标友方单位' };
-      const abTarget = getUnitAt(core, targetPosition);
-      if (!abTarget) return { valid: false, error: '目标位置没有单位' };
-      if (abTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
-      if (abTarget.cardId === sourceUnitId) return { valid: false, error: '不能选择自己' };
-      const abDist = manhattanDistance(sourcePosition!, targetPosition);
-      if (abDist > 3) return { valid: false, error: '目标必须在3格以内' };
-      return { valid: true };
-    }
-
-    case 'prepare': {
-      if (core.phase !== 'move') return { valid: false, error: '预备只能在移动阶段使用' };
-      // 检查使用次数限制
-      const prepareUsageKey = `${sourceUnitId}:prepare`;
-      const prepareUsageCount = core.abilityUsageCount[prepareUsageKey] ?? 0;
-      if (prepareUsageCount >= 1) return { valid: false, error: '预备每回合只能使用一次' };
-      return { valid: true };
-    }
-
-    case 'inspire': {
-      // 启悟：移动后自动触发，无需额外验证
-      if (core.phase !== 'move') return { valid: false, error: '启悟只能在移动阶段使用' };
-      return { valid: true };
-    }
-
-    case 'withdraw': {
-      if (core.phase !== 'attack') return { valid: false, error: '撤退只能在攻击阶段使用' };
-      const wdCostType = payload.costType as string | undefined;
-      if (!wdCostType || (wdCostType !== 'charge' && wdCostType !== 'magic')) {
-        return { valid: false, error: '必须选择消耗充能或魔力' };
-      }
-      if (wdCostType === 'charge' && (sourceUnit!.boosts ?? 0) < 1) {
-        return { valid: false, error: '没有充能可消耗' };
-      }
-      if (wdCostType === 'magic' && core.players[playerId].magic < 1) {
-        return { valid: false, error: '魔力不足' };
-      }
-      if (!targetPosition) return { valid: false, error: '必须选择移动目标位置' };
-      const wdDist = manhattanDistance(sourcePosition!, targetPosition);
-      if (wdDist < 1 || wdDist > 2) return { valid: false, error: '必须移动1-2格' };
-      if (!isCellEmpty(core, targetPosition)) return { valid: false, error: '目标位置必须为空' };
-      return { valid: true };
-    }
-
-    case 'spirit_bond': {
-      if (core.phase !== 'move') return { valid: false, error: '祖灵交流只能在移动阶段使用' };
-      const sbChoice = payload.choice as string | undefined;
-      if (!sbChoice || (sbChoice !== 'self' && sbChoice !== 'transfer')) {
-        return { valid: false, error: '必须选择充能自身或转移充能' };
-      }
-      if (sbChoice === 'transfer') {
-        if ((sourceUnit!.boosts ?? 0) < 1) return { valid: false, error: '没有充能可消耗' };
-        if (!targetPosition) return { valid: false, error: '必须选择目标友方单位' };
-        const sbTarget = getUnitAt(core, targetPosition);
-        if (!sbTarget) return { valid: false, error: '目标位置没有单位' };
-        if (sbTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
-        if (sbTarget.cardId === sourceUnitId) return { valid: false, error: '不能选择自己' };
-        const sbDist = manhattanDistance(sourcePosition!, targetPosition);
-        if (sbDist > 3) return { valid: false, error: '目标必须在3格以内' };
-      }
-      return { valid: true };
-    }
-
-    case 'frost_axe': {
-      if (core.phase !== 'move') return { valid: false, error: '冰霜战斧只能在移动阶段使用' };
-      const fxChoice = payload.choice as string | undefined;
-      if (fxChoice === 'self') return { valid: true };
-      if (fxChoice === 'attach') {
-        if ((sourceUnit!.boosts ?? 0) < 1) return { valid: false, error: '充能不足' };
-        if (!targetPosition) return { valid: false, error: '必须选择目标士兵' };
-        const fxDist = manhattanDistance(sourcePosition!, targetPosition);
-        if (fxDist > 3) return { valid: false, error: '目标必须在3格以内' };
-        const fxTarget = getUnitAt(core, targetPosition);
-        if (!fxTarget) return { valid: false, error: '目标位置没有单位' };
-        if (fxTarget.owner !== playerId) return { valid: false, error: '必须选择友方单位' };
-        if (fxTarget.card.unitClass !== 'common') return { valid: false, error: '只能附加到士兵' };
-        if (fxTarget.cardId === sourceUnitId) return { valid: false, error: '不能附加到自身' };
-        return { valid: true };
-      }
-      return { valid: false, error: '无效选择' };
-    }
-
-    default:
-      return { valid: false, error: '未知的技能' };
-  }
+  // 所有技能已迁移完成，不应该到达这里
+  return { valid: false, error: '未知的技能' };
 }

@@ -1,4 +1,4 @@
-import type { ActionLogEntry, ActionLogSegment } from '../../engine/types';
+import type { ActionLogEntry, ActionLogSegment } from '../../../engine/types';
 
 export interface ActionLogRow {
     id: string;

@@ -8,7 +8,6 @@ import { AudioManager } from './AudioManager';
 import { playSynthSound, getSynthSoundKeys } from './SynthAudio';
 import type { AudioRuntimeContext, BgmDefinition, BgmGroupId, GameAudioConfig, SoundKey } from './types';
 import { resolveAudioEvent, resolveFeedback, resolveBgmGroup, resolveBgmKey } from './audioRouting';
-import { deferredSounds } from './DeferredSoundMap';
 import { useAudio } from '../../contexts/AudioContext';
 import { COMMON_AUDIO_BASE_PATH, loadCommonAudioRegistry } from './commonRegistry';
 
@@ -320,6 +319,9 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         const safeEntries = eventEntries ?? [];
         const totalEntries = safeEntries.length;
         if (totalEntries === 0) {
+            // 撤回恢复快照时 eventStream.entries 被清空，
+            // 必须重置签名指针，否则后续新事件 ID 与旧签名碰撞会被误判为"已播放"
+            lastLogSignatureRef.current = null;
             return;
         }
 
@@ -348,23 +350,14 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
             if (!event) {
                 continue;
             }
-            const result = resolveFeedback(
+            const key = resolveFeedback(
                 event,
                 runtimeContextRef.current,
                 config,
                 (category) => AudioManager.resolveCategoryKey(category)
             );
-            if (!result) continue;
-            const { key, timing } = result;
-            if (timing === 'on-impact') {
-                // 延迟播放：写入 DeferredSoundMap，由动画层在冲击帧消费
-                const entryId = (entry as { id?: number }).id;
-                if (typeof entryId === 'number') {
-                    deferredSounds.set(entryId, key);
-                }
-                continue;
-            }
-            // immediate：立即播放（去重）
+            if (!key) continue;
+            // 立即播放（去重）
             if (!playedKeys.has(key)) {
                 playedKeys.add(key);
                 playSound(key);

@@ -25,13 +25,8 @@ afterEach(() => {
     vi.clearAllMocks();
 });
 
-/** 提取 feedbackResolver 返回的 key 字符串 */
+/** 提取 feedbackResolver 返回的 SoundKey */
 const resolveKey = (event: AudioEvent, ctx: unknown = { G: {}, ctx: {}, meta: {} }): string | null => {
-    return DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, ctx as never)?.key ?? null;
-};
-
-/** 获取完整 EventSoundResult（含 timing） */
-const resolveResult = (event: AudioEvent, ctx: unknown = { G: {}, ctx: {}, meta: {} }) => {
     return DICETHRONE_AUDIO_CONFIG.feedbackResolver(event, ctx as never);
 };
 
@@ -158,29 +153,22 @@ describe('DiceThrone 音效配置', () => {
     });
 
     describe('状态/Token 音效映射', () => {
-        it('状态施加应返回 on-impact 通用状态音效', () => {
-            // 当前架构：STATUS_APPLIED 统一返回 on-impact 通用音效，
-            // 专属 sfxKey 由 DeferredSoundMap 在动画冲击帧 playDeferredSound(eventId) 消费
+        it('状态施加应返回 null（音效由动画层 onImpact 播放）', () => {
             const event: AudioEvent = {
                 type: 'STATUS_APPLIED',
                 payload: { statusId: STATUS_IDS.BURN },
             };
-            const result = resolveResult(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} });
-            expect(result).toBeDefined();
-            expect(result!.timing).toBe('on-impact');
-            expect(result!.key).toBe('status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a');
+            const result = resolveKey(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} });
+            expect(result).toBeNull();
         });
 
-        it('Token 授予应返回 on-impact 通用 Token 音效', () => {
-            // 当前架构：TOKEN_GRANTED 统一返回 on-impact 通用音效（冲击帧消费）
+        it('Token 授予应返回 null（音效由动画层 onImpact 播放）', () => {
             const event: AudioEvent = {
                 type: 'TOKEN_GRANTED',
                 payload: { tokenId: TOKEN_IDS.TAIJI },
             };
-            const result = resolveResult(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} });
-            expect(result).toBeDefined();
-            expect(result!.timing).toBe('on-impact');
-            expect(result!.key).toBe('status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a');
+            const result = resolveKey(event, { G: { tokenDefinitions: ALL_TOKEN_DEFINITIONS }, ctx: {}, meta: {} });
+            expect(result).toBeNull();
         });
     });
 });

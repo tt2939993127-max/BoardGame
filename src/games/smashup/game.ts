@@ -24,7 +24,7 @@ import { initAllAbilities } from './abilities';
 import { createSmashUpEventSystem } from './domain/systems';
 import { smashUpCheatModifier } from './cheatModifier';
 import { ACTION_ALLOWLIST, formatSmashUpActionEntry } from './actionLog';
-import { registerCardPreviewGetter } from '../../components/game/cardPreviewRegistry';
+import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getSmashUpCardPreviewRef } from './ui/cardPreviewHelper';
 import { registerCriticalImageResolver } from '../../core';
 import { smashUpCriticalImageResolver } from './criticalImageResolver';
@@ -43,7 +43,7 @@ const systems: EngineSystem<SmashUpCore>[] = [
         commandAllowlist: ACTION_ALLOWLIST,
         formatEntry: formatSmashUpActionEntry,
     }),
-    createUndoSystem({ snapshotCommandAllowlist: ACTION_ALLOWLIST }),
+    createUndoSystem({ maxSnapshots: 3, snapshotCommandAllowlist: ACTION_ALLOWLIST }),
     createInteractionSystem(),
     createRematchSystem(),
     createResponseWindowSystem({
@@ -77,9 +77,7 @@ export const SmashUp = createGameAdapter<SmashUpCore, SmashUpCommand, SmashUpEve
     systems,
     minPlayers: 2,
     maxPlayers: 4,
-    commandTypes: [
-        ...Object.values(SU_COMMANDS),
-    ],
+    commandTypes: [...Object.values(SU_COMMANDS)],
 });
 
 export default SmashUp;

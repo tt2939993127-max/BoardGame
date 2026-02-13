@@ -8,10 +8,11 @@
  */
 
 import type { Command, GameEvent, MatchState, PlayerId, RandomFn } from '../types';
+import { isDevEnv } from '../env';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
 
-const isDev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
+const isDev = isDevEnv();
 const logDev = (...args: unknown[]) => {
     if (isDev) {
         console.log(...args);
@@ -62,6 +63,8 @@ export interface PhaseExitResult {
     halt?: boolean;
     /** 覆盖下一阶段 */
     overrideNextPhase?: string;
+    /** 如果能力创建了 Interaction，返回更新后的 matchState */
+    updatedState?: MatchState<any>;
 }
 
 export interface FlowHooks<TCore = unknown> {
@@ -150,6 +153,92 @@ export function setPhase<TCore>(state: MatchState<TCore>, phase: string): MatchS
 }
 
 // ============================================================================
+// 阶段推进通用逻辑
+// ============================================================================
+
+interface PhaseAdvanceParams<TCore> {
+    state: MatchState<TCore>;
+    command: Command;
+    random: RandomFn;
+    hooks: FlowHooks<TCore>;
+    logLabel: 'beforeCommand' | 'afterEvents';
+    timestamp: number;
+    playerIds?: PlayerId[];
+    invalidPlayerStrategy: 'error' | 'ignore';
+    haltOnExit: boolean;
+}
+
+function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResult<TCore> | void {
+    const { state, command, random, hooks, logLabel, timestamp, playerIds, invalidPlayerStrategy, haltOnExit } = params;
+
+    if (playerIds && !playerIds.includes(command.playerId)) {
+        return invalidPlayerStrategy === 'error' ? { halt: true, error: 'player_mismatch' } : undefined;
+    }
+
+    const from = getCurrentPhase(state) || hooks.initialPhase;
+    logDev(`[FlowSystem][${logLabel}] ADVANCE_PHASE from=${from} playerId=${command.playerId}`);
+
+    const can = hooks.canAdvance?.({ state, from, command }) ?? { ok: true };
+    if (!can.ok) {
+        logDev(`[FlowSystem][${logLabel}] canAdvance failed: ${can.error}`);
+        return invalidPlayerStrategy === 'error'
+            ? { halt: true, error: can.error ?? 'cannot_advance_phase' }
+            : undefined;
+    }
+
+    let to = hooks.getNextPhase({ state, from, command });
+    logDev(`[FlowSystem][${logLabel}] getNextPhase returned to=${to}`);
+
+    const exit = hooks.onPhaseExit?.({ state, from, to, command, random });
+
+    let exitEvents: GameEvent[] = [];
+    let shouldHalt = false;
+    let updatedState: MatchState<TCore> | undefined;
+
+    if (exit) {
+        if (Array.isArray(exit)) {
+            exitEvents = exit;
+        } else {
+            exitEvents = exit.events ?? [];
+            shouldHalt = exit.halt ?? false;
+            updatedState = exit.updatedState as MatchState<TCore> | undefined;
+            if (exit.overrideNextPhase) {
+                to = exit.overrideNextPhase;
+                logDev(`[FlowSystem][${logLabel}] overrideNextPhase to=${to}`);
+            }
+        }
+    }
+
+    if (shouldHalt) {
+        logDev(`[FlowSystem][${logLabel}] halt=true, not advancing`);
+        return {
+            halt: haltOnExit ? true : undefined,
+            state: updatedState ?? state,
+            events: exitEvents,
+        };
+    }
+
+    const nextState = setPhase(state, to);
+    logDev(`[FlowSystem][${logLabel}] phase updated from=${from} to=${to}`);
+
+    const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command, exitEvents }) ?? command.playerId;
+    const phaseChanged: PhaseChangedEvent = {
+        type: FLOW_EVENTS.PHASE_CHANGED,
+        payload: { from, to, activePlayerId },
+        timestamp,
+    };
+
+    const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command, random });
+    const enterEvents = Array.isArray(enter) ? enter : (enter ?? []);
+
+    return {
+        halt: haltOnExit ? true : undefined,
+        state: nextState,
+        events: [...exitEvents, phaseChanged, ...enterEvents],
+    };
+}
+
+// ============================================================================
 // 创建系统
 // ============================================================================
 
@@ -166,75 +255,17 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
 
         beforeCommand: ({ state, command, random, playerIds }): HookResult<TCore> | void => {
             if (command.type !== FLOW_COMMANDS.ADVANCE_PHASE) return;
-            if (!playerIds.includes(command.playerId)) {
-                return { halt: true, error: 'player_mismatch' };
-            }
-
-            const from = getCurrentPhase(state) || hooks.initialPhase;
-            logDev(`[FlowSystem][beforeCommand] ADVANCE_PHASE from=${from} playerId=${command.playerId}`);
-
-            // canAdvance 校验
-            const can = hooks.canAdvance?.({ state, from, command }) ?? { ok: true };
-            if (!can.ok) {
-                logDev(`[FlowSystem][beforeCommand] canAdvance failed: ${can.error}`);
-                return { halt: true, error: can.error ?? 'cannot_advance_phase' };
-            }
-
-            // 计算下一阶段
-            let to = hooks.getNextPhase({ state, from, command });
-            logDev(`[FlowSystem][beforeCommand] getNextPhase returned to=${to}`);
-
-            // 离开阶段钩子
-            const exit = hooks.onPhaseExit?.({ state, from, to, command, random });
-
-            let exitEvents: GameEvent[] = [];
-            let shouldHalt = false;
-
-            if (exit) {
-                if (Array.isArray(exit)) {
-                    exitEvents = exit;
-                } else {
-                    exitEvents = exit.events ?? [];
-                    shouldHalt = exit.halt ?? false;
-                    if (exit.overrideNextPhase) {
-                        to = exit.overrideNextPhase;
-                        logDev(`[FlowSystem][beforeCommand] overrideNextPhase to=${to}`);
-                    }
-                }
-            }
-
-            if (shouldHalt) {
-                // 不切换阶段
-                logDev(`[FlowSystem][beforeCommand] halt=true, not advancing`);
-                return {
-                    halt: true,
-                    state,
-                    events: exitEvents,
-                };
-            }
-
-            // 更新 sys.phase
-            const nextState = setPhase(state, to);
-            logDev(`[FlowSystem][beforeCommand] phase updated from=${from} to=${to}`);
-
-            // 生成系统事件（用于 UI/日志）
-            const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command, exitEvents }) ?? command.playerId;
-            const phaseChanged: PhaseChangedEvent = {
-                type: FLOW_EVENTS.PHASE_CHANGED,
-                payload: { from, to, activePlayerId },
+            return executePhaseAdvance({
+                state,
+                command,
+                random,
+                hooks,
+                logLabel: 'beforeCommand',
                 timestamp: resolveTimestamp(command),
-            };
-
-            // 进入阶段钩子
-            const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command, random });
-            const enterEvents = Array.isArray(enter) ? enter : (enter ?? []);
-
-            // 系统消费命令：由管线负责将非 SYS_ 事件 reduce 进 core，并执行 afterEvents hooks
-            return {
-                halt: true,
-                state: nextState,
-                events: [...exitEvents, phaseChanged, ...enterEvents],
-            };
+                playerIds,
+                invalidPlayerStrategy: 'error',
+                haltOnExit: true,
+            });
         },
 
         afterEvents: ({ state, events, random, playerIds }): HookResult<TCore> | void => {
@@ -256,69 +287,19 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
                 playerId,
                 payload: undefined,
             };
-
             logDev(`[FlowSystem][afterEvents] autoContinue from=${from} playerId=${playerId}`);
 
-            // canAdvance 校验（自动继续时通常应该允许）
-            const can = hooks.canAdvance?.({ state, from, command: syntheticCommand }) ?? { ok: true };
-            if (!can.ok) {
-                // 自动继续被阻止，静默失败
-                logDev(`[FlowSystem][afterEvents] autoContinue blocked: ${can.error}`);
-                return;
-            }
-
-            // 计算下一阶段
-            let to = hooks.getNextPhase({ state, from, command: syntheticCommand });
-            logDev(`[FlowSystem][afterEvents] getNextPhase returned to=${to}`);
-
-            // 离开阶段钩子
-            const exit = hooks.onPhaseExit?.({ state, from, to, command: syntheticCommand, random });
-
-            let exitEvents: GameEvent[] = [];
-            let shouldHalt = false;
-
-            if (exit) {
-                if (Array.isArray(exit)) {
-                    exitEvents = exit;
-                } else {
-                    exitEvents = exit.events ?? [];
-                    shouldHalt = exit.halt ?? false;
-                    if (exit.overrideNextPhase) {
-                        to = exit.overrideNextPhase;
-                        logDev(`[FlowSystem][afterEvents] overrideNextPhase to=${to}`);
-                    }
-                }
-            }
-
-            if (shouldHalt) {
-                // 流程被 halt（例如又触发了新的响应窗口），只返回事件
-                logDev(`[FlowSystem][afterEvents] halt=true, not advancing`);
-                return {
-                    state,
-                    events: exitEvents,
-                };
-            }
-
-            // 更新 sys.phase
-            const nextState = setPhase(state, to);
-            logDev(`[FlowSystem][afterEvents] phase updated from=${from} to=${to}`);
-
-            // 生成系统事件
-            const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command: syntheticCommand, exitEvents }) ?? playerId;
-            const phaseChanged: PhaseChangedEvent = {
-                type: FLOW_EVENTS.PHASE_CHANGED,
-                payload: { from, to, activePlayerId },
+            return executePhaseAdvance({
+                state,
+                command: syntheticCommand,
+                random,
+                hooks,
+                logLabel: 'afterEvents',
                 timestamp: resolveTimestamp(undefined, events),
-            };
-
-            // 进入阶段钩子
-            const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command: syntheticCommand, random });
-            const enterEvents = Array.isArray(enter) ? enter : (enter ?? []);
-
-            return {
-                state: nextState,
-                events: [...exitEvents, phaseChanged, ...enterEvents],
-            };
+                playerIds,
+                invalidPlayerStrategy: 'ignore',
+                haltOnExit: false,
+            });
         },
     };
 }

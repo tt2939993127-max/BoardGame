@@ -155,7 +155,8 @@ const mockContext = {
 const resolveKey = (event: AudioEvent): string | undefined => {
     const resolver = SUMMONER_WARS_AUDIO_CONFIG.feedbackResolver;
     if (!resolver) throw new Error('feedbackResolver 未定义');
-    return resolver(event, mockContext)?.key;
+    const result = resolver(event, mockContext);
+    return result ?? undefined;
 };
 
 describe('Summoner Wars 音效配置', () => {
@@ -164,7 +165,7 @@ describe('Summoner Wars 音效配置', () => {
         expect(resolveKey({ type: SW_EVENTS.PLAYER_READY } as AudioEvent)).toBe(POSITIVE_SIGNAL_KEY);
         expect(resolveKey({ type: SW_EVENTS.HOST_STARTED } as AudioEvent)).toBe(UPDATE_CHIME_KEY);
         // UNIT_SUMMONED 音效由 FX 系统播放，不在 feedbackResolver 中返回
-        expect(resolveKey({ type: SW_EVENTS.UNIT_SUMMONED } as AudioEvent)).toBeNull();
+        expect(resolveKey({ type: SW_EVENTS.UNIT_SUMMONED } as AudioEvent)).toBeUndefined();
         expect(resolveKey({ type: SW_EVENTS.UNIT_MOVED } as AudioEvent)).toBe(MOVE_FALLBACK_KEY);
         expect(resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT } as AudioEvent)).toBe(BUILD_KEY);
         expect(resolveKey({ type: SW_EVENTS.CARD_DRAWN } as AudioEvent)).toBe(CARD_DRAW_KEY);
@@ -183,27 +184,30 @@ describe('Summoner Wars 音效配置', () => {
         const gateBuild = resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: true } } } as AudioEvent);
         expect(GATE_BUILD_KEYS).toContain(gateBuild);
 
-        // 城墙摧毁 → 石块崩碎
+        // 城墙摧毁 → 石块崩碎（有动画，音效由动画层播放）
         const wallDestroy = resolveKey({
             type: SW_EVENTS.STRUCTURE_DESTROYED,
             payload: { isGate: false },
         } as AudioEvent);
-        expect(wallDestroy).toBe(STRUCTURE_DESTROY_KEY);
+        expect(wallDestroy).toBeUndefined();
 
-        // 传送门摧毁 → 时空裂隙关闭音
+        // 传送门摧毁 → 时空裂隙关闭音（有动画，音效由动画层播放）
         const gateDestroy = resolveKey({
             type: SW_EVENTS.STRUCTURE_DESTROYED,
             payload: { isGate: true },
         } as AudioEvent);
-        expect(GATE_DESTROY_KEYS).toContain(gateDestroy);
+        expect(gateDestroy).toBeUndefined();
     });
 
     it('应解析伤害与治疗音效', () => {
-        expect(resolveKey({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 1 } } as AudioEvent)).toBe(DAMAGE_LIGHT_KEY);
-        expect(resolveKey({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 3 } } as AudioEvent)).toBe(DAMAGE_HEAVY_KEY);
+        // 有动画的事件返回 undefined，音效由动画层播放
+        expect(resolveKey({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 1 } } as AudioEvent)).toBeUndefined();
+        expect(resolveKey({ type: SW_EVENTS.UNIT_DAMAGED, payload: { damage: 3 } } as AudioEvent)).toBeUndefined();
+        // 治疗音效无动画，直接播放
         expect(resolveKey({ type: SW_EVENTS.UNIT_HEALED } as AudioEvent)).toBe(HEAL_KEY);
         expect(resolveKey({ type: SW_EVENTS.STRUCTURE_HEALED } as AudioEvent)).toBe(HEAL_KEY);
-        expect(resolveKey({ type: SW_EVENTS.UNIT_DESTROYED } as AudioEvent)).toBe(UNIT_DESTROY_KEY);
+        // 摧毁有动画，音效由动画层播放
+        expect(resolveKey({ type: SW_EVENTS.UNIT_DESTROYED } as AudioEvent)).toBeUndefined();
     });
 
     it('应解析魔力变化音效', () => {
@@ -214,14 +218,16 @@ describe('Summoner Wars 音效配置', () => {
     });
 
     it('应解析近战/远程与位移音效', () => {
+        // 攻击有动画，音效由动画层播放
         const attackKey = resolveKey({ type: SW_EVENTS.UNIT_ATTACKED } as AudioEvent);
-        expect(MELEE_LIGHT_KEYS).toContain(attackKey);
+        expect(attackKey).toBeUndefined();
         const rangedKey = resolveKey({
             type: SW_EVENTS.UNIT_ATTACKED,
             payload: { attackType: 'ranged' },
         } as AudioEvent);
-        expect(RANGED_ATTACK_KEYS).toContain(rangedKey);
+        expect(rangedKey).toBeUndefined();
 
+        // 位移音效无动画，直接播放
         const moveKey = resolveKey({ type: SW_EVENTS.UNIT_PUSHED } as AudioEvent);
         expect(MOVE_SWING_KEYS).toContain(moveKey);
     });
@@ -242,7 +248,7 @@ describe('Summoner Wars 音效配置', () => {
         const vanishKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'vanish' } } as AudioEvent);
         const structureShiftKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'structure_shift' } } as AudioEvent);
         const rapidFireKey = resolveKey({ type: SW_EVENTS.ABILITY_TRIGGERED, payload: { abilityId: 'rapid_fire' } } as AudioEvent);
-        expect(reviveKey).toBeNull(); // 召唤音效由 FX 系统播放
+        expect(reviveKey).toBeUndefined(); // 召唤音效由 FX 系统播放
         expect(telekinesisKey).toBe(ABILITY_KEYS.telekinesis);
         expect(guidanceKey).toBe(ABILITY_KEYS.guidance);
         expect(vanishKey).toBe(ABILITY_KEYS.vanish);
@@ -384,8 +390,16 @@ describe('Summoner Wars 音效配置', () => {
             ...abilitySfxKeys,
         ];
 
+        const missing: string[] = [];
         for (const key of keys) {
-            expect(registryMap.has(key)).toBe(true);
+            if (!registryMap.has(key)) {
+                missing.push(key);
+            }
         }
+        
+        if (missing.length > 0) {
+            console.error('Missing keys from registry:', missing);
+        }
+        expect(missing).toEqual([]);
     });
 });

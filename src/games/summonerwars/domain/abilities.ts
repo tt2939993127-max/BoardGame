@@ -11,6 +11,12 @@
  */
 
 import type { CellCoord } from './types';
+import { isCellEmpty } from './helpers';
+import { TRICKSTER_ABILITIES } from './abilities-trickster';
+import { GOBLIN_ABILITIES } from './abilities-goblin';
+import { PALADIN_ABILITIES } from './abilities-paladin';
+import { FROST_ABILITIES } from './abilities-frost';
+import { BARBARIC_ABILITIES } from './abilities-barbaric';
 
 // ============================================================================
 // 技能触发时机
@@ -159,6 +165,43 @@ export interface AbilityDef {
   usesPerTurn?: number;
   /** 音效 key */
   sfxKey?: string;
+  /** 验证规则（用于主动技能） */
+  validation?: {
+    /** 必须在指定阶段使用 */
+    requiredPhase?: 'summon' | 'move' | 'attack' | 'build';
+    /** 自定义验证函数 */
+    customValidator?: (ctx: ValidationContext) => ValidationResult;
+  };
+  /** UI 元数据（用于按钮渲染） */
+  ui?: {
+    /** 是否需要按钮 */
+    requiresButton?: boolean;
+    /** 按钮显示的阶段 */
+    buttonPhase?: 'summon' | 'move' | 'attack' | 'build';
+    /** 按钮文本（i18n key） */
+    buttonLabel?: string;
+    /** 按钮样式 */
+    buttonVariant?: 'primary' | 'secondary' | 'danger';
+  };
+}
+
+/**
+ * 验证上下文
+ */
+export interface ValidationContext {
+  core: import('./types').SummonerWarsCore;
+  playerId: import('./types').PlayerId;
+  sourceUnit: import('./types').BoardUnit;
+  sourcePosition: import('./types').CellCoord;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * 验证结果
+ */
+export interface ValidationResult {
+  valid: boolean;
+  error?: string;
 }
 
 // ============================================================================
@@ -226,12 +269,52 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       type: 'card',
       filter: { type: 'isUnitType', target: 'self', unitType: 'undead' },
     },
+    validation: {
+      requiredPhase: 'summon',
+      customValidator: (ctx) => {
+        const targetCardId = ctx.payload.targetCardId as string | undefined;
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        
+        if (!targetCardId) return { valid: false, error: '必须选择弃牌堆中的卡牌' };
+        if (!targetPosition) return { valid: false, error: '必须选择放置位置' };
+        
+        const player = ctx.core.players[ctx.playerId];
+        const card = player.discard.find(c => c.id === targetCardId);
+        if (!card || card.cardType !== 'unit') {
+          return { valid: false, error: '弃牌堆中没有该单位卡' };
+        }
+        
+        const isUndead = card.id.includes('undead') || card.name.includes('亡灵') || (card as import('./types').UnitCard).faction === 'necromancer';
+        if (!isUndead) return { valid: false, error: '只能复活亡灵单位' };
+        
+        // 检查是否相邻
+        const isAdjacent = Math.abs(ctx.sourcePosition.row - targetPosition.row) + Math.abs(ctx.sourcePosition.col - targetPosition.col) === 1;
+        if (!isAdjacent) {
+          return { valid: false, error: '必须放置到召唤师相邻的位置' };
+        }
+        
+        // 检查位置是否为空
+        const isCellEmpty = !ctx.core.board[targetPosition.row]?.[targetPosition.col]?.unit;
+        if (!isCellEmpty) {
+          return { valid: false, error: '放置位置必须为空' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'summon',
+      buttonLabel: 'abilityButtons.reviveUndead',
+      buttonVariant: 'primary',
+    },
   },
 
-  // 伊路特-巴尔 - 火祀召唤
+  // 伊路特-巴尔 - 火祀召唤（被动描述：被召唤时替换友方单位）
+  // 注意：实际执行逻辑由下方主动版本 fire_sacrifice_summon 的 custom actionId 驱动
   {
-    id: 'fire_sacrifice_summon',
-    name: '火祀召唤',
+    id: 'fire_sacrifice_passive',
+    name: '火祀召唤（被动）',
     description: '当你为召唤本单位支付费用时，还必须消灭一个友方单位，并且使用本单位替换被消灭的单位。',
     sfxKey: 'fantasy.elemental_sword_fireattack_01',
     trigger: 'onSummon',
@@ -271,6 +354,48 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
         ],
       },
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const targetUnitId = ctx.payload.targetUnitId as string | undefined;
+        if (!targetUnitId) {
+          return { valid: false, error: '必须选择要消灭的友方单位' };
+        }
+        
+        // 查找目标单位
+        let targetUnit: import('./types').BoardUnit | undefined;
+        let targetPos: import('./types').CellCoord | undefined;
+        for (let row = 0; row < ctx.core.board.length; row++) {
+          for (let col = 0; col < (ctx.core.board[0]?.length ?? 0); col++) {
+            const unit = ctx.core.board[row]?.[col]?.unit;
+            if (unit && unit.cardId === targetUnitId) {
+              targetUnit = unit;
+              targetPos = { row, col };
+              break;
+            }
+          }
+          if (targetUnit) break;
+        }
+        
+        if (!targetUnit || !targetPos || targetUnit.owner !== ctx.playerId) {
+          return { valid: false, error: '必须选择一个友方单位' };
+        }
+        
+        // 计算曼哈顿距离
+        const dist = Math.abs(ctx.sourcePosition.row - targetPos.row) + Math.abs(ctx.sourcePosition.col - targetPos.col);
+        if (dist > 2) {
+          return { valid: false, error: '目标必须在2格以内' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.lifeDrain',
+      buttonVariant: 'secondary',
     },
   },
 
@@ -376,6 +501,33 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       type: 'card',
       filter: { type: 'isUnitType', target: 'self', unitType: 'common' },
     },
+    validation: {
+      customValidator: (ctx) => {
+        const targetCardId = ctx.payload.targetCardId as string | undefined;
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        
+        if (!targetCardId || !targetPosition) {
+          return { valid: false, error: '必须选择弃牌堆中的疫病体和放置位置' };
+        }
+        
+        const player = ctx.core.players[ctx.playerId];
+        const card = player.discard.find(c => c.id === targetCardId);
+        if (!card || card.cardType !== 'unit') {
+          return { valid: false, error: '弃牌堆中没有该单位卡' };
+        }
+        
+        const isPlagueZombie = card.id.includes('plague-zombie') || card.name.includes('疫病体');
+        if (!isPlagueZombie) {
+          return { valid: false, error: '只能召唤疫病体' };
+        }
+        
+        if (!isCellEmpty(ctx.core, targetPosition)) {
+          return { valid: false, error: '放置位置必须为空' };
+        }
+        
+        return { valid: true };
+      },
+    },
   },
 
   // 亡灵弓箭手 - 灵魂转移
@@ -391,6 +543,68 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       { type: 'custom', actionId: 'soul_transfer_request' },
     ],
     requiresTargetSelection: false, // 可选触发，UI 确认
+    validation: {
+      customValidator: (ctx) => {
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须指定目标位置' };
+        }
+        
+        if (!isCellEmpty(ctx.core, targetPosition)) {
+          return { valid: false, error: '目标位置必须为空' };
+        }
+        
+        return { valid: true };
+      },
+    },
+  },
+
+  // ============================================================================
+  // 主动技能（需要玩家手动激活）
+  // ============================================================================
+
+  {
+    id: 'fire_sacrifice_summon',
+    name: '火祀召唤',
+    description: '在你的召唤阶段，你可以消灭一个友方单位，以代替支付魔力费用来召唤一个单位。',
+    sfxKey: 'fantasy.elemental_sword_fireattack_01',
+    trigger: 'activated',
+    effects: [
+      { type: 'custom', actionId: 'fire_sacrifice_summon' },
+    ],
+    validation: {
+      requiredPhase: 'summon',
+      customValidator: (ctx) => {
+        const targetUnitId = ctx.payload.targetUnitId as string | undefined;
+        if (!targetUnitId) {
+          return { valid: false, error: '必须选择要消灭的友方单位' };
+        }
+        
+        let targetUnit: import('./types').BoardUnit | undefined;
+        for (let row = 0; row < ctx.core.board.length; row++) {
+          for (let col = 0; col < (ctx.core.board[0]?.length ?? 0); col++) {
+            const unit = ctx.core.board[row]?.[col]?.unit;
+            if (unit && unit.cardId === targetUnitId) {
+              targetUnit = unit;
+              break;
+            }
+          }
+          if (targetUnit) break;
+        }
+        
+        if (!targetUnit || targetUnit.owner !== ctx.playerId) {
+          return { valid: false, error: '必须选择一个友方单位' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'summon',
+      buttonLabel: 'abilityButtons.fireSacrificeSummon',
+      buttonVariant: 'secondary',
+    },
   },
 ];
 
@@ -398,21 +612,16 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
 abilityRegistry.registerAll(NECROMANCER_ABILITIES);
 
 // 注册欺心巫族技能
-import { TRICKSTER_ABILITIES } from './abilities-trickster';
 abilityRegistry.registerAll(TRICKSTER_ABILITIES);
 
 // 注册洞穴地精技能
-import { GOBLIN_ABILITIES } from './abilities-goblin';
 abilityRegistry.registerAll(GOBLIN_ABILITIES);
 
 // 注册先锋军团技能
-import { PALADIN_ABILITIES } from './abilities-paladin';
 abilityRegistry.registerAll(PALADIN_ABILITIES);
 
 // 注册极地矮人技能
-import { FROST_ABILITIES } from './abilities-frost';
 abilityRegistry.registerAll(FROST_ABILITIES);
 
 // 注册炽原精灵技能
-import { BARBARIC_ABILITIES } from './abilities-barbaric';
 abilityRegistry.registerAll(BARBARIC_ABILITIES);

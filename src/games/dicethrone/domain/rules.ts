@@ -3,7 +3,8 @@
  * 供 UI 与 domain 层共用的纯函数
  */
 
-import type { PlayerId, ResponseWindowType } from '../../../engine/types';
+import type { PlayerId } from '../../../engine/types';
+import type { DtResponseWindowType } from './core-types';
 import type { AbilityContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
 import { isCustomActionCategory } from './effects';
@@ -619,7 +620,7 @@ export const isCardPlayableInResponseWindow = (
     state: DiceThroneCore,
     playerId: PlayerId,
     card: AbilityCard,
-    windowType: ResponseWindowType,
+    windowType: DtResponseWindowType,
     phase: TurnPhase
 ): boolean => {
     // 升级卡不能在响应窗口打出
@@ -846,7 +847,7 @@ const getDiceEffectTarget = (card: AbilityCard): 'self' | 'opponent' | 'any' | '
 export const hasRespondableContent = (
     state: DiceThroneCore,
     playerId: PlayerId,
-    windowType: ResponseWindowType,
+    windowType: DtResponseWindowType,
     _sourceId: string | undefined,
     phase: TurnPhase
 ): boolean => {
@@ -884,7 +885,7 @@ export const hasRespondableContent = (
  */
 export const getResponderQueue = (
     state: DiceThroneCore,
-    windowType: ResponseWindowType,
+    windowType: DtResponseWindowType,
     triggerId: PlayerId,
     sourceId: string | undefined,
     excludeId: PlayerId | undefined,

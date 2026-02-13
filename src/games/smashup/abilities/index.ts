@@ -1,40 +1,40 @@
 /**
  * 大杀四方 - 能力注册入口
  *
- * 在游戏初始化时调�?initAllAbilities() 注册所有派系能力�?
+ * 在游戏初始化时调�?initAllAbilities() 注册所有派系能力�?
  */
 
 import { registerAlienAbilities } from './aliens';
-import { registerAlienPromptContinuations } from './aliens';
+import { registerAlienInteractionHandlers } from './aliens';
 import { registerPirateAbilities } from './pirates';
-import { registerPiratePromptContinuations } from './pirates';
+import { registerPirateInteractionHandlers } from './pirates';
 import { registerNinjaAbilities } from './ninjas';
-import { registerNinjaPromptContinuations } from './ninjas';
+import { registerNinjaInteractionHandlers } from './ninjas';
 import { registerDinosaurAbilities } from './dinosaurs';
-import { registerDinosaurPromptContinuations } from './dinosaurs';
+import { registerDinosaurInteractionHandlers } from './dinosaurs';
 import { registerRobotAbilities } from './robots';
-import { registerRobotPromptContinuations } from './robots';
-import { registerWizardAbilities, registerWizardPromptContinuations } from './wizards';
+import { registerRobotInteractionHandlers } from './robots';
+import { registerWizardAbilities, registerWizardInteractionHandlers } from './wizards';
 import { registerZombieAbilities } from './zombies';
-import { registerZombiePromptContinuations } from './zombies';
+import { registerZombieInteractionHandlers } from './zombies';
 import { registerTricksterAbilities } from './tricksters';
-import { registerTricksterPromptContinuations } from './tricksters';
+import { registerTricksterInteractionHandlers } from './tricksters';
 import { registerGhostAbilities } from './ghosts';
-import { registerGhostPromptContinuations } from './ghosts';
+import { registerGhostInteractionHandlers } from './ghosts';
 import { registerBearCavalryAbilities } from './bear_cavalry';
-import { registerBearCavalryPromptContinuations } from './bear_cavalry';
+import { registerBearCavalryInteractionHandlers } from './bear_cavalry';
 import { registerSteampunkAbilities } from './steampunks';
-import { registerSteampunkPromptContinuations } from './steampunks';
-import { registerKillerPlantAbilities, registerKillerPlantPromptContinuations } from './killer_plants';
-import { registerInnsmouthAbilities, registerInnsmouthPromptContinuations } from './innsmouth';
+import { registerSteampunkInteractionHandlers } from './steampunks';
+import { registerKillerPlantAbilities, registerKillerPlantInteractionHandlers } from './killer_plants';
+import { registerInnsmouthAbilities, registerInnsmouthInteractionHandlers } from './innsmouth';
 import { registerMiskatonicAbilities } from './miskatonic';
-import { registerMiskatonicPromptContinuations } from './miskatonic';
+import { registerMiskatonicInteractionHandlers } from './miskatonic';
 import { registerCthulhuAbilities } from './cthulhu';
-import { registerCthulhuPromptContinuations } from './cthulhu';
+import { registerCthulhuInteractionHandlers } from './cthulhu';
 import { registerElderThingAbilities } from './elder_things';
-import { registerElderThingPromptContinuations } from './elder_things';
-import { registerBaseAbilities, registerBasePromptContinuations } from '../domain/baseAbilities';
-import { registerMultiBaseScoringContinuation } from '../domain/index';
+import { registerElderThingInteractionHandlers } from './elder_things';
+import { registerBaseAbilities, registerBaseInteractionHandlers } from '../domain/baseAbilities';
+import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
 import { clearPowerModifierRegistry } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
@@ -46,50 +46,50 @@ export function initAllAbilities(): void {
     if (initialized) return;
     initialized = true;
 
-    // 基础�?8 派系
+    // 基础�?8 派系
     registerAlienAbilities();
-    registerAlienPromptContinuations();
+    registerAlienInteractionHandlers();
     registerPirateAbilities();
-    registerPiratePromptContinuations();
+    registerPirateInteractionHandlers();
     registerNinjaAbilities();
-    registerNinjaPromptContinuations();
+    registerNinjaInteractionHandlers();
     registerDinosaurAbilities();
-    registerDinosaurPromptContinuations();
+    registerDinosaurInteractionHandlers();
     registerRobotAbilities();
-    registerRobotPromptContinuations();
+    registerRobotInteractionHandlers();
     registerWizardAbilities();
-    registerWizardPromptContinuations();
+    registerWizardInteractionHandlers();
     registerZombieAbilities();
-    registerZombiePromptContinuations();
+    registerZombieInteractionHandlers();
     registerTricksterAbilities();
-    registerTricksterPromptContinuations();
+    registerTricksterInteractionHandlers();
 
     // 基地能力
     registerBaseAbilities();
-    registerBasePromptContinuations();
+    registerBaseInteractionHandlers();
 
-    // 多基地计�?Prompt 继续函数
-    registerMultiBaseScoringContinuation();
+    // 多基地计�?Prompt 继续函数
+    registerMultiBaseScoringInteractionHandler();
 
     // 扩展派系
     registerGhostAbilities();
-    registerGhostPromptContinuations();
+    registerGhostInteractionHandlers();
     registerBearCavalryAbilities();
-    registerBearCavalryPromptContinuations();
+    registerBearCavalryInteractionHandlers();
     registerSteampunkAbilities();
-    registerSteampunkPromptContinuations();
+    registerSteampunkInteractionHandlers();
     registerKillerPlantAbilities();
-    registerKillerPlantPromptContinuations();
+    registerKillerPlantInteractionHandlers();
 
-    // 克苏鲁扩�?
+    // 克苏鲁扩�?
     registerInnsmouthAbilities();
-    registerInnsmouthPromptContinuations();
+    registerInnsmouthInteractionHandlers();
     registerMiskatonicAbilities();
-    registerMiskatonicPromptContinuations();
+    registerMiskatonicInteractionHandlers();
     registerCthulhuAbilities();
-    registerCthulhuPromptContinuations();
+    registerCthulhuInteractionHandlers();
     registerElderThingAbilities();
-    registerElderThingPromptContinuations();
+    registerElderThingInteractionHandlers();
 
     // 持续力量修正
     registerAllOngoingModifiers();

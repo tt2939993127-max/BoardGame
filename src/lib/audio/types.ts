@@ -48,14 +48,8 @@ export interface BgmDefinition {
 
 export type BgmGroupId = 'normal' | 'battle' | (string & {});
 
-/** 音效播放时机 */
-export type AudioTiming = 'immediate' | 'on-impact';
-
-/** feedbackResolver 的返回值：显式声明 key + timing */
-export interface EventSoundResult {
-    key: SoundKey;
-    timing: AudioTiming;
-}
+/** feedbackResolver 的返回值：音效 key */
+export type EventSoundResult = SoundKey;
 
 export interface AudioEvent {
     type: string;
@@ -68,10 +62,9 @@ export interface AudioEvent {
 }
 
 /**
- * 统一反馈解析器：每个事件必须显式声明 key + timing
- * - 返回 { key, timing: 'immediate' }：框架立即播放
- * - 返回 { key, timing: 'on-impact' }：框架写入 DeferredSoundMap，由动画层消费
- * - 返回 null：无音效
+ * 统一反馈解析器：仅处理无动画的事件音效
+ * - 返回 SoundKey：框架立即播放
+ * - 返回 null：无音效（有动画的事件由动画层自行解析 key 并在 onImpact 播放）
  */
 export type FeedbackResolver = (
     event: AudioEvent,

@@ -37,6 +37,51 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       type: 'card',
       count: 1,
     },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const targetCardId = ctx.payload.targetCardId as string | undefined;
+        if (!targetCardId) {
+          return { valid: false, error: '必须选择弃牌堆中的城塞单位' };
+        }
+        
+        // 检查战场上是否有友方城塞单位
+        let hasFortressOnBoard = false;
+        for (let row = 0; row < ctx.core.board.length; row++) {
+          for (let col = 0; col < (ctx.core.board[0]?.length ?? 0); col++) {
+            const u = ctx.core.board[row]?.[col]?.unit;
+            if (u && u.owner === ctx.playerId && u.card.id.includes('fortress')) {
+              hasFortressOnBoard = true;
+              break;
+            }
+          }
+          if (hasFortressOnBoard) break;
+        }
+        
+        if (!hasFortressOnBoard) {
+          return { valid: false, error: '战场上没有友方城塞单位' };
+        }
+        
+        const fpPlayer = ctx.core.players[ctx.playerId];
+        const fpCard = fpPlayer.discard.find(c => c.id === targetCardId);
+        
+        if (!fpCard || fpCard.cardType !== 'unit') {
+          return { valid: false, error: '弃牌堆中没有该单位卡' };
+        }
+        
+        if (!(fpCard as import('./types').UnitCard).id.includes('fortress')) {
+          return { valid: false, error: '只能拿取城塞单位' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.fortressPower',
+      buttonVariant: 'secondary',
+    },
   },
 
   // ============================================================================
@@ -52,6 +97,22 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
     effects: [
       { type: 'custom', actionId: 'guidance_draw' },
     ],
+    validation: {
+      requiredPhase: 'summon',
+      customValidator: (ctx) => {
+        const guidancePlayer = ctx.core.players[ctx.playerId];
+        if (guidancePlayer.deck.length === 0) {
+          return { valid: false, error: '牌组为空' };
+        }
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'summon',
+      buttonLabel: 'abilityButtons.guidance',
+      buttonVariant: 'secondary',
+    },
   },
 
   {
@@ -113,6 +174,44 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       type: 'card',
       count: 1,
     },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const healDiscardId = ctx.payload.targetCardId as string | undefined;
+        if (!healDiscardId) {
+          return { valid: false, error: '必须选择要弃除的手牌' };
+        }
+        
+        const healPlayer = ctx.core.players[ctx.playerId];
+        const healCard = healPlayer.hand.find(c => c.id === healDiscardId);
+        if (!healCard) {
+          return { valid: false, error: '手牌中没有该卡牌' };
+        }
+        
+        // 检查目标是否为友方士兵或英雄
+        const healTargetPos = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!healTargetPos) {
+          return { valid: false, error: '必须选择攻击目标' };
+        }
+        
+        const healTarget = ctx.core.board[healTargetPos.row]?.[healTargetPos.col]?.unit;
+        if (!healTarget || healTarget.owner !== ctx.playerId) {
+          return { valid: false, error: '目标必须是友方单位' };
+        }
+        
+        if (healTarget.card.unitClass !== 'common' && healTarget.card.unitClass !== 'champion') {
+          return { valid: false, error: '目标必须是士兵或英雄' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.healing',
+      buttonVariant: 'secondary',
+    },
   },
 
   // ============================================================================
@@ -173,6 +272,44 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'card',
       count: -1, // 任意数量
+    },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const discardCardIds = ctx.payload.discardCardIds as string[] | undefined;
+        if (!discardCardIds || discardCardIds.length === 0) {
+          return { valid: false, error: '必须选择要弃除的卡牌' };
+        }
+        
+        const haPlayer = ctx.core.players[ctx.playerId];
+        const names = new Set<string>();
+        
+        for (const cardId of discardCardIds) {
+          const card = haPlayer.hand.find(c => c.id === cardId);
+          if (!card || card.cardType !== 'unit') {
+            return { valid: false, error: '只能弃除单位卡' };
+          }
+          
+          const unitCard = card as import('./types').UnitCard;
+          if (unitCard.name === ctx.sourceUnit.card.name) {
+            return { valid: false, error: '不能弃除同名单位' };
+          }
+          
+          if (names.has(unitCard.name)) {
+            return { valid: false, error: '不能弃除多张同名单位' };
+          }
+          
+          names.add(unitCard.name);
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.holyArrow',
+      buttonVariant: 'secondary',
     },
   },
 ];

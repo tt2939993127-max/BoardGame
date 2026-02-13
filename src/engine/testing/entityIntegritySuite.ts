@@ -96,7 +96,7 @@ export function createRefChainSuite<TDef>(config: RefChainSuiteConfig<TDef>): vo
       const errors = validateReferences({ chains, registries: config.registries });
       if (errors.length > 0) {
         const detail = errors.map(e => `  ${e.sourceId} → ${e.refId}`).join('\n');
-        fail(`${errors.length} 个未处理的引用:\n${detail}`);
+        expect(errors).toEqual([]); // 使用 expect 而非 fail
       }
     });
 
@@ -115,7 +115,7 @@ export function createRefChainSuite<TDef>(config: RefChainSuiteConfig<TDef>): vo
           const referencedIds = new Set(chains.map(c => c.refId));
           const stale = [...wl.ids].filter(id => !referencedIds.has(id));
           if (stale.length > 0) {
-            fail(`白名单中存在过时条目: ${stale.join(', ')}`);
+            expect(stale).toEqual([]); // 使用 expect 而非 fail
           }
         });
       }
@@ -173,7 +173,7 @@ export function createTriggerPathSuite<TDef>(config: TriggerPathSuiteConfig<TDef
         .filter(a => !config.confirmed.has(config.getId(a)) && !config.todo.has(config.getId(a)))
         .map(a => `  未声明: ${config.getId(a)}（${config.getLabel(a)}）`);
       if (undeclared.length > 0) {
-        fail(`${undeclared.length} 个缺少路径声明:\n${undeclared.join('\n')}`);
+        expect(undeclared).toEqual([]); // 使用 expect 而非 fail
       }
     });
 
@@ -209,7 +209,7 @@ export function createTriggerPathSuite<TDef>(config: TriggerPathSuiteConfig<TDef
       it('INCOMPLETE_BRANCHES 中所有 ID 都在 CONFIRMED 中', () => {
         const stale = [...ib.keys()].filter(id => !config.confirmed.has(id));
         if (stale.length > 0) {
-          fail(`INCOMPLETE_BRANCHES 包含非 CONFIRMED 项: ${stale.join(', ')}`);
+          expect(stale).toEqual([]); // 使用 expect 而非 fail
         }
       });
     }

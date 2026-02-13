@@ -140,7 +140,7 @@ export class SystemRegistry<TCore = unknown> {
 export const SYSTEM_IDS = {
     FLOW: 'flow',
     UNDO: 'undo',
-    PROMPT: 'prompt',
+    INTERACTION: 'interaction',
     LOG: 'log',
     EVENT_STREAM: 'eventStream',
     ACTION_LOG: 'actionLog',

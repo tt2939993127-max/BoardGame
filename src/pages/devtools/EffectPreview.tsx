@@ -112,11 +112,9 @@ const EffectPreview: React.FC = () => {
   useEffect(() => {
     const initAudio = async () => {
       try {
-        console.log('[EffectPreview] 开始初始化音频系统');
-        await loadCommonAudioRegistry();
-        console.log('[EffectPreview] 音频注册表加载完成');
+        const registry = await loadCommonAudioRegistry();
+        AudioManager.registerRegistryEntries(registry.entries, 'common/audio');
         AudioManager.initialize();
-        console.log('[EffectPreview] AudioManager 初始化完成');
       } catch (error) {
         console.error('[EffectPreview] 音频初始化失败:', error);
       }

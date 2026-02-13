@@ -6,14 +6,16 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, getMinionPower, requestChoice, buildMinionTargetOptions } from '../domain/abilityHelpers';
+import { destroyMinion, getMinionPower, buildMinionTargetOptions } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDiscardedEvent, CardsDrawnEvent, OngoingDetachedEvent, SmashUpEvent, LimitModifiedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
-import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getCardDef, getBaseDef } from '../data/cards';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import type { MatchState } from '../../../engine/types';
 
 /** 侏儒 onPlay：消灭力量低于己方随从数量的随从 */
 function tricksterGnome(ctx: AbilityContext): AbilityResult {
@@ -35,13 +37,11 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'trickster_gnome',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要消灭的随从（力量低于己方随从数量）', options: buildMinionTargetOptions(options) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `trickster_gnome_${ctx.now}`, ctx.playerId,
+        '选择要消灭的随从（力量低于己方随从数量）', buildMinionTargetOptions(options), 'trickster_gnome',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 带走宝物 onPlay：每个其他玩家随机弃两张手牌 */
@@ -99,13 +99,11 @@ function tricksterDisenchant(ctx: AbilityContext): AbilityResult {
     const options = targets.map((t, i) => ({
         id: `action-${i}`, label: t.label, value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
     }));
-    return {
-        events: [requestChoice({
-            abilityId: 'trickster_disenchant',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要消灭的行动牌', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `trickster_disenchant_${ctx.now}`, ctx.playerId,
+        '选择要消灭的行动牌', options as any[], 'trickster_disenchant',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 注册诡术师派系所有能�?*/
@@ -124,37 +122,36 @@ export function registerTricksterAbilities(): void {
     registerTricksterOngoingEffects();
 }
 
-/** 注册诡术师派系的 Prompt 继续函数 */
-export function registerTricksterPromptContinuations(): void {
-    // 侏儒：选择目标后消�?
-    registerPromptContinuation('trickster_gnome', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+/** 注册诡术师派系的交互解决处理函数 */
+export function registerTricksterInteractionHandlers(): void {
+    // 侏儒：选择目标后消灭
+    registerInteractionHandler('trickster_gnome', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
-        if (!target) return [];
-        return [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'trickster_gnome', ctx.now)];
+        if (!target) return undefined;
+        return { state, events: [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'trickster_gnome', timestamp)] };
     });
 
     // 幻想破碎：选择行动卡后消灭
-    registerPromptContinuation('trickster_disenchant', (ctx) => {
-        const { cardUid, defId, ownerId } = ctx.selectedValue as { cardUid: string; defId: string; ownerId: string };
-        return [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'trickster_disenchant' }, timestamp: ctx.now }];
+    registerInteractionHandler('trickster_disenchant', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { cardUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
+        return { state, events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'trickster_disenchant' }, timestamp }] };
     });
 
-    // 沉睡印记：选择对手后执�?
-    registerPromptContinuation('trickster_mark_of_sleep', (ctx) => {
-        const { pid } = ctx.selectedValue as { pid: string };
-        const currentLimit = ctx.state.players[pid].actionLimit;
-        if (currentLimit <= 0) return [];
-        return [{
+    // 沉睡印记：选择对手后执行
+    registerInteractionHandler('trickster_mark_of_sleep', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { pid } = value as { pid: string };
+        const currentLimit = state.core.players[pid].actionLimit;
+        if (currentLimit <= 0) return { state, events: [] };
+        return { state, events: [{
             type: SU_EVENTS.LIMIT_MODIFIED,
             payload: { playerId: pid, limitType: 'action' as const, delta: -currentLimit, reason: 'trickster_mark_of_sleep' },
-            timestamp: ctx.now,
-        }];
+            timestamp,
+        }] };
     });
 }
-
 
 /** 小妖�?onDestroy：被消灭后抽1张牌 + 每个对手随机�?张牌 */
 function tricksterGremlinOnDestroy(ctx: AbilityContext): AbilityResult {
@@ -197,13 +194,11 @@ function tricksterMarkOfSleep(ctx: AbilityContext): AbilityResult {
     const options = opponents.map((pid, i) => ({
         id: `opp-${i}`, label: `对手 ${pid}`, value: { pid },
     }));
-    return {
-        events: [requestChoice({
-            abilityId: 'trickster_mark_of_sleep',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个对手（其下回合不能打行动卡）', options },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `trickster_mark_of_sleep_${ctx.now}`, ctx.playerId,
+        '选择一个对手（其下回合不能打行动卡）', options as any[], 'trickster_mark_of_sleep',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 function executeMarkOfSleep(ctx: AbilityContext, targetPid: string): AbilityResult {

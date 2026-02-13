@@ -273,19 +273,19 @@ const SUMMON_FEEDBACK: FeedbackPack = {
   shake: { intensity: 'normal', type: 'impact', timing: 'on-impact' },
 };
 
-/** 攻击气浪反馈：冲击瞬间播放音效（从 DeferredSoundMap 取，预览模式 fallback 到固定 key）+ 震动 */
+/** 攻击气浪反馈：冲击瞬间播放音效（从 FX params.soundKey 读取，fallback 到近战音效）+ 震动 */
 const COMBAT_SHOCKWAVE_FEEDBACK: FeedbackPack = {
   sound: { 
     timing: 'on-impact', 
-    source: 'deferred',
-    fallbackKey: MELEE_ATTACK_FALLBACK_KEY, // 预览模式使用近战音效作为 fallback
+    source: 'params',
+    key: MELEE_ATTACK_FALLBACK_KEY, // params.soundKey 不存在时的 fallback
   },
   shake: { intensity: 'normal', type: 'hit', timing: 'on-impact' },
 };
 
-/** 受伤闪光反馈：冲击瞬间播放音效（从 DeferredSoundMap 取）+ 震动 */
+/** 受伤闪光反馈：冲击瞬间播放音效（从 FX params.soundKey 读取）+ 震动 */
 const COMBAT_DAMAGE_FEEDBACK: FeedbackPack = {
-  sound: { timing: 'on-impact', source: 'deferred' },
+  sound: { timing: 'on-impact', source: 'params' },
   shake: { intensity: 'normal', type: 'hit', timing: 'on-impact' },
 };
 

@@ -11,9 +11,9 @@ const buildContext = () => ({
 describe('audioRouting', () => {
     it('event.sfxKey 优先', () => {
         const event: AudioEvent = { type: 'X', sfxKey: 'custom' };
-        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'fallback', timing: 'immediate' }) };
+        const config: GameAudioConfig = { feedbackResolver: () => 'fallback' };
         const result = resolveFeedback(event, buildContext(), config);
-        expect(result?.key).toBe('custom');
+        expect(result).toBe('custom');
     });
 
     it('feedbackResolver 返回 null 则静音', () => {
@@ -23,32 +23,32 @@ describe('audioRouting', () => {
         expect(result).toBeNull();
     });
 
-    it('feedbackResolver 结果直接返回（含 timing）', () => {
+    it('feedbackResolver 结果直接返回', () => {
         const event: AudioEvent = { type: 'X' };
-        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'resolved', timing: 'on-impact' }) };
+        const config: GameAudioConfig = { feedbackResolver: () => 'resolved' };
         const result = resolveFeedback(event, buildContext(), config);
-        expect(result).toEqual({ key: 'resolved', timing: 'on-impact' });
+        expect(result).toBe('resolved');
     });
 
     it('audioKey 优先级最高', () => {
         const event: AudioEvent = { type: 'X', audioKey: 'force' };
-        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'fallback', timing: 'immediate' }) };
+        const config: GameAudioConfig = { feedbackResolver: () => 'fallback' };
         const result = resolveFeedback(event, buildContext(), config, () => 'category');
-        expect(result?.key).toBe('force');
+        expect(result).toBe('force');
     });
 
     it('audioCategory 命中时返回分类 key', () => {
         const event: AudioEvent = { type: 'X', audioCategory: { group: 'ui', sub: 'click' } };
-        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'fallback', timing: 'immediate' }) };
+        const config: GameAudioConfig = { feedbackResolver: () => 'fallback' };
         const result = resolveFeedback(event, buildContext(), config, () => 'category');
-        expect(result?.key).toBe('category');
+        expect(result).toBe('category');
     });
 
     it('audioCategory 未命中时回退到 feedbackResolver', () => {
         const event: AudioEvent = { type: 'X', audioCategory: { group: 'ui' } };
-        const config: GameAudioConfig = { feedbackResolver: () => ({ key: 'resolved', timing: 'immediate' }) };
+        const config: GameAudioConfig = { feedbackResolver: () => 'resolved' };
         const result = resolveFeedback(event, buildContext(), config, () => null);
-        expect(result?.key).toBe('resolved');
+        expect(result).toBe('resolved');
     });
 
     it('resolveBgmKey 优先匹配规则，否则 fallback', () => {

@@ -158,8 +158,20 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
     }
   }
   if (abilities.includes('withdraw') && currentPhase === 'attack') {
+    // withdraw 需要充能或魔力，检查是否至少有一个可用
+    const hasCharge = (unit.boosts ?? 0) >= 1;
+    const hasMagic = core.players[myPlayerId as PlayerId].magic >= 1;
+    const canUseWithdraw = hasCharge || hasMagic;
+    
     buttons.push(
-      <GameButton key="withdraw" onClick={() => setWithdrawMode({ sourceUnitId: unit.cardId, step: 'selectCost' })} variant="secondary" size="md">
+      <GameButton 
+        key="withdraw" 
+        onClick={() => setWithdrawMode({ sourceUnitId: unit.cardId, step: 'selectCost' })} 
+        variant="secondary" 
+        size="md"
+        disabled={!canUseWithdraw}
+        title={!canUseWithdraw ? '需要至少1点充能或1点魔力' : undefined}
+      >
         {t('abilityButtons.withdraw')}
       </GameButton>
     );

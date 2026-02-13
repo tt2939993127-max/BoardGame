@@ -84,12 +84,9 @@ const deriveStepState = (manifest: TutorialManifest, stepIndex: number): Tutoria
         step,
         manifestAllowManualSkip: manifest.allowManualSkip,
         manifestRandomPolicy: manifest.randomPolicy,
-        allowedCommands: step.allowedCommands,
-        advanceOnEvents: step.advanceOnEvents,
         randomPolicy: deriveRandomPolicy(step, manifest),
         aiActions: step.aiActions ? [...step.aiActions] : undefined,
         allowManualSkip: deriveManualSkip(step, manifest),
-        waitForAnimation: step.waitForAnimation,
         pendingAnimationAdvance: false,
     };
 };
@@ -230,8 +227,8 @@ const shouldBlockCommand = (tutorial: TutorialState, command: Command): boolean 
     if (command.type.startsWith('SYS_')) return false;
 
     // 白名单模式：只允许列出的命令
-    if (tutorial.allowedCommands) {
-        return !tutorial.allowedCommands.includes(command.type);
+    if (tutorial.step?.allowedCommands) {
+        return !tutorial.step.allowedCommands.includes(command.type);
     }
     // infoStep 模式：阻止所有非系统命令
     if (tutorial.step?.infoStep) {
@@ -333,7 +330,7 @@ export function createTutorialSystem<TCore>(): EngineSystem<TCore> {
                 return;
             }
 
-            const matched = shouldAdvance(events, state.sys.tutorial.advanceOnEvents);
+            const matched = shouldAdvance(events, state.sys.tutorial.step?.advanceOnEvents);
 
             if (!matched) {
                 // 事件未匹配：检查 stepValidator 是否判定当前步骤不可满足
@@ -348,7 +345,7 @@ export function createTutorialSystem<TCore>(): EngineSystem<TCore> {
             const timestamp = resolveTimestamp(command, events);
 
             // 如果当前步骤需要等待动画，不立即推进，设置等待标志
-            if (state.sys.tutorial.waitForAnimation) {
+            if (state.sys.tutorial.step?.waitForAnimation) {
                 const pendingState: TutorialState = {
                     ...state.sys.tutorial,
                     pendingAnimationAdvance: true,

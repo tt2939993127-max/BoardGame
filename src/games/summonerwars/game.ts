@@ -17,16 +17,13 @@ import {
     createResponseWindowSystem,
     createTutorialSystem,
     createUndoSystem,
-    CHEAT_COMMANDS,
-    FLOW_COMMANDS,
-    UNDO_COMMANDS,
     type CheatResourceModifier,
 } from '../../engine';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from './domain';
 import type { GamePhase, PlayerId, SummonerWarsCore } from './domain/types';
 import { abilityRegistry } from './domain/abilities';
 import { summonerWarsFlowHooks } from './domain/flowHooks';
-import { registerCardPreviewGetter } from '../../components/game/cardPreviewRegistry';
+import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getSummonerWarsCardPreviewMeta, getSummonerWarsCardPreviewRef } from './ui/cardPreviewHelper';
 
 // ============================================================================
@@ -361,6 +358,7 @@ const systems = [
         formatEntry: formatSummonerWarsActionEntry,
     }),
     createUndoSystem({
+        maxSnapshots: 3,
         snapshotCommandAllowlist: ACTION_ALLOWLIST,
     }),
     createRematchSystem(),
@@ -391,17 +389,6 @@ export const SummonerWars = createGameAdapter({
         SW_COMMANDS.PLAY_EVENT,
         SW_COMMANDS.BLOOD_SUMMON_STEP,
         SW_COMMANDS.ACTIVATE_ABILITY,
-        FLOW_COMMANDS.ADVANCE_PHASE,
-        UNDO_COMMANDS.REQUEST_UNDO,
-        UNDO_COMMANDS.APPROVE_UNDO,
-        UNDO_COMMANDS.REJECT_UNDO,
-        UNDO_COMMANDS.CANCEL_UNDO,
-        CHEAT_COMMANDS.SET_RESOURCE,
-        CHEAT_COMMANDS.ADD_RESOURCE,
-        CHEAT_COMMANDS.SET_PHASE,
-        CHEAT_COMMANDS.DEAL_CARD_BY_INDEX,
-        CHEAT_COMMANDS.DEAL_CARD_BY_ATLAS_INDEX,
-        CHEAT_COMMANDS.SET_STATE,
     ],
 });
 

@@ -66,23 +66,27 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards' } as any } as any;
+    return { core, sys: { phase: 'playCards', interaction: { queue: [] } } as any } as any;
 }
 
 const defaultRandom: RandomFn = { shuffle: (arr: any[]) => [...arr], random: () => 0.5 };
 
-function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number) {
+    const matchState = makeMatchState(state);
+    const events = execute(matchState, {
         type: SU_COMMANDS.PLAY_MINION, playerId,
         payload: { cardUid, baseIndex },
     } as any, defaultRandom);
+    return { events, matchState };
 }
 
-function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number) {
+    const matchState = makeMatchState(state);
+    const events = execute(matchState, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, defaultRandom);
+    return { events, matchState };
 }
 
 // ============================================================================
@@ -192,11 +196,11 @@ describe('僵尸派系能力', () => {
             bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
-        // 单张随从时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_digger');
+        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
+        // 单张随从时创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_grave_digger');
     });
 
     it('zombie_grave_digger: 弃牌堆无随从时不产生事件', () => {
@@ -211,7 +215,7 @@ describe('僵尸派系能力', () => {
             bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
+        const { events } = execPlayMinion(state, '0', 'm1', 0);
         const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
         expect(recoverEvents.length).toBe(0);
     });
@@ -228,10 +232,10 @@ describe('僵尸派系能力', () => {
             bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
         });
 
-        const events = execPlayMinion(state, '0', 'm1', 0);
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_walker');
+        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_walker');
     });
 
     it('zombie_grave_robbing: 多张弃牌时创建 Prompt', () => {
@@ -248,11 +252,11 @@ describe('僵尸派系能力', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        // 多张弃牌 → Prompt 选择
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_robbing');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 多张弃牌 → 创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_grave_robbing');
     });
 
     it('zombie_grave_robbing: 单张弃牌时创建 Prompt', () => {
@@ -266,11 +270,11 @@ describe('僵尸派系能力', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        // 单张弃牌时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_robbing');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 单张弃牌时创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_grave_robbing');
     });
 
     it('zombie_not_enough_bullets: 多组同名随从时创建 Prompt', () => {
@@ -289,11 +293,11 @@ describe('僵尸派系能力', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        // 2组不同 defId → Prompt 选择
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_not_enough_bullets');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 2组不同 defId → 创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_not_enough_bullets');
     });
 
     it('zombie_not_enough_bullets: 单组同名随从时创建 Prompt', () => {
@@ -311,11 +315,11 @@ describe('僵尸派系能力', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        // 单组同名随从时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_not_enough_bullets');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 单组同名随从时创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_not_enough_bullets');
     });
 
     it('zombie_lend_a_hand: 弃牌堆洗回牌库', () => {
@@ -333,7 +337,7 @@ describe('僵尸派系能力', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events } = execPlayAction(state, '0', 'a1');
         const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
         expect(reshuffleEvents.length).toBe(1);
         // 牌库应包含原牌库 + 弃牌堆的所有卡
@@ -373,7 +377,7 @@ describe('僵尸派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events } = execPlayAction(state, '0', 'a1');
         const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(limitEvents.length).toBe(1);
         expect((limitEvents[0] as any).payload.limitType).toBe('minion');
@@ -392,7 +396,7 @@ describe('僵尸派系能力', () => {
             ],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events } = execPlayAction(state, '0', 'a1');
         const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(limitEvents.length).toBe(0);
     });
@@ -412,10 +416,10 @@ describe('僵尸派系能力', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_mall_crawl');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_mall_crawl');
     });
 });
 
@@ -442,7 +446,7 @@ describe('巫师派系能力（新增）', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events } = execPlayAction(state, '0', 'a1');
 
         // 应有：ACTION_PLAYED + HAND_SHUFFLED_INTO_DECK + CARDS_DRAWN + LIMIT_MODIFIED
         const shuffleEvents = events.filter(e => e.type === SU_EVENTS.HAND_SHUFFLED_INTO_DECK);
@@ -481,7 +485,7 @@ describe('巫师派系能力（新增）', () => {
             },
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events } = execPlayAction(state, '0', 'a1');
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
         // 只有 h1 + d1 = 2 张可抽
         expect((drawEvents[0] as any).payload.count).toBe(2);
@@ -511,10 +515,10 @@ describe('巫师派系能力（新增）', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('wizard_sacrifice');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('wizard_sacrifice');
     });
 
     it('wizard_sacrifice: 没有己方随从时不产生事件', () => {
@@ -531,7 +535,7 @@ describe('巫师派系能力（新增）', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
+        const { events } = execPlayAction(state, '0', 'a1');
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
         expect(destroyEvents.length).toBe(0);
@@ -557,10 +561,10 @@ describe('巫师派系能力（新增）', () => {
             }],
         });
 
-        const events = execPlayAction(state, '0', 'a1');
-        // 单个己方随从时创建 Prompt
-        const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-        expect(promptEvents.length).toBe(1);
-        expect((promptEvents[0] as any).payload.abilityId).toBe('wizard_sacrifice');
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 单个己方随从时创建 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('wizard_sacrifice');
     });
 });

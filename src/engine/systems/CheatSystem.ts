@@ -6,6 +6,7 @@
 
 import type { PlayerId } from '../types';
 import type { EngineSystem, HookResult } from './types';
+import { resolveDevFlag } from '../env';
 import { SYSTEM_IDS } from './types';
 
 // ============================================================================
@@ -161,7 +162,7 @@ function deepMerge(
 // ============================================================================
 
 export interface CheatSystemConfig {
-    /** 用于测试或特殊环境的开发模式覆盖（默认使用 import.meta.env.DEV） */
+    /** 用于测试或特殊环境的开发模式覆盖 */
     devOverride?: boolean;
 }
 
@@ -169,10 +170,7 @@ export function createCheatSystem<TCore>(
     modifier?: CheatResourceModifier<TCore>,
     config: CheatSystemConfig = {}
 ): EngineSystem<TCore> {
-    const isDev = config.devOverride ?? (
-        (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true
-        || (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production')
-    );
+    const isDev = resolveDevFlag(config.devOverride);
     return {
         id: SYSTEM_IDS.CHEAT,
         name: 'Cheat 系统',

@@ -17,7 +17,12 @@
 ## 引擎层系统清单
 
 - `engine/systems/` - Flow/Interaction/Undo/Log/EventStream/ResponseWindow/Tutorial/Rematch/Cheat/ActionLog 等跨游戏系统
-- `engine/primitives/` - condition/effects/dice/resources/target/zones/expression/visual/actionRegistry 等引擎原语模块（纯函数/注册器）
+- `engine/primitives/` - condition/effects/dice/resources/target/zones/expression/visual/actionRegistry/ability/tags/modifier/attribute/uiHints 等引擎原语模块（纯函数/注册器）
+  - `ability.ts` — **AbilityRegistry + AbilityExecutorRegistry**：通用能力定义注册表和执行器注册表，替代各游戏独立实现的 abilityRegistry/abilityResolver/CombatAbilityManager 中的注册+查找部分。附带 `checkAbilityCost`、`filterByTags`、`checkAbilityCondition` 可用性工具。新游戏必须使用此框架而非自行实现。
+  - `tags.ts` — **层级 Tag 系统**：带层数/持续时间的 tag 容器 + 层级前缀匹配（`Status.Debuff` 匹配 `Status.Debuff.Stun`）。替代 DiceThrone 的 `statusEffects` + `TokenInstance`、SummonerWars 的 `boosts` + `tempAbilities`。API：`createTagContainer/addTag/removeTag/hasTag/matchTags/tickDurations/getRemovable`。
+  - `modifier.ts` — **Modifier 管线**：通用数值修改器栈（flat/percent/override/compute），按优先级排序执行。替代 DiceThrone 的 `DamageModifier`、SmashUp 的 `PowerModifierFn`。API：`createModifierStack/addModifier/applyModifiers/computeModifiedValue/tickModifiers`。
+  - `attribute.ts` — **AttributeSet**：base value + ModifierStack → current value 的属性系统，支持 min/max 钳制。与 `resources.ts` 互补（resources 管消耗品，attribute 管可被 buff 修改的属性）。API：`createAttributeSet/getBase/setBase/getCurrent/addAttributeModifier/tickAttributeModifiers`。
+  - `uiHints.ts` — **UI 提示系统**：轻量级的"可交互实体"查询接口。定义 `UIHint` 类型（type/position/entityId/actions）和 `UIHintProvider<TCore>` 接口，游戏层实现 `getXxxUIHints(core, filter)` 函数返回可操作实体列表（如"可移动的单位"、"可使用技能的单位"），UI 层调用 `extractPositions(hints)` 提取位置并渲染视觉提示。工具函数：`filterUIHints/groupUIHintsByType/extractPositions`。用于替代 UI 层直接计算业务逻辑，保持职责分离。
   - `visual.ts` — **VisualResolver**：基于约定的视觉资源解析器，通过实体定义（如 TokenDef）的 atlasId 自动解析图片/动画资源
   - `actionRegistry.ts` — **ActionHandlerRegistry**：统一的 actionId → handler 注册表，替代 if/else 硬编码分发
 - `engine/testing/` - 测试工具
@@ -35,6 +40,259 @@
   - **示例**：`STATUS_IDS.KNOCKDOWN`、`TOKEN_IDS.TAIJI`、`DICE_FACE_IDS.FIST`。
   - **例外**：国际化 key（如 `t('dice.face.fist')`）、类型定义（如 `type DieFace = 'fist' | ...`）可保留字符串字面量。
 - **新机制先检查引擎**：实现新游戏机制前，必须先检查 `src/engine/primitives/` 或 `src/engine/systems/` 是否已有对应能力；若无，必须先在引擎层抽象通用类型和接口，再在游戏层实现。原因：UGC 游戏需要复用这些能力。充分考虑未来可能性而不是只看当下。
+- **新游戏能力系统必须使用 `ability.ts`（强制）**：禁止自行实现能力注册表或执行器注册表。必须使用 `createAbilityRegistry()` 和 `createAbilityExecutorRegistry()`，每游戏独立实例。详见下方「通用能力框架」节。
+
+---
+
+## 通用能力框架使用规范（强制）
+
+> **新游戏实现能力/技能系统时必读**
+
+引擎层 `src/engine/primitives/ability.ts` 提供通用能力框架，替代各游戏重复实现的注册+查找+可用性检查逻辑。
+
+### 核心组件
+
+- **`AbilityDef<TEffect, TTrigger>`** — 泛型能力定义接口（id, name, trigger, effects, condition, tags, cost, cooldown, variants, meta）。游戏通过泛型参数特化效果和触发类型。
+- **`AbilityRegistry<TDef>`** — 能力定义注册表。`register/get/getAll/getByTag/getByTrigger/getRegisteredIds`。每游戏独立实例。
+- **`AbilityExecutorRegistry<TCtx, TEvent>`** — 执行器注册表。支持纯 id 和 `id+tag` 复合键。`register/resolve/has/getRegisteredIds`。
+- **`checkAbilityCost(def, resources)`** — 检查资源是否满足消耗。
+- **`filterByTags(defs, blockedTags)`** — 过滤被标签阻塞的能力。
+- **`checkAbilityCondition(def, ctx, registry?)`** — 委托 `primitives/condition` 评估能力条件。
+
+### 强制要求
+
+- **禁止自行实现能力注册表**：新游戏必须使用 `createAbilityRegistry()` / `createAbilityExecutorRegistry()`，不得再创建类似 `AbilityRegistry class` 或 `registerAbility()` 全局函数。
+- **禁止全局单例**：每个游戏创建自己的注册表实例，通过构造函数传入 label 以区分。
+- **`getRegisteredIds()` 用于契约测试**：在 `entity-chain-integrity.test.ts` 中验证所有数据定义引用的 abilityId 均已注册。
+- **条件评估复用 `primitives/condition`**：`AbilityDef.condition` 使用 `ConditionNode` 类型，通过 `checkAbilityCondition()` 评估，不再自行实现条件系统。
+- **现有三个游戏是历史实现**：DiceThrone 的 `CombatAbilityManager`、SmashUp 的 `abilityRegistry.ts`、SummonerWars 的 `AbilityRegistry` 是引擎框架出现前的实现，新游戏禁止模仿。
+
+### 两种执行模式
+
+- **声明式（数据驱动）**：定义 `AbilityDef` 数据 → 注册到 `AbilityRegistry` → 用 `primitives/effects` 的 `executeEffects()` 执行效果列表。适合效果结构统一的游戏。
+- **命令式（函数驱动）**：注册 `AbilityExecutor` 函数到 `AbilityExecutorRegistry` → 通过 `resolve(id, tag?)` 查找并调用。适合每个能力逻辑差异大的游戏。
+- 两种模式可混合使用：大多数能力走声明式，复杂能力注册 custom executor。
+
+---
+
+## 技能系统反模式清单（强制禁止）
+
+> **新游戏实现技能系统时必读**。以下模式已在召唤师战争中造成严重维护问题，新游戏必须避免。
+
+### ❌ 禁止：技能验证硬编码（validate.ts 中的 switch-case）
+
+**反模式示例**：
+```typescript
+// ❌ 禁止！每个技能都要手写 case 语句
+function validateActivateAbility(core, playerId, payload) {
+  switch (payload.abilityId) {
+    case 'revive_undead':
+      if (core.phase !== 'summon') return { valid: false, error: '...' };
+      if (!targetCardId) return { valid: false, error: '...' };
+      // ... 20 行验证逻辑
+      return { valid: true };
+    
+    case 'fire_sacrifice_summon':
+      // ... 又是 20 行
+    
+    case 'life_drain':
+      // ... 又是 20 行
+    
+    // ... 30+ 个 case 语句
+  }
+}
+```
+
+**问题**：
+- 新增技能必须修改 validate.ts，违反开闭原则
+- 验证逻辑分散在 30+ 个 case 中，无法复用
+- 无法通过数据驱动自动生成验证规则
+
+**正确做法**：
+```typescript
+// ✅ 技能定义中包含验证规则
+interface AbilityDef {
+  id: string;
+  validation?: {
+    requiredPhase?: GamePhase;
+    requiresTarget?: 'unit' | 'position' | 'card';
+    targetFilter?: ConditionNode;
+    costCheck?: { magic?: number; charge?: number };
+    usesPerTurn?: number;
+    customValidator?: (ctx: ValidationContext) => ValidationResult;
+  };
+}
+
+// ✅ 通用验证函数
+function validateAbility(ability: AbilityDef, ctx: ValidationContext): ValidationResult {
+  if (ability.validation?.requiredPhase && ctx.phase !== ability.validation.requiredPhase) {
+    return { valid: false, error: `只能在${ability.validation.requiredPhase}阶段使用` };
+  }
+  
+  if (ability.validation?.usesPerTurn) {
+    const usageKey = `${ctx.sourceUnitId}:${ability.id}`;
+    const count = ctx.core.abilityUsageCount[usageKey] ?? 0;
+    if (count >= ability.validation.usesPerTurn) {
+      return { valid: false, error: `每回合只能使用${ability.validation.usesPerTurn}次` };
+    }
+  }
+  
+  // ... 其他通用验证
+  
+  if (ability.validation?.customValidator) {
+    return ability.validation.customValidator(ctx);
+  }
+  
+  return { valid: true };
+}
+```
+
+---
+
+### ❌ 禁止：技能按钮硬编码（UI 组件中的 if 语句）
+
+**反模式示例**：
+```typescript
+// ❌ 禁止！每个技能都要手写 if 语句和按钮
+function AbilityButtonsPanel({ unit, core, phase }) {
+  const buttons = [];
+  
+  if (abilities.includes('revive_undead') && phase === 'summon') {
+    const hasUndeadInDiscard = /* ... 10 行检查逻辑 */;
+    if (hasUndeadInDiscard) {
+      buttons.push(<GameButton onClick={...}>复活死灵</GameButton>);
+    }
+  }
+  
+  if (abilities.includes('fire_sacrifice_summon') && phase === 'summon') {
+    const hasOtherUnits = /* ... 10 行检查逻辑 */;
+    if (hasOtherUnits) {
+      buttons.push(<GameButton onClick={...}>火祀召唤</GameButton>);
+    }
+  }
+  
+  // ... 9 个 if 语句
+  
+  return <div>{buttons}</div>;
+}
+```
+
+**问题**：
+- 新增技能必须修改 UI 组件，违反单一职责原则
+- 可用性检查逻辑与 validate.ts 重复
+- 无法自动生成按钮
+
+**正确做法**：
+```typescript
+// ✅ 技能定义中包含 UI 元数据
+interface AbilityDef {
+  id: string;
+  ui?: {
+    requiresButton?: boolean;
+    buttonPhase?: GamePhase;
+    buttonLabel?: string; // i18n key
+    buttonVariant?: 'primary' | 'secondary' | 'danger';
+  };
+}
+
+// ✅ 通用按钮渲染
+function AbilityButtonsPanel({ unit, core, phase, validate }) {
+  const abilities = getUnitAbilities(unit);
+  const buttons = abilities
+    .filter(a => a.ui?.requiresButton && a.ui.buttonPhase === phase)
+    .map(ability => {
+      const validationResult = validate(ability, { unit, core, phase });
+      return (
+        <GameButton
+          key={ability.id}
+          onClick={() => activateAbility(ability.id)}
+          disabled={!validationResult.valid}
+          title={validationResult.error}
+          variant={ability.ui.buttonVariant}
+        >
+          {t(ability.ui.buttonLabel)}
+        </GameButton>
+      );
+    });
+  
+  return <div>{buttons}</div>;
+}
+```
+
+---
+
+### ❌ 禁止：特殊逻辑硬编码（execute.ts 中的 if 语句）
+
+**反模式示例**：
+```typescript
+// ❌ 禁止！在 execute.ts 中硬编码技能逻辑
+function executeAttack(core, attacker, target) {
+  // ... 攻击逻辑
+  
+  const afterAttackEvents = triggerAbilities('afterAttack', ctx);
+  
+  // ❌ 硬编码检查特定技能
+  const hasRapidFireTrigger = afterAttackEvents.some(e =>
+    e.type === 'ABILITY_TRIGGERED' && e.payload.abilityId === 'rapid_fire_extra_attack'
+  );
+  if (hasRapidFireTrigger && attacker.boosts >= 1) {
+    events.push({ type: 'UNIT_CHARGED', payload: { delta: -1 } });
+    events.push({ type: 'EXTRA_ATTACK_GRANTED', payload: { ... } });
+  }
+  
+  return events;
+}
+```
+
+**问题**：
+- 技能逻辑泄漏到 execute.ts，无法复用
+- 新增类似技能必须修改 execute.ts
+- 违反单一职责原则
+
+**正确做法**：
+```typescript
+// ✅ 在 abilityResolver.ts 中注册处理函数
+swCustomActionRegistry.register('rapid_fire_extra_attack', ({ ctx, abilityId }) => {
+  const events: GameEvent[] = [];
+  
+  if ((ctx.sourceUnit.boosts ?? 0) >= 1) {
+    events.push({
+      type: SW_EVENTS.UNIT_CHARGED,
+      payload: { position: ctx.sourcePosition, delta: -1, sourceAbilityId: abilityId },
+      timestamp: ctx.timestamp,
+    });
+    events.push({
+      type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
+      payload: { targetPosition: ctx.sourcePosition, targetUnitId: ctx.sourceUnit.cardId, sourceAbilityId: abilityId },
+      timestamp: ctx.timestamp,
+    });
+  }
+  
+  return events;
+});
+
+// ✅ execute.ts 只负责触发，不关心具体逻辑
+function executeAttack(core, attacker, target) {
+  // ... 攻击逻辑
+  const afterAttackEvents = triggerAbilities('afterAttack', ctx);
+  // 所有 afterAttack 技能的逻辑都在 abilityResolver.ts 中处理
+  return [...attackEvents, ...afterAttackEvents];
+}
+```
+
+---
+
+### 强制要求总结
+
+1. **技能验证必须数据驱动**：在 `AbilityDef.validation` 中声明规则，通用函数自动验证
+2. **技能按钮必须自动生成**：在 `AbilityDef.ui` 中声明元数据，通用组件自动渲染
+3. **技能逻辑必须注册**：复杂逻辑在 `abilityResolver.ts` 或 `customActionHandlers.ts` 中注册，不得在 execute.ts 中硬编码
+4. **新增技能只需添加配置**：不得修改 validate.ts、execute.ts、UI 组件
+
+**参考实现**：
+- ✅ DiceThrone 的 `CombatAbilityManager`（虽然是历史实现，但验证逻辑在能力定义中）
+- ✅ SmashUp 的 `registerAbility()` 注册表模式
+- ❌ SummonerWars 的 validate.ts / AbilityButtonsPanel.tsx（反面教材）
 
 ---
 
@@ -187,9 +445,9 @@ createEffectContractSuite({
 
 ### 音效与动画的分流规则（强制）
 
-- **无动画事件**（投骰子、出牌、阶段切换等）：`feedbackResolver` 返回 `{ key, timing: 'immediate' }`，框架层立即播放。
-- **有动画事件**（伤害、治疗、状态增减、Token 增减）：`feedbackResolver` 返回 `{ key, timing: 'on-impact' }`，框架层将音效写入 `DeferredSoundMap`，动画层在冲击帧调用 `playDeferredSound(eventId)` 消费。
-- **FX 特效绑定音效/震动**：通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 自动在 push（immediate）或渲染器 `onImpact()`（on-impact）时触发。禁止在 `useGameEvents` 中手动传 `params.onImpact` 回调。
+- **无动画事件**（投骰子、出牌、阶段切换等）：`feedbackResolver` 返回 `SoundKey`（纯字符串），框架层立即播放。
+- **有动画事件**（伤害、治疗、状态增减、Token 增减）：`feedbackResolver` **必须返回 `null`**，音效由动画层在冲击帧 `onImpact` 回调中直接 `playSound(resolvedKey)`。
+- **FX 特效绑定音效/震动**：通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明。若音效 key 依赖运行时数据，使用 `FeedbackPack.sound: { source: 'params' }`，由 `useFxBus` 从 `event.params.soundKey` 读取并在 push（immediate）或渲染器 `onImpact()`（on-impact）时触发。禁止在 `useGameEvents` 中手动传 `params.onImpact` 回调。
 - **原因**：引擎管线在一个 batch 内同步生成所有事件，但动画有飞行时间；若在事件生成时立即播音，所有音效会同时响起而动画尚未到达，视听不同步。
 
 ---
@@ -323,3 +581,138 @@ domain/
 - `utils.ts` 从项目初始化时就创建，不等“需要时”再加。
 - 一个函数在 ≥2 个 domain 文件中使用，就必须放在 `utils.ts`。禁止复制粘贴。
 - 引擎层已提供的能力（如 `adapter.ts` 的游戏模式判断）禁止在游戏层重新实现。
+
+
+---
+
+## UI 提示系统使用规范（推荐）
+
+> **适用场景**：需要在 UI 层显示"可交互实体"的视觉提示（如可移动的单位、可使用技能的单位、可放置卡牌的位置）
+
+### 设计原则
+
+- **职责分离**：引擎层定义接口，游戏层实现逻辑，UI 层消费数据
+- **轻量级**：引擎层只有类型定义和工具函数，无具体实现
+- **可选使用**：游戏可以选择不使用此系统
+
+### 核心类型
+
+```typescript
+// 引擎层 (engine/primitives/uiHints.ts)
+interface UIHint {
+  type: 'actionable' | 'ability' | 'target' | 'placement' | 'selection';
+  position: Position;
+  entityId?: string;
+  actions?: string[];  // 可用的操作列表
+  meta?: Record<string, unknown>;
+}
+
+type UIHintProvider<TCore = unknown> = (
+  core: TCore,
+  filter?: UIHintFilter
+) => UIHint[];
+```
+
+### 使用流程
+
+#### 1. 游戏层实现 UIHintProvider
+
+```typescript
+// games/summonerwars/domain/uiHints.ts
+export function getSummonerWarsUIHints(
+  core: SummonerWarsCore,
+  filter?: UIHintFilter
+): UIHint[] {
+  const hints: UIHint[] = [];
+  const playerId = filter?.playerId as PlayerId;
+  const phase = filter?.phase as GamePhase;
+
+  // 可移动/攻击的单位
+  if (!filter?.types || filter.types.includes('actionable')) {
+    hints.push(...getActionableUnitHints(core, playerId, phase));
+  }
+
+  // 可使用技能的单位
+  if (!filter?.types || filter.types.includes('ability')) {
+    hints.push(...getAbilityReadyHints(core, playerId, phase));
+  }
+
+  return hints;
+}
+```
+
+#### 2. UI 层消费数据
+
+```typescript
+// games/summonerwars/ui/useCellInteraction.ts
+import { getSummonerWarsUIHints } from '../domain/uiHints';
+import { extractPositions } from '../../../engine/primitives/uiHints';
+
+const abilityReadyPositions = useMemo(() => {
+  if (!isMyTurn) return [];
+  
+  const hints = getSummonerWarsUIHints(core, {
+    types: ['ability'],
+    playerId: myPlayerId,
+    phase: currentPhase,
+  });
+  
+  return extractPositions(hints);
+}, [core, currentPhase, isMyTurn, myPlayerId]);
+```
+
+#### 3. 渲染视觉提示
+
+```typescript
+// UI 组件中
+{abilityReadyPositions.map(pos => (
+  <AbilityReadyIndicator key={`${pos.row}-${pos.col}`} position={pos} />
+))}
+```
+
+### 工具函数
+
+- `extractPositions(hints)` — 提取位置列表
+- `filterUIHints(hints, filter)` — 过滤提示
+- `groupUIHintsByType(hints)` — 按类型分组
+
+### 优势
+
+1. **职责清晰**：UI 层不包含业务逻辑，只负责渲染
+2. **易于测试**：游戏层的纯函数，可以单独测试
+3. **易于扩展**：新游戏只需实现一个函数
+4. **类型安全**：使用 TypeScript 泛型，编译时检查
+
+### 示例：其他游戏
+
+```typescript
+// Dice Throne
+export function getDiceThroneUIHints(core, filter): UIHint[] {
+  const hints: UIHint[] = [];
+  
+  // 可使用的技能卡
+  if (!filter?.types || filter.types.includes('ability')) {
+    const usableCards = getUsableAbilityCards(core, filter?.playerId);
+    hints.push(...usableCards.map(card => ({
+      type: 'ability' as const,
+      position: { row: 0, col: 0 },
+      entityId: card.id,
+      actions: [card.abilityId],
+    })));
+  }
+  
+  return hints;
+}
+```
+
+### 注意事项
+
+- **不要在 core 中存储 UI 提示**：UI 提示是派生数据，应该在需要时计算
+- **使用 useMemo 缓存**：避免每次渲染都重新计算
+- **支持过滤器**：只计算需要的提示类型，提高性能
+
+### 参考实现
+
+- 引擎层：`src/engine/primitives/uiHints.ts`
+- 召唤师战争：`src/games/summonerwars/domain/uiHints.ts`
+- UI 层使用：`src/games/summonerwars/ui/useCellInteraction.ts`

@@ -366,8 +366,6 @@ const resolveSmashUpSound = (event: AudioEvent): string | null => {
     return EVENT_SOUND_MAP[type] ?? null;
 };
 
-import type { EventSoundResult } from '../../lib/audio/types';
-
 export const SMASHUP_AUDIO_CONFIG: GameAudioConfig = {
     criticalSounds: [
         SELECTION_KEY,
@@ -521,9 +519,8 @@ export const SMASHUP_AUDIO_CONFIG: GameAudioConfig = {
             BGM_FIELD_DAY_INTENSE_KEY,
         ],
     },
-    feedbackResolver: (event): EventSoundResult | null => {
-        const key = resolveSmashUpSound(event);
-        return key ? { key, timing: 'immediate' } : null;
+    feedbackResolver: (event) => {
+        return resolveSmashUpSound(event);
     },
     bgmRules: [
         {

@@ -1,37 +1,37 @@
 /**
- * 架构可视化工具 v7 — C4 模型
+ * 架构可视化工具 v9 — 单主视图 + 子视图
  *
- * L1 System Context: 玩家 → 桌游平台 → 外部系统
- * L2 Container:      6 层容器 + 层间关系
- * L3 Component:      单层内部节点 + 内部边 + 外部接口
- * 深层: 管线 8 步流水线 / 系统插件矩阵
+ * 主视图: 事件驱动分层架构全景 — 节点 + 跨层连线 + 流动动画
+ * 子视图: 管线 / 系统 / 测试双轨 / 用户故事
  * 路由: /dev/arch
  */
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   type ArchNode,
-  NODES, EDGES, LAYER_BANDS, NODE_MAP, GRID,
-  PRIMITIVE_ITEMS, PIPELINE_STEPS, SYSTEM_ITEMS, TEST_FLOW_STEPS,
+  NODES, EDGES, LAYER_BANDS, NODE_MAP,
+  SVG_W, SVG_H, nodeRect, bandRect, edgePath,
+  TRUNK_EDGE_IDS, STORY_EDGE_IDS, storyEdgeColor,
+  PRIMITIVE_ITEMS, PIPELINE_STEPS, SYSTEM_ITEMS,
+  TEST_FLOW_STEPS, E2E_TEST_STEPS, INTEGRITY_TEST_STEPS, USER_STORY_STEPS,
   C4_CONTEXT, C4_CONTEXT_LINKS, CONTAINER_LINKS, LAYER_SUMMARIES,
-  rectEdgePath,
-  layerInternalEdges, layerExternalLinks,
+  OVERVIEW_LAYERS, OVERVIEW_FLOW, OVERVIEW_CROSS_LINKS,
 } from './arch/archData';
 
 // ============================================================================
 // 视图模式
 // ============================================================================
 
-type ViewMode = 'context' | 'container' | 'layer' | 'sub-pipeline' | 'sub-systems' | 'sub-testing';
+type ViewMode = 'overview' | 'sub-pipeline' | 'sub-systems' | 'sub-testing' | 'story' | 'c4-context' | 'c4-container' | 'layer-detail';
 
 // ============================================================================
 // 主组件
 // ============================================================================
 
 const ArchitectureView: React.FC = () => {
-  const [viewMode, setViewMode] = useState<ViewMode>('context');
-  const [activeLayer, setActiveLayer] = useState('ui');
+  const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<ArchNode | null>(null);
+  const [detailLayer, setDetailLayer] = useState<string>('core');
   const svgRef = useRef<SVGSVGElement>(null);
 
   // 选中节点的上下游
@@ -42,12 +42,6 @@ const ArchitectureView: React.FC = () => {
       downstream: EDGES.filter(e => e.from === selectedNode.id).map(e => ({ ...e, node: NODE_MAP.get(e.to)! })),
     };
   }, [selectedNode]);
-
-  const goToLayer = useCallback((layerId: string) => {
-    setActiveLayer(layerId);
-    setSelectedNode(null);
-    setViewMode('layer');
-  }, []);
 
   const handleNodeClick = useCallback((n: ArchNode, evt: React.MouseEvent) => {
     evt.stopPropagation();
@@ -60,396 +54,164 @@ const ArchitectureView: React.FC = () => {
   const closePop = useCallback(() => setSelectedNode(null), []);
 
   // ========================================================================
-  // C4 L1: System Context
+  // 主视图: 简化5层 + 主线流动 + 跨层弧线
   // ========================================================================
-  if (viewMode === 'context') {
-    const boxes: { id: string; x: number; y: number; w: number; h: number }[] = [
-      { id: 'user', x: 200, y: 16, w: 140, h: 52 },
-      { id: 'story', x: 155, y: 100, w: 230, h: 64 },
-      { id: 'platform', x: 90, y: 210, w: 360, h: 90 },
-      { id: 'ext-db', x: 50, y: 360, w: 160, h: 52 },
-      { id: 'ext-cdn', x: 330, y: 360, w: 160, h: 52 },
-    ];
-    const boxMap = new Map(boxes.map(b => [b.id, b]));
-    return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4">
-        <div className="mb-3 flex items-center gap-3">
-          <h1 className="text-lg font-bold text-white">🏗️ C4 L1 · 系统上下文</h1>
-          <span className="text-xs text-slate-500">点击引擎框架 → 查看内部容器</span>
-        </div>
-        <svg viewBox="0 0 540 440" preserveAspectRatio="xMidYMid meet"
-          className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
-          <style>{`
-            @keyframes archFadeIn { from { opacity:0 } }
-            @keyframes flowPulse { 0%,100%{ opacity:.3;r:2 } 50%{ opacity:1;r:3.5 } }
-          `}</style>
-          {C4_CONTEXT.map((ent, idx) => {
-            const b = boxMap.get(ent.id)!;
-            const isSys = ent.type === 'system';
-            const isExt = ent.type === 'external';
-            const isStory = ent.type === 'story';
-            return (
-              <g key={ent.id}
-                style={{ cursor: isSys ? 'pointer' : 'default', animation: `archFadeIn 0.4s ease ${idx * 0.1}s both` }}
-                onClick={isSys ? () => setViewMode('container') : undefined}>
-                <rect x={b.x} y={b.y} width={b.w} height={b.h}
-                  rx={isStory ? 14 : isSys ? 14 : isExt ? 8 : 26}
-                  fill={isSys ? ent.color + '12' : isStory ? ent.color + '18' : '#161b22'}
-                  stroke={ent.color} strokeWidth={isStory ? 2.5 : isSys ? 2.5 : 1.2}
-                  strokeDasharray={isExt ? '6,3' : isStory ? '8,4' : undefined} />
-                <text x={b.x + b.w / 2} y={b.y + (isSys ? 30 : isStory ? 26 : 22)} textAnchor="middle"
-                  fill={ent.color} fontSize={isSys ? 16 : isStory ? 15 : 12} fontWeight={700}>{ent.label}</text>
-                <text x={b.x + b.w / 2} y={b.y + (isSys ? 50 : isStory ? 44 : 38)} textAnchor="middle"
-                  fill="#8b949e" fontSize={9}>{ent.desc}</text>
-                {isStory && (
-                  <text x={b.x + b.w / 2} y={b.y + 58} textAnchor="middle"
-                    fill="#6e7681" fontSize={8}>setup · validate · execute · reduce</text>
-                )}
-                {isSys && (
-                  <text x={b.x + b.w / 2} y={b.y + 68} textAnchor="middle"
-                    fill="#8b949e" fontSize={9}>管线 · 系统插件 · 基础能力 · 测试框架</text>
-                )}
-                {isExt && (
-                  <text x={b.x + b.w / 2} y={b.y + b.h + 12} textAnchor="middle"
-                    fill="#6e7681" fontSize={8}>[外部系统]</text>
-                )}
-                {isSys && (
-                  <text x={b.x + b.w / 2} y={b.y + b.h + 14} textAnchor="middle"
-                    fill={ent.color} fontSize={8} opacity={0.6}>点击查看内部 →</text>
-                )}
-              </g>
-            );
-          })}
-          {C4_CONTEXT_LINKS.map((link, i) => {
-            const fb = boxMap.get(link.from)!, tb = boxMap.get(link.to)!;
-            const sx = fb.x + fb.w / 2, sy = fb.y + fb.h;
-            const tx = tb.x + tb.w / 2, ty = tb.y;
-            return (
-              <g key={i} style={{ animation: `archFadeIn 0.5s ease ${0.3 + i * 0.1}s both` }}>
-                <line x1={sx} y1={sy} x2={tx} y2={ty}
-                  stroke="#6e7681" strokeWidth={1.5} strokeOpacity={0.5} />
-                <circle r="3" fill="#6e7681" style={{ animation: 'flowPulse 2s ease infinite' }}>
-                  <animateMotion dur="1.5s" repeatCount="indefinite" path={`M${sx},${sy} L${tx},${ty}`} />
-                </circle>
-                <text x={(sx + tx) / 2 + 8} y={(sy + ty) / 2} fontSize={9} fill="#6e7681">{link.label}</text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    );
-  }
+  if (viewMode === 'overview') {
+    const layers = OVERVIEW_LAYERS;
+    const flow = OVERVIEW_FLOW;
+    const crossLinks = OVERVIEW_CROSS_LINKS;
 
-  // ========================================================================
-  // C4 L2: Container（层间关系）
-  // ========================================================================
-  if (viewMode === 'container') {
-    const cardW = 480, cardH = 56, gap = 14, startX = 60, startY = 40;
-    const layerCards = LAYER_BANDS.map((band, i) => ({
-      ...band,
-      cx: startX, cy: startY + i * (cardH + gap),
-      w: cardW, h: cardH,
-      summary: LAYER_SUMMARIES[band.id] ?? '',
-      nodeCount: NODES.filter(n => n.layer === band.id).length,
-    }));
-    const cardMap = new Map(layerCards.map(c => [c.id, c]));
-    const vw = startX + cardW + 100, vh = startY + layerCards.length * (cardH + gap) + 20;
-    return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4">
-        <div className="mb-3 flex items-center gap-3">
-          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setViewMode('context')}>← 系统上下文</button>
-          <h1 className="text-lg font-bold text-white">📦 C4 L2 · 容器图</h1>
-          <span className="text-xs text-slate-500">点击容器 → 查看内部组件</span>
-        </div>
-        <svg viewBox={`0 0 ${vw} ${vh}`} preserveAspectRatio="xMidYMid meet"
-          className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
-          <style>{`
-            @keyframes archFadeIn { from { opacity:0 } }
-            @keyframes flowPulse { 0%,100%{ opacity:.3;r:2 } 50%{ opacity:1;r:3.5 } }
-          `}</style>
-          {layerCards.map((card, idx) => (
-            <g key={card.id}
-              style={{ cursor: 'pointer', animation: `archFadeIn 0.4s ease ${idx * 0.08}s both` }}
-              onClick={() => goToLayer(card.id)}>
-              <rect x={card.cx} y={card.cy} width={card.w} height={card.h} rx={10}
-                fill={card.color + '08'} stroke={card.color} strokeOpacity={0.4} strokeWidth={1.5} />
-              <rect x={card.cx + 1} y={card.cy + 6} width={3} height={card.h - 12} rx={1.5}
-                fill={card.color} fillOpacity={0.6} />
-              <text x={card.cx + 16} y={card.cy + 24} fontSize={14} fontWeight={700} fill={card.color}>{card.label}</text>
-              <text x={card.cx + 16} y={card.cy + 42} fontSize={9} fill="#8b949e">{card.summary}</text>
-              <text x={card.cx + card.w - 14} y={card.cy + 33} textAnchor="end" fill="#6e7681" fontSize={9}>
-                {card.nodeCount} 组件 →
-              </text>
-            </g>
-          ))}
-          {CONTAINER_LINKS.filter(l => !l.dashed).map((link, i) => {
-            const fc = cardMap.get(link.from), tc = cardMap.get(link.to);
-            if (!fc || !tc) return null;
-            const mx = fc.cx + fc.w / 2;
-            const sy = fc.cy + fc.h, ty = tc.cy;
-            return (
-              <g key={`m${i}`} style={{ animation: `archFadeIn 0.5s ease ${0.4 + i * 0.08}s both` }}>
-                <line x1={mx} y1={sy} x2={mx} y2={ty}
-                  stroke={link.color} strokeWidth={1.5} strokeOpacity={0.4} />
-                <circle r="3" fill={link.color} style={{ animation: 'flowPulse 2s ease infinite' }}>
-                  <animateMotion dur="1.5s" repeatCount="indefinite" path={`M${mx},${sy} V${ty}`} />
-                </circle>
-                <text x={mx + 10} y={(sy + ty) / 2 + 4} fontSize={9} fill={link.color} opacity={0.6}>{link.label}</text>
-              </g>
-            );
-          })}
-          {CONTAINER_LINKS.filter(l => l.dashed).map((link, i) => {
-            const fc = cardMap.get(link.from), tc = cardMap.get(link.to);
-            if (!fc || !tc) return null;
-            const rx = fc.cx + fc.w + 14;
-            const sy = fc.cy + fc.h / 2, ty = tc.cy + tc.h / 2;
-            return (
-              <g key={`fb${i}`} style={{ animation: 'archFadeIn 0.6s ease 0.8s both' }}>
-                <path d={`M${fc.cx + fc.w},${sy} H${rx} V${ty} H${tc.cx + tc.w}`}
-                  fill="none" stroke={link.color} strokeWidth={1.2} strokeDasharray="6,3" strokeOpacity={0.5} />
-                <text x={rx + 4} y={(sy + ty) / 2 + 4} fontSize={8} fill={link.color} opacity={0.6}>{link.label}</text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    );
-  }
+    // 布局参数
+    const vw = 860, cardW = 500, cardH = 100, gap = 52;
+    const cardX = 180, startY = 70;
+    const vh = startY + layers.length * (cardH + gap) + 40;
+    // 流动步骤映射到层间的箭头位置
+    const flowLayerMap = [0, 0, 1, 2, 3, 4]; // 每个 flow step 关联的层索引
+    const layerY = (idx: number) => startY + idx * (cardH + gap);
 
-  // ========================================================================
-  // C4 L3: Component（单层内部）
-  // ========================================================================
-  if (viewMode === 'layer') {
-    const band = LAYER_BANDS.find(b => b.id === activeLayer);
-    if (!band) { setViewMode('container'); return null; }
-    const layerNodes = NODES.filter(n => n.layer === activeLayer);
-    const intEdges = layerInternalEdges(activeLayer);
-    const extLinks = layerExternalLinks(activeLayer);
-    const inLinks = extLinks.filter(l => l.direction === 'in');
-    const outLinks = extLinks.filter(l => l.direction === 'out');
-
-    const rowOffset = band.rowStart;
-    const localRows = band.rowEnd - band.rowStart + 1;
-    const localRect = (n: ArchNode) => {
-      const span = n.colSpan ?? 1;
-      const x = GRID.padX + n.col * (GRID.cellW + GRID.gapX);
-      const y = 60 + (n.row - rowOffset) * (GRID.cellH + GRID.gapY);
-      const w = span * GRID.cellW + (span - 1) * GRID.gapX;
-      return { x, y, w, h: GRID.cellH };
+    // 钻取处理
+    const handleLayerClick = (layerId: string) => {
+      if (layerId === 'engine') { setViewMode('sub-pipeline'); return; }
+      if (layerId === 'game') { setViewMode('story'); return; }
+      setDetailLayer(layerId);
+      setViewMode('layer-detail');
     };
-    const localNodeMap = new Map(layerNodes.map(n => [n.id, n]));
-
-    const svgW = GRID.padX + GRID.cols * (GRID.cellW + GRID.gapX);
-    const extBadgeH = (inLinks.length > 0 || outLinks.length > 0) ? 50 : 0;
-    const svgH = 60 + localRows * (GRID.cellH + GRID.gapY) + extBadgeH + 30;
 
     return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={closePop}>
-        <div className="mb-3 flex items-center gap-3">
-          <button className="text-sm text-slate-400 hover:text-white"
-            onClick={e => { e.stopPropagation(); setViewMode('container'); }}>← 容器图</button>
-          <h1 className="text-lg font-bold text-white">🔍 {band.label} — 组件视图 (C4 L3)</h1>
-          <span className="text-xs text-slate-500">{layerNodes.length} 个组件 · 点击查看详情</span>
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4">
+        <div className="mb-3 flex items-center gap-3 flex-wrap">
+          <h1 className="text-lg font-bold text-white">🏗️ 架构全景 — 一次操作的完整旅程</h1>
+          <span className="text-xs text-slate-500">点击层卡片可展开 · 右侧虚线为跨层连接</span>
+          <div className="ml-auto flex gap-2">
+            <button className="text-sm px-3 py-1 rounded bg-blue-900/40 text-blue-400 border border-blue-700/40 hover:bg-blue-900/60"
+              onClick={() => setViewMode('c4-context')}>🏛️ C4 全景</button>
+            <button className="text-sm px-3 py-1 rounded bg-purple-900/40 text-purple-400 border border-purple-700/40 hover:bg-purple-900/60"
+              onClick={() => setViewMode('c4-container')}>📦 C4 容器</button>
+            <button className="text-sm px-3 py-1 rounded bg-green-900/40 text-green-400 border border-green-700/40 hover:bg-green-900/60"
+              onClick={() => setViewMode('story')}>📖 用户故事</button>
+          </div>
         </div>
-        <svg ref={svgRef} viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="xMidYMid meet"
-          className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
           <style>{`
-            @keyframes archFadeIn { from { opacity:0 } }
-            @keyframes flowPulse { 0%,100%{ opacity:.3;r:2 } 50%{ opacity:1;r:3.5 } }
+            @keyframes archFadeIn { from { opacity: 0 } }
+            @keyframes flowDot { 0% { offset-distance: 0% } 100% { offset-distance: 100% } }
           `}</style>
           <defs>
-            <marker id="l3-arr" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
-              <path d="M2,2 L8,5 L2,8" fill="none" stroke={band.color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <marker id="ov-arr" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M2,2 L8,5 L2,8" fill="none" stroke="#e3b341" strokeWidth="1.5" strokeLinecap="round" />
+            </marker>
+            <marker id="ov-cross" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M2,2 L8,5 L2,8" fill="none" stroke="#6e7681" strokeWidth="1.5" strokeLinecap="round" />
             </marker>
           </defs>
 
-          {/* 层色带背景 */}
-          <rect x={GRID.padX - 8} y={50} width={svgW - GRID.padX + 4}
-            height={localRows * (GRID.cellH + GRID.gapY) + 20} rx={8}
-            fill={band.color} fillOpacity={0.04} stroke={band.color} strokeOpacity={0.15} strokeWidth={1} />
-
-          {/* 内部边 */}
-          {intEdges.map((edge, i) => {
-            const fn = localNodeMap.get(edge.from);
-            const tn = localNodeMap.get(edge.to);
-            if (!fn || !tn) return null;
-            const pathD = rectEdgePath(localRect(fn), localRect(tn));
+          {/* ── 左侧：主线流动箭头 + 步骤标签 ── */}
+          {flow.map((step, i) => {
+            const li = flowLayerMap[i];
+            // 箭头起点：层卡片中间偏左
+            const arrowX = cardX - 40;
+            const y = layerY(li) + (i === 0 ? 20 : cardH / 2);
+            // 下一步的 y
+            const nextLi = flowLayerMap[i + 1] ?? li;
+            const nextY = i < flow.length - 1
+              ? layerY(nextLi) + (i + 1 === 0 ? 20 : cardH / 2)
+              : y + 40;
+            const labelX = 16;
             return (
-              <g key={`e${i}`} style={{ animation: `archFadeIn 0.5s ease ${0.2 + i * 0.05}s both` }}>
-                <path d={pathD} fill="none" stroke={edge.color} strokeWidth={1.2} strokeOpacity={0.6}
-                  strokeDasharray={edge.type === 'event' ? '6,3' : undefined} markerEnd="url(#l3-arr)" />
-                {edge.label && (() => {
-                  const fr = localRect(fn), tr = localRect(tn);
-                  const lx = (fr.x + fr.w / 2 + tr.x + tr.w / 2) / 2;
-                  const ly = (fr.y + fr.h / 2 + tr.y + tr.h / 2) / 2;
-                  return <text x={lx} y={ly - 5} textAnchor="middle" fill={edge.color} fontSize={8}
-                    stroke="#0d1117" strokeWidth={2.5} paintOrder="stroke">{edge.label}</text>;
-                })()}
-              </g>
-            );
-          })}
-
-          {/* 节点 */}
-          {layerNodes.map((n, ni) => {
-            const r = localRect(n);
-            const isSelected = selectedNode?.id === n.id;
-            const isHovered = hoveredNode === n.id;
-            return (
-              <g key={n.id}
-                style={{ cursor: 'pointer', animation: `archFadeIn 0.4s ease ${ni * 0.06}s both` }}
-                onMouseEnter={() => setHoveredNode(n.id)} onMouseLeave={() => setHoveredNode(null)}
-                onClick={evt => handleNodeClick(n, evt)}>
-                <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={8}
-                  fill={isHovered || isSelected ? n.color + '30' : '#161b22'}
-                  stroke={isHovered || isSelected ? n.color : n.color + '60'}
-                  strokeWidth={isHovered || isSelected ? 2 : 1}
-                  strokeDasharray={n.dashed ? '6,3' : undefined}
-                  style={{ transition: 'fill 0.2s, stroke 0.2s' }} />
-                <text x={r.x + r.w / 2} y={r.y + 20} textAnchor="middle" fill={n.color} fontSize={12} fontWeight={700}>{n.label}</text>
-                <text x={r.x + r.w / 2} y={r.y + 38} textAnchor="middle" fill="#8b949e" fontSize={9}>{n.desc}</text>
-                {n.expandable && (
-                  <text x={r.x + r.w - 10} y={r.y + 14} textAnchor="end" fill={n.color} fontSize={8} opacity={0.5}>→ 展开</text>
-                )}
-              </g>
-            );
-          })}
-
-          {/* 外部接口 */}
-          {(inLinks.length > 0 || outLinks.length > 0) && (() => {
-            const badgeY = 60 + localRows * (GRID.cellH + GRID.gapY) + 14;
-            return (
-              <g style={{ animation: 'archFadeIn 0.5s ease 0.4s both' }}>
-                {inLinks.length > 0 && (
-                  <text x={GRID.padX} y={badgeY} fill="#6e7681" fontSize={9}>
-                    ⬇ 来自: {inLinks.map(l => `${l.externalNode.label}(${l.label})`).join(' · ')}
-                  </text>
-                )}
-                {outLinks.length > 0 && (
-                  <text x={GRID.padX} y={badgeY + (inLinks.length > 0 ? 16 : 0)} fill="#6e7681" fontSize={9}>
-                    ⬆ 输出: {outLinks.map(l => `${l.externalNode.label}(${l.label})`).join(' · ')}
-                  </text>
-                )}
-              </g>
-            );
-          })()}
-
-          {/* SVG 弹窗 */}
-          {selectedNode && selectedDeps && (() => {
-            const isPrimitives = selectedNode.expandable === 'primitives';
-            const popW = isPrimitives ? 420 : 400;
-            const details = selectedNode.details ?? [];
-            const accentN = details.filter(d => d.startsWith('\ud83c\udfaf') || d.startsWith('\ud83c\udfb2')).length;
-            const upCount = selectedDeps.upstream.length;
-            const downCount = selectedDeps.downstream.length;
-            let contentH = 68 + (details.length - accentN) * 16 + accentN * 22
-              + (upCount > 0 ? 28 + upCount * 24 : 0) + (downCount > 0 ? 28 + downCount * 24 : 0);
-            if (isPrimitives) contentH += 130;
-            const popH = Math.max(120, contentH + 20);
-            const popX = (svgW - popW) / 2;
-            const popY = Math.max(10, (svgH - popH) / 2);
-            let cy = popY + 16;
-            return (
-              <g onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ animation: 'archFadeIn 0.2s ease' }}>
-                <rect x={0} y={0} width={svgW} height={svgH} fill="#000" fillOpacity={0.45}
-                  style={{ cursor: 'pointer' }} onClick={closePop} />
-                <rect x={popX} y={popY} width={popW} height={popH} rx={12}
-                  fill="#161b22" stroke={selectedNode.color + '40'} strokeWidth={1.5} />
-                <rect x={popX + 1} y={popY + 1} width={popW - 2} height={3} rx={1.5}
-                  fill={selectedNode.color} fillOpacity={0.5} />
-                <text x={popX + popW - 16} y={popY + 18} textAnchor="middle" fill="#6e7681" fontSize={14}
-                  style={{ cursor: 'pointer' }} onClick={closePop}>{"\u2715"}</text>
-                <text x={popX + 16} y={(cy += 12, cy)} fill={selectedNode.color} fontSize={14} fontWeight={700}>{selectedNode.label}</text>
-                <text x={popX + 16} y={(cy += 18, cy)} fill="#8b949e" fontSize={10}>{selectedNode.desc}</text>
-                {(cy += 10, null)}
-                <line x1={popX + 14} y1={cy} x2={popX + popW - 14} y2={cy} stroke="#21262d" strokeWidth={1} />
-                {details.length > 0 && (() => {
-                  cy += 4;
-                  return details.map((d, i) => {
-                    const isRole = d.startsWith('\ud83c\udfaf');
-                    const isExample = d.startsWith('\ud83c\udfb2');
-                    if (isRole || isExample) {
-                      cy += 20;
-                      const ac = isRole ? selectedNode.color : '#e3b341';
-                      return (
-                        <g key={i}>
-                          <rect x={popX + 14} y={cy - 13} width={popW - 28} height={18} rx={4}
-                            fill={ac} fillOpacity={0.08} stroke={ac} strokeOpacity={0.15} strokeWidth={0.8} />
-                          <text x={popX + 22} y={cy} fill={ac} fontSize={9} fontWeight={600}>{d}</text>
-                        </g>
-                      );
-                    }
-                    cy += 16;
-                    return (
-                      <g key={i}>
-                        <line x1={popX + 18} y1={cy - 10} x2={popX + 18} y2={cy - 2} stroke="#30363d" strokeWidth={1} />
-                        <text x={popX + 26} y={cy} fill="#c9d1d9" fontSize={9}>{d}</text>
-                      </g>
-                    );
-                  });
-                })()}
-                {isPrimitives && (() => {
-                  cy += 16;
-                  const gridX = popX + 16, gridCols = 2, cellW = 192, cellH = 22;
-                  return PRIMITIVE_ITEMS.map((item, i) => {
-                    const col = i % gridCols, row = Math.floor(i / gridCols);
-                    const ix = gridX + col * cellW, iy = cy + row * cellH;
-                    return (
-                      <g key={i}>
-                        <text x={ix} y={iy + 14} fontSize={13}>{item.emoji}</text>
-                        <text x={ix + 20} y={iy + 14} fontSize={10} fontWeight={600} fill="#e6edf3">{item.name}</text>
-                        <text x={ix + 20} y={iy + 14} dx={item.name.length * 9 + 4} fontSize={9} fill="#6e7681">{item.desc}</text>
-                      </g>
-                    );
-                  });
-                })()}
-                {isPrimitives && (cy += 110, null)}
-                {upCount > 0 && (() => {
-                  cy += 14;
+              <g key={`flow-${i}`} style={{ animation: `archFadeIn 0.4s ease ${0.2 + i * 0.12}s both` }}>
+                {/* 步骤标签 */}
+                <text x={labelX} y={y + 4} fontSize={12}>{step.emoji}</text>
+                <text x={labelX + 18} y={y} fontSize={10} fontWeight={700} fill="#e3b341">{step.label}</text>
+                <text x={labelX + 18} y={y + 14} fontSize={8} fill="#8b949e">{step.detail}</text>
+                {/* 弧线箭头（连到下一步） */}
+                {i < flow.length - 1 && (() => {
+                  const sy = y + 20, ey = nextY - 14;
+                  const midY = (sy + ey) / 2;
+                  const curveX = arrowX + 16;
+                  const pathD = `M${arrowX},${sy} C${curveX},${midY - 10} ${curveX},${midY + 10} ${arrowX},${ey}`;
                   return (
                     <>
-                      <text x={popX + 16} y={(cy += 4, cy)} fill="#6e7681" fontSize={9} fontWeight={600}>⬆ 上游（谁调用我）</text>
-                      {(cy += 4, null)}
-                      <line x1={popX + 14} y1={cy} x2={popX + popW - 14} y2={cy} stroke="#21262d" strokeWidth={1} />
-                      {selectedDeps.upstream.map((dep, i) => {
-                        cy += 24;
-                        const bw = (dep.node?.label?.length ?? 8) * 8 + 20;
-                        return (
-                          <g key={i} style={{ cursor: 'pointer' }} onClick={() => dep.node && setSelectedNode(dep.node)}>
-                            <rect x={popX + 20} y={cy - 14} width={bw} height={20} rx={6}
-                              fill={dep.node?.color + '12'} stroke={dep.node?.color + '40'} strokeWidth={1} />
-                            <text x={popX + 28} y={cy} fill={dep.node?.color} fontSize={10} fontWeight={500}>{dep.node?.label}</text>
-                            {dep.label && <text x={popX + 28 + bw} y={cy} fill="#6e7681" fontSize={9}>{dep.label}</text>}
-                          </g>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
-                {downCount > 0 && (() => {
-                  cy += 14;
-                  return (
-                    <>
-                      <text x={popX + 16} y={(cy += 4, cy)} fill="#6e7681" fontSize={9} fontWeight={600}>⬇ 下游（我调用谁）</text>
-                      {(cy += 4, null)}
-                      <line x1={popX + 14} y1={cy} x2={popX + popW - 14} y2={cy} stroke="#21262d" strokeWidth={1} />
-                      {selectedDeps.downstream.map((dep, i) => {
-                        cy += 24;
-                        const bw = (dep.node?.label?.length ?? 8) * 8 + 20;
-                        return (
-                          <g key={i} style={{ cursor: 'pointer' }} onClick={() => dep.node && setSelectedNode(dep.node)}>
-                            <rect x={popX + 20} y={cy - 14} width={bw} height={20} rx={6}
-                              fill={dep.node?.color + '12'} stroke={dep.node?.color + '40'} strokeWidth={1} />
-                            <text x={popX + 28} y={cy} fill={dep.node?.color} fontSize={10} fontWeight={500}>{dep.node?.label}</text>
-                            {dep.label && <text x={popX + 28 + bw} y={cy} fill="#6e7681" fontSize={9}>{dep.label}</text>}
-                          </g>
-                        );
-                      })}
+                      <path d={pathD} fill="none" stroke="#e3b341" strokeWidth={1.5} strokeOpacity={0.5} markerEnd="url(#ov-arr)" />
+                      <circle r={2.5} fill="#e3b341" fillOpacity={0.9}>
+                        <animateMotion dur="2s" repeatCount="indefinite" path={pathD} />
+                      </circle>
                     </>
                   );
                 })()}
               </g>
             );
-          })()}
+          })}
+
+          {/* ── 中间：5 层卡片 ── */}
+          {layers.map((layer, i) => {
+            const y = layerY(i);
+            return (
+              <g key={layer.id}
+                style={{ cursor: 'pointer', animation: `archFadeIn 0.4s ease ${i * 0.1}s both` }}
+                onClick={() => handleLayerClick(layer.id)}>
+                {/* 卡片背景 */}
+                <rect x={cardX} y={y} width={cardW} height={cardH} rx={12}
+                  fill="#161b22" stroke={layer.color} strokeWidth={2}
+                  style={{ transition: 'fill 0.2s' }} />
+                {/* 顶部色带 */}
+                <rect x={cardX + 1} y={y + 1} width={cardW - 2} height={5} rx={2}
+                  fill={layer.color} fillOpacity={0.7} />
+                {/* 序号 + 层名 */}
+                <text x={cardX + 16} y={y + 30} fontSize={18}>{layer.emoji}</text>
+                <text x={cardX + 44} y={y + 30} fontSize={15} fontWeight={700} fill={layer.color}>
+                  {'①②③④⑤'[i]} {layer.label}
+                </text>
+                <text x={cardX + cardW - 14} y={y + 18} textAnchor="end" fontSize={8} fill={layer.color} opacity={0.5}>点击展开 →</text>
+                {/* 做什么 */}
+                <text x={cardX + 44} y={y + 50} fontSize={11} fill="#c9d1d9">{layer.whatItDoes}</text>
+                {/* 没有它会怎样 */}
+                <text x={cardX + 44} y={y + 66} fontSize={9} fill="#6e7681" fontStyle="italic">⚠ {layer.whyItExists}</text>
+                {/* 标签 */}
+                {layer.tags.map((tag, ti) => {
+                  const tagX = cardX + 44 + ti * (tag.length * 8 + 20);
+                  return (
+                    <g key={ti}>
+                      <rect x={tagX} y={y + 74} width={tag.length * 8 + 12} height={18} rx={4}
+                        fill={layer.color + '12'} stroke={layer.color + '30'} strokeWidth={0.8} />
+                      <text x={tagX + 6} y={y + 86} fontSize={8} fill={layer.color}>{tag}</text>
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })}
+
+          {/* ── 右侧：跨层弧线 ── */}
+          {crossLinks.map((link, i) => {
+            const fromIdx = layers.findIndex(l => l.id === link.from);
+            const toIdx = layers.findIndex(l => l.id === link.to);
+            if (fromIdx < 0 || toIdx < 0) return null;
+            const fromY = layerY(fromIdx) + cardH / 2;
+            const toY = layerY(toIdx) + cardH / 2;
+            const arcX = cardX + cardW + 30 + i * 40;
+            const pathD = `M${cardX + cardW},${fromY} C${arcX},${fromY} ${arcX},${toY} ${cardX + cardW},${toY}`;
+            return (
+              <g key={`cross-${i}`} style={{ animation: `archFadeIn 0.5s ease ${0.6 + i * 0.15}s both` }}>
+                <path d={pathD} fill="none" stroke={link.color} strokeWidth={1.5}
+                  strokeDasharray="6,4" strokeOpacity={0.6} markerEnd="url(#ov-cross)" />
+                {/* 标签 */}
+                <text x={arcX + 6} y={(fromY + toY) / 2 + 4} fontSize={8} fill={link.color} fontStyle="italic">
+                  {link.label}
+                </text>
+                {/* 流动小球 */}
+                <circle r={2} fill={link.color} fillOpacity={0.7}>
+                  <animateMotion dur="3s" repeatCount="indefinite" path={pathD} />
+                </circle>
+              </g>
+            );
+          })}
+
+          {/* ── 底部说明 ── */}
+          <g style={{ animation: 'archFadeIn 0.5s ease 1s both' }}>
+            <text x={cardX} y={vh - 14} fontSize={9} fill="#6e7681">
+              实线 = 逐层依赖（操作从上往下流过每一层） · 虚线 = 跨层连接（事件驱动/UI组件注入）
+            </text>
+          </g>
         </svg>
       </div>
     );
@@ -464,10 +226,10 @@ const ArchitectureView: React.FC = () => {
     const vw = stepW + sysW + 180, vh = totalH;
     const sx = 80, sy = 70;
     return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => goToLayer('engine')}>
-        <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); goToLayer('engine'); }}>← 引擎层</button>
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
+        <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
         <h2 className="text-lg font-bold text-white mb-2">⚡ 回合执行引擎 — 8 步管线</h2>
-        <p className="text-xs text-slate-500 mb-2">点击任意位置返回引擎层</p>
+        <p className="text-xs text-slate-500 mb-2">点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
           <style>{`
             @keyframes archFadeIn { from { opacity: 0 } }
@@ -553,10 +315,10 @@ const ArchitectureView: React.FC = () => {
       </g>
     );
     return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => goToLayer('engine')}>
-        <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); goToLayer('engine'); }}>← 引擎层</button>
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
+        <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
         <h2 className="text-lg font-bold text-white mb-2">🔌 系统插件 — 11 个系统</h2>
-        <p className="text-xs text-slate-500 mb-2">点击任意位置返回引擎层</p>
+        <p className="text-xs text-slate-500 mb-2">点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 100px)' }}>
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
           <text x={padX} y={padY - 8} fontSize={12} fontWeight={700} fill="#3fb950">默认启用（8 个）— createDefaultSystems() 自动包含</text>
@@ -590,122 +352,697 @@ const ArchitectureView: React.FC = () => {
   }
 
   // ========================================================================
-  // 深层: 测试框架 — 录制→回放→对比 动画演示
+  // L3: 测试框架 — 三轨并列（Vitest + 实体完整性 + E2E）
   // ========================================================================
   if (viewMode === 'sub-testing') {
-    const recordSteps = TEST_FLOW_STEPS.filter(s => s.phase === 'record');
-    const verifySteps = TEST_FLOW_STEPS.filter(s => s.phase === 'verify');
-    const stepH = 72, stepW = 340, gap = 14;
-    const colGap = 120;
-    const maxRows = Math.max(recordSteps.length, verifySteps.length);
-    const totalH = maxRows * (stepH + gap) + 180;
-    const sx = 60, sy = 100;
-    const vw = sx + stepW * 2 + colGap + 80;
-    const vh = totalH;
-    const recColor = '#3fb950';
-    const verColor = '#f0883e';
+    const vitestRec = TEST_FLOW_STEPS.filter(s => s.phase === 'record');
+    const vitestVer = TEST_FLOW_STEPS.filter(s => s.phase === 'verify');
+    const e2eSteps = E2E_TEST_STEPS;
+    const integritySteps = INTEGRITY_TEST_STEPS;
+    const stepH = 64, stepW = 280, gap = 12;
+    const trackGap = 30;
+    const maxSteps = Math.max(vitestRec.length + vitestVer.length, integritySteps.length, e2eSteps.length);
+    const sx = 30, sy = 90;
+    const trackW = stepW + 20;
+    const vw = sx + trackW * 3 + trackGap * 2 + 30;
+    const vh = sy + maxSteps * (stepH + gap) + 120;
+    const vitestColor = '#3fb950';
+    const integrityColor = '#bc8cff';
+    const e2eColor = '#58a6ff';
 
-    const renderStep = (step: typeof TEST_FLOW_STEPS[number], i: number, x: number, y: number, color: string, totalInCol: number) => (
-      <g key={`${step.phase}-${i}`} style={{ animation: `archFadeIn 0.4s ease ${i * 0.1 + (step.phase === 'verify' ? 0.4 : 0)}s both` }}>
+    const renderStepBox = (emoji: string, label: string, desc: string, example: string | undefined,
+      i: number, x: number, y: number, color: string, circled: string, delay: number, total: number) => (
+      <g key={`${label}-${i}`} style={{ animation: `archFadeIn 0.4s ease ${delay}s both` }}>
         <rect x={x} y={y} width={stepW} height={stepH} rx={10}
           fill="#161b22" stroke={color} strokeWidth={1.2} />
-        <text x={x + 14} y={y + 22} fontSize={18} fill={color}>{step.emoji}</text>
-        <text x={x + 42} y={y + 22} fontSize={13} fontWeight={700} fill={color}>
-          {'\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467'[i] ?? ''} {step.label}
-        </text>
-        <text x={x + 42} y={y + 40} fontSize={10} fill="#8b949e">{step.desc}</text>
-        {step.example && (
-          <text x={x + 42} y={y + 56} fontSize={9} fill="#e3b341">🎲 {step.example}</text>
-        )}
-        {i < totalInCol - 1 && (
+        <text x={x + 14} y={y + 20} fontSize={16} fill={color}>{emoji}</text>
+        <text x={x + 38} y={y + 20} fontSize={11} fontWeight={700} fill={color}>{circled} {label}</text>
+        <text x={x + 38} y={y + 38} fontSize={9} fill="#8b949e">{desc}</text>
+        {example && <text x={x + 38} y={y + 52} fontSize={7.5} fill="#e3b341">{example}</text>}
+        {i < total - 1 && (
           <line x1={x + stepW / 2} y1={y + stepH} x2={x + stepW / 2} y2={y + stepH + gap}
-            stroke={color} strokeWidth={2} markerEnd={step.phase === 'record' ? 'url(#test-arr-rec)' : 'url(#test-arr-ver)'}
-            style={{ strokeDasharray: 20, strokeDashoffset: 20, animation: `archDraw 0.3s ease ${i * 0.1 + 0.3}s forwards` }} />
+            stroke={color} strokeWidth={2}
+            style={{ strokeDasharray: 16, strokeDashoffset: 16, animation: `archDraw 0.3s ease ${delay + 0.2}s forwards` }} />
         )}
       </g>
     );
 
-    // 录制末尾 → 验证开头 的跨列连线
-    const recLastY = sy + (recordSteps.length - 1) * (stepH + gap);
-    const verFirstY = sy;
-    const bridgeFromX = sx + stepW;
-    const bridgeToX = sx + stepW + colGap;
-    const bridgeMidX = bridgeFromX + colGap / 2;
-    const bridgeFromY = recLastY + stepH / 2;
-    const bridgeToY = verFirstY + stepH / 2;
+    // Vitest: 先录制 4 步，再验证 4 步，中间有分隔
+    const allVitest = [...vitestRec, ...vitestVer];
+    const circledNums = '\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467';
+
+    const track2X = sx + trackW + trackGap;
+    const track3X = sx + (trackW + trackGap) * 2;
 
     return (
-      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => goToLayer('engine')}>
-        <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); goToLayer('engine'); }}>← 引擎层</button>
-        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 — 命令录制 → 回放对比</h2>
-        <p className="text-xs text-slate-500 mb-2">左: 录制阶段 · 右: 验证阶段 · 点击任意位置返回引擎层</p>
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
+        <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
+        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 — 三轨并列</h2>
+        <p className="text-xs text-slate-500 mb-2">左: Vitest 命令驱动 · 中: 实体链完整性 · 右: Playwright E2E · 点击任意位置返回</p>
         <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
           <style>{`
             @keyframes archFadeIn { from { opacity: 0 } }
             @keyframes archDraw { to { stroke-dashoffset: 0 } }
-            @keyframes flowPulse { 0%,100%{ opacity:.3;r:2 } 50%{ opacity:1;r:3.5 } }
-            @keyframes testBridge { 0%,100%{ opacity:.4 } 50%{ opacity:1 } }
           `}</style>
-          <defs>
-            <marker id="test-arr-rec" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
-              <path d="M2,2 L8,5 L2,8" fill="none" stroke={recColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </marker>
-            <marker id="test-arr-ver" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
-              <path d="M2,2 L8,5 L2,8" fill="none" stroke={verColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </marker>
-          </defs>
 
-          {/* 阶段标题 */}
+          {/* 左列标题: Vitest 命令驱动 */}
           <g style={{ animation: 'archFadeIn 0.3s ease both' }}>
-            <rect x={sx - 4} y={sy - 42} width={stepW + 8} height={26} rx={6} fill={recColor} fillOpacity={0.1} stroke={recColor} strokeOpacity={0.3} strokeWidth={1} />
-            <text x={sx + stepW / 2} y={sy - 24} textAnchor="middle" fontSize={13} fontWeight={700} fill={recColor}>📹 录制阶段</text>
-          </g>
-          <g style={{ animation: 'archFadeIn 0.3s ease 0.3s both' }}>
-            <rect x={sx + stepW + colGap - 4} y={sy - 42} width={stepW + 8} height={26} rx={6} fill={verColor} fillOpacity={0.1} stroke={verColor} strokeOpacity={0.3} strokeWidth={1} />
-            <text x={sx + stepW + colGap + stepW / 2} y={sy - 24} textAnchor="middle" fontSize={13} fontWeight={700} fill={verColor}>🔬 验证阶段</text>
-          </g>
-
-          {/* 录制列 */}
-          {recordSteps.map((step, i) => renderStep(step, i, sx, sy + i * (stepH + gap), recColor, recordSteps.length))}
-
-          {/* 验证列 */}
-          {verifySteps.map((step, i) => renderStep(step, i, sx + stepW + colGap, sy + i * (stepH + gap), verColor, verifySteps.length))}
-
-          {/* 跨列桥接: 录制末 → 验证首 */}
-          <g style={{ animation: 'archFadeIn 0.6s ease 0.6s both' }}>
-            <path d={`M${bridgeFromX},${bridgeFromY} C${bridgeMidX},${bridgeFromY} ${bridgeMidX},${bridgeToY} ${bridgeToX},${bridgeToY}`}
-              fill="none" stroke="#e3b341" strokeWidth={2} strokeDasharray="8,4" />
-            <circle r="4" fill="#e3b341" style={{ animation: 'testBridge 2s ease infinite' }}>
-              <animateMotion dur="2.5s" repeatCount="indefinite"
-                path={`M${bridgeFromX},${bridgeFromY} C${bridgeMidX},${bridgeFromY} ${bridgeMidX},${bridgeToY} ${bridgeToX},${bridgeToY}`} />
-            </circle>
-            <text x={bridgeMidX} y={Math.min(bridgeFromY, bridgeToY) - 10} textAnchor="middle" fontSize={10} fontWeight={600} fill="#e3b341">
-              ✏️ 代码修改后触发验证
+            <rect x={sx - 4} y={sy - 42} width={trackW} height={28} rx={6}
+              fill={vitestColor} fillOpacity={0.1} stroke={vitestColor} strokeOpacity={0.3} strokeWidth={1} />
+            <text x={sx + trackW / 2 - 4} y={sy - 22} textAnchor="middle" fontSize={12} fontWeight={700} fill={vitestColor}>
+              🧪 Vitest 命令驱动测试
             </text>
           </g>
 
-          {/* 结果指示: 通过 vs 失败 */}
+          {/* 中列标题: 实体链完整性 */}
+          <g style={{ animation: 'archFadeIn 0.3s ease 0.1s both' }}>
+            <rect x={track2X - 4} y={sy - 42} width={trackW} height={28} rx={6}
+              fill={integrityColor} fillOpacity={0.1} stroke={integrityColor} strokeOpacity={0.3} strokeWidth={1} />
+            <text x={track2X + trackW / 2 - 4} y={sy - 22} textAnchor="middle" fontSize={12} fontWeight={700} fill={integrityColor}>
+              🔗 实体链完整性测试
+            </text>
+          </g>
+
+          {/* 右列标题: Playwright E2E */}
+          <g style={{ animation: 'archFadeIn 0.3s ease 0.2s both' }}>
+            <rect x={track3X - 4} y={sy - 42} width={trackW} height={28} rx={6}
+              fill={e2eColor} fillOpacity={0.1} stroke={e2eColor} strokeOpacity={0.3} strokeWidth={1} />
+            <text x={track3X + trackW / 2 - 4} y={sy - 22} textAnchor="middle" fontSize={12} fontWeight={700} fill={e2eColor}>
+              🌐 Playwright E2E 截图
+            </text>
+          </g>
+
+          {/* 左列: Vitest 步骤 */}
+          {allVitest.map((step, i) => {
+            const y = sy + i * (stepH + gap);
+            // 录制→验证分界线
+            const isBoundary = i === vitestRec.length;
+            return (
+              <React.Fragment key={`vt${i}`}>
+                {isBoundary && (
+                  <g style={{ animation: `archFadeIn 0.3s ease ${i * 0.08 + 0.1}s both` }}>
+                    <line x1={sx} y1={y - gap / 2} x2={sx + stepW} y2={y - gap / 2}
+                      stroke={vitestColor} strokeWidth={1} strokeDasharray="4,3" strokeOpacity={0.4} />
+                    <text x={sx + stepW / 2} y={y - gap / 2 - 4} textAnchor="middle" fontSize={8} fill={vitestColor} opacity={0.6}>
+                      ── 代码修改后触发 ──
+                    </text>
+                  </g>
+                )}
+                {renderStepBox(step.emoji, step.label, step.desc, step.example,
+                  i, sx, y, vitestColor, circledNums[i] ?? '', i * 0.08, allVitest.length)}
+              </React.Fragment>
+            );
+          })}
+
+          {/* 中列: 实体链完整性步骤 */}
+          {integritySteps.map((step, i) => {
+            const y = sy + i * (stepH + gap);
+            return renderStepBox(step.emoji, step.label, step.desc, step.example,
+              i, track2X, y, integrityColor, circledNums[i] ?? '', 0.1 + i * 0.08, integritySteps.length);
+          })}
+
+          {/* 右列: E2E 步骤 */}
+          {e2eSteps.map((step, i) => {
+            const y = sy + i * (stepH + gap);
+            return renderStepBox(step.emoji, step.label, step.desc, step.example,
+              i, track3X, y, e2eColor, circledNums[i] ?? '', 0.2 + i * 0.08, e2eSteps.length);
+          })}
+
+          {/* 底部总结 */}
           {(() => {
-            const lastVerY = sy + (verifySteps.length - 1) * (stepH + gap);
-            const rx = sx + stepW + colGap, ry = lastVerY + stepH + 24;
+            const bottomY = sy + maxSteps * (stepH + gap) + 10;
+            return (
+              <g style={{ animation: 'archFadeIn 0.5s ease 0.8s both' }}>
+                <rect x={sx - 4} y={bottomY} width={vw - sx * 2 + 8} height={68} rx={8}
+                  fill="#161b22" stroke="#30363d" strokeWidth={1} />
+                <text x={sx + 10} y={bottomY + 18} fontSize={10} fill={vitestColor} fontWeight={600}>
+                  🧪 Vitest: 纯函数引擎 + 确定性管线 → 命令回放即可验证规则正确性
+                </text>
+                <text x={sx + 10} y={bottomY + 36} fontSize={10} fill={integrityColor} fontWeight={600}>
+                  🔗 实体完整性: 注册表 + 引用链 + 触发路径 + 效果契约 → 确保实体交互无断链
+                </text>
+                <text x={sx + 10} y={bottomY + 54} fontSize={10} fill={e2eColor} fontWeight={600}>
+                  🌐 Playwright: 无头浏览器 + 截图对比 → 防止 UI 视觉回归
+                </text>
+              </g>
+            );
+          })()}
+        </svg>
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // L3: 用户故事 — 如何用框架开发一个游戏
+  // ========================================================================
+  if (viewMode === 'story') {
+    const steps = USER_STORY_STEPS;
+    const stepH = 80, stepW = 460, gap = 16;
+    const sx = 60, sy = 80;
+    const vw = sx + stepW + 120, vh = sy + steps.length * (stepH + gap) + 60;
+    const layerColorMap: Record<string, string> = { core: '#bc8cff', engine: '#f0883e', ui: '#58a6ff', server: '#8b949e' };
+    const circled = '\u2460\u2461\u2462\u2463\u2464\u2465\u2466';
+
+    return (
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
+        <div className="mb-3 flex items-center gap-3">
+          <button className="text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
+          <h1 className="text-lg font-bold text-white">📖 用户故事 — 如何用框架开发一个游戏</h1>
+        </div>
+        <p className="text-xs text-slate-500 mb-2">以骰子王座为例，展示从零开始到上线的 7 步 · 点击任意位置返回</p>
+        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+          <style>{`
+            @keyframes archFadeIn { from { opacity:0 } }
+            @keyframes archDraw { to { stroke-dashoffset: 0 } }
+            @keyframes storyPulse { 0%,100%{ opacity:.4 } 50%{ opacity:1 } }
+          `}</style>
+          <defs>
+            <marker id="story-arr" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M2,2 L8,5 L2,8" fill="none" stroke="#3fb950" strokeWidth="1.5" strokeLinecap="round" />
+            </marker>
+          </defs>
+
+          {/* 标题装饰 */}
+          <text x={sx} y={sy - 30} fontSize={11} fontWeight={600} fill="#e3b341">
+            🎲 示例: 骰子王座 — 2人对战·6英雄·骰子+卡牌+技能
+          </text>
+
+          {steps.map((step, i) => {
+            const y = sy + i * (stepH + gap);
+            const lc = layerColorMap[step.layer] ?? '#6e7681';
+            return (
+              <g key={i} style={{ animation: `archFadeIn 0.4s ease ${i * 0.1}s both` }}>
+                {/* 卡片 */}
+                <rect x={sx} y={y} width={stepW} height={stepH} rx={12}
+                  fill="#161b22" stroke={lc} strokeWidth={1.5} strokeOpacity={0.6} />
+                {/* 左侧层色带 */}
+                <rect x={sx + 1} y={y + 10} width={4} height={stepH - 20} rx={2}
+                  fill={lc} fillOpacity={0.7} />
+                {/* 序号 + emoji + 标题 */}
+                <text x={sx + 18} y={y + 24} fontSize={15} fill={lc}>{step.emoji}</text>
+                <text x={sx + 42} y={y + 24} fontSize={14} fontWeight={700} fill={lc}>
+                  {circled[i] ?? ''} {step.label}
+                </text>
+                {/* 层标签 */}
+                <rect x={sx + stepW - 70} y={y + 8} width={56} height={18} rx={4}
+                  fill={lc} fillOpacity={0.12} stroke={lc} strokeOpacity={0.25} strokeWidth={0.8} />
+                <text x={sx + stepW - 42} y={y + 20} textAnchor="middle" fontSize={8} fontWeight={600} fill={lc}>{step.layer}</text>
+                {/* 描述 */}
+                <text x={sx + 18} y={y + 46} fontSize={10} fill="#8b949e">{step.desc}</text>
+                {/* 示例 */}
+                {step.example && (
+                  <text x={sx + 18} y={y + 64} fontSize={9} fill="#e3b341">🎲 {step.example}</text>
+                )}
+                {/* 关联组件 */}
+                {step.relatedIds.length > 0 && (() => {
+                  const tagX = sx + stepW + 14;
+                  return step.relatedIds.map((rid, ri) => {
+                    const rn = NODE_MAP.get(rid);
+                    if (!rn) return null;
+                    return (
+                      <g key={ri}>
+                        <rect x={tagX} y={y + 8 + ri * 22} width={80} height={18} rx={4}
+                          fill={rn.color + '15'} stroke={rn.color + '40'} strokeWidth={0.8} />
+                        <text x={tagX + 40} y={y + 20 + ri * 22} textAnchor="middle" fontSize={8} fill={rn.color}>{rn.label.slice(2)}</text>
+                      </g>
+                    );
+                  });
+                })()}
+                {/* 步骤间连线 */}
+                {i < steps.length - 1 && (
+                  <g>
+                    <line x1={sx + stepW / 2} y1={y + stepH} x2={sx + stepW / 2} y2={y + stepH + gap}
+                      stroke="#3fb950" strokeWidth={2.5} markerEnd="url(#story-arr)"
+                      style={{ strokeDasharray: 20, strokeDashoffset: 20, animation: `archDraw 0.3s ease ${i * 0.1 + 0.3}s forwards` }} />
+                    <circle r="3" fill="#3fb950" fillOpacity={0.8}>
+                      <animateMotion dur="1.5s" repeatCount="indefinite"
+                        path={`M${sx + stepW / 2},${y + stepH} L${sx + stepW / 2},${y + stepH + gap}`} />
+                    </circle>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+
+          {/* 底部总结 */}
+          {(() => {
+            const bottomY = sy + steps.length * (stepH + gap) + 6;
             return (
               <g style={{ animation: 'archFadeIn 0.5s ease 0.9s both' }}>
-                <rect x={rx} y={ry} width={stepW / 2 - 8} height={36} rx={8}
-                  fill="#3fb950" fillOpacity={0.1} stroke="#3fb950" strokeOpacity={0.4} strokeWidth={1.5} />
-                <text x={rx + stepW / 4 - 4} y={ry + 22} textAnchor="middle" fontSize={12} fontWeight={700} fill="#3fb950">✅ 全部通过</text>
-                <rect x={rx + stepW / 2 + 8} y={ry} width={stepW / 2 - 8} height={36} rx={8}
-                  fill="#f85149" fillOpacity={0.1} stroke="#f85149" strokeOpacity={0.4} strokeWidth={1.5} />
-                <text x={rx + stepW * 3 / 4 + 4} y={ry + 22} textAnchor="middle" fontSize={12} fontWeight={700} fill="#f85149">❌ 有差异 → 定位Bug</text>
+                <text x={sx} y={bottomY} fontSize={10} fill="#6e7681">
+                  💡 核心理念: 游戏只需回答 4 个问题(开局摆什么/能不能做/做了会怎样/怎么改状态) + 选用基础能力 → 引擎负责其余一切
+                </text>
+              </g>
+            );
+          })()}
+        </svg>
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // C4 L1: System Context — 系统上下文全景
+  // ========================================================================
+  if (viewMode === 'c4-context') {
+    const entities = C4_CONTEXT;
+    const links = C4_CONTEXT_LINKS;
+    const vw = 900, vh = 560;
+    const centerX = vw / 2;
+
+    // 手动布局每个实体的位置
+    const positions: Record<string, { x: number; y: number }> = {
+      user: { x: centerX, y: 70 },
+      story: { x: centerX - 160, y: 220 },
+      platform: { x: centerX + 160, y: 220 },
+      'ext-db': { x: centerX - 160, y: 420 },
+      'ext-cdn': { x: centerX + 160, y: 420 },
+    };
+    const boxW = 200, boxH = 80;
+
+    return (
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4">
+        <div className="mb-3 flex items-center gap-3">
+          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setViewMode('overview')}>← 返回</button>
+          <h1 className="text-lg font-bold text-white">🏛️ C4 Model — L1 System Context</h1>
+          <button className="ml-auto text-sm px-3 py-1 rounded bg-purple-900/40 text-purple-400 border border-purple-700/40 hover:bg-purple-900/60"
+            onClick={() => setViewMode('c4-container')}>📦 L2 容器视图 →</button>
+        </div>
+        <p className="text-xs text-slate-500 mb-2">最高层视角：系统边界 · 外部依赖 · 用户交互</p>
+        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+          <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
+          <defs>
+            <marker id="c4-arr" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M2,2 L8,5 L2,8" fill="none" stroke="#6e7681" strokeWidth="1.5" strokeLinecap="round" />
+            </marker>
+          </defs>
+
+          {/* 连线 */}
+          {links.map((link, i) => {
+            const from = positions[link.from];
+            const to = positions[link.to];
+            if (!from || !to) return null;
+            const midY = (from.y + to.y) / 2;
+            return (
+              <g key={`link-${i}`} style={{ animation: `archFadeIn 0.5s ease ${0.3 + i * 0.1}s both` }}>
+                <path d={`M${from.x},${from.y + boxH / 2} C${from.x},${midY} ${to.x},${midY} ${to.x},${to.y - boxH / 2}`}
+                  fill="none" stroke="#6e7681" strokeWidth={1.5} strokeDasharray="6,3"
+                  markerEnd="url(#c4-arr)" />
+                <text x={(from.x + to.x) / 2 + (from.x === to.x ? 8 : 0)}
+                  y={midY + (from.x === to.x ? 0 : -6)}
+                  textAnchor="middle" fontSize={9} fill="#8b949e" fontStyle="italic">
+                  {link.label}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* 实体 */}
+          {entities.map((ent, i) => {
+            const pos = positions[ent.id];
+            if (!pos) return null;
+            const x = pos.x - boxW / 2, y = pos.y - boxH / 2;
+            const isPerson = ent.type === 'person';
+            const isExternal = ent.type === 'external';
+            return (
+              <g key={ent.id} style={{ animation: `archFadeIn 0.4s ease ${i * 0.1}s both` }}>
+                {isPerson ? (
+                  <>
+                    <circle cx={pos.x} cy={y + 16} r={14} fill={ent.color + '20'} stroke={ent.color} strokeWidth={2} />
+                    <text x={pos.x} y={y + 20} textAnchor="middle" fontSize={14}>👤</text>
+                    <rect x={x} y={y + 34} width={boxW} height={boxH - 34} rx={8}
+                      fill="#161b22" stroke={ent.color} strokeWidth={1.5} />
+                    <text x={pos.x} y={y + 54} textAnchor="middle" fontSize={13} fontWeight={700} fill={ent.color}>{ent.label.replace(/^..\s/, '')}</text>
+                    <text x={pos.x} y={y + 70} textAnchor="middle" fontSize={9} fill="#8b949e">{ent.desc}</text>
+                  </>
+                ) : (
+                  <>
+                    <rect x={x} y={y} width={boxW} height={boxH} rx={isExternal ? 4 : 10}
+                      fill={isExternal ? '#1c2128' : '#161b22'}
+                      stroke={ent.color} strokeWidth={isExternal ? 1 : 2}
+                      strokeDasharray={isExternal ? '8,4' : undefined} />
+                    <rect x={x + 1} y={y + 1} width={boxW - 2} height={4} rx={2}
+                      fill={ent.color} fillOpacity={0.6} />
+                    <rect x={x + boxW - 68} y={y + 8} width={60} height={16} rx={3}
+                      fill={ent.color + '18'} stroke={ent.color + '30'} strokeWidth={0.8} />
+                    <text x={x + boxW - 38} y={y + 19} textAnchor="middle" fontSize={7} fill={ent.color} fontWeight={600}>
+                      {isExternal ? '外部系统' : ent.type === 'story' ? '用户故事' : '核心系统'}
+                    </text>
+                    <text x={pos.x} y={y + 38} textAnchor="middle" fontSize={13} fontWeight={700} fill={ent.color}>{ent.label}</text>
+                    <text x={pos.x} y={y + 56} textAnchor="middle" fontSize={9} fill="#8b949e">{ent.desc}</text>
+                  </>
+                )}
+              </g>
+            );
+          })}
+
+          {/* 底部图例 */}
+          <g style={{ animation: 'archFadeIn 0.5s ease 0.8s both' }}>
+            <text x={30} y={vh - 20} fontSize={9} fill="#6e7681">
+              C4 Level 1 · System Context · 实线=核心系统 · 虚线=外部依赖
+            </text>
+          </g>
+        </svg>
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // C4 L2: Container — 容器视图（按层展开）
+  // ========================================================================
+  if (viewMode === 'c4-container') {
+    const layers = ['game', 'engine', 'core', 'ui', 'server'] as const;
+    const layerColors: Record<string, string> = {
+      game: '#3fb950', engine: '#f0883e', core: '#bc8cff', ui: '#58a6ff', server: '#8b949e',
+    };
+    const layerLabels: Record<string, string> = {
+      game: '🎮 游戏层', engine: '⚡ 引擎层', core: '💎 核心层', ui: '🖥️ UI层', server: '🖧 服务端层',
+    };
+    const cLinks = CONTAINER_LINKS;
+    const vw = 960, padX = 60, padY = 70;
+    const containerW = (vw - padX * 2 - 40) / layers.length;
+    const containerH = 180;
+    const vh = padY + containerH + 200;
+
+    const containerPos = (idx: number) => ({
+      x: padX + idx * (containerW + 10),
+      cx: padX + idx * (containerW + 10) + containerW / 2,
+      y: padY + 40,
+    });
+
+    return (
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4">
+        <div className="mb-3 flex items-center gap-3">
+          <button className="text-sm text-slate-400 hover:text-white" onClick={() => setViewMode('overview')}>← 返回</button>
+          <h1 className="text-lg font-bold text-white">📦 C4 Model — L2 Container</h1>
+          <button className="ml-auto text-sm px-3 py-1 rounded bg-blue-900/40 text-blue-400 border border-blue-700/40 hover:bg-blue-900/60"
+            onClick={() => setViewMode('c4-context')}>← L1 全景视图</button>
+        </div>
+        <p className="text-xs text-slate-500 mb-2">容器级视角：5 个核心层 · 层间依赖 · 数据/事件流向</p>
+        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+          <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
+          <defs>
+            <marker id="c4c-arr" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+              <path d="M2,2 L8,5 L2,8" fill="none" stroke="#6e7681" strokeWidth="1.5" strokeLinecap="round" />
+            </marker>
+          </defs>
+
+          {/* 容器卡片 */}
+          {layers.map((layerId, i) => {
+            const pos = containerPos(i);
+            const color = layerColors[layerId];
+            const summary = LAYER_SUMMARIES[layerId] ?? '';
+            const label = layerLabels[layerId] ?? layerId;
+            const summaryParts = summary.split(' · ');
+            return (
+              <g key={layerId} style={{ animation: `archFadeIn 0.4s ease ${i * 0.08}s both` }}>
+                <rect x={pos.x} y={pos.y} width={containerW} height={containerH} rx={10}
+                  fill="#161b22" stroke={color} strokeWidth={2} />
+                <rect x={pos.x + 1} y={pos.y + 1} width={containerW - 2} height={5} rx={2}
+                  fill={color} fillOpacity={0.7} />
+                <text x={pos.cx} y={pos.y + 30} textAnchor="middle" fontSize={14} fontWeight={700} fill={color}>
+                  {label}
+                </text>
+                <rect x={pos.cx - 28} y={pos.y + 36} width={56} height={16} rx={4}
+                  fill={color + '15'} stroke={color + '30'} strokeWidth={0.8} />
+                <text x={pos.cx} y={pos.y + 47} textAnchor="middle" fontSize={7} fontWeight={600} fill={color}>Container</text>
+                {summaryParts.map((part, pi) => (
+                  <text key={pi} x={pos.x + 10} y={pos.y + 68 + pi * 16} fontSize={8.5} fill="#8b949e">
+                    {part.length > 22 ? part.slice(0, 22) + '…' : part}
+                  </text>
+                ))}
+              </g>
+            );
+          })}
+
+          {/* 层间连线 */}
+          {cLinks.map((link, i) => {
+            const fromIdx = layers.indexOf(link.from as typeof layers[number]);
+            const toIdx = layers.indexOf(link.to as typeof layers[number]);
+            if (fromIdx < 0 || toIdx < 0) return null;
+            const from = containerPos(fromIdx);
+            const to = containerPos(toIdx);
+            const y1 = from.y + containerH;
+            const y2 = to.y + containerH;
+            const midY = Math.max(y1, y2) + 30 + i * 18;
+            const pathD = `M${from.cx},${y1} C${from.cx},${midY} ${to.cx},${midY} ${to.cx},${y2}`;
+            return (
+              <g key={`clink-${i}`} style={{ animation: `archFadeIn 0.5s ease ${0.4 + i * 0.08}s both` }}>
+                <path d={pathD} fill="none" stroke={link.color} strokeWidth={1.5}
+                  strokeDasharray={link.dashed ? '6,3' : undefined}
+                  strokeOpacity={0.7} markerEnd="url(#c4c-arr)" />
+                <text x={(from.cx + to.cx) / 2} y={midY + 4}
+                  textAnchor="middle" fontSize={8} fill={link.color} fontStyle="italic">
+                  {link.label}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* 底部图例 */}
+          <g style={{ animation: 'archFadeIn 0.5s ease 0.9s both' }}>
+            <text x={padX} y={vh - 30} fontSize={9} fill="#6e7681">
+              C4 Level 2 · Container · 实线=直接依赖 · 虚线=事件/UI驱动
+            </text>
+            <g>
+              {layers.map((layerId, i) => (
+                <g key={layerId}>
+                  <rect x={padX + i * 150} y={vh - 18} width={10} height={10} rx={2}
+                    fill={layerColors[layerId]} fillOpacity={0.4} />
+                  <text x={padX + i * 150 + 14} y={vh - 9} fontSize={8} fill={layerColors[layerId]}>
+                    {layerLabels[layerId]}
+                  </text>
+                </g>
+              ))}
+            </g>
+          </g>
+        </svg>
+      </div>
+    );
+  }
+
+  // ========================================================================
+  // 层详情: SVG 布局 — 节点 + 内部弧线 + 跨层接口 + 点击弹窗
+  // ========================================================================
+  if (viewMode === 'layer-detail') {
+    const layerNodes = NODES.filter(n => n.layer === detailLayer);
+    const internalEdges = EDGES.filter(e => {
+      const fn = NODE_MAP.get(e.from);
+      const tn = NODE_MAP.get(e.to);
+      return fn && tn && fn.layer === detailLayer && tn.layer === detailLayer;
+    });
+    const externalEdges = EDGES.filter(e => {
+      const fn = NODE_MAP.get(e.from);
+      const tn = NODE_MAP.get(e.to);
+      return fn && tn && (fn.layer === detailLayer || tn.layer === detailLayer)
+        && (fn.layer !== detailLayer || tn.layer !== detailLayer);
+    });
+
+    const layerInfo = OVERVIEW_LAYERS.find(l => l.id === detailLayer);
+    const color = layerInfo?.color ?? '#6e7681';
+    const padX = 60, padY = 80;
+    const nodeW = 420, nodeH = 56, nodeGap = 16;
+    const vw = nodeW + padX * 2 + 300;
+    const vh = padY + layerNodes.length * (nodeH + nodeGap) + 120;
+
+    // 弹窗内容计算
+    const popNode = selectedNode?.layer === detailLayer ? selectedNode : null;
+    const popDetails = popNode?.details ?? [];
+    const popIface = popNode?.iface ?? [];
+    const popFlow = popNode?.dataFlow ?? [];
+    const popExample = popNode?.realExample ?? [];
+    const popSections = (popDetails.length > 0 ? 1 : 0) + (popIface.length > 0 ? 1 : 0)
+      + (popFlow.length > 0 ? 1 : 0) + (popExample.length > 0 ? 1 : 0);
+    const popH = popNode ? Math.max(140, 60
+      + popDetails.length * 15
+      + (popIface.length > 0 ? 24 + popIface.length * 13 : 0)
+      + (popFlow.length > 0 ? 24 + popFlow.length * 15 : 0)
+      + (popExample.length > 0 ? 24 + popExample.length * 13 : 0)
+      + popSections * 12
+    ) : 0;
+    const popW = 460;
+
+    return (
+      <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={closePop}>
+        <div className="mb-3 flex items-center gap-3">
+          <button className="text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
+          <h1 className="text-lg font-bold text-white">{layerInfo?.emoji} {layerInfo?.label} — 组件详情</h1>
+          <span className="text-xs text-slate-500">{layerNodes.length} 个组件 · 点击查看接口和案例</span>
+        </div>
+        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+          <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
+
+          {/* 层背景 */}
+          <rect x={padX - 10} y={padY - 30} width={nodeW + 20} height={layerNodes.length * (nodeH + nodeGap) + 40} rx={12}
+            fill={color} fillOpacity={0.04} stroke={color} strokeOpacity={0.2} strokeWidth={1.5} />
+          <text x={padX} y={padY - 12} fontSize={12} fontWeight={700} fill={color} opacity={0.6}>
+            {layerInfo?.emoji} {layerInfo?.label}
+          </text>
+
+          {/* 内部弧线 */}
+          {internalEdges.map((edge, ei) => {
+            const fromIdx = layerNodes.findIndex(n => n.id === edge.from);
+            const toIdx = layerNodes.findIndex(n => n.id === edge.to);
+            if (fromIdx < 0 || toIdx < 0) return null;
+            const fromY = padY + fromIdx * (nodeH + nodeGap) + nodeH / 2;
+            const toY = padY + toIdx * (nodeH + nodeGap) + nodeH / 2;
+            const arcX = padX - 20 - ei * 14;
+            const pathD = `M${padX},${fromY} C${arcX},${fromY} ${arcX},${toY} ${padX},${toY}`;
+            return (
+              <g key={`ie-${ei}`} style={{ animation: `archFadeIn 0.5s ease ${0.3 + ei * 0.06}s both` }}>
+                <path d={pathD} fill="none" stroke={edge.color} strokeWidth={1.2}
+                  strokeOpacity={0.4} strokeDasharray={edge.type === 'event' ? '5,3' : undefined} />
+                {edge.label && (
+                  <text x={arcX - 4} y={(fromY + toY) / 2 + 4} textAnchor="end" fontSize={7} fill={edge.color} opacity={0.6} fontStyle="italic">
+                    {edge.label}
+                  </text>
+                )}
+                <circle r={1.8} fill={edge.color} fillOpacity={0.6}>
+                  <animateMotion dur="2.5s" repeatCount="indefinite" path={pathD} />
+                </circle>
+              </g>
+            );
+          })}
+
+          {/* 节点卡片 */}
+          {layerNodes.map((node, i) => {
+            const x = padX, y = padY + i * (nodeH + nodeGap);
+            const hasExpand = !!node.expandable;
+            const hasDetail = !!(node.iface || node.dataFlow || node.realExample || (node.details && node.details.length > 0));
+            return (
+              <g key={node.id}
+                style={{ cursor: hasExpand || hasDetail ? 'pointer' : 'default', animation: `archFadeIn 0.4s ease ${i * 0.08}s both` }}
+                onClick={e => {
+                  e.stopPropagation();
+                  if (hasExpand) {
+                    if (node.expandable === 'pipeline') setViewMode('sub-pipeline');
+                    else if (node.expandable === 'systems') setViewMode('sub-systems');
+                    else if (node.expandable === 'testing') setViewMode('sub-testing');
+                  } else if (hasDetail) {
+                    setSelectedNode(prev => prev?.id === node.id ? null : node);
+                  }
+                }}>
+                <rect x={x} y={y} width={nodeW} height={nodeH} rx={8}
+                  fill={selectedNode?.id === node.id ? node.color + '18' : '#161b22'}
+                  stroke={node.color} strokeWidth={selectedNode?.id === node.id ? 2 : 1.5} />
+                <rect x={x + 1} y={y + 8} width={4} height={nodeH - 16} rx={2}
+                  fill={node.color} fillOpacity={0.7} />
+                <text x={x + 16} y={y + 22} fontSize={12} fontWeight={700} fill={node.color}>{node.label}</text>
+                <text x={x + 16} y={y + 40} fontSize={9} fill="#8b949e">{node.desc}</text>
+                {hasExpand && (
+                  <text x={x + nodeW - 10} y={y + 16} textAnchor="end" fontSize={8} fill={node.color} opacity={0.5}>→ 展开</text>
+                )}
+                {hasDetail && !hasExpand && (
+                  <text x={x + nodeW - 10} y={y + 16} textAnchor="end" fontSize={8} fill={node.color} opacity={0.4}>点击详情</text>
+                )}
+              </g>
+            );
+          })}
+
+          {/* 跨层接口 */}
+          {externalEdges.length > 0 && (() => {
+            const extX = padX + nodeW + 60;
+            return (
+              <g style={{ animation: 'archFadeIn 0.5s ease 0.5s both' }}>
+                <text x={extX} y={padY - 12} fontSize={11} fontWeight={600} fill="#6e7681">跨层连接</text>
+                {externalEdges.map((edge, i) => {
+                  const fn = NODE_MAP.get(edge.from);
+                  const tn = NODE_MAP.get(edge.to);
+                  if (!fn || !tn) return null;
+                  const isOut = fn.layer === detailLayer;
+                  const otherNode = isOut ? tn : fn;
+                  const y = padY + i * 28;
+                  return (
+                    <g key={i}>
+                      <text x={extX} y={y + 10} fontSize={9} fill={isOut ? '#3fb950' : '#58a6ff'}>
+                        {isOut ? '→ 出' : '← 入'}
+                      </text>
+                      <rect x={extX + 28} y={y - 2} width={otherNode.label.length * 8 + 16} height={18} rx={4}
+                        fill={otherNode.color + '12'} stroke={otherNode.color + '30'} strokeWidth={0.8} />
+                      <text x={extX + 36} y={y + 10} fontSize={8} fill={otherNode.color}>{otherNode.label}</text>
+                      {edge.label && (
+                        <text x={extX + 36 + otherNode.label.length * 8 + 20} y={y + 10} fontSize={8} fill="#6e7681">{edge.label}</text>
+                      )}
+                    </g>
+                  );
+                })}
               </g>
             );
           })()}
 
-          {/* 底部原理说明 */}
-          <g style={{ animation: 'archFadeIn 0.5s ease 1s both' }}>
-            <text x={sx} y={vh - 30} fontSize={10} fill="#6e7681">
-              💡 核心原理: 纯函数引擎 + 确定性管线 → 相同输入必定产生相同输出 → 命令序列回放即可验证正确性
-            </text>
-          </g>
+          {/* 详情弹窗 */}
+          {popNode && popSections > 0 && (() => {
+            const popX = (vw - popW) / 2;
+            const popY = Math.max(10, (vh - popH) / 2);
+            let cy = popY + 16;
+            return (
+              <g onClick={(e: React.MouseEvent) => e.stopPropagation()} style={{ animation: 'archFadeIn 0.15s ease' }}>
+                <rect x={0} y={0} width={vw} height={vh} fill="#000" fillOpacity={0.5} style={{ cursor: 'pointer' }} onClick={closePop} />
+                <rect x={popX} y={popY} width={popW} height={popH} rx={12}
+                  fill="#161b22" stroke={popNode.color + '40'} strokeWidth={1.5} />
+                <rect x={popX + 1} y={popY + 1} width={popW - 2} height={4} rx={2} fill={popNode.color} fillOpacity={0.6} />
+                <text x={popX + popW - 16} y={popY + 18} textAnchor="middle" fill="#6e7681" fontSize={14}
+                  style={{ cursor: 'pointer' }} onClick={closePop}>{'\u2715'}</text>
+                <text x={popX + 16} y={(cy += 14, cy)} fill={popNode.color} fontSize={13} fontWeight={700}>{popNode.label}</text>
+                <text x={popX + 16} y={(cy += 16, cy)} fill="#8b949e" fontSize={9}>{popNode.desc}</text>
+                {(cy += 8, null)}
+                <line x1={popX + 14} y1={cy} x2={popX + popW - 14} y2={cy} stroke="#21262d" />
+
+                {/* 说明 */}
+                {popDetails.length > 0 && popDetails.map((d, i) => (
+                  <text key={`d${i}`} x={popX + 16} y={(cy += 15, cy)} fill="#c9d1d9" fontSize={9}>{d}</text>
+                ))}
+
+                {/* 接口 */}
+                {popIface.length > 0 && (() => {
+                  cy += 12;
+                  return (
+                    <>
+                      <text x={popX + 16} y={(cy += 12, cy)} fill={popNode.color} fontSize={9} fontWeight={700}>📋 接口定义</text>
+                      <rect x={popX + 14} y={cy + 4} width={popW - 28} height={popIface.length * 13 + 8} rx={4}
+                        fill="#0d1117" stroke="#21262d" strokeWidth={0.8} />
+                      {popIface.map((line, i) => (
+                        <text key={`if${i}`} x={popX + 22} y={(cy += 13, cy + 4)} fill="#7ee787" fontSize={8}
+                          fontFamily="monospace">{line}</text>
+                      ))}
+                      {(cy += 8, null)}
+                    </>
+                  );
+                })()}
+
+                {/* 链路 */}
+                {popFlow.length > 0 && (() => {
+                  cy += 12;
+                  return (
+                    <>
+                      <text x={popX + 16} y={(cy += 12, cy)} fill={popNode.color} fontSize={9} fontWeight={700}>🔗 数据链路</text>
+                      {popFlow.map((step, i) => (
+                        <g key={`fl${i}`}>
+                          <text x={popX + 22} y={(cy += 15, cy)} fill="#e3b341" fontSize={8} fontFamily="monospace">{i + 1}.</text>
+                          <text x={popX + 38} y={cy} fill="#c9d1d9" fontSize={8}>{step}</text>
+                        </g>
+                      ))}
+                    </>
+                  );
+                })()}
+
+                {/* 案例 */}
+                {popExample.length > 0 && (() => {
+                  cy += 12;
+                  return (
+                    <>
+                      <text x={popX + 16} y={(cy += 12, cy)} fill={popNode.color} fontSize={9} fontWeight={700}>🎲 骰子王座案例</text>
+                      <rect x={popX + 14} y={cy + 4} width={popW - 28} height={popExample.length * 13 + 8} rx={4}
+                        fill="#0d1117" stroke="#e3b34130" strokeWidth={0.8} />
+                      {popExample.map((line, i) => (
+                        <text key={`ex${i}`} x={popX + 22} y={(cy += 13, cy + 4)} fill="#e3b341" fontSize={8}
+                          fontFamily="monospace">{line}</text>
+                      ))}
+                    </>
+                  );
+                })()}
+              </g>
+            );
+          })()}
         </svg>
       </div>
     );

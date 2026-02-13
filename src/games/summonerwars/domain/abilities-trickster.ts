@@ -19,6 +19,7 @@
  */
 
 import type { AbilityDef } from './abilities';
+import { getUnitAt } from './helpers';
 
 export const TRICKSTER_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -37,6 +38,26 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       // trigger 设为 passive 避免 afterAttack 重复触发
       { type: 'custom', actionId: 'mind_capture_check' },
     ],
+  },
+
+  {
+    id: 'mind_capture_resolve',
+    name: '心灵捕获决策',
+    description: '选择控制目标单位或造成伤害。',
+    sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_003',
+    trigger: 'activated',
+    effects: [
+      { type: 'custom', actionId: 'mind_capture_resolve' },
+    ],
+    validation: {
+      customValidator: (ctx) => {
+        const choice = ctx.payload.choice as string | undefined;
+        if (!choice || (choice !== 'control' && choice !== 'damage')) {
+          return { valid: false, error: '必须选择控制或伤害' };
+        }
+        return { valid: true };
+      },
+    },
   },
 
   // ============================================================================
@@ -86,6 +107,37 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       filter: { type: 'isInRange', target: 'self', range: 3 },
       count: 1,
     },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择推拉目标' };
+        }
+        
+        const dist = Math.abs(ctx.sourcePosition.row - targetPosition.row) + Math.abs(ctx.sourcePosition.col - targetPosition.col);
+        if (dist > 3) {
+          return { valid: false, error: '目标必须在3格以内' };
+        }
+        
+        const tkTarget = getUnitAt(ctx.core, targetPosition);
+        if (!tkTarget) {
+          return { valid: false, error: '目标位置没有单位' };
+        }
+        
+        if (tkTarget.card.unitClass === 'summoner') {
+          return { valid: false, error: '不能推拉召唤师' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.highTelekinesis',
+      buttonVariant: 'secondary',
+    },
   },
 
   {
@@ -125,6 +177,41 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
         ],
       },
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择额外攻击目标' };
+        }
+        
+        const mtDist = Math.abs(ctx.sourcePosition.row - targetPosition.row) + Math.abs(ctx.sourcePosition.col - targetPosition.col);
+        if (mtDist > 3) {
+          return { valid: false, error: '目标必须在3格以内' };
+        }
+        
+        const mtTarget = getUnitAt(ctx.core, targetPosition);
+        if (!mtTarget) {
+          return { valid: false, error: '目标位置没有单位' };
+        }
+        
+        if (mtTarget.owner !== ctx.playerId) {
+          return { valid: false, error: '必须选择友方单位' };
+        }
+        
+        if (mtTarget.card.unitClass !== 'common') {
+          return { valid: false, error: '只能选择士兵' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.mindTransmission',
+      buttonVariant: 'secondary',
     },
   },
 
@@ -175,6 +262,37 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       filter: { type: 'isInRange', target: 'self', range: 2 },
       count: 1,
     },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择推拉目标' };
+        }
+        
+        const dist = Math.abs(ctx.sourcePosition.row - targetPosition.row) + Math.abs(ctx.sourcePosition.col - targetPosition.col);
+        if (dist > 2) {
+          return { valid: false, error: '目标必须在2格以内' };
+        }
+        
+        const tkTarget = getUnitAt(ctx.core, targetPosition);
+        if (!tkTarget) {
+          return { valid: false, error: '目标位置没有单位' };
+        }
+        
+        if (tkTarget.card.unitClass === 'summoner') {
+          return { valid: false, error: '不能推拉召唤师' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.telekinesis',
+      buttonVariant: 'secondary',
+    },
   },
 
   // ============================================================================
@@ -202,6 +320,37 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
         ],
       },
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'move',
+      customValidator: (ctx) => {
+        const illusionTargetPos = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!illusionTargetPos) {
+          return { valid: false, error: '必须选择目标士兵' };
+        }
+        
+        const illusionTarget = getUnitAt(ctx.core, illusionTargetPos);
+        if (!illusionTarget) {
+          return { valid: false, error: '目标位置没有单位' };
+        }
+        
+        if (illusionTarget.card.unitClass !== 'common') {
+          return { valid: false, error: '只能选择士兵' };
+        }
+        
+        const illusionDist = Math.abs(ctx.sourcePosition.row - illusionTargetPos.row) + Math.abs(ctx.sourcePosition.col - illusionTargetPos.col);
+        if (illusionDist > 3 || illusionDist === 0) {
+          return { valid: false, error: '目标必须在3格以内' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'move',
+      buttonLabel: 'abilityButtons.illusion',
+      buttonVariant: 'secondary',
     },
   },
 

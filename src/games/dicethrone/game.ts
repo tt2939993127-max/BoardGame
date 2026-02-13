@@ -370,7 +370,7 @@ const systems = [
         formatEntry: formatDiceThroneActionEntry,
     }),
     createUndoSystem({
-        maxSnapshots: 10,
+        maxSnapshots: 3,
         // 只对白名单命令做撤回快照，避免 UI/系统行为导致“一进局就可撤回”。
         snapshotCommandAllowlist: UNDO_ALLOWLIST,
     }),
@@ -419,7 +419,6 @@ const COMMAND_TYPES = [
     'PLAY_UPGRADE_CARD',
     // 选择与阶段
     'RESOLVE_CHOICE',
-    'ADVANCE_PHASE',
     // 卡牌交互（骰子修改、状态移除/转移）
     'MODIFY_DIE',
     'REROLL_DIE',
@@ -457,7 +456,7 @@ export default DiceThroneGame;
 export { formatDiceThroneActionEntry };
 
 // 注册卡牌预览获取函数
-import { registerCardPreviewGetter } from '../../components/game/cardPreviewRegistry';
+import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getDiceThroneCardPreviewRef } from './ui/cardPreviewHelper';
 registerCardPreviewGetter('dicethrone', getDiceThroneCardPreviewRef);
 

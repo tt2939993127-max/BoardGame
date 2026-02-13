@@ -77,11 +77,13 @@ const defaultRandom: RandomFn = {
     range: (_min: number, _max: number) => _min,
 };
 
-function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string) {
+    const ms = makeMatchState(state);
+    const events = execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid },
     } as any, defaultRandom);
+    return { events, matchState: ms };
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -125,14 +127,12 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'action1');
+            const { matchState } = execPlayAction(state, '0', 'action1');
 
-            // 应该有 PROMPT_CONTINUATION 事件
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-
-            const payload = (promptEvents[0] as any).payload;
-            expect(payload.abilityId).toBe('pirate_cannon_choose_first');
+            // 迁移后直接创建 Interaction
+            const current = (matchState.sys as any).interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('pirate_cannon_choose_first');
         });
 
         it('只有一个力量≤2随从时创建 Prompt', () => {
@@ -157,11 +157,12 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'action1');
+            const { matchState } = execPlayAction(state, '0', 'action1');
 
-            // 单目标时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 单目标时也创建 Interaction
+            const current = (matchState.sys as any).interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('pirate_cannon_choose_first');
         });
 
         it('无力量≤2随从时无事件', () => {
@@ -186,13 +187,13 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'action1');
+            const { events, matchState } = execPlayAction(state, '0', 'action1');
 
-            // 不应该有消灭或 Prompt 事件
+            // 不应该有消灭事件或 Interaction
             const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(destroyEvents.length).toBe(0);
-            expect(promptEvents.length).toBe(0);
+            const current = (matchState.sys as any).interaction?.current;
+            expect(current).toBeUndefined();
         });
     });
 
@@ -222,11 +223,11 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'action1');
+            const { matchState } = execPlayAction(state, '0', 'action1');
 
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('pirate_powderkeg');
+            const current = (matchState.sys as any).interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('pirate_powderkeg');
         });
 
         it('只有一个己方随从时创建 Prompt', () => {
@@ -254,11 +255,12 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'action1');
+            const { matchState } = execPlayAction(state, '0', 'action1');
 
-            // 单个己方随从时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 单个己方随从时也创建 Interaction
+            const current = (matchState.sys as any).interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('pirate_powderkeg');
         });
     });
 
@@ -287,14 +289,16 @@ describe('Prompt E2E: 确定性状态测试', () => {
             });
 
             // 打出随从
-            const events = execute(makeMatchState(state), {
+            const ms = makeMatchState(state);
+            execute(ms, {
                 type: SU_COMMANDS.PLAY_MINION, playerId: '0',
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
-            expect((promptEvents[0] as any).payload.abilityId).toBe('zombie_grave_digger');
+            // 迁移后直接创建 Interaction（不再生成 CHOICE_REQUESTED 事件）
+            const current = (ms.sys as any).interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('zombie_grave_digger');
         });
 
         it('弃牌堆只有一张随从时创建 Prompt', () => {
@@ -317,14 +321,16 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 bases: [makeBase('base1')],
             });
 
-            const events = execute(makeMatchState(state), {
+            const ms = makeMatchState(state);
+            execute(ms, {
                 type: SU_COMMANDS.PLAY_MINION, playerId: '0',
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
-            // 单张随从时创建 Prompt
-            const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
-            expect(promptEvents.length).toBe(1);
+            // 单张随从时也创建 Interaction
+            const current = (ms.sys as any).interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('zombie_grave_digger');
         });
 
         it('弃牌堆没有随从时无回收事件', () => {
@@ -383,7 +389,7 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'action1');
+            const { events } = execPlayAction(state, '0', 'action1');
 
             const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);
             expect(promptEvents.length).toBe(1);
@@ -413,7 +419,7 @@ describe('Prompt E2E: 确定性状态测试', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'action1');
+            const { events } = execPlayAction(state, '0', 'action1');
 
             // 单个有随从的基地时创建 Prompt
             const promptEvents = events.filter(e => e.type === SU_EVENTS.CHOICE_REQUESTED);

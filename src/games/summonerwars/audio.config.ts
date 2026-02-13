@@ -2,7 +2,7 @@
  * 召唤师战争音频配置
  * 仅保留事件解析/规则，音效资源统一来自 registry
  */
-import type { AudioEvent, AudioRuntimeContext, EventSoundResult, GameAudioConfig } from '../../lib/audio/types';
+import type { AudioEvent, AudioRuntimeContext, GameAudioConfig, SoundKey } from '../../lib/audio/types';
 import { pickDiceRollSoundKey, pickRandomSoundKey } from '../../lib/audio/audioUtils';
 import type { GamePhase, PlayerId, SummonerWarsCore, FactionId } from './domain/types';
 import { SW_EVENTS } from './domain/types';
@@ -310,6 +310,40 @@ const resolveAbilitySound = (event: AudioEvent): string | null => {
     return pickRandomSoundKey(`summonerwars.ability.${group}`, [...keys], { minGap: 1 });
 };
 
+// ============================================================================
+// 音效 key 解析 helpers（供 FX/动画层调用，避免重复定义 key 映射）
+// ============================================================================
+
+/** 解析攻击音效 key（melee/ranged） */
+export function resolveAttackSoundKey(
+    attackType: 'melee' | 'ranged',
+    core: SummonerWarsCore,
+    attackerPos?: { row: number; col: number },
+): string {
+    if (attackType === 'ranged') {
+        return pickRandomSoundKey('summonerwars.ranged_attack', RANGED_ATTACK_KEYS, { minGap: 1 });
+    }
+    const attackerUnit = attackerPos ? core.board?.[attackerPos.row]?.[attackerPos.col]?.unit : undefined;
+    const meleeKeys = attackerUnit?.card?.unitClass === 'summoner' || attackerUnit?.card?.unitClass === 'champion'
+        ? MELEE_HEAVY_KEYS : MELEE_LIGHT_KEYS;
+    return pickRandomSoundKey('summonerwars.melee_attack', meleeKeys, { minGap: 1 });
+}
+
+/** 解析受伤音效 key */
+export function resolveDamageSoundKey(damage: number): string | null {
+    if (damage >= 3) return DAMAGE_HEAVY_KEY;
+    if (damage > 0) return DAMAGE_LIGHT_KEY;
+    return null;
+}
+
+/** 解析摧毁音效 key */
+export function resolveDestroySoundKey(type: 'unit' | 'structure', isGate?: boolean): string {
+    if (type === 'unit') return UNIT_DESTROY_KEY;
+    return isGate
+        ? pickRandomSoundKey('summonerwars.gate_destroy', GATE_DESTROY_KEYS, { minGap: 1 })
+        : STRUCTURE_DESTROY_KEY;
+}
+
 export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
     criticalSounds: [
         SELECTION_KEY,
@@ -367,57 +401,32 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
             BGM_STONE_CHANT_INTENSE_KEY,
         ],
     },
-    feedbackResolver: (event, context): EventSoundResult | null => {
+    feedbackResolver: (event, context): SoundKey | null => {
         const type = event.type;
         const runtime = context as AudioRuntimeContext<
             SummonerWarsCore,
             { currentPhase: GamePhase; isGameOver: boolean; isWinner?: boolean },
             { currentPlayerId: PlayerId }
         >;
-        const I = (key: string): EventSoundResult => ({ key, timing: 'immediate' });
-        const ON_IMPACT = (key: string): EventSoundResult => ({ key, timing: 'on-impact' });
 
-        // ==== 战斗事件：必须优先检查，防止 resolveAbilitySound 抢先 ====
-        if (type === SW_EVENTS.UNIT_ATTACKED) {
-            const p = (event as AudioEvent & { payload?: {
-                attackType?: 'melee' | 'ranged'; attacker?: { row: number; col: number };
-            } }).payload;
-            if (p?.attackType === 'ranged') {
-                return ON_IMPACT(pickRandomSoundKey('summonerwars.ranged_attack', RANGED_ATTACK_KEYS, { minGap: 1 }));
-            }
-            const attackerUnit = p?.attacker ? runtime.G?.board?.[p.attacker.row]?.[p.attacker.col]?.unit : undefined;
-            const meleeKeys = attackerUnit?.card?.unitClass === 'summoner' || attackerUnit?.card?.unitClass === 'champion'
-                ? MELEE_HEAVY_KEYS : MELEE_LIGHT_KEYS;
-            return ON_IMPACT(pickRandomSoundKey('summonerwars.melee_attack', meleeKeys, { minGap: 1 }));
-        }
-        if (type === SW_EVENTS.UNIT_DAMAGED) {
-            const damage = (event as AudioEvent & { payload?: { damage?: number } }).payload?.damage ?? 0;
-            if (damage >= 3) return ON_IMPACT(DAMAGE_HEAVY_KEY);
-            if (damage > 0) return ON_IMPACT(DAMAGE_LIGHT_KEY);
-            return null;
-        }
-        if (type === SW_EVENTS.UNIT_DESTROYED) {
-            return ON_IMPACT(UNIT_DESTROY_KEY);
-        }
-        if (type === SW_EVENTS.STRUCTURE_DESTROYED) {
-            const p = (event as AudioEvent & { payload?: { isGate?: boolean } }).payload;
-            return ON_IMPACT(p?.isGate
-                ? pickRandomSoundKey('summonerwars.gate_destroy', GATE_DESTROY_KEYS, { minGap: 1 })
-                : STRUCTURE_DESTROY_KEY);
-        }
+        // ==== 有动画/FX 的事件：返回 null，音效由动画层在 onImpact 播放 ====
+        if (type === SW_EVENTS.UNIT_ATTACKED) return null;
+        if (type === SW_EVENTS.UNIT_DAMAGED) return null;
+        if (type === SW_EVENTS.UNIT_DESTROYED) return null;
+        if (type === SW_EVENTS.STRUCTURE_DESTROYED) return null;
         if (type === SW_EVENTS.STRUCTURE_DAMAGED) return null;
+        if (type === SW_EVENTS.UNIT_SUMMONED) return null;
 
         // ==== 能力音效（战斗事件已排除，此处仅处理非战斗能力） ====
         const abilitySound = resolveAbilitySound(event);
-        if (abilitySound) return I(abilitySound);
+        if (abilitySound) return abilitySound;
 
-        if (type === SW_EVENTS.FACTION_SELECTED) return I(SELECTION_KEY);
-        if (type === SW_EVENTS.PLAYER_READY) return I(POSITIVE_SIGNAL_KEY);
-        if (type === SW_EVENTS.HOST_STARTED || type === SW_EVENTS.GAME_INITIALIZED) return I(UPDATE_CHIME_KEY);
-        if (type === SW_EVENTS.PHASE_CHANGED) return I('fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_001');
-        if (type === SW_EVENTS.TURN_CHANGED) return I(TURN_CHANGED_KEY);
-
-        // UNIT_SUMMONED 音效由 FX 系统在特效冲击帧播放（on-impact），不在此处播放
+        if (type === SW_EVENTS.FACTION_SELECTED) return SELECTION_KEY;
+        if (type === SW_EVENTS.PLAYER_READY) return POSITIVE_SIGNAL_KEY;
+        if (type === SW_EVENTS.HOST_STARTED || type === SW_EVENTS.GAME_INITIALIZED) return UPDATE_CHIME_KEY;
+        if (type === SW_EVENTS.PHASE_CHANGED) return 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_001';
+        if (type === SW_EVENTS.TURN_CHANGED) return TURN_CHANGED_KEY;
+        
         if (type === SW_EVENTS.UNIT_MOVED) {
             const movePayload = (event as AudioEvent & { payload?: { to?: { row: number; col: number } } }).payload;
             const to = movePayload?.to;
@@ -426,47 +435,47 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
             const faction = factionRaw ? resolveFactionId(factionRaw) : undefined;
             const factionKeys = faction ? FACTION_MOVE_KEYS[faction] : undefined;
             if (factionKeys) {
-                return I(pickRandomSoundKey(`summonerwars.move.${faction}`, factionKeys, { minGap: 1 }));
+                return pickRandomSoundKey(`summonerwars.move.${faction}`, factionKeys, { minGap: 1 });
             }
-            return I(MOVE_FALLBACK_KEY);
+            return MOVE_FALLBACK_KEY;
         }
         if (type === SW_EVENTS.STRUCTURE_BUILT) {
             const buildPayload = (event as AudioEvent & { payload?: { card?: { isGate?: boolean } } }).payload;
             if (buildPayload?.card?.isGate) {
-                return I(pickRandomSoundKey('summonerwars.gate_build', GATE_BUILD_KEYS, { minGap: 1 }));
+                return pickRandomSoundKey('summonerwars.gate_build', GATE_BUILD_KEYS, { minGap: 1 });
             }
-            return I(BUILD_KEY);
+            return BUILD_KEY;
         }
 
-        if (type === SW_EVENTS.UNIT_HEALED || type === SW_EVENTS.STRUCTURE_HEALED) return I(HEAL_KEY);
+        if (type === SW_EVENTS.UNIT_HEALED || type === SW_EVENTS.STRUCTURE_HEALED) return HEAL_KEY;
 
         if (type === SW_EVENTS.MAGIC_CHANGED) {
             const delta = (event as AudioEvent & { payload?: { delta?: number } }).payload?.delta ?? 0;
-            return I(delta >= 0 ? MAGIC_GAIN_KEY : MAGIC_SPEND_KEY);
+            return delta >= 0 ? MAGIC_GAIN_KEY : MAGIC_SPEND_KEY;
         }
 
-        if (type === SW_EVENTS.CARD_DRAWN) return I(CARD_DRAW_KEY);
-        if (type === SW_EVENTS.CARD_DISCARDED || type === SW_EVENTS.ACTIVE_EVENT_DISCARDED) return I(CARD_DISCARD_KEY);
-        if (type === SW_EVENTS.EVENT_PLAYED || type === SW_EVENTS.EVENT_ATTACHED) return I(EVENT_PLAY_KEY);
-        if (type === SW_EVENTS.CARD_RETRIEVED) return I(CARD_DRAW_KEY);
+        if (type === SW_EVENTS.CARD_DRAWN) return CARD_DRAW_KEY;
+        if (type === SW_EVENTS.CARD_DISCARDED || type === SW_EVENTS.ACTIVE_EVENT_DISCARDED) return CARD_DISCARD_KEY;
+        if (type === SW_EVENTS.EVENT_PLAYED || type === SW_EVENTS.EVENT_ATTACHED) return EVENT_PLAY_KEY;
+        if (type === SW_EVENTS.CARD_RETRIEVED) return CARD_DRAW_KEY;
 
-        if (type === SW_EVENTS.UNIT_CHARGED || type === SW_EVENTS.FUNERAL_PYRE_CHARGED) return I(UNIT_CHARGE_KEY);
-        if (type === SW_EVENTS.HEALING_MODE_SET) return I(HEAL_MODE_KEY);
+        if (type === SW_EVENTS.UNIT_CHARGED || type === SW_EVENTS.FUNERAL_PYRE_CHARGED) return UNIT_CHARGE_KEY;
+        if (type === SW_EVENTS.HEALING_MODE_SET) return HEAL_MODE_KEY;
 
-        if (type === SW_EVENTS.DAMAGE_REDUCED) return I(STRUCTURE_DAMAGE_KEY);
-        if (type === SW_EVENTS.EXTRA_ATTACK_GRANTED) return I(POSITIVE_SIGNAL_KEY);
+        if (type === SW_EVENTS.DAMAGE_REDUCED) return STRUCTURE_DAMAGE_KEY;
+        if (type === SW_EVENTS.EXTRA_ATTACK_GRANTED) return POSITIVE_SIGNAL_KEY;
         if (type === SW_EVENTS.STRENGTH_MODIFIED) {
             const delta = (event as AudioEvent & { payload?: { delta?: number } }).payload?.delta ?? 0;
-            return I(delta >= 0 ? UNIT_CHARGE_KEY : MAGIC_SPEND_KEY);
+            return delta >= 0 ? UNIT_CHARGE_KEY : MAGIC_SPEND_KEY;
         }
-        if (type === SW_EVENTS.ABILITIES_COPIED) return I(MAGIC_SHOCK_KEY);
+        if (type === SW_EVENTS.ABILITIES_COPIED) return MAGIC_SHOCK_KEY;
 
         if (type === SW_EVENTS.UNIT_PUSHED || type === SW_EVENTS.UNIT_PULLED || type === SW_EVENTS.UNITS_SWAPPED) {
-            return I(pickRandomSoundKey('summonerwars.move_swing', MOVE_SWING_KEYS, { minGap: 1 }));
+            return pickRandomSoundKey('summonerwars.move_swing', MOVE_SWING_KEYS, { minGap: 1 });
         }
 
         if (type === SW_EVENTS.CONTROL_TRANSFERRED || type === SW_EVENTS.ABILITY_TRIGGERED || type === SW_EVENTS.HYPNOTIC_LURE_MARKED) {
-            return I(MAGIC_SHOCK_KEY);
+            return MAGIC_SHOCK_KEY;
         }
 
         if (
@@ -475,7 +484,7 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
             || type === SW_EVENTS.MIND_CAPTURE_REQUESTED
             || type === SW_EVENTS.GRAB_FOLLOW_REQUESTED
         ) {
-            return I(PROMPT_KEY);
+            return PROMPT_KEY;
         }
 
         return null;

@@ -17,7 +17,6 @@ import type {
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from './types';
 import { getEffectivePower } from './ongoingModifiers';
 import {
-    requestChoice,
     returnMadnessCard,
     moveMinion,
     destroyMinion,
@@ -25,7 +24,8 @@ import {
     grantExtraAction,
     recoverCardsFromDiscard,
 } from './abilityHelpers';
-import { registerPromptContinuation } from './promptContinuation';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerBaseAbility } from './baseAbilities';
 import { registerInterceptor, registerProtection } from './ongoingEffects';
 import type { ProtectionCheckContext } from './ongoingEffects';
@@ -70,13 +70,12 @@ export function registerExpansionBaseAbilities(): void {
             })),
         ];
 
-        return {
-            events: [requestChoice({
-                abilityId: 'base_the_asylum',
-                playerId: ctx.playerId,
-                promptConfig: { title: '疯人院：选择返回一张疯狂卡', options },
-            }, ctx.now)],
-        };
+        if (!ctx.matchState) return { events: [] };
+        const interaction = createSimpleChoice(
+            `base_the_asylum_${ctx.now}`, ctx.playerId,
+            '疯人院：选择返回一张疯狂卡', options as any[], 'base_the_asylum',
+        );
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
     // ── 印斯茅斯基地（Innsmouth Base）────────────────────────────
@@ -107,13 +106,12 @@ export function registerExpansionBaseAbilities(): void {
             })),
         ];
 
-        return {
-            events: [requestChoice({
-                abilityId: 'base_innsmouth_base',
-                playerId: ctx.playerId,
-                promptConfig: { title: '印斯茅斯基地：选择一张弃牌堆卡放入牌库底', options },
-            }, ctx.now)],
-        };
+        if (!ctx.matchState) return { events: [] };
+        const interaction = createSimpleChoice(
+            `base_innsmouth_base_${ctx.now}`, ctx.playerId,
+            '印斯茅斯基地：选择一张弃牌堆卡放入牌库底', options as any[], 'base_innsmouth_base',
+        );
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
     // ── 密斯卡托尼克大学基地（Miskatonic University Base）────────
@@ -159,14 +157,16 @@ export function registerExpansionBaseAbilities(): void {
                 })),
             ];
 
-            events.push(requestChoice({
-                abilityId: 'base_miskatonic_university_base',
-                playerId: pid,
-                promptConfig: { title: '密大基地：选择返回一张疯狂卡', options },
-            }, ctx.now));
+            if (ctx.matchState) {
+                const interaction = createSimpleChoice(
+                    `base_miskatonic_university_base_${pid}_${ctx.now}`, pid,
+                    '密大基地：选择返回一张疯狂卡', options as any[], 'base_miskatonic_university_base',
+                );
+                ctx.matchState = queueInteraction(ctx.matchState, interaction);
+            }
         }
 
-        return { events };
+        return { events, matchState: ctx.matchState };
     });
 
     // ── 冷原高地（Plateau of Leng）──────────────────────────────
@@ -196,14 +196,13 @@ export function registerExpansionBaseAbilities(): void {
             })),
         ];
 
-        return {
-            events: [requestChoice({
-                abilityId: 'base_plateau_of_leng',
-                playerId: ctx.playerId,
-                promptConfig: { title: `冷原高地：是否打出同名随�?${minionName}？`, options },
-                        continuationContext: { baseIndex: ctx.baseIndex, },
-            }, ctx.now)],
-        };
+        if (!ctx.matchState) return { events: [] };
+        const interaction = createSimpleChoice(
+            `base_plateau_of_leng_${ctx.now}`, ctx.playerId,
+            `冷原高地：是否打出同名随从${minionName}？`, options as any[], 'base_plateau_of_leng',
+        );
+        (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
     // ============================================================================
@@ -234,15 +233,13 @@ export function registerExpansionBaseAbilities(): void {
             }),
         ];
 
-        return {
-            events: [requestChoice({
-                abilityId: 'base_greenhouse',
-                playerId: winnerId,
-                promptConfig: { title: '温室：从牌库中选择一个随从打出到新基地', options },
-                        continuationContext: { // afterScoring 后基地被替换，替换基地在同一 baseIndex 位置
-                    baseIndex: ctx.baseIndex, },
-            }, ctx.now)],
-        };
+        if (!ctx.matchState) return { events: [] };
+        const interaction = createSimpleChoice(
+            `base_greenhouse_${ctx.now}`, winnerId,
+            '温室：从牌库中选择一个随从打出到新基地', options as any[], 'base_greenhouse',
+        );
+        (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
     // ── 神秘花园（Secret Garden）──────────────────────────────
@@ -277,18 +274,17 @@ export function registerExpansionBaseAbilities(): void {
                 return {
                     id: `action-${i}`,
                     label: def?.name ?? c.defId,
-                    value: { cardUid: c.uid },
+                    value: { cardUid: c.uid, defId: c.defId },
                 };
             }),
         ];
 
-        return {
-            events: [requestChoice({
-                abilityId: 'base_inventors_salon',
-                playerId: winnerId,
-                promptConfig: { title: '发明家沙龙：从弃牌堆选择一张行动卡放入手牌', options },
-            }, ctx.now)],
-        };
+        if (!ctx.matchState) return { events: [] };
+        const interaction = createSimpleChoice(
+            `base_inventors_salon_${ctx.now}`, winnerId,
+            '发明家沙龙：从弃牌堆选择一张行动卡放入手牌', options as any[], 'base_inventors_salon',
+        );
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
     // ============================================================================
@@ -319,14 +315,13 @@ export function registerExpansionBaseAbilities(): void {
             ...minionOptions,
         ];
 
-        return {
-            events: [requestChoice({
-                abilityId: 'base_cat_fanciers_alley',
-                playerId: ctx.playerId,
-                promptConfig: { title: '诡猫巷：消灭一个己方随从来抽一张卡牌', options },
-                        continuationContext: { baseIndex: ctx.baseIndex, },
-            }, ctx.now)],
-        };
+        if (!ctx.matchState) return { events: [] };
+        const interaction = createSimpleChoice(
+            `base_cat_fanciers_alley_${ctx.now}`, ctx.playerId,
+            '诡猫巷：消灭一个己方随从来抽一张卡牌', options as any[], 'base_cat_fanciers_alley',
+        );
+        (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
     // ── 魔法林地（Enchanted Glade）──────────────────────────────
@@ -407,14 +402,13 @@ export function registerExpansionBaseAbilities(): void {
             ...minionOptions,
         ];
 
-        return {
-            events: [requestChoice({
-                abilityId: 'base_land_of_balance',
-                playerId: ctx.playerId,
-                promptConfig: { title: '平衡之地：选择一个己方随从移动到这里', options },
-                        continuationContext: { balanceBaseIndex, },
-            }, ctx.now)],
-        };
+        if (!ctx.matchState) return { events: [] };
+        const interaction = createSimpleChoice(
+            `base_land_of_balance_${ctx.now}`, ctx.playerId,
+            '平衡之地：选择一个己方随从移动到这里', options as any[], 'base_land_of_balance',
+        );
+        (interaction.data as any).continuationContext = { balanceBaseIndex };
+        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
 
     // ── 九命之屋（House of Nine Lives）──────────────────────────
@@ -478,143 +472,86 @@ export function registerExpansionBaseAbilities(): void {
 }
 
 // ============================================================================
-// 扩展包基�?Prompt 继续函数
+// 扩展包基�?交互解决处理函数
 // ============================================================================
 
-/** 注册扩展包基地能力的 Prompt 继续函数 */
-export function registerExpansionBasePromptContinuations(): void {
+/** 注册扩展包基地能力的交互解决处理函数 */
+export function registerExpansionBaseInteractionHandlers(): void {
 
-    // 疯人院：返回疯狂卡到疯狂牌堆
-    registerPromptContinuation('base_the_asylum', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; cardUid?: string; source?: string };
-        if (selected.skip) return [];
-        return [returnMadnessCard(ctx.playerId, selected.cardUid!, '疯人院：返回疯狂卡', ctx.now)];
+    registerInteractionHandler('base_the_asylum', (state, playerId, value, _iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; cardUid?: string; source?: string };
+        if (selected.skip) return { state, events: [] };
+        return { state, events: [returnMadnessCard(playerId, selected.cardUid!, '疑人院：返回疯狂卡', timestamp)] };
     });
 
-    // 印斯茅斯基地：将弃牌堆卡放入拥有者牌库底
-    registerPromptContinuation('base_innsmouth_base', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; cardUid?: string; defId?: string; ownerId?: string };
-        if (selected.skip) return [];
-        return [{
+    registerInteractionHandler('base_innsmouth_base', (state, _playerId, value, _iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; cardUid?: string; defId?: string; ownerId?: string };
+        if (selected.skip) return { state, events: [] };
+        return { state, events: [({
             type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
-            payload: {
-                cardUid: selected.cardUid!,
-                defId: selected.defId!,
-                ownerId: selected.ownerId!,
-                reason: '印斯茅斯基地：弃牌堆卡放入牌库底',
-            },
-            timestamp: ctx.now,
-        } as CardToDeckBottomEvent];
+            payload: { cardUid: selected.cardUid!, defId: selected.defId!, ownerId: selected.ownerId!, reason: '印斯茅斯基地：弃牌堆卡放入牌库底' },
+            timestamp,
+        } as CardToDeckBottomEvent)] };
     });
 
-    // 密大基地：返回疯狂卡到疯狂牌堆（与疯人院逻辑相同�?
-    registerPromptContinuation('base_miskatonic_university_base', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; cardUid?: string; source?: string };
-        if (selected.skip) return [];
-        return [returnMadnessCard(ctx.playerId, selected.cardUid!, '密大基地：返回疯狂卡', ctx.now)];
+    registerInteractionHandler('base_miskatonic_university_base', (state, playerId, value, _iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; cardUid?: string; source?: string };
+        if (selected.skip) return { state, events: [] };
+        return { state, events: [returnMadnessCard(playerId, selected.cardUid!, '密大基地：返回疯狂卡', timestamp)] };
     });
 
-    // 冷原高地：打出同名随从到冷原高地
-    registerPromptContinuation('base_plateau_of_leng', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; cardUid?: string; defId?: string };
-        if (selected.skip) return [];
-        const data = ctx.data as { baseIndex: number };
+    registerInteractionHandler('base_plateau_of_leng', (state, playerId, value, iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; cardUid?: string; defId?: string };
+        if (selected.skip) return { state, events: [] };
+        const ctx = (iData as any)?.continuationContext as { baseIndex: number };
+        if (!ctx) return { state, events: [] };
         const mDef = getMinionDef(selected.defId!);
         const power = mDef?.power ?? 0;
-        // 产生 MINION_PLAYED 事件将同名随从打出到冷原高地
-        return [{
+        return { state, events: [({
             type: SU_EVENTS.MINION_PLAYED,
-            payload: {
-                playerId: ctx.playerId,
-                cardUid: selected.cardUid!,
-                defId: selected.defId!,
-                baseIndex: data.baseIndex,
-                power,
-            },
-            timestamp: ctx.now,
-        } as MinionPlayedEvent];
+            payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, power },
+            timestamp,
+        } as MinionPlayedEvent)] };
     });
 
-    // ── AL9000 扩展基地 Prompt 继续函数 ──
-
-    // 温室：从牌库选择随从打出到替换基�?
-    // continuation 运行时基地已被替换，替换基地在同一 baseIndex 位置
-    registerPromptContinuation('base_greenhouse', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; cardUid?: string; defId?: string; power?: number };
-        if (selected.skip) return [];
-        const data = ctx.data as { baseIndex: number };
+    registerInteractionHandler('base_greenhouse', (state, playerId, value, iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; cardUid?: string; defId?: string; power?: number };
+        if (selected.skip) return { state, events: [] };
+        const ctx = (iData as any)?.continuationContext as { baseIndex: number };
+        if (!ctx) return { state, events: [] };
         const power = selected.power ?? (getMinionDef(selected.defId!)?.power ?? 0);
-        // 产生 MINION_PLAYED 事件将随从打出到替换基地
-        return [{
+        return { state, events: [({
             type: SU_EVENTS.MINION_PLAYED,
-            payload: {
-                playerId: ctx.playerId,
-                cardUid: selected.cardUid!,
-                defId: selected.defId!,
-                baseIndex: data.baseIndex,
-                power,
-            },
-            timestamp: ctx.now,
-        } as MinionPlayedEvent];
+            payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, power },
+            timestamp,
+        } as MinionPlayedEvent)] };
     });
 
-    // 发明家沙龙：从弃牌堆取回行动卡到手牌
-    registerPromptContinuation('base_inventors_salon', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; cardUid?: string };
-        if (selected.skip) return [];
-        return [recoverCardsFromDiscard(
-            ctx.playerId,
-            [selected.cardUid!],
-            '发明家沙龙：从弃牌堆取回行动卡',
-            ctx.now,
-        )];
+    registerInteractionHandler('base_inventors_salon', (state, playerId, value, _iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; cardUid?: string };
+        if (selected.skip) return { state, events: [] };
+        return { state, events: [recoverCardsFromDiscard(playerId, [selected.cardUid!], '发明家沙龙：从弃牌堆取回行动卡', timestamp)] };
     });
 
-    // ── Pretty Pretty 扩展基地 Prompt 继续函数 ──
-
-    // 诡猫巷：消灭己方随从 + �?1 �?
-    registerPromptContinuation('base_cat_fanciers_alley', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; minionUid?: string; minionDefId?: string; owner?: string };
-        if (selected.skip) return [];
-        const data = ctx.data as { baseIndex: number };
+    registerInteractionHandler('base_cat_fanciers_alley', (state, playerId, value, iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; owner?: string };
+        if (selected.skip) return { state, events: [] };
+        const ctx = (iData as any)?.continuationContext as { baseIndex: number };
+        if (!ctx) return { state, events: [] };
         const events: SmashUpEvent[] = [];
-        // 消灭随从
-        events.push(destroyMinion(
-            selected.minionUid!,
-            selected.minionDefId!,
-            data.baseIndex,
-            selected.owner!,
-            '诡猫巷：消灭己方随从',
-            ctx.now,
-        ));
-        // �?1 �?
-        const player = ctx.state.players[ctx.playerId];
+        events.push(destroyMinion(selected.minionUid!, selected.minionDefId!, ctx.baseIndex, selected.owner!, '诡猫巷：消灭己方随从', timestamp));
+        const player = state.core.players[playerId];
         if (player && player.deck.length > 0) {
-            events.push({
-                type: SU_EVENTS.CARDS_DRAWN,
-                payload: {
-                    playerId: ctx.playerId,
-                    count: 1,
-                    cardUids: [player.deck[0].uid],
-                },
-                timestamp: ctx.now,
-            } as CardsDrawnEvent);
+            events.push({ type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [player.deck[0].uid] }, timestamp } as CardsDrawnEvent);
         }
-        return events;
+        return { state, events };
     });
 
-    // 平衡之地：移动己方随从到平衡之地
-    registerPromptContinuation('base_land_of_balance', (ctx) => {
-        const selected = ctx.selectedValue as { skip?: boolean; minionUid?: string; minionDefId?: string; fromBaseIndex?: number };
-        if (selected.skip) return [];
-        const data = ctx.data as { balanceBaseIndex: number };
-        return [moveMinion(
-            selected.minionUid!,
-            selected.minionDefId!,
-            selected.fromBaseIndex!,
-            data.balanceBaseIndex,
-            '平衡之地：移动己方随从到此',
-            ctx.now,
-        )];
+    registerInteractionHandler('base_land_of_balance', (state, _playerId, value, iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; fromBaseIndex?: number };
+        if (selected.skip) return { state, events: [] };
+        const ctx = (iData as any)?.continuationContext as { balanceBaseIndex: number };
+        if (!ctx) return { state, events: [] };
+        return { state, events: [moveMinion(selected.minionUid!, selected.minionDefId!, selected.fromBaseIndex!, ctx.balanceBaseIndex, '平衡之地：移动己方随从到此', timestamp)] };
     });
 }

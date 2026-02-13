@@ -8,7 +8,8 @@
  * - 先到 15 VP 胜出
  */
 
-import type { Command, GameEvent, GameOverResult, PlayerId, PromptMultiConfig } from '../../../engine/types';
+import type { Command, GameEvent, GameOverResult, PlayerId } from '../../../engine/types';
+import type { PromptMultiConfig } from '../../../engine/systems/InteractionSystem';
 import type { CardPreviewRef } from '../../../core';
 import { SMASHUP_FACTION_IDS } from './ids';
 

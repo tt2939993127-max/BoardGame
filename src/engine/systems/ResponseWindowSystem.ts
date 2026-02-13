@@ -10,6 +10,7 @@
  */
 
 import type { MatchState, PlayerId, GameEvent, ResponseWindowState, ResponseWindowType } from '../types';
+import { resolveCommandTimestamp, resolveEventTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
 
@@ -196,12 +197,6 @@ export function getResponseWindowResponderId<TCore>(
 const ENGINE_ALLOWED_COMMANDS = [
     'RESPONSE_PASS',
 ];
-
-const resolveCommandTimestamp = (command: { timestamp?: number }): number =>
-    typeof command.timestamp === 'number' ? command.timestamp : 0;
-
-const resolveEventTimestamp = (event: GameEvent): number =>
-    typeof event.timestamp === 'number' ? event.timestamp : 0;
 
 function skipToNextRespondableResponder<TCore>(
     state: MatchState<TCore>,

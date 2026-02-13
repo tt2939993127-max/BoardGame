@@ -17,6 +17,7 @@
  */
 
 import type { AbilityDef } from './abilities';
+import { getUnitAt, isCellEmpty } from './helpers';
 
 export const GOBLIN_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -44,6 +45,40 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       },
       count: 1,
     },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择交换目标' };
+        }
+        
+        const vanishTarget = getUnitAt(ctx.core, targetPosition);
+        if (!vanishTarget) {
+          return { valid: false, error: '目标位置没有单位' };
+        }
+        
+        if (vanishTarget.owner !== ctx.playerId) {
+          return { valid: false, error: '必须选择友方单位' };
+        }
+        
+        if (vanishTarget.card.cost !== 0) {
+          return { valid: false, error: '只能与费用为0的友方单位交换' };
+        }
+        
+        if (vanishTarget.cardId === ctx.sourceUnit.cardId) {
+          return { valid: false, error: '不能与自己交换' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.vanish',
+      buttonVariant: 'secondary',
+    },
   },
 
   // ============================================================================
@@ -62,6 +97,27 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       { type: 'custom', actionId: 'blood_rune_choice' },
     ],
     requiresTargetSelection: true,
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const brChoice = ctx.payload.choice as string | undefined;
+        if (!brChoice || (brChoice !== 'damage' && brChoice !== 'charge')) {
+          return { valid: false, error: '必须选择自伤或充能' };
+        }
+        
+        if (brChoice === 'charge' && ctx.core.players[ctx.playerId].magic < 1) {
+          return { valid: false, error: '魔力不足' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.bloodRune',
+      buttonVariant: 'secondary',
+    },
   },
 
   // power_boost 已在亡灵法师定义中注册，无需重复
@@ -116,6 +172,46 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       type: 'unit',
       filter: { type: 'isOwner', target: 'self', owner: 'self' },
       count: 1,
+    },
+    validation: {
+      requiredPhase: 'attack',
+      customValidator: (ctx) => {
+        const fbChoice = ctx.payload.choice as string | undefined;
+        if (fbChoice === 'self_destroy') {
+          return { valid: true };
+        }
+        
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择相邻友方单位或自毁' };
+        }
+        
+        const fbTarget = getUnitAt(ctx.core, targetPosition);
+        if (!fbTarget) {
+          return { valid: false, error: '目标位置没有单位' };
+        }
+        
+        if (fbTarget.owner !== ctx.playerId) {
+          return { valid: false, error: '必须选择友方单位' };
+        }
+        
+        if (fbTarget.cardId === ctx.sourceUnit.cardId) {
+          return { valid: false, error: '不能选择自己' };
+        }
+        
+        const fbDist = Math.abs(ctx.sourcePosition.row - targetPosition.row) + Math.abs(ctx.sourcePosition.col - targetPosition.col);
+        if (fbDist !== 1) {
+          return { valid: false, error: '必须选择相邻的友方单位' };
+        }
+        
+        return { valid: true };
+      },
+    },
+    ui: {
+      requiresButton: true,
+      buttonPhase: 'attack',
+      buttonLabel: 'abilityButtons.feedBeast',
+      buttonVariant: 'secondary',
     },
   },
 
@@ -181,6 +277,20 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
     targetSelection: {
       type: 'position',
       count: 1,
+    },
+    validation: {
+      customValidator: (ctx) => {
+        const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
+        if (!targetPosition) {
+          return { valid: false, error: '必须选择放置位置' };
+        }
+        
+        if (!isCellEmpty(ctx.core, targetPosition)) {
+          return { valid: false, error: '目标位置必须为空' };
+        }
+        
+        return { valid: true };
+      },
     },
   },
 ];

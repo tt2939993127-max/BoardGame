@@ -13,6 +13,9 @@ import type { TokenDef, TokenState } from './tokenTypes';
 // 基础类型
 // ============================================================================
 
+/** DiceThrone 响应窗口类型（引擎层为通用 string，此处定义游戏特有值） */
+export type DtResponseWindowType = 'afterRollConfirmed' | 'afterCardPlayed' | 'thenBreakpoint' | 'meFirst';
+
 export type TurnPhase =
     | 'setup'
     | 'upkeep'

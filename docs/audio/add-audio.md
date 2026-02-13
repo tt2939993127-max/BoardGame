@@ -205,11 +205,20 @@ node scripts/audio/generate_audio_catalog.js
 
 示例：
 ```ts
-// 事件解析直接返回 registry key
-return 'ui.general.menu_click_01';
+// feedbackResolver 直接返回 registry key（SoundKey 类型）
+feedbackResolver: (event): SoundKey | null => {
+  if (event.type === 'DICE_ROLLED') return 'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_002';
+  // 有动画的事件返回 null，音效由动画层 onImpact 播放
+  if (event.type === 'DAMAGE_DEALT') return null;
+  return null;
+}
+
+// 飞行动画 onImpact 回调中直接播放
+playSound('combat.impact.hit_heavy_001');
 ```
 
 > `getOptimizedAudioUrl()` 会自动优先使用压缩音频路径，无需自行处理。
+> **已废弃**：`DeferredSoundMap`、`AudioTiming`、`EventSoundResult` 已移除，`feedbackResolver` 不再返回 `{ key, timing }` 对象。
 
 ### 8.1 预加载策略（新增）
 - **criticalSounds**：进入游戏后立即预加载（适合首回合高频音效）。

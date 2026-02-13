@@ -104,7 +104,7 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
         const allTipImages = ALL_FACTIONS.map(getTipImagePath);
         return {
             critical: [COMMON_PATHS.map, COMMON_PATHS.cardback, ...allHeroAtlases],
-            warm: allTipImages,
+            warm: [COMMON_PATHS.dice, COMMON_PATHS.portal, ...allTipImages],
         };
     }
 
@@ -112,13 +112,13 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
     const inFactionSelect = isInFactionSelectPhase(core);
 
     if (inFactionSelect) {
-        // 派系选择阶段：hero 图集为关键，tip 图片为暖加载
+        // 派系选择阶段：hero 图集为关键，tip + 通用资源为暖加载
         const allHeroAtlases = ALL_FACTIONS.map(getHeroAtlasPath);
         const allTipImages = ALL_FACTIONS.map(getTipImagePath);
 
         return {
             critical: [COMMON_PATHS.map, COMMON_PATHS.cardback, ...allHeroAtlases],
-            warm: allTipImages,
+            warm: [COMMON_PATHS.dice, COMMON_PATHS.portal, ...allTipImages],
         };
     }
 
@@ -152,10 +152,9 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
             COMMON_PATHS.map,
             COMMON_PATHS.cardback,
             COMMON_PATHS.portal,
-            COMMON_PATHS.dice,
             ...selectedHeroAtlases,
             ...selectedCardsAtlases,
         ],
-        warm: unselectedCardsAtlases,
+        warm: [COMMON_PATHS.dice, ...unselectedCardsAtlases],
     };
 };

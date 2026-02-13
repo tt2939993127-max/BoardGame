@@ -2,15 +2,9 @@
 
 本项目默认采用**同域访问**，避免 CORS 与 WebSocket 跨域问题。
 
-## 部署模式选择
+## 部署方式
 
-| 模式 | 适用场景 | 部署速度 | 服务器压力 | 一致性 |
-|------|---------|---------|-----------|--------|
-| **镜像部署**（推荐生产） | 生产环境、多服务器 | 快（< 1 分钟） | 低 | 高 |
-| **Git + 本地构建** | 开发测试、快速迭代 | 慢（3-10 分钟） | 高 | 依赖网络 |
-
-- **镜像部署**：CI 预构建镜像 → 推送到镜像仓库 → 服务器拉取启动
-- **Git 部署**：服务器 git pull → 本地 docker build → 启动
+使用 **镜像部署**：CI 预构建镜像 → 推送到镜像仓库 → 服务器拉取启动（< 1 分钟）
 
 ## 入口地址
 
@@ -34,72 +28,31 @@
 2. GitHub Actions CI 已配置（自动构建并推送镜像）
 3. 镜像仓库可访问（GHCR / 阿里云 ACR）
 
-### 首次部署
-
-服务器上只需两个文件，**不需要拉取代码**：
+### 一键部署（推荐）
 
 ```bash
-# 1. 下载生产配置文件
-curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/docker-compose.prod.yml -o docker-compose.prod.yml
-
-# 2. 创建 .env（两种方式任选其一）
-
-# 方式 A：从本地 scp .env.server 到服务器后执行
-#   scp .env.server user@server:/home/admin/BoardGame/
-bash .env.server
-
-# 方式 B：手动创建（只需密钥和域名，其余由 compose 覆盖）
-cat > .env << 'EOF'
-JWT_SECRET=你的密钥
-WEB_ORIGINS=https://your-domain.com
-SMTP_HOST=smtp.qq.com
-SMTP_PORT=465
-SMTP_USER=xxx@qq.com
-SMTP_PASS=xxx
-EOF
-
-# 3. 拉取镜像并启动
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+# 下载部署脚本并执行（交互式引导配置 .env）
+curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy/deploy-image.sh -o deploy-image.sh
+bash deploy-image.sh
 ```
+
+脚本会自动完成：下载 compose 文件 → 引导生成 .env → 配置 Docker 镜像加速 → 安装/配置 Nginx → 拉取镜像 → 启动服务。
+
+> **架构**：Nginx (80) → Docker web 容器 (3000) → 内部 game-server (18000)
+> Nginx 由脚本自动安装和配置，管理 `/etc/nginx/conf.d/boardgame.conf`。
 
 ### 更新部署
 
 ```bash
-# 拉取最新镜像并重启
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+bash deploy-image.sh update
 ```
 
-### 回滚到指定版本
+### 回滚 / 状态 / 日志
 
 ```bash
-# 编辑 docker-compose.prod.yml，将 image tag 改为指定版本
-# 例如：ghcr.io/zhuanggenhua/boardgame-web:v1.2.3
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-```
-
-### 使用部署脚本（推荐）
-
-```bash
-# 首次部署 / 更新
-bash scripts/deploy-image.sh deploy
-
-# 一键迁移（从 Git 部署切换到镜像部署）
-# 会自动停止旧容器、准备 .env、拉取镜像并启动
-# 执行时会提示是否登录 ghcr.io（私有镜像需登录）
-# 若缺少 .env/.env.server，会进入交互式生成（JWT_SECRET 可自动生成）
-bash scripts/deploy/deploy-migrate-image.sh
-
-# 回滚到指定版本
-bash scripts/deploy-image.sh rollback v1.2.3
-
-# 查看状态
-bash scripts/deploy-image.sh status
-
-# 查看日志
-bash scripts/deploy-image.sh logs [service]
+bash deploy-image.sh rollback v1.2.3   # 回滚到指定版本
+bash deploy-image.sh status             # 查看状态
+bash deploy-image.sh logs [service]     # 查看日志
 ```
 
 ### CI 配置说明
@@ -115,58 +68,7 @@ bash scripts/deploy-image.sh logs [service]
 > **注意**：镜像构建由 GitHub Actions 自动完成，服务器脚本只负责拉取镜像。
 > 私有镜像需要登录（脚本会提示是否登录 ghcr.io）。
 
-### 从 Git 部署迁移到镜像部署
 
-如果你当前使用 Git + 本地构建部署，按以下步骤迁移：
-
-```bash
-# 1. 停止现有服务
-cd /home/admin/BoardGame
-docker compose down
-
-# 2. 备份 .env（保留配置）
-cp .env /tmp/.env.bak
-
-# 3. 下载生产配置文件
-curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/docker-compose.prod.yml -o docker-compose.prod.yml
-
-# 4. 恢复 .env
-cp /tmp/.env.bak .env
-
-# 5. 拉取镜像并启动
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-
-# 6. 验证
-docker compose ps
-curl -I http://127.0.0.1/
-```
-
-迁移后，更新只需 `docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d`，无需 `git pull`。
-
----
-
-## Git + 本地构建部署（开发/测试）
-
-> **注意**：此方式适合开发测试或无 CI 环境的场景，生产环境推荐使用镜像部署。
-
-### 一键部署脚本
-
-适用于 Debian/Ubuntu 与 RHEL 系（含 Alibaba Cloud Linux）。脚本会自动完成：安装 Git/Docker/Compose、配置镜像源、克隆仓库、生成 `.env`、启动服务。
-
-在根目录执行
-```bash
-curl -fsSL https://raw.githubusercontent.com/zhuanggenhua/BoardGame/main/scripts/deploy-auto.sh -o deploy-auto.sh && bash deploy-auto.sh
-```
-
-## 快速更新脚本（已部署后使用）
-
-适用于已部署的服务器，执行：拉取最新代码 → 重建镜像 → 重启服务。
-
-```bash
-cd /home/admin/BoardGame
-bash scripts/deploy-quick.sh
-```
 
 ## 部署前本地自检（强烈建议）
 
@@ -259,7 +161,7 @@ Cloudflare 控制台 → 你的域名 → **SSL/TLS** → **概述** → **配�
 
 ### 4. 服务器 .env 配置
 
-服务器 `.env` 只需密钥和域名，数据库/Redis/端口由 `docker-compose.prod.yml` 的 `environment` 自动覆盖：
+服务器 `.env` 只需密钥和域名，数据库/Redis/端口由 `docker-compose.prod.yml` 自动覆盖：
 
 ```bash
 # /home/admin/BoardGame/.env
@@ -269,77 +171,23 @@ SMTP_HOST=smtp.qq.com
 SMTP_PORT=465
 SMTP_USER=xxx@qq.com
 SMTP_PASS=xxx
-
-# 以下由 docker-compose.prod.yml 自动覆盖，无需配置：
-# MONGO_URI, REDIS_HOST, REDIS_PORT, GAME_SERVER_PORT, API_SERVER_PORT
 ```
 
 > **WEB_ORIGINS** 必须包含所有可能访问后端的域名，否则会出现 CORS 错误。
 >
-> 提示：可用 `.env.server` 脚本一键生成，避免手动编写。
+> 提示：首次运行 `deploy-image.sh` 时会交互式引导生成 `.env`。
 
-## 服务器 Nginx 配置（仅 Pages 分离部署需要）
+## Nginx 反向代理（自动管理）
 
-> **同域部署不需要 Nginx**：web 容器已经在端口 80 提供服务。
-> 仅当前端部署在 Cloudflare Pages、后端在服务器时，才需要 Nginx 做 api 子域名反向代理。
-
-### 安装 Nginx
-
-```bash
-# Debian/Ubuntu
-sudo apt install -y nginx
-
-# RHEL/CentOS/Alibaba Cloud Linux
-sudo tee /etc/yum.repos.d/nginx.repo << 'EOF'
-[nginx-stable]
-name=nginx stable repo
-baseurl=http://nginx.org/packages/centos/8/$basearch/
-gpgcheck=0
-enabled=1
-EOF
-sudo yum install -y nginx --disableexcludes=all
-```
-
-### 配置反向代理
-
-> **端口说明**：
-> - 镜像部署（`docker-compose.prod.yml`）：web 容器监听 **端口 80**
-> - Git 部署（`docker-compose.yml`）：web 容器映射到 **端口 3000**
+> **无需手动配置**。部署脚本自动安装 Nginx 并管理 `/etc/nginx/conf.d/boardgame.conf`。
 >
-> 以下示例以镜像部署为准（端口 80），若使用 Git 部署请将 `proxy_pass` 端口改为 3000。
-
-```bash
-# API 服务代理（api.easyboardgame.top -> web 容器）
-# 请求经 web 容器（NestJS 单体）内部反代到 game-server
-sudo tee /etc/nginx/conf.d/api.conf << 'EOF'
-server {
-    listen 80;
-    server_name api.easyboardgame.top;  # 改成你的域名
-
-    client_max_body_size 10M;
-
-    location / {
-        proxy_pass http://127.0.0.1:80;  # web 容器端口
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_request_buffering off;
-        proxy_buffering off;
-    }
-}
-EOF
-
-# 启动 Nginx
-sudo nginx -t && sudo systemctl enable --now nginx
-```
-
-> **注意**：Nginx 和 web 容器都监听 80 端口时会冲突。
-> Pages 分离部署时，需将 `docker-compose.prod.yml` 中 web 的端口映射改为 `"3000:80"`，
-> 然后 Nginx `proxy_pass` 指向 `http://127.0.0.1:3000`。
+> | 情况 | 脚本行为 |
+> |---|---|
+> | 没有 Nginx | 自动安装，创建配置 |
+> | 配置已是最新 | 跳过 |
+> | 配置过时 | 备份旧的，覆盖新的 |
+> | 存在冲突的 `default.conf` | 自动禁用 |
+> | 存在用户自建的其他配置 | 不动，冲突时提示 |
 
 ### Cloudflare SSL 设置
 

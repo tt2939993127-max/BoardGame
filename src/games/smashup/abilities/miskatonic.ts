@@ -11,10 +11,11 @@ import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionCardDef
 import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion, recoverCardsFromDiscard,
-    getMinionPower, requestChoice, buildMinionTargetOptions,
+    getMinionPower, buildMinionTargetOptions,
 } from '../domain/abilityHelpers';
-import { registerPromptContinuation } from '../domain/promptContinuation';
 import { getCardDef, getBaseDef } from '../data/cards';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
 /** 注册米斯卡塔尼克大学派系所有能�?*/
 export function registerMiskatonicAbilities(): void {
@@ -234,13 +235,11 @@ function miskatonicProfessor(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    return {
-        events: [requestChoice({
-            abilityId: 'miskatonic_professor',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要返回手牌的力量≤3的随从', options: buildMinionTargetOptions(options) },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `miskatonic_professor_${ctx.now}`, ctx.playerId,
+        '选择要返回手牌的力量≤3的随从', buildMinionTargetOptions(options), 'miskatonic_professor',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // ============================================================================
@@ -272,14 +271,12 @@ function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
     if (allMinions.length === 0) return { events: [] };
     // Prompt 选择
     const options = allMinions.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
-    return {
-        events: [requestChoice({
-            abilityId: 'miskatonic_it_might_just_work',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择要消灭的随从（弃2张疯狂卡）', options: buildMinionTargetOptions(options) },
-                        continuationContext: { madnessUids: [madnessInHand[0].uid, madnessInHand[1].uid], },
-        }, ctx.now)],
-    };
+    const interaction = createSimpleChoice(
+        `miskatonic_it_might_just_work_${ctx.now}`, ctx.playerId,
+        '选择要消灭的随从（弃2张疯狂卡）', buildMinionTargetOptions(options), 'miskatonic_it_might_just_work',
+    );
+    (interaction.data as any).continuationContext = { madnessUids: [madnessInHand[0].uid, madnessInHand[1].uid] };
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /**
@@ -320,11 +317,11 @@ function miskatonicBookOfIterTheUnseen(ctx: AbilityContext): AbilityResult {
     } else if (opponents.length > 1) {
         // 多个对手，生成选择 Prompt
         const options = opponents.map((o, i) => ({ id: `opp-${i}`, label: o.label, value: { pid: o.pid } }));
-        events.push(requestChoice({
-            abilityId: 'miskatonic_book_of_iter_choose_opponent',
-            playerId: ctx.playerId,
-            promptConfig: { title: '选择一个对手查看其手牌', options },
-        }, ctx.now));
+        const interaction = createSimpleChoice(
+            `miskatonic_book_of_iter_choose_opponent_${ctx.now}`, ctx.playerId,
+            '选择一个对手查看其手牌', options as any[], 'miskatonic_book_of_iter_choose_opponent',
+        );
+        return { events, matchState: queueInteraction(ctx.matchState, interaction) };
     }
     return { events };
 }
@@ -356,54 +353,52 @@ function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 注册米斯卡塔尼克大学�?Prompt 继续函数 */
-export function registerMiskatonicPromptContinuations(): void {
-    // 教授：选择目标后返回手�?
-    registerPromptContinuation('miskatonic_professor', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+/** 注册米斯卡塔尼克大学的交互解决处理函数 */
+export function registerMiskatonicInteractionHandlers(): void {
+    registerInteractionHandler('miskatonic_professor', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
-        if (!target) return [];
-        return [{
+        if (!target) return undefined;
+        return { state, events: [{
             type: SU_EVENTS.MINION_RETURNED,
             payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'miskatonic_professor' },
-            timestamp: ctx.now,
-        }];
+            timestamp,
+        }] };
     });
 
-    // 也许能行：选择目标后弃疯狂卡并消灭
-    registerPromptContinuation('miskatonic_it_might_just_work', (ctx) => {
-        const { minionUid, baseIndex } = ctx.selectedValue as { minionUid: string; baseIndex: number };
-        const data = ctx.data as { madnessUids: string[] };
-        const base = ctx.state.bases[baseIndex];
-        if (!base) return [];
+    registerInteractionHandler('miskatonic_it_might_just_work', (state, playerId, value, iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const ctx = (iData as any)?.continuationContext as { madnessUids: string[] };
+        if (!ctx) return undefined;
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
-        if (!target) return [];
+        if (!target) return undefined;
         const events: SmashUpEvent[] = [];
-        for (const uid of data.madnessUids) {
-            events.push(returnMadnessCard(ctx.playerId, uid, 'miskatonic_it_might_just_work', ctx.now));
+        for (const uid of ctx.madnessUids) {
+            events.push(returnMadnessCard(playerId, uid, 'miskatonic_it_might_just_work', timestamp));
         }
-        events.push(destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'miskatonic_it_might_just_work', ctx.now));
-        return events;
+        events.push(destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'miskatonic_it_might_just_work', timestamp));
+        return { state, events };
     });
 
-    // Book of Iter：选择对手后展示手�?
-    registerPromptContinuation('miskatonic_book_of_iter_choose_opponent', (ctx) => {
-        const { pid } = ctx.selectedValue as { pid: string };
-        const target = ctx.state.players[pid];
-        if (!target || target.hand.length === 0) return [];
+    registerInteractionHandler('miskatonic_book_of_iter_choose_opponent', (state, playerId, value, _iData, _random, timestamp) => {
+        const { pid } = value as { pid: string };
+        const target = state.core.players[pid];
+        if (!target || target.hand.length === 0) return { state, events: [] };
         const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
-        return [{
+        return { state, events: [{
             type: SU_EVENTS.REVEAL_HAND,
             payload: {
                 targetPlayerId: pid,
-                viewerPlayerId: ctx.playerId,
+                viewerPlayerId: playerId,
                 cards,
                 reason: 'miskatonic_book_of_iter',
             },
-            timestamp: ctx.now,
-        }];
+            timestamp,
+        }] };
     });
 }
 

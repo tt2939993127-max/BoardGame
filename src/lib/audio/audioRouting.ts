@@ -1,7 +1,8 @@
-import type { AudioCategory, AudioEvent, AudioRuntimeContext, BgmGroupId, BgmRule, EventSoundResult, GameAudioConfig, SoundKey } from './types';
+import type { AudioCategory, AudioEvent, AudioRuntimeContext, BgmGroupId, BgmRule, GameAudioConfig, SoundKey } from './types';
 
 /**
- * 统一反馈解析：调用 feedbackResolver 获取 { key, timing } 或 null。
+ * 统一反馈解析：返回 SoundKey 或 null。
+ * 仅处理无动画事件，返回的 key 由框架立即播放。
  * event.audioKey / event.audioCategory 仍享有最高优先级（向前兼容引擎层事件标注）。
  */
 export function resolveFeedback<
@@ -13,18 +14,18 @@ export function resolveFeedback<
     context: AudioRuntimeContext<G, Ctx, Meta>,
     config: GameAudioConfig,
     resolveCategoryKey?: (category: AudioCategory) => SoundKey | null
-): EventSoundResult | null {
+): SoundKey | null {
     // event 上的 audioKey（引擎层标注）优先级最高
-    if (event.audioKey) return { key: event.audioKey, timing: 'immediate' };
+    if (event.audioKey) return event.audioKey;
 
     // event 上的 audioCategory
     if (event.audioCategory && resolveCategoryKey) {
         const categoryKey = resolveCategoryKey(event.audioCategory);
-        if (categoryKey) return { key: categoryKey, timing: 'immediate' };
+        if (categoryKey) return categoryKey;
     }
 
     // event.sfxKey（事件级注入）
-    if (event.sfxKey) return { key: event.sfxKey, timing: 'immediate' };
+    if (event.sfxKey) return event.sfxKey;
 
     // 游戏层 feedbackResolver
     const resolved = config.feedbackResolver(event, context);

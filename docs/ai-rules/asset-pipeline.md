@@ -15,12 +15,14 @@
 
 ```
 public/assets/<gameId>/
-├── images/
+├── <资源分类>/                  # 按业务语义分类（如 hero/、cards/、common/）
 │   ├── foo.png              # 原始图片（仅用于压缩源）
 │   └── compressed/          # 压缩输出目录
 │       ├── foo.avif         # AVIF 格式（首选）
 │       └── foo.webp         # WebP 格式（回退）
 ```
+
+> **禁止**使用无语义的 `images/` 中间目录。直接按业务含义组织：`hero/`、`cards/`、`base/`、`common/` 等。
 
 ### 压缩流程
 
@@ -177,42 +179,46 @@ registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
 
 ### ✅ 音效触发规范（统一标准）
 
-**音效四条路径**：
-1. **路径①（EventStream + immediate）**：无动画事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `{ key, timing: 'immediate' }` 即时播放，key 来自通用注册表。
-2. **路径②（EventStream + on-impact + DeferredSoundMap）**：有动画但无 FX 特效的事件音（伤害/治疗数字飞行）`feedbackResolver` 返回 `{ key, timing: 'on-impact' }` 写入 `DeferredSoundMap`，`FlyingEffect.onImpact` 冲击帧调用 `playDeferredSound(eventId)`，key 来自通用注册表。
-3. **路径③（FX 系统 + FeedbackPack）**：有 FX 特效的事件音（召唤光柱/攻击气浪/充能旋涡）通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 自动在 push（immediate）或渲染器 `onImpact()`（on-impact）时触发。**优先使用此路径**，音效与视觉完全同步。key 直接使用通用注册表中的完整 key 字符串。
-4. **路径④（UI 交互音）**：UI 点击音走 `GameButton`，拒绝音走 `playDeniedSound()`，key 来自通用注册表。
+**音效两条路径 + UI 交互音**：
+1. **路径① 即时播放（feedbackResolver）**：无动画的事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `SoundKey`（纯字符串）即时播放。有动画的事件（伤害/状态/Token）`feedbackResolver` 返回 `null`，由动画层在 `onImpact` 回调中直接 `playSound(key)` 播放。
+2. **路径② 动画驱动（params.soundKey / onImpact）**：有 FX 特效的事件音（召唤光柱/攻击气浪/充能旋涡）通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 在 push 时从 `event.params.soundKey` 读取 key。飞行动画（伤害数字/状态增减/Token 获得消耗）在 `onImpact` 回调中直接 `playSound(resolvedKey)` 播放。
+3. **UI 交互音**：UI 点击音走 `GameButton`，拒绝音走 `playDeniedSound()`，key 来自通用注册表。
 
-**选择原则**：有 FX 特效 → 路径③；有动画无特效 → 路径②；无动画 → 路径①；UI 交互 → 路径④。
+**选择原则**：有 FX 特效 → 路径②（FeedbackPack）；有飞行动画无特效 → 路径②（onImpact 回调）；无动画 → 路径①；UI 交互 → UI 交互音。
 
-**避免重复**：同一事件只能选择一条路径，禁止在 `feedbackResolver` 和 `FeedbackPack` 中同时配置音效。
+**避免重复**：同一事件只能选择一条路径，有动画的事件 `feedbackResolver` 必须返回 `null`。
+
+**已废弃**：`DeferredSoundMap` 已删除，`AudioTiming`/`EventSoundResult` 已移除，`feedbackResolver` 不再返回 `{ key, timing }` 对象。
 
 ### ✅ 当前正确示例（音频）
 
 ```typescript
-// ===== 路径① 示例：feedbackResolver 返回 immediate =====
-feedbackResolver: (event) => {
+// ===== 路径① 示例：feedbackResolver 返回 SoundKey =====
+feedbackResolver: (event): SoundKey | null => {
   if (event.type === 'CELL_OCCUPIED') {
-    return { 
-      key: 'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.heavy_object_move', 
-      timing: 'immediate' 
-    };
+    return 'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.heavy_object_move';
   }
+  // 有动画的事件返回 null，音效由动画层 onImpact 播放
+  if (event.type === 'DAMAGE_DEALT') return null;
   return null;
 }
 
-// ===== 路径③ 示例：FX 系统 FeedbackPack =====
+// ===== 路径② 示例：FX 系统 FeedbackPack（source: 'params'）=====
 // src/games/summonerwars/ui/fxSetup.ts
-const SUMMON_FEEDBACK: FeedbackPack = {
+const COMBAT_DAMAGE_FEEDBACK: FeedbackPack = {
   sound: {
-    // 直接使用通用注册表中的 key，不定义常量
-    key: 'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_06_krst',
-    timing: 'on-impact',
+    source: 'params',   // 从 event.params.soundKey 读取
   },
   shake: { intensity: 'normal', type: 'impact', timing: 'on-impact' },
 };
 
-registry.register(SW_FX.SUMMON, SummonRenderer, { timeoutMs: 4000 }, SUMMON_FEEDBACK);
+// ===== 路径② 示例：飞行动画 onImpact 直接播放 =====
+const impactKey = resolveDamageImpactKey(damage, targetId, currentPlayerId);
+pushFlyingEffect({
+  type: 'damage',
+  content: `-${damage}`,
+  onImpact: () => { playSound(impactKey); },
+});
 ```
 
 ### 音频工具链
