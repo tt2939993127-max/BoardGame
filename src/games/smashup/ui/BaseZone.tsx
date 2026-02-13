@@ -2,15 +2,17 @@
  * 大杀四方 (Smash Up) - 基地区域 + 随从卡片组件
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Paperclip } from 'lucide-react';
 import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
 import { getTotalEffectivePowerOnBase } from '../domain/ongoingModifiers';
 import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
+import { UI_Z_INDEX } from '../../../core';
 
 // ============================================================================
 // Base Zone: The "Battlefield"
@@ -236,6 +238,29 @@ export const BaseZone: React.FC<{
 // Minion Card
 // ============================================================================
 
+// ============================================================================
+// 附着行动卡角标 + 悬浮预览
+// ============================================================================
+
+/** 附着行动卡角标（纯视觉提示，不含交互） */
+const AttachedBadge: React.FC<{ count: number }> = ({ count }) => (
+    <div className="absolute -top-[0.3vw] -left-[0.3vw] w-[1.1vw] h-[1.1vw] rounded-full
+        bg-purple-600 border-[0.1vw] border-white shadow-md
+        flex items-center justify-center pointer-events-none z-30">
+        <Paperclip className="w-[0.6vw] h-[0.6vw] text-white" strokeWidth={3} />
+        {count > 1 && (
+            <span className="absolute -bottom-[0.15vw] -right-[0.15vw] w-[0.5vw] h-[0.5vw] rounded-full
+                bg-amber-400 text-[0.3vw] font-black text-slate-900 flex items-center justify-center border border-white">
+                {count}
+            </span>
+        )}
+    </div>
+);
+
+// ============================================================================
+// Minion Card
+// ============================================================================
+
 const MinionCard: React.FC<{
     minion: MinionOnBase;
     index: number;
@@ -347,42 +372,48 @@ const MinionCard: React.FC<{
                 </div>
             )}
 
-            {/* 附着的 ongoing 行动卡（右侧小卡片） */}
+            {/* 附着的 ongoing 行动卡 - 角标 + hover 时右侧弹出小卡片 */}
             {minion.attachedActions && minion.attachedActions.length > 0 && (
-                <div className="absolute top-0 -right-[2.2vw] flex flex-col gap-[0.2vw] z-20">
-                    {minion.attachedActions.map((aa) => {
-                        const actionDef = getCardDef(aa.defId);
-                        const actionName = resolveCardName(actionDef, t) || aa.defId;
-                        return (
-                            <motion.div
-                                key={aa.uid}
-                                onClick={(e) => { e.stopPropagation(); onViewAction(aa.defId); }}
-                                className="w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-md cursor-pointer
-                                    hover:scale-150 hover:z-50 transition-transform
-                                    border-[0.08vw] border-purple-400 ring-1 ring-purple-300/50"
-                                initial={{ x: -8, opacity: 0, scale: 0.5 }}
-                                animate={{ x: 0, opacity: 1, scale: 1 }}
-                                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                                title={actionName}
-                            >
-                                <div className="w-full h-full overflow-hidden rounded-[0.06vw]">
-                                    <CardPreview
-                                        previewRef={actionDef?.previewRef}
-                                        className="w-full h-full object-cover"
-                                        title={actionName}
-                                    />
-                                    {!actionDef?.previewRef && (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-purple-50 p-[0.05vw]">
-                                            <span className="text-[0.3vw] font-bold text-purple-800 leading-tight text-center line-clamp-2">
-                                                {actionName}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            </motion.div>
-                        );
-                    })}
-                </div>
+                <>
+                    <AttachedBadge count={minion.attachedActions.length} />
+                    {/* hover 随从时显示的小卡片列，高 z-index 避免被相邻随从遮挡 */}
+                    <div
+                        className="absolute top-0 -right-[2.4vw] flex flex-col gap-[0.2vw]
+                            opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100
+                            transition-all duration-150 pointer-events-none group-hover:pointer-events-auto"
+                        style={{ zIndex: UI_Z_INDEX.tooltip }}
+                    >
+                        {minion.attachedActions.map((aa) => {
+                            const actionDef = getCardDef(aa.defId);
+                            const actionName = resolveCardName(actionDef, t) || aa.defId;
+                            return (
+                                <motion.div
+                                    key={aa.uid}
+                                    onClick={(e) => { e.stopPropagation(); onViewAction(aa.defId); }}
+                                    className="w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer
+                                        hover:scale-[2] hover:translate-x-[0.8vw] transition-transform duration-150
+                                        border-[0.08vw] border-purple-400 ring-1 ring-purple-300/50"
+                                    title={actionName}
+                                >
+                                    <div className="w-full h-full overflow-hidden rounded-[0.06vw]">
+                                        <CardPreview
+                                            previewRef={actionDef?.previewRef}
+                                            className="w-full h-full object-cover"
+                                            title={actionName}
+                                        />
+                                        {!actionDef?.previewRef && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-purple-50 p-[0.05vw]">
+                                                <span className="text-[0.3vw] font-bold text-purple-800 leading-tight text-center line-clamp-2">
+                                                    {actionName}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                </>
             )}
         </motion.div>
     );

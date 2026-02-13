@@ -138,8 +138,8 @@ export function findUnitPosition(state: SummonerWarsCore, cardId: string): CellC
   return result ? result.position : null;
 }
 
-/** 按 cardId 查找棋盘上的单位（返回单位对象，用于交缠颂歌等需要读取卡牌数据的场景） */
-function findBoardUnitByCardId(state: SummonerWarsCore, cardId: string): BoardUnit | undefined {
+/** 按 cardId 查找棋盘上的单位（私有，仅返回 BoardUnit，不含位置） */
+function findUnitByCardId(state: SummonerWarsCore, cardId: string): BoardUnit | undefined {
   const result = findOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.cardId === cardId);
   return result ? result.cell.unit! : undefined;
 }
@@ -531,11 +531,11 @@ export function getUnitAbilities(unit: BoardUnit, state: SummonerWarsCore): stri
       let partnerAbilities: string[] | undefined;
       if (t1 === unit.cardId) {
         // 本单位是目标1，获取目标2的基础技能
-        const partner = findBoardUnitByCardId(state, t2);
+        const partner = findUnitByCardId(state, t2);
         if (partner) partnerAbilities = partner.card.abilities ?? [];
       } else if (t2 === unit.cardId) {
         // 本单位是目标2，获取目标1的基础技能
-        const partner = findBoardUnitByCardId(state, t1);
+        const partner = findUnitByCardId(state, t1);
         if (partner) partnerAbilities = partner.card.abilities ?? [];
       }
       if (partnerAbilities) {

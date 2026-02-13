@@ -62,7 +62,13 @@
     "talent_used": "Used",
     "card_placeholder": "Card",
     "me_first_title": "⚡ Me First!",
-    "thinking": "Thinking..."
+    "thinking": "Thinking...",
+    "loading": "Loading...",
+    "reveal_hand_title": "P{{player}}'s Hand",
+    "reveal_deck_top_title": "P{{player}}'s Deck Top",
+    "reveal_no_cards": "No cards to reveal",
+    "confirm": "Confirm",
+    "prompt_no_options": "No options available"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",

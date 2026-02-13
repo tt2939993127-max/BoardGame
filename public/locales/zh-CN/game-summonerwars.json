@@ -42,6 +42,7 @@
     "continue": "继续",
     "finish": "完成",
     "skip": "跳过",
+    "skipPush": "跳过推拉",
     "push": "推开",
     "pull": "拉近",
     "control": "控制",
@@ -371,6 +372,8 @@
       "structureShift": "结构变换：选择3格内友方建筑",
       "frostAxe": "冰霜战斧：充能自身，或消耗充能附加友方士兵",
       "frostAxeSelectTarget": "冰霜战斧：选择3格内友方士兵",
+      "iceRamSelectTarget": "寒冰冲撞：选择建筑相邻的一个单位",
+      "iceRamSelectPush": "寒冰冲撞：选择推拉方向（或跳过）",
       "vanish": "神出鬼没：选择一个0费友方单位交换位置"
     },
     "beforeAttack": {
@@ -690,6 +693,10 @@
     "slow": {
       "name": "缓慢",
       "description": "本单位必须减少移动1个区格。"
+    },
+    "ice_ram": {
+      "name": "寒冰冲撞",
+      "description": "持续：在一个友方建筑移动或被推拉之后，你可以指定其相邻的一个单位为目标。对目标造成1点伤害。你可以将目标推拉1个区格。"
     },
     "ancestral_bond": {
       "name": "祖灵羁绊",

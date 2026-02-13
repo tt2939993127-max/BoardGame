@@ -30,6 +30,9 @@
         "ratingCount": "{{count}} reviews",
         "statsError": "Unable to load statistics at the moment"
     },
+    "common": {
+        "unknownUser": "Unknown User"
+    },
     "errors": {
         "contentLength": "Review content cannot exceed 500 characters",
         "required": "Please select positive or negative"

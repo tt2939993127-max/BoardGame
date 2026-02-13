@@ -926,8 +926,8 @@ export function executeCommand(
     if (e.type !== SW_EVENTS.UNIT_MOVED) return false;
     const p = e.payload as { from: CellCoord; to: CellCoord; unitId: string };
     // 检查移动的单位是否有 mobile_structure 技能
-    const unit = findBoardUnitByCardId(core, p.unitId);
-    return unit && getUnitAbilities(unit, core).includes('mobile_structure');
+    const found = findBoardUnitByCardId(core, p.unitId);
+    return found && getUnitAbilities(found.unit, core).includes('mobile_structure');
   });
   const allStructureMoveEvents = [...structurePushEvents, ...mobileStructureMoveEvents];
   if (allStructureMoveEvents.length > 0) {
@@ -941,12 +941,14 @@ export function executeCommand(
       for (const moveEvent of allStructureMoveEvents) {
         let structureNewPos: CellCoord;
         let structureOwner: string | undefined;
+        let structureCardId: string | undefined;
         if (moveEvent.type === SW_EVENTS.UNIT_MOVED) {
           // mobile_structure 正常移动
           const mp = moveEvent.payload as { from: CellCoord; to: CellCoord; unitId: string };
           structureNewPos = mp.to;
-          const unit = findBoardUnitByCardId(core, mp.unitId);
-          structureOwner = unit?.owner;
+          const found = findBoardUnitByCardId(core, mp.unitId);
+          structureOwner = found?.unit.owner;
+          structureCardId = found?.unit.cardId ?? mp.unitId;
         } else {
           // 建筑推拉
           const pp = moveEvent.payload as { targetPosition: CellCoord; newPosition: CellCoord };
@@ -956,8 +958,11 @@ export function executeCommand(
           const origUnit = getUnitAt(core, pp.targetPosition);
           structureOwner = origStructure?.owner
             ?? (origUnit && getUnitAbilities(origUnit, core).includes('mobile_structure') ? origUnit.owner : undefined);
+          structureCardId = origStructure?.cardId
+            ?? (origUnit && getUnitAbilities(origUnit, core).includes('mobile_structure') ? origUnit.cardId : undefined);
         }
         if (structureOwner !== pid) continue;
+        if (!structureCardId) continue;
         // 检查建筑新位置是否有相邻单位（任意阵营）
         const adjDirs = [
           { row: -1, col: 0 }, { row: 1, col: 0 },
@@ -970,7 +975,7 @@ export function executeCommand(
         });
         if (hasAdjacentUnit) {
           processedEvents.push(createAbilityTriggeredEvent(
-            'ice_ram_trigger', 'ice_ram', structureNewPos, timestamp,
+            'ice_ram_trigger', structureCardId, structureNewPos, timestamp,
             { iceRamOwner: pid, structurePosition: structureNewPos },
           ));
         }

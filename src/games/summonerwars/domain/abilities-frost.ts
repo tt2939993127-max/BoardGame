@@ -305,4 +305,19 @@ export const FROST_ABILITIES: AbilityDef[] = [
       { type: 'extraMove', target: 'self', value: -1 },
     ],
   },
+
+  // ============================================================================
+  // 事件卡 - 寒冰冲撞（持续事件，非单位技能）
+  // ============================================================================
+
+  {
+    id: 'ice_ram',
+    name: abilityText('ice_ram', 'name'),
+    description: abilityText('ice_ram', 'description'),
+    sfxKey: 'fantasy.elemental_sword_iceattack_v1',
+    trigger: 'activated',
+    effects: [
+      { type: 'custom', actionId: 'ice_ram_action' },
+    ],
+  },
 ];

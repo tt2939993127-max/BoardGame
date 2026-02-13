@@ -81,6 +81,10 @@
     "dicethrone": "王权骰铸",
     "summonerwars": "召唤师战争"
   },
+  "matchRoom": {
+    "tutorialTitle": "{{game}} - 教学模式",
+    "matchTitle": "{{game}} - 对战"
+  },
   "games": {
     "summonerwars": {
       "title": "召唤师战争",

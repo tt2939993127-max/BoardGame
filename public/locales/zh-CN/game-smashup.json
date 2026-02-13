@@ -62,7 +62,13 @@
     "talent_used": "已用",
     "card_placeholder": "卡牌",
     "me_first_title": "⚡ 先手响应！",
-    "thinking": "思考中..."
+    "thinking": "思考中...",
+    "loading": "加载中...",
+    "reveal_hand_title": "P{{player}} 的手牌",
+    "reveal_deck_top_title": "P{{player}} 的牌库顶",
+    "reveal_no_cards": "没有可展示的卡牌",
+    "confirm": "确认",
+    "prompt_no_options": "暂无可选项"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",

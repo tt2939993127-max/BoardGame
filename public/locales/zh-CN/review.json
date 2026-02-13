@@ -30,6 +30,9 @@
         "ratingCount": "{{count}} 条评价",
         "statsError": "暂时无法加载统计信息"
     },
+    "common": {
+        "unknownUser": "未知用户"
+    },
     "errors": {
         "contentLength": "评论内容不能超过 500 字",
         "required": "请选择好评或差评"

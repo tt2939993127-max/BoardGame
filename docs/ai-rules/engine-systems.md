@@ -29,6 +29,7 @@ Flow / Interaction / Undo / Log / EventStream / ResponseWindow / Tutorial / Rema
 | `attribute.ts` | base + ModifierStack → current（min/max 钳制） | `createAttributeSet` / `getBase` / `setBase` / `getCurrent` / `addAttributeModifier` / `tickAttributeModifiers` |
 | `uiHints.ts` | 可交互实体查询接口 | `UIHint` / `UIHintProvider<TCore>` / `filterUIHints` / `groupUIHintsByType` / `extractPositions` |
 | `visual.ts` | 基于 atlasId 的视觉资源解析器 | `VisualResolver` |
+| `spriteAtlas.ts` | 精灵图集注册/裁切/查询（网格式） | `SpriteAtlasRegistry` / `globalSpriteAtlasRegistry` / `computeSpriteStyle` / `computeSpriteAspectRatio` / `generateUniformAtlasConfig` / `isSpriteAtlasConfig` |
 | `actionRegistry.ts` | actionId → handler 注册表 | `ActionHandlerRegistry` |
 | `condition.ts` / `effects.ts` / `dice.ts` / `resources.ts` / `target.ts` / `zones.ts` / `expression.ts` | 其他引擎原语 | — |
 
@@ -44,6 +45,43 @@ Flow / Interaction / Undo / Log / EventStream / ResponseWindow / Tutorial / Rema
 ### `engine/fx/` — FxSystem
 
 Cue 注册表 + 事件总线 + 渲染层 + WebGL Shader 子系统 + FeedbackPack。游戏侧通过 `fxSetup.ts` 注册渲染器并声明反馈包（音效+震动）。`useFxBus` 接受 `{ playSound, triggerShake }` 注入反馈能力，push 时自动触发 `timing='immediate'` 反馈，渲染器 `onImpact()` 触发 `timing='on-impact'` 反馈。Shader 管线（`src/engine/fx/shader/`）提供 `ShaderCanvas` + `ShaderMaterial` + `ShaderPrecompile` + GLSL 噪声库。
+
+---
+
+## 精灵图集系统（`engine/primitives/spriteAtlas.ts`）（强制）
+
+### 架构
+
+引擎层提供统一的精灵图集原语，类似 Unity SpriteAtlas / Phaser TextureAtlas：
+
+- **`SpriteAtlasConfig`** — 网格裁切配置（imageW/imageH/cols/rows/colStarts/colWidths/rowStarts/rowHeights）
+- **`SpriteAtlasRegistry`** — 注册表（`register` / `getSource` / `resolve`）
+- **`globalSpriteAtlasRegistry`** — 全局单例，游戏层注册，UI 层查询
+- **纯函数** — `computeSpriteStyle(index, config)` / `computeSpriteAspectRatio(index, config)` / `generateUniformAtlasConfig` / `isSpriteAtlasConfig`
+
+### 两个注册表的区别（强制理解）
+
+| 注册表 | 位置 | `image` 字段含义 | 消费方 |
+|--------|------|-----------------|--------|
+| `globalSpriteAtlasRegistry` | 引擎层 | **运行时 webp URL**（可直接用于 `backgroundImage`） | `CardSprite` 等游戏内组件 |
+| `CardPreview.cardAtlasRegistry` | 框架层 | **base path**（不带扩展名，由 `buildLocalizedImageSet` 构建实际 URL） | `CardPreview` 组件（教学/选牌预览） |
+
+**禁止合并这两个注册表**。它们的 `image` 字段语义不同，合并会导致后注册的覆盖前者，造成图片不显示。
+
+### 使用规范
+
+1. **裁切算法禁止在游戏层重复实现**：所有 `backgroundSize/backgroundPosition` 计算必须调用 `computeSpriteStyle`，禁止手写百分比计算。
+2. **类型守卫统一使用 `isSpriteAtlasConfig`**：禁止在游戏层重复定义 `isCardAtlasConfig` / `isNumberArray`。
+3. **卡牌→精灵图配置的解析必须收敛到单一函数**：每个游戏只允许有一个 `getCardSpriteConfig(card)` 函数（通常在 `spriteHelpers.ts`），所有消费点（手牌、棋盘、预览、弃牌堆、牌组构建器）统一调用，禁止各自写 `if (spriteAtlas === 'portal')` 分支。
+4. **新增图集类型时**：只需在 `getCardSpriteConfig` 中添加一个分支，不需要修改任何消费点。
+
+### 反模式
+
+- ❌ 在 UI 组件中直接写 `if (spriteAtlas === 'xxx') return { atlasId: 'yyy', ... }` — 每个消费点都写一遍，漏一个就出 bug
+- ❌ 在游戏层定义 `SpriteAtlasConfig` 类型或裁切算法 — 引擎层已提供
+- ❌ 把 `registerSpriteAtlas`（webp URL）和 `registerCardAtlasSource`（base path）写入同一个 Map
+- ✅ 统一在 `spriteHelpers.ts` 的 `getCardSpriteConfig(card)` 中处理所有图集类型分支
+- ✅ 裁切算法调用 `computeSpriteStyle` / `computeSpriteAspectRatio`
 
 ---
 
@@ -437,9 +475,16 @@ domain/
 
 ### 审查流程
 
-**第一步：拆分原子效果** — 每个"动词"或"条件→结果"对 = 一个原子效果。
+**第一步：拆分独立交互链** — 审查的原子单位不是"卡牌"或"技能"，而是**独立交互链**。任何需要独立的触发条件、玩家输入、或状态变更路径的效果，都必须作为单独的审查条目。一个卡牌/机制拆出几条链就审查几条。
 
-**第二步：逐效果追踪六层链路**
+拆分方法：逐句读描述文本，每遇到以下信号就拆出一条独立链：
+- 不同的触发时机（"打出时" vs "之后每当…时"）
+- 需要玩家做出新的选择（"你可以指定一个目标"）
+- 独立的条件→结果对（"如果…则…"）
+
+> **常见遗漏模式**：一张卡牌的描述包含"即时效果"和"持续/触发效果"两段，只审查了前者。持续效果的后续触发往往是一条完整的独立交互链（触发条件 → 玩家选择 → 执行 → 状态变更），必须单独审查。
+
+**第二步：逐链追踪六层**
 
 | 层 | 检查内容 |
 |----|----------|
@@ -454,11 +499,11 @@ domain/
 
 ### 测试覆盖要求
 
-每个原子效果：正向（触发→生效→验证状态）+ 负向（不触发→状态未变）+ 边界（0值/空目标/多次叠加）。**禁止只测注册/写入就判定"已实现"。**
+每条交互链：正向（触发→生效→验证状态）+ 负向（不触发→状态未变）+ 边界（0值/空目标/多次叠加）。**禁止只测注册/写入就判定"已实现"。**
 
 ### 产出要求
 
-- 输出"原子效果 × 六层"矩阵，每个交叉点 ✅/❌ + 具体证据（文件名+函数名）
+- 输出"独立交互链 × 六层"矩阵，每个交叉点 ✅/❌ + 具体证据（文件名+函数名）
 - ❌ 时立即修复或标注 TODO
 - UI 层不明确时询问用户
 - 禁止"看起来没问题"的模糊结论

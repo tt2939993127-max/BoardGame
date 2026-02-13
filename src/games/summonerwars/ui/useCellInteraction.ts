@@ -48,6 +48,8 @@ interface UseCellInteractionParams {
   activePlayerId: string;
   myHand: import('../domain/types').Card[];
   fromViewCoord: (coord: CellCoord) => CellCoord;
+  /** undo 快照数量，用于检测撤回恢复后抑制自动跳过 */
+  undoSnapshotCount?: number;
   // 外部模式状态
   abilityMode: AbilityModeState | null;
   setAbilityMode: (mode: AbilityModeState | null) => void;
@@ -65,6 +67,7 @@ interface UseCellInteractionParams {
 export function useCellInteraction({
   core, moves, currentPhase, isMyTurn, isGameOver,
   myPlayerId, activePlayerId, myHand, fromViewCoord,
+  undoSnapshotCount,
   abilityMode, setAbilityMode, soulTransferMode,
   mindCaptureMode, setMindCaptureMode,
   afterAttackAbilityMode, setAfterAttackAbilityMode,
@@ -811,6 +814,7 @@ export function useCellInteraction({
     hasActiveInteraction,
     advancePhase,
     enabled: !!core.hostStarted && !debugDisabled,
+    undoSnapshotCount,
   });
 
   // ---------- 返回 ----------

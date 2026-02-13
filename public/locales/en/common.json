@@ -81,6 +81,10 @@
     "dicethrone": "Dice Throne",
     "summonerwars": "Summoner Wars"
   },
+  "matchRoom": {
+    "tutorialTitle": "{{game}} - Tutorial",
+    "matchTitle": "{{game}} - Match"
+  },
   "games": {
     "summonerwars": {
       "title": "Summoner Wars",

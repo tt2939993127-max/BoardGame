@@ -281,6 +281,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     core, moves: moves as Record<string, (payload?: unknown) => void>,
     currentPhase, isMyTurn, isGameOver: !!isGameOver,
     myPlayerId, activePlayerId, myHand, fromViewCoord,
+    undoSnapshotCount: G.sys?.undo?.snapshots?.length ?? 0,
     abilityMode, setAbilityMode, soulTransferMode,
     mindCaptureMode, setMindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
@@ -387,7 +388,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   }, []);
 
   // StatusBanners 回调
-  const handleCancelAbility = useCallback(() => setAbilityMode(null), [setAbilityMode]);
+  const handleCancelAbility = useCallback(() => {
+    // 寒冰冲撞推拉步骤跳过：仍然发送命令（造成伤害但不推拉）
+    if (abilityMode?.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection'
+      && abilityMode.targetPosition && abilityMode.structurePosition) {
+      moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+        abilityId: 'ice_ram',
+        sourceUnitId: 'ice_ram',
+        targetPosition: abilityMode.targetPosition,
+        structurePosition: abilityMode.structurePosition,
+      });
+    }
+    setAbilityMode(null);
+  }, [setAbilityMode, abilityMode, moves]);
   const handleCancelBeforeAttack = useCallback(() => interaction.handleCancelBeforeAttack(), [interaction]);
   const handleCancelBloodSummon = useCallback(() => {
     interaction.setBloodSummonMode(null);

@@ -42,6 +42,7 @@
     "continue": "Continue",
     "finish": "Finish",
     "skip": "Skip",
+    "skipPush": "Skip Push",
     "push": "Push",
     "pull": "Pull",
     "control": "Control",
@@ -363,6 +364,8 @@
       "structureShift": "Structure Shift: Select friendly building within 3",
       "frostAxe": "Frost Axe: Charge self, or spend charges to attach to friendly soldier",
       "frostAxeSelectTarget": "Frost Axe: Select a friendly soldier within 3 spaces",
+      "iceRamSelectTarget": "Ice Ram: Select a unit adjacent to a building",
+      "iceRamSelectPush": "Ice Ram: Choose push/pull direction (or skip)",
       "vanish": "Vanish: Select a 0-cost friendly unit to swap positions"
     },
     "beforeAttack": {
@@ -690,6 +693,10 @@
     "slow": {
       "name": "Slow",
       "description": "This unit must move 1 fewer space."
+    },
+    "ice_ram": {
+      "name": "Ice Ram",
+      "description": "Ongoing: After a friendly structure moves or is pushed/pulled, you may target a unit adjacent to it. Deal 1 damage to the target. You may push or pull the target 1 space."
     },
     "ancestral_bond": {
       "name": "Ancestral Bond",

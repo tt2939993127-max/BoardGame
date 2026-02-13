@@ -74,6 +74,7 @@ const HANDLED_BY_EXECUTORS = new Set([
     // 极地矮人
     'frost_axe_action',         // → executors/frost 'frost_axe'
     'structure_shift_push_pull', // → executors/frost 'structure_shift'
+    'ice_ram_action',           // → executors/frost 'ice_ram'
     // 炽原精灵
     'ancestral_bond_transfer',  // → executors/barbaric 'ancestral_bond'
     'withdraw_push_pull',       // → executors/barbaric 'withdraw'
@@ -202,6 +203,8 @@ const ACTIVATED_UI_CONFIRMED = new Map<string, string>([
     ['revive_undead',  'button:summon — Board.tsx 召唤阶段按钮 + CardSelectorOverlay'],
     ['fire_sacrifice_summon', 'button:summon — AbilityButtonsPanel 召唤阶段按钮 + cell interaction 选友方单位'],
     ['mind_capture_resolve', 'modal:decision — mind_capture 触发后的决策 Modal（控制/伤害）'],
+    // 事件卡持续效果（ABILITY_TRIGGERED → useGameEvents → cell interaction）
+    ['ice_ram',         'eventCard:ui  — 建筑移动/推拉后 useGameEvents 触发 + StatusBanners + cell interaction'],
 ]);
 
 /**

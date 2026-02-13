@@ -67,7 +67,7 @@ export const loadCardAtlasConfig = async (
                 const response = await fetch(url);
                 if (!response.ok) continue;
                 const data: unknown = await response.json();
-                if (isCardAtlasConfig(data)) return data;
+                if (isSpriteAtlasConfig(data)) return data;
             } catch {
                 // 忽略单个路径错误，继续尝试下一候选
             }
