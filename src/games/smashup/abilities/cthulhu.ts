@@ -203,7 +203,7 @@ function cthulhuCorruption(ctx: AbilityContext): AbilityResult {
     const targets: { uid: string; defId: string; baseIndex: number; ownerId: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
-            if (m.controller === ctx.playerId) continue;
+            // 可以选择任意玩家的随从（包括己方）
             const def = getCardDef(m.defId) as MinionCardDef | undefined;
             const name = def?.name ?? m.defId;
             const power = getMinionPower(ctx.state, m, i);

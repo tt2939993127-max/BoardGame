@@ -25,8 +25,11 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
 
     /**
      * 火焰精通 - 增加火焰伤害
-     * 效果：可用于增加伤害或触发特殊效果
+     * 效果：由技能效果（custom actions）自动消耗，不通过 Token 响应弹窗交互
      * 上限：5（可通过升级卡提高）
+     * 
+     * 注意：火焰精通没有 activeUse 配置，因为它不是玩家手动使用的 token。
+     * 消耗逻辑在 customActions/pyromancer.ts 中（resolveBurnDown、resolveDmgPerFM 等）。
      */
     {
         id: TOKEN_IDS.FIRE_MASTERY,
@@ -37,14 +40,6 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
         sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.fire.flame_armor',
         stackLimit: 5,
         category: 'consumable',
-        activeUse: {
-            timing: ['beforeDamageDealt'],
-            consumeAmount: 1,
-            effect: {
-                type: 'modifyDamageDealt',
-                value: 1,
-            },
-        },
         frameId: 'pyro-status-2',
         atlasId: DICETHRONE_STATUS_ATLAS_IDS.PYROMANCER,
     },
@@ -89,6 +84,7 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
         passiveTrigger: {
             timing: 'onTurnStart',
             removable: true,
+            // value 仅为占位，实际伤害按 stacks 数量计算（见 flowHooks.ts）
             actions: [{ type: 'damage', target: 'self', value: 1 }],
         },
         frameId: 'pyro-status-4',

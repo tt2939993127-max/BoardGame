@@ -8,8 +8,8 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { recoverCardsFromDiscard, grantExtraAction, moveMinion } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { SmashUpEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
-import { registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
+import type { SmashUpEvent, SmashUpCore, CardsDrawnEvent, MinionReturnedEvent, OngoingDetachedEvent } from '../domain/types';
+import { registerProtection, registerRestriction, registerTrigger, registerInterceptor } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, RestrictionCheckContext, TriggerContext } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -28,7 +28,7 @@ export function registerSteampunkAbilities(): void {
 
     // === ongoing 效果注册 ===
     // steam_queen: 己方 ongoing 行动卡不受对手影�?
-    registerProtection('steampunk_steam_queen', 'action', steampunkSteamQueenChecker);
+    registerInterceptor('steampunk_steam_queen', steampunkSteamQueenInterceptor);
     // ornate_dome: 禁止对手打行动卡到此基地
     registerRestriction('steampunk_ornate_dome', 'play_action', steampunkOrnateDomeChecker);
     // difference_engine: 回合结束时控制者多�?�?
@@ -65,20 +65,24 @@ function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
 // ============================================================================
 
 /**
- * steam_queen 保护检查：己方 ongoing 行动卡不受对手行动卡影响
- * 
- * 规则：当 steam_queen 在场时，同基地己方随从不受对手行动卡影响
+ * steam_queen 拦截器：己方 ongoing 行动卡不受对手卡牌影响
+ *
+ * 规则：当 steam_queen 在场时，拥有者的行动卡不能被对手的卡牌影响
  */
-function steampunkSteamQueenChecker(ctx: ProtectionCheckContext): boolean {
-    // steam_queen 保护同基地己方随�?
-    const base = ctx.state.bases[ctx.targetBaseIndex];
-    if (!base) return false;
-    // 检�?steam_queen 是否在同基地
-    const queenOnBase = base.minions.some(m => m.defId === 'steampunk_steam_queen');
-    if (!queenOnBase) return false;
-    // 只保�?steam_queen 控制者的随从
-    const queenController = base.minions.find(m => m.defId === 'steampunk_steam_queen')?.controller;
-    return ctx.targetMinion.controller === queenController && ctx.sourcePlayerId !== queenController;
+function steampunkSteamQueenInterceptor(state: SmashUpCore, event: SmashUpEvent): SmashUpEvent | SmashUpEvent[] | null | undefined {
+    if (event.type !== SU_EVENTS.ONGOING_DETACHED) return undefined;
+    const payload = (event as OngoingDetachedEvent).payload;
+    if (payload.reason?.includes('self_destruct') || payload.reason?.includes('expired')) return undefined;
+    for (const base of state.bases) {
+        const queen = base.minions.find(m => m.defId === 'steampunk_steam_queen');
+        if (!queen) continue;
+        const isOwnerAction = base.ongoingActions.some(o => o.uid === payload.cardUid && o.ownerId === queen.controller);
+        const isAttachedAction = base.minions.some(m => m.attachedActions.some(a => a.uid === payload.cardUid && a.ownerId === queen.controller));
+        if (isOwnerAction || isAttachedAction) {
+            return null;
+        }
+    }
+    return undefined;
 }
 
 /**
@@ -309,7 +313,11 @@ export function registerSteampunkInteractionHandlers(): void {
 
     registerInteractionHandler('steampunk_mechanic', (state, playerId, value, _iData, _random, timestamp) => {
         const { cardUid } = value as { cardUid: string };
-        return { state, events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp)] };
+        // 从弃牌堆取回到手牌 + 额外行动（模拟"打出弃牌堆行动卡"）
+        return { state, events: [
+            recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp),
+            grantExtraAction(playerId, 'steampunk_mechanic', timestamp),
+        ] };
     });
 
     registerInteractionHandler('steampunk_change_of_venue', (state, playerId, value, _iData, _random, timestamp) => {

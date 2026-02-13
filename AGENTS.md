@@ -30,7 +30,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/ai-rules/golden-rules.md` — **遇到 React 渲染错误/白屏/函数未定义/高频交互卡顿时必读**。含 React Hooks 示例、白屏排查流程、Vite SSR、高频交互/拖拽规范。
 - `docs/ai-rules/animation-effects.md` — **开发/修改任何动画、特效、粒子效果时必读**。含动效选型表、Canvas 粒子引擎、特效组件/架构/视觉质量规范。
 - `docs/ai-rules/asset-pipeline.md` — **新增/修改图片或音频资源引用时必读**。含压缩流程、路径规范、✅/❌ 示例。
-- `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、框架解耦/复用、EventStream、ABILITY_TRIGGERED、afterEventsRound。
+- `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、框架解耦/复用、EventStream、ABILITY_TRIGGERED、afterEventsRound、**描述→实现全链路审查规范**。**当用户说"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等要求验证某机制实现完整性的词语时，必须先阅读本文档「描述→实现全链路审查规范」节，按规范流程执行审查并输出矩阵，禁止凭印象回答。**
 - `docs/ai-rules/ui-ux.md` — **开发/修改 UI 组件、布局、样式、游戏界面时必读**。含审美准则、多端布局、游戏 UI 特化、设计系统引用。
 - `docs/ai-rules/global-systems.md` — **使用/修改全局 Context（Toast/Modal/音频/教学/认证）时必读**。含 Context 系统、实时服务层。
 - `docs/ai-rules/doc-index.md` — **不确定该读哪个文档时必读**。按场景查找需要阅读的文档。
@@ -291,10 +291,12 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 ### 验证测试（Playwright 优先）
 - 详细规范见 `docs/automated-testing.md`。
 - **工具**：Playwright E2E / Vitest / GameTestRunner / 引擎层审计工厂（`src/engine/testing/`）。
+- **GameTestRunner 优先（强制）**：GameTestRunner 行为测试是最优先、最可靠的测试手段。审计工厂（entityIntegritySuite / interactionChainAudit / interactionCompletenessAudit）是补充，用于批量覆盖注册表引用完整性和交互链完整性。
 - **命令**：`npm run test:e2e`（E2E）、`npm test -- <路径>`（Vitest）。
 - **截图规范**：禁止硬编码路径，必须用 `testInfo.outputPath('name.png')`。
 - **E2E 覆盖要求**：必须覆盖"关键交互面"（按钮/Modal/Tab/表单校验），不只是跑通 happy path。
-- **静态审计要求**：新增游戏时必须根据游戏特征选择引擎层审计工具创建对应测试。审计工具清单和选型指南见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
+- **静态审计要求**：新增游戏时根据游戏特征选择引擎层审计工具。选型指南见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
+- **描述→实现全链路审查（强制）**：以下场景必须执行全链路审查——① 新增任何技能/Token/事件卡/被动效果/光环的实现 ② 修复"没效果"类 bug ③ 审查已有机制是否正确实现 ④ 重构涉及消费链路。审查方法：拆分描述为原子效果，逐效果检查定义层→执行层→状态层→验证层→UI 层→测试层六层链路，输出"原子效果 × 六层"矩阵。**禁止只测注册/写入就判定"已实现"，禁止输出"看起来没问题"的模糊结论。** 详见 `docs/ai-rules/engine-systems.md`「描述→实现全链路审查规范」节。
 
 ---
 

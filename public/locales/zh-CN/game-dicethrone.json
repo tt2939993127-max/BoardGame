@@ -91,7 +91,7 @@
     "burn": {
       "name": "燃烧",
       "description": [
-        "受此效果影响的玩家必须在其维持阶段受到2点不可防御伤害。"
+        "维持阶段受到等同层数的不可防御伤害，然后移除1层"
       ]
     },
     "stun": {
@@ -116,6 +116,24 @@
       "name": "中毒",
       "description": [
         "回合开始时受到等同层数的伤害，然后移除1层"
+      ]
+    },
+    "blinded": {
+      "name": "致盲",
+      "description": [
+        "攻击掷骰阶段结算时掷1骰，1-2则攻击无效，然后移除此标记"
+      ]
+    },
+    "entangle": {
+      "name": "缠绕",
+      "description": [
+        "下次攻击掷骰少一次（3→2），然后移除此标记"
+      ]
+    },
+    "targeted": {
+      "name": "锁定",
+      "description": [
+        "受到的伤害+2，受到伤害后移除此标记"
       ]
     }
   },
@@ -164,6 +182,42 @@
       "name": "伏击",
       "description": [
         "攻击结算时，投掷1个骰子并将结果加到伤害中"
+      ]
+    },
+    "crit": {
+      "name": "暴击",
+      "description": [
+        "攻击结算前消耗1层，伤害+1"
+      ]
+    },
+    "accuracy": {
+      "name": "精准",
+      "description": [
+        "攻击结算前消耗1层，本次攻击不可防御"
+      ]
+    },
+    "protect": {
+      "name": "守护",
+      "description": [
+        "受到伤害前消耗1层，伤害-1"
+      ]
+    },
+    "retribution": {
+      "name": "神罚",
+      "description": [
+        "受到伤害前消耗1层，对攻击者造成2点不可防御伤害"
+      ]
+    },
+    "tithes_upgraded": {
+      "name": "教会税升级",
+      "description": [
+        "收入阶段额外获得1CP"
+      ]
+    },
+    "blessing_of_divinity": {
+      "name": "神圣祝福",
+      "description": [
+        "受到致死伤害时，移除此标记，将HP设为1并回复5HP"
       ]
     }
   },
@@ -278,6 +332,9 @@
     "taijiBoostHint": "花费太极来提高伤害",
     "taijiReduceHint": "花费太极来减少伤害",
     "useTaiji": "使用太极",
+    "boostHint": "花费 Token 来提高伤害",
+    "reduceHint": "花费 Token 来减少伤害",
+    "useToken": "使用",
     "evasiveHint": "花费闪避尝试完全躲避",
     "evasiveDesc": "花费 1 个闪避并掷 1 骰；成功则本次伤害变为 0。",
     "useEvasive": "使用闪避",
@@ -784,11 +841,12 @@
     },
     "calm-water-2": {
       "name": "心如止水 II",
-      "description": "大顺子触发：造成9伤害，获得3气+闪避",
+      "description": "大顺子触发：造成9伤害，获得3气+闪避，施加击倒",
       "effects": {
         "damage9": "造成9点伤害",
         "gainTaiji3": "然后获得3个太极标记",
-        "gainEvasive": "获得1个闪避标记"
+        "gainEvasive": "获得1个闪避标记",
+        "inflictKnockdown": "施加1个击倒标记"
       }
     },
     "meditation": {
@@ -852,7 +910,7 @@
     },
     "suppress": {
       "name": "压制",
-      "description": "3剑+2星触发：投掷3骰，造成其点数总和的伤害；若总数>14，施加脑震荡",
+      "description": "2剑+2星触发：投掷3骰，造成其点数总和的伤害；若总数>14，施加脑震荡",
       "effects": {
         "rollDice": "投掷3颗骰子，造成其点数总和的伤害",
         "concussionThreshold": "如果总数大于14，施加1个脑震荡标记"
@@ -1245,7 +1303,7 @@
     },
     "card-zen-fist-2": {
       "name": "止禅拳法 II",
-      "description": "大顺子触发：造成7伤害，然后获得闪避和3气，施加倒地。武僧之路（拳掌太极莲花触发）：获得2闪避，造成3不可防御伤害。"
+      "description": "大顺子触发：造成9伤害，然后获得闪避和3气，施加击倒。武僧之路（拳掌太极莲花触发）：获得2闪避，造成3不可防御伤害。"
     },
     "card-storm-assault-2": {
       "name": "风暴突袭 II",
@@ -1356,6 +1414,46 @@
     "hints": {
       "releaseToPlay": "松开打出",
       "releaseToSell": "松开售卖"
+    },
+    "card-thick-skin-2": {
+      "name": "皮糙肉厚 II",
+      "description": "升级厚皮至 II 级。"
+    },
+    "card-slap-2": {
+      "name": "拍击 II",
+      "description": "升级拍击至 II 级。"
+    },
+    "card-slap-3": {
+      "name": "拍击 III",
+      "description": "升级拍击至 III 级。"
+    },
+    "card-all-out-strike-2": {
+      "name": "全力一击 II",
+      "description": "升级全力一击至 II 级。"
+    },
+    "card-all-out-strike-3": {
+      "name": "全力一击 III",
+      "description": "升级全力一击至 III 级。"
+    },
+    "card-powerful-strike-2": {
+      "name": "强力一击 II",
+      "description": "升级强力一击至 II 级。"
+    },
+    "card-reckless-strike-2": {
+      "name": "鲁莽一击 II",
+      "description": "升级鲁莽一击至 II 级。"
+    },
+    "card-suppress-2": {
+      "name": "压制 II",
+      "description": "升级压制至 II 级。"
+    },
+    "card-steadfast-2": {
+      "name": "坚韧不拔 II",
+      "description": "升级坚韧不拔至 II 级。"
+    },
+    "card-violent-assault-2": {
+      "name": "暴力猛击 II",
+      "description": "升级暴力猛击至 II 级。"
     },
     "card-flame-barrier": {
       "name": "火焰护盾",
@@ -1476,6 +1574,126 @@
     "upgrade-cornucopia-2": {
       "name": "聚宝盆 II",
       "description": "升级聚宝盆至 II 级。"
+    },
+    "moon-shadow-strike": {
+      "name": "月影突袭",
+      "description": "投掷1骰：弓→抽1牌；足→施加缠绕；月→施加致盲+锁定。"
+    },
+    "dodge": {
+      "name": "闪避！",
+      "description": "获得1个闪避标记。"
+    },
+    "volley": {
+      "name": "齐射！",
+      "description": "本次攻击伤害+3。"
+    },
+    "watch-out": {
+      "name": "小心！",
+      "description": "对对手施加锁定。"
+    },
+    "moonlight-magic": {
+      "name": "月光魔法！",
+      "description": "获得闪避，对对手施加致盲、缠绕和锁定。"
+    },
+    "upgrade-elusive-step-2": {
+      "name": "迷影步 II",
+      "description": "升级迷影步至 II 级。"
+    },
+    "upgrade-eclipse-2": {
+      "name": "月蚀 II",
+      "description": "升级月蚀至 II 级。"
+    },
+    "upgrade-blinding-shot-2": {
+      "name": "致盲射击 II",
+      "description": "升级致盲射击至 II 级。"
+    },
+    "upgrade-entangling-shot-2": {
+      "name": "缠绕射击 II",
+      "description": "升级缠绕射击至 II 级。"
+    },
+    "upgrade-exploding-arrow-3": {
+      "name": "爆裂箭 III",
+      "description": "升级爆裂箭至 III 级。"
+    },
+    "upgrade-exploding-arrow-2": {
+      "name": "爆裂箭 II",
+      "description": "升级爆裂箭至 II 级。"
+    },
+    "upgrade-covering-fire-2": {
+      "name": "掩护射击 II",
+      "description": "升级掩护射击至 II 级。"
+    },
+    "upgrade-deadeye-shot-2": {
+      "name": "精准射击 II",
+      "description": "升级隐蔽射击至 II 级。"
+    },
+    "upgrade-longbow-3": {
+      "name": "长弓 III",
+      "description": "升级长弓至 III 级。"
+    },
+    "upgrade-longbow-2": {
+      "name": "长弓 II",
+      "description": "升级长弓至 II 级。"
+    },
+    "card-might": {
+      "name": "神力！",
+      "description": "获得1个暴击标记。"
+    },
+    "card-consecrate": {
+      "name": "神圣祝圣！",
+      "description": "获得守护、神罚、暴击和精准各1个。"
+    },
+    "card-divine-favor": {
+      "name": "神恩！",
+      "description": "投掷1骰：剑→抽2牌；头盔→治愈3；心→治愈4；祈祷→获得3CP。"
+    },
+    "card-absolution": {
+      "name": "赦免！",
+      "description": "投掷1骰防御：剑→对攻击者造成1不可防御伤害；头盔→防止1伤害；心→防止2伤害；祈祷→获得1CP。"
+    },
+    "card-gods-grace": {
+      "name": "神佑！",
+      "description": "投掷1骰：祈祷→获得4CP；否则抽1牌。"
+    },
+    "card-holy-defense-3": {
+      "name": "神圣防御 III",
+      "description": "升级神圣防御至 III 级。"
+    },
+    "card-holy-defense-2": {
+      "name": "神圣防御 II",
+      "description": "升级神圣防御至 II 级。"
+    },
+    "card-holy-light-2": {
+      "name": "圣光 II",
+      "description": "升级圣光至 II 级。"
+    },
+    "card-righteous-combat-3": {
+      "name": "正义战法 III",
+      "description": "升级正义战法至 III 级。"
+    },
+    "card-righteous-combat-2": {
+      "name": "正义战法 II",
+      "description": "升级正义战法至 II 级。"
+    },
+    "card-blessing-of-might-2": {
+      "name": "力量祝福 II",
+      "description": "升级力量祝福至 II 级。"
+    },
+    "card-holy-strike-2": {
+      "name": "神圣攻击 II",
+      "description": "升级神圣攻击至 II 级。"
+    },
+    "card-vengeance-2": {
+      "name": "复仇 II",
+      "description": "升级复仇至 II 级。"
+    },
+    "card-righteous-prayer-2": {
+      "name": "正义祷告 II",
+      "description": "升级正义祷告至 II 级。"
+    },
+    "card-tithes-2": {
+      "name": "教会税 II",
+      "description": "升级教会税：收入阶段额外获得1CP。"
     }
   },
   "cardSpotlight": {

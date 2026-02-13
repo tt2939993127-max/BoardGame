@@ -15,6 +15,7 @@ vi.mock('react-i18next', () => ({
             return `${key}:${params}`;
         },
     }),
+    initReactI18next: { type: '3rdParty', init: () => {} },
 }));
 
 vi.mock('framer-motion', () => {
@@ -60,7 +61,7 @@ describe('BonusDieOverlay', () => {
         expect(html).toContain('bonusDie.confirmDamage');
         expect(html).toContain('bonusDie.total');
         expect(html).toContain('cursor-pointer');
-        expect(html).toContain('bg-purple-600/80');
+        expect(html).toContain('bg-amber-600/80');
         expect(html).toContain('(bonusDie.knockdownTrigger)');
     });
 
@@ -83,6 +84,6 @@ describe('BonusDieOverlay', () => {
         expect(html).toContain('bonusDie.continue');
         expect(html).not.toContain('bonusDie.confirmDamage');
         expect(html).not.toContain('cursor-pointer');
-        expect(html).not.toContain('bg-purple-600/80');
+        expect(html).not.toContain('bg-amber-600/80');
     });
 });

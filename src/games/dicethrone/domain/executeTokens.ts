@@ -25,7 +25,22 @@ import {
     hasDefensiveTokens,
     createTokenResponseRequestedEvent,
 } from './tokenResponse';
+import { getCustomActionHandler } from './effects';
 import { applyEvents } from './utils';
+
+/**
+ * 根据 tokenId 查找该 token 所属英雄的前缀（用于拼接 custom action ID）
+ * 例如 sneak_attack → shadow_thief
+ */
+function findTokenHeroPrefix(state: DiceThroneCore, tokenId: string): string | undefined {
+    // 从 state 中查找持有该 token 的玩家的 characterId
+    for (const [, player] of Object.entries(state.players)) {
+        if (player.characterId && player.characterId !== 'unselected' && tokenId in (player.tokens ?? {})) {
+            return player.characterId;
+        }
+    }
+    return undefined;
+}
 
 /**
  * 执行 Token / 奖励骰 / 击倒移除相关命令
@@ -97,6 +112,36 @@ export function executeTokenCommand(
                     sourceCommandType: command.type,
                     timestamp,
                 } as DiceThroneEvent);
+            }
+
+            // 伏击等 value=0 的 token：触发对应 custom action（如掷骰加伤）
+            if (result.success && result.damageModifier === 0 && tokenDef.activeUse?.effect?.value === 0) {
+                const customActionId = `${tokenDef.id.replace(/_/g, '-')}-use`;
+                // 尝试查找 hero-prefixed custom action（如 shadow_thief-sneak-attack-use）
+                const heroPrefix = findTokenHeroPrefix(state, tokenId);
+                const prefixedActionId = heroPrefix ? `${heroPrefix}-${customActionId}` : customActionId;
+                const handler = getCustomActionHandler(prefixedActionId) ?? getCustomActionHandler(customActionId);
+                if (handler) {
+                    const customCtx: import('../domain/effects').CustomActionContext = {
+                        ctx: {
+                            attackerId: pendingDamage.sourcePlayerId,
+                            defenderId: pendingDamage.targetPlayerId,
+                            sourceAbilityId: pendingDamage.sourceAbilityId ?? 'token-use',
+                            state,
+                            damageDealt: 0,
+                            timestamp,
+                        },
+                        targetId: pendingDamage.targetPlayerId,
+                        attackerId: pendingDamage.sourcePlayerId,
+                        sourceAbilityId: pendingDamage.sourceAbilityId ?? 'token-use',
+                        state,
+                        timestamp,
+                        random,
+                        action: { type: 'custom', target: 'opponent', customActionId: prefixedActionId },
+                    };
+                    const customEvents = handler(customCtx);
+                    events.push(...customEvents);
+                }
             }
             
             // 如果完全闪避，关闭响应窗口

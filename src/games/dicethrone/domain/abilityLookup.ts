@@ -52,6 +52,13 @@ export function getPlayerAbilityEffects(
 
 /**
  * 判断该技能是否包含伤害效果（用于是否进入防御投掷阶段）
+ *
+ * 检查范围：
+ * - 显式 damage action（value > 0）
+ * - rollDie action（conditionalEffects 中可能包含 bonusDamage）
+ * - custom action targeting opponent（自定义动作可能造成伤害，如 thunder-strike-roll-damage）
+ *
+ * 只有纯 buff/token/heal/cp 技能才返回 false
  */
 export function playerAbilityHasDamage(
     state: DiceThroneCore,
@@ -59,7 +66,16 @@ export function playerAbilityHasDamage(
     abilityId: string
 ): boolean {
     const effects = getPlayerAbilityEffects(state, playerId, abilityId);
-    return effects.some(e => e.action?.type === 'damage' && (e.action.value ?? 0) > 0);
+    return effects.some(e => {
+        if (!e.action) return false;
+        // 显式伤害
+        if (e.action.type === 'damage' && (e.action.value ?? 0) > 0) return true;
+        // rollDie 可能包含 bonusDamage
+        if (e.action.type === 'rollDie') return true;
+        // custom action targeting opponent 可能造成伤害（保守判定）
+        if (e.action.type === 'custom' && e.action.target === 'opponent') return true;
+        return false;
+    });
 }
 
 /**

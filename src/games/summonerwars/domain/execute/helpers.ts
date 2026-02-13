@@ -20,9 +20,10 @@ import type {
 import { SW_EVENTS } from '../types';
 import { findOnGrid } from '../../../../engine/primitives/grid';
 import type { BoardCell } from '../types';
-import { getEffectiveLife, triggerAbilities, triggerAllUnitsAbilities } from '../abilityResolver';
+import { getEffectiveLife, getEffectiveStructureLife, triggerAbilities, triggerAllUnitsAbilities } from '../abilityResolver';
 import type { AbilityContext } from '../abilityResolver';
 import { reduceEvent } from '../reduce';
+import { abilityRegistry } from '../abilities';
 import { getBaseCardId, CARD_IDS } from '../ids';
 
 // ============================================================================
@@ -63,11 +64,12 @@ export function createAbilityTriggeredEvent(
   timestamp: number,
   extra?: Record<string, unknown>,
 ): GameEvent {
+  const abilityName = abilityRegistry.get(abilityId)?.name;
   return {
     type: SW_EVENTS.ABILITY_TRIGGERED,
     payload: {
       abilityId,
-      abilityName: abilityId,
+      ...(abilityName ? { abilityName } : {}),
       sourceUnitId,
       sourcePosition,
       ...extra,
@@ -157,6 +159,7 @@ export function emitDestroyWithTriggers(
   }
 
   // 4. onUnitDestroyed 触发（血腥狂怒等全局回调）
+  // 注意：blood_rage 规则为"在你的回合中"，所以只遍历当前回合玩家的单位
   events.push(...triggerAllUnitsAbilities('onUnitDestroyed', core, opts.playerId, {
     victimUnit: victim,
     victimPosition: position,
@@ -229,7 +232,7 @@ export function postProcessDeathChecks(
         }
       } else if (structure && !destroyedStructureIds.has(structure.cardId)) {
         const newDamage = structure.damage + damage;
-        if (newDamage >= structure.card.life) {
+        if (newDamage >= getEffectiveStructureLife(workingState, structure)) {
           result.splice(idx + 1, 0, {
             type: SW_EVENTS.STRUCTURE_DESTROYED,
             payload: {

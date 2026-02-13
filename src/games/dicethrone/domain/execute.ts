@@ -30,7 +30,7 @@ import {
     getNextPlayerId,
     getResponderQueue,
 } from './rules';
-import { findPlayerAbility } from './abilityLookup';
+import { findPlayerAbility, playerAbilityHasDamage } from './abilityLookup';
 
 import { DICETHRONE_COMMANDS, STATUS_IDS } from './ids';
 import { CHARACTER_DATA_MAP } from './characters';
@@ -50,10 +50,11 @@ import { getGameMode } from './utils';
 /**
  * 判断该进攻技能是否可被防御（是否进入防御投掷阶段）
  * 
- * 设计原则：
+ * 设计原则（规则 §4.3/§4.4）：
  * - 进攻技能默认可防御（进入防御阶段）
- * - 只有明确标记 'unblockable' 的技能才不可防御
- * - 不再基于 hasDamage 判断，因为 custom action 也可能造成伤害（如 thunder-strike-2-roll-damage）
+ * - 标记 'unblockable' 的技能/变体不可防御
+ * - 终极技能（'ultimate' tag）不可防御（规则 §4.4：不可阻挡）
+ * - 没有任何伤害效果的技能不进入防御阶段（无需防御）
  */
 const isDefendableAttack = (state: DiceThroneCore, attackerId: string, abilityId: string): boolean => {
     const match = findPlayerAbility(state, attackerId, abilityId);
@@ -64,10 +65,15 @@ const isDefendableAttack = (state: DiceThroneCore, attackerId: string, abilityId
     // 检查 variant 和 ability 的 tags
     const variantTags = match.variant?.tags ?? [];
     const abilityTags = match.ability.tags ?? [];
-    const hasUnblockableTag = variantTags.includes('unblockable') || abilityTags.includes('unblockable');
+
+    // 终极技能：不可阻挡（规则 §4.4）
+    if (abilityTags.includes('ultimate')) return false;
 
     // 不可防御标签：跳过防御阶段
-    if (hasUnblockableTag) return false;
+    if (variantTags.includes('unblockable') || abilityTags.includes('unblockable')) return false;
+
+    // 无伤害效果的技能不进入防御阶段
+    if (!playerAbilityHasDamage(state, attackerId, abilityId)) return false;
 
     // 进攻技能默认可防御
     return true;

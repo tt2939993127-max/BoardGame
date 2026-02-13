@@ -7,6 +7,7 @@ import { RESOURCE_IDS } from './domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
 import type { PendingInteraction } from './domain/types';
+import { getUsableTokensForTiming } from './domain/tokenResponse';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
@@ -280,6 +281,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         ? (pendingDamage.responderId === pendingDamage.sourcePlayerId ? 'attackerBoost' : 'defenderMitigation')
         : null;
     const isTokenResponder = pendingDamage && (pendingDamage.responderId === rootPid);
+
+    // 领域层计算当前阶段可用的 Token 列表（唯一数据源）
+    const usableTokens = React.useMemo(() => {
+        if (!pendingDamage) return [];
+        return getUsableTokensForTiming(G, pendingDamage.responderId, pendingDamage.responseType);
+    }, [G, pendingDamage]);
 
     const isActivePlayer = G.activePlayerId === rootPid;
     const { rollerId, shouldAutoObserve, viewMode, isSelfView } = computeViewModeState({
@@ -998,7 +1005,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     pendingDamage={pendingDamage}
                     tokenResponsePhase={tokenResponsePhase}
                     isTokenResponder={!!isTokenResponder}
-                    tokenDefinitions={G.tokenDefinitions}
+                    usableTokens={usableTokens}
                     onUseToken={(tokenId, amount) => engineMoves.useToken(tokenId, amount)}
                     onSkipTokenResponse={() => engineMoves.skipTokenResponse()}
 

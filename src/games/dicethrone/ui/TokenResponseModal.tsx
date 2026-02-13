@@ -14,8 +14,8 @@ interface TokenResponseModalProps {
     responsePhase: TokenResponsePhase;
     /** 响应玩家状态 */
     responderState: HeroState;
-    /** Token 定义列表（动态驱动 UI） */
-    tokenDefinitions: TokenDef[];
+    /** 当前阶段可用的 Token 列表（由领域层过滤，UI 直接渲染） */
+    usableTokens: TokenDef[];
     /** 使用 Token（通用接口） */
     onUseToken: (tokenId: string, amount: number) => void;
     /** 跳过响应 */
@@ -30,14 +30,16 @@ interface TokenResponseModalProps {
 
 /**
  * Token 响应弹窗
- * - 攻击阶段：攻击方可消耗太极增加伤害
- * - 防御阶段：防御方可消耗太极减少伤害，或消耗闪避尝试完全躲避
+ * - 攻击阶段：攻击方可消耗 damage modifier Token 增加伤害
+ * - 防御阶段：防御方可消耗 damage modifier Token 减少伤害，或消耗闪避尝试完全躲避
+ *
+ * usableTokens 由领域层 getUsableTokensForTiming 提供，UI 不再自行过滤
  */
 export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     pendingDamage,
     responsePhase,
     responderState,
-    tokenDefinitions,
+    usableTokens,
     onUseToken,
     onSkip,
     locale,
@@ -47,19 +49,20 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     const { t } = useTranslation('game-dicethrone');
     const [boostAmount, setBoostAmount] = React.useState(1);
 
-    // 从定义中动态获取可用 Token（根据 activeUse.timing）
-    const boostToken = tokenDefinitions.find(def =>
-        def.activeUse?.timing.includes('beforeDamageDealt') && def.activeUse.timing.includes('beforeDamageReceived')
-    );
-    const evasiveToken = tokenDefinitions.find(def =>
+    const isAttackerPhase = responsePhase === 'attackerBoost';
+    const isDefenderPhase = responsePhase === 'defenderMitigation';
+
+    // 从已过滤的可用 token 中按 effect type 分类
+    const boostToken = usableTokens.find(def => {
+        const effectType = def.activeUse?.effect.type;
+        return effectType === 'modifyDamageDealt' || effectType === 'modifyDamageReceived';
+    });
+    const evasiveToken = usableTokens.find(def =>
         def.activeUse?.effect.type === 'rollToNegate'
     );
 
     const boostCount = boostToken ? (responderState.tokens[boostToken.id] ?? 0) : 0;
     const evasiveCount = evasiveToken ? (responderState.tokens[evasiveToken.id] ?? 0) : 0;
-
-    const isAttackerPhase = responsePhase === 'attackerBoost';
-    const isDefenderPhase = responsePhase === 'defenderMitigation';
 
     // 攻击方只能用增益 Token 加伤
     const canUseBoost = boostToken && boostCount > 0;
@@ -192,8 +195,8 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                                 </div>
                                 <div className="text-xs text-slate-400 hidden sm:block">
                                     {isAttackerPhase
-                                        ? t('tokenResponse.taijiBoostHint')
-                                        : t('tokenResponse.taijiReduceHint')}
+                                        ? t('tokenResponse.boostHint')
+                                        : t('tokenResponse.reduceHint')}
                                 </div>
                             </div>
 
@@ -230,7 +233,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                                     onClick={handleUseBoost}
                                     className="ml-auto"
                                 >
-                                    {t('tokenResponse.useTaiji')}
+                                    {t('tokenResponse.useToken')}
                                 </GameButton>
                             </div>
                         </div>

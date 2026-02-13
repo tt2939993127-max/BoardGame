@@ -332,8 +332,8 @@ describe('米斯卡塔尼克大学派系能力', () => {
             expect(uids).toContain('att1');
         });
 
-        it('选择行动卡最多的基地', () => {
-            const state = makeState({
+        it('多个基地有行动卡时创建 Prompt 选择', () => {
+            const core = makeState({
                 players: {
                     '0': makePlayer('0', {
                         hand: [makeCard('a1', 'miskatonic_those_meddling_kids', 'action', '0')],
@@ -355,13 +355,16 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const detachEvents = events.filter(e => e.type === SU_EVENTS.ONGOING_DETACHED);
-            // 应选择 b2（2张行动卡）
-            expect(detachEvents.length).toBe(2);
-            const uids = detachEvents.map(e => (e as any).payload.cardUid);
-            expect(uids).toContain('o2');
-            expect(uids).toContain('o3');
+            const ms = makeMatchState(core);
+            execute(ms, {
+                type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+                payload: { cardUid: 'a1' },
+            } as any, defaultRandom);
+            // 多个基地有行动卡 → 创建 Prompt 让玩家选择
+            const interaction = (ms.sys as any)?.interaction;
+            const current = interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('miskatonic_those_meddling_kids');
         });
 
         it('无行动卡时不产生事件', () => {

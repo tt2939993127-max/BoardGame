@@ -138,6 +138,12 @@ export function findUnitPosition(state: SummonerWarsCore, cardId: string): CellC
   return result ? result.position : null;
 }
 
+/** 按 cardId 查找棋盘上的单位（返回单位对象，用于交缠颂歌等需要读取卡牌数据的场景） */
+function findBoardUnitByCardId(state: SummonerWarsCore, cardId: string): BoardUnit | undefined {
+  const result = findOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.cardId === cardId);
+  return result ? result.cell.unit! : undefined;
+}
+
 /** 获取玩家的城门 */
 export function getPlayerGates(state: SummonerWarsCore, playerId: PlayerId): BoardStructure[] {
   return collectOnGrid<BoardCell>(state.board, (cell) =>
@@ -207,6 +213,49 @@ export function getMovePath(from: CellCoord, to: CellCoord): CellCoord[] {
     const mid1 = { row: from.row, col: to.col };
     return [mid1, to]; // 简化：默认先走横向
   }
+  return [];
+}
+
+/**
+ * 获取移动路径上被穿过的单位位置（用于践踏等穿越伤害）
+ * 只返回中间格上的单位（不含终点），且只返回敌方士兵
+ */
+export function getPassedThroughUnitPositions(
+  state: SummonerWarsCore,
+  from: CellCoord,
+  to: CellCoord,
+  movingUnitOwner: PlayerId,
+): CellCoord[] {
+  const distance = manhattanDistance(from, to);
+  if (distance <= 1) return []; // 1格移动没有中间格
+
+  // 直线移动：中间格明确
+  if (from.row === to.row || from.col === to.col) {
+    const path = getStraightLinePath(from, to);
+    // 不含终点的中间格
+    const intermediates = path.slice(0, -1);
+    return intermediates.filter(pos => {
+      const u = getUnitAt(state, pos);
+      return u && u.owner !== movingUnitOwner;
+    });
+  }
+
+  // L 形移动（2格）：两条可能路径
+  if (distance === 2) {
+    const mid1 = { row: from.row, col: to.col };
+    const mid2 = { row: to.row, col: from.col };
+    const unit1 = isValidCoord(mid1) ? getUnitAt(state, mid1) : undefined;
+    const unit2 = isValidCoord(mid2) ? getUnitAt(state, mid2) : undefined;
+    const hasEnemy1 = unit1 && unit1.owner !== movingUnitOwner;
+    const hasEnemy2 = unit2 && unit2.owner !== movingUnitOwner;
+
+    // 优先选择穿过敌方单位的路径（践踏设计意图）
+    const result: CellCoord[] = [];
+    if (hasEnemy1) result.push(mid1);
+    if (hasEnemy2) result.push(mid2);
+    return result;
+  }
+
   return [];
 }
 
@@ -366,6 +415,15 @@ export function hasEnoughMagic(state: SummonerWarsCore, playerId: PlayerId, cost
 // 阶段可操作性检查
 // ============================================================================
 
+/** 检查手牌中是否有可在指定阶段打出的事件卡（含 playPhase='any'）且魔力足够 */
+function hasPlayableEvents(player: { hand: readonly import('./types').Card[]; magic: number }, phase: GamePhase): boolean {
+  return player.hand.some(
+    c => c.cardType === 'event'
+      && ((c as import('./types').EventCard).playPhase === phase || (c as import('./types').EventCard).playPhase === 'any')
+      && (c as import('./types').EventCard).cost <= player.magic
+  );
+}
+
 /** 检查当前阶段是否有可用操作（用于自动跳过） */
 export function hasAvailableActions(state: SummonerWarsCore, playerId: PlayerId): boolean {
   const player = state.players[playerId];
@@ -373,72 +431,34 @@ export function hasAvailableActions(state: SummonerWarsCore, playerId: PlayerId)
 
   switch (phase) {
     case 'summon': {
-      // 检查1：有可召唤的单位卡 + 有可用位置 + 魔力够
       const unitCards = player.hand.filter(c => c.cardType === 'unit');
       const positions = getValidSummonPositions(state, playerId);
       const canSummonUnit = unitCards.length > 0 && 
         positions.length > 0 && 
         unitCards.some(c => (c as import('./types').UnitCard).cost <= player.magic);
-      
-      // 检查2：有可在召唤阶段打出的事件卡（如血契召唤）+ 魔力够
-      const summonPhaseEvents = player.hand.filter(
-        c => c.cardType === 'event' && (c as import('./types').EventCard).playPhase === 'summon'
-      );
-      const canPlaySummonEvent = summonPhaseEvents.length > 0 &&
-        summonPhaseEvents.some(c => (c as import('./types').EventCard).cost <= player.magic);
-      
-      return canSummonUnit || canPlaySummonEvent;
+      return canSummonUnit || hasPlayableEvents(player, phase);
     }
     case 'move': {
-      // 检查1：还有移动次数 + 有可移动的单位（排除禁足单位）
       const canMoveUnit = player.moveCount < MAX_MOVES_PER_TURN &&
         getPlayerUnits(state, playerId).some(u => !u.hasMoved && !isImmobile(u) && getValidMoveTargetsEnhanced(state, u.position).length > 0);
-      
-      // 检查2：有可在移动阶段打出的事件卡（如除灭）+ 魔力够
-      const movePhaseEvents = player.hand.filter(
-        c => c.cardType === 'event' && (c as import('./types').EventCard).playPhase === 'move'
-      );
-      const canPlayMoveEvent = movePhaseEvents.length > 0 &&
-        movePhaseEvents.some(c => (c as import('./types').EventCard).cost <= player.magic);
-      
-      return canMoveUnit || canPlayMoveEvent;
+      return canMoveUnit || hasPlayableEvents(player, phase);
     }
     case 'build': {
-      // 检查1：有建筑卡 + 有可建造位置 + 魔力够
       const structureCards = player.hand.filter(c => c.cardType === 'structure');
       const positions = getValidBuildPositions(state, playerId);
       const canBuildStructure = structureCards.length > 0 && 
         positions.length > 0 && 
         structureCards.some(c => (c as import('./types').StructureCard).cost <= player.magic);
-      
-      // 检查2：有可在建造阶段打出的事件卡（如狱火铸剑）+ 魔力够
-      const buildPhaseEvents = player.hand.filter(
-        c => c.cardType === 'event' && (c as import('./types').EventCard).playPhase === 'build'
-      );
-      const canPlayBuildEvent = buildPhaseEvents.length > 0 &&
-        buildPhaseEvents.some(c => (c as import('./types').EventCard).cost <= player.magic);
-      
-      return canBuildStructure || canPlayBuildEvent;
+      return canBuildStructure || hasPlayableEvents(player, phase);
     }
     case 'attack': {
-      // 检查1：还有攻击次数 + 有可攻击的单位
-      // 凶残单位可以作为额外攻击者（不计入3次限制）
       const units = getPlayerUnits(state, playerId);
       const normalAttackAvailable = player.attackCount < MAX_ATTACKS_PER_TURN &&
         units.some(u => !u.hasAttacked && getValidAttackTargetsEnhanced(state, u.position).length > 0);
       const ferocityAvailable = units.some(u => 
         hasFerocityAbility(u) && !u.hasAttacked && getValidAttackTargetsEnhanced(state, u.position).length > 0
       );
-      const canAttackUnit = normalAttackAvailable || ferocityAvailable;
-      
-      // 检查2：有可在攻击阶段打出的事件卡 + 魔力够
-      const attackPhaseEvents = player.hand.filter(
-        c => c.cardType === 'event' && (c as import('./types').EventCard).playPhase === 'attack'
-      );
-      const canPlayAttackEvent = attackPhaseEvents.length > 0 &&
-        attackPhaseEvents.some(c => (c as import('./types').EventCard).cost <= player.magic);
-      
-      return canAttackUnit || canPlayAttackEvent;
+      return normalAttackAvailable || ferocityAvailable || hasPlayableEvents(player, phase);
     }
     case 'magic': {
       // 魔力阶段总是可以手动跳过（弃牌是可选的）
@@ -470,13 +490,43 @@ export function getDrawCount(handSize: number): number {
 import { abilityRegistry } from './abilities';
 
 /**
- * 获取单位的所有有效技能（包含临时技能）
- * 合并 card.abilities 和 tempAbilities，用于所有技能检查
+ * 获取单位的所有有效技能（包含临时技能 + 交缠颂歌共享技能）
+ * 合并 card.abilities、tempAbilities、交缠颂歌共享的对方基础技能
  */
-export function getUnitAbilities(unit: BoardUnit): string[] {
+export function getUnitAbilities(unit: BoardUnit, state?: SummonerWarsCore): string[] {
   const base = unit.card.abilities ?? [];
   const temp = unit.tempAbilities ?? [];
-  return temp.length > 0 ? [...base, ...temp] : base;
+  let result = temp.length > 0 ? [...base, ...temp] : [...base];
+
+  // 交缠颂歌：检查主动事件区是否有交缠颂歌标记了本单位
+  if (state) {
+    for (const pid of ['0', '1'] as PlayerId[]) {
+      const player = state.players[pid];
+      if (!player) continue;
+      for (const ev of player.activeEvents) {
+        if (getBaseCardId(ev.id) !== CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT) continue;
+        if (!ev.entanglementTargets) continue;
+        const [t1, t2] = ev.entanglementTargets;
+        let partnerAbilities: string[] | undefined;
+        if (t1 === unit.cardId) {
+          // 本单位是目标1，获取目标2的基础技能
+          const partner = findBoardUnitByCardId(state, t2);
+          if (partner) partnerAbilities = partner.card.abilities ?? [];
+        } else if (t2 === unit.cardId) {
+          // 本单位是目标2，获取目标1的基础技能
+          const partner = findBoardUnitByCardId(state, t1);
+          if (partner) partnerAbilities = partner.card.abilities ?? [];
+        }
+        if (partnerAbilities) {
+          for (const a of partnerAbilities) {
+            if (!result.includes(a)) result.push(a);
+          }
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -522,18 +572,19 @@ export function hasFerocityAbility(unit: BoardUnit): boolean {
 export function getUnitMoveEnhancements(
   state: SummonerWarsCore,
   unitPos: CellCoord
-): { extraDistance: number; canPassThrough: boolean; canPassStructures: boolean; isChargeUnit: boolean; isImmobileUnit: boolean } {
+): { extraDistance: number; canPassThrough: boolean; canPassStructures: boolean; isChargeUnit: boolean; isImmobileUnit: boolean; damageOnPassThrough: number } {
   const unit = getUnitAt(state, unitPos);
-  if (!unit) return { extraDistance: 0, canPassThrough: false, canPassStructures: false, isChargeUnit: false, isImmobileUnit: false };
+  if (!unit) return { extraDistance: 0, canPassThrough: false, canPassStructures: false, isChargeUnit: false, isImmobileUnit: false, damageOnPassThrough: 0 };
 
   // 禁足检查
   if (isImmobile(unit)) {
-    return { extraDistance: 0, canPassThrough: false, canPassStructures: false, isChargeUnit: false, isImmobileUnit: true };
+    return { extraDistance: 0, canPassThrough: false, canPassStructures: false, isChargeUnit: false, isImmobileUnit: true, damageOnPassThrough: 0 };
   }
 
   let extraDistance = 0;
   let canPassThrough = false;
   let canPassStructures = false;
+  let damageOnPassThrough = 0;
   const abilities = getUnitAbilities(unit);
   const isChargeUnit = hasChargeAbility(unit);
 
@@ -550,6 +601,9 @@ export function getUnitMoveEnhancements(
           }
           if (effect.canPassThrough === 'structures' || effect.canPassThrough === 'all') {
             canPassStructures = true;
+          }
+          if (effect.damageOnPassThrough) {
+            damageOnPassThrough = Math.max(damageOnPassThrough, effect.damageOnPassThrough);
           }
         }
         // 速度强化：每点充能+1移动，最多+5
@@ -580,7 +634,7 @@ export function getUnitMoveEnhancements(
   const stormReduction = getStormAssaultReduction(state);
   extraDistance -= stormReduction;
 
-  return { extraDistance, canPassThrough, canPassStructures, isChargeUnit, isImmobileUnit: false };
+  return { extraDistance, canPassThrough, canPassStructures, isChargeUnit, isImmobileUnit: false, damageOnPassThrough };
 }
 
 /**

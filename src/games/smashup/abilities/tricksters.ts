@@ -117,6 +117,8 @@ export function registerTricksterAbilities(): void {
     registerAbility('trickster_gremlin', 'onDestroy', tricksterGremlinOnDestroy);
     // 沉睡印记（行动卡）：对手下回合不能打行动
     registerAbility('trickster_mark_of_sleep', 'onPlay', tricksterMarkOfSleep);
+    // 封路（ongoing）：打出时选择一个派系
+    registerAbility('trickster_block_the_path', 'onPlay', tricksterBlockThePath);
 
     // 注册 ongoing 拦截�?
     registerTricksterOngoingEffects();
@@ -140,16 +142,35 @@ export function registerTricksterInteractionHandlers(): void {
         return { state, events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'trickster_disenchant' }, timestamp }] };
     });
 
-    // 沉睡印记：选择对手后执行
-    registerInteractionHandler('trickster_mark_of_sleep', (state, _playerId, value, _iData, _random, timestamp) => {
+    // 沉睡印记：选择对手后标记（下回合生效）
+    registerInteractionHandler('trickster_mark_of_sleep', (state, _playerId, value, _iData, _random, _timestamp) => {
         const { pid } = value as { pid: string };
-        const currentLimit = state.core.players[pid].actionLimit;
-        if (currentLimit <= 0) return { state, events: [] };
-        return { state, events: [{
-            type: SU_EVENTS.LIMIT_MODIFIED,
-            payload: { playerId: pid, limitType: 'action' as const, delta: -currentLimit, reason: 'trickster_mark_of_sleep' },
-            timestamp,
-        }] };
+        // 添加沉睡标记，在对手的下一个回合开始时生效
+        const currentMarked = state.core.sleepMarkedPlayers ?? [];
+        if (currentMarked.includes(pid)) return { state, events: [] };
+        return {
+            state: { ...state, core: { ...state.core, sleepMarkedPlayers: [...currentMarked, pid] } },
+            events: [],
+        };
+    });
+
+    // 封路：选择派系后，将派系信息存入 ongoing 的 metadata
+    registerInteractionHandler('trickster_block_the_path', (state, _playerId, value, iData, _random, _timestamp) => {
+        const { factionId } = value as { factionId: string };
+        const ctx = (iData as any)?.continuationContext as { cardUid: string; baseIndex: number };
+        if (!ctx) return undefined;
+        // 找到刚附着的 ongoing 并更新 metadata
+        const newBases = state.core.bases.map((base, i) => {
+            if (i !== ctx.baseIndex) return base;
+            return {
+                ...base,
+                ongoingActions: base.ongoingActions.map(o => {
+                    if (o.uid !== ctx.cardUid) return o;
+                    return { ...o, metadata: { blockedFaction: factionId } };
+                }),
+            };
+        });
+        return { state: { ...state, core: { ...state.core, bases: newBases } }, events: [] };
     });
 }
 
@@ -187,6 +208,35 @@ function tricksterGremlinOnDestroy(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
+/** 封路 onPlay（ongoing）：选择一个派系，该派系随从不能被打出到此基地 */
+function tricksterBlockThePath(ctx: AbilityContext): AbilityResult {
+    // 收集场上所有派系
+    const factionSet = new Set<string>();
+    for (const base of ctx.state.bases) {
+        for (const m of base.minions) {
+            const def = getCardDef(m.defId);
+            if (def?.faction) factionSet.add(def.faction);
+        }
+    }
+    // 也从所有玩家手牌中收集派系
+    for (const pid of ctx.state.turnOrder) {
+        const player = ctx.state.players[pid];
+        for (const c of player.hand) {
+            const def = getCardDef(c.defId);
+            if (def?.faction) factionSet.add(def.faction);
+        }
+    }
+    if (factionSet.size === 0) return { events: [] };
+    const options = Array.from(factionSet).map((fid, i) => ({
+        id: `faction-${i}`, label: fid, value: { factionId: fid },
+    }));
+    const interaction = createSimpleChoice(
+        `trickster_block_the_path_${ctx.now}`, ctx.playerId,
+        '封路：选择一个派系（该派系随从不能被打出到此基地）', options as any[], 'trickster_block_the_path',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ctx.cardUid, baseIndex: ctx.baseIndex } } }) };
+}
+
 /** 沉睡印记 onPlay：选择一个对手，其下回合不能打行动卡 */
 function tricksterMarkOfSleep(ctx: AbilityContext): AbilityResult {
     const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
@@ -201,17 +251,7 @@ function tricksterMarkOfSleep(ctx: AbilityContext): AbilityResult {
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-function executeMarkOfSleep(ctx: AbilityContext, targetPid: string): AbilityResult {
-    const currentLimit = ctx.state.players[targetPid].actionLimit;
-    if (currentLimit <= 0) return { events: [] };
-    return {
-        events: [{
-            type: SU_EVENTS.LIMIT_MODIFIED,
-            payload: { playerId: targetPid, limitType: 'action' as const, delta: -currentLimit, reason: 'trickster_mark_of_sleep' },
-            timestamp: ctx.now,
-        } as LimitModifiedEvent],
-    };
-}
+// executeMarkOfSleep 已移除，沉睡印记改为标记模式（在对手回合开始时生效）
 
 // ============================================================================
 // Ongoing 拦截器注�?
@@ -253,33 +293,51 @@ function registerTricksterOngoingEffects(): void {
         return [];
     });
 
-    // 布朗尼：被对手行动影响时，对手弃两张�?
-    registerTrigger('trickster_brownie', 'onMinionPlayed', (trigCtx) => {
-        // 简化实现：当对手在 brownie 所在基地打出随从时触发弃牌
-        if (!trigCtx.triggerMinionUid || trigCtx.baseIndex === undefined) return [];
-        for (let i = 0; i < trigCtx.state.bases.length; i++) {
-            const base = trigCtx.state.bases[i];
-            const brownie = base.minions.find(m => m.defId === 'trickster_brownie');
-            if (!brownie || i !== trigCtx.baseIndex) continue;
-            if (brownie.controller === trigCtx.playerId) continue;
-            // 对手弃两张牌
-            const opponent = trigCtx.state.players[trigCtx.playerId];
-            if (!opponent || opponent.hand.length === 0) continue;
-            const discardCount = Math.min(2, opponent.hand.length);
-            const discardUids: string[] = [];
-            const handCopy = [...opponent.hand];
-            for (let j = 0; j < discardCount; j++) {
-                const idx = Math.floor(trigCtx.random.random() * handCopy.length);
-                discardUids.push(handCopy[idx].uid);
-                handCopy.splice(idx, 1);
-            }
-            return [{
-                type: SU_EVENTS.CARDS_DISCARDED,
-                payload: { playerId: trigCtx.playerId, cardUids: discardUids },
-                timestamp: trigCtx.now,
-            }];
+    // 布朗尼：被对手卡牌效果影响时，对手弃两张牌
+    // TODO: 完整实现需要 onAffected trigger timing，当前简化为：
+    // 当 brownie 被消灭或被移动时（最常见的"被影响"场景），触发对手弃牌
+    registerTrigger('trickster_brownie', 'onMinionDestroyed', (trigCtx) => {
+        if (!trigCtx.triggerMinionDefId || trigCtx.triggerMinionDefId !== 'trickster_brownie') return [];
+        // 找到消灭 brownie 的来源玩家（即当前回合玩家，如果不是 brownie 拥有者）
+        const brownieOwner = trigCtx.triggerMinion?.controller;
+        if (!brownieOwner || brownieOwner === trigCtx.playerId) return [];
+        // 对手（触发消灭的玩家）弃两张牌
+        const opponent = trigCtx.state.players[trigCtx.playerId];
+        if (!opponent || opponent.hand.length === 0) return [];
+        const discardCount = Math.min(2, opponent.hand.length);
+        const discardUids: string[] = [];
+        const handCopy = [...opponent.hand];
+        for (let j = 0; j < discardCount; j++) {
+            const idx = Math.floor(trigCtx.random.random() * handCopy.length);
+            discardUids.push(handCopy[idx].uid);
+            handCopy.splice(idx, 1);
         }
-        return [];
+        return [{
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId: trigCtx.playerId, cardUids: discardUids },
+            timestamp: trigCtx.now,
+        }];
+    });
+
+    registerTrigger('trickster_brownie', 'onMinionMoved', (trigCtx) => {
+        if (!trigCtx.triggerMinionDefId || trigCtx.triggerMinionDefId !== 'trickster_brownie') return [];
+        const brownieOwner = trigCtx.triggerMinion?.controller;
+        if (!brownieOwner || brownieOwner === trigCtx.playerId) return [];
+        const opponent = trigCtx.state.players[trigCtx.playerId];
+        if (!opponent || opponent.hand.length === 0) return [];
+        const discardCount = Math.min(2, opponent.hand.length);
+        const discardUids: string[] = [];
+        const handCopy = [...opponent.hand];
+        for (let j = 0; j < discardCount; j++) {
+            const idx = Math.floor(trigCtx.random.random() * handCopy.length);
+            discardUids.push(handCopy[idx].uid);
+            handCopy.splice(idx, 1);
+        }
+        return [{
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId: trigCtx.playerId, cardUids: discardUids },
+            timestamp: trigCtx.now,
+        }];
     });
 
     // 迷雾笼罩：此基地上可额外打出一个随从（回合开始时给额外额度）
@@ -356,16 +414,22 @@ function registerTricksterOngoingEffects(): void {
         return [];
     });
 
-    // 封路：指定派系不能打出随从到此基�?
+    // 封路：指定派系不能打出随从到此基地
     registerRestriction('trickster_block_the_path', 'play_minion', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return false;
         const blockAction = base.ongoingActions.find(o => o.defId === 'trickster_block_the_path');
         if (!blockAction) return false;
-        // 只限制对�?
+        // 只限制对手
         if (blockAction.ownerId === ctx.playerId) return false;
-        // MVP：限制所有对手打出随从到此基地（完整版需�?Prompt 选择派系�?
-        return true;
+        // 检查被限制的派系
+        const blockedFaction = blockAction.metadata?.blockedFaction as string | undefined;
+        if (!blockedFaction) return false;
+        // 检查打出的随从是否属于被限制的派系
+        const minionDefId = ctx.extra?.minionDefId as string | undefined;
+        if (!minionDefId) return false;
+        const def = getCardDef(minionDefId);
+        return def?.faction === blockedFaction;
     });
 
     // 付笛手的钱：对手打出随从后弃一张牌

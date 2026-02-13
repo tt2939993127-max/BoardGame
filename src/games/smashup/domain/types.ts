@@ -9,7 +9,6 @@
  */
 
 import type { Command, GameEvent, GameOverResult, PlayerId } from '../../../engine/types';
-import type { PromptMultiConfig } from '../../../engine/systems/InteractionSystem';
 import type { CardPreviewRef } from '../../../core';
 import { SMASHUP_FACTION_IDS } from './ids';
 
@@ -51,7 +50,8 @@ export interface MinionCardDef {
     id: string;
     type: 'minion';
     name: string;
-    nameEn: string;
+    /** @deprecated 历史英文名，已由 i18n 接管，待清理 */
+    nameEn?: string;
     faction: FactionId;
     power: number;
     abilityTags?: AbilityTag[];
@@ -66,11 +66,14 @@ export interface ActionCardDef {
     type: 'action';
     subtype: ActionSubtype;
     name: string;
-    nameEn: string;
+    /** @deprecated 历史英文名，已由 i18n 接管，待清理 */
+    nameEn?: string;
     faction: FactionId;
     abilityTags?: AbilityTag[];
     count: number;
     previewRef?: CardPreviewRef;
+    /** ongoing 行动卡的附着目标：'base'（默认）或 'minion'（附着到随从上） */
+    ongoingTarget?: 'base' | 'minion';
 }
 
 /** 卡牌定义联合类型 */
@@ -90,6 +93,11 @@ export interface BaseRestriction {
          * 用于母星（The Homeworld）、神秘花园（Secret Garden）等基地。
          */
         extraPlayMinionPowerMax?: number;
+        /**
+         * 每回合每位玩家在此基地打出随从的上限。
+         * 用于北极基地（North Pole）：每回合只能打出一个随从到这。
+         */
+        minionPlayLimitPerTurn?: number;
     };
 }
 
@@ -97,7 +105,8 @@ export interface BaseRestriction {
 export interface BaseCardDef {
     id: string;
     name: string;
-    nameEn: string;
+    /** @deprecated 历史英文名，已由 i18n 接管，待清理 */
+    nameEn?: string;
     breakpoint: number;
     /** VP 奖励：[1st, 2nd, 3rd] */
     vpAwards: [number, number, number];
@@ -106,6 +115,8 @@ export interface BaseCardDef {
     previewRef?: CardPreviewRef;
     /** 基地限制规则（如禁止打出随从/行动） */
     restrictions?: BaseRestriction[];
+    /** 基地持续力量加成：在此基地上的所有随从获得该值的力量修正 */
+    minionPowerBonus?: number;
 }
 
 // ============================================================================
@@ -148,6 +159,8 @@ export interface OngoingActionOnBase {
     uid: string;
     defId: string;
     ownerId: PlayerId;
+    /** 额外元数据（如 block_the_path 存储被限制的派系） */
+    metadata?: Record<string, unknown>;
 }
 
 /** 场上的基地 */
@@ -177,6 +190,8 @@ export interface PlayerState {
     actionsPlayed: number;
     /** 本回合可打出行动额度（默认 1） */
     actionLimit: number;
+    /** 本回合每个基地已打出随从数（baseIndex → count），用于北极基地等限制 */
+    minionsPlayedPerBase?: Record<number, number>;
     /** 选择的派系 */
     factions: [FactionId, FactionId];
 }
@@ -228,6 +243,10 @@ export interface SmashUpCore {
     madnessDeck?: string[];
     /** 本回合被消灭的随从记录（用于 cthulhu_furthering_the_cause 等能力的精确判定） */
     turnDestroyedMinions?: { defId: string; baseIndex: number; owner: string }[];
+    /** 被沉睡印记标记的玩家（下回合不能打行动卡） */
+    sleepMarkedPlayers?: PlayerId[];
+    /** 本回合每位玩家移动随从到各基地的次数（用于牧场等"首次移动"触发） */
+    minionsMovedToBaseThisTurn?: Record<string, Record<number, number>>;
     /**
      * 待展示的卡牌信息（外星人/密大查看手牌/牌库顶能力，UI 层读取后展示，玩家确认后清除）
      *
@@ -251,22 +270,6 @@ export interface FactionSelectionState {
     completedPlayers: PlayerId[];
 }
 
-
-export interface PromptConfig {
-    id: string;
-    playerId: PlayerId;
-    title: string;
-    description?: string;
-    options: PromptOption[];
-    sourceId?: string;
-    multi?: PromptMultiConfig;
-}
-
-export interface PromptOption {
-    label: string;
-    value: unknown;
-    disabled?: boolean;
-}
 
 // ============================================================================
 // 辅助函数
@@ -615,6 +618,8 @@ export interface OngoingAttachedEvent extends GameEvent<typeof SU_EVENTS.ONGOING
         targetType: 'base' | 'minion';
         targetBaseIndex: number;
         targetMinionUid?: string;
+        /** 额外元数据（如 block_the_path 存储被限制的派系） */
+        metadata?: Record<string, unknown>;
     };
 }
 

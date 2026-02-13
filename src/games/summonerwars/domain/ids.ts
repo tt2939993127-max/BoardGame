@@ -25,20 +25,37 @@ export const CARD_IDS = {
   // 亡灵法师事件卡
   NECRO_HELLFIRE_BLADE: 'necro-hellfire-blade',
   NECRO_FUNERAL_PYRE: 'necro-funeral-pyre',
+  NECRO_ANNIHILATE: 'necro-annihilate',
+  NECRO_BLOOD_SUMMON: 'necro-blood-summon',
 
   // 欺心巫族事件卡
   TRICKSTER_MIND_CONTROL: 'trickster-mind-control',
   TRICKSTER_STORM_ASSAULT: 'trickster-storm-assault',
   TRICKSTER_HYPNOTIC_LURE: 'trickster-hypnotic-lure',
+  TRICKSTER_STUN: 'trickster-stun',
 
   // 圣堂骑士事件卡
   PALADIN_REKINDLE_HOPE: 'paladin-rekindle-hope',
   PALADIN_HOLY_JUDGMENT: 'paladin-holy-judgment',
   PALADIN_HOLY_PROTECTION: 'paladin-holy-protection',
+  PALADIN_MASS_HEALING: 'paladin-mass-healing',
 
   // 洞穴地精事件卡
   GOBLIN_RELENTLESS: 'goblin-relentless',
   GOBLIN_SWARM: 'goblin-swarm',
+  GOBLIN_FRENZY: 'goblin-frenzy',
+  GOBLIN_SNEAK: 'goblin-sneak',
+
+  // 极地矮人事件卡
+  FROST_ICE_RAM: 'frost-ice-ram',
+  FROST_GLACIAL_SHIFT: 'frost-glacial-shift',
+  FROST_ICE_REPAIR: 'frost-ice-repair',
+
+  // 炽原精灵事件卡
+  BARBARIC_CHANT_OF_WEAVING: 'barbaric-chant-of-weaving',
+  BARBARIC_CHANT_OF_POWER: 'barbaric-chant-of-power',
+  BARBARIC_CHANT_OF_GROWTH: 'barbaric-chant-of-growth',
+  BARBARIC_CHANT_OF_ENTANGLEMENT: 'barbaric-chant-of-entanglement',
 } as const;
 
 // ============================================================================

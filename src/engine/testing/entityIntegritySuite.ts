@@ -6,6 +6,7 @@
  * 2. createRefChainSuite — 引用链完整性（断链检测 + 孤儿 + 过时白名单）
  * 3. createTriggerPathSuite — 触发路径声明（CONFIRMED / TODO / INCOMPLETE_BRANCHES 三层）
  * 4. createEffectContractSuite — 效果数据契约验证（隐式契约自动化守卫）
+ * 5. createI18nContractSuite — i18n 文案契约验证（key 格式 + key 存在性）
  *
  * 使用方：各游戏的 entity-chain-integrity.test.ts
  */
@@ -299,6 +300,129 @@ export function createEffectContractSuite<TSource, TEffect>(
 
                 if (violations.length > 0) {
                     // 使用 expect 而非 fail，确保错误消息清晰
+                    expect(violations).toEqual([]);
+                }
+            });
+        }
+    });
+}
+
+
+// ============================================================================
+// 5. createI18nContractSuite — i18n 文案契约验证
+// ============================================================================
+
+/**
+ * i18n key 提取规则
+ *
+ * 定义如何从数据源中提取需要验证的 i18n key。
+ * 每条规则描述一个字段的 key 格式要求和存在性检查。
+ */
+export interface I18nKeyExtractor<TSource> {
+    /** 字段名称（用于错误消息） */
+    fieldName: string;
+    /** 从数据源中提取 i18n key 值（返回 undefined 表示该字段不存在） */
+    extract: (source: TSource) => string | undefined;
+    /** key 格式正则（如 /^cards\.\S+\.(name|description)$/） */
+    keyPattern: RegExp;
+    /** 格式描述（用于错误消息，如 "cards.<id>.name"） */
+    patternDescription: string;
+}
+
+/**
+ * i18n 契约套件配置
+ */
+export interface I18nContractSuiteConfig<TSource> {
+    /** describe 块名称 */
+    suiteName: string;
+    /** 获取所有数据源 */
+    getSources: () => TSource[];
+    /** 从数据源中提取 ID（用于错误消息定位） */
+    getSourceId: (source: TSource) => string;
+    /** i18n key 提取规则列表 */
+    keyExtractors: I18nKeyExtractor<TSource>[];
+    /** 各语言的 i18n 数据（key: 语言代码，value: 扁平化的 key→value 映射） */
+    locales: Record<string, Record<string, string>>;
+    /** 最少数据源数量（防止空跑） */
+    minSourceCount?: number;
+}
+
+/**
+ * 将嵌套 JSON 对象扁平化为 dot-separated key 映射
+ *
+ * 例：{ cards: { foo: { name: "bar" } } } → { "cards.foo.name": "bar" }
+ */
+export function flattenI18nKeys(obj: Record<string, unknown>, prefix = ''): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [key, value] of Object.entries(obj)) {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            Object.assign(result, flattenI18nKeys(value as Record<string, unknown>, fullKey));
+        } else {
+            result[fullKey] = String(value);
+        }
+    }
+    return result;
+}
+
+/**
+ * 生成 i18n 文案契约验证测试
+ *
+ * 验证内容：
+ * 1. key 格式：所有提取的 key 必须匹配指定的正则格式（防止硬编码字符串）
+ * 2. key 存在性：所有提取的 key 必须在每个语言的 i18n 文件中存在（防止引用缺失）
+ */
+export function createI18nContractSuite<TSource>(
+    config: I18nContractSuiteConfig<TSource>
+): void {
+    describe(config.suiteName, () => {
+        const sources = config.getSources();
+
+        if (config.minSourceCount !== undefined) {
+            it(`至少存在 ${config.minSourceCount} 个数据源`, () => {
+                expect(sources.length).toBeGreaterThanOrEqual(config.minSourceCount!);
+            });
+        }
+
+        // key 格式验证
+        for (const extractor of config.keyExtractors) {
+            it(`${extractor.fieldName} 必须使用 i18n key 格式（${extractor.patternDescription}）`, () => {
+                const violations: string[] = [];
+                for (const source of sources) {
+                    const sourceId = config.getSourceId(source);
+                    const value = extractor.extract(source);
+                    if (value === undefined) continue;
+                    if (!extractor.keyPattern.test(value)) {
+                        violations.push(
+                            `  [${sourceId}] ${extractor.fieldName}="${value}" 不匹配格式 ${extractor.patternDescription}`
+                        );
+                    }
+                }
+                if (violations.length > 0) {
+                    expect(violations).toEqual([]);
+                }
+            });
+        }
+
+        // key 存在性验证（每个语言单独检查）
+        for (const [lang, flatKeys] of Object.entries(config.locales)) {
+            it(`所有 i18n key 在 ${lang} 中存在`, () => {
+                const violations: string[] = [];
+                for (const source of sources) {
+                    const sourceId = config.getSourceId(source);
+                    for (const extractor of config.keyExtractors) {
+                        const value = extractor.extract(source);
+                        if (value === undefined) continue;
+                        // 只检查符合 key 格式的值（非 key 格式的已被格式验证捕获）
+                        if (!extractor.keyPattern.test(value)) continue;
+                        if (!(value in flatKeys)) {
+                            violations.push(
+                                `  [${sourceId}] ${extractor.fieldName} key "${value}" 在 ${lang} 中不存在`
+                            );
+                        }
+                    }
+                }
+                if (violations.length > 0) {
                     expect(violations).toEqual([]);
                 }
             });

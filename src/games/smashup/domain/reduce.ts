@@ -131,6 +131,10 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         ...player,
                         hand: newHand,
                         minionsPlayed: player.minionsPlayed + 1,
+                        minionsPlayedPerBase: {
+                            ...(player.minionsPlayedPerBase ?? {}),
+                            [baseIndex]: ((player.minionsPlayedPerBase ?? {})[baseIndex] ?? 0) + 1,
+                        },
                     },
                 },
                 bases: newBases,
@@ -162,13 +166,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.ONGOING_ATTACHED: {
-            const { cardUid, defId, ownerId, targetType, targetBaseIndex, targetMinionUid } = event.payload;
+            const { cardUid, defId, ownerId, targetType, targetBaseIndex, targetMinionUid, metadata } = event.payload;
             if (targetType === 'base') {
                 const newBases = state.bases.map((base, i) => {
                     if (i !== targetBaseIndex) return base;
                     return {
                         ...base,
-                        ongoingActions: [...base.ongoingActions, { uid: cardUid, defId, ownerId }],
+                        ongoingActions: [...base.ongoingActions, { uid: cardUid, defId, ownerId, ...(metadata ? { metadata } : {}) }],
                     };
                 });
                 return { ...state, bases: newBases };
@@ -181,7 +185,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         ...base,
                         minions: base.minions.map(m => {
                             if (m.uid !== targetMinionUid) return m;
-                            return { ...m, attachedActions: [...m.attachedActions, { uid: cardUid, defId, ownerId }] };
+                            const updated = { ...m, attachedActions: [...m.attachedActions, { uid: cardUid, defId, ownerId }] };
+                            // ghost_make_contact：附着时改变控制权
+                            if (defId === 'ghost_make_contact') {
+                                updated.controller = ownerId;
+                            }
+                            return updated;
                         }),
                     };
                 });
@@ -326,12 +335,20 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     talentUsed: m.controller === playerId ? false : m.talentUsed,
                 })),
             }));
+            // 检查沉睡印记：被标记的玩家本回合 actionLimit 设为 0
+            const isSleepMarked = state.sleepMarkedPlayers?.includes(playerId);
+            const newActionLimit = isSleepMarked ? 0 : 1;
+            // 清除该玩家的沉睡标记
+            const newSleepMarked = isSleepMarked
+                ? (state.sleepMarkedPlayers?.filter(p => p !== playerId) ?? [])
+                : state.sleepMarkedPlayers;
             return {
                 ...state,
                 turnNumber,
                 bases: newBases,
                 // 清空本回合消灭记录
                 turnDestroyedMinions: [],
+                sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
                 players: {
                     ...state.players,
                     [playerId]: {
@@ -339,7 +356,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         minionsPlayed: 0,
                         minionLimit: 1,
                         actionsPlayed: 0,
-                        actionLimit: 1,
+                        actionLimit: newActionLimit,
+                        minionsPlayedPerBase: undefined,
                     },
                 },
             };
@@ -591,10 +609,17 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // 从基地的 ongoingActions 或随从的 attachedActions 中移除
             const newBases = state.bases.map(base => {
                 const filteredOngoing = base.ongoingActions.filter(o => o.uid !== cardUid);
-                const filteredMinions = base.minions.map(m => ({
-                    ...m,
-                    attachedActions: m.attachedActions.filter(a => a.uid !== cardUid),
-                }));
+                const filteredMinions = base.minions.map(m => {
+                    const hadAttachment = m.attachedActions.some(a => a.uid === cardUid);
+                    const filtered = m.attachedActions.filter(a => a.uid !== cardUid);
+                    if (!hadAttachment) return { ...m, attachedActions: filtered };
+                    const updated = { ...m, attachedActions: filtered };
+                    // ghost_make_contact：移除时恢复控制权为原始 owner
+                    if (defId === 'ghost_make_contact') {
+                        updated.controller = m.owner;
+                    }
+                    return updated;
+                });
                 if (filteredOngoing.length === base.ongoingActions.length &&
                     filteredMinions.every((m, idx) => m.attachedActions.length === base.minions[idx].attachedActions.length)) {
                     return base;

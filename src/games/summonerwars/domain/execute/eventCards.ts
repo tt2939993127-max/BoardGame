@@ -77,7 +77,7 @@ export function executePlayEvent(
         }
         break;
       }
-      case 'necro-annihilate': {
+      case CARD_IDS.NECRO_ANNIHILATE: {
         const damageTargets = payload.damageTargets as (CellCoord | null)[] | undefined;
         if (targets && targets.length > 0) {
           for (let i = 0; i < targets.length; i++) {
@@ -125,7 +125,7 @@ export function executePlayEvent(
 
       // ============ 欺心巫族事件卡 ============
 
-      case 'trickster-mind-control': {
+      case CARD_IDS.TRICKSTER_MIND_CONTROL: {
         // 心灵操控（传奇）：召唤师2格内任意数量敌方士兵和英雄，获得控制权直到回合结束
         // targets = 选中的敌方单位位置列表
         const summoner = getSummoner(core, playerId);
@@ -154,14 +154,14 @@ export function executePlayEvent(
         break;
       }
 
-      case 'trickster-storm-assault': {
+      case CARD_IDS.TRICKSTER_STORM_ASSAULT: {
         // 风暴侵袭（ACTIVE）：单位必须减少移动1格
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 实际效果在移动验证时检查主动事件区
         break;
       }
 
-      case 'trickster-stun': {
+      case CARD_IDS.TRICKSTER_STUN: {
         // 震慑：召唤师3格直线内的一个士兵或英雄，推拉1-3格可穿过单位，对目标和被穿过的单位各造成1伤害
         // targets[0] = 目标位置
         // payload.stunDirection = 'push' | 'pull'
@@ -234,7 +234,7 @@ export function executePlayEvent(
         break;
       }
 
-      case 'trickster-hypnotic-lure': {
+      case CARD_IDS.TRICKSTER_HYPNOTIC_LURE: {
         // 催眠引诱：拉目标向召唤师靠近1格 + ACTIVE（攻击该目标时+1战力）
         // targets[0] = 目标位置
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
@@ -267,7 +267,7 @@ export function executePlayEvent(
 
       // ============ 洞穴地精事件卡 ============
 
-      case 'goblin-frenzy': {
+      case CARD_IDS.GOBLIN_FRENZY: {
         // 群情激愤（传奇）：所有0费友方单位获得额外攻击
         const frenzyUnits = getPlayerUnits(core, playerId);
         for (const u of frenzyUnits) {
@@ -286,7 +286,7 @@ export function executePlayEvent(
         break;
       }
 
-      case 'goblin-sneak': {
+      case CARD_IDS.GOBLIN_SNEAK: {
         // 潜行：推拉任意数量0费友方单位1格
         // targets = 选中的友方单位位置列表
         // payload.sneakDirections = 每个目标的推拉方向和目标位置
@@ -310,14 +310,14 @@ export function executePlayEvent(
         break;
       }
 
-      case 'goblin-relentless': {
+      case CARD_IDS.GOBLIN_RELENTLESS: {
         // 不屈不挠（ACTIVE）：友方士兵被消灭时返回手牌
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 实际效果在 UNIT_DESTROYED 处理时检查主动事件区
         break;
       }
 
-      case 'goblin-swarm': {
+      case CARD_IDS.GOBLIN_SWARM: {
         // 成群结队（ACTIVE）：友方单位获得围攻（每有一个友方相邻目标+1战力）
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 实际效果在 calculateEffectiveStrength 中检查
@@ -326,7 +326,7 @@ export function executePlayEvent(
 
       // ============ 先锋军团事件卡 ============
 
-      case 'paladin-holy-judgment': {
+      case CARD_IDS.PALADIN_HOLY_JUDGMENT: {
         // 圣洁审判（传奇/ACTIVE）：放置2点充能，友方士兵+1战力
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 设置初始充能为2
@@ -338,14 +338,14 @@ export function executePlayEvent(
         break;
       }
 
-      case 'paladin-holy-protection': {
+      case CARD_IDS.PALADIN_HOLY_PROTECTION: {
         // 圣灵庇护（ACTIVE）：召唤师3格内友方士兵获得庇护
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 实际效果在伤害计算时检查
         break;
       }
 
-      case 'paladin-mass-healing': {
+      case CARD_IDS.PALADIN_MASS_HEALING: {
         // 群体治疗：召唤师2格内每个友方士兵和英雄移除2点伤害
         const mhSummoner = getSummoner(core, playerId);
         if (mhSummoner) {
@@ -366,7 +366,7 @@ export function executePlayEvent(
         break;
       }
 
-      case 'paladin-rekindle-hope': {
+      case CARD_IDS.PALADIN_REKINDLE_HOPE: {
         // 重燃希望（ACTIVE）：可在任意阶段召唤，可召唤到召唤师相邻
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 实际效果在召唤验证时检查
@@ -375,14 +375,14 @@ export function executePlayEvent(
 
       // ============ 极地矮人事件卡 ============
 
-      case 'frost-ice-ram': {
+      case CARD_IDS.FROST_ICE_RAM: {
         // 寒冰冲撞（传奇/ACTIVE）：友方建筑移动/推拉后对相邻单位造成1伤+推拉1格
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 实际效果在建筑移动/推拉时检查
         break;
       }
 
-      case 'frost-glacial-shift': {
+      case CARD_IDS.FROST_GLACIAL_SHIFT: {
         // 冰川位移：召唤师3格内至多3个友方建筑推拉1-2格
         // targets = 选中的友方建筑位置列表
         // payload.shiftDirections = 每个建筑的推拉方向和目标位置
@@ -408,7 +408,7 @@ export function executePlayEvent(
         break;
       }
 
-      case 'frost-ice-repair': {
+      case CARD_IDS.FROST_ICE_REPAIR: {
         // 寒冰修补：每个友方建筑移除2点伤害
         for (let r = 0; r < BOARD_ROWS; r++) {
           for (let c = 0; c < BOARD_COLS; c++) {
@@ -427,7 +427,7 @@ export function executePlayEvent(
 
       // ============ 炽原精灵事件卡 ============
 
-      case 'barbaric-chant-of-power': {
+      case CARD_IDS.BARBARIC_CHANT_OF_POWER: {
         // 力量颂歌（传奇）：目标获得 power_up 直到回合结束
         // targets[0] = 目标位置（召唤师3格内的士兵或英雄）
         if (targets && targets.length > 0) {
@@ -455,7 +455,7 @@ export function executePlayEvent(
         break;
       }
 
-      case 'barbaric-chant-of-growth': {
+      case CARD_IDS.BARBARIC_CHANT_OF_GROWTH: {
         // 生长颂歌：将目标和每个相邻友方单位充能
         if (targets && targets.length > 0) {
           const cgTarget = getUnitAt(core, targets[0]);
@@ -488,7 +488,7 @@ export function executePlayEvent(
         break;
       }
 
-      case 'barbaric-chant-of-entanglement': {
+      case CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT: {
         // 交缠颂歌（ACTIVE）：两个友方士兵共享技能
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         // 实际效果在技能查询时检查主动事件区
@@ -510,10 +510,15 @@ export function executePlayEvent(
       case 'barbaric-chant-of-weaving': {
         // 编织颂歌（ACTIVE）：可在目标相邻召唤，召唤时充能目标
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
-        // 实际效果在召唤验证和召唤执行时检查
         if (targets && targets.length > 0) {
           const cwTarget = getUnitAt(core, targets[0]);
           if (cwTarget && cwTarget.owner === playerId) {
+            // 标记 activeEvent 的目标单位（复用 HYPNOTIC_LURE_MARKED 的 reduce 逻辑）
+            events.push({
+              type: SW_EVENTS.HYPNOTIC_LURE_MARKED,
+              payload: { playerId, cardId, targetUnitId: cwTarget.cardId },
+              timestamp,
+            });
             const sourcePosition = summoner?.position ?? targets[0];
             const sourceUnitId = summoner?.cardId ?? eventCard.id;
             events.push(createAbilityTriggeredEvent('chant_of_weaving', sourceUnitId, sourcePosition, timestamp, {

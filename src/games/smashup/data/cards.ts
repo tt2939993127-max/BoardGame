@@ -28,15 +28,22 @@ const _cardRegistry = new Map<string, CardDef>();
 /** 所有基地定义（按 id 索引） */
 const _baseRegistry = new Map<string, BaseCardDef>();
 
+const normalizeCardName = (defId: string, name: string): string => {
+    if (typeof name === 'string' && name.startsWith('cards.')) return name;
+    return `cards.${defId}.name`;
+};
+
 function registerCards(cards: CardDef[]): void {
     for (const card of cards) {
-        _cardRegistry.set(card.id, card);
+        const normalized = { ...card, name: normalizeCardName(card.id, card.name) };
+        _cardRegistry.set(card.id, normalized);
     }
 }
 
 function registerBases(bases: BaseCardDef[]): void {
     for (const base of bases) {
-        _baseRegistry.set(base.id, base);
+        const normalized = { ...base, name: normalizeCardName(base.id, base.name) };
+        _baseRegistry.set(base.id, normalized);
     }
 }
 
@@ -69,7 +76,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '家园',
         nameEn: 'The Homeworld',
         breakpoint: 23,
-        vpAwards: [4, 2, 1],        faction: 'aliens',
+        vpAwards: [4, 2, 1],
+        faction: 'aliens',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 0 },
         restrictions: [{ type: 'play_minion', condition: { extraPlayMinionPowerMax: 2 } }],
     },
@@ -78,7 +86,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '母舰',
         nameEn: 'The Mothership',
         breakpoint: 20,
-        vpAwards: [4, 2, 1],        faction: 'aliens',
+        vpAwards: [4, 2, 1],
+        faction: 'aliens',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 1 },
     },
     {
@@ -86,15 +95,18 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '中央大脑',
         nameEn: 'Central Brain',
         breakpoint: 19,
-        vpAwards: [4, 2, 1],        faction: 'robots',
+        vpAwards: [4, 2, 1],
+        faction: 'robots',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 2 },
+        minionPowerBonus: 1,
     },
     {
         id: 'base_the_jungle',
         name: '绿洲丛林',
         nameEn: 'The Jungle',
         breakpoint: 12,
-        vpAwards: [2, 0, 0],        faction: 'dinosaurs',
+        vpAwards: [2, 0, 0],
+        faction: 'dinosaurs',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 3 },
     },
     {
@@ -102,7 +114,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '刚柔流寺庙',
         nameEn: 'Temple of Goju',
         breakpoint: 18,
-        vpAwards: [2, 3, 2],        faction: 'ninjas',
+        vpAwards: [2, 3, 2],
+        faction: 'ninjas',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 4 },
     },
     {
@@ -110,7 +123,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '闪光洞穴',
         nameEn: 'Cave of Shinies',
         breakpoint: 23,
-        vpAwards: [4, 2, 1],        faction: 'tricksters',
+        vpAwards: [4, 2, 1],
+        faction: 'tricksters',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 5 },
     },
     {
@@ -118,7 +132,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '伊万斯堡城镇公墓',
         nameEn: 'Haunted House',
         breakpoint: 20,
-        vpAwards: [5, 3, 2],        faction: 'zombies',
+        vpAwards: [5, 3, 2],
+        faction: 'zombies',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 6 },
     },
     {
@@ -126,7 +141,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '罗德百货商场',
         nameEn: 'Rhodes Plaza Mall',
         breakpoint: 24,
-        vpAwards: [0, 0, 0],        faction: 'zombies',
+        vpAwards: [0, 0, 0],
+        faction: 'zombies',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 7 },
     },
     {
@@ -134,7 +150,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '436-1337工厂',
         nameEn: 'The Factory',
         breakpoint: 25,
-        vpAwards: [2, 2, 1],        faction: 'robots',
+        vpAwards: [2, 2, 1],
+        faction: 'robots',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 8 },
     },
     {
@@ -142,7 +159,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '焦油坑',
         nameEn: 'Tar Pits',
         breakpoint: 16,
-        vpAwards: [4, 3, 2],        faction: 'dinosaurs',
+        vpAwards: [4, 3, 2],
+        faction: 'dinosaurs',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 9 },
     },
     {
@@ -150,7 +168,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '忍者道场',
         nameEn: 'Ninja Dojo',
         breakpoint: 18,
-        vpAwards: [2, 3, 2],        faction: 'ninjas',
+        vpAwards: [2, 3, 2],
+        faction: 'ninjas',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 10 },
     },
     {
@@ -158,7 +177,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '蘑菇王国',
         nameEn: 'Mushroom Kingdom',
         breakpoint: 20,
-        vpAwards: [5, 3, 2],        faction: 'tricksters',
+        vpAwards: [5, 3, 2],
+        faction: 'tricksters',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 11 },
     },
     {
@@ -166,7 +186,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '灰色猫眼石/海盗湾',
         nameEn: 'Pirate Cove',
         breakpoint: 17,
-        vpAwards: [3, 1, 1],        faction: 'pirates',
+        vpAwards: [3, 1, 1],
+        faction: 'pirates',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 12 },
     },
     {
@@ -174,7 +195,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '托尔图加',
         nameEn: 'Tortuga',
         breakpoint: 21,
-        vpAwards: [4, 3, 2],        faction: 'pirates',
+        vpAwards: [4, 3, 2],
+        faction: 'pirates',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 13 },
     },
     {
@@ -182,7 +204,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '大图书馆',
         nameEn: 'Great Library',
         breakpoint: 22,
-        vpAwards: [4, 2, 1],        faction: 'wizards',
+        vpAwards: [4, 2, 1],
+        faction: 'wizards',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 14 },
     },
     {
@@ -190,7 +213,8 @@ export const BASE_CARDS: BaseCardDef[] = [
         name: '巫师学院',
         nameEn: 'Wizard Academy',
         breakpoint: 20,
-        vpAwards: [3, 2, 1],        faction: 'wizards',
+        vpAwards: [3, 2, 1],
+        faction: 'wizards',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 15 },
     },
 ];
@@ -206,7 +230,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '恐怖眺望台',
         nameEn: 'Dread Lookout',
         breakpoint: 20,
-        vpAwards: [4, 2, 1],        faction: 'ghosts',
+        vpAwards: [4, 2, 1],
+        faction: 'ghosts',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 6 },
         restrictions: [{ type: 'play_action' }],
     },
@@ -215,7 +240,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '鬼屋',
         nameEn: 'Haunted House',
         breakpoint: 18,
-        vpAwards: [4, 3, 2],        faction: 'ghosts',
+        vpAwards: [4, 3, 2],
+        faction: 'ghosts',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 7 },
     },
     // Bear Cavalry
@@ -224,7 +250,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '荣誉之地',
         nameEn: 'The Field of Honor',
         breakpoint: 18,
-        vpAwards: [3, 2, 1],        faction: 'bear_cavalry',
+        vpAwards: [3, 2, 1],
+        faction: 'bear_cavalry',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 0 },
     },
     {
@@ -232,7 +259,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '沙皇宫殿',
         nameEn: 'Tsar’s Palace',
         breakpoint: 22,
-        vpAwards: [5, 3, 2],        faction: 'bear_cavalry',
+        vpAwards: [5, 3, 2],
+        faction: 'bear_cavalry',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 1 },
         restrictions: [{ type: 'play_minion', condition: { maxPower: 2 } }],
     },
@@ -242,7 +270,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '发明家沙龙',
         nameEn: 'Inventor’s Salon',
         breakpoint: 22,
-        vpAwards: [4, 2, 1],        faction: 'steampunks',
+        vpAwards: [4, 2, 1],
+        faction: 'steampunks',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 2 },
     },
     {
@@ -250,7 +279,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '工坊',
         nameEn: 'The Workshop',
         breakpoint: 20,
-        vpAwards: [4, 2, 1],        faction: 'steampunks',
+        vpAwards: [4, 2, 1],
+        faction: 'steampunks',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 3 },
     },
     // Killer Plants
@@ -259,7 +289,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '温室',
         nameEn: 'Greenhouse',
         breakpoint: 24,
-        vpAwards: [4, 2, 1],        faction: 'killer_plants',
+        vpAwards: [4, 2, 1],
+        faction: 'killer_plants',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 4 },
     },
     {
@@ -267,7 +298,8 @@ export const BASE_CARDS_AL9000: BaseCardDef[] = [
         name: '神秘花园',
         nameEn: 'Secret Garden',
         breakpoint: 21,
-        vpAwards: [3, 2, 1],        faction: 'killer_plants',
+        vpAwards: [3, 2, 1],
+        faction: 'killer_plants',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE2, index: 5 },
         restrictions: [{ type: 'play_minion', condition: { extraPlayMinionPowerMax: 2 } }],
     },
@@ -284,7 +316,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '诡猫巷',
         nameEn: 'Cat Fanciers’ Alley',
         breakpoint: 18,
-        vpAwards: [3, 2, 1],        faction: 'kitty_cats',
+        vpAwards: [3, 2, 1],
+        faction: 'kitty_cats',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 0 },
     },
     {
@@ -292,7 +325,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '九命之家',
         nameEn: 'House of Nine Lives',
         breakpoint: 20,
-        vpAwards: [4, 2, 1],        faction: 'kitty_cats',
+        vpAwards: [4, 2, 1],
+        faction: 'kitty_cats',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 1 },
     },
     // Fairies
@@ -301,7 +335,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '迷人峡谷',
         nameEn: 'Enchanted Glade',
         breakpoint: 20,
-        vpAwards: [4, 2, 1],        faction: 'fairies',
+        vpAwards: [4, 2, 1],
+        faction: 'fairies',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 2 },
     },
     {
@@ -309,7 +344,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '仙灵圈',
         nameEn: 'Fairy Ring',
         breakpoint: 26,
-        vpAwards: [4, 3, 2],        faction: 'fairies',
+        vpAwards: [4, 3, 2],
+        faction: 'fairies',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 3 },
     },
     // Princesses
@@ -318,7 +354,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '美丽城堡',
         nameEn: 'Beautiful Castle',
         breakpoint: 22,
-        vpAwards: [4, 2, 1],        faction: 'princesses',
+        vpAwards: [4, 2, 1],
+        faction: 'princesses',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 4 },
     },
     {
@@ -326,7 +363,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '冰之城堡',
         nameEn: 'Castle of Ice',
         breakpoint: 15,
-        vpAwards: [3, 2, 2],        faction: 'princesses',
+        vpAwards: [3, 2, 2],
+        faction: 'princesses',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 5 },
         restrictions: [{ type: 'play_minion' }],
     },
@@ -336,7 +374,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '平衡之地',
         nameEn: 'Land of Balance',
         breakpoint: 25,
-        vpAwards: [5, 3, 2],        faction: 'mythic_horses',
+        vpAwards: [5, 3, 2],
+        faction: 'mythic_horses',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 6 },
     },
     {
@@ -344,7 +383,8 @@ export const BASE_CARDS_PRETTY_PRETTY: BaseCardDef[] = [
         name: '小马乐园',
         nameEn: 'Pony Paradise',
         breakpoint: 18,
-        vpAwards: [3, 2, 1],        faction: 'mythic_horses',
+        vpAwards: [3, 2, 1],
+        faction: 'mythic_horses',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE3, index: 7 },
     },
 ];
@@ -359,15 +399,18 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '北极基地',
         nameEn: 'North Pole',
         breakpoint: 24,
-        vpAwards: [5, 3, 2],        faction: 'cyborg_apes',
+        vpAwards: [5, 3, 2],
+        faction: 'cyborg_apes',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 0 },
+        restrictions: [{ type: 'play_minion', condition: { minionPlayLimitPerTurn: 1 } }],
     },
     {
         id: 'base_ritual_site',
         name: '仪式场所',
         nameEn: 'Ritual Site',
         breakpoint: 20,
-        vpAwards: [4, 2, 2],        faction: 'elder_things',
+        vpAwards: [4, 2, 2],
+        faction: 'elder_things',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 1 },
     },
     {
@@ -375,7 +418,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '拉莱耶',
         nameEn: 'R’lyeh',
         breakpoint: 18,
-        vpAwards: [4, 2, 1],        faction: SMASHUP_FACTION_IDS.MINIONS_OF_CTHULHU,
+        vpAwards: [4, 2, 1],
+        faction: SMASHUP_FACTION_IDS.MINIONS_OF_CTHULHU,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 2 },
     },
     {
@@ -383,7 +427,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '庇护所',
         nameEn: 'The Asylum',
         breakpoint: 16,
-        vpAwards: [3, 1, 1],        faction: 'elder_things',
+        vpAwards: [3, 1, 1],
+        faction: 'elder_things',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 3 },
     },
     {
@@ -391,7 +436,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '印斯茅斯',
         nameEn: 'Innsmouth',
         breakpoint: 23,
-        vpAwards: [5, 3, 2],        faction: 'innsmouth',
+        vpAwards: [5, 3, 2],
+        faction: 'innsmouth',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 4 },
     },
     {
@@ -399,7 +445,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '疯狂山脉',
         nameEn: 'Mountains of Madness',
         breakpoint: 20,
-        vpAwards: [6, 4, 3],        faction: 'elder_things',
+        vpAwards: [6, 4, 3],
+        faction: 'elder_things',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 5 },
     },
     {
@@ -407,7 +454,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '米斯卡塔尼克大学',
         nameEn: 'Miskatonic University',
         breakpoint: 24,
-        vpAwards: [3, 3, 2],        faction: SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY,
+        vpAwards: [3, 3, 2],
+        faction: SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 6 },
     },
     {
@@ -415,7 +463,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '伦格高原',
         nameEn: 'Plateau of Leng',
         breakpoint: 18,
-        vpAwards: [3, 2, 1],        faction: 'innsmouth',
+        vpAwards: [3, 2, 1],
+        faction: 'innsmouth',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 7 },
     },
     {
@@ -423,7 +472,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '牧场',
         nameEn: 'The Pasture',
         breakpoint: 25,
-        vpAwards: [5, 3, 2],        faction: 'sheep',
+        vpAwards: [5, 3, 2],
+        faction: 'sheep',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 8 },
     },
     {
@@ -431,7 +481,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '绵羊神社',
         nameEn: 'Sheep Shrine',
         breakpoint: 19,
-        vpAwards: [4, 2, 1],        faction: 'sheep',
+        vpAwards: [4, 2, 1],
+        faction: 'sheep',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 9 },
     },
     {
@@ -439,7 +490,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '更衣室',
         nameEn: 'Locker Room',
         breakpoint: 23,
-        vpAwards: [3, 2, 2],        faction: 'vampires',
+        vpAwards: [3, 2, 2],
+        faction: 'vampires',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 10 },
     },
     {
@@ -447,7 +499,8 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         name: '体育场',
         nameEn: 'The Stadium',
         breakpoint: 17,
-        vpAwards: [3, 2, 1],        faction: 'vampires',
+        vpAwards: [3, 2, 1],
+        faction: 'vampires',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 11 },
     },
 ];
@@ -506,7 +559,7 @@ export function getBaseDef(defId: string): BaseCardDef | undefined {
  */
 export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key: string) => string): string {
     if (!def) return '';
-    const key = `cards.${def.id}.name`;
+    const key = def.name.startsWith('cards.') ? def.name : `cards.${def.id}.name`;
     const resolved = t(key);
     // 如果 i18n 未命中（返回 key 本身），回退到定义中的 name
     return resolved !== key ? resolved : def.name;

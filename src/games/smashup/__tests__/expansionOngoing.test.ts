@@ -18,6 +18,7 @@ import {
     isMinionProtected,
     isOperationRestricted,
     fireTriggers,
+    interceptEvent,
 } from '../domain/ongoingEffects';
 import type { SmashUpCore, MinionOnBase, BaseInPlay, CardInstance, FactionId } from '../domain/types';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
@@ -188,13 +189,23 @@ describe('蒸汽朋克 ongoing 能力', () => {
     });
 
     describe('steampunk_steam_queen: 蒸汽女王保护', () => {
-        test('同基地己方随从不受对手行动卡影响', () => {
+        test('同基地己方行动卡不受对手移除（通过拦截器）', () => {
             const queen = makeMinion({ defId: 'steampunk_steam_queen', uid: 'sq-1', controller: '0' });
-            const ally = makeMinion({ defId: 'steampunk_a', uid: 'sa-1', controller: '0' });
-            const base = makeBase({ minions: [queen, ally] });
+            const base = makeBase({
+                minions: [queen],
+                ongoingActions: [{ uid: 'oa-1', defId: 'test_ongoing', ownerId: '0' }],
+            });
             const state = makeState([base]);
 
-            expect(isMinionProtected(state, ally, 0, '1', 'action')).toBe(true);
+            // steam_queen 通过 interceptor 保护 ongoing 行动卡不被对手移除
+            const detachEvt = {
+                type: SU_EVENTS.ONGOING_DETACHED,
+                payload: { cardUid: 'oa-1', defId: 'test_ongoing', ownerId: '0', reason: 'opponent_action' },
+                timestamp: 0,
+            };
+            const result = interceptEvent(state, detachEvt);
+            // 拦截器应阻止移除（返回 null）
+            expect(result).toBeNull();
         });
 
         test('不保护对手随从', () => {
@@ -599,16 +610,19 @@ describe('米斯卡塔尼克 新增能力', () => {
         test('手牌放牌库底+抽牌', () => {
             const base = makeBase();
             const state = makeState([base]);
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
             const executor = resolveAbility('miskatonic_field_trip', 'onPlay')!;
             const result = executor({
-                state, playerId: '0', cardUid: 'ft-1', defId: 'miskatonic_field_trip',
+                state, matchState: ms, playerId: '0', cardUid: 'ft-1', defId: 'miskatonic_field_trip',
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
-            // 至少有手牌洗入牌库事件
-            expect(result.events.length).toBeGreaterThanOrEqual(1);
-            expect(result.events[0].type).toBe(SU_EVENTS.HAND_SHUFFLED_INTO_DECK);
+            // 手牌>0时创建多选 Interaction 让玩家选择放牌库底的手牌
+            const interaction = (result.matchState?.sys as any)?.interaction;
+            const current = interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('miskatonic_field_trip');
         });
     });
 });

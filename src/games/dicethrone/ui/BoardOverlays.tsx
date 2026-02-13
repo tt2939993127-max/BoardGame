@@ -93,7 +93,8 @@ export interface BoardOverlaysProps {
     pendingDamage?: PendingDamage;
     tokenResponsePhase: TokenResponsePhase | null;
     isTokenResponder: boolean;
-    tokenDefinitions: TokenDef[];
+    /** 当前阶段可用的 Token 列表（由领域层过滤） */
+    usableTokens: TokenDef[];
     onUseToken: (tokenId: string, amount: number) => void;
     onSkipTokenResponse: () => void;
 
@@ -261,7 +262,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         pendingDamage={props.pendingDamage}
                         responsePhase={props.tokenResponsePhase}
                         responderState={props.players[props.pendingDamage.responderId]}
-                        tokenDefinitions={props.tokenDefinitions}
+                        usableTokens={props.usableTokens}
                         onUseToken={props.onUseToken}
                         onSkip={props.onSkipTokenResponse}
                         locale={props.locale}

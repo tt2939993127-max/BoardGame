@@ -10,6 +10,7 @@ import type {
   PlayerId, 
   CellCoord, 
   UnitInstance,
+  BoardStructure,
   AbilityTriggeredPayload,
 } from './types';
 import { SW_EVENTS } from './types';
@@ -22,7 +23,7 @@ import type {
   AbilityTrigger,
 } from './abilities';
 import { abilityRegistry } from './abilities';
-import { BOARD_ROWS, BOARD_COLS, manhattanDistance } from './helpers';
+import { BOARD_ROWS, BOARD_COLS, manhattanDistance, getPlayerUnits } from './helpers';
 import { swCustomActionRegistry } from './customActionHandlers';
 import { resolveTargetUnits, resolveTargetPosition } from './abilityTargets';
 import {
@@ -890,5 +891,31 @@ export function getEffectiveLife(unit: UnitInstance): number {
   }
 
   // 力量颂歌临时赋予的 power_up 不影响生命
+  return life;
+}
+
+/**
+ * 计算建筑的有效生命值（考虑 cold_snap 等光环加成）
+ * 遍历场上友方单位的被动技能，检查 auraStructureLife 效果
+ */
+export function getEffectiveStructureLife(state: SummonerWarsCore, structure: BoardStructure): number {
+  let life = structure.card.life;
+  const friendlyUnits = getPlayerUnits(state, structure.owner);
+
+  for (const unit of friendlyUnits) {
+    const abilities = getUnitAbilities(unit);
+    for (const ability of abilities) {
+      if (ability.trigger !== 'passive') continue;
+      for (const effect of ability.effects) {
+        if (effect.type === 'auraStructureLife') {
+          const dist = manhattanDistance(unit.position, structure.position);
+          if (dist <= effect.range) {
+            life += effect.value;
+          }
+        }
+      }
+    }
+  }
+
   return life;
 }

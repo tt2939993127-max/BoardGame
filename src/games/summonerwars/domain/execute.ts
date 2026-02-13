@@ -30,12 +30,15 @@ import {
   getEntangleUnits,
   getPlayerUnits,
   getUnitAbilities,
+  getUnitMoveEnhancements,
+  getPassedThroughUnitPositions,
+  findUnitPosition,
   HAND_SIZE,
 } from './helpers';
 import { rollDice, countHits } from '../config/dice';
 import { createDeckByFactionId } from '../config/factions';
 import { buildGameDeckFromCustom } from '../config/deckBuilder';
-import { calculateEffectiveStrength, getEffectiveLife, triggerAbilities, hasHellfireBlade } from './abilityResolver';
+import { calculateEffectiveStrength, getEffectiveLife, getEffectiveStructureLife, triggerAbilities, hasHellfireBlade } from './abilityResolver';
 import { reduceEvent } from './reduce';
 import type { AbilityContext } from './abilityResolver';
 import {
@@ -110,6 +113,21 @@ export function executeCommand(
             timestamp,
           });
         }
+
+        // 编织颂歌：召唤到目标相邻位置时，充能目标
+        const cwEvent = player.activeEvents.find(ev =>
+          getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_WEAVING && ev.targetUnitId
+        );
+        if (cwEvent) {
+          const cwTargetPos = findUnitPosition(core, cwEvent.targetUnitId!);
+          if (cwTargetPos && manhattanDistance(position, cwTargetPos) === 1) {
+            events.push({
+              type: SW_EVENTS.UNIT_CHARGED,
+              payload: { position: cwTargetPos, delta: 1, sourceAbilityId: 'chant_of_weaving' },
+              timestamp,
+            });
+          }
+        }
       }
       break;
     }
@@ -178,6 +196,25 @@ export function executeCommand(
             events.push({
               type: SW_EVENTS.UNIT_CHARGED,
               payload: { position: to, delta: 1 },
+              timestamp,
+            });
+          }
+        }
+
+        // 践踏伤害：穿过敌方士兵时造成伤害（数据驱动，读取 damageOnPassThrough）
+        const moveEnhancements = getUnitMoveEnhancements(core, from);
+        if (moveEnhancements.damageOnPassThrough > 0) {
+          const passedPositions = getPassedThroughUnitPositions(core, from, to, unit.owner);
+          for (const pos of passedPositions) {
+            events.push({
+              type: SW_EVENTS.UNIT_DAMAGED,
+              payload: {
+                position: pos,
+                damage: moveEnhancements.damageOnPassThrough,
+                reason: 'trample',
+                sourceUnitId: unit.cardId,
+                sourcePlayerId: unit.owner,
+              },
               timestamp,
             });
           }
@@ -564,7 +601,7 @@ export function executeCommand(
             }
           } else if (targetCell?.structure) {
             const newDamage = targetCell.structure.damage + hits;
-            if (newDamage >= targetCell.structure.card.life) {
+            if (newDamage >= getEffectiveStructureLife(core, targetCell.structure)) {
               events.push({
                 type: SW_EVENTS.STRUCTURE_DESTROYED,
                 payload: { 

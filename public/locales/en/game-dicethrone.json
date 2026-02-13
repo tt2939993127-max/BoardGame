@@ -91,7 +91,7 @@
     "burn": {
       "name": "Burn",
       "description": [
-        "During Upkeep, the affected player takes 2 undefendable damage."
+        "During Upkeep, take undefendable damage equal to the number of stacks, then remove 1 stack"
       ]
     },
     "stun": {
@@ -117,6 +117,24 @@
       "name": "Poison",
       "description": [
         "At the start of your turn, take damage equal to the number of stacks, then remove 1 stack"
+      ]
+    },
+    "blinded": {
+      "name": "Blinded",
+      "description": [
+        "At the end of Offensive Roll Phase, roll 1 die. On 1-2, the attack is negated. Then remove this token."
+      ]
+    },
+    "entangle": {
+      "name": "Entangle",
+      "description": [
+        "Your next Offensive Roll Phase has one fewer roll (3→2). Then remove this token."
+      ]
+    },
+    "targeted": {
+      "name": "Targeted",
+      "description": [
+        "Incoming damage +2. Remove this token after taking damage."
       ]
     }
   },
@@ -165,6 +183,42 @@
       "name": "Sneak Attack",
       "description": [
         "When dealing damage, roll 1 die and add the result to your damage"
+      ]
+    },
+    "crit": {
+      "name": "Crit",
+      "description": [
+        "Before attack resolves, consume 1 stack to increase damage by 1"
+      ]
+    },
+    "accuracy": {
+      "name": "Accuracy",
+      "description": [
+        "Before attack resolves, consume 1 stack to make this attack undefendable"
+      ]
+    },
+    "protect": {
+      "name": "Protect",
+      "description": [
+        "Before taking damage, consume 1 stack to reduce damage by 1"
+      ]
+    },
+    "retribution": {
+      "name": "Retribution",
+      "description": [
+        "Before taking damage, consume 1 stack to deal 2 undefendable damage to the attacker"
+      ]
+    },
+    "tithes_upgraded": {
+      "name": "Tithes Upgraded",
+      "description": [
+        "During Income Phase, gain 1 extra CP"
+      ]
+    },
+    "blessing_of_divinity": {
+      "name": "Blessing of Divinity",
+      "description": [
+        "When you would take lethal damage, remove this token, set HP to 1, then heal 5 HP"
       ]
     }
   },
@@ -264,6 +318,9 @@
     "taijiBoostHint": "Spend Taiji to boost damage",
     "taijiReduceHint": "Spend Taiji to reduce damage",
     "useTaiji": "Use Taiji",
+    "boostHint": "Spend tokens to boost damage",
+    "reduceHint": "Spend tokens to reduce damage",
+    "useToken": "Use",
     "evasiveHint": "Spend Evasive to attempt a full evade",
     "evasiveDesc": "Spend 1 Evasive and roll 1 die. On success, damage becomes 0.",
     "useEvasive": "Use Evasive",
@@ -884,11 +941,12 @@
     },
     "calm-water-2": {
       "name": "Calm Water II",
-      "description": "Large Straight: deal 9 damage, gain 3 Taiji and 1 Evasive.",
+      "description": "Large Straight: deal 9 damage, gain 3 Taiji and 1 Evasive, inflict Knockdown.",
       "effects": {
         "damage9": "Deal 9 damage",
         "gainTaiji3": "Then gain 3 Taiji tokens",
-        "gainEvasive": "Gain 1 Evasive token"
+        "gainEvasive": "Gain 1 Evasive token",
+        "inflictKnockdown": "Inflict 1 Knockdown"
       }
     },
     "slap": {
@@ -933,7 +991,7 @@
     },
     "suppress": {
       "name": "Suppress",
-      "description": "3 Sword + 2 Strength: roll 3 dice, deal total damage; if total >14, inflict Concussion.",
+      "description": "2 Sword + 2 Strength: roll 3 dice, deal total damage; if total >14, inflict Concussion.",
       "effects": {
         "rollDice": "Roll 3 dice; deal damage equal to the total",
         "concussionThreshold": "If total >14, inflict 1 Concussion token"
@@ -1329,6 +1387,46 @@
       "name": "Head Blow!",
       "description": "Inflict Concussion on 1 opponent."
     },
+    "card-thick-skin-2": {
+      "name": "Thick Skin II",
+      "description": "Upgrade Thick Skin to Level II."
+    },
+    "card-slap-2": {
+      "name": "Slap II",
+      "description": "Upgrade Slap to Level II."
+    },
+    "card-slap-3": {
+      "name": "Slap III",
+      "description": "Upgrade Slap to Level III."
+    },
+    "card-all-out-strike-2": {
+      "name": "All Out Strike II",
+      "description": "Upgrade All Out Strike to Level II."
+    },
+    "card-all-out-strike-3": {
+      "name": "All Out Strike III",
+      "description": "Upgrade All Out Strike to Level III."
+    },
+    "card-powerful-strike-2": {
+      "name": "Powerful Strike II",
+      "description": "Upgrade Powerful Strike to Level II."
+    },
+    "card-reckless-strike-2": {
+      "name": "Reckless Strike II",
+      "description": "Upgrade Reckless Strike to Level II."
+    },
+    "card-suppress-2": {
+      "name": "Suppress II",
+      "description": "Upgrade Suppress to Level II."
+    },
+    "card-steadfast-2": {
+      "name": "Steadfast II",
+      "description": "Upgrade Steadfast to Level II."
+    },
+    "card-violent-assault-2": {
+      "name": "Violent Assault II",
+      "description": "Upgrade Violent Assault to Level II."
+    },
     "card-flame-barrier": {
       "name": "Flame Barrier",
       "description": "Immediately gain 2 Fire Mastery."
@@ -1462,6 +1560,126 @@
     "upgrade-cornucopia-2": {
       "name": "Cornucopia II",
       "description": "Upgrade Cornucopia to Level 2."
+    },
+    "moon-shadow-strike": {
+      "name": "Moon Shadow Strike",
+      "description": "Roll 1 die: Bow → Draw 1 card; Foot → Inflict Entangle; Moon → Inflict Blinded + Targeted."
+    },
+    "dodge": {
+      "name": "Dodge!",
+      "description": "Gain 1 Evasive token."
+    },
+    "volley": {
+      "name": "Volley!",
+      "description": "This attack deals +3 damage."
+    },
+    "watch-out": {
+      "name": "Watch Out!",
+      "description": "Inflict Targeted on opponent."
+    },
+    "moonlight-magic": {
+      "name": "Moonlight Magic!",
+      "description": "Gain Evasive. Inflict Blinded, Entangle, and Targeted on opponent."
+    },
+    "upgrade-elusive-step-2": {
+      "name": "Elusive Step II",
+      "description": "Upgrade Elusive Step to Level 2."
+    },
+    "upgrade-eclipse-2": {
+      "name": "Eclipse II",
+      "description": "Upgrade Eclipse to Level 2."
+    },
+    "upgrade-blinding-shot-2": {
+      "name": "Blinding Shot II",
+      "description": "Upgrade Blinding Shot to Level 2."
+    },
+    "upgrade-entangling-shot-2": {
+      "name": "Entangling Shot II",
+      "description": "Upgrade Entangling Shot to Level 2."
+    },
+    "upgrade-exploding-arrow-3": {
+      "name": "Exploding Arrow III",
+      "description": "Upgrade Exploding Arrow to Level 3."
+    },
+    "upgrade-exploding-arrow-2": {
+      "name": "Exploding Arrow II",
+      "description": "Upgrade Exploding Arrow to Level 2."
+    },
+    "upgrade-covering-fire-2": {
+      "name": "Covering Fire II",
+      "description": "Upgrade Covering Fire to Level 2."
+    },
+    "upgrade-deadeye-shot-2": {
+      "name": "Deadeye Shot II",
+      "description": "Upgrade Covert Fire to Level 2."
+    },
+    "upgrade-longbow-3": {
+      "name": "Longbow III",
+      "description": "Upgrade Longbow to Level 3."
+    },
+    "upgrade-longbow-2": {
+      "name": "Longbow II",
+      "description": "Upgrade Longbow to Level 2."
+    },
+    "card-might": {
+      "name": "Might!",
+      "description": "Gain 1 Crit token."
+    },
+    "card-consecrate": {
+      "name": "Consecrate!",
+      "description": "Gain Protect, Retribution, Crit, and Accuracy (1 each)."
+    },
+    "card-divine-favor": {
+      "name": "Divine Favor!",
+      "description": "Roll 1 die: Sword → Draw 2; Helm → Heal 3; Heart → Heal 4; Pray → Gain 3 CP."
+    },
+    "card-absolution": {
+      "name": "Absolution!",
+      "description": "Roll 1 die: Sword → Deal 1 undefendable damage; Helm → Prevent 1 damage; Heart → Prevent 2 damage; Pray → Gain 1 CP."
+    },
+    "card-gods-grace": {
+      "name": "God's Grace!",
+      "description": "Roll 1 die: Pray → Gain 4 CP; Otherwise → Draw 1 card."
+    },
+    "card-holy-defense-3": {
+      "name": "Holy Defense III",
+      "description": "Upgrade Holy Defense to Level 3."
+    },
+    "card-holy-defense-2": {
+      "name": "Holy Defense II",
+      "description": "Upgrade Holy Defense to Level 2."
+    },
+    "card-holy-light-2": {
+      "name": "Holy Light II",
+      "description": "Upgrade Holy Light to Level 2."
+    },
+    "card-righteous-combat-3": {
+      "name": "Righteous Combat III",
+      "description": "Upgrade Righteous Combat to Level 3."
+    },
+    "card-righteous-combat-2": {
+      "name": "Righteous Combat II",
+      "description": "Upgrade Righteous Combat to Level 2."
+    },
+    "card-blessing-of-might-2": {
+      "name": "Blessing of Might II",
+      "description": "Upgrade Blessing of Might to Level 2."
+    },
+    "card-holy-strike-2": {
+      "name": "Holy Strike II",
+      "description": "Upgrade Holy Strike to Level 2."
+    },
+    "card-vengeance-2": {
+      "name": "Vengeance II",
+      "description": "Upgrade Vengeance to Level 2."
+    },
+    "card-righteous-prayer-2": {
+      "name": "Righteous Prayer II",
+      "description": "Upgrade Righteous Prayer to Level 2."
+    },
+    "card-tithes-2": {
+      "name": "Tithes II",
+      "description": "Upgrade Tithes: Gain 1 extra CP during Income phase."
     }
   },
   "cardSpotlight": {

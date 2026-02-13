@@ -187,7 +187,7 @@ describe('海盗派系能力（第6批）', () => {
         expect(current?.data?.sourceId).toBe('pirate_shanghai_choose_minion');
     });
 
-    it('pirate_sea_dogs: 多目标时创建 Prompt 选择随从', () => {
+    it('pirate_sea_dogs: 多目标时创建 Prompt 选择派系', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -196,16 +196,16 @@ describe('海盗派系能力（第6批）', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 5), makeMinion('m2', 'test', '1', 2)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m1', 'robot_zapbot', '1', 5), makeMinion('m2', 'robot_hoverbot', '1', 2)], ongoingActions: [] },
                 { defId: 'b2', minions: [], ongoingActions: [] },
             ],
         });
 
         const { matchState } = execPlayAction(state, '0', 'a1');
-        // 多个随从时创建 Interaction
+        // 现在先选派系
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('pirate_sea_dogs_choose_minion');
+        expect(current?.data?.sourceId).toBe('pirate_sea_dogs_choose_faction');
     });
 
     it('pirate_powderkeg: 单个己方随从时创建 Prompt', () => {
@@ -334,10 +334,10 @@ describe('忍者派系能力（第6批）', () => {
         });
 
         const { matchState } = execPlayAction(state, '0', 'a1');
-        // 单个己方随从时创建 Interaction
+        // 单个己方随从时直接跳到选随从
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('ninja_disguise_choose_return');
+        expect(current?.data?.sourceId).toBe('ninja_disguise_choose_minions');
     });
 
     it('ninja_disguise: 没有己方随从时无事件', () => {
@@ -361,7 +361,7 @@ describe('忍者派系能力（第6批）', () => {
         expect(returnEvents.length).toBe(0);
     });
 
-    it('ninja_disguise: 有己方随从但手牌无随从时创建 Prompt', () => {
+    it('ninja_disguise: 有己方随从但手牌无随从时不创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -374,11 +374,11 @@ describe('忍者派系能力（第6批）', () => {
             ],
         });
 
-        const { matchState } = execPlayAction(state, '0', 'a1');
-        // 单个己方随从时创建 Interaction
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
+        // 手牌无随从时 maxSelect=0，不创建 Interaction
         const current = (matchState.sys as any).interaction?.current;
-        expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('ninja_disguise_choose_return');
+        expect(current).toBeUndefined();
+        expect(events.filter(e => e.type === SU_EVENTS.MINION_RETURNED).length).toBe(0);
     });
 });
 
@@ -462,7 +462,7 @@ describe('巫师派系能力（第6批）', () => {
         expect(drawEvents.length).toBe(0);
     });
 
-    it('wizard_portal: 顶部5张全是行动卡时不抽牌但重排牌库', () => {
+    it('wizard_portal: 顶部5张全是行动卡时不抽牌但创建排序 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -479,9 +479,11 @@ describe('巫师派系能力（第6批）', () => {
 
         const { events, matchState } = execPlayAction(state, '0', 'a1');
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
         expect(drawEvents.length).toBe(0);
-        expect(reshuffleEvents.length).toBe(1);
+        // 多张非随从卡时创建排序 Interaction
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('wizard_portal_order');
     });
 
     it('wizard_scry: 单张行动卡时创建 Prompt', () => {

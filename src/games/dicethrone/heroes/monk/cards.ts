@@ -164,7 +164,7 @@ const CALM_WATER_2: AbilityDef = {
     sfxKey: MONK_SFX_PUNCH_3,
     variants: [
         { id: 'calm-water-2-way-of-monk', trigger: { type: 'allSymbolsPresent', symbols: [DICE_FACE_IDS.FIST, DICE_FACE_IDS.PALM, DICE_FACE_IDS.TAIJI, DICE_FACE_IDS.LOTUS] }, effects: [grantToken(TOKEN_IDS.EVASIVE, 2, abilityEffectText('calm-water-2-way-of-monk', 'gainEvasive2')), damage(3, abilityEffectText('calm-water-2-way-of-monk', 'damage3'))], priority: 0, tags: ['unblockable'] },
-        { id: 'calm-water-2-large-straight', trigger: { type: 'largeStraight' }, effects: [damage(7, abilityEffectText('calm-water-2', 'damage7')), grantToken(TOKEN_IDS.TAIJI, 3, abilityEffectText('calm-water-2', 'gainTaiji3'), { timing: 'postDamage', condition: { type: 'onHit' } }), grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('calm-water-2', 'gainEvasive'), { timing: 'postDamage', condition: { type: 'onHit' } }), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('calm-water-2', 'inflictKnockdown'), { timing: 'postDamage', condition: { type: 'onHit' } })], priority: 1 },
+        { id: 'calm-water-2-large-straight', trigger: { type: 'largeStraight' }, effects: [damage(9, abilityEffectText('calm-water-2', 'damage9')), grantToken(TOKEN_IDS.TAIJI, 3, abilityEffectText('calm-water-2', 'gainTaiji3'), { timing: 'postDamage', condition: { type: 'onHit' } }), grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('calm-water-2', 'gainEvasive'), { timing: 'postDamage', condition: { type: 'onHit' } }), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, abilityEffectText('calm-water-2', 'inflictKnockdown'), { timing: 'postDamage', condition: { type: 'onHit' } })], priority: 1 },
     ],
 };
 

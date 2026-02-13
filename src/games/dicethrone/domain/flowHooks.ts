@@ -190,6 +190,22 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         // ========== offensiveRoll 阶段退出：攻击前处理 ==========
         if (from === 'offensiveRoll') {
             if (core.pendingAttack) {
+                // 伤害已通过 Token 响应结算（autoContinue 重入），只执行 postDamage 效果
+                if (core.pendingAttack.damageResolved) {
+                    const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
+                    events.push(...postDamageEvents);
+
+                    const { dazeEvents, triggered } = checkDazeExtraAttack(
+                        core, events, command.type, timestamp
+                    );
+                    if (triggered) {
+                        events.push(...dazeEvents);
+                        return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
+                    return { events, overrideNextPhase: 'main2' };
+                }
+
                 // ========== 致盲判定：攻击方有致盲时投掷1骰 ==========
                 const attacker = core.players[core.pendingAttack.attackerId];
                 const blindedStacks = attacker?.statusEffects[STATUS_IDS.BLINDED] ?? 0;
@@ -397,6 +413,22 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 : core.activePlayerId;
             const player = core.players[activeId];
             if (player?.statusEffects) {
+                // 0. 火焰精通冷却 — 维持阶段移除 1 个火焰精通
+                const fmCount = player.tokens?.[TOKEN_IDS.FIRE_MASTERY] ?? 0;
+                if (fmCount > 0) {
+                    events.push({
+                        type: 'TOKEN_CONSUMED',
+                        payload: {
+                            playerId: activeId,
+                            tokenId: TOKEN_IDS.FIRE_MASTERY,
+                            amount: 1,
+                            newTotal: fmCount - 1,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                }
+
                 // 1. 燃烧 (burn) — 每层造成 1 点伤害，然后移除 1 层
                 const burnStacks = player.statusEffects[STATUS_IDS.BURN] ?? 0;
                 if (burnStacks > 0) {

@@ -134,7 +134,7 @@ export function formatSmashUpActionEntry({
                 const baseLabel = formatBaseLabel(baseDefId, minionEvent?.payload?.baseIndex ?? payload.baseIndex);
                 const segments = withCardSegments('actionLog.playMinion', defId);
                 if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 }
                 return { id: `${command.type}-${actorId}-${timestamp}`, timestamp, actorId, kind: command.type, segments };
             }
@@ -207,14 +207,15 @@ export function formatSmashUpActionEntry({
                 const baseLabel = formatBaseLabel(getBaseDefId(payload.baseIndex), payload.baseIndex);
                 const segments = withCardSegments('actionLog.minionPlayed', payload.defId);
                 if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SU_EVENTS.ACTION_PLAYED: {
                 const payload = event.payload as { defId: string };
-                pushEntry(event.type, withCardSegments('actionLog.actionPlayed', payload.defId), actorId, entryTimestamp, index);
+                const segments = withCardSegments('actionLog.actionPlayed', payload.defId);
+                pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
             case SU_EVENTS.MINION_DESTROYED: {
@@ -222,7 +223,7 @@ export function formatSmashUpActionEntry({
                 const baseLabel = formatBaseLabel(getBaseDefId(payload.fromBaseIndex), payload.fromBaseIndex);
                 const segments = withCardSegments('actionLog.minionDestroyed', payload.minionDefId);
                 if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -232,7 +233,7 @@ export function formatSmashUpActionEntry({
                 const fromLabel = formatBaseLabel(getBaseDefId(payload.fromBaseIndex), payload.fromBaseIndex);
                 const toLabel = formatBaseLabel(getBaseDefId(payload.toBaseIndex), payload.toBaseIndex);
                 const segments = withCardSegments('actionLog.minionMoved', payload.minionDefId);
-                segments.push(i18nSeg('actionLog.fromTo', { from: fromLabel, to: toLabel }));
+                segments.push(i18nSeg('actionLog.fromTo', { from: fromLabel, to: toLabel }, ['from', 'to']));
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
@@ -241,7 +242,7 @@ export function formatSmashUpActionEntry({
                 const baseLabel = formatBaseLabel(getBaseDefId(payload.fromBaseIndex), payload.fromBaseIndex);
                 const segments = withCardSegments('actionLog.minionReturned', payload.minionDefId, { playerId: payload.toPlayerId });
                 if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 }
                 pushEntry(event.type, segments, payload.toPlayerId, entryTimestamp, index);
                 break;
@@ -251,7 +252,7 @@ export function formatSmashUpActionEntry({
                 const baseLabel = formatBaseLabel(getBaseDefId(payload.baseIndex), payload.baseIndex);
                 const segments = withCardSegments('actionLog.powerCounterAdded', payload.minionUid, { amount: payload.amount });
                 if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -261,7 +262,7 @@ export function formatSmashUpActionEntry({
                 const baseLabel = formatBaseLabel(getBaseDefId(payload.baseIndex), payload.baseIndex);
                 const segments = withCardSegments('actionLog.powerCounterRemoved', payload.minionUid, { amount: payload.amount });
                 if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -271,7 +272,7 @@ export function formatSmashUpActionEntry({
                 const segments = withCardSegments('actionLog.ongoingAttached', payload.defId);
                 if (payload.targetType === 'base') {
                     const baseLabel = formatBaseLabel(getBaseDefId(payload.targetBaseIndex), payload.targetBaseIndex);
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 } else if (payload.targetMinionUid) {
                     segments.push(textSegment(' → '));
                     const targetSegment = buildCardSegment(payload.targetMinionUid);
@@ -294,7 +295,7 @@ export function formatSmashUpActionEntry({
                 const baseLabel = formatBaseLabel(getBaseDefId(payload.baseIndex), payload.baseIndex);
                 const segments = withCardSegments('actionLog.talentUsed', payload.defId);
                 if (baseLabel) {
-                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }));
+                    segments.push(i18nSeg('actionLog.onBase', { base: baseLabel }, ['base']));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;

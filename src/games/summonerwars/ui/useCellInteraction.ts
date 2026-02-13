@@ -16,9 +16,9 @@ import {
   getValidMoveTargetsEnhanced, getValidAttackTargetsEnhanced,
   getPlayerUnits, hasAvailableActions, isCellEmpty, isImmobile,
   getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
-  manhattanDistance, getStructureAt, findUnitPosition,
+  manhattanDistance, getStructureAt, findUnitPosition, getSummoner,
 } from '../domain/helpers';
-import { isUndeadCard } from '../domain/ids';
+import { isUndeadCard, getBaseCardId, CARD_IDS } from '../domain/ids';
 import { getSummonerWarsUIHints } from '../domain/uiHints';
 import { extractPositions } from '../../../engine/primitives/uiHints';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
@@ -97,9 +97,44 @@ export function useCellInteraction({
   }, [selectedHandCardId, myHand]);
 
   const validSummonPositions = useMemo(() => {
-    if (currentPhase !== 'summon' || !isMyTurn || !selectedHandCard) return [];
-    if (selectedHandCard.cardType !== 'unit') return [];
-    return getValidSummonPositions(core, myPlayerId as '0' | '1');
+    if (!isMyTurn || !selectedHandCard || selectedHandCard.cardType !== 'unit') return [];
+    const player = core.players[myPlayerId];
+    // 重燃希望：允许在任意阶段召唤
+    const hasRekindleHope = player.activeEvents.some(ev =>
+      getBaseCardId(ev.id) === CARD_IDS.PALADIN_REKINDLE_HOPE
+    );
+    if (currentPhase !== 'summon' && !hasRekindleHope) return [];
+
+    const positions = getValidSummonPositions(core, myPlayerId as '0' | '1');
+    const posSet = new Set(positions.map(p => `${p.row},${p.col}`));
+    const addIfEmpty = (pos: CellCoord) => {
+      const key = `${pos.row},${pos.col}`;
+      if (!posSet.has(key) && isCellEmpty(core, pos)) {
+        posSet.add(key);
+        positions.push(pos);
+      }
+    };
+
+    // 重燃希望：召唤师相邻位置
+    if (hasRekindleHope) {
+      const summoner = getSummoner(core, myPlayerId as '0' | '1');
+      if (summoner) {
+        for (const adj of getAdjacentCells(summoner.position)) addIfEmpty(adj);
+      }
+    }
+
+    // 编织颂歌：目标单位相邻位置
+    const cwEvent = player.activeEvents.find(ev =>
+      getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_WEAVING && ev.targetUnitId
+    );
+    if (cwEvent) {
+      const targetPos = findUnitPosition(core, cwEvent.targetUnitId!);
+      if (targetPos) {
+        for (const adj of getAdjacentCells(targetPos)) addIfEmpty(adj);
+      }
+    }
+
+    return positions;
   }, [core, currentPhase, isMyTurn, myPlayerId, selectedHandCard]);
 
   const validBuildPositions = useMemo(() => {

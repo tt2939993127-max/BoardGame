@@ -6,7 +6,7 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import type { SmashUpCore, SmashUpEvent, AbilityTag, PromptConfig } from './types';
+import type { SmashUpCore, SmashUpEvent, AbilityTag } from './types';
 
 // ============================================================================
 // 能力执行上下文与结果
@@ -33,8 +33,6 @@ export interface AbilityResult {
     events: SmashUpEvent[];
     /** 如果能力修改了 matchState（如创建了 Interaction），返回更新后的 matchState */
     matchState?: MatchState<SmashUpCore>;
-    /** 需要 Prompt 时返回 prompt 配置 */
-    prompt?: PromptConfig;
 }
 
 /** 能力执行函数签名 */

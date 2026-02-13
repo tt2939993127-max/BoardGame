@@ -49,13 +49,16 @@ type DefaultGameThumbnailProps = {
     icon?: string;
 };
 
-export const DefaultGameThumbnail = ({ titleKey, icon }: DefaultGameThumbnailProps) => {
-    const { t } = useTranslation('lobby');
+export const DefaultGameThumbnail = (_props: DefaultGameThumbnailProps) => {
     return (
-        <div className="w-full h-full bg-[#fcfbf9] flex flex-col items-center justify-center text-[#433422] font-bold">
-            <div className="text-4xl leading-none">{icon ?? '🎲'}</div>
-            <div className="mt-1 text-[10px] tracking-widest text-[#8c7b64]">{t(titleKey)}</div>
-        </div>
+        <div
+            className="w-full h-full bg-parchment-cream"
+            style={{
+                backgroundImage: 'linear-gradient(100deg, rgba(0,0,0,0.03) 40%, rgba(0,0,0,0.08) 50%, rgba(0,0,0,0.03) 60%)',
+                backgroundSize: '200% 100%',
+                animation: 'img-shimmer 1.5s linear infinite',
+            }}
+        />
     );
 };
 

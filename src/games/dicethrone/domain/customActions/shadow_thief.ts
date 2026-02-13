@@ -241,9 +241,11 @@ function handleCornucopiaDiscard({ targetId, state, timestamp, random }: CustomA
 
 
 /** 终极：Shadow Shank Damage (Deal CP + 5) */
-function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx }: CustomActionContext): DiceThroneEvent[] {
+function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
-    const damageAmt = currentCp + 5;
+    const params = (action as any).params;
+    const bonusCp = (params?.bonusCp as number) || 0;
+    const damageAmt = currentCp + bonusCp + 5;
 
     const target = state.players[targetId];
     const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;

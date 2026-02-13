@@ -21,6 +21,7 @@ function extractDefId(value: unknown): string | undefined {
     if (!value || typeof value !== 'object') return undefined;
     const v = value as Record<string, unknown>;
     if (typeof v.defId === 'string') return v.defId;
+    if (typeof v.minionDefId === 'string') return v.minionDefId;
     if (typeof v.baseDefId === 'string') return v.baseDefId;
     return undefined;
 }
@@ -36,6 +37,12 @@ function isCardOption(value: unknown): boolean {
 export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID }) => {
     const prompt = asSimpleChoice(interaction);
     const { t, i18n } = useTranslation('game-smashup');
+
+    const resolveLabel = (label?: string) => {
+        if (!label) return '';
+        if (!label.includes('cards.')) return label;
+        return label.replace(/cards\.[\w-]+\.name/g, (key) => t(key, { defaultValue: key }));
+    };
 
     const isMyPrompt = !!prompt && prompt.playerId === playerID;
     const isMulti = !!prompt?.multi && isMyPrompt;
@@ -99,7 +106,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                 >
                     {/* 标题 */}
                     <h2 className="text-2xl font-black text-amber-100 uppercase tracking-wide mb-6 drop-shadow-lg">
-                        {prompt.title}
+                        {resolveLabel(prompt.title)}
                     </h2>
 
                     {!isMyPrompt && (
@@ -115,7 +122,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                                 const defId = extractDefId(option.value);
                                 const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
                                 const previewRef = def?.previewRef;
-                                const name = def ? resolveCardName(def, t) : option.label;
+                                const name = def ? resolveCardName(def, t) : resolveLabel(option.label);
                                 const isSelected = selectedIds.includes(option.id);
 
                                 return (
@@ -147,7 +154,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                                                 />
                                             ) : (
                                                 <div className="w-[140px] aspect-[0.714] bg-slate-800 rounded-lg flex items-center justify-center p-2">
-                                                    <span className="text-white text-sm font-bold text-center">{option.label}</span>
+                                                    <span className="text-white text-sm font-bold text-center">{resolveLabel(option.label)}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -156,7 +163,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                                             mt-2 text-center text-xs font-bold truncate max-w-[140px] px-1
                                             ${isSelected ? 'text-amber-300' : 'text-white/80'}
                                         `}>
-                                            {name || option.label}
+                                            {name || resolveLabel(option.label)}
                                         </div>
                                         {/* 多选勾选标记 */}
                                         {isMulti && isSelected && (
@@ -184,7 +191,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                                     }
                                     disabled={option.disabled}
                                 >
-                                    {option.label}
+                                    {resolveLabel(option.label)}
                                 </GameButton>
                             ))}
                         </div>
@@ -212,6 +219,15 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
         );
     }
 
+    // 从 continuationContext 提取上下文卡牌预览（用于"查看牌库顶"等场景）
+    const contextCardPreview = useMemo(() => {
+        if (!prompt) return undefined;
+        const ctx = (prompt as any).continuationContext as Record<string, unknown> | undefined;
+        if (!ctx || typeof ctx.defId !== 'string') return undefined;
+        const def = getCardDef(ctx.defId as string) ?? getBaseDef(ctx.defId as string);
+        return def?.previewRef;
+    }, [prompt]);
+
     // ====== 文本列表模式（原有逻辑） ======
     return (
         <AnimatePresence>
@@ -233,7 +249,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                     {/* Header */}
                     <div className="bg-slate-800 p-6 text-center">
                         <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">
-                            {prompt.title}
+                            {resolveLabel(prompt.title)}
                         </h2>
                         {!isMyPrompt && (
                             <div className="mt-4 bg-yellow-500/20 text-yellow-300 px-3 py-1 rounded text-xs font-bold uppercase border border-yellow-500/50 inline-block animate-pulse">
@@ -241,6 +257,15 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                             </div>
                         )}
                     </div>
+                    {/* 上下文卡牌预览（牌库顶查看等场景） */}
+                    {contextCardPreview && (
+                        <div className="flex justify-center py-4 bg-slate-700">
+                            <CardPreview
+                                previewRef={contextCardPreview}
+                                className="w-[160px] aspect-[0.714] rounded-lg shadow-xl ring-2 ring-white/30"
+                            />
+                        </div>
+                    )}
 
                     {/* Options List */}
                     <div className="p-6 bg-slate-50 max-h-[60vh] overflow-y-auto custom-scrollbar flex flex-col gap-3">
@@ -260,7 +285,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                                             }
                                         `}
                                     >
-                                        {option.label}
+                                        {resolveLabel(option.label)}
                                     </button>
                                 );
                             }
@@ -283,7 +308,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                                     <span className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-400'}`}>
                                         {isSelected && <Check size={12} strokeWidth={3} />}
                                     </span>
-                                    {option.label}
+                                    {resolveLabel(option.label)}
                                 </button>
                             );
                         }) : (

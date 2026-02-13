@@ -243,14 +243,28 @@ describe('dino_upgrade 保护 + 力量', () => {
 });
 
 describe('dino_tooth_and_claw 保护', () => {
-    it('附着此卡的随从不被其他玩家消灭', () => {
+    it('附着此卡的随从不被其他玩家消灭（通过拦截器）', () => {
         const minion = makeMinion('m1', 'test_minion', '0', 3, {
             attachedActions: [{ uid: 'tc-1', defId: 'dino_tooth_and_claw', ownerId: '0' }],
         });
         const base = makeBase({ minions: [minion] });
         const state = makeState({ bases: [base] });
-        expect(isMinionProtected(state, minion, 0, '1', 'destroy')).toBe(true);
-        expect(isMinionProtected(state, minion, 0, '0', 'destroy')).toBe(false); // 自己不受限
+        // destroy 保护现在通过 interceptor 实现，不再通过 isMinionProtected
+        // 验证 interceptEvent 拦截消灭事件
+        const destroyEvt = {
+            type: SU_EVENTS.MINION_DESTROYED,
+            payload: { minionUid: 'm1', minionDefId: 'test_minion', fromBaseIndex: 0, ownerId: '1', reason: 'test' },
+            timestamp: 0,
+        };
+        const result = interceptEvent(state, destroyEvt);
+        // 拦截器应替换消灭事件为自毁事件
+        expect(result).toBeDefined();
+        expect(Array.isArray(result) ? result : [result]).toEqual(
+            expect.arrayContaining([expect.objectContaining({ type: SU_EVENTS.ONGOING_DETACHED })])
+        );
+        // affect 保护仍通过 isMinionProtected
+        expect(isMinionProtected(state, minion, 0, '1', 'affect')).toBe(true);
+        expect(isMinionProtected(state, minion, 0, '0', 'affect')).toBe(false);
     });
 });
 

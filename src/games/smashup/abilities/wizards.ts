@@ -15,7 +15,7 @@ import {
     buildMinionTargetOptions,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { CardsDrawnEvent, SmashUpEvent, DeckReshuffledEvent, MinionCardDef } from '../domain/types';
+import type { CardsDrawnEvent, SmashUpEvent, DeckReshuffledEvent, MinionCardDef, CardToDeckTopEvent } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerTrigger } from '../domain/ongoingEffects';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -90,7 +90,7 @@ function wizardNeophyte(ctx: AbilityContext): AbilityResult {
     );
     const extended = {
         ...interaction,
-        data: { ...interaction.data, continuationContext: { cardUid: topCard.uid } },
+        data: { ...interaction.data, continuationContext: { cardUid: topCard.uid, defId: topCard.defId } },
     };
     return { events: [], matchState: queueInteraction(ctx.matchState, extended) };
 }
@@ -163,20 +163,32 @@ function wizardPortal(ctx: AbilityContext): AbilityResult {
         events.push(drawEvt);
     }
 
-    // 其余放牌库底：重建牌�?= 剩余未翻到的 + 翻到的非随从放底�?
-    if (others.length > 0) {
-        const processedUids = new Set(topCards.map(c => c.uid));
-        const remainingDeck = player.deck.filter(c => !processedUids.has(c.uid));
-        const newDeckUids = [...remainingDeck.map(c => c.uid), ...others.map(c => c.uid)];
-        const reshuffleEvt: DeckReshuffledEvent = {
-            type: SU_EVENTS.DECK_RESHUFFLED,
-            payload: { playerId: ctx.playerId, deckUids: newDeckUids },
+    // 其余放牌库顶（以玩家选择的顺序）
+    if (others.length === 0) return { events };
+    if (others.length === 1) {
+        // 只有一张，直接放牌库顶
+        events.push({
+            type: SU_EVENTS.CARD_TO_DECK_TOP,
+            payload: { cardUid: others[0].uid, defId: others[0].defId, ownerId: ctx.playerId, reason: 'wizard_portal' },
             timestamp: ctx.now,
-        };
-        events.push(reshuffleEvt);
+        } as CardToDeckTopEvent);
+        return { events };
     }
-
-    return { events };
+    // 多张：让玩家逐个选择放回顺序（先选的放最上面）
+    const options = others.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+    });
+    const interaction = createSimpleChoice(
+        `wizard_portal_order_${ctx.now}`, ctx.playerId,
+        '传送：选择放回牌库顶的第一张牌（最先选的在最上面）', options, 'wizard_portal_order',
+    );
+    const remainingUids = others.map(c => ({ uid: c.uid, defId: c.defId }));
+    return {
+        events,
+        matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { remaining: remainingUids, ordered: [] as { uid: string; defId: string }[] } } }),
+    };
 }
 
 /** 占卜 onPlay：搜索牌库找一张行动卡放入手牌，然后洗牌库 */
@@ -347,6 +359,40 @@ export function registerWizardInteractionHandlers(): void {
                 timestamp,
             } as SmashUpEvent],
         };
+    });
+
+    // 传送：逐个选择非随从牌放回牌库顶的顺序
+    registerInteractionHandler('wizard_portal_order', (state, playerId, value, iData, _random, timestamp) => {
+        const { cardUid, defId } = value as { cardUid: string; defId: string };
+        const ctx = (iData as any)?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] };
+        if (!ctx) return undefined;
+        const ordered = [...ctx.ordered, { uid: cardUid, defId }];
+        const remaining = ctx.remaining.filter(c => c.uid !== cardUid);
+        if (remaining.length <= 1) {
+            // 最后一张或没有了，全部放回牌库顶
+            const allCards = remaining.length === 1 ? [...ordered, remaining[0]] : ordered;
+            // 按选择顺序放回：先选的在最上面，所以倒序 push CARD_TO_DECK_TOP
+            const events: SmashUpEvent[] = [];
+            for (let i = allCards.length - 1; i >= 0; i--) {
+                events.push({
+                    type: SU_EVENTS.CARD_TO_DECK_TOP,
+                    payload: { cardUid: allCards[i].uid, defId: allCards[i].defId, ownerId: playerId, reason: 'wizard_portal' },
+                    timestamp,
+                } as CardToDeckTopEvent);
+            }
+            return { state, events };
+        }
+        // 还有多张，继续选
+        const options = remaining.map((c, i) => {
+            const def = getCardDef(c.defId);
+            const name = def?.name ?? c.defId;
+            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        });
+        const next = createSimpleChoice(
+            `wizard_portal_order_${timestamp}`, playerId,
+            `传送：选择下一张放回牌库顶的牌（已选 ${ordered.length} 张）`, options, 'wizard_portal_order',
+        );
+        return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered } } }), events: [] };
     });
 
     // 献祭：选择随从→消灭 + 抽牌

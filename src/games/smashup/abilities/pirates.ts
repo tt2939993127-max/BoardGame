@@ -296,25 +296,32 @@ function pirateShanghai(ctx: AbilityContext): AbilityResult {
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-/** 海狗 onPlay：移动一个随从到另一个基�?*/
+/**
+ * 海狗 onPlay：指定一个派系，移动所有其他玩家该派系的随从从一个基地到另一个
+ *
+ * 流程：选择派系 → 选择来源基地 → 选择目标基地 → 批量移动
+ */
 function pirateSeaDogs(ctx: AbilityContext): AbilityResult {
-    // 收集所有随从（任意玩家�?
-    const targets: { uid: string; defId: string; baseIndex: number; power: number; label: string }[] = [];
-    for (let i = 0; i < ctx.state.bases.length; i++) {
-        for (const m of ctx.state.bases[i].minions) {
-            const power = getMinionPower(ctx.state, m, i);
-            const def = getCardDef(m.defId) as MinionCardDef | undefined;
-            const name = def?.name ?? m.defId;
-            const baseDef = getBaseDef(ctx.state.bases[i].defId);
-            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
-            targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, power, label: `${name} (力量 ${power}) @ ${baseName}` });
+    // 收集场上所有对手随从的派系（去重）
+    const factionSet = new Map<string, string>(); // factionId → 派系中文名
+    for (const base of ctx.state.bases) {
+        for (const m of base.minions) {
+            if (m.controller === ctx.playerId) continue;
+            const def = getCardDef(m.defId);
+            if (!def || !def.faction) continue;
+            if (!factionSet.has(def.faction)) {
+                factionSet.set(def.faction, def.faction);
+            }
         }
     }
-    if (targets.length === 0) return { events: [] };
-    const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    if (factionSet.size === 0) return { events: [] };
+
+    const options = Array.from(factionSet.keys()).map((fid, i) => ({
+        id: `faction-${i}`, label: fid, value: { factionId: fid },
+    }));
     const interaction = createSimpleChoice(
-        `pirate_sea_dogs_minion_${ctx.now}`, ctx.playerId,
-        '选择要移动的随从', buildMinionTargetOptions(options), 'pirate_sea_dogs_choose_minion',
+        `pirate_sea_dogs_faction_${ctx.now}`, ctx.playerId,
+        '水手：指定一个派系', options as any[], 'pirate_sea_dogs_choose_faction',
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -460,23 +467,66 @@ export function registerPirateInteractionHandlers(): void {
         return { state, events: [moveMinion(ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, destBase, 'pirate_shanghai', timestamp)] };
     });
 
-    // 海狗：选择随从后，链式选择目标基地
-    registerInteractionHandler('pirate_sea_dogs_choose_minion', (state, playerId, value, _iData, _random, timestamp) => {
-        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
-        const base = state.core.bases[baseIndex];
-        if (!base) return undefined;
-        const minion = base.minions.find(m => m.uid === minionUid);
-        if (!minion) return undefined;
-        const next = buildMoveToBaseInteraction(state.core, minionUid, minion.defId, baseIndex, 'pirate_sea_dogs', playerId, timestamp);
-        return next ? { state: queueInteraction(state, next), events: [] } : undefined;
+    // 海狗第一步：选择派系后，链式选择来源基地
+    registerInteractionHandler('pirate_sea_dogs_choose_faction', (state, playerId, value, _iData, _random, timestamp) => {
+        const { factionId } = value as { factionId: string };
+        // 找有该派系对手随从的基地
+        const candidates: { baseIndex: number; count: number; label: string }[] = [];
+        for (let i = 0; i < state.core.bases.length; i++) {
+            const count = state.core.bases[i].minions.filter(m => {
+                if (m.controller === playerId) return false;
+                const def = getCardDef(m.defId);
+                return def?.faction === factionId;
+            }).length;
+            if (count > 0) {
+                const baseDef = getBaseDef(state.core.bases[i].defId);
+                candidates.push({ baseIndex: i, count, label: `${baseDef?.name ?? `基地 ${i + 1}`} (${count} 个该派系随从)` });
+            }
+        }
+        if (candidates.length === 0) return { state, events: [] };
+        const next = createSimpleChoice(
+            `pirate_sea_dogs_from_${timestamp}`, playerId,
+            '选择来源基地（移动该派系所有对手随从）', buildBaseTargetOptions(candidates), 'pirate_sea_dogs_choose_from',
+        );
+        (next.data as any).continuationContext = { factionId };
+        return { state: queueInteraction(state, next), events: [] };
     });
 
-    // 海狗：选择基地后移动
-    registerInteractionHandler('pirate_sea_dogs_choose_base', (state, _playerId, value, iData, _random, timestamp) => {
-        const { baseIndex: destBase } = value as { baseIndex: number };
-        const ctx = (iData as any)?.continuationContext as { minionUid: string; minionDefId: string; fromBaseIndex: number };
+    // 海狗第二步：选择来源基地后，链式选择目标基地
+    registerInteractionHandler('pirate_sea_dogs_choose_from', (state, playerId, value, iData, _random, timestamp) => {
+        const { baseIndex: fromBase } = value as { baseIndex: number };
+        const ctx = (iData as any)?.continuationContext as { factionId: string };
         if (!ctx) return undefined;
-        return { state, events: [moveMinion(ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, destBase, 'pirate_sea_dogs', timestamp)] };
+        const destCandidates: { baseIndex: number; label: string }[] = [];
+        for (let i = 0; i < state.core.bases.length; i++) {
+            if (i === fromBase) continue;
+            const baseDef = getBaseDef(state.core.bases[i].defId);
+            destCandidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
+        }
+        if (destCandidates.length === 0) return { state, events: [] };
+        const next = createSimpleChoice(
+            `pirate_sea_dogs_to_${timestamp}`, playerId,
+            '选择目标基地', buildBaseTargetOptions(destCandidates), 'pirate_sea_dogs_choose_to',
+        );
+        (next.data as any).continuationContext = { factionId: ctx.factionId, fromBase };
+        return { state: queueInteraction(state, next), events: [] };
+    });
+
+    // 海狗第三步：选择目标基地后，批量移动
+    registerInteractionHandler('pirate_sea_dogs_choose_to', (state, playerId, value, iData, _random, timestamp) => {
+        const { baseIndex: destBase } = value as { baseIndex: number };
+        const ctx = (iData as any)?.continuationContext as { factionId: string; fromBase: number };
+        if (!ctx) return undefined;
+        const base = state.core.bases[ctx.fromBase];
+        if (!base) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+        for (const m of base.minions) {
+            if (m.controller === playerId) continue;
+            const def = getCardDef(m.defId);
+            if (def?.faction !== ctx.factionId) continue;
+            events.push(moveMinion(m.uid, m.defId, ctx.fromBase, destBase, 'pirate_sea_dogs', timestamp));
+        }
+        return { state, events };
     });
 
     // 小艇第一步：选择随从后，链式选择目标基地

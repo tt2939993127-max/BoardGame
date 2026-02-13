@@ -49,6 +49,7 @@ export const RIGHTEOUS_COMBAT_2: AbilityDef = {
         {
             id: 'righteous-combat-2-tenacity',
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 2, [FACES.HELM]: 1 } },
+            tags: ['unblockable'],
             effects: [
                 heal(2, abilityEffectText('righteous-combat-2', 'heal2')),
                 damage(2, abilityEffectText('righteous-combat-2', 'damage2Unblockable'), { tags: ['unblockable'] })
@@ -93,6 +94,7 @@ export const RIGHTEOUS_COMBAT_3: AbilityDef = {
         {
             id: 'righteous-combat-3-tenacity',
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 2, [FACES.HELM]: 1 } },
+            tags: ['unblockable'],
             effects: [
                 heal(2, abilityEffectText('righteous-combat-3', 'heal2')),
                 damage(2, abilityEffectText('righteous-combat-3', 'damage2Unblockable'), { tags: ['unblockable'] })
@@ -137,6 +139,7 @@ export const BLESSING_OF_MIGHT_2: AbilityDef = {
         {
             id: 'blessing-of-might-2-stance',
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 2, [FACES.PRAY]: 1 } },
+            tags: ['unblockable'],
             effects: [
                 damage(2, abilityEffectText('blessing-of-might-2', 'damage2Unblockable'), { tags: ['unblockable'] }),
                 {
@@ -159,6 +162,7 @@ export const BLESSING_OF_MIGHT_2: AbilityDef = {
         {
             id: 'blessing-of-might-2-main',
             trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 3, [FACES.PRAY]: 1 } },
+            tags: ['unblockable'],
             effects: [
                 damage(4, abilityEffectText('blessing-of-might-2', 'damage4Unblockable'), { tags: ['unblockable'] }),
                 grantToken(TOKEN_IDS.CRIT, 1, abilityEffectText('blessing-of-might-2', 'gainCrit')),
@@ -201,6 +205,7 @@ export const VENGEANCE_2: AbilityDef = {
         {
             id: 'vengeance-2-mix',
             trigger: { type: 'allSymbolsPresent', symbols: [FACES.SWORD, FACES.HELM, FACES.HEART, FACES.PRAY] },
+            tags: ['unblockable'],
             effects: [
                 grantToken(TOKEN_IDS.RETRIBUTION, 1, abilityEffectText('vengeance-2', 'gainRetribution')),
                 heal(1, abilityEffectText('vengeance-2', 'heal1')),
@@ -239,6 +244,7 @@ export const RIGHTEOUS_PRAYER_2: AbilityDef = {
         {
             id: 'righteous-prayer-2-main',
             trigger: { type: 'diceSet', faces: { [FACES.PRAY]: 4 } },
+            tags: ['unblockable'],
             effects: [
                 damage(8, abilityEffectText('righteous-prayer-2', 'damage8Unblockable'), { tags: ['unblockable'] }),
                 grantToken(TOKEN_IDS.CRIT, 1, abilityEffectText('righteous-prayer-2', 'gainCrit')),
@@ -341,6 +347,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('blessing-of-might', 'description'),
         sfxKey: PALADIN_SFX_HEAVY,
+        tags: ['unblockable'],
         trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 3, [FACES.PRAY]: 1 } },
         effects: [
             damage(3, abilityEffectText('blessing-of-might', 'damage3'), { tags: ['unblockable'] }),

@@ -1157,6 +1157,174 @@ describe('炽原精灵事件卡', () => {
       );
       expect(abilityEvents.length).toBe(1);
     });
+
+    it('召唤到目标相邻位置时充能目标', () => {
+      const state = createBarbaricState();
+      clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+      // 放置编织颂歌目标单位
+      placeUnit(state, { row: 4, col: 3 }, {
+        cardId: 'weave-target', card: makeLioness('weave-target'), owner: '0',
+        boosts: 0,
+      });
+
+      state.phase = 'summon';
+      state.currentPlayer = '0';
+
+      // 先打出编织颂歌
+      addEventToHand(state, '0', 'barbaric-chant-of-weaving-0', {
+        name: '编织颂歌',
+        playPhase: 'summon',
+        isActive: true,
+        effect: '可在目标相邻召唤，召唤时充能目标。',
+      });
+
+      const { newState: stateAfterEvent } = executeAndReduce(state, SW_COMMANDS.PLAY_EVENT, {
+        cardId: 'barbaric-chant-of-weaving-0',
+        targets: [{ row: 4, col: 3 }],
+      });
+
+      // 在手牌中放一个可召唤的单位
+      const summonCard = makeSpiritMage('summon-test');
+      stateAfterEvent.players['0'].hand.push(summonCard);
+      stateAfterEvent.players['0'].magic = 5;
+
+      // 召唤到目标相邻位置 (4,4)
+      const { newState: stateAfterSummon, events: summonEvents } = executeAndReduce(
+        stateAfterEvent, SW_COMMANDS.SUMMON_UNIT, {
+          cardId: 'summon-test',
+          position: { row: 4, col: 4 },
+        }
+      );
+
+      // 应该有充能事件（编织颂歌触发）
+      const chargeEvents = summonEvents.filter(e =>
+        e.type === SW_EVENTS.UNIT_CHARGED
+        && (e.payload as Record<string, unknown>).sourceAbilityId === 'chant_of_weaving'
+      );
+      expect(chargeEvents.length).toBe(1);
+
+      // 目标单位应该获得1点充能
+      expect(stateAfterSummon.board[4][3].unit?.boosts).toBe(1);
+    });
+
+    it('召唤到非目标相邻位置时不充能', () => {
+      const state = createBarbaricState();
+      clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+      placeUnit(state, { row: 4, col: 3 }, {
+        cardId: 'weave-target', card: makeLioness('weave-target'), owner: '0',
+        boosts: 0,
+      });
+
+      state.phase = 'summon';
+      state.currentPlayer = '0';
+
+      addEventToHand(state, '0', 'barbaric-chant-of-weaving-0', {
+        name: '编织颂歌',
+        playPhase: 'summon',
+        isActive: true,
+        effect: '可在目标相邻召唤，召唤时充能目标。',
+      });
+
+      const { newState: stateAfterEvent } = executeAndReduce(state, SW_COMMANDS.PLAY_EVENT, {
+        cardId: 'barbaric-chant-of-weaving-0',
+        targets: [{ row: 4, col: 3 }],
+      });
+
+      // 在城门旁放一个可召唤的单位（远离目标）
+      const summonCard = makeSpiritMage('summon-far');
+      stateAfterEvent.players['0'].hand.push(summonCard);
+      stateAfterEvent.players['0'].magic = 5;
+
+      // 确保城门附近有空位（玩家0在底部，城门在 row 7 附近）
+      // 召唤到城门旁（距离目标>1）
+      stateAfterEvent.board[7][3] = { unit: undefined, structure: stateAfterEvent.board[7][3]?.structure ?? null };
+      const gatePos = stateAfterEvent.board[7]?.[3]?.structure ? { row: 6, col: 3 } : { row: 7, col: 3 };
+      // 找一个城门相邻的空位
+      let summonPos: { row: number; col: number } | null = null;
+      for (let r = 5; r <= 7; r++) {
+        for (let c = 0; c < 6; c++) {
+          const cell = stateAfterEvent.board[r]?.[c];
+          if (cell && !cell.unit && !cell.structure && Math.abs(r - 4) + Math.abs(c - 3) > 1) {
+            summonPos = { row: r, col: c };
+            break;
+          }
+        }
+        if (summonPos) break;
+      }
+
+      if (summonPos) {
+        const { events: summonEvents } = executeAndReduce(
+          stateAfterEvent, SW_COMMANDS.SUMMON_UNIT, {
+            cardId: 'summon-far',
+            position: summonPos,
+          }
+        );
+
+        // 不应该有编织颂歌充能事件
+        const chargeEvents = summonEvents.filter(e =>
+          e.type === SW_EVENTS.UNIT_CHARGED
+          && (e.payload as Record<string, unknown>).sourceAbilityId === 'chant_of_weaving'
+        );
+        expect(chargeEvents.length).toBe(0);
+      }
+    });
+
+    it('validate 允许在目标相邻位置召唤（即使不在城门旁）', () => {
+      const state = createBarbaricState();
+      clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+      // 目标放在棋盘中央（远离城门）
+      placeUnit(state, { row: 3, col: 3 }, {
+        cardId: 'weave-target', card: makeLioness('weave-target'), owner: '0',
+      });
+
+      state.phase = 'summon';
+      state.currentPlayer = '0';
+
+      // 手动设置 activeEvent（模拟已打出编织颂歌）
+      state.players['0'].activeEvents.push({
+        id: 'barbaric-chant-of-weaving-0',
+        card: {
+          id: 'barbaric-chant-of-weaving',
+          cardType: 'event',
+          name: '编织颂歌',
+          faction: 'barbaric',
+          cost: 0,
+          playPhase: 'summon',
+          effect: '可在目标相邻召唤，召唤时充能目标。',
+          isActive: true,
+          deckSymbols: [],
+        },
+        targetUnitId: 'weave-target',
+      });
+
+      // 在手牌中放一个可召唤的单位
+      const summonCard = makeSpiritMage('summon-test');
+      state.players['0'].hand.push(summonCard);
+      state.players['0'].magic = 5;
+
+      const fullState = { core: state, sys: {} as any };
+
+      // 目标相邻位置 (3,4) 应该合法
+      const result = SummonerWarsDomain.validate(fullState, {
+        type: SW_COMMANDS.SUMMON_UNIT,
+        payload: { cardId: 'summon-test', position: { row: 3, col: 4 } },
+        playerId: '0',
+        timestamp: fixedTimestamp,
+      });
+      expect(result.valid).toBe(true);
+
+      // 远离目标的位置 (1,1) 应该不合法（也不在城门旁）
+      const result2 = SummonerWarsDomain.validate(fullState, {
+        type: SW_COMMANDS.SUMMON_UNIT,
+        payload: { cardId: 'summon-test', position: { row: 1, col: 1 } },
+        playerId: '0',
+        timestamp: fixedTimestamp,
+      });
+      expect(result2.valid).toBe(false);
+    });
   });
 });
 

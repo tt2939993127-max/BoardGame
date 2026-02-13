@@ -11,7 +11,16 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import type { AuditableEntity } from '../../../engine/testing/abilityBehaviorAudit';
+/** 可审计实体最小抽象 */
+interface AuditableEntity {
+    id: string;
+    name: string;
+    descriptionText: string;
+    entityType: string;
+    subtype?: string;
+    abilityTags?: string[];
+    meta?: Record<string, unknown>;
+}
 import { getAllCardDefs } from '../data/cards';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry, getRegisteredAbilityKeys } from '../domain/abilityRegistry';
@@ -42,7 +51,7 @@ function getCardDescription(defId: string, def: CardDef): string {
 function buildEntities(): AuditableEntity[] {
     return getAllCardDefs().map(def => ({
         id: def.id,
-        name: zhCN.cards?.[def.id]?.name ?? def.nameEn ?? def.id,
+        name: zhCN.cards?.[def.id]?.name ?? def.id,
         descriptionText: getCardDescription(def.id, def),
         entityType: def.type,
         subtype: def.type === 'action' ? (def as ActionCardDef).subtype : undefined,
@@ -299,6 +308,79 @@ describe('SmashUp 能力行为审计', () => {
                 }
             }
             expect(violations).toEqual([]);
+        });
+    });
+
+    // ── 5. 卡牌定义结构完整性（描述语义 → 定义字段） ──
+    describe('卡牌定义结构完整性', () => {
+        /**
+         * 匹配"打出到（一个）随从上"的描述模式，覆盖：
+         * - "打出到一个随从上" / "打出到你的一个随从上"
+         * - "打到一个随从上"（简写）
+         */
+        const minionTargetPatterns = [
+            /打出到.*随从上/,
+            /打到.*随从上/,
+        ];
+
+        it('描述含"打出到随从上"的 ongoing 行动卡必须有 ongoingTarget: "minion"', () => {
+            const allDefs = getAllCardDefs();
+            const violations: string[] = [];
+
+            for (const def of allDefs) {
+                // 只检查 subtype === 'ongoing' 的行动卡
+                if (def.type !== 'action') continue;
+                const actionDef = def as ActionCardDef;
+                if (actionDef.subtype !== 'ongoing') continue;
+
+                // 获取 i18n 描述
+                const i18n = zhCN.cards?.[def.id];
+                const effectText: string = i18n?.effectText ?? '';
+                if (!effectText) continue;
+
+                // 检查描述是否包含"打出到随从上"模式
+                const targetsMinion = minionTargetPatterns.some(p => p.test(effectText));
+                if (!targetsMinion) continue;
+
+                // 验证定义中有 ongoingTarget: 'minion'
+                if (actionDef.ongoingTarget !== 'minion') {
+                    violations.push(
+                        `[${def.id}]（${i18n?.name ?? def.id}）` +
+                        `描述含"打出到随从上"但缺少 ongoingTarget: 'minion'` +
+                        `\n  effectText: ${effectText.slice(0, 60)}...`,
+                    );
+                }
+            }
+
+            expect(violations, '以下 ongoing 行动卡的 ongoingTarget 字段缺失或错误').toEqual([]);
+        });
+
+        it('描述含"打出到基地上"的 ongoing 行动卡不应有 ongoingTarget: "minion"', () => {
+            const allDefs = getAllCardDefs();
+            const violations: string[] = [];
+
+            for (const def of allDefs) {
+                if (def.type !== 'action') continue;
+                const actionDef = def as ActionCardDef;
+                if (actionDef.subtype !== 'ongoing') continue;
+
+                const i18n = zhCN.cards?.[def.id];
+                const effectText: string = i18n?.effectText ?? '';
+                if (!effectText) continue;
+
+                // 描述明确说"打出到基地上"
+                if (!/打出到基地上/.test(effectText)) continue;
+
+                // 不应标记为 minion 目标
+                if (actionDef.ongoingTarget === 'minion') {
+                    violations.push(
+                        `[${def.id}]（${i18n?.name ?? def.id}）` +
+                        `描述含"打出到基地上"但 ongoingTarget 错误地设为 'minion'`,
+                    );
+                }
+            }
+
+            expect(violations, '以下 ongoing 行动卡的 ongoingTarget 字段与描述矛盾').toEqual([]);
         });
     });
 });

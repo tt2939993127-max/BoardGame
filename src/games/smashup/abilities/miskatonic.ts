@@ -11,36 +11,50 @@ import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionCardDef
 import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion,
-    getMinionPower, buildMinionTargetOptions,
+    getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions,
 } from '../domain/abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
 
-/** 这些多管闲事的小鬼 onPlay：消灭一个基地上任意数量的行动卡（MVP：自动选行动卡最多的基地，全部消灭） */
+/** 这些多管闲事的小鬼 onPlay：选择一个基地，消灭该基地上任意数量的行动卡 */
 function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
-    // 找行动卡最多的基地
-    let bestBaseIndex = -1;
-    let bestCount = 0;
+    // 找有行动卡的基地
+    const candidates: { baseIndex: number; label: string; actionCount: number }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
-        // 统计基地上的持续行动卡 + 随从附着的行动卡
         let actionCount = base.ongoingActions.length;
         for (const m of base.minions) {
             actionCount += m.attachedActions.length;
         }
-        if (actionCount > bestCount) {
-            bestCount = actionCount;
-            bestBaseIndex = i;
-        }
+        if (actionCount === 0) continue;
+        const baseDef = getBaseDef(base.defId);
+        const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+        candidates.push({ baseIndex: i, label: `${baseName}（${actionCount}张行动卡）`, actionCount });
     }
-    if (bestCount === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 1) {
+        // 只有一个基地有行动卡，直接消灭
+        return destroyAllActionsOnBase(ctx, candidates[0].baseIndex);
+    }
+    // 多个基地，让玩家选择
+    const options = candidates.map((c, i) => ({
+        id: `base-${i}`, label: c.label, value: { baseIndex: c.baseIndex },
+    }));
+    const interaction = createSimpleChoice(
+        `miskatonic_those_meddling_kids_${ctx.now}`, ctx.playerId,
+        '选择一个基地消灭其上所有行动卡',
+        options as any[],
+        'miskatonic_those_meddling_kids',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
 
+/** 辅助：消灭指定基地上所有行动卡 */
+function destroyAllActionsOnBase(ctx: AbilityContext, baseIndex: number): AbilityResult {
     const events: SmashUpEvent[] = [];
-    const base = ctx.state.bases[bestBaseIndex];
-
-    // 消灭基地上的持续行动卡
+    const base = ctx.state.bases[baseIndex];
     for (const ongoing of base.ongoingActions) {
         const evt: OngoingDetachedEvent = {
             type: SU_EVENTS.ONGOING_DETACHED,
@@ -54,8 +68,6 @@ function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
         };
         events.push(evt);
     }
-
-    // 消灭随从上附着的行动卡
     for (const m of base.minions) {
         for (const attached of m.attachedActions) {
             const evt: OngoingDetachedEvent = {
@@ -71,7 +83,6 @@ function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
             events.push(evt);
         }
     }
-
     return { events };
 }
 
@@ -96,17 +107,30 @@ function miskatonicPsychologicalProfiling(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 强制阅读 onPlay：目标对手抽2张疯狂卡 + 你获得1个额外行动（MVP：自动选第一个对手） */
+/** 强制阅读 onPlay：选择一位玩家，该玩家抽2张疯狂卡 + 你获得1个额外行动 */
 function miskatonicMandatoryReading(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
-    // 选第一个对手
-    const opponent = ctx.state.turnOrder.find(pid => pid !== ctx.playerId);
-    if (opponent) {
-        const madnessEvt = drawMadnessCards(opponent, 2, ctx.state, 'miskatonic_mandatory_reading', ctx.now);
-        if (madnessEvt) events.push(madnessEvt);
+    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
+    if (opponents.length === 0) {
+        events.push(grantExtraAction(ctx.playerId, 'miskatonic_mandatory_reading', ctx.now));
+        return { events };
     }
-    events.push(grantExtraAction(ctx.playerId, 'miskatonic_mandatory_reading', ctx.now));
-    return { events };
+    if (opponents.length === 1) {
+        // 只有一个对手，直接选择
+        const madnessEvt = drawMadnessCards(opponents[0], 2, ctx.state, 'miskatonic_mandatory_reading', ctx.now);
+        if (madnessEvt) events.push(madnessEvt);
+        events.push(grantExtraAction(ctx.playerId, 'miskatonic_mandatory_reading', ctx.now));
+        return { events };
+    }
+    // 多个对手，创建选择 Prompt
+    const options = opponents.map((pid, i) => ({
+        id: `opp-${i}`, label: `玩家 ${pid}`, value: { pid },
+    }));
+    const interaction = createSimpleChoice(
+        `miskatonic_mandatory_reading_${ctx.now}`, ctx.playerId,
+        '选择一位玩家抽两张疯狂卡', options as any[], 'miskatonic_mandatory_reading',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 失落的知识 onPlay：手中有≥2张疯狂卡时，抽2张牌 + 额外随从 + 额外行动 */
@@ -338,8 +362,7 @@ function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 实地考察 onPlay：手牌放牌库底 + 抽等量牌
- * MVP：将所有手牌放牌库底，然后抽等量牌
+ * 实地考察 onPlay：从手牌中选择任意数量的卡放牌库底，每放一张抽一张
  */
 function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
@@ -347,25 +370,20 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
     const handCards = player.hand.filter(c => c.uid !== ctx.cardUid);
     if (handCards.length === 0) return { events: [] };
 
-    const events: SmashUpEvent[] = [];
-    // 手牌放牌库底
-    const newDeckUids = [...player.deck.map(c => c.uid), ...handCards.map(c => c.uid)];
-    events.push({
-        type: SU_EVENTS.HAND_SHUFFLED_INTO_DECK,
-        payload: { playerId: ctx.playerId, newDeckUids, reason: 'miskatonic_field_trip' },
-        timestamp: ctx.now,
+    // 创建多选 Prompt 让玩家选择要放牌库底的卡
+    const options = handCards.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
     });
-    // 抽等量牌（从新牌库顶部抽取）
-    const drawCount = Math.min(handCards.length, newDeckUids.length);
-    if (drawCount > 0) {
-        const drawnUids = newDeckUids.slice(0, drawCount);
-        events.push({
-            type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: ctx.playerId, count: drawCount, cardUids: drawnUids },
-            timestamp: ctx.now,
-        } as CardsDrawnEvent);
-    }
-    return { events };
+    const interaction = createSimpleChoice(
+        `miskatonic_field_trip_${ctx.now}`, ctx.playerId,
+        '选择要放到牌库底的卡牌（每放一张抽一张）',
+        options as any[],
+        'miskatonic_field_trip',
+        { min: 1, max: handCards.length },
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 注册米斯卡塔尼克大学派系所有能力（放在所有函数定义之后，避免 Vite SSR 提升失效） */
@@ -434,5 +452,67 @@ export function registerMiskatonicInteractionHandlers(): void {
             },
             timestamp,
         }] };
+    });
+
+    // 强制阅读：选择对手后给其抽疯狂卡 + 额外行动
+    registerInteractionHandler('miskatonic_mandatory_reading', (state, playerId, value, _iData, _random, timestamp) => {
+        const { pid } = value as { pid: string };
+        const events: SmashUpEvent[] = [];
+        const madnessEvt = drawMadnessCards(pid, 2, state.core, 'miskatonic_mandatory_reading', timestamp);
+        if (madnessEvt) events.push(madnessEvt);
+        events.push(grantExtraAction(playerId, 'miskatonic_mandatory_reading', timestamp));
+        return { state, events };
+    });
+
+    // 这些多管闲事的小鬼：选择基地后消灭所有行动卡
+    registerInteractionHandler('miskatonic_those_meddling_kids', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { baseIndex } = value as { baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+        for (const ongoing of base.ongoingActions) {
+            events.push({
+                type: SU_EVENTS.ONGOING_DETACHED,
+                payload: { cardUid: ongoing.uid, defId: ongoing.defId, ownerId: ongoing.ownerId, reason: 'miskatonic_those_meddling_kids' },
+                timestamp,
+            } as OngoingDetachedEvent);
+        }
+        for (const m of base.minions) {
+            for (const attached of m.attachedActions) {
+                events.push({
+                    type: SU_EVENTS.ONGOING_DETACHED,
+                    payload: { cardUid: attached.uid, defId: attached.defId, ownerId: attached.ownerId, reason: 'miskatonic_those_meddling_kids' },
+                    timestamp,
+                } as OngoingDetachedEvent);
+            }
+        }
+        return { state, events };
+    });
+
+    // 实地考察：选择卡牌后放牌库底 + 抽等量牌
+    registerInteractionHandler('miskatonic_field_trip', (state, playerId, value, _iData, _random, timestamp) => {
+        const selectedCards = value as Array<{ cardUid: string; defId: string }>;
+        if (!Array.isArray(selectedCards) || selectedCards.length === 0) return { state, events: [] };
+        const player = state.core.players[playerId];
+        const events: SmashUpEvent[] = [];
+        const cardUids = selectedCards.map(v => v.cardUid);
+        // 手牌放牌库底
+        const newDeckUids = [...player.deck.map(c => c.uid), ...cardUids];
+        events.push({
+            type: SU_EVENTS.HAND_SHUFFLED_INTO_DECK,
+            payload: { playerId, newDeckUids, reason: 'miskatonic_field_trip' },
+            timestamp,
+        });
+        // 抽等量牌
+        const drawCount = Math.min(cardUids.length, newDeckUids.length);
+        if (drawCount > 0) {
+            const drawnUids = newDeckUids.slice(0, drawCount);
+            events.push({
+                type: SU_EVENTS.CARDS_DRAWN,
+                payload: { playerId, count: drawCount, cardUids: drawnUids },
+                timestamp,
+            } as CardsDrawnEvent);
+        }
+        return { state, events };
     });
 }

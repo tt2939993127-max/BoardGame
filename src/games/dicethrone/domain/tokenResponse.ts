@@ -32,35 +32,36 @@ import { TOKEN_IDS } from './ids';
 // ============================================================================
 
 /**
- * 检查玩家是否有指定时机可用的 Token（基于 tokenDefinitions）
+ * 获取玩家在指定时机下实际可用的 Token 列表（已过滤 category、timing、持有量）
+ * 这是 Token 响应窗口的唯一数据源——有可用 token 才弹窗，窗口直接渲染此列表
  */
-const hasTokensForTiming = (
+export function getUsableTokensForTiming(
     state: DiceThroneCore,
     playerId: PlayerId,
     timing: 'beforeDamageDealt' | 'beforeDamageReceived'
-): boolean => {
+): TokenDef[] {
     const player = state.players[playerId];
-    if (!player) return false;
+    if (!player) return [];
 
-    return (state.tokenDefinitions ?? []).some(def => {
+    return (state.tokenDefinitions ?? []).filter(def => {
         if (def.category !== 'consumable') return false;
         if (!def.activeUse?.timing?.includes(timing)) return false;
         return (player.tokens[def.id] ?? 0) > 0;
     });
-};
+}
 
 /**
  * 检查玩家是否有可用于减伤的 Token（beforeDamageReceived）
  */
 export function hasDefensiveTokens(state: DiceThroneCore, playerId: PlayerId): boolean {
-    return hasTokensForTiming(state, playerId, 'beforeDamageReceived');
+    return getUsableTokensForTiming(state, playerId, 'beforeDamageReceived').length > 0;
 }
 
 /**
  * 检查玩家是否有可用于加伤的 Token（beforeDamageDealt）
  */
 export function hasOffensiveTokens(state: DiceThroneCore, playerId: PlayerId): boolean {
-    return hasTokensForTiming(state, playerId, 'beforeDamageDealt');
+    return getUsableTokensForTiming(state, playerId, 'beforeDamageDealt').length > 0;
 }
 
 /**
@@ -164,15 +165,20 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
     },
 
     /**
-     * 修改受到的伤害（减伤）
+     * 修改受到的伤害（减伤/加伤，根据使用时机动态决定）
+     * - 太极 beforeDamageDealt: value=-1 → 反转为 +1（加伤）
+     * - 太极 beforeDamageReceived: value=-1 → 保持 -1（减伤）
      * - protect: value=-1，每层 -1 伤害
      * - retribution: value=0，不减伤但反弹 2 点不可防御伤害给攻击者
      */
     modifyDamageReceived: (ctx) => {
-        const { tokenDef, amount } = ctx;
+        const { tokenDef, amount, pendingDamage } = ctx;
         const effect = tokenDef.activeUse?.effect;
-        // value 通常为负数（如 -1），amount 为消耗数量
-        const modifier = (effect?.value ?? -1) * amount;
+        const rawValue = effect?.value ?? -1;
+
+        // 太极等双时机 token：在 beforeDamageDealt 时反转 modifier（减伤值变加伤值）
+        const isOffensiveUse = pendingDamage?.responseType === 'beforeDamageDealt';
+        const modifier = isOffensiveUse ? Math.abs(rawValue) * amount : rawValue * amount;
 
         // 神罚 (retribution)：value=0 且 tokenId 为 retribution → 反弹 2 点伤害
         const isRetribution = tokenDef.id === TOKEN_IDS.RETRIBUTION;

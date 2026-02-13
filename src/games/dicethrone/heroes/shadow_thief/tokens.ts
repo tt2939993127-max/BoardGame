@@ -51,6 +51,7 @@ export const SHADOW_THIEF_TOKENS: TokenDef[] = [
         passiveTrigger: {
             timing: 'onTurnStart',
             removable: true,
+            // value 仅为占位，实际伤害按 stacks 数量计算（见 flowHooks.ts）
             actions: [{ type: 'damage', target: 'self', value: 1 }],
         },
         frameId: 'poison',

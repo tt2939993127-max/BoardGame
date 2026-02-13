@@ -4,168 +4,164 @@ import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCa
 import type { RandomFn } from '../../../../engine/types';
 import { DAGGER_STRIKE_2, PICKPOCKET_2, KIDNEY_SHOT_2, SHADOW_ASSAULT, PIERCING_ATTACK, SHADOW_DEFENSE_2, FEARLESS_RIPOSTE_2, SHADOW_DANCE_2, STEAL_2, CORNUCOPIA_2 } from './abilities';
 
+/** 卡牌文本 i18n key 生成 */
+const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
 
 export const SHADOW_THIEF_CARDS: AbilityCard[] = [
-    // 1. Pickpocket II (迅捷突袭 II)
+    // 1. 抢夺 II
     {
         id: 'upgrade-pickpocket-2',
-        name: 'Pickpocket II',
+        name: cardText('upgrade-pickpocket-2', 'name'),
         type: 'upgrade',
         cpCost: 2,
         timing: 'main',
-        description: 'Upgrade Pickpocket to Level 2',
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 1 }, // Map to correct index eventually
-        effects: [{ description: 'Upgrade Pickpocket', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'pickpocket', newAbilityDef: PICKPOCKET_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        description: cardText('upgrade-pickpocket-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 1 },
+        effects: [{ description: '升级抢夺至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'pickpocket', newAbilityDef: PICKPOCKET_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 2. Kidney Shot II (破隐一击 II)
+    // 2. 肾击 II
     {
         id: 'upgrade-kidney-shot-2',
-        name: 'Kidney Shot II',
+        name: cardText('upgrade-kidney-shot-2', 'name'),
         type: 'upgrade',
         cpCost: 2,
         timing: 'main',
-        description: 'Upgrade Kidney Shot to Level 2',
+        description: cardText('upgrade-kidney-shot-2', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 2 },
-        effects: [{ description: 'Upgrade Kidney Shot', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'kidney-shot', newAbilityDef: KIDNEY_SHOT_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '升级肾击至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'kidney-shot', newAbilityDef: KIDNEY_SHOT_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 3. Shadow Assault (暗影突袭) - Assumed Upgrade for Shadow Dance
+    // 3. 暗影突袭
     {
         id: 'upgrade-shadow-assault',
-        name: 'Shadow Assault',
+        name: cardText('upgrade-shadow-assault', 'name'),
         type: 'upgrade',
-        cpCost: 2, // From image
+        cpCost: 2,
         timing: 'main',
-        description: 'Upgrade Shadow Dance to Shadow Assault',
+        description: cardText('upgrade-shadow-assault', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 3 },
-        effects: [{ description: 'Replace Shadow Dance', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'shadow-dance', newAbilityDef: SHADOW_ASSAULT, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '将暗影之舞升级为暗影突袭', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'shadow-dance', newAbilityDef: SHADOW_ASSAULT, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 4. Piercing Attack (穿刺攻击) - Assumed Upgrade for Steal
+    // 4. 穿刺攻击
     {
         id: 'upgrade-piercing-attack',
-        name: 'Piercing Attack',
+        name: cardText('upgrade-piercing-attack', 'name'),
         type: 'upgrade',
-        cpCost: 2, // Guessing cost based on tier
+        cpCost: 2,
         timing: 'main',
-        description: 'Upgrade Steal to Piercing Attack',
+        description: cardText('upgrade-piercing-attack', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 4 },
-        effects: [{ description: 'Replace Steal', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'steal', newAbilityDef: PIERCING_ATTACK, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '将偷窃升级为穿刺攻击', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'steal', newAbilityDef: PIERCING_ATTACK, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 5. Sneaky! (鬼鬼祟祟!) - Instant Action (Keeping as is, card 11 is similar logic but different name?)
-    // Card 15: "遁入暗影!" (Vanish / Into the Shadows!)
+
+    // 5. 遁入暗影!
     {
-        id: 'action-into-the-shadows', // "遁入暗影!"
-        name: 'Into the Shadows!',
+        id: 'action-into-the-shadows',
+        name: cardText('action-into-the-shadows', 'name'),
         type: 'action',
-        cpCost: 4, // From Card Image 15: 4CP, Red Border (Instant Action)
+        cpCost: 4,
         timing: 'instant',
-        description: 'Gain Shadow Token',
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 14 }, // Card 15 -> Index 14 (0-based)
-        effects: [{ description: 'Gain Shadow', action: { type: 'grantToken', target: 'self', tokenId: 'shadow', value: 1 } }]
+        description: cardText('action-into-the-shadows', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 14 },
+        effects: [{ description: '获得1个暗影标记', action: { type: 'grantToken', target: 'self', tokenId: 'shadow', value: 1 }, timing: 'immediate' }]
     },
-    // 6. One with Shadows! (Keeping as is)
+    // 6. 与影同行!
     {
         id: 'action-one-with-shadows',
-        name: 'One with Shadows!',
+        name: cardText('action-one-with-shadows', 'name'),
         type: 'action',
         cpCost: 0,
         timing: 'main',
-        description: 'Roll 1 die. If Shadow: Gain Sneak Attack + 2 CP. Else Draw 1 Card.',
+        description: cardText('action-one-with-shadows', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 6 },
-        effects: [{ description: 'Roll Die', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-one-with-shadows' }, timing: 'immediate' }]
+        effects: [{ description: '投掷1骰结算', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-one-with-shadows' }, timing: 'immediate' }]
     },
-    // 7. Shadow Defense II (暗影守护 II) - Standard Defense Upgrade
+    // 7. 暗影守护 II
     {
         id: 'upgrade-shadow-defense-2',
-        name: 'Shadow Defense II', // "暗影守护 II"
+        name: cardText('upgrade-shadow-defense-2', 'name'),
         type: 'upgrade',
         cpCost: 2,
         timing: 'main',
-        description: 'Upgrade Shadow Defense to Level 2',
+        description: cardText('upgrade-shadow-defense-2', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 6 },
-        effects: [{ description: 'Upgrade Shadow Defense', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'shadow-defense', newAbilityDef: SHADOW_DEFENSE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '升级暗影守护至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'shadow-defense', newAbilityDef: SHADOW_DEFENSE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 8. Fearless Riposte II (后发制人 II) - Alternative Defense Upgrade
+    // 8. 后发制人 II
     {
         id: 'upgrade-fearless-riposte-2',
-        name: 'Fearless Riposte II', // "后发制人 II"
+        name: cardText('upgrade-fearless-riposte-2', 'name'),
         type: 'upgrade',
         cpCost: 4,
         timing: 'main',
-        description: 'Upgrade Defense to Fearless Riposte II',
+        description: cardText('upgrade-fearless-riposte-2', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 7 },
-        effects: [{ description: 'Upgrade Defense', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'fearless-riposte', newAbilityDef: FEARLESS_RIPOSTE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '升级恐惧反击至后发制人 II', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'fearless-riposte', newAbilityDef: FEARLESS_RIPOSTE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 8. Poison Tip! (Keeping as is)
+    // 9. 淬毒!
     {
         id: 'action-poison-tip',
-        name: 'Poison Tip!',
+        name: cardText('action-poison-tip', 'name'),
         type: 'action',
         cpCost: 2,
         timing: 'instant',
-        description: 'Inflict Poison',
+        description: cardText('action-poison-tip', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 8 },
-        effects: [{ description: 'Inflict Poison', action: { type: 'grantStatus', target: 'opponent', statusId: 'poison', value: 1 } }]
+        effects: [{ description: '对对手施加中毒', action: { type: 'grantStatus', target: 'opponent', statusId: 'poison', value: 1 }, timing: 'immediate' }]
     },
-    // 9. Card Trick! (Keeping as is)
+    // 10. 卡牌戏法!
     {
         id: 'action-card-trick',
-        name: 'Card Trick!',
+        name: cardText('action-card-trick', 'name'),
         type: 'action',
         cpCost: 2,
         timing: 'main',
-        description: 'Opponent Discards 1. Draw 1 (2 if Sneak).',
+        description: cardText('action-card-trick', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 9 },
-        effects: [{ description: 'Resolve Card Trick', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-card-trick' }, timing: 'immediate' }]
+        effects: [{ description: '卡牌戏法结算', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-card-trick' }, timing: 'immediate' }]
     },
-    // 10. Dagger Strike II (Keeping as is)
+    // 11. 匕首打击 II
     {
         id: 'upgrade-dagger-strike-2',
-        name: 'Dagger Strike II',
+        name: cardText('upgrade-dagger-strike-2', 'name'),
         type: 'upgrade',
         cpCost: 2,
         timing: 'main',
-        description: 'Upgrade Dagger Strike to Level 2',
+        description: cardText('upgrade-dagger-strike-2', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 10 },
-        effects: [{ description: 'Upgrade Dagger Strike', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'dagger-strike', newAbilityDef: DAGGER_STRIKE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '升级匕首打击至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'dagger-strike', newAbilityDef: DAGGER_STRIKE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 11. Shadow Dance II (暗影之舞 II) - Card 11
+    // 12. 暗影之舞 II
     {
         id: 'upgrade-shadow-dance-2',
-        name: 'Shadow Dance II',
+        name: cardText('upgrade-shadow-dance-2', 'name'),
         type: 'upgrade',
-        cpCost: 1, // Card 11
+        cpCost: 1,
         timing: 'main',
-        description: 'Upgrade Shadow Dance to Level 2',
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 10 }, // Index? Need to map correctly. 11? 
-        // Card 1-10 were covered. Card 11 is next.
-        // Let's assume sequential indexing from the atlas.
-        // Card 11 -> Index 10? No, user uploaded first 10, now 11-15.
-        // indices should follow.
-        // Just using partial indices for now, but really `index` should match the sprite sheet.
-        // Assuming 10-14 for these 5 cards if strictly sequential.
-        effects: [{ description: 'Upgrade Shadow Dance', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'shadow-dance', newAbilityDef: SHADOW_DANCE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        description: cardText('upgrade-shadow-dance-2', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 10 },
+        effects: [{ description: '升级暗影之舞至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'shadow-dance', newAbilityDef: SHADOW_DANCE_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 12. Steal II (扒窃 II) - Card 12
+    // 13. 偷窃 II
     {
         id: 'upgrade-steal-2',
-        name: 'Steal II', // Matches '扒窃' which is usually 'Pickpocket' but ability uses Bags -> 'steal'
+        name: cardText('upgrade-steal-2', 'name'),
         type: 'upgrade',
-        cpCost: 1, // Card 12
+        cpCost: 1,
         timing: 'main',
-        description: 'Upgrade Steal to Level 2',
+        description: cardText('upgrade-steal-2', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 11 },
-        effects: [{ description: 'Upgrade Steal', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'steal', newAbilityDef: STEAL_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '升级偷窃至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'steal', newAbilityDef: STEAL_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
-    // 13. Cornucopia II (卡牌大师 II) - Card 13
+    // 14. 聚宝盆 II
     {
         id: 'upgrade-cornucopia-2',
-        name: 'Cornucopia II', // Matches '卡牌大师' triggers on Cards -> 'cornucopia'
+        name: cardText('upgrade-cornucopia-2', 'name'),
         type: 'upgrade',
-        cpCost: 2, // Card 13
+        cpCost: 2,
         timing: 'main',
-        description: 'Upgrade Cornucopia to Level 2',
+        description: cardText('upgrade-cornucopia-2', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 12 },
-        effects: [{ description: 'Upgrade Cornucopia', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'cornucopia', newAbilityDef: CORNUCOPIA_2, newAbilityLevel: 2 }, timing: 'immediate' }]
+        effects: [{ description: '升级聚宝盆至 II 级', action: { type: 'replaceAbility', target: 'self', targetAbilityId: 'cornucopia', newAbilityDef: CORNUCOPIA_2, newAbilityLevel: 2 }, timing: 'immediate' }]
     },
 
     // 注入通用卡牌

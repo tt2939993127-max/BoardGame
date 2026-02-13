@@ -443,7 +443,7 @@ describe('远古之物派系能力', () => {
     });
 
     describe('elder_thing_unfathomable_goals（深不可测的目的）', () => {
-        it('有疯狂卡的对手消灭最弱随从', () => {
+        it('有疯狂卡的对手多个随从时创建 Prompt', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -464,9 +464,35 @@ describe('远古之物派系能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
+            // 多个随从 → 创建 Prompt 让对手选择消灭哪个
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
+            expect(interactions[0]?.data?.sourceId).toBe('elder_thing_unfathomable_goals');
+        });
+
+        it('有疯狂卡的对手只有一个随从时直接消灭', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'elder_thing_unfathomable_goals', 'action', '0')],
+                    }),
+                    '1': makePlayer('1', {
+                        hand: [makeCard('h1', MADNESS_CARD_DEF_ID, 'action', '1')],
+                    }),
+                },
+                bases: [{
+                    defId: 'b1',
+                    minions: [
+                        makeMinion('m1', 'test', '1', 2),
+                    ],
+                    ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayAction(state, '0', 'a1');
             const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
             expect(destroyEvents.length).toBe(1);
-            expect((destroyEvents[0] as any).payload.minionUid).toBe('m1'); // 最弱
+            expect((destroyEvents[0] as any).payload.minionUid).toBe('m1');
         });
 
         it('无疯狂卡的对手不受影响', () => {

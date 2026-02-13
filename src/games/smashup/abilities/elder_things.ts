@@ -233,7 +233,7 @@ function elderThingBeginTheSummoning(ctx: AbilityContext): AbilityResult {
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-/** 深不收回可测的目�?onPlay：对手展示手牌，有疯狂卡的必须消灭一个自己的随从 */
+/** 深不可测的目的 onPlay：对手展示手牌，有疯狂卡的必须消灭一个自己的随从 */
 function elderThingUnfathomableGoals(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
 
@@ -243,7 +243,7 @@ function elderThingUnfathomableGoals(ctx: AbilityContext): AbilityResult {
         const hasMadness = opponent.hand.some(c => c.defId === MADNESS_CARD_DEF_ID);
         if (!hasMadness) continue;
 
-        // 收集该对手的所有随�?
+        // 收集该对手的所有随从
         const opMinions: { uid: string; defId: string; baseIndex: number; owner: string; power: number }[] = [];
         for (let i = 0; i < ctx.state.bases.length; i++) {
             for (const m of ctx.state.bases[i].minions) {
@@ -253,16 +253,28 @@ function elderThingUnfathomableGoals(ctx: AbilityContext): AbilityResult {
         }
         if (opMinions.length === 0) continue;
         if (opMinions.length === 1) {
+            // 只有一个随从，直接消灭
             events.push(destroyMinion(opMinions[0].uid, opMinions[0].defId, opMinions[0].baseIndex, opMinions[0].owner, 'elder_thing_unfathomable_goals', ctx.now));
             continue;
         }
-        // 多个随从：对手应选择（MVP：自动选最弱的，因�?Prompt 目前只支持当前玩家选择�?
-        opMinions.sort((a, b) => a.power - b.power);
-        events.push(destroyMinion(opMinions[0].uid, opMinions[0].defId, opMinions[0].baseIndex, opMinions[0].owner, 'elder_thing_unfathomable_goals', ctx.now));
+        // 多个随从：让对手选择消灭哪个
+        const options = opMinions.map(m => {
+            const def = getCardDef(m.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? m.defId;
+            const baseDef = getBaseDef(ctx.state.bases[m.baseIndex].defId);
+            const baseName = baseDef?.name ?? `基地 ${m.baseIndex + 1}`;
+            return { uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: `${name} (力量 ${m.power}) @ ${baseName}` };
+        });
+        const interaction = createSimpleChoice(
+            `elder_thing_unfathomable_goals_${pid}_${ctx.now}`, pid,
+            '你手中有疯狂卡，必须消灭一个自己的随从', buildMinionTargetOptions(options), 'elder_thing_unfathomable_goals',
+        );
+        return { events, matchState: queueInteraction(ctx.matchState, interaction) };
     }
 
     return { events };
 }
+
 
 // ============================================================================
 // 远古之物 (Elder Thing) - onPlay + 保护
@@ -416,6 +428,16 @@ export function registerElderThingInteractionHandlers(): void {
         }
 
         return { state, events };
+    });
+
+    // 深不可测的目的：对手选择消灭自己的随从
+    registerInteractionHandler('elder_thing_unfathomable_goals', (state, _playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const base = state.core.bases[baseIndex];
+        if (!base) return { state, events: [] };
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return { state, events: [] };
+        return { state, events: [destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'elder_thing_unfathomable_goals', timestamp)] };
     });
 }
 

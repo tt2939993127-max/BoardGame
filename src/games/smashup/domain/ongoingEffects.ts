@@ -300,6 +300,14 @@ export function isOperationRestricted(
                     return true;
                 }
             }
+            // 条件限制：minionPlayLimitPerTurn（每回合每位玩家在此基地打出随从上限）
+            if (r.condition.minionPlayLimitPerTurn !== undefined && restrictionType === 'play_minion') {
+                const player = state.players[playerId];
+                const playedAtBase = player?.minionsPlayedPerBase?.[baseIndex] ?? 0;
+                if (playedAtBase >= r.condition.minionPlayLimitPerTurn) {
+                    return true;
+                }
+            }
         }
     }
 

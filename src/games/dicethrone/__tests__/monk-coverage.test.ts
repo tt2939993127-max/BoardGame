@@ -21,7 +21,7 @@ describe('Monk 技能完整覆盖测试', () => {
     describe('超脱 (transcendence) - Ultimate', () => {
         it('命中后完整效果链：10伤害+击倒+闪避+净化+太极上限+1并补满', () => {
             // 5个莲花: [6,6,6,6,6]
-            const diceValues = [6, 6, 6, 6, 6, 1, 1, 1, 1];
+            const diceValues = [6, 6, 6, 6, 6];
             const random = createQueuedRandom(diceValues);
             
             const runner = new GameTestRunner({
@@ -41,10 +41,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'transcendence' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
+                    // ultimate 技能不可防御，ADVANCE_PHASE 直接从 offensiveRoll -> main2
+                    cmd('ADVANCE_PHASE', '0'),
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -73,8 +71,7 @@ describe('Monk 技能完整覆盖测试', () => {
     describe('禅忘 (zen-forget) - 二选一分支', () => {
         it('触发禅忘获得5太极和闪避Token', () => {
             // 3个太极: [4,4,4,1,1]
-            // 防御骰: [1,1,1,1] -> 4拳
-            const diceValues = [4, 4, 4, 1, 1, 1, 1, 1, 1];
+            const diceValues = [4, 4, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
             
             const runner = new GameTestRunner({
@@ -94,11 +91,9 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'zen-forget' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 触发 preDefense choice
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll exit -> preDefense choice -> halt
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }), // 选择闪避
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
+                    // 无伤害技能，autoContinue 后跳过防御直接到 main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -118,8 +113,7 @@ describe('Monk 技能完整覆盖测试', () => {
 
         it('触发禅忘获得5太极和净化Token', () => {
             // 3个太极: [4,4,4,1,1]
-            // 防御骰: [1,1,1,1] -> 4拳
-            const diceValues = [4, 4, 4, 1, 1, 1, 1, 1, 1];
+            const diceValues = [4, 4, 4, 1, 1];
             const random = createQueuedRandom(diceValues);
             
             const runner = new GameTestRunner({
@@ -139,11 +133,9 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'zen-forget' }),
-                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll exit -> preDefense choice -> halt
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }), // 选择净化
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'),
+                    // 无伤害技能，autoContinue 后跳过防御直接到 main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -773,8 +765,6 @@ describe('Monk 技能完整覆盖测试', () => {
             const diceValues = [
                 // 玩家0进攻: 5莲花
                 6, 6, 6, 6, 6,
-                // 玩家1防御: 4太极（清修获得4太极，0反伤）
-                4, 4, 4, 4,
                 // 玩家1进攻: 无效骰面
                 2, 2, 2, 2, 2,
             ];
@@ -799,11 +789,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'transcendence' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }), // 清修防御
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2（结算攻击）
+                    // ultimate 技能不可防御，直接从 offensiveRoll -> main2
+                    cmd('ADVANCE_PHASE', '0'),
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep（切换到玩家1）
                 ],
@@ -813,7 +800,7 @@ describe('Monk 技能完整覆盖测试', () => {
                     turnNumber: 2,
                     players: {
                         '0': { 
-                            hp: 50, // 清修4太极不造成反伤
+                            hp: 50,
                             tokens: {
                                 [TOKEN_IDS.TAIJI]: 6, // 超脱命中后太极上限+1并补满
                                 [TOKEN_IDS.EVASIVE]: 1,
@@ -822,9 +809,6 @@ describe('Monk 技能完整覆盖测试', () => {
                         },
                         '1': { 
                             hp: 40, // 50 - 10 = 40
-                            tokens: {
-                                [TOKEN_IDS.TAIJI]: 4, // 清修获得4太极
-                            },
                             statusEffects: {
                                 [STATUS_IDS.KNOCKDOWN]: 1, // 超脱造成击倒
                             },
@@ -839,7 +823,7 @@ describe('Monk 技能完整覆盖测试', () => {
         it('两回合对局：验证第二回合开始（含Token响应流程）', () => {
             /**
              * 测试设计：验证两个完整回合对
-             * - 回合1: 玩家0超脱攻击，玩家1清修防御
+             * - 回合1: 玩家0超脱攻击（ultimate，跳过防御）
              * - 回合2: 玩家1跳过（击倒），切换到玩家0
              * - 回合3: 玩家0再次超脱攻击
              * 
@@ -850,12 +834,10 @@ describe('Monk 技能完整覆盖测试', () => {
              */
             
             const diceValues = [
-                // 回合1: 玩家0进攻
+                // 回合1: 玩家0进攻（ultimate 不进入防御）
                 6, 6, 6, 6, 6, // 5莲花
-                4, 4, 4, 4,    // 玩家1防御: 4太极
-                // 回合3: 玩家0进攻
+                // 回合3: 玩家0进攻（ultimate 不进入防御）
                 6, 6, 6, 6, 6, // 5莲花
-                4, 4, 4, 4,    // 玩家1防御: 4太极
             ];
             
             const random = createQueuedRandom(diceValues);
@@ -873,16 +855,12 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '两回合对局',
                 commands: [
-                    // === 回合1: 玩家0攻击 ===
+                    // === 回合1: 玩家0攻击（ultimate 跳过防御） ===
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'transcendence' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2（跳过防御）
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (切换到玩家1)
                     
@@ -896,15 +874,9 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'transcendence' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> 触发攻击结算
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 直接结算（ultimate 跳过防御）
                     // 玩家0有太极，触发 beforeDamageDealt 响应窗口
                     cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过加伤响应
-                    // 玩家1有太极，触发 beforeDamageReceived 响应窗口
-                    cmd('SKIP_TOKEN_RESPONSE', '1'), // 跳过减伤响应
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -921,25 +893,20 @@ describe('Monk 技能完整覆盖测试', () => {
         it('三回合对局：验证回合3-4流程（含Token响应）', () => {
             /**
              * 测试设计：验证三个完整回合对
-             * - 回合1: 玩家0超脱攻击，玩家1清修防御
+             * - 回合1: 玩家0超脱攻击（ultimate，跳过防御）
              * - 回合2: 玩家1跳过（击倒）
              * - 回合3: 玩家0再次超脱攻击（含Token响应）
              * - 回合4: 玩家1跳过（击倒）
              * - 回合5: 玩家0再次超脱攻击（含Token响应）
-             * 
-             * 这个测试用于验证多回合流程是否正确
              */
             
             const diceValues = [
-                // 回合1: 玩家0进攻
+                // 回合1: 玩家0进攻（ultimate 不进入防御）
                 6, 6, 6, 6, 6, // 5莲花
-                4, 4, 4, 4,    // 玩家1防御: 4太极
                 // 回合3: 玩家0进攻
                 6, 6, 6, 6, 6, // 5莲花
-                4, 4, 4, 4,    // 玩家1防御: 4太极
                 // 回合5: 玩家0进攻
                 6, 6, 6, 6, 6, // 5莲花
-                4, 4, 4, 4,    // 玩家1防御: 4太极
             ];
             
             const random = createQueuedRandom(diceValues);
@@ -957,16 +924,12 @@ describe('Monk 技能完整覆盖测试', () => {
             const result = runner.run({
                 name: '三回合对局',
                 commands: [
-                    // === 回合1: 玩家0攻击（无Token响应） ===
+                    // === 回合1: 玩家0攻击（ultimate 跳过防御，无Token响应） ===
                     cmd('ADVANCE_PHASE', '0'), // main1 -> offensiveRoll
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'transcendence' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> main2
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> main2（跳过防御）
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (切换到玩家1)
                     
@@ -980,13 +943,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'transcendence' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> 触发攻击结算
-                    cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过加伤响应
-                    cmd('SKIP_TOKEN_RESPONSE', '1'), // 跳过减伤响应
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 直接结算（ultimate 跳过防御）
+                    cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过加伤响应（玩家0有太极）
                     cmd('ADVANCE_PHASE', '0'), // main2 -> discard
                     cmd('ADVANCE_PHASE', '0'), // discard -> upkeep (切换到玩家1)
                     
@@ -1000,13 +958,8 @@ describe('Monk 技能完整覆盖测试', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'transcendence' }),
-                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> defensiveRoll
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'), // defensiveRoll -> 触发攻击结算
+                    cmd('ADVANCE_PHASE', '0'), // offensiveRoll -> 直接结算（ultimate 跳过防御）
                     cmd('SKIP_TOKEN_RESPONSE', '0'), // 跳过加伤响应
-                    cmd('SKIP_TOKEN_RESPONSE', '1'), // 跳过减伤响应
                 ],
                 expect: {
                     turnPhase: 'main2',

@@ -30,6 +30,7 @@
     "discard_desc": "Discard {{count}} cards to continue.",
     "throw_away": "Throw Away",
     "invalid_play": "Cannot play cards now",
+    "select_minion_hint": "Select a minion to attach this card to",
     "your_turn": "Your Turn!",
     "me_first_your_turn": "Your response — play a Special or pass",
     "me_first_waiting": "Waiting for P{{player}} to respond...",

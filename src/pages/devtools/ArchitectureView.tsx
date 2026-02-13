@@ -5,7 +5,7 @@
  * 子视图: 管线 / 系统 / 测试双轨 / 用户故事
  * 路由: /dev/arch
  */
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   type ArchNode,
   NODES, EDGES, LAYER_BANDS, NODE_MAP,
@@ -13,11 +13,114 @@ import {
   TRUNK_EDGE_IDS, STORY_EDGE_IDS, storyEdgeColor,
   PRIMITIVE_ITEMS, PIPELINE_STEPS, SYSTEM_ITEMS,
   TEST_FLOW_STEPS, E2E_TEST_STEPS, INTEGRITY_TEST_STEPS,
-  BEHAVIOR_AUDIT_STEPS, INTERACTION_AUDIT_STEPS,
+  INTERACTION_AUDIT_STEPS,
   USER_STORY_STEPS,
   C4_CONTEXT, C4_CONTEXT_LINKS, CONTAINER_LINKS, LAYER_SUMMARIES,
   OVERVIEW_LAYERS, OVERVIEW_FLOW, OVERVIEW_CROSS_LINKS,
 } from './arch/archData';
+
+// ============================================================================
+// 缩放/平移容器 — 滚轮缩放 + 拖拽平移 + 控制按钮
+// ============================================================================
+
+interface ZoomableSvgProps {
+  viewBox: string;
+  maxHeight?: string;
+  className?: string;
+  children: React.ReactNode;
+}
+
+function ZoomableSvg({ viewBox, maxHeight = 'calc(100vh - 120px)', className = 'w-full', children }: ZoomableSvgProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
+
+  // 非 passive 的 wheel 监听（React 合成事件默认 passive，无法 preventDefault）
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setScale(s => Math.min(5, Math.max(0.3, s * delta)));
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // 中键或 Ctrl+左键 开始拖拽
+    if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+      e.preventDefault();
+      setIsDragging(true);
+      dragStart.current = { x: e.clientX, y: e.clientY, tx: translate.x, ty: translate.y };
+    }
+  }, [translate]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    setTranslate({ x: dragStart.current.tx + dx, y: dragStart.current.ty + dy });
+  }, [isDragging]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // 全局 mouseup 防止拖出容器后卡住
+  useEffect(() => {
+    if (!isDragging) return;
+    const up = () => setIsDragging(false);
+    window.addEventListener('mouseup', up);
+    return () => window.removeEventListener('mouseup', up);
+  }, [isDragging]);
+
+  const resetZoom = useCallback(() => {
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', overflow: 'hidden', maxHeight, cursor: isDragging ? 'grabbing' : undefined }}>
+      {/* 缩放控制按钮 */}
+      <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10, display: 'flex', gap: 4 }}>
+        <button
+          onClick={() => setScale(s => Math.min(5, s * 1.2))}
+          style={{ width: 28, height: 28, borderRadius: 6, background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title="放大"
+        >+</button>
+        <button
+          onClick={() => setScale(s => Math.max(0.3, s * 0.8))}
+          style={{ width: 28, height: 28, borderRadius: 6, background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title="缩小"
+        >−</button>
+        <button
+          onClick={resetZoom}
+          style={{ height: 28, borderRadius: 6, background: '#21262d', border: '1px solid #30363d', color: '#8b949e', fontSize: 10, cursor: 'pointer', padding: '0 8px' }}
+          title="重置缩放"
+        >{Math.round(scale * 100)}%</button>
+      </div>
+      <svg
+        viewBox={viewBox}
+        className={className}
+        style={{
+          maxHeight,
+          transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+          transformOrigin: 'center top',
+          transition: isDragging ? 'none' : 'transform 0.15s ease-out',
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+      >
+        {children}
+      </svg>
+    </div>
+  );
+}
 
 // ============================================================================
 // 视图模式
@@ -34,7 +137,6 @@ const ArchitectureView: React.FC = () => {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<ArchNode | null>(null);
   const [detailLayer, setDetailLayer] = useState<string>('core');
-  const svgRef = useRef<SVGSVGElement>(null);
 
   // 选中节点的上下游
   const selectedDeps = useMemo(() => {
@@ -93,7 +195,7 @@ const ArchitectureView: React.FC = () => {
               onClick={() => setViewMode('story')}>📖 用户故事</button>
           </div>
         </div>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`} maxHeight="calc(100vh - 80px)">
           <style>{`
             @keyframes archFadeIn { from { opacity: 0 } }
             @keyframes flowDot { 0% { offset-distance: 0% } 100% { offset-distance: 100% } }
@@ -171,10 +273,20 @@ const ArchitectureView: React.FC = () => {
                 {/* 标签 */}
                 {layer.tags.map((tag, ti) => {
                   const tagX = cardX + 44 + ti * (tag.length * 8 + 20);
+                  // 引擎层标签可直接钻取到子视图
+                  const tagDrillMap: Record<string, ViewMode> = {
+                    '8步管线': 'sub-pipeline',
+                    '11个系统插件': 'sub-systems',
+                    '4轨自动化测试': 'sub-testing',
+                  };
+                  const drillTarget = tagDrillMap[tag];
                   return (
-                    <g key={ti}>
+                    <g key={ti}
+                      style={drillTarget ? { cursor: 'pointer' } : undefined}
+                      onClick={drillTarget ? (e) => { e.stopPropagation(); setViewMode(drillTarget); } : undefined}>
                       <rect x={tagX} y={y + 74} width={tag.length * 8 + 12} height={18} rx={4}
-                        fill={layer.color + '12'} stroke={layer.color + '30'} strokeWidth={0.8} />
+                        fill={drillTarget ? layer.color + '20' : layer.color + '12'}
+                        stroke={drillTarget ? layer.color + '60' : layer.color + '30'} strokeWidth={0.8} />
                       <text x={tagX + 6} y={y + 86} fontSize={8} fill={layer.color}>{tag}</text>
                     </g>
                   );
@@ -214,7 +326,7 @@ const ArchitectureView: React.FC = () => {
               实线 = 逐层依赖（操作从上往下流过每一层） · 虚线 = 跨层连接（事件驱动/UI组件注入）
             </text>
           </g>
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }
@@ -232,7 +344,7 @@ const ArchitectureView: React.FC = () => {
         <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
         <h2 className="text-lg font-bold text-white mb-2">⚡ 回合执行引擎 — 8 步管线</h2>
         <p className="text-xs text-slate-500 mb-2">点击任意位置返回</p>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`}>
           <style>{`
             @keyframes archFadeIn { from { opacity: 0 } }
             @keyframes archDraw { to { stroke-dashoffset: 0 } }
@@ -289,7 +401,7 @@ const ArchitectureView: React.FC = () => {
               </g>
             );
           })()}
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }
@@ -321,7 +433,7 @@ const ArchitectureView: React.FC = () => {
         <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
         <h2 className="text-lg font-bold text-white mb-2">🔌 系统插件 — 11 个系统</h2>
         <p className="text-xs text-slate-500 mb-2">点击任意位置返回</p>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 100px)' }}>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`} maxHeight="calc(100vh - 100px)">
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
           <text x={padX} y={padY - 8} fontSize={12} fontWeight={700} fill="#3fb950">默认启用（8 个）— createBaseSystems() 自动包含</text>
           {defaults.map((item, i) => renderRow(item, i, padY + i * (rowH + 4), false))}
@@ -348,32 +460,30 @@ const ArchitectureView: React.FC = () => {
               </g>
             );
           })()}
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }
 
   // ========================================================================
-  // L3: 测试框架 — 五轨并列
+  // L3: 测试框架 — 四轨并列
   // ========================================================================
   if (viewMode === 'sub-testing') {
     const vitestRec = TEST_FLOW_STEPS.filter(s => s.phase === 'record');
     const vitestVer = TEST_FLOW_STEPS.filter(s => s.phase === 'verify');
     const e2eSteps = E2E_TEST_STEPS;
     const integritySteps = INTEGRITY_TEST_STEPS;
-    const behaviorSteps = BEHAVIOR_AUDIT_STEPS;
     const interactionSteps = INTERACTION_AUDIT_STEPS;
-    const stepH = 60, stepW = 220, gap = 10;
+    const stepH = 60, stepW = 260, gap = 10;
     const trackGap = 14;
     const allVitest = [...vitestRec, ...vitestVer];
-    const maxSteps = Math.max(allVitest.length, integritySteps.length, behaviorSteps.length, interactionSteps.length, e2eSteps.length);
+    const maxSteps = Math.max(allVitest.length, integritySteps.length, interactionSteps.length, e2eSteps.length);
     const sx = 16, sy = 90;
     const trackW = stepW + 12;
-    const vw = sx + trackW * 5 + trackGap * 4 + 16;
+    const vw = sx + trackW * 4 + trackGap * 3 + 16;
     const vh = sy + maxSteps * (stepH + gap) + 140;
     const vitestColor = '#3fb950';
     const integrityColor = '#bc8cff';
-    const behaviorColor = '#f0883e';
     const interactionColor = '#f778ba';
     const e2eColor = '#58a6ff';
 
@@ -384,8 +494,8 @@ const ArchitectureView: React.FC = () => {
           fill="#161b22" stroke={color} strokeWidth={1.2} />
         <text x={x + 10} y={y + 17} fontSize={13} fill={color}>{emoji}</text>
         <text x={x + 30} y={y + 17} fontSize={9.5} fontWeight={700} fill={color}>{circled} {label}</text>
-        <text x={x + 10} y={y + 33} fontSize={8} fill="#8b949e">{desc.length > 32 ? desc.slice(0, 32) + '…' : desc}</text>
-        {example && <text x={x + 10} y={y + 47} fontSize={7} fill="#e3b341">{example.length > 38 ? example.slice(0, 38) + '…' : example}</text>}
+        <text x={x + 10} y={y + 33} fontSize={8} fill="#8b949e">{desc.length > 36 ? desc.slice(0, 36) + '…' : desc}</text>
+        {example && <text x={x + 10} y={y + 47} fontSize={7} fill="#e3b341">{example.length > 42 ? example.slice(0, 42) + '…' : example}</text>}
         {i < total - 1 && (
           <line x1={x + stepW / 2} y1={y + stepH} x2={x + stepW / 2} y2={y + stepH + gap}
             stroke={color} strokeWidth={2}
@@ -410,20 +520,19 @@ const ArchitectureView: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
         <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
-        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 — 五轨并列</h2>
-        <p className="text-xs text-slate-500 mb-2">命令驱动 · 实体完整性 · 行为审计 · 交互完整性 · E2E截图 · 点击任意位置返回</p>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 — 四轨并列</h2>
+        <p className="text-xs text-slate-500 mb-2">命令驱动（最优先） · 实体完整性 · 交互完整性 · E2E截图 · 点击任意位置返回</p>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`}>
           <style>{`
             @keyframes archFadeIn { from { opacity: 0 } }
             @keyframes archDraw { to { stroke-dashoffset: 0 } }
           `}</style>
 
-          {/* 五列标题 */}
-          {renderTrackTitle(trackX(0), '🧪 命令驱动测试', vitestColor, 0)}
+          {/* 四列标题 */}
+          {renderTrackTitle(trackX(0), '🧪 命令驱动测试（首选）', vitestColor, 0)}
           {renderTrackTitle(trackX(1), '🔗 实体链完整性', integrityColor, 0.05)}
-          {renderTrackTitle(trackX(2), '🔍 行为审计', behaviorColor, 0.1)}
-          {renderTrackTitle(trackX(3), '🎯 交互完整性', interactionColor, 0.15)}
-          {renderTrackTitle(trackX(4), '🌐 E2E 截图', e2eColor, 0.2)}
+          {renderTrackTitle(trackX(2), '🎯 交互完整性', interactionColor, 0.1)}
+          {renderTrackTitle(trackX(3), '🌐 E2E 截图', e2eColor, 0.15)}
 
           {/* 第1列: Vitest 步骤 */}
           {allVitest.map((step, i) => {
@@ -453,25 +562,18 @@ const ArchitectureView: React.FC = () => {
               i, trackX(1), y, integrityColor, circledNums[i] ?? '', 0.05 + i * 0.08, integritySteps.length);
           })}
 
-          {/* 第3列: 行为审计 */}
-          {behaviorSteps.map((step, i) => {
-            const y = sy + i * (stepH + gap);
-            return renderStepBox(step.emoji, step.label, step.desc, step.example,
-              i, trackX(2), y, behaviorColor, circledNums[i] ?? '', 0.1 + i * 0.08, behaviorSteps.length);
-          })}
-
-          {/* 第4列: 交互完整性 */}
+          {/* 第3列: 交互完整性 */}
           {interactionSteps.map((step, i) => {
             const y = sy + i * (stepH + gap);
             return renderStepBox(step.emoji, step.label, step.desc, step.example,
-              i, trackX(3), y, interactionColor, circledNums[i] ?? '', 0.15 + i * 0.08, interactionSteps.length);
+              i, trackX(2), y, interactionColor, circledNums[i] ?? '', 0.1 + i * 0.08, interactionSteps.length);
           })}
 
-          {/* 第5列: E2E 步骤 */}
+          {/* 第4列: E2E 步骤 */}
           {e2eSteps.map((step, i) => {
             const y = sy + i * (stepH + gap);
             return renderStepBox(step.emoji, step.label, step.desc, step.example,
-              i, trackX(4), y, e2eColor, circledNums[i] ?? '', 0.2 + i * 0.08, e2eSteps.length);
+              i, trackX(3), y, e2eColor, circledNums[i] ?? '', 0.15 + i * 0.08, e2eSteps.length);
           })}
 
           {/* 底部总结 */}
@@ -479,27 +581,24 @@ const ArchitectureView: React.FC = () => {
             const bottomY = sy + maxSteps * (stepH + gap) + 10;
             return (
               <g style={{ animation: 'archFadeIn 0.5s ease 0.8s both' }}>
-                <rect x={sx - 4} y={bottomY} width={vw - sx * 2 + 8} height={104} rx={8}
+                <rect x={sx - 4} y={bottomY} width={vw - sx * 2 + 8} height={86} rx={8}
                   fill="#161b22" stroke="#30363d" strokeWidth={1} />
                 <text x={sx + 10} y={bottomY + 18} fontSize={9} fill={vitestColor} fontWeight={600}>
-                  🧪 命令驱动: 纯函数引擎 + 确定性管线 → 命令回放验证规则正确性
+                  🧪 命令驱动（最优先）: 纯函数引擎 + 确定性管线 → 命令回放验证规则正确性
                 </text>
                 <text x={sx + 10} y={bottomY + 36} fontSize={9} fill={integrityColor} fontWeight={600}>
                   🔗 实体完整性: 注册表 + 引用链 + 触发路径 + 效果契约 → 确保数据定义无断链
                 </text>
-                <text x={sx + 10} y={bottomY + 54} fontSize={9} fill={behaviorColor} fontWeight={600}>
-                  🔍 行为审计: 描述关键词→代码行为 + ongoing/标签/自毁/条件 → 确保描述与实现一致
-                </text>
-                <text x={sx + 10} y={bottomY + 72} fontSize={9} fill={interactionColor} fontWeight={600}>
+                <text x={sx + 10} y={bottomY + 54} fontSize={9} fill={interactionColor} fontWeight={600}>
                   🎯 交互完整性: Mode A(UI状态机payload) + Mode B(Handler注册链) → 确保交互链无断裂
                 </text>
-                <text x={sx + 10} y={bottomY + 90} fontSize={9} fill={e2eColor} fontWeight={600}>
+                <text x={sx + 10} y={bottomY + 72} fontSize={9} fill={e2eColor} fontWeight={600}>
                   🌐 E2E截图: 无头浏览器 + 像素对比 → 防止 UI 视觉回归
                 </text>
               </g>
             );
           })()}
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }
@@ -522,7 +621,7 @@ const ArchitectureView: React.FC = () => {
           <h1 className="text-lg font-bold text-white">📖 用户故事 — 创建新游戏的 6 个阶段</h1>
         </div>
         <p className="text-xs text-slate-500 mb-2">基于 create-new-game 技能，数据录入合并为一个阶段 · 每阶段独立可验证 · 点击任意位置返回</p>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`}>
           <style>{`
             @keyframes archFadeIn { from { opacity:0 } }
             @keyframes archDraw { to { stroke-dashoffset: 0 } }
@@ -607,7 +706,7 @@ const ArchitectureView: React.FC = () => {
               </g>
             );
           })()}
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }
@@ -640,7 +739,7 @@ const ArchitectureView: React.FC = () => {
             onClick={e => { e.stopPropagation(); setViewMode('c4-container'); }}>📦 L2 容器视图 →</button>
         </div>
         <p className="text-xs text-slate-500 mb-2">最高层视角：系统边界 · 外部依赖 · 用户交互 · 点击任意位置返回</p>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`}>
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
           <defs>
             <marker id="c4-arr" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
@@ -713,7 +812,7 @@ const ArchitectureView: React.FC = () => {
               C4 Level 1 · System Context · 实线=核心系统 · 虚线=外部依赖
             </text>
           </g>
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }
@@ -750,7 +849,7 @@ const ArchitectureView: React.FC = () => {
             onClick={e => { e.stopPropagation(); setViewMode('c4-context'); }}>← L1 全景视图</button>
         </div>
         <p className="text-xs text-slate-500 mb-2">容器级视角：5 个核心层 · 层间依赖 · 数据/事件流向 · 点击任意位置返回</p>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`}>
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
           <defs>
             <marker id="c4c-arr" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
@@ -827,7 +926,7 @@ const ArchitectureView: React.FC = () => {
               ))}
             </g>
           </g>
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }
@@ -880,7 +979,7 @@ const ArchitectureView: React.FC = () => {
           <h1 className="text-lg font-bold text-white">{layerInfo?.emoji} {layerInfo?.label} — 组件详情</h1>
           <span className="text-xs text-slate-500">{layerNodes.length} 个组件 · 点击查看接口和案例 · 点击空白返回</span>
         </div>
-        <svg viewBox={`0 0 ${vw} ${vh}`} className="w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+        <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`} maxHeight="calc(100vh - 80px)">
           <style>{`@keyframes archFadeIn { from { opacity: 0 } }`}</style>
 
           {/* 层背景 */}
@@ -1055,7 +1154,7 @@ const ArchitectureView: React.FC = () => {
               </g>
             );
           })()}
-        </svg>
+        </ZoomableSvg>
       </div>
     );
   }

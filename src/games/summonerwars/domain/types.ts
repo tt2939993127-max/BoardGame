@@ -91,6 +91,7 @@ export interface EventCard {
   isActive?: boolean;    // 是否为主动事件
   charges?: number;      // 充能计数（殉葬火堆等主动事件使用）
   targetUnitId?: string; // 目标单位 ID（催眠引诱等需要追踪目标的主动事件）
+  entanglementTargets?: [string, string]; // 交缠颂歌：两个目标单位 ID
   deckSymbols: string[];
   spriteIndex?: number;  // 精灵图索引
   spriteAtlas?: 'hero' | 'cards' | 'portal';
@@ -132,6 +133,7 @@ export interface BoardUnit {
   healingMode?: boolean; // 治疗模式（圣殿牧师：本次攻击转为治疗）
   wasAttackedThisTurn?: boolean; // 本回合是否已被攻击（庇护判定用）
   tempAbilities?: string[]; // 临时技能（幻化复制，回合结束清除）
+  originalOwner?: PlayerId; // 临时控制权转移前的原始拥有者（心灵操控）
   attachedUnits?: { cardId: string; card: UnitCard; owner: PlayerId }[]; // 附加的单位卡（冰霜战斧）
 }
 

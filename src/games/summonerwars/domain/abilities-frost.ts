@@ -94,7 +94,7 @@ export const FROST_ABILITIES: AbilityDef[] = [
     sfxKey: 'fantasy.elemental_sword_iceattack_v2',
     trigger: 'passive',
     effects: [
-      { type: 'custom', actionId: 'cold_snap_aura' },
+      { type: 'auraStructureLife', range: 3, value: 1 },
     ],
   },
 
@@ -186,7 +186,7 @@ export const FROST_ABILITIES: AbilityDef[] = [
     sfxKey: 'fantasy.elemental_sword_iceattack_v2',
     trigger: 'onMove',
     effects: [
-      { type: 'extraMove', target: 'self', value: 0, canPassThrough: 'units' },
+      { type: 'extraMove', target: 'self', value: 0, canPassThrough: 'units', damageOnPassThrough: 1 },
     ],
   },
 

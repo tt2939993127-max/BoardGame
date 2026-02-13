@@ -37,7 +37,7 @@ export function registerGhostAbilities(): void {
     // ghost_haunting: 持续：手牌≤2时，本随从不受其他玩家卡牌影�?
     registerProtection('ghost_haunting', 'affect', ghostHauntingChecker);
 
-    // ghost_make_contact: 控制对手随从（special 能力�?
+    // ghost_make_contact: ongoing 卡，附着到对手随从上改变控制权
     registerAbility('ghost_make_contact', 'onPlay', ghostMakeContact);
     // 亡者崛起：弃牌→从弃牌堆打出力�?弃牌数的额外随从
     registerAbility('ghost_the_dead_rise', 'onPlay', ghostTheDeadRise);
@@ -252,8 +252,9 @@ function ghostAcrossTheDivide(ctx: AbilityContext): AbilityResult {
 // 幽灵之主：手牌≤2时可从弃牌堆打出
 // ============================================================================
 
-/** 幽灵之主触发：回合开始时检查弃牌堆 + 手牌条件 */
+/** 幽灵之主触发：回合开始时检查弃牌堆 + 手牌条件，可从弃牌堆打出 */
 function ghostSpectreTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    if (!ctx.matchState) return [];
     const player = ctx.state.players[ctx.playerId];
     if (!player) return [];
     if (player.hand.length > 2) return [];
@@ -263,7 +264,24 @@ function ghostSpectreTrigger(ctx: TriggerContext): SmashUpEvent[] {
     const def = getCardDef(card.defId) as MinionCardDef | undefined;
     const name = def?.name ?? card.defId;
     const power = def?.power ?? 0;
-    // TODO: ghostSpectreTrigger 返回事件数组，无法直接返回 matchState，继续使用旧系统
+    // 选择基地
+    const baseCandidates: { baseIndex: number; label: string }[] = [];
+    for (let i = 0; i < ctx.state.bases.length; i++) {
+        const baseDef = getBaseDef(ctx.state.bases[i].defId);
+        baseCandidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
+    }
+    const options = [
+        ...baseCandidates.map((b, i) => ({
+            id: `base-${i}`, label: `打出到 ${b.label}`, value: { action: 'play', baseIndex: b.baseIndex, cardUid: card.uid, defId: card.defId, power },
+        })),
+        { id: 'skip', label: '跳过', value: { action: 'skip' } },
+    ];
+    const interaction = createSimpleChoice(
+        `ghost_spectre_${ctx.now}`, ctx.playerId,
+        `幽灵之主在弃牌堆（手牌≤2），是否打出 ${name}？`,
+        options as any[], 'ghost_spectre',
+    );
+    queueInteraction(ctx.matchState, interaction);
     return [];
 }
 
@@ -306,18 +324,25 @@ export function registerGhostInteractionHandlers(): void {
         return { state, events };
     });
 
-    // 心灵接触：选择目标后返回手牌
-    registerInteractionHandler('ghost_make_contact', (state, _playerId, value, _iData, _random, timestamp) => {
+    // ghost_make_contact: 控制权变更 — 选择对手随从后附着 ongoing 改变控制权
+    registerInteractionHandler('ghost_make_contact', (state, playerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
         if (!target) return undefined;
+        // 附着 ongoing 到目标随从，控制权变更在 reducer 的 ONGOING_ATTACHED 中处理
         return { state, events: [{
-            type: SU_EVENTS.MINION_RETURNED,
-            payload: { minionUid: target.uid, minionDefId: target.defId, fromBaseIndex: baseIndex, toPlayerId: target.owner, reason: 'ghost_make_contact' },
+            type: SU_EVENTS.ONGOING_ATTACHED,
+            payload: {
+                cardUid: `ghost_make_contact_${timestamp}`,
+                defId: 'ghost_make_contact',
+                ownerId: playerId,
+                targetMinionUid: minionUid,
+                baseIndex,
+            },
             timestamp,
-        }] };
+        } as SmashUpEvent] };
     });
 
     // 亡者崛起：多选弃牌后→链式选择弃牌堆中力量<弃牌数的随从
@@ -371,11 +396,11 @@ export function registerGhostInteractionHandlers(): void {
 
     // 幽灵之主：选择打出或跳过
     registerInteractionHandler('ghost_spectre', (state, playerId, value, _iData, _random, timestamp) => {
-        const val = value as { action: string; cardUid?: string; defId?: string; power?: number };
+        const val = value as { action: string; baseIndex?: number; cardUid?: string; defId?: string; power?: number };
         if (val.action === 'skip') return { state, events: [] };
         return { state, events: [
             grantExtraMinion(playerId, 'ghost_spectre', timestamp),
-            { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid: val.cardUid!, defId: val.defId!, baseIndex: 0, power: val.power!, fromDiscard: true }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid: val.cardUid!, defId: val.defId!, baseIndex: val.baseIndex ?? 0, power: val.power!, fromDiscard: true }, timestamp } as SmashUpEvent,
         ] };
     });
 }

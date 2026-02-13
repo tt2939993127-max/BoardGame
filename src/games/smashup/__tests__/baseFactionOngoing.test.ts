@@ -417,22 +417,24 @@ describe('诡术师 ongoing 能力', () => {
     });
 
     describe('trickster_block_the_path: 封路', () => {
-        test('对手不能打出随从到封路基地', () => {
+        test('对手不能打出被封派系随从到封路基地', () => {
             const base = makeBase({
-                ongoingActions: [{ uid: 'bp-1', defId: 'trickster_block_the_path', ownerId: '0' }],
+                ongoingActions: [{ uid: 'bp-1', defId: 'trickster_block_the_path', ownerId: '0', metadata: { blockedFaction: SMASHUP_FACTION_IDS.ROBOTS } }],
             });
             const state = makeState([base]);
 
-            expect(isOperationRestricted(state, 0, '1', 'play_minion')).toBe(true);
+            // 使用真实的机器人派系 defId
+            expect(isOperationRestricted(state, 0, '1', 'play_minion', { minionDefId: 'robot_zapbot' })).toBe(true);
         });
 
         test('自己不受封路限制', () => {
             const base = makeBase({
-                ongoingActions: [{ uid: 'bp-1', defId: 'trickster_block_the_path', ownerId: '0' }],
+                ongoingActions: [{ uid: 'bp-1', defId: 'trickster_block_the_path', ownerId: '0', metadata: { blockedFaction: SMASHUP_FACTION_IDS.ROBOTS } }],
             });
             const state = makeState([base]);
 
-            expect(isOperationRestricted(state, 0, '0', 'play_minion')).toBe(false);
+            // 拥有者不受限制
+            expect(isOperationRestricted(state, 0, '0', 'play_minion', { minionDefId: 'robot_zapbot' })).toBe(false);
         });
     });
 

@@ -69,14 +69,14 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'pirate_full_sail', name: '全速前进', interactionSourceIds: ['pirate_full_sail_choose_minion'] },
   { id: 'pirate_dinghy', name: '小艇', interactionSourceIds: ['pirate_dinghy_choose_first'] },
   { id: 'pirate_shanghai', name: '拉壮丁', interactionSourceIds: ['pirate_shanghai_choose_minion'] },
-  { id: 'pirate_sea_dogs', name: '海狗', interactionSourceIds: ['pirate_sea_dogs_choose_minion'] },
+  { id: 'pirate_sea_dogs', name: '海狗', interactionSourceIds: ['pirate_sea_dogs_choose_faction'] },
   { id: 'pirate_powderkeg', name: '火药桶', interactionSourceIds: ['pirate_powderkeg'] },
 
   // ── 忍者 ──
   { id: 'ninja_master', name: '忍者大师', interactionSourceIds: ['ninja_master'] },
   { id: 'ninja_tiger_assassin', name: '虎爪刺客', interactionSourceIds: ['ninja_tiger_assassin'] },
   { id: 'ninja_seeing_stars', name: '眼冒金星', interactionSourceIds: ['ninja_seeing_stars'] },
-  { id: 'ninja_disguise', name: '伪装', interactionSourceIds: ['ninja_disguise_choose_return'] },
+  { id: 'ninja_disguise', name: '伪装', interactionSourceIds: ['ninja_disguise_choose_base', 'ninja_disguise_choose_minions'] },
   { id: 'ninja_hidden_ninja', name: '隐忍', interactionSourceIds: ['ninja_hidden_ninja'] },
   { id: 'ninja_way_of_deception', name: '欺诈之道', interactionSourceIds: ['ninja_way_of_deception_choose_minion'] },
 
@@ -96,14 +96,16 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'wizard_mass_enchantment', name: '聚集秘术', interactionSourceIds: ['wizard_mass_enchantment'] },
   { id: 'wizard_scry', name: '占卜', interactionSourceIds: ['wizard_scry'] },
   { id: 'wizard_sacrifice', name: '献祭', interactionSourceIds: ['wizard_sacrifice'] },
+  { id: 'wizard_portal', name: '传送', interactionSourceIds: ['wizard_portal_order'] },
 
   // ── 僵尸 ──
   { id: 'zombie_grave_digger', name: '掘墓者', interactionSourceIds: ['zombie_grave_digger'] },
   { id: 'zombie_walker', name: '行尸', interactionSourceIds: ['zombie_walker'] },
   { id: 'zombie_grave_robbing', name: '掘墓', interactionSourceIds: ['zombie_grave_robbing'] },
   { id: 'zombie_not_enough_bullets', name: '子弹不够', interactionSourceIds: ['zombie_not_enough_bullets'] },
-  { id: 'zombie_lord', name: '僵尸领主', interactionSourceIds: ['zombie_lord_choose_minion'] },
+  { id: 'zombie_lord', name: '僵尸领主', interactionSourceIds: ['zombie_lord_choose_base_first'] },
   { id: 'zombie_mall_crawl', name: '进发商场', interactionSourceIds: ['zombie_mall_crawl'] },
+  { id: 'zombie_lend_a_hand', name: '借把手', interactionSourceIds: ['zombie_lend_a_hand'] },
   { id: 'zombie_they_keep_coming', name: '它们不断来临', interactionSourceIds: ['zombie_they_keep_coming'] },
   { id: 'zombie_theyre_coming_to_get_you', name: '它们为你而来', interactionSourceIds: ['zombie_theyre_coming_to_get_you'] },
   { id: 'zombie_tenacious_z', name: '顽强丧尸', interactionSourceIds: ['zombie_tenacious_z'] },
@@ -112,6 +114,7 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'trickster_gnome', name: '侏儒', interactionSourceIds: ['trickster_gnome'] },
   { id: 'trickster_disenchant', name: '幻想破碎', interactionSourceIds: ['trickster_disenchant'] },
   { id: 'trickster_mark_of_sleep', name: '沉睡印记', interactionSourceIds: ['trickster_mark_of_sleep'] },
+  { id: 'trickster_block_the_path', name: '封路', interactionSourceIds: ['trickster_block_the_path'] },
 
   // ── 幽灵 ──
   { id: 'ghost_ghost', name: '幽灵', interactionSourceIds: ['ghost_ghost'] },
@@ -145,6 +148,9 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   // ── 米斯卡托尼克 ──
   { id: 'miskatonic_it_might_just_work', name: '也许行得通', interactionSourceIds: ['miskatonic_it_might_just_work'] },
   { id: 'miskatonic_book_of_iter', name: '旅行之书', interactionSourceIds: ['miskatonic_book_of_iter_choose_opponent'] },
+  { id: 'miskatonic_mandatory_reading', name: '强制阅读', interactionSourceIds: ['miskatonic_mandatory_reading'] },
+  { id: 'miskatonic_those_meddling_kids', name: '多管闲事的小鬼', interactionSourceIds: ['miskatonic_those_meddling_kids'] },
+  { id: 'miskatonic_field_trip', name: '实地考察', interactionSourceIds: ['miskatonic_field_trip'] },
 
   // ── 克苏鲁 ──
   { id: 'cthulhu_corruption', name: '腐化', interactionSourceIds: ['cthulhu_corruption'] },
@@ -157,6 +163,7 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'elder_thing_begin_the_summoning', name: '开始召唤', interactionSourceIds: ['elder_thing_begin_the_summoning'] },
   { id: 'elder_thing_elder_thing_choice', name: '远古之物选择', interactionSourceIds: ['elder_thing_elder_thing_choice'] },
   { id: 'elder_thing_shoggoth', name: '修格斯', interactionSourceIds: ['elder_thing_shoggoth_opponent'] },
+  { id: 'elder_thing_unfathomable_goals', name: '深不可测的目的', interactionSourceIds: ['elder_thing_unfathomable_goals'] },
 
   // ── 基地能力 ──
   { id: 'base_haunted_house_al9000', name: '鬼屋/AL9000', interactionSourceIds: ['base_haunted_house_al9000'] },
@@ -187,8 +194,9 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
 // ============================================================================
 
 const HANDLER_CHAINS: HandlerChainLink[] = [
-  // 僵尸领主：选随从 → 选基地
-  { sourceId: 'zombie_lord_choose_minion', producesSourceIds: ['zombie_lord_choose_base'] },
+  // 僵尸领主：选基地 → 选随从
+  { sourceId: 'zombie_lord_choose_base_first', producesSourceIds: ['zombie_lord_choose_minion'] },
+  { sourceId: 'zombie_lord_choose_minion', producesSourceIds: ['zombie_lord_choose_base_first'] },
   // 海盗大炮：选第一个 → 选第二个
   { sourceId: 'pirate_cannon_choose_first', producesSourceIds: ['pirate_cannon_choose_second'] },
   // 海盗全速前进：选随从 → 选基地（循环直到完成）
@@ -200,16 +208,21 @@ const HANDLER_CHAINS: HandlerChainLink[] = [
   { sourceId: 'pirate_dinghy_choose_second', producesSourceIds: ['pirate_dinghy_second_choose_base'] },
   // 海盗拉壮丁：选随从 → 选基地
   { sourceId: 'pirate_shanghai_choose_minion', producesSourceIds: ['pirate_shanghai_choose_base'] },
-  // 海盗海狗：选随从 → 选基地
-  { sourceId: 'pirate_sea_dogs_choose_minion', producesSourceIds: ['pirate_sea_dogs_choose_base'] },
+  // 海盗海狗：选派系 → 选来源基地 → 选目标基地
+  { sourceId: 'pirate_sea_dogs_choose_faction', producesSourceIds: ['pirate_sea_dogs_choose_from'] },
+  { sourceId: 'pirate_sea_dogs_choose_from', producesSourceIds: ['pirate_sea_dogs_choose_to'] },
   // 忍者欺诈之道：选随从 → 选基地
   { sourceId: 'ninja_way_of_deception_choose_minion', producesSourceIds: ['ninja_way_of_deception_choose_base'] },
-  // 忍者伪装：选返回 → 选打出
-  { sourceId: 'ninja_disguise_choose_return', producesSourceIds: ['ninja_disguise_choose_play'] },
+  // 忍者伪装：选基地 → 选随从 → 选打出1 → 选打出2
+  { sourceId: 'ninja_disguise_choose_base', producesSourceIds: ['ninja_disguise_choose_minions'] },
+  { sourceId: 'ninja_disguise_choose_minions', producesSourceIds: ['ninja_disguise_choose_play1'] },
+  { sourceId: 'ninja_disguise_choose_play1', producesSourceIds: ['ninja_disguise_choose_play2'] },
   // 恐龙自然选择：选己方 → 选目标
   { sourceId: 'dino_natural_selection_choose_mine', producesSourceIds: ['dino_natural_selection_choose_target'] },
   // 外星人传送：选对手 → 决定
   { sourceId: 'alien_beaming_down_choose_opponent', producesSourceIds: ['alien_beaming_down_decide'] },
+  // 外星人探测：选对手 → 牌库顶选择
+  { sourceId: 'alien_probe_choose_opponent', producesSourceIds: ['alien_probe_deck_choice'] },
   // 外星人侦察船：选玩家 → 选手牌
   { sourceId: 'alien_scout_ship_choose_player', producesSourceIds: ['alien_scout_ship_hand_choose_opponent'] },
   // 亡者复苏：弃牌 → 打出
@@ -225,6 +238,12 @@ const HANDLER_CHAINS: HandlerChainLink[] = [
   { sourceId: 'bear_cavalry_borscht_choose_from', producesSourceIds: ['bear_cavalry_borscht_choose_dest'] },
   // 多基地计分继续（同一个 handler 循环使用）
   { sourceId: 'multi_base_scoring', producesSourceIds: ['multi_base_scoring'] },
+  // 传送：排序循环
+  { sourceId: 'wizard_portal_order', producesSourceIds: ['wizard_portal_order'] },
+  // 它们不断来临：选随从 → 选基地
+  { sourceId: 'zombie_they_keep_coming', producesSourceIds: ['zombie_they_keep_coming_choose_base'] },
+  // 顽强丧尸：选打出 → 选基地
+  { sourceId: 'zombie_tenacious_z', producesSourceIds: ['zombie_tenacious_z_choose_base'] },
 ];
 
 // ============================================================================
@@ -234,6 +253,14 @@ const HANDLER_CHAINS: HandlerChainLink[] = [
 /** 由特殊系统处理的 handler（不由能力直接创建） */
 const ORPHAN_WHITELIST = new Set([
   'pirate_dinghy_choose_second', // 链式中间步骤（由 pirate_dinghy_first_choose_base 产出）
+  'pirate_sea_dogs_choose_from', // 链式中间步骤（由 pirate_sea_dogs_choose_faction 产出）
+  'pirate_sea_dogs_choose_to', // 链式中间步骤（由 pirate_sea_dogs_choose_from 产出）
+  'ninja_disguise_choose_play1', // 链式中间步骤（由 ninja_disguise_choose_minions 产出）
+  'ninja_disguise_choose_play2', // 链式中间步骤（由 ninja_disguise_choose_play1 产出）
+  'zombie_lord_choose_minion', // 链式中间步骤（由 zombie_lord_choose_base_first 产出）
+  'zombie_they_keep_coming_choose_base', // 链式中间步骤（由 zombie_they_keep_coming 产出）
+  'zombie_tenacious_z_choose_base', // 链式中间步骤（由 zombie_tenacious_z 产出）
+  'alien_probe_deck_choice', // 链式中间步骤（由 alien_probe_choose_opponent 产出）
 ]);
 
 // ============================================================================

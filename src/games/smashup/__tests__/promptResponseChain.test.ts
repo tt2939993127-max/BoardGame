@@ -72,7 +72,7 @@ describe('Prompt 响应链集成测试', () => {
                 'ninja_tiger_assassin',
                 'ninja_seeing_stars',
                 'ninja_way_of_deception_choose_minion',
-                'ninja_disguise_choose_return',
+                'ninja_disguise_choose_base',
                 'ninja_hidden_ninja',
                 'dino_laser_triceratops',
                 'dino_wild_stuffing',

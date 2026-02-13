@@ -15,6 +15,8 @@ import { getRegisteredCustomActionIds, isCustomActionCategory, getCustomActionMe
 import {
     createRegistryIntegritySuite,
     createEffectContractSuite,
+    createI18nContractSuite,
+    flattenI18nKeys,
     extractRefChains,
     type RefChain,
     type EffectContractRule,
@@ -488,6 +490,362 @@ describe('能力效果双重授予检测', () => {
                 if (mayProduceStatus) {
                     violations.push(
                         `[${group.label}] 独立 grantStatus 效果 + custom action "${ca.action!.customActionId}"（categories: ${meta.categories.join(',')}）可能双重施加 status`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+});
+
+
+// ============================================================================
+// 8. Token 响应窗口契约完整性
+// ============================================================================
+
+/**
+ * 验证领域层 getUsableTokensForTiming 与 UI 层 TokenResponseModal 的分类逻辑一致。
+ *
+ * 背景：曾因 UI 层硬编码太极特征（同时有两个 timing）导致火焰精通触发了太极弹窗。
+ * 重构后 UI 直接消费领域层输出，此测试确保：
+ * 1. 每个 consumable token 的 effect type 都在 UI 已知分类中
+ * 2. 有 beforeDamageDealt/beforeDamageReceived timing 的 token 能被 getUsableTokensForTiming 正确返回
+ * 3. 返回的 token 都能被 UI 分类逻辑识别（damage modifier 或 rollToNegate）
+ */
+import { getUsableTokensForTiming } from '../domain/tokenResponse';
+import { RESOURCE_IDS } from '../domain/resources';
+import { TOKEN_IDS } from '../domain/ids';
+
+describe('Token 响应窗口契约完整性', () => {
+    // UI 层已知的 activeUse effect type（TokenResponseModal 能处理的类型）
+    const UI_KNOWN_EFFECT_TYPES = new Set([
+        'modifyDamageDealt',
+        'modifyDamageReceived',
+        'rollToNegate',
+        'removeDebuff',
+    ]);
+
+    // UI 层在响应窗口中展示的 effect type（damage modifier + evasion）
+    const UI_RESPONSE_EFFECT_TYPES = new Set([
+        'modifyDamageDealt',
+        'modifyDamageReceived',
+        'rollToNegate',
+    ]);
+
+    const consumableTokens = ALL_TOKEN_DEFINITIONS.filter(d => d.category === 'consumable' && d.activeUse);
+
+    // 自动消耗的 token（由 custom actions 消耗，不通过弹窗交互）
+    // 这些 token 不应该有 activeUse 配置
+    const AUTO_CONSUMED_TOKEN_IDS = new Set([
+        TOKEN_IDS.FIRE_MASTERY, // 由 resolveBurnDown / resolveDmgPerFM 等 custom actions 自动消耗
+    ]);
+
+    it('自动消耗的 token 不应该有 activeUse 配置', () => {
+        const violations: string[] = [];
+        for (const def of ALL_TOKEN_DEFINITIONS) {
+            if (AUTO_CONSUMED_TOKEN_IDS.has(def.id) && def.activeUse) {
+                violations.push(
+                    `[${def.id}] 是自动消耗的 token，不应该有 activeUse 配置（会错误触发 Token 响应弹窗）`
+                );
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('火焰精通不会出现在 getUsableTokensForTiming 结果中', () => {
+        // 即使玩家持有火焰精通，也不应该触发弹窗
+        const mockState = {
+            players: {
+                '0': {
+                    tokens: { [TOKEN_IDS.FIRE_MASTERY]: 5 },
+                    resources: { [RESOURCE_IDS.HP]: 50 },
+                },
+            },
+            tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+        } as any;
+
+        const offensive = getUsableTokensForTiming(mockState, '0', 'beforeDamageDealt');
+        const defensive = getUsableTokensForTiming(mockState, '0', 'beforeDamageReceived');
+        const fmInOffensive = offensive.some(t => t.id === TOKEN_IDS.FIRE_MASTERY);
+        const fmInDefensive = defensive.some(t => t.id === TOKEN_IDS.FIRE_MASTERY);
+        expect(fmInOffensive).toBe(false);
+        expect(fmInDefensive).toBe(false);
+    });
+
+    it('所有 consumable token 的 effect type 都在 UI 已知分类中', () => {
+        const violations: string[] = [];
+        for (const def of consumableTokens) {
+            const effectType = def.activeUse!.effect.type;
+            if (!UI_KNOWN_EFFECT_TYPES.has(effectType)) {
+                violations.push(`[${def.id}] effect type "${effectType}" 不在 UI 已知分类中`);
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('有 beforeDamageDealt timing 的 token 能被 getUsableTokensForTiming 正确返回', () => {
+        const offensiveTokens = consumableTokens.filter(d =>
+            d.activeUse!.timing.includes('beforeDamageDealt')
+        );
+        expect(offensiveTokens.length).toBeGreaterThan(0);
+
+        for (const def of offensiveTokens) {
+            // 构造最小状态：玩家持有该 token
+            const mockState = {
+                players: {
+                    '0': {
+                        tokens: { [def.id]: 1 },
+                        resources: { [RESOURCE_IDS.HP]: 50 },
+                    },
+                },
+                tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+            } as any;
+
+            const result = getUsableTokensForTiming(mockState, '0', 'beforeDamageDealt');
+            const found = result.some(t => t.id === def.id);
+            expect(found).toBe(true);
+        }
+    });
+
+    it('有 beforeDamageReceived timing 的 token 能被 getUsableTokensForTiming 正确返回', () => {
+        const defensiveTokens = consumableTokens.filter(d =>
+            d.activeUse!.timing.includes('beforeDamageReceived')
+        );
+        expect(defensiveTokens.length).toBeGreaterThan(0);
+
+        for (const def of defensiveTokens) {
+            const mockState = {
+                players: {
+                    '0': {
+                        tokens: { [def.id]: 1 },
+                        resources: { [RESOURCE_IDS.HP]: 50 },
+                    },
+                },
+                tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+            } as any;
+
+            const result = getUsableTokensForTiming(mockState, '0', 'beforeDamageReceived');
+            const found = result.some(t => t.id === def.id);
+            expect(found).toBe(true);
+        }
+    });
+
+    it('getUsableTokensForTiming 返回的 token 都能被 UI 响应窗口分类逻辑识别', () => {
+        // 模拟一个持有所有 consumable token 的玩家
+        const allTokens: Record<string, number> = {};
+        for (const def of consumableTokens) {
+            allTokens[def.id] = 1;
+        }
+        const mockState = {
+            players: { '0': { tokens: allTokens, resources: { [RESOURCE_IDS.HP]: 50 } } },
+            tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+        } as any;
+
+        const violations: string[] = [];
+        for (const timing of ['beforeDamageDealt', 'beforeDamageReceived'] as const) {
+            const usable = getUsableTokensForTiming(mockState, '0', timing);
+            for (const def of usable) {
+                const effectType = def.activeUse!.effect.type;
+                if (!UI_RESPONSE_EFFECT_TYPES.has(effectType)) {
+                    violations.push(
+                        `[${def.id}] timing="${timing}" effect type "${effectType}" 不在 UI 响应窗口分类中，弹窗后 UI 无法渲染`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('持有量为 0 的 token 不会被 getUsableTokensForTiming 返回', () => {
+        const mockState = {
+            players: {
+                '0': {
+                    tokens: {},  // 所有 token 持有量为 0
+                    resources: { [RESOURCE_IDS.HP]: 50 },
+                },
+            },
+            tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+        } as any;
+
+        const offensive = getUsableTokensForTiming(mockState, '0', 'beforeDamageDealt');
+        const defensive = getUsableTokensForTiming(mockState, '0', 'beforeDamageReceived');
+        expect(offensive).toEqual([]);
+        expect(defensive).toEqual([]);
+    });
+});
+
+// ============================================================================
+// 9. 卡牌 i18n 文案契约验证
+// ============================================================================
+
+// @ts-ignore JSON import
+import zhCN from '../../../../public/locales/zh-CN/game-dicethrone.json';
+// @ts-ignore JSON import
+import en from '../../../../public/locales/en/game-dicethrone.json';
+
+/** 卡牌 i18n key 格式：cards.<cardId>.<field> */
+const CARD_KEY_PATTERN = /^cards\.\S+\.(name|description)$/;
+
+const flatZhCN = flattenI18nKeys(zhCN as Record<string, unknown>);
+const flatEn = flattenI18nKeys(en as Record<string, unknown>);
+
+createI18nContractSuite<AbilityCard>({
+    suiteName: '卡牌 i18n 文案契约',
+    getSources: getAllCards,
+    getSourceId: (card) => card.id,
+    keyExtractors: [
+        {
+            fieldName: 'name',
+            extract: (card) => card.name,
+            keyPattern: CARD_KEY_PATTERN,
+            patternDescription: 'cards.<id>.name',
+        },
+        {
+            fieldName: 'description',
+            extract: (card) => card.description,
+            keyPattern: CARD_KEY_PATTERN,
+            patternDescription: 'cards.<id>.description',
+        },
+    ],
+    locales: { 'zh-CN': flatZhCN, en: flatEn },
+    minSourceCount: 10,
+});
+
+// ============================================================================
+// 10. 卡牌效果 timing 完整性（边界测试）
+// ============================================================================
+
+describe('卡牌效果 timing 完整性（边界测试）', () => {
+    const allCards = getAllCards();
+
+    it('所有卡牌效果（非纯描述）都必须有显式 timing', () => {
+        const violations: string[] = [];
+        for (const card of allCards) {
+            if (!card.effects) continue;
+            for (const effect of card.effects) {
+                // 纯描述效果（无 action）不需要 timing
+                if (!effect.action) continue;
+                if (effect.timing === undefined) {
+                    violations.push(
+                        `[${card.id}] action.type="${effect.action.type}" 缺少 timing（效果不会在任何时机执行）`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('instant 卡牌的所有有 action 的效果必须有 timing: immediate', () => {
+        const violations: string[] = [];
+        const instantCards = allCards.filter(c => c.timing === 'instant');
+        for (const card of instantCards) {
+            if (!card.effects) continue;
+            for (const effect of card.effects) {
+                if (!effect.action) continue;
+                // instant 卡牌只走 immediate 时机
+                if (effect.timing !== 'immediate') {
+                    violations.push(
+                        `[${card.id}] instant 卡牌的效果 timing="${effect.timing}"，应为 "immediate"`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('upgrade 卡牌的 replaceAbility 效果必须有 timing: immediate', () => {
+        const violations: string[] = [];
+        const upgradeCards = allCards.filter(c => c.type === 'upgrade');
+        for (const card of upgradeCards) {
+            if (!card.effects) continue;
+            for (const effect of card.effects) {
+                if (effect.action?.type !== 'replaceAbility') continue;
+                if (effect.timing !== 'immediate') {
+                    violations.push(
+                        `[${card.id}] upgrade 卡的 replaceAbility timing="${effect.timing}"，应为 "immediate"`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('grantToken/grantStatus 效果必须有显式 timing', () => {
+        const violations: string[] = [];
+        const GRANT_TYPES = new Set(['grantToken', 'grantStatus']);
+        for (const card of allCards) {
+            if (!card.effects) continue;
+            for (const effect of card.effects) {
+                if (!effect.action || !GRANT_TYPES.has(effect.action.type)) continue;
+                if (effect.timing === undefined) {
+                    violations.push(
+                        `[${card.id}] ${effect.action.type} 缺少 timing（授予效果不会执行）`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+});
+
+// ============================================================================
+// 11. 技能效果 timing 完整性（边界测试）
+// ============================================================================
+
+describe('技能效果 timing 完整性（边界测试）', () => {
+    const allAbilities = getAllAbilityDefs();
+
+    /**
+     * 技能效果中，以下 action type 在无 timing 时走默认路径（withDamage/preDefense），
+     * 这些默认路径是安全的（damage/heal/grantToken/grantStatus 不依赖 random）。
+     * 只有需要 random 的 action（rollDie/drawCard/dice 类 custom）缺少 timing 才是 bug。
+     *
+     * 此测试验证：所有 grantToken/grantStatus 效果如果有 postDamage 语义
+     * （即 condition.type === 'onHit'），必须有显式 timing: 'postDamage'。
+     * 否则会在 withDamage 阶段执行，无法正确判断 onHit 条件。
+     */
+    it('带 onHit 条件的效果必须有 timing: postDamage', () => {
+        const violations: string[] = [];
+        for (const entry of allAbilities) {
+            const effects = extractAbilityEffects(entry);
+            for (const effect of effects) {
+                if (!effect.action) continue;
+                if (effect.condition?.type !== 'onHit') continue;
+                if (effect.timing !== 'postDamage') {
+                    violations.push(
+                        `[${entry.heroId}/${entry.ability.id}] action.type="${effect.action.type}" 有 onHit 条件但 timing="${effect.timing}"，应为 "postDamage"`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('rollDie 效果在技能中必须有显式 timing', () => {
+        const violations: string[] = [];
+        for (const entry of allAbilities) {
+            const effects = extractAbilityEffects(entry);
+            for (const effect of effects) {
+                if (effect.action?.type !== 'rollDie') continue;
+                if (effect.timing === undefined) {
+                    violations.push(
+                        `[${entry.heroId}/${entry.ability.id}] rollDie 缺少 timing（会落入不传 random 的时机导致静默跳过）`
+                    );
+                }
+            }
+        }
+        expect(violations).toEqual([]);
+    });
+
+    it('drawCard 效果在技能中必须有显式 timing', () => {
+        const violations: string[] = [];
+        for (const entry of allAbilities) {
+            const effects = extractAbilityEffects(entry);
+            for (const effect of effects) {
+                if (effect.action?.type !== 'drawCard') continue;
+                if (effect.timing === undefined) {
+                    violations.push(
+                        `[${entry.heroId}/${entry.ability.id}] drawCard 缺少 timing（会落入不传 random 的时机导致静默跳过）`
                     );
                 }
             }

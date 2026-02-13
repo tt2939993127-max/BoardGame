@@ -349,66 +349,76 @@ function resolveEffectAction(
 
     switch (action.type) {
         case 'damage': {
-            let totalValue = (action.value ?? 0) + (bonusDamage ?? 0);
+            // target: 'all' → 对所有玩家分别生成伤害事件
+            const damageTargets = action.target === 'all'
+                ? Object.keys(state.players)
+                : [targetId];
 
-            if (totalValue > 0) {
-                const passiveResult = applyOnDamageReceivedTriggers(ctx, targetId, totalValue, {
+            for (const dmgTargetId of damageTargets) {
+                let totalValue = (action.value ?? 0) + (bonusDamage ?? 0);
+
+                if (totalValue > 0) {
+                    const passiveResult = applyOnDamageReceivedTriggers(ctx, dmgTargetId, totalValue, {
+                        timestamp,
+                        random,
+                        sfxKey,
+                    });
+                    totalValue = passiveResult.damage;
+                    events.push(...passiveResult.events);
+                }
+
+                if (totalValue <= 0) continue;
+
+                // target: 'all' 的全体伤害不触发 Token 响应窗口
+                if (action.target !== 'all') {
+                    // 检查是否需要打开 Token 响应窗口
+                    const tokenResponseType = shouldOpenTokenResponse(
+                        state,
+                        attackerId,
+                        dmgTargetId,
+                        totalValue
+                    );
+
+                    if (tokenResponseType) {
+                        // 创建待处理伤害，暂停伤害结算
+                        const responseType = tokenResponseType === 'attackerBoost'
+                            ? 'beforeDamageDealt'
+                            : 'beforeDamageReceived';
+                        const pendingDamage = createPendingDamage(
+                            attackerId,
+                            dmgTargetId,
+                            totalValue,
+                            responseType,
+                            sourceAbilityId,
+                            timestamp
+                        );
+                        const tokenResponseEvent = createTokenResponseRequestedEvent(pendingDamage, timestamp);
+                        events.push(tokenResponseEvent);
+                        // 不在这里生成 DAMAGE_DEALT，等待 Token 响应完成后再生成
+                        continue;
+                    }
+                }
+
+                // 没有可用 Token，直接生成伤害事件
+                const dmgTarget = state.players[dmgTargetId];
+                const dmgTargetHp = dmgTarget?.resources[RESOURCE_IDS.HP] ?? 0;
+                const actualDamage = dmgTarget ? Math.min(totalValue, dmgTargetHp) : 0;
+
+                const event: DamageDealtEvent = {
+                    type: 'DAMAGE_DEALT',
+                    payload: {
+                        targetId: dmgTargetId,
+                        amount: totalValue,
+                        actualDamage,
+                        sourceAbilityId,
+                    },
+                    sourceCommandType: 'ABILITY_EFFECT',
                     timestamp,
-                    random,
                     sfxKey,
-                });
-                totalValue = passiveResult.damage;
-                events.push(...passiveResult.events);
+                };
+                events.push(event);
+                ctx.damageDealt += actualDamage;
             }
-
-            if (totalValue <= 0) break;
-
-            // 检查是否需要打开 Token 响应窗口
-            const tokenResponseType = shouldOpenTokenResponse(
-                state,
-                attackerId,
-                targetId,
-                totalValue
-            );
-
-            if (tokenResponseType) {
-                // 创建待处理伤害，暂停伤害结算
-                const responseType = tokenResponseType === 'attackerBoost'
-                    ? 'beforeDamageDealt'
-                    : 'beforeDamageReceived';
-                const pendingDamage = createPendingDamage(
-                    attackerId,
-                    targetId,
-                    totalValue,
-                    responseType,
-                    sourceAbilityId,
-                    timestamp
-                );
-                const tokenResponseEvent = createTokenResponseRequestedEvent(pendingDamage, timestamp);
-                events.push(tokenResponseEvent);
-                // 不在这里生成 DAMAGE_DEALT，等待 Token 响应完成后再生成
-                break;
-            }
-
-            // 没有可用 Token，直接生成伤害事件
-            const target = state.players[targetId];
-            const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-            const actualDamage = target ? Math.min(totalValue, targetHp) : 0;
-
-            const event: DamageDealtEvent = {
-                type: 'DAMAGE_DEALT',
-                payload: {
-                    targetId,
-                    amount: totalValue,
-                    actualDamage,
-                    sourceAbilityId,
-                },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp,
-                sfxKey,
-            };
-            events.push(event);
-            ctx.damageDealt += actualDamage;
             break;
         }
 

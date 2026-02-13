@@ -316,9 +316,9 @@ describe('USE_TOKEN 伤害响应窗口使用 Token', () => {
         }
     });
 
-    it('攻击方使用太极（damageBoost 阶段，modifier 仍为负数）', () => {
-        // 太极的 effect.value = -1，无论攻击方还是防御方使用，modifier 都是负数
-        // 攻击方阶段 effectType=damageBoost，reducer 做 currentDamage + damageModifier
+    it('攻击方使用太极（damageBoost 阶段，modifier 正确反转为正数）', () => {
+        // 太极的 effect.value = -1，但攻击方使用时 tokenResponse 会反转符号
+        // 攻击方阶段 responseType=beforeDamageDealt，modifier = abs(-1) * 2 = +2
         let state = setupWithPendingDamage('0', 'beforeDamageDealt');
         state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 3;
 
@@ -328,9 +328,9 @@ describe('USE_TOKEN 伤害响应窗口使用 Token', () => {
         }));
 
         expect(state.core.players['0'].tokens[TOKEN_IDS.TAIJI]).toBe(1);
-        // modifier = -1 * 2 = -2 → currentDamage = 6 + (-2) = 4
+        // modifier = abs(-1) * 2 = +2 → currentDamage = 6 + 2 = 8
         if (state.core.pendingDamage) {
-            expect(state.core.pendingDamage.currentDamage).toBe(4);
+            expect(state.core.pendingDamage.currentDamage).toBe(8);
         }
     });
 

@@ -174,9 +174,11 @@ function alienProbe(ctx: AbilityContext): AbilityResult {
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-/** 构建 Probe 展示手牌事件 */
+/** 构建 Probe 展示手牌事件 + 链式牌库顶选择 */
 function buildProbeRevealEvents(ctx: AbilityContext, targetPid: string): AbilityResult {
     const target = ctx.state.players[targetPid];
+    const events: SmashUpEvent[] = [];
+    // 展示手牌
     const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
     const revealEvt: SmashUpEvent = {
         type: SU_EVENTS.REVEAL_HAND,
@@ -188,8 +190,38 @@ function buildProbeRevealEvents(ctx: AbilityContext, targetPid: string): Ability
         },
         timestamp: ctx.now,
     };
-    // TODO: Probe 还需要查看牌库顶并选择放回顶部或底部（需要额�?Prompt 流程，待 pendingReveal 确认后触发）
-    return { events: [revealEvt] };
+    events.push(revealEvt);
+    // 查看牌库顶并选择放回顶部或底部
+    if (target.deck.length > 0) {
+        const topCard = target.deck[0];
+        const def = getCardDef(topCard.defId);
+        const cardName = def?.name ?? topCard.defId;
+        // 展示牌库顶
+        events.push({
+            type: SU_EVENTS.REVEAL_DECK_TOP,
+            payload: {
+                targetPlayerId: targetPid,
+                viewerPlayerId: ctx.playerId,
+                cards: [{ uid: topCard.uid, defId: topCard.defId }],
+                count: 1,
+                reason: 'alien_probe',
+            },
+            timestamp: ctx.now,
+        });
+        // 创建选择：放回顶部或底部
+        const interaction = createSimpleChoice(
+            `alien_probe_deck_choice_${ctx.now}`, ctx.playerId,
+            `对手牌库顶是「${cardName}」，选择放置位置`,
+            [
+                { id: 'top', label: '放回牌库顶', value: { action: 'top' } },
+                { id: 'bottom', label: '放到牌库底', value: { action: 'bottom' } },
+            ] as any[],
+            'alien_probe_deck_choice',
+        );
+        (interaction.data as any).continuationContext = { cardUid: topCard.uid, defId: topCard.defId, targetPid };
+        return { events, matchState: queueInteraction(ctx.matchState, interaction) };
+    }
+    return { events };
 }
 
 /** 侦察船一（Scout Ship I）：展示一个玩家牌库顶的一张牌 */
@@ -496,17 +528,54 @@ export function registerAlienInteractionHandlers(): void {
         } as BaseReplacedEvent] };
     });
 
-    // 射线探测：选择对手后展示手牌
+    // 射线探测：选择对手后展示手牌 + 链式牌库顶选择
     registerInteractionHandler('alien_probe_choose_opponent', (state, playerId, value, _iData, _random, timestamp) => {
         const { pid } = value as { pid: string };
         const target = state.core.players[pid];
         if (!target || target.hand.length === 0) return undefined;
         const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
-        return { state, events: [{
+        const events: SmashUpEvent[] = [{
             type: SU_EVENTS.REVEAL_HAND,
             payload: { targetPlayerId: pid, viewerPlayerId: playerId, cards, reason: 'alien_probe' },
             timestamp,
-        } as SmashUpEvent] };
+        }];
+        // 链式：查看牌库顶并选择放回顶部或底部
+        if (target.deck.length > 0) {
+            const topCard = target.deck[0];
+            const def = getCardDef(topCard.defId);
+            const cardName = def?.name ?? topCard.defId;
+            events.push({
+                type: SU_EVENTS.REVEAL_DECK_TOP,
+                payload: { targetPlayerId: pid, viewerPlayerId: playerId, cards: [{ uid: topCard.uid, defId: topCard.defId }], count: 1, reason: 'alien_probe' },
+                timestamp,
+            });
+            const next = createSimpleChoice(
+                `alien_probe_deck_choice_${timestamp}`, playerId,
+                `对手牌库顶是「${cardName}」，选择放置位置`,
+                [
+                    { id: 'top', label: '放回牌库顶', value: { action: 'top' } },
+                    { id: 'bottom', label: '放到牌库底', value: { action: 'bottom' } },
+                ] as any[],
+                'alien_probe_deck_choice',
+            );
+            (next.data as any).continuationContext = { cardUid: topCard.uid, defId: topCard.defId, targetPid: pid };
+            return { state: queueInteraction(state, next), events };
+        }
+        return { state, events };
+    });
+
+    // 射线探测：牌库顶放回顶部或底部
+    registerInteractionHandler('alien_probe_deck_choice', (state, _playerId, value, iData, _random, timestamp) => {
+        const { action } = value as { action: 'top' | 'bottom' };
+        const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string; targetPid: string };
+        if (!ctx) return { state, events: [] };
+        if (action === 'top') return { state, events: [] }; // 已在顶部，无需操作
+        // 放到牌库底
+        return { state, events: [{
+            type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
+            payload: { cardUid: ctx.cardUid, defId: ctx.defId, ownerId: ctx.targetPid, reason: 'alien_probe' },
+            timestamp,
+        }] };
     });
 
     // 侦察船一：选择玩家后展示牌库顶

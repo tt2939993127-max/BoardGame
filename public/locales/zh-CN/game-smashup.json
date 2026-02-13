@@ -30,6 +30,7 @@
     "discard_desc": "你需要丢弃 {{count}} 张牌以继续游戏。",
     "throw_away": "丢弃并继续",
     "invalid_play": "当前无法出牌",
+    "select_minion_hint": "请选择一个随从来附着此卡",
     "your_turn": "轮到你了！",
     "me_first_your_turn": "轮到你响应 — 打出特殊牌或让过",
     "me_first_waiting": "等待 P{{player}} 响应...",
@@ -602,7 +603,7 @@
     },
     "miskatonic_book_of_iter_the_unseen": {
       "name": "金克丝!",
-      "effectText": "从你的手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆。"
+      "effectText": "查看任意一位玩家的手牌。抽一张疯狂卡并额外打出两个战术。"
     },
     "miskatonic_mandatory_reading": {
       "name": "最好不知道的事",

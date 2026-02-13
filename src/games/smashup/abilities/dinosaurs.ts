@@ -7,10 +7,11 @@
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { destroyMinion, addPowerCounter, getMinionPower, buildMinionTargetOptions } from '../domain/abilityHelpers';
-import type { SmashUpEvent, SmashUpCore, MinionOnBase } from '../domain/types';
+import type { SmashUpEvent, SmashUpCore, MinionOnBase, OngoingDetachedEvent, MinionDestroyedEvent } from '../domain/types';
+import { SU_EVENTS } from '../domain/types';
 import { getCardDef, getBaseDef } from '../data/cards';
 import type { MinionCardDef } from '../domain/types';
-import { registerProtection } from '../domain/ongoingEffects';
+import { registerProtection, registerInterceptor } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext } from '../domain/ongoingEffects';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -27,8 +28,8 @@ export function registerDinosaurAbilities(): void {
     registerAbility('dino_survival_of_the_fittest', 'onPlay', dinoSurvivalOfTheFittest);
 
     // === ongoing 效果注册 ===
-    // 利齿钢爪：保护附着随从不被其他玩家消灭/影响
-    registerProtection('dino_tooth_and_claw', 'destroy', dinoToothAndClawChecker);
+    // 利齿钢爪：拦截消灭事件时自毁以保护附着随从
+    registerInterceptor('dino_tooth_and_claw', dinoToothAndClawInterceptor);
     registerProtection('dino_tooth_and_claw', 'affect', dinoToothAndClawChecker);
     // 升级：保护附着随从不被消灭�?2力量�?ongoingModifiers 中注册）
     registerProtection('dino_upgrade', 'destroy', dinoUpgradeChecker);
@@ -79,7 +80,7 @@ function dinoWildStuffing(ctx: AbilityContext): AbilityResult {
     }));
     const interaction = createSimpleChoice(
         `dino_wild_stuffing_${ctx.now}`, ctx.playerId,
-        '选择要消灭的力量≤2的随从', buildMinionTargetOptions(options), 'dino_wild_stuffing',
+        '选择要消灭的力量≤3的随从', buildMinionTargetOptions(options), 'dino_wild_stuffing',
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -266,10 +267,42 @@ function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
 // 暴龙雷克斯：无能力（纯力�?�?
 // dino_armor_stego (ongoing) - 已通过 ongoingModifiers 系统实现力量修正
 // dino_war_raptor (ongoing) - 已通过 ongoingModifiers 系统实现力量修正
-// dino_tooth_and_claw (ongoing) - 已通过 ongoingEffects 保护系统实现
+// dino_tooth_and_claw (ongoing) - 通过 interceptor 拦截消灭事件并自毁
 // dino_upgrade (ongoing) - 已通过 ongoingEffects 保护 + ongoingModifiers 力量修正实现
 
-/** 利齿钢爪保护检查：附着了此卡的随从不受其他玩家消灭/影响 */
+/**
+ * 利齿钢爪事件拦截器：当附着随从被其他玩家消灭时，自毁此卡以阻止消灭
+ * 规则：如果一个其他玩家的卡试图消灭该随从，你可以消灭本卡来阻止
+ */
+function dinoToothAndClawInterceptor(state: SmashUpCore, event: SmashUpEvent): SmashUpEvent | SmashUpEvent[] | null | undefined {
+    if (event.type !== SU_EVENTS.MINION_DESTROYED) return undefined;
+    const payload = (event as MinionDestroyedEvent).payload;
+    const base = state.bases[payload.fromBaseIndex];
+    if (!base) return undefined;
+    const target = base.minions.find(m => m.uid === payload.minionUid);
+    if (!target) return undefined;
+    // 检查是否附着了利齿钢爪
+    const toothCard = target.attachedActions.find(a => a.defId === 'dino_tooth_and_claw');
+    if (!toothCard) return undefined;
+    // 只拦截其他玩家发起的消灭（reason 中不包含自身 controller 的消灭）
+    // 简化判断：如果 reason 来源不是 controller 自己的能力，则拦截
+    // 由于 reason 字段无法精确判断来源玩家，用 ownerId 判断
+    if (payload.ownerId === target.controller) return undefined;
+    // 自毁利齿钢爪，阻止消灭
+    const detachEvt: OngoingDetachedEvent = {
+        type: SU_EVENTS.ONGOING_DETACHED,
+        payload: {
+            cardUid: toothCard.uid,
+            defId: toothCard.defId,
+            ownerId: toothCard.ownerId,
+            reason: 'dino_tooth_and_claw_self_destruct',
+        },
+        timestamp: event.timestamp,
+    };
+    return [detachEvt]; // 替换消灭事件为自毁事件，随从存活
+}
+
+/** 利齿钢爪保护检查：附着了此卡的随从不受其他玩家影响（affect 类型） */
 function dinoToothAndClawChecker(ctx: ProtectionCheckContext): boolean {
     if (ctx.sourcePlayerId === ctx.targetMinion.controller) return false;
     return ctx.targetMinion.attachedActions.some(a => a.defId === 'dino_tooth_and_claw');

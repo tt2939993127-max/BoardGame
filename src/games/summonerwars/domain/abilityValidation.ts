@@ -80,7 +80,7 @@ export function validateAbilityActivation(
       };
       return {
         valid: false,
-        error: `${ability.name}只能在${phaseNames[ability.validation.requiredPhase]}使用`,
+        error: `只能在${phaseNames[ability.validation.requiredPhase]}使用`,
       };
     }
     
@@ -91,7 +91,7 @@ export function validateAbilityActivation(
       if (usageCount >= ability.usesPerTurn) {
         return {
           valid: false,
-          error: `${ability.name}每回合只能使用一次`,
+          error: '每回合只能使用一次',
         };
       }
     }

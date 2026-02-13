@@ -62,7 +62,7 @@ export const MOON_ELF_CARDS: AbilityCard[] = [
         timing: 'instant',
         description: cardText('dodge', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MOON_ELF, index: 1 },
-        effects: [{ description: 'Gain Evasive', action: { type: 'grantToken', target: 'select', tokenId: TOKEN_IDS.EVASIVE, value: 1 }, timing: 'immediate' }]
+        effects: [{ description: 'Gain Evasive', action: { type: 'grantToken', target: 'self', tokenId: TOKEN_IDS.EVASIVE, value: 1 }, timing: 'immediate' }]
     },
     {
         id: 'volley',

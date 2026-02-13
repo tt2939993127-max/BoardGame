@@ -122,7 +122,8 @@ function executeCommand(
                 }
             }
 
-            // 基地能力触发：onMinionPlayed（如中央大脑 +1 力量）
+            // 基地能力触发：onMinionPlayed（如鬼屋：弃一张牌）
+            const currentMS = updatedState ?? state;
             const baseAbilityResult = triggerAllBaseAbilities(
                 'onMinionPlayed', core, command.playerId, now,
                 {
@@ -130,15 +131,19 @@ function executeCommand(
                     minionUid: card.uid,
                     minionDefId: card.defId,
                     minionPower: minionDef?.power ?? 0,
-                }
+                },
+                currentMS,
             );
             events.push(...baseAbilityResult.events);
+            if (baseAbilityResult.matchState) {
+                updatedState = baseAbilityResult.matchState;
+            }
 
             // ongoing 触发：onMinionPlayed（如火焰陷阱消灭入场随从）
             const coreAfterPlayed = reduce(core, playedEvt);
             const ongoingTriggerEvents = fireTriggers(coreAfterPlayed, 'onMinionPlayed', {
                 state: coreAfterPlayed,
-                matchState: state,
+                matchState: updatedState ?? state,
                 playerId: command.playerId,
                 baseIndex,
                 triggerMinionUid: card.uid,
@@ -186,6 +191,26 @@ function executeCommand(
                     timestamp: now,
                 };
                 events.push(attachEvt);
+                // ongoing 卡也可以有 onPlay 能力（如 block_the_path 需要选择派系）
+                const ongoingExecutor = resolveOnPlay(card.defId);
+                if (ongoingExecutor) {
+                    const ctx: AbilityContext = {
+                        state: core,
+                        matchState: state,
+                        playerId: command.playerId,
+                        cardUid: card.uid,
+                        defId: card.defId,
+                        baseIndex: targetBase,
+                        targetMinionUid: command.payload.targetMinionUid,
+                        random,
+                        now,
+                    };
+                    const result = ongoingExecutor(ctx);
+                    events.push(...result.events);
+                    if (result.matchState) {
+                        updatedState = result.matchState;
+                    }
+                }
             } else {
                 // standard / special 行动卡：执行效果
                 const executor = resolveOnPlay(card.defId);
@@ -214,8 +239,10 @@ function executeCommand(
             if (targetBaseIdx !== undefined) {
                 const base = core.bases[targetBaseIdx];
                 if (base) {
+                    const currentActionMS = updatedState ?? state;
                     const baseCtx = {
                         state: core,
+                        matchState: currentActionMS,
                         baseIndex: targetBaseIdx,
                         baseDefId: base.defId,
                         playerId: command.playerId,
@@ -225,6 +252,9 @@ function executeCommand(
                     };
                     const bResult = triggerBaseAbility(base.defId, 'onActionPlayed', baseCtx);
                     events.push(...bResult.events);
+                    if (bResult.matchState) {
+                        updatedState = bResult.matchState;
+                    }
                 }
             }
 

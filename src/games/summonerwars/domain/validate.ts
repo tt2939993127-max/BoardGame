@@ -32,6 +32,7 @@ import {
   manhattanDistance,
   getSummoner,
   getUnitAbilities,
+  findUnitPosition,
 } from './helpers';
 import { getPhaseDisplayName } from './execute';
 import { validateAbilityActivation } from './abilityValidation';
@@ -115,6 +116,27 @@ export function validateCommand(
           ];
           for (const d of dirs) {
             const adjPos = { row: summoner.position.row + d.row, col: summoner.position.col + d.col };
+            if (adjPos.row >= 0 && adjPos.row < BOARD_ROWS && adjPos.col >= 0 && adjPos.col < BOARD_COLS
+              && isCellEmpty(core, adjPos)
+              && !validPositions.some(p => p.row === adjPos.row && p.col === adjPos.col)) {
+              validPositions = [...validPositions, adjPos];
+            }
+          }
+        }
+      }
+      // 编织颂歌：允许在目标单位相邻位置召唤
+      const chantOfWeaving = player.activeEvents.find(ev =>
+        getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_WEAVING && ev.targetUnitId
+      );
+      if (chantOfWeaving) {
+        const targetPos = findUnitPosition(core, chantOfWeaving.targetUnitId!);
+        if (targetPos) {
+          const dirs = [
+            { row: -1, col: 0 }, { row: 1, col: 0 },
+            { row: 0, col: -1 }, { row: 0, col: 1 },
+          ];
+          for (const d of dirs) {
+            const adjPos = { row: targetPos.row + d.row, col: targetPos.col + d.col };
             if (adjPos.row >= 0 && adjPos.row < BOARD_ROWS && adjPos.col >= 0 && adjPos.col < BOARD_COLS
               && isCellEmpty(core, adjPos)
               && !validPositions.some(p => p.row === adjPos.row && p.col === adjPos.col)) {

@@ -27,11 +27,10 @@
   - `actionRegistry.ts` — **ActionHandlerRegistry**：统一的 actionId → handler 注册表，替代 if/else 硬编码分发
 - `engine/testing/` - 测试工具
   - `referenceValidator.ts` — **validateReferences + extractRefChains**：实体引用链完整性验证，检测定义与注册表之间的断裂引用
-  - `entityIntegritySuite.ts` — **createRegistryIntegritySuite / createRefChainSuite / createTriggerPathSuite / createEffectContractSuite**：四个测试套件工厂，生成标准化 describe/it 测试块，用于数据定义的自动化契约验证
+  - `entityIntegritySuite.ts` — **createRegistryIntegritySuite / createRefChainSuite / createTriggerPathSuite / createEffectContractSuite / createI18nContractSuite**：五个测试套件工厂，生成标准化 describe/it 测试块，用于数据定义的自动化契约验证（含 i18n key 格式与存在性）
   - `interactionChainAudit.ts` — **createInteractionChainAuditSuite**：交互链完整性审计套件工厂（模式 A：UI 状态机），验证多步交互技能的 UI 步骤是否覆盖执行器所需 payload 字段。三类检查：声明完整性、步骤覆盖、契约对齐
   - `interactionCompletenessAudit.ts` — **createInteractionCompletenessAuditSuite**：交互完整性审计套件工厂（模式 B：Interaction 链），验证所有创建 Interaction 的能力都有对应 handler 注册。三类检查：Handler 注册覆盖、链式完整性、孤儿 Handler
-  - `abilityBehaviorAudit.ts` — **createAbilityBehaviorAuditSuite**：能力行为审计套件工厂，验证"i18n 描述说了 X 但代码没做 X"的不一致。五类检查：关键词→行为映射、ongoing 注册覆盖、能力标签执行器覆盖、自毁行为完整性、条件语句完整性
-  - `cardCompletenessAudit.ts` — **createCardCompletenessAuditSuite**：卡牌完整性审计套件工厂，静态分析卡牌定义的常见遗漏。三类检查：描述条件性语言检测、卡牌结构完整性、占位符检测
+
 - `FxSystem` (`src/engine/fx/`) - 视觉特效调度（Cue 注册表 + 事件总线 + 渲染层 + WebGL Shader 子系统 + FeedbackPack 反馈包），游戏侧通过 `fxSetup.ts` 注册渲染器并声明反馈包（音效 + 震动）。`useFxBus` 接受 `{ playSound, triggerShake }` 选项注入反馈能力，push 事件时自动触发 `timing='immediate'` 反馈，渲染器调用 `onImpact()` 时自动触发 `timing='on-impact'` 反馈。Shader 包装组件在模块顶层调用 `registerShader()` 自注册到预编译队列，`useFxBus` 挂载时调用 `flushRegisteredShaders()` 自动预编译所有已注册的 shader（`ShaderPrecompile`）。Shader 管线（`src/engine/fx/shader/`）提供 `ShaderCanvas` + `ShaderMaterial` + `ShaderPrecompile` + GLSL 噪声库，用于逐像素流体特效。
 
 ---
@@ -440,11 +439,54 @@ createEffectContractSuite({
 | 卡牌效果 | `AbilityCard.effects` | 主阶段卡 custom/rollDie/drawCard 需 `timing: 'immediate'`、replaceAbility 需完整字段 |
 | Token 被动触发 | `TokenDef.passiveTrigger.actions` | customActionId 需注册 |
 
+### i18n 文案契约（`createI18nContractSuite`）
+
+引擎层提供 `createI18nContractSuite<TSource>` 工厂，验证数据定义中的 i18n key 格式和存在性：
+
+- `keyExtractors` — 定义从数据源中提取哪些字段的 i18n key，以及 key 的格式正则
+- `locales` — 各语言的扁平化 key→value 映射（使用 `flattenI18nKeys()` 工具函数转换嵌套 JSON）
+
+验证内容：
+1. **key 格式**：所有提取的 key 必须匹配指定正则（防止硬编码字符串混入）
+2. **key 存在性**：所有 key 必须在每个语言的 i18n 文件中存在（防止引用缺失）
+
+```typescript
+import { createI18nContractSuite, flattenI18nKeys } from '../../../engine/testing/entityIntegritySuite';
+import zhCN from '../../../../public/locales/zh-CN/game-xxx.json';
+
+createI18nContractSuite({
+    suiteName: '卡牌 i18n 文案契约',
+    getSources: getAllCards,
+    getSourceId: (card) => card.id,
+    keyExtractors: [
+        { fieldName: 'name', extract: (c) => c.name, keyPattern: /^cards\.\S+\.name$/, patternDescription: 'cards.<id>.name' },
+        { fieldName: 'description', extract: (c) => c.description, keyPattern: /^cards\.\S+\.description$/, patternDescription: 'cards.<id>.description' },
+    ],
+    locales: { 'zh-CN': flattenI18nKeys(zhCN) },
+    minSourceCount: 10,
+});
+```
+
+### 卡牌效果 timing 边界测试
+
+除了 `createEffectContractSuite` 的通用规则外，DiceThrone 还有以下边界测试（直接用 `describe/it` 编写）：
+
+| 测试 | 验证内容 | 防止的 bug |
+|------|----------|-----------|
+| 所有卡牌效果（非纯描述）都必须有显式 timing | 卡牌效果缺 timing 导致不执行 | Task 1-5 发现的 bug |
+| instant 卡牌效果必须 `timing: 'immediate'` | instant 卡只走 immediate 时机 | grantToken/grantStatus 静默跳过 |
+| upgrade 卡 replaceAbility 必须 `timing: 'immediate'` | 升级卡效果不执行 | 升级卡打出后技能未替换 |
+| grantToken/grantStatus 必须有显式 timing | 授予效果缺 timing 导致不执行 | Token/状态未授予 |
+| 带 onHit 条件的技能效果必须 `timing: 'postDamage'` | onHit 条件在错误时机判断 | 命中判定失效 |
+
 ### 强制要求
 
 - **新增英雄/卡牌/Token**：必须确保现有契约规则覆盖新数据，运行测试验证通过。
 - **新增效果类型/action type**：必须评估是否需要新增契约规则。
 - **新增游戏**：必须创建 `entity-chain-integrity.test.ts` 并注册该游戏的契约规则。
+- **卡牌 name/description 必须使用 i18n key**：禁止硬编码字符串，必须使用 `cardText()` 辅助函数生成 key。
+- **新增卡牌必须同步更新 zh-CN 和 en 的 i18n JSON**：i18n 契约测试会自动检测缺失 key。
+- **卡牌效果必须有显式 timing**：所有有 action 的效果都必须声明 timing，不得依赖隐式默认值。
 - **参考实现**：`src/games/dicethrone/__tests__/entity-chain-integrity.test.ts`
 
 ---
@@ -455,7 +497,7 @@ createEffectContractSuite({
 
 ### 背景
 
-静态引用链测试（`entityIntegritySuite`）和行为审计（`abilityBehaviorAudit`）只能检测"引用是否存在"和"关键词-行为映射"，无法检测"UI 多步交互链断裂"——例如 `structure_shift` 技能 UI 选了建筑但没有第二步选方向，导致 `payload.newPosition` 为 `undefined`，执行器静默返回空事件。
+静态引用链测试（`entityIntegritySuite`）只能检测"引用是否存在"，无法检测"UI 多步交互链断裂"——例如 `structure_shift` 技能 UI 选了建筑但没有第二步选方向，导致 `payload.newPosition` 为 `undefined`，执行器静默返回空事件。
 
 ### 核心类型（`engine/primitives/ability.ts`）
 
@@ -607,147 +649,24 @@ createInteractionCompletenessAuditSuite({
 
 ---
 
-## 能力行为审计规范（推荐）
-
-> **卡牌/能力数量多的游戏（≥30 张卡或 ≥15 个能力）推荐创建此审计**
-
-### 背景
-
-卡牌的 i18n 描述文本说了某个效果（比如"回合开始时抽牌"），但代码里忘了注册对应的触发器/执行器。在卡牌数量多的游戏里很容易出现。`abilityBehaviorAudit` 通过声明式规则自动扫描描述→代码的一致性。
-
-### 五类检查
-
-| 检查 | 说明 | 检测的 bug |
-|------|------|-----------|
-| 关键词→行为映射 | 描述匹配正则 → 验证对应行为已注册 | 描述说"回合开始时抽牌"但没注册 onTurnStart 触发器 |
-| ongoing 注册覆盖 | subtype=ongoing 的行动卡必须在注册表中有条目 | ongoing 卡没注册任何效果（trigger/protection/restriction/modifier） |
-| 能力标签执行器覆盖 | 有 abilityTags 的卡必须有对应执行器 | 卡牌定义了 onPlay 标签但 abilityRegistry 没有执行器 |
-| 自毁行为完整性 | 描述含"消灭本卡"→ 必须有自毁触发器 | 描述说消灭自己但代码没实现 |
-| 条件语句完整性 | 描述含"如果你有随从"→ 代码有条件检查 | 描述有条件但代码无条件分支 |
-
-### 使用方式
-
-```typescript
-import { createAbilityBehaviorAuditSuite } from '../../../engine/testing';
-
-createAbilityBehaviorAuditSuite({
-  suiteName: 'SmashUp 能力行为审计',
-  keywordBehavior: {
-    entities: auditableEntities,
-    rules: [
-      {
-        name: '回合开始触发器',
-        keywordPattern: /回合开始时/,
-        checkBehavior: (id) => triggerRegistry.has(id),
-        violationMessage: (id) => `描述含"回合开始时"但未注册 onTurnStart 触发器`,
-      },
-    ],
-  },
-  ongoingCollection: { ongoingActionIds, registeredOngoingIds },
-  abilityTagCoverage: { entities, registeredAbilityIds, makeRegistryKey: (id, tag) => `${id}::${tag}` },
-  selfDestruct: { entities, selfDestructPatterns: [/消灭本卡/], hasSelfDestructBehavior: (id) => ... },
-  condition: { entities, rules: [...] },
-});
-```
-
-### 参考实现
-
-- 引擎层工厂：`src/engine/testing/abilityBehaviorAudit.ts`
-- 输入接口：`AuditableEntity`（id + name + descriptionText + entityType + subtype + abilityTags）
-
----
-
-## 卡牌完整性审计规范（推荐）
-
-> **有卡牌系统的游戏（行动卡/升级卡/装备卡等）推荐创建此审计**
-
-### 背景
-
-卡牌定义中的常见遗漏：描述暗示了打出条件但 `playCondition` 未实现、效果结构不完整、占位符配置未清理。`cardCompletenessAudit` 通过声明式规则自动检测这些问题。
-
-### 三类检查
-
-| 检查 | 说明 | 检测的 bug |
-|------|------|-----------|
-| 描述条件性语言检测 | i18n 描述匹配条件模式 → 验证 playCondition 有对应字段 | 描述说"造成至少3伤害后"但没有 requireMinDamageDealt |
-| 卡牌结构完整性 | 声明式结构规则（appliesTo + check） | 升级卡缺少 replaceAbility、行动卡无效果、骰子卡缺前置条件 |
-| 占位符检测 | 检测无效/占位配置 | playCondition 只有 `requireDiceExists: false`（占位） |
-
-### 使用方式
-
-```typescript
-import { createCardCompletenessAuditSuite, type AuditableCard } from '../../../engine/testing';
-
-// 游戏层适配：将游戏卡牌类型映射为 AuditableCard
-const auditableCards: AuditableCard[] = gameCards.map(card => ({
-  id: card.id,
-  type: card.type,
-  timing: card.timing,
-  effects: card.effects?.map(e => ({ description: e.description, action: e.action })),
-  playCondition: card.playCondition,
-}));
-
-createCardCompletenessAuditSuite({
-  suiteName: 'DiceThrone 卡牌完整性审计',
-  descriptionCondition: {
-    cards: actionCards,
-    getDescriptions: (id) => [zhDesc[id], enDesc[id]].filter(Boolean),
-    rules: [
-      { name: '伤害条件', patterns: [/造成.*至少.*\d+.*伤害/], requiredConditionField: 'requireMinDamageDealt' },
-    ],
-  },
-  cardStructure: {
-    cards: auditableCards,
-    rules: [
-      { name: '升级卡必须有效果', appliesTo: c => c.type === 'upgrade', check: c => ..., describeViolation: c => ... },
-    ],
-  },
-  placeholder: {
-    cards: auditableCards,
-    patterns: [
-      { name: '占位 playCondition', isPlaceholder: c => ... },
-    ],
-  },
-});
-```
-
-### 与 abilityBehaviorAudit 的关系
-
-两者互补：
-- `abilityBehaviorAudit`：面向能力/卡牌的**行为注册**（触发器、执行器、ongoing 效果），检测"描述说了但代码没注册"
-- `cardCompletenessAudit`：面向卡牌的**定义结构**（playCondition、effects、timing），检测"配置不完整或有占位符"
-
-一个游戏可以同时使用两者。
-
-### 参考实现
-
-- 引擎层工厂：`src/engine/testing/cardCompletenessAudit.ts`
-- DiceThrone 测试：`src/games/dicethrone/__tests__/card-completeness-audit.test.ts`
-
----
-
 ## 引擎测试工具总览
 
-> 新增游戏时，根据游戏特征选择需要的审计工具。
+> **GameTestRunner 行为测试是最优先、最可靠的测试手段**。审计工具是补充，用于批量覆盖 GameTestRunner 无法高效覆盖的注册表引用完整性和交互链完整性。
 
 | 工具 | 文件 | 适用场景 | 已使用的游戏 |
 |------|------|---------|-------------|
-| GameTestRunner | `index.ts` | 命令序列执行 + 状态断言 | DiceThrone、SummonerWars、SmashUp |
+| GameTestRunner | `index.ts` | 命令序列执行 + 状态断言（首选） | DiceThrone、SummonerWars、SmashUp |
 | entityIntegritySuite | `entityIntegritySuite.ts` | 数据定义契约（注册表完整性/引用链/触发路径/效果契约） | SmashUp、DiceThrone |
 | referenceValidator | `referenceValidator.ts` | 实体引用链提取与验证 | SmashUp |
-| abilityBehaviorAudit | `abilityBehaviorAudit.ts` | 描述→代码一致性（关键词行为/ongoing/标签/自毁/条件） | SmashUp |
-| cardCompletenessAudit | `cardCompletenessAudit.ts` | 卡牌定义结构（playCondition/效果/占位符） | DiceThrone |
 | interactionChainAudit | `interactionChainAudit.ts` | UI 状态机 payload 覆盖（模式 A） | SummonerWars |
 | interactionCompletenessAudit | `interactionCompletenessAudit.ts` | Interaction handler 注册覆盖（模式 B） | SmashUp |
 
 ### 新游戏选型指南
 
+- **所有游戏（必选）** → `GameTestRunner`（命令序列 + 状态断言，覆盖核心行为）
+- 有注册表 + 数据定义（≥20 个实体） → `entityIntegritySuite`（批量扫描引用断裂）
 - 有多步 UI 交互（逐步收集 payload）→ `interactionChainAudit`
 - 有 InteractionSystem（createSimpleChoice + handler）→ `interactionCompletenessAudit`
-- 有卡牌系统（行动卡/升级卡）→ `cardCompletenessAudit`
-- 卡牌/能力数量多（≥30）→ `abilityBehaviorAudit`
-- 有注册表 + 数据定义 → `entityIntegritySuite`
-- 所有游戏 → `GameTestRunner`
 
 ---
 
@@ -1179,3 +1098,102 @@ export function getDiceThroneUIHints(core, filter): UIHint[] {
 - 引擎层：`src/engine/primitives/uiHints.ts`
 - 召唤师战争：`src/games/summonerwars/domain/uiHints.ts`
 - UI 层使用：`src/games/summonerwars/ui/useCellInteraction.ts`
+
+---
+
+## 描述→实现全链路审查规范（强制）
+
+> **新增或审查任何"描述声明了效果、代码分散在多处实现"的机制时必读**
+
+### 核心问题
+
+桌游中大量机制的描述文本包含多个独立效果，而每个效果的实现散布在不同文件、不同命令分支中。常见的失败模式是：**只实现/验证了其中一个效果就判定"已完成"，其余效果静默缺失。**
+
+这不是某一类机制的特殊问题，而是所有"描述→实现"映射的通用风险。
+
+### 适用场景（非穷举）
+
+| 机制类型 | 描述来源 | 实现散布位置 | 典型断裂点 |
+|----------|----------|-------------|-----------|
+| ACTIVE 事件卡 | 卡牌 effect 文本 | eventCards.ts（写入）→ execute.ts/validate.ts（消费）→ UI hook（高亮） | 写入完成但消费层缺失 |
+| 被动技能（onAttack/onDamaged/onMove 等） | AbilityDef.description | abilityResolver.ts（触发）→ execute.ts（后处理）→ reduce.ts（状态变更） | 触发器注册了但后处理逻辑缺失 |
+| Token / 状态效果 | TokenDef.description | 授予逻辑 → passiveTrigger（被动触发）→ 数值修改管线 → 清理/过期 | 授予了但被动触发未注册 |
+| 光环 / 持续 buff | 技能描述中的"持续"/"附近" | 标记写入 → calculateEffectiveXxx（数值查询）→ UI 显示 | 标记写入了但查询函数没读 |
+| 多阶段效果 | "先…然后…" 描述 | 第一阶段 execute → 第二阶段 execute/validate → UI 交互流 | 第一阶段完成，第二阶段缺失 |
+| 条件触发 | "每当…时" 描述 | 事件监听注册 → 条件判断 → 效果执行 → 状态更新 | 监听注册了但条件判断有误或效果执行缺失 |
+| 回合生命周期 | "回合开始/结束时" 描述 | FlowHooks/afterEventsRound → 遍历实体 → 效果执行 → 清理 | 注册了 hook 但遍历遗漏某些实体 |
+| 跨命令联动 | "当你执行 X 时，额外获得 Y" | 命令 A 的 execute → 查询标记/状态 → 命令 B 的 validate 放宽 | 命令 A 写了标记但命令 B 没查 |
+
+### 强制审查流程
+
+**第一步：拆分效果**
+
+将描述文本拆分为独立的原子效果。每个"动词"或"条件→结果"对就是一个原子效果。
+
+示例 — 编织颂歌："指定一个友方单位为目标。持续：你可以将单位召唤到目标相邻的区格。每当你将一个单位召唤到目标相邻的区格时，将目标充能。"
+- 效果 A：放入主动区域并标记目标单位
+- 效果 B：允许在目标相邻位置召唤（validate 放宽 + UI 高亮）
+- 效果 C：召唤到目标相邻位置时充能目标（execute 后处理）
+
+示例 — Token 被动触发："获得此 Token 时，每回合开始投 1 骰，命中则对相邻敌方造成 1 伤害。"
+- 效果 A：Token 授予（execute 中 grantToken）
+- 效果 B：回合开始触发（passiveTrigger 注册 + handler）
+- 效果 C：投骰 + 条件伤害（handler 内逻辑）
+
+**第二步：逐效果追踪实现链路**
+
+对每个原子效果，检查以下六层是否都有对应实现：
+
+| 层 | 检查内容 | 检查方法 |
+|----|----------|----------|
+| 1. 定义层 | 效果是否在数据定义中声明（AbilityDef/TokenDef/CardDef/事件卡 case） | 读定义文件 |
+| 2. 执行层 | 效果的触发/执行逻辑是否存在（execute/abilityResolver/handler） | grep 效果 ID 或关键常量 |
+| 3. 状态层 | 效果产生的状态变更是否被 reduce 正确持久化 | 读 reduce.ts 对应事件 |
+| 4. 验证层 | 效果是否影响其他命令的合法性（validate 放宽/收紧） | grep 效果 ID，检查 validate 分支 |
+| 5. UI 层 | 效果对应的视觉反馈/交互变化是否同步（高亮、按钮、提示） | 检查 UI hook 和组件 |
+| 6. 测试层 | 是否有端到端测试覆盖"触发条件满足 → 效果生效 → 状态正确" | 不能只测注册/写入 |
+
+**第三步：发现所有消费点**
+
+```bash
+# grep 机制的 ID 常量 / 字符串字面量，找到所有引用点
+grep -r "CARD_IDS.XXX" src/games/<gameId>/
+grep -r "ability_id_string" src/games/<gameId>/
+grep -r "token_id_string" src/games/<gameId>/
+```
+
+**规则：所有引用点都必须有对应的完整实现。如果某个 ID 只出现在定义文件和注册文件中，说明消费层缺失。**
+
+### 测试覆盖要求（强制）
+
+每个原子效果的测试必须包含：
+
+1. **正向测试**：满足触发条件 → 效果生效 → 验证最终状态变化
+2. **负向测试**：不满足触发条件 → 效果不触发 → 验证状态未变
+3. **边界测试**：极端条件（0 值、空目标、多次触发叠加等）
+
+**禁止只测"注册/写入/标记"就判定"已实现"。必须测到效果实际生效的最终状态。**
+
+### 教训案例
+
+编织颂歌（Chant of Weaving）— 3 个效果中只有效果 A 被测试覆盖：
+- 效果 A（标记目标）：`eventCards.ts` 正确写入 ✅，测试验证了 `activeEvents` 状态 ✅
+- 效果 B（允许相邻召唤）：`validate.ts` 写了逻辑 ✅，但 UI 层 `validSummonPositions` 没有同步 ❌，无测试 ❌
+- 效果 C（召唤时充能）：`execute.ts` 写了逻辑但漏了 import ❌，无测试 ❌
+
+如果按本规范执行，第二步就会发现效果 B 和 C 的 UI 层和测试层缺失。
+
+### 强制触发条件
+
+**以下场景必须执行全链路审查，不得跳过：**
+
+1. **新增机制实现**：实现任何新的技能、Token、事件卡、被动效果、光环时，完成编码后必须对照描述文本执行全链路审查，确认每个原子效果的六层链路完整。
+2. **修复"没效果"类 bug**：用户报告某机制"没效果"/"不生效"时，必须先按本规范拆分描述并逐效果排查，禁止只看一个文件就下结论。
+3. **审查已有实现**：被要求审查/确认某机制是否正确实现时，必须执行完整审查流程，禁止只看定义层或只跑已有测试就判定"已实现"。
+4. **重构涉及消费链路**：重构 execute/validate/reduce/UI 时，如果变更影响了某机制的消费点（如修改了 `SUMMON_UNIT` 分支），必须 grep 该分支涉及的所有机制 ID，确认没有破坏其他机制的消费链路。
+
+**审查产出要求**：
+
+- 审查结果必须以"原子效果 × 六层"矩阵形式输出（可以是表格或清单），每个交叉点标注 ✅/❌。
+- 发现 ❌ 时必须立即修复或明确标注为已知缺陷（附 TODO）。
+- 禁止输出"看起来没问题"这类模糊结论，必须逐效果逐层给出具体证据（文件名 + 行号或函数名）。

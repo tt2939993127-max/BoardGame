@@ -97,7 +97,9 @@ export type AbilityEffect =
   // 推拉（欺心巫族核心机制）
   | { type: 'pushPull'; target: TargetRef; distance: number; direction: 'push' | 'pull' | 'choice' }
   // 移动增强
-  | { type: 'extraMove'; target: TargetRef; value: number; canPassThrough?: 'units' | 'structures' | 'all' }
+  | { type: 'extraMove'; target: TargetRef; value: number; canPassThrough?: 'units' | 'structures' | 'all'; damageOnPassThrough?: number }
+  // 光环：增加友方建筑生命
+  | { type: 'auraStructureLife'; range: number; value: number }
   // 控制权转移（心灵捕获）
   | { type: 'takeControl'; target: TargetRef; duration?: 'permanent' | 'untilEndOfTurn' }
   // 减伤

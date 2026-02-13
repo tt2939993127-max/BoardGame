@@ -617,7 +617,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         bloodSummonHighlights={interaction.bloodSummonHighlights}
                         annihilateHighlights={interaction.annihilateHighlights}
                         annihilateMode={interaction.annihilateMode}
-                        abilityMode={abilityMode}
                         mindControlHighlights={interaction.mindControlHighlights}
                         mindControlSelectedTargets={interaction.mindControlMode?.selectedTargets ?? []}
                         entanglementHighlights={interaction.entanglementHighlights}

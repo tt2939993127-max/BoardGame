@@ -24,6 +24,7 @@ import {
     triggerExtendedBaseAbility,
 } from '../domain/baseAbilities';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
+import { getEffectivePower } from '../domain/ongoingModifiers';
 
 const PLAYER_IDS = ['0', '1'];
 
@@ -53,98 +54,76 @@ const DRAFT_COMMANDS: SmashUpCommand[] = [
 ] as any[];
 
 // ============================================================================
-// base_central_brain: 中央大脑 - 随从入场 +1 力量
+// base_central_brain: 中央大脑 - 持续被动 +1 力量（power modifier）
 // ============================================================================
 
-describe('base_central_brain: 随从入场 +1 力量', () => {
-    it('打出随从到中央大脑基地时获得 +1 powerModifier', () => {
-        const runner = createRunner();
-        const result = runner.run({
-            name: '选秀',
-            commands: DRAFT_COMMANDS,
-        });
+describe('base_central_brain: 持续被动 +1 力量', () => {
+    it('中央大脑基地上的随从 getEffectivePower 包含 +1 修正', () => {
+        const minion = {
+            uid: 'm1', defId: 'd1', controller: '0', owner: '0',
+            basePower: 3, powerModifier: 0, talentUsed: false, attachedActions: [],
+        };
+        const state = {
+            bases: [{
+                defId: 'base_central_brain',
+                minions: [minion],
+                ongoingActions: [],
+            }],
+            players: { '0': { hand: [], deck: [], discard: [] } },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+        } as any;
 
-        const core = result.finalState.core;
-        const pid = getCurrentPlayerId(core);
-        const player = core.players[pid];
-
-        // 找中央大脑基地
-        const centralBrainIdx = core.bases.findIndex(b => b.defId === 'base_central_brain');
-        if (centralBrainIdx === -1) {
-            // 基地未翻出，跳过
-            return;
-        }
-
-        // 找一张随从卡
-        const minion = player.hand.find(c => c.type === 'minion');
-        if (!minion) return;
-
-        const runner2 = createRunner();
-        const result2 = runner2.run({
-            name: '打出随从到中央大脑',
-            commands: [
-                ...DRAFT_COMMANDS,
-                {
-                    type: SU_COMMANDS.PLAY_MINION,
-                    playerId: pid,
-                    payload: { cardUid: minion.uid, baseIndex: centralBrainIdx },
-                },
-            ] as any[],
-        });
-
-        const playStep = result2.steps[result2.steps.length - 1];
-        expect(playStep?.success).toBe(true);
-        // 应包含 POWER_COUNTER_ADDED 事件
-        expect(playStep?.events).toContain(SU_EVENTS.POWER_COUNTER_ADDED);
-
-        // 验证随从的 powerModifier 为 1
-        const base = result2.finalState.core.bases[centralBrainIdx];
-        const placedMinion = base.minions.find(m => m.uid === minion.uid);
-        expect(placedMinion).toBeDefined();
-        expect(placedMinion!.powerModifier).toBe(1);
+        const effective = getEffectivePower(state, minion, 0);
+        // basePower(3) + powerModifier(0) + ongoingModifier(+1 from central brain) = 4
+        expect(effective).toBe(4);
     });
 
-    it('打出随从到非中央大脑基地时不获得额外力量', () => {
-        const runner = createRunner();
-        const result = runner.run({
-            name: '选秀',
-            commands: DRAFT_COMMANDS,
-        });
+    it('非中央大脑基地上的随从不获得 +1 修正', () => {
+        const minion = {
+            uid: 'm1', defId: 'd1', controller: '0', owner: '0',
+            basePower: 3, powerModifier: 0, talentUsed: false, attachedActions: [],
+        };
+        const state = {
+            bases: [{
+                defId: 'base_the_jungle',
+                minions: [minion],
+                ongoingActions: [],
+            }],
+            players: { '0': { hand: [], deck: [], discard: [] } },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+        } as any;
 
-        const core = result.finalState.core;
-        const pid = getCurrentPlayerId(core);
-        const player = core.players[pid];
+        const effective = getEffectivePower(state, minion, 0);
+        expect(effective).toBe(3);
+    });
 
-        // 找一个不是中央大脑的基地
-        const otherIdx = core.bases.findIndex(b => b.defId !== 'base_central_brain');
-        if (otherIdx === -1) return;
+    it('移动到中央大脑的随从也获得 +1（非仅入场时）', () => {
+        const m1 = {
+            uid: 'm1', defId: 'd1', controller: '0', owner: '0',
+            basePower: 5, powerModifier: 0, talentUsed: false, attachedActions: [],
+        };
+        const m2 = {
+            uid: 'm2', defId: 'd2', controller: '1', owner: '1',
+            basePower: 2, powerModifier: 0, talentUsed: false, attachedActions: [],
+        };
+        const state = {
+            bases: [{
+                defId: 'base_central_brain',
+                minions: [m1, m2],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': { hand: [], deck: [], discard: [] },
+                '1': { hand: [], deck: [], discard: [] },
+            },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+        } as any;
 
-        const minion = player.hand.find(c => c.type === 'minion');
-        if (!minion) return;
-
-        const runner2 = createRunner();
-        const result2 = runner2.run({
-            name: '打出随从到其他基地',
-            commands: [
-                ...DRAFT_COMMANDS,
-                {
-                    type: SU_COMMANDS.PLAY_MINION,
-                    playerId: pid,
-                    payload: { cardUid: minion.uid, baseIndex: otherIdx },
-                },
-            ] as any[],
-        });
-
-        const playStep = result2.steps[result2.steps.length - 1];
-        expect(playStep?.success).toBe(true);
-
-        // 验证随从的 powerModifier 为 0（除非该随从自身有 onPlay 加力量的能力）
-        const base = result2.finalState.core.bases[otherIdx];
-        const placedMinion = base.minions.find(m => m.uid === minion.uid);
-        expect(placedMinion).toBeDefined();
-        // 不检查具体值，因为某些随从可能有自身能力修改 powerModifier
-        // 但不应有 POWER_COUNTER_ADDED 来自基地能力
-        // 检查事件中不包含来自中央大脑的 POWER_COUNTER_ADDED
+        expect(getEffectivePower(state, m1, 0)).toBe(6); // 5 + 0 + 1
+        expect(getEffectivePower(state, m2, 0)).toBe(3); // 2 + 0 + 1
     });
 });
 

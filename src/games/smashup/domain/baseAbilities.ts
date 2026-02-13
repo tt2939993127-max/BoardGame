@@ -11,8 +11,7 @@ import type {
     SmashUpEvent,
     VpAwardedEvent,
     CardsDrawnEvent,
-    CardsDiscardedEvent,
-    PowerCounterAddedEvent,
+    CardsDiscardedEvent,
     LimitModifiedEvent,
     CardToDeckBottomEvent,
     MinionOnBase,
@@ -245,22 +244,9 @@ export function registerBaseAbilities(): void {
     });
 
     // base_central_brain: 中央大脑
-    // "每个在这里的随从获得+1力量�?
-    registerBaseAbility('base_central_brain', 'onMinionPlayed', (ctx) => {
-        if (!ctx.minionUid) return { events: [] };
-        return {
-            events: [{
-                type: SU_EVENTS.POWER_COUNTER_ADDED,
-                payload: {
-                    minionUid: ctx.minionUid,
-                    baseIndex: ctx.baseIndex,
-                    amount: 1,
-                    reason: '中央大脑�?1力量',
-                },
-                timestamp: ctx.now,
-            } as PowerCounterAddedEvent],
-        };
-    });
+    // "每个在这里的随从获得+1力量"
+    // 持续性被动 buff，通过 power modifier 实现（非入场指示物）
+    // 注册在 ongoing_modifiers.ts 的 registerBaseModifiers() 中
 
     // base_cave_of_shinies: 闪光洞穴
     // "每当这里的一个随从被消灭后，它的拥有者获�?VP�?

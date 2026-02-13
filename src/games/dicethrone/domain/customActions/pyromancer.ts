@@ -160,7 +160,7 @@ const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
  * 流星 (Meteor) 结算: 根据 base-ability.png 校准
  * (Stun 和 Collateral 2 在 abilities.ts 触发)
  * 1. 获得 2 火焰精通
- * 2. 然后造成 (1x FM) 不可防御伤害
+ * 2. 然后造成 (1x FM) 不可防御伤害给对手
  */
 const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
@@ -178,10 +178,12 @@ const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
         timestamp
     } as TokenGrantedEvent);
 
+    // FM 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
+    const opponentId = Object.keys(ctx.state.players).find(id => id !== ctx.attackerId) ?? ctx.attackerId;
     if (updatedFM > 0) {
         events.push({
             type: 'DAMAGE_DEALT',
-            payload: { targetId: ctx.targetId, amount: updatedFM, actualDamage: updatedFM, sourceAbilityId: ctx.sourceAbilityId },
+            payload: { targetId: opponentId, amount: updatedFM, actualDamage: updatedFM, sourceAbilityId: ctx.sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 0.1
         } as DamageDealtEvent);

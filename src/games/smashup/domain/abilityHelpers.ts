@@ -351,11 +351,11 @@ export function openMeFirstWindow(
  */
 export function buildMinionTargetOptions(
     candidates: { uid: string; defId: string; baseIndex: number; label: string }[]
-): EnginePromptOption<{ minionUid: string; baseIndex: number }>[] {
+): EnginePromptOption<{ minionUid: string; baseIndex: number; defId: string }>[] {
     return candidates.map((c, i) => ({
         id: `minion-${i}`,
         label: c.label,
-        value: { minionUid: c.uid, baseIndex: c.baseIndex },
+        value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
     }));
 }
 

@@ -215,8 +215,13 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         const newCell = { ...cell };
         if (newCell.unit) {
           // 回合切换：重置移动/攻击状态，清除临时技能（幻化）
-          const { tempAbilities: _removed, ...unitWithoutTemp } = newCell.unit;
-          newCell.unit = { ...unitWithoutTemp, hasMoved: false, hasAttacked: false, wasAttackedThisTurn: false };
+          const { tempAbilities: _removed, originalOwner: origOwner, ...unitWithoutTemp } = newCell.unit;
+          // 心灵操控：归还临时控制的单位
+          if (origOwner) {
+            newCell.unit = { ...unitWithoutTemp, owner: origOwner, hasMoved: false, hasAttacked: false, wasAttackedThisTurn: false };
+          } else {
+            newCell.unit = { ...unitWithoutTemp, hasMoved: false, hasAttacked: false, wasAttackedThisTurn: false };
+          }
         }
         return newCell;
       }));
@@ -468,18 +473,68 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
 
     case SW_EVENTS.ABILITY_TRIGGERED: {
       // 记录技能使用次数（用于限制每回合使用次数）
-      const abilityPayload = event.payload as { abilityId?: string; sourceUnitId?: string };
+      const abilityPayload = event.payload as {
+        abilityId?: string; sourceUnitId?: string;
+        grantedAbility?: string; targetUnitId?: string;
+      };
+
+      let updatedCore = core;
+
+      // 力量颂歌等：将 grantedAbility 写入目标单位的 tempAbilities
+      if (abilityPayload.grantedAbility && abilityPayload.targetUnitId) {
+        const newBoard = updatedCore.board.map(row => row.map(cell => {
+          if (cell.unit && cell.unit.cardId === abilityPayload.targetUnitId) {
+            const existing = cell.unit.tempAbilities ?? [];
+            if (!existing.includes(abilityPayload.grantedAbility!)) {
+              return { ...cell, unit: { ...cell.unit, tempAbilities: [...existing, abilityPayload.grantedAbility!] } };
+            }
+          }
+          return cell;
+        }));
+        updatedCore = { ...updatedCore, board: newBoard };
+      }
+
+      // 交缠颂歌：标记两个目标到主动事件卡
+      if (abilityPayload.abilityId === 'chant_of_entanglement') {
+        const entPayload = event.payload as {
+          targetUnitId1?: string; targetUnitId2?: string;
+          sourceUnitId?: string;
+        };
+        if (entPayload.targetUnitId1 && entPayload.targetUnitId2) {
+          // 找到刚放入主动区域的交缠颂歌卡，写入 entanglementTargets
+          const newPlayers = { ...updatedCore.players };
+          for (const pid of ['0', '1'] as PlayerId[]) {
+            const player = newPlayers[pid];
+            const hasEntanglement = player.activeEvents.some(ev =>
+              getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT && !ev.entanglementTargets
+            );
+            if (hasEntanglement) {
+              newPlayers[pid] = {
+                ...player,
+                activeEvents: player.activeEvents.map(ev =>
+                  getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT && !ev.entanglementTargets
+                    ? { ...ev, entanglementTargets: [entPayload.targetUnitId1!, entPayload.targetUnitId2!] as [string, string] }
+                    : ev
+                ),
+              };
+              break;
+            }
+          }
+          updatedCore = { ...updatedCore, players: newPlayers };
+        }
+      }
+
       if (abilityPayload.abilityId && abilityPayload.sourceUnitId) {
         const usageKey = `${abilityPayload.sourceUnitId}:${abilityPayload.abilityId}`;
         return {
-          ...core,
+          ...updatedCore,
           abilityUsageCount: {
-            ...(core.abilityUsageCount ?? {}),
-            [usageKey]: ((core.abilityUsageCount ?? {})[usageKey] ?? 0) + 1,
+            ...(updatedCore.abilityUsageCount ?? {}),
+            [usageKey]: ((updatedCore.abilityUsageCount ?? {})[usageKey] ?? 0) + 1,
           },
         };
       }
-      return core;
+      return updatedCore;
     }
 
     case SW_EVENTS.STRENGTH_MODIFIED:
@@ -584,15 +639,22 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     }
 
     case SW_EVENTS.CONTROL_TRANSFERRED: {
-      // 控制权转移：改变单位的 owner
-      const { targetPosition, newOwner } = payload as {
+      // 控制权转移：改变单位的 owner，保存原始拥有者（临时控制用）
+      const { targetPosition, newOwner, temporary, originalOwner: origOwner } = payload as {
         targetPosition: CellCoord;
         newOwner: PlayerId;
+        temporary?: boolean;
+        originalOwner?: PlayerId;
       };
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       const cell = newBoard[targetPosition.row]?.[targetPosition.col];
       if (cell?.unit) {
-        cell.unit = { ...cell.unit, owner: newOwner };
+        cell.unit = {
+          ...cell.unit,
+          owner: newOwner,
+          // 临时控制时保存原始拥有者，回合结束归还
+          ...(temporary && origOwner ? { originalOwner: origOwner } : {}),
+        };
       }
       return { ...core, board: newBoard };
     }

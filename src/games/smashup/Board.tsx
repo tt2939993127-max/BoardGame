@@ -71,7 +71,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
 
     const [selectedCardUid, setSelectedCardUid] = useState<string | null>(null);
-    const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | null>(null);
+    const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | 'ongoing-minion' | null>(null);
     const [discardSelection, setDiscardSelection] = useState<Set<string>>(new Set());
     const autoAdvancePhaseRef = useRef<string | null>(null);
     const needDiscard = phase === 'discard' && isMyTurn && myPlayer != null && myPlayer.hand.length > HAND_LIMIT;
@@ -210,12 +210,28 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
         setSelectedCardMode(null);
     }, [moves, isTutorialCommandAllowed]);
 
+    /** 持续行动卡附着到随从：点击随从时触发 */
+    const handlePlayOngoingToMinion = useCallback((cardUid: string, baseIndex: number, minionUid: string) => {
+        if (!isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION)) {
+            playDeniedSound();
+            return;
+        }
+        moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid, targetBaseIndex: baseIndex, targetMinionUid: minionUid });
+        setSelectedCardUid(null);
+        setSelectedCardMode(null);
+    }, [moves, isTutorialCommandAllowed]);
+
     // VIEWING STATE
     const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' } | null>(null);
 
     const handleBaseClick = useCallback((index: number) => {
         const base = core.bases[index];
         if (selectedCardUid) {
+            if (selectedCardMode === 'ongoing-minion') {
+                // 需要选择随从，点击基地无效
+                toast(t('ui.select_minion_hint', { defaultValue: '请选择一个随从' }));
+                return;
+            }
             if (selectedCardMode === 'ongoing') {
                 handlePlayOngoingAction(selectedCardUid, index);
             } else {
@@ -224,7 +240,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
         } else {
             setViewingCard({ defId: base.defId, type: 'base' });
         }
-    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases]);
+    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases, t]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
         // 手牌弃牌交互优先：直接响应 interaction
@@ -260,16 +276,17 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
 
         // Normal play logic
         if (card.type === 'action') {
-            // ongoing 行动卡需要选择基地
+            // ongoing 行动卡需要选择目标
             const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
             if (cardDef?.subtype === 'ongoing') {
-                // 进入/退出部署模式，等待点击基地
+                // 进入/退出部署模式
                 if (selectedCardUid === card.uid) {
                     setSelectedCardUid(null);
                     setSelectedCardMode(null);
                 } else {
                     setSelectedCardUid(card.uid);
-                    setSelectedCardMode('ongoing');
+                    // 根据 ongoingTarget 决定选择基地还是随从
+                    setSelectedCardMode(cardDef.ongoingTarget === 'minion' ? 'ongoing-minion' : 'ongoing');
                 }
             } else {
                 moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid: card.uid });
@@ -284,6 +301,13 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
             }
         }
     }, [isMyTurn, phase, moves, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt]);
+
+    /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从 */
+    const handleMinionSelect = useCallback((minionUid: string, baseIndex: number) => {
+        if (selectedCardUid && selectedCardMode === 'ongoing-minion') {
+            handlePlayOngoingToMinion(selectedCardUid, baseIndex, minionUid);
+        }
+    }, [selectedCardUid, selectedCardMode, handlePlayOngoingToMinion]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
         setViewingCard({ defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' });
@@ -482,10 +506,12 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                             core={core}
                             turnOrder={core.turnOrder}
                             isDeployMode={!!selectedCardUid}
+                            isMinionSelectMode={selectedCardMode === 'ongoing-minion'}
                             isMyTurn={isMyTurn}
                             myPlayerId={playerID}
                             moves={moves}
                             onClick={() => handleBaseClick(idx)}
+                            onMinionSelect={handleMinionSelect}
                             onViewMinion={(defId) => setViewingCard({ defId, type: 'minion' })}
                             onViewAction={handleViewAction}
                             isTutorialTargetAllowed={isTutorialTargetAllowed}

@@ -458,7 +458,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
             expect(newState.madnessDeck!.length).toBe(MADNESS_DECK_SIZE - 2);
         });
 
-        it('3人游戏中选第一个对手', () => {
+        it('3人游戏中创建 Prompt 选择对手', () => {
             const state = makeStateWithMadness({
                 players: {
                     '0': makePlayer('0', {
@@ -471,8 +471,10 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
-            expect((madnessEvents[0] as any).payload.playerId).toBe('1');
+            // 多个对手时创建 Interaction 选择，不直接产生 MADNESS_DRAWN
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBeGreaterThanOrEqual(1);
+            expect(interactions[0]?.data?.sourceId).toBe('miskatonic_mandatory_reading');
         });
     });
 

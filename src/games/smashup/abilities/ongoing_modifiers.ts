@@ -7,6 +7,7 @@
 
 import { registerPowerModifier, registerBreakpointModifier } from '../domain/ongoingModifiers';
 import type { PowerModifierContext, BreakpointModifierContext } from '../domain/ongoingModifiers';
+import { getBaseDef } from '../data/cards';
 
 // ============================================================================
 // 恐龙派系
@@ -219,9 +220,21 @@ function registerElderThingModifiers(): void {
         return ctx.minion.attachedActions.some(a => a.defId === 'elder_thing_dunwich_horror') ? 5 : 0;
     });
 }
+// ============================================================================
+// 基地持续力量修正
+// ============================================================================
+
+function registerBaseModifiers(): void {
+    // 通用基地持续力量加成：从 BaseCardDef.minionPowerBonus 数据驱动
+    registerPowerModifier('base_minionPowerBonus', (ctx: PowerModifierContext) => {
+        const baseDef = getBaseDef(ctx.base.defId);
+        return baseDef?.minionPowerBonus ?? 0;
+    });
+}
 
 /** 注册所有持续力量修�?*/
 export function registerAllOngoingModifiers(): void {
+    registerBaseModifiers();
     registerDinosaurModifiers();
     registerRobotModifiers();
     registerGhostModifiers();

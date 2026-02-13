@@ -111,7 +111,7 @@ export const NODES: ArchNode[] = [
   { id: 'pipeline', label: '⚡ 回合执行引擎', desc: '每次操作经过8步处理：校验→执行→更新→通知', col: 0, row: 1, colSpan: 6, color: C.engine, layer: 'engine', expandable: 'pipeline', storyIndex: 2 },
   { id: 'systems', label: '🔌 系统插件', desc: '撤销·教学·日志…不改游戏规则就能加功能', col: 0, row: 2, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'systems' },
   { id: 'primitives', label: '🧩 基础能力库', desc: '骰子、卡牌、资源…现成的积木块，拼出任意游戏', col: 3, row: 2, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'primitives', details: ['🎯 所有游戏都能用的"积木块" — 15个独立模块', '底层: 骰子·卡牌·资源·条件·效果·棋盘格·表达式·目标选择·标签·属性·修饰器·UI提示', '中层: 注册技能 → 绑定执行逻辑 → 自动路由操作 → 图片映射', '游戏挑选需要的积木块，引擎负责组装和调度', '🎲 例: 骰子王座用能力框架注册6英雄技能，底层用[骰子+资源池+目标选择+效果处理+属性+修饰器]'] },
-  { id: 'testfw', label: '🧪 自动化测试', desc: '五轨验证：命令回放·实体完整性·行为审计·交互完整性·E2E截图', col: 0, row: 3, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'testing', details: ['🎯 五轨并行确保改代码后游戏不坏', '① 命令驱动: 录制对局→回放命令→快照对比', '② 实体完整性: 注册表+引用链+触发路径+效果契约', '③ 行为审计: 描述关键词→代码行为·ongoing·标签·自毁·条件', '④ 交互完整性: UI状态机payload覆盖 + Handler注册链', '⑤ E2E截图: Playwright无头浏览器+像素对比'] },
+  { id: 'testfw', label: '🧪 自动化测试', desc: '四轨验证：命令回放·实体完整性·交互完整性·E2E截图', col: 0, row: 3, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'testing', details: ['🎯 四轨并行确保改代码后游戏不坏', '① 命令驱动: 录制对局→回放命令→快照对比（最优先）', '② 实体完整性: 注册表+引用链+触发路径+效果契约', '③ 交互完整性: UI状态机payload覆盖 + Handler注册链', '④ E2E截图: Playwright无头浏览器+像素对比'] },
   { id: 'eventstream', label: '📡 事件广播', desc: '实时通知界面播放特效和音效', col: 3, row: 3, colSpan: 3, color: C.engine, layer: 'engine', details: ['🎯 管线处理完后通知UI"发生了什么" → 播放对应特效', '每个事件有自增ID, 撤销时清空(防止重播旧动画)', '🎲 例: 管线产生[攻击命中, 扣血-3] → UI依次播放命中音效+飞字"-3"'] },
   // ── 框架核心 ──
   { id: 'matchstate', label: '💾 游戏状态', desc: '当前对局的完整快照：轮到谁、血量多少、骰子几个…', col: 0, row: 4, colSpan: 3, color: C.core, layer: 'core', storyIndex: 3,
@@ -204,11 +204,12 @@ export const NODES: ArchNode[] = [
   { id: 'fx', label: '✨ 视觉特效', desc: '粒子动画·画面震动·伤害飞字', col: 2, row: 7, colSpan: 2, color: C.fx, layer: 'ui', details: ['🎯 让游戏"有感觉" — 动画·音效·屏幕震动', 'Canvas 2D 粒子引擎 · Shader 特效 · CSS 动画', '🎲 例: 骰子王座攻击 → 屏幕震动 + 伤害飞字"-3"'] },
   { id: 'lib', label: '🛠 工具库', desc: '中英文切换、音效播放、常用工具函数', col: 4, row: 7, colSpan: 2, color: C.ui, layer: 'ui', details: ['🎯 常用工具 — 中英文切换 / 音效播放 / 通用函数', 'i18n(中英文切换) · 音效管理 · 常用工具函数', '🎲 例: 切换语言 → 所有界面文字自动变成英文'] },
   // ── 服务端 ──
-  { id: 'bgio', label: '🎲 boardgame.io', desc: '状态同步·回合管理·房间管理', col: 0, row: 8, colSpan: 2, color: C.server, layer: 'server', storyIndex: 4, details: ['🎯 保证所有玩家看到一致的游戏状态', '你的操作 → 服务器校验 → 广播给所有人', 'Immer状态管理: 不可变更新, 自动记录历史', '🎲 例: 你点击"攻击" → 服务器确认合法 → 对手画面同步显示你的攻击动画'] },
+  { id: 'bgio', label: '🎲 boardgame.io', desc: 'Docker game-server容器 · 状态同步·回合管理·房间管理', col: 0, row: 8, colSpan: 2, color: C.server, layer: 'server', storyIndex: 4, details: ['🎯 保证所有玩家看到一致的游戏状态', '独立 Docker 容器(game-server)，web容器通过内部网络代理', '你的操作 → 服务器校验 → 广播给所有人', 'Immer状态管理: 不可变更新, 自动记录历史', '🎲 例: 你点击"攻击" → 服务器确认合法 → 对手画面同步显示你的攻击动画'] },
   { id: 'socketio', label: '💬 实时通信', desc: '大厅/聊天/匹配/重赛投票', col: 2, row: 8, colSpan: 2, color: C.server, layer: 'server', details: ['🎯 非游戏内的实时通信 — 大厅/聊天/邀请', '在线状态 · 好友邀请 · 大厅聊天 · 重赛投票', '🎲 例: 你在大厅看到好友在线 → 发送邀请 → 好友收到弹窗'] },
-  { id: 'restapi', label: '🌐 NestJS API', desc: '认证·社交·管理后台（13个模块）', col: 4, row: 8, colSpan: 2, color: C.server, layer: 'server', details: ['🎯 独立 NestJS 服务 — apps/api/', '13个模块: auth·admin·friend·message·invite·review·custom-deck·layout·ugc(搁置)·sponsor·feedback·user-settings·health', '用户认证(JWT) · 好友/消息/邀请 · 评论/评分 · 自定义卡组 · 管理后台', '🎲 例: 注册账号 → JWT登录 → 添加好友 → 发送邀请'] },
-  { id: 'mongodb', label: '🗄 数据库', desc: '游戏状态·用户·自定义卡组', col: 0, row: 9, colSpan: 3, color: C.server, layer: 'server', storyIndex: 5, details: ['🎯 所有需要长期保存的数据都在这里', '游戏状态(断线重连) · 用户数据(账号) · 自定义卡组', '🎲 例: 对战到一半掉线 → 重新打开 → 对局还在, 从上次继续'] },
-  { id: 'static', label: '☁️ 静态资源', desc: 'Cloudflare R2 · 图片 · 音频 · 国际化', col: 3, row: 9, colSpan: 3, color: C.server, layer: 'server', details: ['🎯 图片/音频/翻译文件的存储和分发', 'Cloudflare R2 CDN · 全球加速', '🎲 例: 玩家在海外打开游戏 → CDN就近加载卡牌图片, 秒开'] },
+  { id: 'restapi', label: '🌐 NestJS API', desc: 'Docker web容器 · 认证·社交·管理后台（13个模块）', col: 4, row: 8, colSpan: 2, color: C.server, layer: 'server', details: ['🎯 NestJS 单体服务 — Docker web 容器直接监听 :80', '同域部署: 前端静态文件 + API + WebSocket 代理 → 无CORS', '13个模块: auth·admin·friend·message·invite·review·custom-deck·layout·ugc(搁置)·sponsor·feedback·user-settings·health', '🎲 例: 注册账号 → JWT登录 → 添加好友 → 发送邀请'] },
+  { id: 'mongodb', label: '🗄 MongoDB', desc: '游戏状态·用户·自定义卡组（Docker容器）', col: 0, row: 9, colSpan: 2, color: C.server, layer: 'server', storyIndex: 5, details: ['🎯 所有需要长期保存的数据都在这里', '游戏状态(断线重连) · 用户数据(账号) · 自定义卡组', 'Docker 容器内部通信，不暴露端口到宿主机', '🎲 例: 对战到一半掉线 → 重新打开 → 对局还在, 从上次继续'] },
+  { id: 'redis', label: '⚡ Redis', desc: '会话缓存·在线状态·实时数据', col: 2, row: 9, colSpan: 2, color: C.server, layer: 'server', details: ['🎯 高速缓存层 — 毫秒级读写', 'Redis 7 Alpine · Docker 容器', '会话管理 · 在线状态 · 实时数据缓存', '🎲 例: 查询好友在线状态 → Redis 直接返回, 无需查数据库'] },
+  { id: 'static', label: '☁️ Cloudflare CDN', desc: '全站HTTPS + 静态资源缓存 + 全球加速', col: 4, row: 9, colSpan: 2, color: C.server, layer: 'server', details: ['🎯 Cloudflare 代理全站流量 — HTTPS + CDN + 防护', '架构: Cloudflare(HTTPS) → 服务器:80 → Docker web容器(NestJS)', 'SSL模式: Flexible（源站HTTP，Cloudflare自动加密）', '自动缓存静态资源(JS/CSS/图片)，服务器只承担API和WebSocket', '🎲 例: 玩家在海外打开游戏 → CDN就近加载, 秒开'] },
 ];
 
 // ============================================================================
@@ -249,6 +250,8 @@ export const EDGES: ArchEdge[] = [
   { from: 'pages', to: 'socketio', label: '大厅通信', color: C.server, type: 'data' },
   { from: 'pages', to: 'restapi', label: 'API 调用', color: C.server, type: 'data' },
   { from: 'restapi', to: 'mongodb', label: 'CRUD', color: C.server, type: 'data' },
+  { from: 'restapi', to: 'redis', label: '缓存', color: C.server, type: 'data' },
+  { from: 'bgio', to: 'redis', label: '会话', color: C.server, type: 'data' },
   { from: 'assetloader', to: 'static', label: '加载资源', color: C.server, type: 'data' },
 ];
 
@@ -322,7 +325,7 @@ export const OVERVIEW_LAYERS: OverviewLayer[] = [
     id: 'engine', emoji: '⚡', label: '引擎层',
     whatItDoes: '自动处理每一步操作：校验→执行→更新→通知',
     whyItExists: '没有它 → 每个游戏都要自己写回合管理、撤销、联机同步',
-    tags: ['8步管线', '11个系统插件', '15个基础能力', '5轨自动化测试'],
+    tags: ['8步管线', '11个系统插件', '15个基础能力', '4轨自动化测试'],
     color: C.engine, drillDown: 'sub-pipeline',
   },
   {
@@ -343,7 +346,7 @@ export const OVERVIEW_LAYERS: OverviewLayer[] = [
     id: 'server', emoji: '🖧', label: '服务端',
     whatItDoes: '联机同步、用户账号、数据存储',
     whyItExists: '没有它 → 只能自己跟自己玩',
-    tags: ['boardgame.io', '实时通信', 'NestJS API', 'MongoDB'],
+    tags: ['boardgame.io', '实时通信', 'NestJS API', 'MongoDB', 'Redis', 'Cloudflare CDN'],
     color: C.server,
   },
 ];
@@ -387,15 +390,15 @@ export const C4_CONTEXT: ContextEntity[] = [
   { id: 'user', label: '👤 玩家', desc: '通过浏览器玩桌游', type: 'person', color: '#bc8cff' },
   { id: 'story', label: '🎮 骰子王座', desc: '一个具体的桌游游戏（引擎的使用者）', type: 'story', color: C.game },
   { id: 'platform', label: '⚙️ 桌游引擎框架', desc: '自动处理回合、同步、撤销、特效…', type: 'system', color: '#58a6ff' },
-  { id: 'ext-db', label: '🗄️ MongoDB', desc: '用户 · 对局 · 卡组', type: 'external', color: '#8b949e' },
-  { id: 'ext-cdn', label: '☁️ Cloudflare R2', desc: '图片 · 音频 · CDN', type: 'external', color: '#8b949e' },
+  { id: 'ext-db', label: '🗄️ MongoDB + Redis', desc: '持久化 · 缓存 · Docker容器', type: 'external', color: '#8b949e' },
+  { id: 'ext-cdn', label: '☁️ Cloudflare CDN', desc: 'HTTPS · 静态缓存 · 全球加速', type: 'external', color: '#8b949e' },
 ];
 
 export const C4_CONTEXT_LINKS: { from: string; to: string; label: string }[] = [
   { from: 'user', to: 'story', label: '浏览器操作' },
   { from: 'story', to: 'platform', label: '发送操作指令' },
-  { from: 'platform', to: 'ext-db', label: '状态持久化' },
-  { from: 'platform', to: 'ext-cdn', label: '静态资源加载' },
+  { from: 'platform', to: 'ext-db', label: '持久化+缓存' },
+  { from: 'platform', to: 'ext-cdn', label: 'HTTPS代理+CDN' },
 ];
 
 /** L2 Container 层间边 */
@@ -410,10 +413,10 @@ export const CONTAINER_LINKS: { from: string; to: string; label: string; color: 
 /** 每层组件摘要（L2 容器图显示） */
 export const LAYER_SUMMARIES: Record<string, string> = {
   game: '定义游戏规则 · 开局摆什么 · 能做什么 · 做了会怎样',
-  engine: '自动处理操作 · 8步管线 · 11个系统插件 · 15个基础能力 · 5轨测试框架',
+  engine: '自动处理操作 · 8步管线 · 11个系统插件 · 15个基础能力 · 4轨测试框架',
   core: '管理对局数据 · 游戏定义 · 三种模式自动适配 · 资源加载',
   ui: '页面路由 · 游戏骨架 · 视觉特效 · 全局状态 · 工具库',
-  server: '联机同步 · 实时通信 · 用户系统(13模块) · 数据库 · CDN',
+  server: '联机同步 · 实时通信 · 用户系统(13模块) · Docker部署 · MongoDB · Redis · Cloudflare CDN',
 };
 
 /** L3: 某层内部边 */
@@ -546,22 +549,6 @@ export const INTEGRITY_TEST_STEPS: IntegrityTestStep[] = [
   { emoji: '🎯', label: '触发路径声明', desc: 'CONFIRMED / TODO / 分支完整性', example: '52 CONFIRMED + 8 TODO + 3 分支' },
   { emoji: '📐', label: '效果契约验证', desc: '隐式数据契约 · 类型安全守卫', example: 'rollDie必须有conditionalEffects' },
   { emoji: '📊', label: '覆盖率报告', desc: '引用覆盖 / 分支覆盖统计', example: '引用87% · 分支92% · 无孤儿' },
-];
-
-/** 能力行为审计步骤 */
-export interface BehaviorAuditStep {
-  emoji: string;
-  label: string;
-  desc: string;
-  example?: string;
-}
-
-export const BEHAVIOR_AUDIT_STEPS: BehaviorAuditStep[] = [
-  { emoji: '🔑', label: '关键词→行为映射', desc: '描述含"伤害"→代码有伤害逻辑', example: '"造成3点伤害"→ checkBehavior(dmg_handler) ✓' },
-  { emoji: '📌', label: 'ongoing注册覆盖', desc: 'ongoing卡必须注册trigger/protection等', example: '12张ongoing卡 → 全部有注册 ✓' },
-  { emoji: '🏷️', label: '能力标签覆盖', desc: '有abilityTag的卡必须有执行器', example: 'tag="special_play" → executor注册 ✓' },
-  { emoji: '💀', label: '自毁行为完整性', desc: '"消灭本卡"描述→自毁触发器存在', example: '"打出后消灭"→ selfDestruct handler ✓' },
-  { emoji: '❓', label: '条件语句完整性', desc: '描述中的条件→代码中的条件检查', example: '"如果基地有3+随从"→ condition check ✓' },
 ];
 
 /** 交互完整性审计步骤 */

@@ -322,7 +322,7 @@ describe('僵尸派系能力', () => {
         expect(current?.data?.sourceId).toBe('zombie_not_enough_bullets');
     });
 
-    it('zombie_lend_a_hand: 弃牌堆洗回牌库', () => {
+    it('zombie_lend_a_hand: 弃牌堆有卡时创建多选 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -337,30 +337,11 @@ describe('僵尸派系能力', () => {
             },
         });
 
-        const { events } = execPlayAction(state, '0', 'a1');
-        const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-        expect(reshuffleEvents.length).toBe(1);
-        // 牌库应包含原牌库 + 弃牌堆的所有卡
-        const deckUids = (reshuffleEvents[0] as any).payload.deckUids;
-        expect(deckUids.length).toBe(3); // d1 + d2 + d3
-
-        const newState = applyEvents(state, events);
-        // ACTION_PLAYED 先把 a1 放入弃牌堆，然后 DECK_RESHUFFLED 清空弃牌堆
-        // 所以最终牌库 = d1 + d2 + d3 + a1 = 4 张（a1 在 ACTION_PLAYED 时进了弃牌堆，被 reshuffle 吸收）
-        // 但 DECK_RESHUFFLED 的 deckUids 只有 3 张（execute 时计算的），
-        // reducer 会从 deck+discard 中按 deckUids 匹配，a1 不在 deckUids 中所以不会进牌库
-        // 实际：deck=3, discard=0（a1 在 ACTION_PLAYED 进弃牌堆，reshuffle 清空弃牌堆但 a1 不在 deckUids 中）
-        // 等等，reducer 现在合并 deck+discard 查找，a1 在弃牌堆中但不在 deckUids 中，所以被丢弃
-        // 这不对。让我重新分析：
-        // 1. ACTION_PLAYED: hand=[], discard=[d2,d3,a1], deck=[d1]
-        // 2. DECK_RESHUFFLED(deckUids=[d1,d2,d3]): 从 deck[d1]+discard[d2,d3,a1] 中按 deckUids 匹配
-        //    结果 deck=[d1,d2,d3], discard=[]
-        //    a1 丢失了！这是因为 execute 时 a1 还在手牌中，不在弃牌堆
-        // 这是预期行为：a1 作为打出的行动卡进入弃牌堆，然后被 reshuffle 清空
-        // 但 a1 不在 deckUids 中所以不会进新牌库 → a1 丢失
-        // 实际上这是合理的：a1 是刚打出的行动卡，不应该被洗回牌库
-        expect(newState.players['0'].deck.length).toBe(3);
-        expect(newState.players['0'].discard.length).toBe(0);
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        // 弃牌堆有卡 → 创建多选 Prompt
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('zombie_lend_a_hand');
     });
 
     it('zombie_outbreak: 有空基地时给予额外随从额度', () => {

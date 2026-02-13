@@ -57,8 +57,9 @@ function scoreOneBase(
     baseDeck: string[],
     pid: PlayerId,
     now: number,
-    random?: RandomFn
-): { events: SmashUpEvent[]; newBaseDeck: string[] } {
+    random?: RandomFn,
+    matchState?: MatchState<SmashUpCore>,
+): { events: SmashUpEvent[]; newBaseDeck: string[]; matchState?: MatchState<SmashUpCore> } {
     // 默认 random（确定性回退，计分中大多数 trigger 不需要随机）
     const rng: RandomFn = random ?? {
         random: () => 0.5,
@@ -67,12 +68,14 @@ function scoreOneBase(
         shuffle: <T>(arr: T[]) => [...arr],
     };
     const events: SmashUpEvent[] = [];
+    let ms = matchState;
     const base = core.bases[baseIndex];
     const baseDef = getBaseDef(base.defId)!;
 
     // 触发 beforeScoring 基地能力
     const beforeCtx = {
         state: core,
+        matchState: ms,
         baseIndex,
         baseDefId: base.defId,
         playerId: pid,
@@ -80,6 +83,7 @@ function scoreOneBase(
     };
     const beforeResult = triggerBaseAbility(base.defId, 'beforeScoring', beforeCtx);
     events.push(...beforeResult.events);
+    if (beforeResult.matchState) ms = beforeResult.matchState;
 
     // 触发 ongoing beforeScoring（如 pirate_king 移动到该基地、cthulhu_chosen +2力量）
     const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
@@ -127,6 +131,7 @@ function scoreOneBase(
     // 触发 afterScoring 基地能力
     const afterCtx = {
         state: core,
+        matchState: ms,
         baseIndex,
         baseDefId: base.defId,
         playerId: pid,
@@ -135,6 +140,7 @@ function scoreOneBase(
     };
     const afterResult = triggerBaseAbility(base.defId, 'afterScoring', afterCtx);
     events.push(...afterResult.events);
+    if (afterResult.matchState) ms = afterResult.matchState;
 
     // 触发 ongoing afterScoring（如 pirate_first_mate 移动到其他基地）
     const afterScoringEvents = fireTriggers(core, 'afterScoring', {
@@ -163,15 +169,16 @@ function scoreOneBase(
         newBaseDeck = newBaseDeck.slice(1);
     }
 
-    return { events, newBaseDeck };
+    return { events, newBaseDeck, matchState: ms };
 }
 
 /** 注册多基地计分的交互解决处理函数 */
 export function registerMultiBaseScoringInteractionHandler(): void {
     registerInteractionHandler('multi_base_scoring', (state, playerId, value, _iData, random, timestamp) => {
         const { baseIndex } = value as { baseIndex: number };
-        const { events } = scoreOneBase(state.core, baseIndex, state.core.baseDeck, playerId, timestamp, random);
-        return { state, events };
+        const result = scoreOneBase(state.core, baseIndex, state.core.baseDeck, playerId, timestamp, random, state);
+        const updatedState = result.matchState ?? state;
+        return { state: updatedState, events: result.events };
     });
 }
 
@@ -336,9 +343,13 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 }
                 if (foundIndex === null) break;
 
-                const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random);
+                const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random, state);
                 events.push(...result.events);
                 currentBaseDeck = result.newBaseDeck;
+                // 传播 matchState（afterScoring 基地能力可能创建 Interaction）
+                if (result.matchState) {
+                    state.sys = result.matchState.sys;
+                }
                 remainingBaseIndices = remainingBaseIndices.filter((index) => index !== foundIndex);
             }
 
@@ -374,9 +385,13 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             };
             events.push(turnStarted);
 
-            // 触发基地 onTurnStart 能力（如更衣室：有随从则抽牌）
-            const baseResult = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now);
+            // 触发基地 onTurnStart 能力（如拉莱耶：消灭随从获1VP、蘑菇王国：移动对手随从）
+            const baseResult = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now, undefined, state);
             events.push(...baseResult.events);
+            // 传播 matchState（onTurnStart 基地能力可能创建 Interaction）
+            if (baseResult.matchState) {
+                state.sys = baseResult.matchState.sys;
+            }
 
             // 触发 ongoing 效果 onTurnStart
             const onTurnStartEvents = fireTriggers(core, 'onTurnStart', {

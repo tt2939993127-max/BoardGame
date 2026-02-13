@@ -102,23 +102,20 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 ### 引擎层审计工具（`src/engine/testing/`）
 
+> **GameTestRunner 行为测试是最优先、最可靠的测试手段**。审计工具是补充，用于批量覆盖 GameTestRunner 无法高效覆盖的注册表引用完整性和交互链完整性。
 > 详细规范见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
 
 | 工具 | 文件 | 用途 |
 |------|------|------|
-| GameTestRunner | `index.ts` | 命令序列执行 + 状态断言，所有游戏通用 |
+| GameTestRunner | `index.ts` | 命令序列执行 + 状态断言，所有游戏首选 |
 | entityIntegritySuite | `entityIntegritySuite.ts` | 数据定义契约验证（注册表完整性/引用链/触发路径/效果契约） |
 | referenceValidator | `referenceValidator.ts` | 实体引用链提取与验证 |
-| abilityBehaviorAudit | `abilityBehaviorAudit.ts` | 描述→代码一致性（关键词行为/ongoing/标签/自毁/条件） |
-| cardCompletenessAudit | `cardCompletenessAudit.ts` | 卡牌定义结构审计（playCondition/效果/占位符） |
 | interactionChainAudit | `interactionChainAudit.ts` | UI 状态机 payload 覆盖审计（模式 A） |
 | interactionCompletenessAudit | `interactionCompletenessAudit.ts` | Interaction handler 注册覆盖审计（模式 B） |
 
 新增游戏时根据游戏特征选择需要的审计工具：
-- 所有游戏 → GameTestRunner
-- 有注册表 + 数据定义 → entityIntegritySuite
-- 卡牌/能力数量多（≥30）→ abilityBehaviorAudit
-- 有卡牌系统 → cardCompletenessAudit
+- 所有游戏（必选）→ GameTestRunner
+- 有注册表 + 数据定义（≥20 个实体）→ entityIntegritySuite
 - 有多步 UI 交互 → interactionChainAudit
 - 有 InteractionSystem → interactionCompletenessAudit
 
@@ -146,8 +143,20 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 | 升级系统 | 逐级升级、跳级拒绝、费用计算、最高级处理 |
 | 错误处理 | 非法操作拒绝、前置条件拒绝、错误码正确性 |
 | 边界条件 | 数值上下限、特殊触发、并发/竞态 |
-| 静态审计 | 注册表完整性、描述→代码一致性、交互链覆盖、卡牌定义结构（使用引擎层审计工厂） |
+| 静态审计 | 注册表完整性、交互链覆盖（使用引擎层审计工厂） |
+| **集成链路** | **每个需要 Interaction 的能力至少 1 条 execute() 完整链路测试** |
 | E2E | 入口 → 关键交互 → 完成/退出；教程需验证 AI 回合 |
+
+### 集成链路测试规范（强制）
+
+> 教训：单元测试直接调用能力函数（如 `triggerBaseAbility`）时会自动注入 `matchState`，
+> 但 reducer 层可能漏传参数导致 Interaction 类能力静默失败。单元测试全绿不代表完整链路正确。
+
+**规则**：每个通过 `matchState` / `queueInteraction` 创建交互的能力，必须至少有 1 条通过 `execute()` 走完整链路的集成测试，验证：
+1. `execute()` 返回的事件列表正确
+2. `sys.interaction` 中有对应的 Interaction（sourceId 匹配）
+
+**参考**：`src/games/smashup/__tests__/baseAbilityIntegrationE2E.test.ts`
 
 ### 精简策略（同类覆盖保留）
 

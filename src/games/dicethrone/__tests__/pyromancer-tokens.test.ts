@@ -36,16 +36,13 @@ const testSystems = diceThroneSystemsForTest as unknown as EngineSystem<DiceThro
 // ============================================================================
 
 describe('炎术士 Token 定义', () => {
-    it('应包含 Fire Mastery（火焰精通）— consumable', () => {
+    it('应包含 Fire Mastery（火焰精通）— consumable，无 activeUse（自动消耗）', () => {
         const fm = PYROMANCER_TOKENS.find(t => t.id === TOKEN_IDS.FIRE_MASTERY);
         expect(fm).toBeDefined();
         expect(fm!.category).toBe('consumable');
         expect(fm!.stackLimit).toBe(5);
-        expect(fm!.activeUse).toBeDefined();
-        expect(fm!.activeUse!.timing).toContain('beforeDamageDealt');
-        expect(fm!.activeUse!.consumeAmount).toBe(1);
-        expect(fm!.activeUse!.effect.type).toBe('modifyDamageDealt');
-        expect(fm!.activeUse!.effect.value).toBe(1);
+        // 火焰精通由 custom actions 自动消耗，不通过 Token 响应弹窗交互
+        expect(fm!.activeUse).toBeUndefined();
     });
 
     it('应包含 Knockdown（击倒）— debuff, onPhaseEnter', () => {
@@ -130,49 +127,19 @@ function createPyromancerState(playerIds: string[], random: RandomFn): MatchStat
 }
 
 describe('炎术士 Fire Mastery 执行逻辑', () => {
-    it('消耗 1 层 Fire Mastery 应产生 +1 damageModifier', () => {
+    it('Fire Mastery 无 activeUse，processTokenUsage 应返回失败', () => {
+        // 火焰精通不通过 Token 响应弹窗交互，processTokenUsage 应返回 success=false
         const state = createPyromancerState(['0', '1'], fixedRandom);
-        // 手动给玩家 0 设置 3 层 fire_mastery
         state.core.players['0'].tokens[TOKEN_IDS.FIRE_MASTERY] = 3;
 
         const fmDef = PYROMANCER_TOKENS.find(t => t.id === TOKEN_IDS.FIRE_MASTERY)!;
-        const { events, result, newTokenAmount } = processTokenUsage(
+        const { result, events } = processTokenUsage(
             state.core, fmDef, '0', 1, fixedRandom, 'beforeDamageDealt'
         );
 
-        expect(result.success).toBe(true);
-        expect(result.damageModifier).toBe(1);
-        expect(newTokenAmount).toBe(2);
-        expect(events).toHaveLength(1);
-        expect(events[0].type).toBe('TOKEN_USED');
-    });
-
-    it('消耗 3 层 Fire Mastery 应产生 +3 damageModifier', () => {
-        const state = createPyromancerState(['0', '1'], fixedRandom);
-        state.core.players['0'].tokens[TOKEN_IDS.FIRE_MASTERY] = 5;
-
-        const fmDef = PYROMANCER_TOKENS.find(t => t.id === TOKEN_IDS.FIRE_MASTERY)!;
-        const { result, newTokenAmount } = processTokenUsage(
-            state.core, fmDef, '0', 3, fixedRandom, 'beforeDamageDealt'
-        );
-
-        expect(result.success).toBe(true);
-        expect(result.damageModifier).toBe(3);
-        expect(newTokenAmount).toBe(2);
-    });
-
-    it('消耗量超过持有量时按实际持有量计算', () => {
-        const state = createPyromancerState(['0', '1'], fixedRandom);
-        state.core.players['0'].tokens[TOKEN_IDS.FIRE_MASTERY] = 2;
-
-        const fmDef = PYROMANCER_TOKENS.find(t => t.id === TOKEN_IDS.FIRE_MASTERY)!;
-        const { result, newTokenAmount } = processTokenUsage(
-            state.core, fmDef, '0', 5, fixedRandom, 'beforeDamageDealt'
-        );
-
-        expect(result.success).toBe(true);
-        expect(result.damageModifier).toBe(2); // 实际只消耗 2
-        expect(newTokenAmount).toBe(0);
+        // 无 activeUse.effect → 处理器找不到 → 返回失败
+        expect(result.success).toBe(false);
+        expect(events).toHaveLength(0);
     });
 
     it('持有量为 0 时使用失败', () => {
