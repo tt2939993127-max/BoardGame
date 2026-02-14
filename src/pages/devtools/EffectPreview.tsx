@@ -3,108 +3,81 @@
  *
  * 独立页面，可在 /dev/fx 访问。
  * 左侧分类导航（按特效类型分组） + 右侧网格展示该分类下所有特效。
+ *
+ * 自动注册机制：
+ * - 每个 cards/*.tsx 文件导出 `meta: EffectEntryMeta[]` 描述自身包含的特效条目
+ * - 本文件通过 `import.meta.glob` 自动收集所有 meta，无需手动维护注册表
+ * - 新增特效只需在卡片文件中添加组件 + meta 条目即可
  */
 
-import React, { useState, useEffect } from 'react';
-import {
-  Flame, Swords, Send, Sparkles, Hourglass,
-  Skull, Trophy, Wand2, Zap, RotateCw,
-  Bomb, Aperture, Hammer, Droplets,
-  Rocket, Wind,
-  MessageCircle, Sun,
-  CircleCheckBig, Star, WandSparkles, Globe, Clock,
-} from 'lucide-react';
-import type { IconComponent } from './cards/shared';
-import {
-  BurstCard, ShatterCard, VictoryCard, SummonCard, SummonShaderCard, VortexCard, CombatShockwaveCard,
-  ShakeHitStopCard, SlashCard, RiftSlashCard, ImpactCard, DamageFlashCard,
-  FlyingCard, ConeBlastCard,
-  FloatingTextCard, PulseGlowCard,
-  ArcaneQualifiedCard, ArcaneGrandmasterCard, MagicCardsCard, OrreryCard, GrandClockCard,
-} from './cards';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { EffectEntryMeta, EffectGroupDef, IconComponent } from './cards/shared';
+import { EFFECT_GROUP_DEFS } from './cards/shared';
 import { AudioManager } from '../../lib/audio/AudioManager';
 import { loadCommonAudioRegistry } from '../../lib/audio/commonRegistry';
 
 // ============================================================================
-// 分类注册表 — 按特效类型分组
+// 自动收集所有卡片文件的 meta（eager 模式，构建时静态解析）
 // ============================================================================
 
-interface EffectEntry {
-  id: string;
-  label: string;
-  icon: IconComponent;
-  component: React.FC<{ useRealCards?: boolean; iconColor?: string }>;
-  usageDesc?: string;
+const cardModules = import.meta.glob<{ meta?: EffectEntryMeta[] }>(
+  './cards/*Cards.tsx',
+  { eager: true },
+);
+
+/** 从所有卡片模块中收集 meta 条目 */
+function collectEntries(): EffectEntryMeta[] {
+  const entries: EffectEntryMeta[] = [];
+  for (const mod of Object.values(cardModules)) {
+    if (mod.meta) entries.push(...mod.meta);
+  }
+  return entries;
 }
+
+// ============================================================================
+// 构建分组结构
+// ============================================================================
 
 interface EffectGroup {
   id: string;
   label: string;
   icon: IconComponent;
   colorClass: string;
-  entries: EffectEntry[];
+  entries: EffectEntryMeta[];
 }
 
-const EFFECT_GROUPS: EffectGroup[] = [
-  {
-    id: 'particle', label: '粒子类', icon: Flame, colorClass: 'text-purple-400',
-    entries: [
-      { id: 'burst', label: '爆发粒子', icon: Sparkles, component: BurstCard, usageDesc: '召唤师战争·单位被消灭' },
-      { id: 'shatter', label: '碎裂消散', icon: Skull, component: ShatterCard, usageDesc: '召唤师战争·单位/建筑死亡碎裂' },
-      { id: 'victory', label: '胜利彩带', icon: Trophy, component: VictoryCard, usageDesc: '通用·对局胜利结算' },
-      { id: 'summon', label: '召唤特效', icon: Wand2, component: SummonCard, usageDesc: '召唤师战争·召唤单位入场' },
-      { id: 'summonShader', label: '召唤混合特效', icon: Zap, component: SummonShaderCard, usageDesc: '召唤师战争·召唤单位入场（Shader + 粒子混合版）' },
-      { id: 'vortex', label: '充能旋涡', icon: RotateCw, component: VortexCard, usageDesc: '召唤师战争·单位充能' },
-      { id: 'combatShockwave', label: '攻击气浪', icon: Zap, component: CombatShockwaveCard, usageDesc: '召唤师战争·攻击受击反馈（FX 系统完整反馈）' },
-    ],
-  },
-  {
-    id: 'impact', label: '打击类', icon: Swords, colorClass: 'text-rose-400',
-    entries: [
-      { id: 'shake', label: '震动+钝帧', icon: Bomb, component: ShakeHitStopCard, usageDesc: '骰铸王座·受击震动 / 召唤师战争·棋格受击' },
-      { id: 'slash', label: '弧形刀光', icon: Swords, component: SlashCard, usageDesc: '暂未接入业务' },
-      { id: 'rift', label: '次元裂隙', icon: Aperture, component: RiftSlashCard, usageDesc: '受伤反馈·斜切视觉（DamageFlash 内部）' },
-      { id: 'impactCombo', label: '打击感组合', icon: Hammer, component: ImpactCard, usageDesc: '测试台·自由组合各效果' },
-      { id: 'dmgflash', label: '受伤反馈', icon: Droplets, component: DamageFlashCard, usageDesc: '召唤师战争·伤害反馈覆盖层' },
-    ],
-  },
-  {
-    id: 'projectile', label: '投射类', icon: Send, colorClass: 'text-cyan-400',
-    entries: [
-      { id: 'flying', label: '飞行特效', icon: Rocket, component: FlyingCard, usageDesc: '骰铸王座·伤害/治疗/增益飞行数字' },
-      { id: 'coneblast', label: '锥形气浪', icon: Wind, component: ConeBlastCard, usageDesc: '召唤师战争·远程攻击投射' },
-    ],
-  },
-  {
-    id: 'ui', label: 'UI 类', icon: Sparkles, colorClass: 'text-amber-400',
-    entries: [
-      { id: 'floating', label: '飘字', icon: MessageCircle, component: FloatingTextCard, usageDesc: '暂未接入业务' },
-      { id: 'pulseglow', label: '脉冲发光', icon: Sun, component: PulseGlowCard, usageDesc: '骰铸王座·技能高亮 / 悬浮球菜单' },
-    ],
-  },
-  {
-    id: 'loading', label: '加载类', icon: Hourglass, colorClass: 'text-emerald-400',
-    entries: [
-      { id: 'arcane_qualified', label: '过审法阵', icon: CircleCheckBig, component: ArcaneQualifiedCard },
-      { id: 'arcane_grandmaster', label: '究极法阵', icon: Star, component: ArcaneGrandmasterCard },
-      { id: 'magic_cards', label: '魔术飞牌', icon: WandSparkles, component: MagicCardsCard },
-      { id: 'solar_system', label: '太阳系 Pro', icon: Globe, component: OrreryCard },
-      { id: 'grand_clock', label: '机械神域', icon: Clock, component: GrandClockCard },
-    ],
-  },
-];
+function buildGroups(entries: EffectEntryMeta[]): EffectGroup[] {
+  const groupMap = new Map<string, EffectGroupDef>();
+  for (const def of EFFECT_GROUP_DEFS) groupMap.set(def.id, def);
+
+  const grouped = new Map<string, EffectEntryMeta[]>();
+  for (const entry of entries) {
+    const list = grouped.get(entry.group) ?? [];
+    list.push(entry);
+    grouped.set(entry.group, list);
+  }
+
+  return EFFECT_GROUP_DEFS
+    .filter(def => grouped.has(def.id))
+    .map(def => ({
+      id: def.id,
+      label: def.label,
+      icon: def.icon,
+      colorClass: def.colorClass,
+      entries: grouped.get(def.id)!,
+    }));
+}
+
+const ALL_ENTRIES = collectEntries();
+const EFFECT_GROUPS = buildGroups(ALL_ENTRIES);
 
 // ============================================================================
 // 主页面
 // ============================================================================
 
-/** 所有特效条目打平索引 */
-const ALL_ENTRIES = EFFECT_GROUPS.flatMap(g => g.entries);
-
 const EffectPreview: React.FC = () => {
-  const [activeEffectId, setActiveEffectId] = useState(ALL_ENTRIES[0].id);
+  const [activeEffectId, setActiveEffectId] = useState(ALL_ENTRIES[0]?.id ?? '');
   const [useRealCards, setUseRealCards] = useState(true);
-  /** 被折叠的分类 ID 集合 */
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const totalCount = ALL_ENTRIES.length;
 
@@ -122,9 +95,15 @@ const EffectPreview: React.FC = () => {
     initAudio();
   }, []);
 
-  const activeGroup = EFFECT_GROUPS.find(g => g.entries.some(e => e.id === activeEffectId)) ?? EFFECT_GROUPS[0];
-  const activeEntry = activeGroup.entries.find(e => e.id === activeEffectId) ?? activeGroup.entries[0];
-  const Comp = activeEntry.component;
+  const activeGroup = useMemo(
+    () => EFFECT_GROUPS.find(g => g.entries.some(e => e.id === activeEffectId)) ?? EFFECT_GROUPS[0],
+    [activeEffectId],
+  );
+  const activeEntry = useMemo(
+    () => activeGroup?.entries.find(e => e.id === activeEffectId) ?? activeGroup?.entries[0],
+    [activeGroup, activeEffectId],
+  );
+  const Comp = activeEntry?.component;
 
   const allCollapsed = collapsedGroups.size === EFFECT_GROUPS.length;
   const toggleAll = () => {
@@ -204,7 +183,9 @@ const EffectPreview: React.FC = () => {
 
       {/* 右侧：单一特效预览区（填满屏幕） */}
       <main className="flex-1 flex flex-col min-h-0 min-w-0">
-        <Comp key={activeEntry.id} useRealCards={useRealCards} iconColor={activeGroup.colorClass} />
+        {Comp && activeEntry && (
+          <Comp key={activeEntry.id} useRealCards={useRealCards} iconColor={activeGroup?.colorClass} />
+        )}
       </main>
     </div>
   );

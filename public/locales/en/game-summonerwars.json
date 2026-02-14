@@ -138,7 +138,7 @@
       "buildAction": "Event card played! Click \"End Phase\" to enter the Attack phase.",
       "attackExplain": "Attack phase! Attack with up to 3 units.\n\nStrength = number of dice. Ranged units need \ud83c\udff9 hits, melee units need \u2694\ufe0f hits.\n\n\u26a0\ufe0f If you don't attack, your Summoner takes 1 penalty damage!",
       "meleeExplain": "⚔️ Melee units can only attack adjacent targets (up/down/left/right).\n\nMelee dice face ⚔️ = 1 damage.",
-      "rangedExplain": "🏹 Your Archer is a ranged unit.\n\nRanged units can attack targets up to 3 spaces away in a straight line, dealing damage from a safe distance!",
+      "rangedExplain": "🏹 Your Archer is a ranged unit.\n\nRanged units can attack targets up to 3 spaces away in a straight line, dealing damage from a safe distance!\n\n⚠️ Note: If any card (unit or structure) blocks the path between attacker and target, the attack is blocked. Exception: friendly Parapets allow your ranged attacks to pass through.",
       "attackAction": "Click your unit to select it, then click an enemy target within range to attack!\n\nTry using the Archer to ranged attack an enemy unit.",
       "attackResult": "Dice results determine hits. ✦ Special faces deal no damage by default (unless an ability says otherwise).\n\nWhen damage equals Life, the unit is destroyed. Destroying an enemy grants 1 Magic!",
       "endAttack": "You can attack with more units, or click \"End Phase\".",
@@ -232,6 +232,8 @@
     "castSpell": "Cast Spell",
     "endPhase": "End Phase",
     "confirmEndPhase": "{{count}} unit(s) can still act. End?",
+    "confirmEndMove": "{{count}} move(s) remaining. End?",
+    "confirmEndAttack": "{{count}} attack(s) remaining. End?",
     "endTurn": "End Turn",
     "discardSelected": "Discard +{{count}}"
   },
@@ -418,6 +420,10 @@
     },
     "afterAttack": {
       "message": "{{ability}}: Select a target"
+    },
+    "rapidFire": {
+      "message": "Rapid Fire: Spend 1 charge for an extra attack?",
+      "confirm": "Fire"
     },
     "abilityNames": {
       "telekinesis": "Telekinesis",

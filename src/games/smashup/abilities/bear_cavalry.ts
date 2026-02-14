@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, grantExtraMinion, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions } from '../domain/abilityHelpers';
+import { destroyMinion, grantExtraMinion, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, resolveOrPrompt } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, MinionOnBase, OngoingDetachedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -15,7 +15,6 @@ import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext } from '../domain/ongoingEffects';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
-import type { MatchState } from '../../../engine/types';
 
 /** 注册黑熊骑兵派系所有能�?*/
 export function registerBearCavalryAbilities(): void {
@@ -272,7 +271,7 @@ function bearCavalryYourePrettyMuchBorscht(ctx: AbilityContext): AbilityResult {
 
 /** 黑熊口粮 onPlay：消灭一个随从或一个已打出的行动卡 */
 function bearCavalryBearNecessities(ctx: AbilityContext): AbilityResult {
-    // 收集所有可消灭的对手随�?
+    // 收集所有可消灭的对手随从
     const minionTargets: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
@@ -308,26 +307,26 @@ function bearCavalryBearNecessities(ctx: AbilityContext): AbilityResult {
     }
     const allTargets = [...minionTargets, ...actionTargets];
     if (allTargets.length === 0) return { events: [] };
-    // 单目标自动执�?
-    if (allTargets.length === 1) {
-        if (minionTargets.length === 1) {
-            const t = minionTargets[0];
-            return { events: [destroyMinion(t.uid, t.defId, t.baseIndex, t.owner, 'bear_cavalry_bear_necessities', ctx.now)] };
-        }
-        const t = actionTargets[0];
-        return { events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId, reason: 'bear_cavalry_bear_necessities' }, timestamp: ctx.now } as OngoingDetachedEvent] };
-    }
-    // Prompt 选择（混合随从和行动卡）
+    // 数据驱动：强制效果，单候选自动执行（混合随从和行动卡，用 generic）
+    type BearNecessitiesValue = { type: 'minion'; uid: string; defId: string; baseIndex: number; owner: string } | { type: 'action'; uid: string; defId: string; ownerId: string };
     const options = allTargets.map((t, i) => ({
         id: `target-${i}`,
         label: t.label,
-        value: 'owner' in t ? { type: 'minion' as const, uid: t.uid, defId: t.defId, baseIndex: (t as typeof minionTargets[0]).baseIndex, owner: (t as typeof minionTargets[0]).owner } : { type: 'action' as const, uid: t.uid, defId: t.defId, ownerId: (t as typeof actionTargets[0]).ownerId },
+        value: ('owner' in t
+            ? { type: 'minion' as const, uid: t.uid, defId: t.defId, baseIndex: (t as typeof minionTargets[0]).baseIndex, owner: (t as typeof minionTargets[0]).owner }
+            : { type: 'action' as const, uid: t.uid, defId: t.defId, ownerId: (t as typeof actionTargets[0]).ownerId }) as BearNecessitiesValue,
     }));
-    const interaction = createSimpleChoice(
-        `bear_cavalry_bear_necessities_${ctx.now}`, ctx.playerId,
-        '选择要消灭的随从或行动卡', options as any[], 'bear_cavalry_bear_necessities',
-    );
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return resolveOrPrompt<BearNecessitiesValue>(ctx, options, {
+        id: 'bear_cavalry_bear_necessities',
+        title: '选择要消灭的随从或行动卡',
+        sourceId: 'bear_cavalry_bear_necessities',
+        targetType: 'generic',
+    }, (value) => {
+        if (value.type === 'minion') {
+            return { events: [destroyMinion(value.uid, value.defId, value.baseIndex, value.owner, 'bear_cavalry_bear_necessities', ctx.now)] };
+        }
+        return { events: [{ type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid: value.uid, defId: value.defId, ownerId: value.ownerId, reason: 'bear_cavalry_bear_necessities' }, timestamp: ctx.now } as OngoingDetachedEvent] };
+    });
 }
 
 

@@ -90,3 +90,9 @@ export interface TelekinesisTargetModeState {
   sourceUnitId: string;
   targetPosition: CellCoord;
 }
+
+/** 连续射击确认模式 */
+export interface RapidFireModeState {
+  sourceUnitId: string;
+  sourcePosition: CellCoord;
+}

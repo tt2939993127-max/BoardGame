@@ -100,6 +100,10 @@ export function validate(
             if (card.type !== 'action') return { valid: false, error: '该卡牌不是行动卡' };
             const def = getCardDef(card.defId);
             if (!def) return { valid: false, error: '卡牌定义不存在' };
+            // 特殊行动卡只能在 Me First! 响应窗口中打出，不能在正常出牌阶段使用
+            if ('subtype' in def && (def as ActionCardDef).subtype === 'special') {
+                return { valid: false, error: '特殊行动卡只能在基地计分前的 Me First! 窗口中打出' };
+            }
             // ongoing 限制检查：是否禁止打出行动卡到目标基地
             const targetBase = command.payload.targetBaseIndex;
             if (targetBase !== undefined && isOperationRestricted(core, targetBase, command.playerId, 'play_action')) {
@@ -184,7 +188,12 @@ export function validate(
             if (!core.pendingReveal) {
                 return { valid: false, error: '没有待展示的卡牌' };
             }
-            if (command.playerId !== core.pendingReveal.viewerPlayerId) {
+            // 'all' 模式下由牌库所有者（发起者）关闭展示
+            if (core.pendingReveal.viewerPlayerId === 'all') {
+                if (command.playerId !== core.pendingReveal.targetPlayerId) {
+                    return { valid: false, error: '只有发起者可以关闭展示' };
+                }
+            } else if (command.playerId !== core.pendingReveal.viewerPlayerId) {
                 return { valid: false, error: '只有查看者可以关闭展示' };
             }
             return { valid: true };

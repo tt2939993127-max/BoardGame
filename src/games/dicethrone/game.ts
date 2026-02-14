@@ -209,7 +209,10 @@ function formatDiceThroneActionEntry({
     );
 
     events.forEach((event, index) => {
-        const entryTimestamp = typeof event.timestamp === 'number' ? event.timestamp : timestamp;
+        // 效果事件的 timestamp 必须严格大于命令 entry 的 timestamp，
+        // 否则 newest-first 排序时效果会显示在命令下方（看起来先于命令发生）
+        const rawEventTs = typeof event.timestamp === 'number' ? event.timestamp : timestamp;
+        const entryTimestamp = Math.max(rawEventTs, timestamp + 1 + index);
 
         if (event.type === 'DAMAGE_DEALT') {
             const damageEvent = event as DamageDealtEvent;

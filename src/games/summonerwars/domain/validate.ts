@@ -187,9 +187,10 @@ export function validateCommand(
       const attacker = getUnitAt(core, attackerPos);
       if (!attacker || attacker.owner !== playerId) return { valid: false, error: '无法使用该单位攻击' };
       if (attacker.hasAttacked) return { valid: false, error: '该单位本回合已攻击' };
-      // 凶残单位可以作为额外攻击者（不计入3次限制）
+      // 凶残单位或有额外攻击的单位不受3次攻击限制
       const hasFerocity = getUnitAbilities(attacker, core).includes('ferocity');
-      if (core.players[playerId].attackCount >= MAX_ATTACKS_PER_TURN && !hasFerocity) {
+      const hasExtraAttacks = (attacker.extraAttacks ?? 0) > 0;
+      if (core.players[playerId].attackCount >= MAX_ATTACKS_PER_TURN && !hasFerocity && !hasExtraAttacks) {
         return { valid: false, error: '本回合攻击次数已用完' };
       }
       const rawBeforeAttack = payload.beforeAttack as

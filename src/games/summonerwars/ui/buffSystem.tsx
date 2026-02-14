@@ -4,8 +4,9 @@
  * 使用通用 BuffSystem 框架，注册游戏特定的 buff
  */
 
-import type { BoardUnit, EventCard } from '../domain/types';
+import type { BoardUnit, EventCard, SummonerWarsCore } from '../domain/types';
 import { BuffRegistry, type BuffDetector, type BuffRegistration } from '../../../components/game/framework/widgets/BuffSystem';
+import { getUnitAbilities, getUnitBaseAbilities } from '../domain/helpers';
 import {
   HealingIcon,
   SparkleIcon,
@@ -20,6 +21,7 @@ import {
 
 interface GameState {
   activeEvents: EventCard[];
+  core?: SummonerWarsCore;
 }
 
 // ============================================================================
@@ -30,11 +32,21 @@ const detectHealing: BuffDetector<GameState, BoardUnit> = (unit) => {
   return unit.healingMode ? { type: 'healing' } : null;
 };
 
-const detectTempAbility: BuffDetector<GameState, BoardUnit> = (unit) => {
-  if (unit.tempAbilities && unit.tempAbilities.length > 0) {
-    return { type: 'tempAbility', count: unit.tempAbilities.length, data: unit.tempAbilities };
+const detectExtraAbilities: BuffDetector<GameState, BoardUnit> = (unit, gameState) => {
+  // 通用额外技能检测：比较当前有效技能与基础技能的差集
+  // 覆盖所有来源：幻化 tempAbilities、交缠颂歌共享、未来新机制
+  if (!gameState.core) {
+    // 降级：无 core 时只检测 tempAbilities
+    if (unit.tempAbilities && unit.tempAbilities.length > 0) {
+      return { type: 'extraAbilities', count: unit.tempAbilities.length, data: unit.tempAbilities };
+    }
+    return null;
   }
-  return null;
+  const effective = getUnitAbilities(unit, gameState.core);
+  const base = getUnitBaseAbilities(unit);
+  const extra = effective.filter(a => !base.includes(a));
+  if (extra.length === 0) return null;
+  return { type: 'extraAbilities', count: extra.length, data: extra };
 };
 
 const detectAttachedUnit: BuffDetector<GameState, BoardUnit> = (unit) => {
@@ -58,15 +70,6 @@ const detectHellfireBlade: BuffDetector<GameState, BoardUnit> = (unit) => {
     return baseId === 'necro-hellfire-blade';
   });
   return hasIt ? { type: 'hellfireBlade' } : null;
-};
-
-const detectChantEntanglement: BuffDetector<GameState, BoardUnit> = (unit, gameState) => {
-  const isTarget = gameState.activeEvents.some(ev => {
-    const baseId = ev.id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
-    if (baseId !== 'barbaric-chant-of-entanglement') return false;
-    return ev.entanglementTargets?.includes(unit.cardId) ?? false;
-  });
-  return isTarget ? { type: 'chantEntanglement' } : null;
 };
 
 const detectChantWeaving: BuffDetector<GameState, BoardUnit> = (unit, gameState) => {
@@ -95,15 +98,15 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
     detector: detectHealing,
   },
   {
-    type: 'tempAbility',
+    type: 'extraAbilities',
     visual: {
-      label: '临时技能',
+      label: '额外技能',
       icon: SparkleIcon,
       iconColor: 'text-purple-100',
       bgColor: 'bg-purple-500',
       glowColor: 'rgba(168,85,247,0.4)',
     },
-    detector: detectTempAbility,
+    detector: detectExtraAbilities,
   },
   {
     type: 'attachedUnit',
@@ -139,17 +142,6 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
     detector: detectHellfireBlade,
   },
   {
-    type: 'chantEntanglement',
-    visual: {
-      label: '交缠颂歌（互相获得对方技能）',
-      icon: SparkleIcon,
-      iconColor: 'text-emerald-100',
-      bgColor: 'bg-emerald-500',
-      glowColor: 'rgba(16,185,129,0.4)',
-    },
-    detector: detectChantEntanglement,
-  },
-  {
     type: 'chantWeaving',
     visual: {
       label: '编织颂歌（临时召唤点）',
@@ -173,12 +165,12 @@ summonerWarsBuffRegistry.registerAll(BUFF_REGISTRATIONS);
 // 便捷函数（兼容旧 API）
 // ============================================================================
 
-export function detectBuffs(unit: BoardUnit, activeEvents: EventCard[]) {
-  return summonerWarsBuffRegistry.detectBuffs(unit, { activeEvents });
+export function detectBuffs(unit: BoardUnit, activeEvents: EventCard[], core?: SummonerWarsCore) {
+  return summonerWarsBuffRegistry.detectBuffs(unit, { activeEvents, core });
 }
 
-export function getBuffGlowStyles(unit: BoardUnit, activeEvents: EventCard[]): string {
-  const buffs = detectBuffs(unit, activeEvents);
+export function getBuffGlowStyles(unit: BoardUnit, activeEvents: EventCard[], core?: SummonerWarsCore): string {
+  const buffs = detectBuffs(unit, activeEvents, core);
   if (buffs.length === 0) return '';
   
   const glows = buffs

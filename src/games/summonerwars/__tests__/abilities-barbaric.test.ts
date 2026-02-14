@@ -25,6 +25,7 @@ import type {
 import type { RandomFn, GameEvent } from '../../../engine/types';
 import { canMoveToEnhanced } from '../domain/helpers';
 import { calculateEffectiveStrength, getEffectiveLifeBase } from '../domain/abilityResolver';
+import { getSummonerWarsUIHints } from '../domain/uiHints';
 import { createInitializedCore } from './test-helpers';
 
 // ============================================================================
@@ -1330,16 +1331,18 @@ describe('炽原精灵事件卡', () => {
 
 // ============================================================================
 // 连续射击 (rapid_fire) 完整流程测试
+// 流程：DECLARE_ATTACK → ABILITY_TRIGGERED(rapid_fire_extra_attack)
+//       → 玩家确认 → ACTIVATE_ABILITY(rapid_fire) → 消耗充能 + EXTRA_ATTACK_GRANTED
 // ============================================================================
 
 describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
-  it('攻击后有充能时消耗1充能并授予额外攻击', () => {
+  it('攻击后发射 ABILITY_TRIGGERED 事件（不自动消耗充能）', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
     placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
-      boosts: 2, // 有充能
+      boosts: 2,
     });
 
     placeUnit(state, { row: 4, col: 4 }, {
@@ -1354,12 +1357,52 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
       target: { row: 4, col: 4 },
     });
 
-    // 应该触发 rapid_fire_extra_attack
+    // DECLARE_ATTACK 只发射 ABILITY_TRIGGERED，不自动消耗充能
     const rapidFireTrigger = events.filter(e =>
       e.type === SW_EVENTS.ABILITY_TRIGGERED
       && (e.payload as Record<string, unknown>).abilityId === 'rapid_fire_extra_attack'
     );
     expect(rapidFireTrigger.length).toBe(1);
+
+    // 不应该有 UNIT_CHARGED（充能消耗在 ACTIVATE_ABILITY 中）
+    const chargeEvents = events.filter(e =>
+      e.type === SW_EVENTS.UNIT_CHARGED
+      && (e.payload as Record<string, unknown>).sourceAbilityId === 'rapid_fire'
+    );
+    expect(chargeEvents.length).toBe(0);
+
+    // 不应该有 EXTRA_ATTACK_GRANTED（在 ACTIVATE_ABILITY 中）
+    const extraAttackEvents = events.filter(e =>
+      e.type === SW_EVENTS.EXTRA_ATTACK_GRANTED
+    );
+    expect(extraAttackEvents.length).toBe(0);
+
+    // 充能不变（仍为2）
+    expect(newState.board[4][2].unit?.boosts).toBe(2);
+  });
+
+  it('玩家确认后 ACTIVATE_ABILITY 消耗充能并授予额外攻击', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
+      boosts: 2,
+      hasAttacked: true, // 攻击后
+    });
+
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'enemy-1', card: makeEnemy('enemy-1', { life: 10 }), owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    // 玩家确认连续射击
+    const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'rapid_fire',
+      sourceUnitId: 'test-makinda',
+    });
 
     // 应该消耗1充能
     const chargeEvents = events.filter(e =>
@@ -1376,17 +1419,45 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     );
     expect(extraAttackEvents.length).toBe(1);
 
-    // 充能应该减少1（2→1）
+    // 充能减少1（2→1）
     expect(newState.board[4][2].unit?.boosts).toBe(1);
+
+    // 额外攻击授予后：hasAttacked 重置，extraAttacks > 0
+    expect(newState.board[4][2].unit?.hasAttacked).toBe(false);
+    expect(newState.board[4][2].unit?.extraAttacks).toBe(1);
   });
 
-  it('攻击后无充能时不授予额外攻击', () => {
+  it('无充能时 ACTIVATE_ABILITY 验证拒绝', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
     placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer', card: makeArcher('test-archer'), owner: '0',
       boosts: 0, // 无充能
+      hasAttacked: true,
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: { abilityId: 'rapid_fire', sourceUnitId: 'test-archer' },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('充能');
+  });
+
+  it('攻击后无充能时 ABILITY_TRIGGERED 仍发射但无法确认', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-archer', card: makeArcher('test-archer'), owner: '0',
+      boosts: 0,
     });
 
     placeUnit(state, { row: 4, col: 4 }, {
@@ -1401,13 +1472,71 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
       target: { row: 4, col: 4 },
     });
 
-    // rapid_fire_extra_attack 触发事件仍会生成（afterAttack 触发器不检查充能）
-    // 但不应该有 EXTRA_ATTACK_GRANTED（因为无充能）
+    // ABILITY_TRIGGERED 仍会发射（afterAttack 触发器不检查充能）
+    const rapidFireTrigger = events.filter(e =>
+      e.type === SW_EVENTS.ABILITY_TRIGGERED
+      && (e.payload as Record<string, unknown>).abilityId === 'rapid_fire_extra_attack'
+    );
+    expect(rapidFireTrigger.length).toBe(1);
+
+    // 但不应该有 EXTRA_ATTACK_GRANTED（需要玩家通过 ACTIVATE_ABILITY 确认，而验证会拒绝）
     const extraAttackEvents = events.filter(e =>
       e.type === SW_EVENTS.EXTRA_ATTACK_GRANTED
-      && (e.payload as Record<string, unknown>).sourceAbilityId === 'rapid_fire'
     );
     expect(extraAttackEvents.length).toBe(0);
+  });
+
+  it('额外攻击后 extraAttacks 递减', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    // 模拟已获得额外攻击的状态
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
+      boosts: 1,
+      hasAttacked: false,
+      extraAttacks: 1,
+    } as Partial<BoardUnit> & { card: UnitCard; owner: PlayerId });
+
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'enemy-1', card: makeEnemy('enemy-1', { life: 10 }), owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    // 使用额外攻击
+    const { newState } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
+      attacker: { row: 4, col: 2 },
+      target: { row: 4, col: 4 },
+    });
+
+    // 额外攻击使用后 hasAttacked 应为 true
+    expect(newState.board[4][2].unit?.hasAttacked).toBe(true);
+  });
+
+  it('回合结束时清除 extraAttacks', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
+      boosts: 1,
+      extraAttacks: 1,
+    } as Partial<BoardUnit> & { card: UnitCard; owner: PlayerId });
+
+    state.currentPlayer = '0';
+
+    // 模拟回合结束
+    const turnChangedEvent: GameEvent = {
+      type: SW_EVENTS.TURN_CHANGED,
+      payload: { from: '0', to: '1' },
+      timestamp: fixedTimestamp,
+    };
+
+    const newState = SummonerWarsDomain.reduce(state, turnChangedEvent);
+    // TURN_CHANGED 通过解构移除 extraAttacks 字段
+    expect(newState.board[4][2].unit?.extraAttacks).toBeUndefined();
   });
 });
 
@@ -1665,5 +1794,58 @@ describe('充能验证', () => {
 
     expect(result.valid).toBe(false);
     expect(result.error).toContain('魔力');
+  });
+});
+
+// ============================================================================
+// 青色波纹 UI Hint 验证
+// ============================================================================
+
+describe('边境弓箭手 - 青色波纹 (ability hint)', () => {
+  it('移动阶段未移动的弓箭手应有 ability hint', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-archer',
+      card: makeArcher('test-archer'),
+      owner: '0',
+      hasMoved: false,
+    });
+
+    const hints = getSummonerWarsUIHints(state, {
+      types: ['ability'],
+      playerId: '0',
+      phase: 'move',
+    });
+
+    const archerHint = hints.find((h: { entityId: string }) => h.entityId === 'test-archer');
+    expect(archerHint).toBeDefined();
+    expect(archerHint.actions).toContain('prepare');
+  });
+
+  it('移动阶段已移动的弓箭手不应有 ability hint', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-archer-moved',
+      card: makeArcher('test-archer-moved'),
+      owner: '0',
+      hasMoved: true,
+    });
+
+    const hints = getSummonerWarsUIHints(state, {
+      types: ['ability'],
+      playerId: '0',
+      phase: 'move',
+    });
+
+    const archerHint = hints.find((h: { entityId: string }) => h.entityId === 'test-archer-moved');
+    expect(archerHint).toBeUndefined();
   });
 });

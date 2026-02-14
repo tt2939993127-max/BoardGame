@@ -62,13 +62,14 @@ function buildEntities(): AuditableEntity[] {
 
 /** 收集所有已注册的 ongoing 效果 ID（合并所有注册表） */
 function collectAllRegisteredIds(): Set<string> {
-    const { protectionIds, restrictionIds, triggerIds, interceptorIds } = getRegisteredOngoingEffectIds();
+    const { protectionIds, restrictionIds, triggerIds, interceptorIds, baseAbilitySuppressionIds } = getRegisteredOngoingEffectIds();
     const { powerModifierIds, breakpointModifierIds } = getRegisteredModifierIds();
     const all = new Set<string>();
     for (const id of protectionIds) all.add(id);
     for (const id of restrictionIds) all.add(id);
     for (const id of triggerIds.keys()) all.add(id);
     for (const id of interceptorIds) all.add(id);
+    for (const id of baseAbilitySuppressionIds) all.add(id);
     for (const id of powerModifierIds) all.add(id);
     for (const id of breakpointModifierIds) all.add(id);
     return all;

@@ -385,10 +385,10 @@ function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId
 
 export function registerBarbarianCustomActions(): void {
     registerCustomActionHandler('barbarian-suppress-roll', handleBarbarianSuppressRoll, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage', 'status'],
     });
     registerCustomActionHandler('barbarian-suppress-2-roll', handleBarbarianSuppress2Roll, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage', 'status'],
     });
     registerCustomActionHandler('barbarian-thick-skin', handleBarbarianThickSkin, {
         categories: ['other'],
@@ -403,6 +403,6 @@ export function registerBarbarianCustomActions(): void {
         categories: ['dice', 'resource'],
     });
     registerCustomActionHandler('more-please-roll-damage', handleMorePleaseRollDamage, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage', 'status'],
     });
 }

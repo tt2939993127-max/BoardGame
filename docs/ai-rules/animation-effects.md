@@ -227,6 +227,20 @@ onImpact: () => opponentImpact.trigger(damage);
 </ShakeContainer>
 ```
 
+### 伤害反馈分级（强制）
+
+不同伤害来源应有不同强度的受击反馈，禁止所有伤害走同一套完整反馈：
+
+| 伤害来源 | 反馈强度 | 典型效果 | 示例 |
+|---------|---------|---------|------|
+| 战斗伤害（技能攻击/反击） | 完整 | 飞行数字 + 动态音效 + 震动 + 钝帧 + 裂隙闪光 | DiceThrone 技能攻击、SummonerWars 近战/远程 |
+| 持续伤害（DoT：灼烧/中毒/流血） | 轻量 | 飞行数字 + 轻微音效，无震动无钝帧 | DiceThrone upkeep 灼烧/中毒 |
+| 系统惩罚（不活动惩罚等） | 轻量 | 飞行数字或状态变化动画，无震动 | SummonerWars 不活动惩罚 |
+
+- **实现方式**：在 FX 注册表中为不同强度的伤害注册不同的 cue（如 `fx.damage` vs `fx.dot-damage`），通过 FeedbackPack 控制是否包含 shake。
+- **判断依据**：事件的 `sourceAbilityId` 或 `reason` 字段区分伤害来源。持续伤害的 sourceAbilityId 通常以 `upkeep-` 开头。
+- **禁止**：所有 `DAMAGE_DEALT` / `UNIT_DAMAGED` 事件无差别触发完整受击反馈（震动+钝帧+裂隙闪光）。
+
 ---
 
 ## 特效视觉质量规则（强制）

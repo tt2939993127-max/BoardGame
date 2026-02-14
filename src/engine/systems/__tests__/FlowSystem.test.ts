@@ -94,6 +94,8 @@ describe('FlowSystem', () => {
 
         expect(result?.halt).toBe(true);
         expect(result?.state?.sys.phase).toBe('phase2');
+        // 成功推进后 flowHalted 清除
+        expect(result?.state?.sys.flowHalted).toBe(false);
         expect(result?.events).toContainEqual(
             expect.objectContaining({
                 type: FLOW_EVENTS.PHASE_CHANGED,
@@ -122,6 +124,8 @@ describe('FlowSystem', () => {
 
         expect(result?.halt).toBe(true);
         expect(result?.state?.sys.phase).toBe('phase1');
+        // halt 时设置 flowHalted 标记，供 onAutoContinueCheck 判断
+        expect(result?.state?.sys.flowHalted).toBe(true);
     });
 
     it('onPhaseExit overrideNextPhase：覆盖下一阶段', () => {

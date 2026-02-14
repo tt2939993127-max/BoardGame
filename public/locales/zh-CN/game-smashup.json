@@ -213,52 +213,52 @@
   },
   "cards": {
     "alien_supreme_overlord": {
-      "name": "外星霸主",
-      "abilityText": "你可以将一个随从返回到拥有者的手牌。"
+      "name": "最高指挥官",
+      "abilityText": "你可以将一个随从返回到其拥有者的手上。"
     },
     "alien_invader": {
-      "name": "侵略者",
+      "name": "入侵者",
       "abilityText": "获得1VP。"
     },
     "alien_scout": {
-      "name": "侦察卫",
-      "abilityText": "寻找一个随从将其放入你的手牌。"
+      "name": "侦察兵",
+      "abilityText": "特殊：在这个基地计分后，你可以将此随从放回手牌而非弃牌堆。"
     },
     "alien_collector": {
-      "name": "采集者",
-      "abilityText": "你可以将本基地的一个力量为3或以下的随从回其手牌。"
+      "name": "收集者",
+      "abilityText": "你可以将这个基地的一个力量为3或以下的随从返回其拥有者的手上。"
     },
-    "alien_disintegrate": {
-      "name": "解体",
-      "effectText": "将一个力量为3或以下的随从放入拥有者手牌。"
+    "alien_invasion": {
+      "name": "入侵",
+      "effectText": "将一个随从移动到另一个基地。"
     },
-    "alien_beaming_down": {
-      "name": "射线传递",
-      "effectText": "展示一个玩家的一张随机手牌。你可以将其返回到牌库顶。"
+    "alien_disintegrator": {
+      "name": "分解者",
+      "effectText": "将一个力量为3或以下的随从放到它的拥有者的牌库底。"
+    },
+    "alien_beam_up": {
+      "name": "光束捕捉",
+      "effectText": "将一个随从返回其拥有者的手上。"
     },
     "alien_probe": {
-      "name": "射线探测",
-      "effectText": "查看一个玩家的手牌。查看那个玩家牌组顶的一张牌并将其中。"
+      "name": "探究",
+      "effectText": "查看一个玩家的手牌。查看该玩家牌库顶的一张牌，将其放回牌库顶或放到牌库底。"
     },
     "alien_crop_circles": {
       "name": "麦田怪圈",
-      "effectText": "将任意数量的随从从一个基地中返回到其手牌中。"
+      "effectText": "将任意数量的随从从一个基地中返回到其拥有者的手牌中。"
     },
     "alien_terraform": {
-      "name": "地球化",
-      "effectText": "从牌组搜寻一张基地并将它替换当前任意一张基地，所有在上面卡片都移动到这个新的基地去。"
+      "name": "适居化",
+      "effectText": "从基地牌库搜寻一张基地。将它与场上一张基地交换（弃掉上面所有行动卡）。洗混基地牌库。你可以在新基地上额外打出一个随从。"
     },
-    "alien_scout_ship_1": {
-      "name": "侦察船（一）",
-      "effectText": "展示一个玩家的牌库顶的一张牌。"
+    "alien_abduction": {
+      "name": "绑架",
+      "effectText": "将一个随从返回其拥有者的手上。额外打出一个随从。"
     },
-    "alien_scout_ship_2": {
-      "name": "侦察船（二）",
-      "effectText": "展示一个玩家的手牌。"
-    },
-    "alien_jammed_signals": {
-      "name": "信号干扰",
-      "effectText": "打出到基地上。持续：没有玩家可以在此打出卡项。在你下回合开始时消灭本卡。"
+    "alien_jammed_signal": {
+      "name": "糟糕的信号",
+      "effectText": "打出到基地上。持续：所有玩家无视此基地的能力。"
     },
     "bear_cavalry_general_ivan": {
       "name": "伊万将军",
@@ -361,51 +361,51 @@
       "effectText": "将你弃牌堆任意数量的战术洗回你的牌库。"
     },
     "dino_king_rex": {
-      "name": "暴龙雷克斯"
+      "name": "雷克斯王"
     },
     "dino_laser_triceratops": {
       "name": "激光三角龙",
-      "abilityText": "你可以消灭本基地的一个力量为2或以下的随从。"
+      "abilityText": "消灭一个本基地的力量为2或以下的随从。"
     },
     "dino_armor_stego": {
-      "name": "重装剑龙",
-      "abilityText": "持续：在其他玩家的回合，本随从+2力量。"
+      "name": "装甲剑龙",
+      "abilityText": "持续：在其他玩家的回合中+2力量。"
     },
     "dino_war_raptor": {
-      "name": "战争猛禽",
-      "abilityText": "持续：你在此基地的每个战争猛禽（包括本随从）都获得+1力量。"
+      "name": "战斗迅猛龙",
+      "abilityText": "持续：这个基地每有一个战斗迅猛龙（包括本卡）使本卡获得+1力量。"
     },
-    "dino_wild_stuffing": {
-      "name": "野蛮践踏",
-      "effectText": "消灭力量为3或以下的一张随从。"
-    },
-    "dino_augmentation": {
-      "name": "机能强化",
-      "effectText": "一个随从获得+4力量直到回合结束。"
-    },
-    "dino_howl": {
-      "name": "咆哮",
-      "effectText": "你的全部随从获得+1力量直到回合结束。"
-    },
-    "dino_tooth_and_claw": {
-      "name": "利齿钢爪",
-      "effectText": "打出到一个随从上。持续：如果一个其他玩家的卡试图消灭或让该随从回手牌，消灭本卡，那个玩家随从被消灭或者移回。"
-    },
-    "dino_upgrade": {
-      "name": "升级",
-      "effectText": "打出到一个随从上。持续：本随从获得+2力量且不能被消灭。"
+    "dino_wildlife_preserve": {
+      "name": "野生保护区",
+      "effectText": "打出到基地上。持续：你在这里的随从不会受到其他玩家的战术影响。"
     },
     "dino_natural_selection": {
       "name": "物竞天择",
-      "effectText": "在本基地中消灭一张随从，消灭那张随从力量必须低于你的一张随从。"
-    },
-    "dino_wild_rampage": {
-      "name": "疯狂暴走",
-      "effectText": "直到你的回合结束，你在这个基地的每个随从获得+2力量。"
+      "effectText": "选择你的在一个基地上的随从。消灭一个在那里力量小于你的随从的随从。"
     },
     "dino_survival_of_the_fittest": {
       "name": "适者生存",
-      "effectText": "消灭每一个拥有最小力量的随从。"
+      "effectText": "每个基地在存在两个及以上的随从且其中有随从有更高力量的情况下消灭一个最低力量的随从（如果出现平局你来选择）。"
+    },
+    "dino_upgrade": {
+      "name": "升级",
+      "effectText": "打出到一个随从上。持续：该随从+2力量。"
+    },
+    "dino_howl": {
+      "name": "嚎叫",
+      "effectText": "每个你的随从获得+1力量直到回合结束。"
+    },
+    "dino_rampage": {
+      "name": "狂暴",
+      "effectText": "将一个基地的爆破点降低等同于你在这个基地的随从的力量数直到回合结束。"
+    },
+    "dino_augmentation": {
+      "name": "增强",
+      "effectText": "一个随从获得+4力量直到回合结束。"
+    },
+    "dino_tooth_and_claw": {
+      "name": "全副武装",
+      "effectText": "打出到一个随从上。持续：如果一个能力将会影响该随从，消灭本卡，那么那个能力将不会影响该随从。"
     },
     "elder_thing_elder_thing": {
       "name": "远古之物",
@@ -701,7 +701,7 @@
     },
     "pirate_first_mate": {
       "name": "大副",
-      "abilityText": "特殊：在本基地计分后，你可以移动本随从到其他基地而不是弃牌堆。"
+      "abilityText": "特殊：在本基地计分后，你可以移动你的两个随从到其他基地而不是弃牌堆。"
     },
     "pirate_dinghy": {
       "name": "小船",

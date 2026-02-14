@@ -9,6 +9,7 @@
 import type { PlayerId } from '../../../engine/types';
 import type { AbilityDef, AbilityEffect, AbilityTag, AbilityVariantDef } from './combat';
 import type { DiceThroneCore } from './types';
+import { getCustomActionMeta } from './effects';
 
 export type PlayerAbilityMatch = { ability: AbilityDef; variant?: AbilityVariantDef };
 
@@ -72,8 +73,14 @@ export function playerAbilityHasDamage(
         if (e.action.type === 'damage' && (e.action.value ?? 0) > 0) return true;
         // rollDie 可能包含 bonusDamage
         if (e.action.type === 'rollDie') return true;
-        // custom action targeting opponent 可能造成伤害（保守判定）
-        if (e.action.type === 'custom' && e.action.target === 'opponent') return true;
+        // custom action：通过注册的 categories 判断是否包含伤害
+        // 修复：target='self' 的 custom action 内部也可能对对手造成伤害（如灵魂燃烧）
+        if (e.action.type === 'custom' && e.action.customActionId) {
+            const meta = getCustomActionMeta(e.action.customActionId);
+            if (meta?.categories.includes('damage')) return true;
+            // categories 包含 dice/other 等可能产生伤害的分类，且 target=opponent → 保守判定为有伤害
+            if (e.action.target === 'opponent') return true;
+        }
         return false;
     });
 }

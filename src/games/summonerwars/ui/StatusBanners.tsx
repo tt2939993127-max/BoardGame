@@ -72,6 +72,7 @@ interface StatusBannersProps {
   hypnoticLureMode: HypnoticLureModeState | null;
   mindCaptureMode: MindCaptureModeState | null;
   afterAttackAbilityMode: AfterAttackAbilityModeState | null;
+  rapidFireMode: import('./modeTypes').RapidFireModeState | null;
   telekinesisTargetMode: { abilityId: string; targetPosition: CellCoord } | null;
   // 回调
   onCancelAbility: () => void;
@@ -102,6 +103,8 @@ interface StatusBannersProps {
   onCancelHypnoticLure: () => void;
   onConfirmMindCapture: (choice: 'control' | 'damage') => void;
   onCancelAfterAttackAbility: () => void;
+  onConfirmRapidFire: () => void;
+  onCancelRapidFire: () => void;
   onConfirmTelekinesis: (direction: 'push' | 'pull') => void;
   onCancelTelekinesis: () => void;
   onAfterMoveSelfCharge: () => void;
@@ -173,7 +176,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   currentPhase, isMyTurn, core,
   abilityMode, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
   mindControlMode, chantEntanglementMode, sneakMode, glacialShiftMode, withdrawMode, stunMode, hypnoticLureMode,
-  mindCaptureMode, afterAttackAbilityMode, telekinesisTargetMode,
+  mindCaptureMode, afterAttackAbilityMode, rapidFireMode, telekinesisTargetMode,
   onCancelAbility, onConfirmBeforeAttackCards, onConfirmBloodRune, onConfirmIceShards, onConfirmFeedBeastSelfDestroy,
   onCancelBeforeAttack, onCancelBloodSummon, onContinueBloodSummon,
   onCancelAnnihilate, onConfirmAnnihilateTargets,
@@ -186,6 +189,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   onConfirmStun, onCancelStun,
   onCancelHypnoticLure,
   onConfirmMindCapture, onCancelAfterAttackAbility,
+  onConfirmRapidFire, onCancelRapidFire,
   onConfirmTelekinesis, onCancelTelekinesis,
   onAfterMoveSelfCharge,
   onFrostAxeAttach,
@@ -534,6 +538,18 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
           {t('statusBanners.afterAttack.message', { ability: abilityName })}
         </span>
         <GameButton onClick={onCancelAfterAttackAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
+      </div>
+    );
+  }
+
+  if (rapidFireMode) {
+    return (
+      <div className="bg-orange-900/90 px-4 py-2 rounded-lg border border-orange-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-orange-200 text-sm font-bold">
+          {t('statusBanners.rapidFire.message')}
+        </span>
+        <GameButton onClick={onConfirmRapidFire} variant="primary" size="sm">{t('statusBanners.rapidFire.confirm')}</GameButton>
+        <GameButton onClick={onCancelRapidFire} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
       </div>
     );
   }

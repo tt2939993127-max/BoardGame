@@ -112,7 +112,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'summon',
       buttonLabel: 'abilityButtons.guidance',
       buttonVariant: 'secondary',

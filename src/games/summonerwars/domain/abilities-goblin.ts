@@ -117,7 +117,7 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.bloodRune',
       buttonVariant: 'secondary',
@@ -223,7 +223,7 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.feedBeast',
       buttonVariant: 'secondary',

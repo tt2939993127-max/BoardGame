@@ -78,8 +78,12 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
         trigger: { type: 'diceSet', faces: { [PYROMANCER_DICE_FACE_IDS.FIERY_SOUL]: 2 } },
         effects: [
             {
-                description: abilityEffectText('soul-burn', 'main'),
-                action: { type: 'custom', target: 'self', customActionId: 'soul-burn-resolve' }
+                description: abilityEffectText('soul-burn', 'fm'),
+                action: { type: 'custom', target: 'self', customActionId: 'soul-burn-fm' }
+            },
+            {
+                description: abilityEffectText('soul-burn', 'damage'),
+                action: { type: 'custom', target: 'opponent', customActionId: 'soul-burn-damage' }
             }
         ]
     },
@@ -259,8 +263,12 @@ export const BURNING_SOUL_2: AbilityDef = {
                     action: { type: 'custom', target: 'self', customActionId: 'increase-fm-limit' }
                 },
                 {
-                    description: abilityEffectText('soul-burn-3', 'main'),
-                    action: { type: 'custom', target: 'self', customActionId: 'soul-burn-resolve' }
+                    description: abilityEffectText('soul-burn-3', 'fm'),
+                    action: { type: 'custom', target: 'self', customActionId: 'soul-burn-fm' }
+                },
+                {
+                    description: abilityEffectText('soul-burn-3', 'damage'),
+                    action: { type: 'custom', target: 'opponent', customActionId: 'soul-burn-damage' }
                 }
             ],
             priority: 2,

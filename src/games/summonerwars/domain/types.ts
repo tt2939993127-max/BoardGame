@@ -129,6 +129,7 @@ export interface BoardUnit {
   boosts: number;        // 增益标记数
   hasMoved: boolean;     // 本回合是否已移动
   hasAttacked: boolean;  // 本回合是否已攻击
+  extraAttacks?: number; // 额外攻击次数（连续射击/群情激愤等授予，不计入3次限制）
   attachedCards?: EventCard[]; // 附加的事件卡（如狱火铸剑）
   healingMode?: boolean; // 治疗模式（圣殿牧师：本次攻击转为治疗）
   wasAttackedThisTurn?: boolean; // 本回合是否已被攻击（庇护判定用）

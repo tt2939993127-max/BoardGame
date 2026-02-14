@@ -2,13 +2,14 @@
  * UI 类特效预览卡片
  */
 
-import React, { useCallback, useRef } from 'react';
-import { MessageCircle, Sun } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react';
+import { MessageCircle, Sun, Waves } from 'lucide-react';
 import { FloatingTextLayer, useFloatingText } from '../../../components/common/animations/FloatingText';
 import { PulseGlow } from '../../../components/common/animations/PulseGlow';
+import { AbilityReadyIndicator } from '../../../games/summonerwars/ui/AbilityReadyIndicator';
 import {
-  type PreviewCardProps,
-  EffectCard, TriggerButton,
+  type PreviewCardProps, type EffectEntryMeta,
+  EffectCard, TriggerButton, CardSprite,
   usePerfCounter,
 } from './shared';
 
@@ -84,3 +85,46 @@ export const PulseGlowCard: React.FC<PreviewCardProps> = ({ iconColor }) => {
     </EffectCard>
   );
 };
+
+
+// ============================================================================
+// 技能就绪波纹
+// ============================================================================
+
+export const AbilityReadyCard: React.FC<PreviewCardProps> = ({ useRealCards, iconColor }) => {
+  const [visible, setVisible] = useState(true);
+  const [showGreenRing, setShowGreenRing] = useState(true);
+
+  return (
+    <EffectCard title="技能就绪波纹" icon={Waves} iconColor={iconColor} desc="召唤师战争·可激活技能的单位边框青色波纹"
+      buttons={<>
+        <TriggerButton label={visible ? '隐藏波纹' : '显示波纹'} onClick={() => setVisible(v => !v)} color="bg-cyan-700 hover:bg-cyan-600" />
+        <TriggerButton label={showGreenRing ? '隐藏绿框' : '显示绿框'} onClick={() => setShowGreenRing(v => !v)} color="bg-green-700 hover:bg-green-600" />
+      </>}
+    >
+      <div className="absolute inset-0 flex items-center justify-center">
+        {/* 只设宽度，高度由 aspect-ratio 自动撑开（与棋盘一致） */}
+        <div className={`relative w-28 rounded-lg ${showGreenRing ? 'ring-2 ring-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)]' : ''}`} style={{ aspectRatio: '1044 / 729' }}>
+          {useRealCards ? (
+            <CardSprite className="w-full h-full rounded-lg" />
+          ) : (
+            <div className="w-full h-full rounded-lg bg-slate-700/60 border border-slate-600/40 flex items-center justify-center">
+              <span className="text-[10px] text-slate-500">单位卡</span>
+            </div>
+          )}
+          {visible && <AbilityReadyIndicator />}
+        </div>
+      </div>
+    </EffectCard>
+  );
+};
+
+// ============================================================================
+// 自动注册元数据
+// ============================================================================
+
+export const meta: EffectEntryMeta[] = [
+  { id: 'floating', label: '飘字', icon: MessageCircle, component: FloatingTextCard, group: 'ui', usageDesc: '暂未接入业务' },
+  { id: 'pulseglow', label: '脉冲发光', icon: Sun, component: PulseGlowCard, group: 'ui', usageDesc: '骰铸王座·技能高亮 / 悬浮球菜单' },
+  { id: 'abilityready', label: '技能就绪波纹', icon: Waves, component: AbilityReadyCard, group: 'ui', usageDesc: '召唤师战争·可激活技能单位青色波纹' },
+];

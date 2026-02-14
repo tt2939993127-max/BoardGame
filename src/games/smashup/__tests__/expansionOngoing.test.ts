@@ -247,7 +247,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnEnd', {
+            const { events } = fireTriggers(state, 'onTurnEnd', {
                 state, playerId: '0', random: dummyRandom, now: 1000,
             });
 
@@ -264,7 +264,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnEnd', {
+            const { events } = fireTriggers(state, 'onTurnEnd', {
                 state, playerId: '1', random: dummyRandom, now: 1000,
             });
 
@@ -277,7 +277,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnEnd', {
+            const { events } = fireTriggers(state, 'onTurnEnd', {
                 state, playerId: '0', random: dummyRandom, now: 1000,
             });
 
@@ -294,7 +294,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionDestroyed', {
+            const { events } = fireTriggers(state, 'onMinionDestroyed', {
                 state, playerId: '1', baseIndex: 0,
                 triggerMinionUid: 'sa-1', triggerMinionDefId: 'steampunk_a',
                 random: dummyRandom, now: 1000,
@@ -313,7 +313,7 @@ describe('蒸汽朋克 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionDestroyed', {
+            const { events } = fireTriggers(state, 'onMinionDestroyed', {
                 state, playerId: '0', baseIndex: 0,
                 triggerMinionUid: 'om-1', triggerMinionDefId: 'opp_m',
                 random: dummyRandom, now: 1000,
@@ -391,7 +391,7 @@ describe('食人花 ongoing 能力', () => {
             const base = makeBase({ minions: [lily] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state, playerId: '0', random: dummyRandom, now: 1000,
             });
 
@@ -404,7 +404,7 @@ describe('食人花 ongoing 能力', () => {
             const base = makeBase({ minions: [lily] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state, playerId: '1', random: dummyRandom, now: 1000,
             });
 
@@ -418,7 +418,7 @@ describe('食人花 ongoing 能力', () => {
             const base = makeBase({ minions: [lily1, lily2, lily3] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state, playerId: '0', random: dummyRandom, now: 1000,
             });
 
@@ -433,7 +433,7 @@ describe('食人花 ongoing 能力', () => {
             const base = makeBase({ minions: [sprout] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state, playerId: '0', random: dummyRandom, now: 1000,
             });
 
@@ -457,7 +457,7 @@ describe('食人花 ongoing 能力', () => {
             const base = makeBase({ minions: [target, strong] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state, playerId: '0', random: dummyRandom, now: 1000,
             });
 

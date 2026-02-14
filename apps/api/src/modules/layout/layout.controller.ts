@@ -17,10 +17,7 @@ export class LayoutController {
             return res.status(403).json({ error: '布局保存已禁用' });
         }
         try {
-            // TODO: 调试布局保存后移除日志（确认 DI 是否异常）
-            const hasService = !!this.layoutService && typeof this.layoutService.saveSummonerWarsLayout === 'function';
-            console.log(`[Layout] save request hasService=${hasService} bodyType=${typeof body} path=${req.path}`);
-            if (!hasService) {
+            if (!this.layoutService || typeof this.layoutService.saveSummonerWarsLayout !== 'function') {
                 return res.status(500).json({ error: '布局保存失败', message: 'layoutService.missing', path: req.path });
             }
             const payload = this.normalizeBody(body);

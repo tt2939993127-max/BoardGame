@@ -214,7 +214,7 @@
   "cards": {
     "alien_supreme_overlord": {
       "name": "Supreme Overlord",
-      "abilityText": "You may return a minion to its owner’s hand."
+      "abilityText": "You may return a minion to its owner's hand."
     },
     "alien_invader": {
       "name": "Invader",
@@ -222,43 +222,43 @@
     },
     "alien_scout": {
       "name": "Scout",
-      "abilityText": "Search for a minion and place it in your hand."
+      "abilityText": "Special: After this base scores, you may place this minion into your hand instead of the discard pile."
     },
     "alien_collector": {
       "name": "Collector",
-      "abilityText": "You may return a minion of power 3 or less at this base to its owner’s hand."
+      "abilityText": "You may return a minion of power 3 or less at this base to its owner's hand."
     },
-    "alien_disintegrate": {
-      "name": "Disintegrate",
-      "effectText": "Place a minion of power 3 or less into its owner’s hand."
+    "alien_invasion": {
+      "name": "Invasion",
+      "effectText": "Move a minion to another base."
     },
-    "alien_beaming_down": {
-      "name": "Beaming Down",
-      "effectText": "Reveal a random card in a player’s hand. You may return it to the top of its owner’s deck."
+    "alien_disintegrator": {
+      "name": "Disintegrator",
+      "effectText": "Place a minion of power 3 or less on the bottom of its owner's deck."
+    },
+    "alien_beam_up": {
+      "name": "Beam Up",
+      "effectText": "Return a minion to its owner's hand."
     },
     "alien_probe": {
       "name": "Probe",
-      "effectText": "Look at a player’s hand. Look at the top card of that player’s deck and place it either back on top or on the bottom."
+      "effectText": "Look at a player's hand. Look at the top card of that player's deck and place it either back on top or on the bottom."
     },
     "alien_crop_circles": {
       "name": "Crop Circles",
-      "effectText": "Return any number of minions from one base to their owners’ hands."
+      "effectText": "Return any number of minions from one base to their owners' hands."
     },
     "alien_terraform": {
-      "name": "Terraform",
-      "effectText": "Search the base deck for a base and swap it with any base in play. All cards on that base are moved to the new one. Shuffle the base deck."
+      "name": "Terraforming",
+      "effectText": "Search the base deck for a base. Swap it with a base in play (discard all actions on it). Shuffle the base deck. You may play an extra minion on the new base."
     },
-    "alien_scout_ship_1": {
-      "name": "Scout Ship I",
-      "effectText": "Reveal the top card of a player’s deck."
+    "alien_abduction": {
+      "name": "Abduction",
+      "effectText": "Return a minion to its owner's hand. Play an extra minion."
     },
-    "alien_scout_ship_2": {
-      "name": "Scout Ship II",
-      "effectText": "Reveal a player’s hand."
-    },
-    "alien_jammed_signals": {
+    "alien_jammed_signal": {
       "name": "Jammed Signals",
-      "effectText": "Play on a base. Ongoing: No players may play cards on this base. Destroy this card at the start of your next turn."
+      "effectText": "Play on a base. Ongoing: All players ignore this base's ability."
     },
     "bear_cavalry_general_ivan": {
       "name": "General Ivan",
@@ -270,27 +270,27 @@
     },
     "bear_cavalry_bear_cavalry": {
       "name": "Bear Cavalry",
-      "abilityText": "Move another player’s minion from this base to another base."
+      "abilityText": "Move another player's minion from this base to another base."
     },
     "bear_cavalry_cub_scout": {
       "name": "Cub Scout",
-      "abilityText": "Ongoing: After another player’s minion is moved to this base, if it has less power than this minion, destroy it."
+      "abilityText": "Ongoing: After another player's minion is moved to this base, if it has less power than this minion, destroy it."
     },
     "bear_cavalry_bear_hug": {
       "name": "Bear Hug",
       "effectText": "Each other player destroys their lowest-power minion. (They choose in case of a tie.)"
     },
     "bear_cavalry_youre_screwed": {
-      "name": "You’re Screwed",
-      "effectText": "Choose a base where you have a minion. Move another player’s minion from that base to another base."
+      "name": "You're Screwed",
+      "effectText": "Choose a base where you have a minion. Move another player's minion from that base to another base."
     },
     "bear_cavalry_bear_necessities": {
       "name": "Bear Necessities",
       "effectText": "Destroy a minion or an action played on a base."
     },
     "bear_cavalry_youre_pretty_much_borscht": {
-      "name": "You’re Pretty Much Borscht",
-      "effectText": "Choose a base where you have a minion. Move all other players’ minions from that base to another base."
+      "name": "You're Pretty Much Borscht",
+      "effectText": "Choose a base where you have a minion. Move all other players' minions from that base to another base."
     },
     "bear_cavalry_bear_rides_you": {
       "name": "Bear Rides You",
@@ -298,11 +298,11 @@
     },
     "bear_cavalry_commission": {
       "name": "Commission",
-      "effectText": "Play an extra minion. Move another player’s minion from that base to another base."
+      "effectText": "Play an extra minion. Move another player's minion from that base to another base."
     },
     "bear_cavalry_superiority": {
       "name": "Superiority",
-      "effectText": "Play on a base. Ongoing: Your minions here cannot be destroyed, moved, or returned to your hand or deck by other players’ cards."
+      "effectText": "Play on a base. Ongoing: Your minions here cannot be destroyed, moved, or returned to your hand or deck by other players' cards."
     },
     "bear_cavalry_high_ground": {
       "name": "High Ground",
@@ -310,10 +310,10 @@
     },
     "cthulhu_star_spawn": {
       "name": "Star-Spawn of Cthulhu",
-      "abilityText": "Talent: Place a Madness card from your hand into another player’s hand."
+      "abilityText": "Talent: Place a Madness card from your hand into another player's hand."
     },
     "cthulhu_chosen": {
-      "name": "Cthulhu’s Chosen",
+      "name": "Cthulhu's Chosen",
       "abilityText": "Special: Before a base scores, you may draw a Madness card to give this minion +2 power until the end of the turn."
     },
     "cthulhu_servitor": {
@@ -330,11 +330,11 @@
     },
     "cthulhu_complete_the_ritual": {
       "name": "Complete the Ritual",
-      "effectText": "Play on a base where you have at least one minion. At the start of your turn, place all minions and actions on this base to the bottom of their owners’ decks, and swap this base with the top card of the base deck."
+      "effectText": "Play on a base where you have at least one minion. At the start of your turn, place all minions and actions on this base to the bottom of their owners' decks, and swap this base with the top card of the base deck."
     },
     "cthulhu_furthering_the_cause": {
       "name": "Furthering the Cause",
-      "effectText": "Play on a base. Ongoing: At the end of each turn, if another player’s minion was destroyed here, gain 1 VP."
+      "effectText": "Play on a base. Ongoing: At the end of each turn, if another player's minion was destroyed here, gain 1 VP."
     },
     "cthulhu_whispers_in_darkness": {
       "name": "Whispers in Darkness",
@@ -364,20 +364,20 @@
       "name": "King Rex"
     },
     "dino_laser_triceratops": {
-      "name": "Laser Triceratops",
+      "name": "Laseratops",
       "abilityText": "You may destroy a minion of power 2 or less on this base."
     },
     "dino_armor_stego": {
       "name": "Armor Stego",
-      "abilityText": "Ongoing: This minion has +2 power during other players’ turns."
+      "abilityText": "Ongoing: This minion has +2 power during other players' turns."
     },
     "dino_war_raptor": {
       "name": "War Raptor",
       "abilityText": "Ongoing: This minion has +1 power for each War Raptor you have at this base (including this one)."
     },
-    "dino_wild_stuffing": {
-      "name": "Wild Stuffing",
-      "effectText": "Destroy a minion with power 3 or less."
+    "dino_wildlife_preserve": {
+      "name": "Wildlife Preserve",
+      "effectText": "Play on a base. Ongoing: Your minions here are not affected by other players' actions."
     },
     "dino_augmentation": {
       "name": "Augmentation",
@@ -388,28 +388,28 @@
       "effectText": "Each of your minions gains +1 power until the end of the turn."
     },
     "dino_tooth_and_claw": {
-      "name": "Tooth and Claw",
-      "effectText": "Play on a minion. Ongoing: If another player’s card would affect this minion, you may destroy this card to prevent it and destroy that player’s card."
+      "name": "Tooth and Claw...and Guns",
+      "effectText": "Play on a minion. Ongoing: If an ability would affect this minion, destroy this card and that ability does not affect this minion."
     },
     "dino_upgrade": {
       "name": "Upgrade",
-      "effectText": "Play on a minion. Ongoing: This minion has +2 power and cannot be destroyed."
+      "effectText": "Play on a minion. Ongoing: This minion has +2 power."
     },
     "dino_natural_selection": {
       "name": "Natural Selection",
       "effectText": "Choose a base where you have a minion. Destroy a minion there with less power than yours."
     },
-    "dino_wild_rampage": {
-      "name": "Wild Rampage",
-      "effectText": "Each of your minions here has +2 power until the end of the turn."
+    "dino_rampage": {
+      "name": "Rampage",
+      "effectText": "Reduce a base's breakpoint by the total power of your minions there until the end of the turn."
     },
     "dino_survival_of_the_fittest": {
       "name": "Survival of the Fittest",
-      "effectText": "Destroy each minion that has the lowest power."
+      "effectText": "On each base with two or more minions where one has higher power, destroy the minion with the lowest power (you choose in case of a tie)."
     },
     "elder_thing_elder_thing": {
       "name": "Elder Thing",
-      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. This minion is not affected by other players’ cards."
+      "abilityText": "Destroy two of your other minions or place this minion on the bottom of your deck. This minion is not affected by other players' cards."
     },
     "elder_thing_shoggoth": {
       "name": "Shoggoth",
@@ -461,11 +461,11 @@
     },
     "ghost_haunting": {
       "name": "Haunting",
-      "abilityText": "Ongoing: If you have 2 or fewer cards in hand, this minion has +3 power and cannot be affected by other players’ cards."
+      "abilityText": "Ongoing: If you have 2 or fewer cards in hand, this minion has +3 power and cannot be affected by other players' cards."
     },
     "ghost_spirit": {
       "name": "Spirit",
-      "abilityText": "Choose a minion. You may discard a number of cards equal to that minion’s power to destroy it."
+      "abilityText": "Choose a minion. You may discard a number of cards equal to that minion's power to destroy it."
     },
     "ghost_ghost": {
       "name": "Ghost",
@@ -477,7 +477,7 @@
     },
     "ghost_incorporeal": {
       "name": "Incorporeal",
-      "effectText": "Play on one of your minions. Ongoing: This minion cannot be affected by other players’ cards."
+      "effectText": "Play on one of your minions. Ongoing: This minion cannot be affected by other players' cards."
     },
     "ghost_ghostly_arrival": {
       "name": "Ghostly Arrival",
@@ -533,7 +533,7 @@
     },
     "innsmouth_in_plain_sight": {
       "name": "In Plain Sight",
-      "effectText": "Play on a base. Your minions of power 2 or less here are not affected by other players’ cards."
+      "effectText": "Play on a base. Your minions of power 2 or less here are not affected by other players' cards."
     },
     "innsmouth_the_deep_ones": {
       "name": "The Deep Ones",
@@ -549,7 +549,7 @@
     },
     "killer_plant_water_lily": {
       "name": "Water Lily",
-      "abilityText": "Ongoing: At the start of each of your turns, draw a card. You may only use one Water Lily’s ability per turn."
+      "abilityText": "Ongoing: At the start of each of your turns, draw a card. You may only use one Water Lily's ability per turn."
     },
     "killer_plant_sprout": {
       "name": "Sprout",
@@ -561,7 +561,7 @@
     },
     "killer_plant_deep_roots": {
       "name": "Deep Roots",
-      "effectText": "Play on a base. Ongoing: Your minions on this base cannot be moved or returned to your hand by other players’ abilities."
+      "effectText": "Play on a base. Ongoing: Your minions on this base cannot be moved or returned to your hand by other players' abilities."
     },
     "killer_plant_choking_vines": {
       "name": "Choking Vines",
@@ -577,11 +577,11 @@
     },
     "killer_plant_sleep_spores": {
       "name": "Sleep Spores",
-      "effectText": "Play on a base. Ongoing: Other players’ minions on this base have -1 power. (min 0)"
+      "effectText": "Play on a base. Ongoing: Other players' minions on this base have -1 power. (min 0)"
     },
     "killer_plant_overgrowth": {
       "name": "Overgrowth",
-      "effectText": "Play on a base. Ongoing: At the start of your turn, reduce this base’s breakpoint to 0."
+      "effectText": "Play on a base. Ongoing: At the start of your turn, reduce this base's breakpoint to 0."
     },
     "killer_plant_entangled": {
       "name": "Entangled",
@@ -609,7 +609,7 @@
     },
     "miskatonic_book_of_iter_the_unseen": {
       "name": "Jinkies!",
-      "effectText": "Look at any player’s hand. Draw a Madness card and play two extra actions."
+      "effectText": "Look at any player's hand. Draw a Madness card and play two extra actions."
     },
     "miskatonic_mandatory_reading": {
       "name": "Things Best Not Known",
@@ -661,7 +661,7 @@
     },
     "ninja_smoke_bomb": {
       "name": "Smoke Bomb",
-      "effectText": "Play on one of your minions. Ongoing: This minion is not affected by other players’ actions. Destroy this card at the start of your turn."
+      "effectText": "Play on one of your minions. Ongoing: This minion is not affected by other players' actions. Destroy this card at the start of your turn."
     },
     "ninja_assassination": {
       "name": "Assassination",
@@ -673,7 +673,7 @@
     },
     "ninja_seeing_stars": {
       "name": "Seeing Stars",
-      "effectText": "Destroy a minion with power 3 or less."
+      "effectText": "Play on a base. Ongoing: Your minions here are not affected by other players' actions."
     },
     "ninja_disguise": {
       "name": "Disguise",
@@ -681,7 +681,7 @@
     },
     "ninja_infiltrate": {
       "name": "Infiltrate",
-      "effectText": "Play on a base. Destroy an action that has been played here. Ongoing: You may ignore this base’s ability until the start of your next turn."
+      "effectText": "Play on a base. Destroy an action that has been played here. Ongoing: You may ignore this base's ability until the start of your next turn."
     },
     "ninja_poison": {
       "name": "Poison",
@@ -701,7 +701,7 @@
     },
     "pirate_first_mate": {
       "name": "First Mate",
-      "abilityText": "Special: After this base scores, you may move this minion to another base instead of the discard pile."
+      "abilityText": "Special: After this base scores, you may move up to two of your minions to other bases instead of the discard pile."
     },
     "pirate_dinghy": {
       "name": "Dinghy",
@@ -725,11 +725,11 @@
     },
     "pirate_shanghai": {
       "name": "Shanghai",
-      "effectText": "Move another player’s minion to another base."
+      "effectText": "Move another player's minion to another base."
     },
     "pirate_sea_dogs": {
       "name": "Sea Dogs",
-      "effectText": "Choose a faction. Move all of other players’ minions of that faction from one base to another."
+      "effectText": "Choose a faction. Move all of other players' minions of that faction from one base to another."
     },
     "pirate_swashbuckling": {
       "name": "Swashbuckling",
@@ -737,7 +737,7 @@
     },
     "robot_nukebot": {
       "name": "Nukebot",
-      "abilityText": "Ongoing: After this minion is destroyed, destroy all other players’ minions on this base."
+      "abilityText": "Ongoing: After this minion is destroyed, destroy all other players' minions on this base."
     },
     "robot_warbot": {
       "name": "Warbot",
@@ -777,7 +777,7 @@
     },
     "steampunk_steam_queen": {
       "name": "Steam Queen",
-      "abilityText": "Ongoing: Your actions cannot be affected by other players’ cards."
+      "abilityText": "Ongoing: Your actions cannot be affected by other players' cards."
     },
     "steampunk_mechanic": {
       "name": "Mechanic",
@@ -793,7 +793,7 @@
     },
     "steampunk_ornate_dome": {
       "name": "Ornate Dome",
-      "effectText": "Play on a base. Destroy all other players’ actions played here. Ongoing: Other players cannot play actions on this base."
+      "effectText": "Play on a base. Destroy all other players' actions played here. Ongoing: Other players cannot play actions on this base."
     },
     "steampunk_aggromotive": {
       "name": "Aggromotive",
@@ -829,7 +829,7 @@
     },
     "trickster_brownie": {
       "name": "Brownie",
-      "abilityText": "Ongoing: If another player’s card affects this minion, that player discards two cards at random."
+      "abilityText": "Ongoing: If another player's card affects this minion, that player discards two cards at random."
     },
     "trickster_gnome": {
       "name": "Gnome",
@@ -845,7 +845,7 @@
     },
     "trickster_hideout": {
       "name": "Hideout",
-      "effectText": "Play on a base. Ongoing: If another player’s action would affect your minions on this base, destroy this card to cancel that action."
+      "effectText": "Play on a base. Ongoing: If another player's action would affect your minions on this base, destroy this card to cancel that action."
     },
     "trickster_mark_of_sleep": {
       "name": "Mark of Sleep",
@@ -889,7 +889,7 @@
     },
     "wizard_mass_enchantment": {
       "name": "Mass Enchantment",
-      "effectText": "Reveal the top card of each other player’s deck. You may play one revealed action as an extra action. Put the remaining cards back on top of their owners’ decks."
+      "effectText": "Reveal the top card of each other player's deck. You may play one revealed action as an extra action. Put the remaining cards back on top of their owners' decks."
     },
     "wizard_mystic_studies": {
       "name": "Mystic Studies",
@@ -952,7 +952,7 @@
       "effectText": "Play on a base. Ongoing: Other players cannot play minions on this base. At the start of your turn, destroy this card."
     },
     "zombie_theyre_coming_to_get_you": {
-      "name": "They’re Coming to Get You",
+      "name": "They're Coming to Get You",
       "effectText": "Play on a base. Ongoing: On your turn, you may play a minion from your discard pile on this base instead of from your hand."
     },
     "zombie_not_enough_bullets": {
@@ -984,7 +984,7 @@
     },
     "base_temple_of_goju": {
       "name": "Temple of Goju",
-      "abilityText": "After this base scores, place each player’s highest-power minion here on the bottom of its owner’s deck."
+      "abilityText": "After this base scores, place each player's highest-power minion here on the bottom of its owner's deck."
     },
     "base_cave_of_shinies": {
       "name": "Cave of Shinies",
@@ -1004,7 +1004,7 @@
     },
     "base_tar_pits": {
       "name": "Tar Pits",
-      "abilityText": "After each time a minion is destroyed here, place it on the bottom of its owner’s deck."
+      "abilityText": "After each time a minion is destroyed here, place it on the bottom of its owner's deck."
     },
     "base_ninja_dojo": {
       "name": "Ninja Dojo",
@@ -1012,7 +1012,7 @@
     },
     "base_mushroom_kingdom": {
       "name": "Mushroom Kingdom",
-      "abilityText": "At the start of each player’s turn, that player may move an opponent’s minion from any base to here."
+      "abilityText": "At the start of each player's turn, that player may move an opponent's minion from any base to here."
     },
     "base_pirate_cove": {
       "name": "Pirate Cove",
@@ -1043,11 +1043,11 @@
       "abilityText": "After each time one or more minions are destroyed here, the player who destroyed them gains 1 VP."
     },
     "base_tsars_palace": {
-      "name": "Tsar’s Palace",
+      "name": "Tsar's Palace",
       "abilityText": "Minions of power 2 or less cannot be played here."
     },
     "base_inventors_salon": {
-      "name": "Inventor’s Salon",
+      "name": "Inventor's Salon",
       "abilityText": "After this base scores, the winner may take an action from their discard pile into their hand."
     },
     "base_the_workshop": {
@@ -1063,7 +1063,7 @@
       "abilityText": "On your turn, you may play one extra minion of power 2 or less here."
     },
     "base_cat_fanciers_alley": {
-      "name": "Cat Fanciers’ Alley",
+      "name": "Cat Fanciers' Alley",
       "abilityText": "Once per turn, you may destroy one of your minions here to draw a card."
     },
     "base_house_of_nine_lives": {
@@ -1080,7 +1080,7 @@
     },
     "base_beautiful_castle": {
       "name": "Beautiful Castle",
-      "abilityText": "Minions here of power 5 or more are unaffected by other players’ cards."
+      "abilityText": "Minions here of power 5 or more are unaffected by other players' cards."
     },
     "base_castle_of_ice": {
       "name": "Castle of Ice",
@@ -1100,11 +1100,11 @@
     },
     "base_ritual_site": {
       "name": "Ritual Site",
-      "abilityText": "After this base scores, shuffle all minions here into their owners’ decks instead of placing them in the discard pile."
+      "abilityText": "After this base scores, shuffle all minions here into their owners' decks instead of placing them in the discard pile."
     },
     "base_rlyeh": {
-      "name": "R’lyeh",
-      "abilityText": "At the start of each player’s turn, that player may destroy one of their minions here to gain 1 VP."
+      "name": "R'lyeh",
+      "abilityText": "At the start of each player's turn, that player may destroy one of their minions here to gain 1 VP."
     },
     "base_the_asylum": {
       "name": "The Asylum",
@@ -1112,7 +1112,7 @@
     },
     "base_innsmouth_base": {
       "name": "Innsmouth",
-      "abilityText": "After each time a minion is played here, its owner may place a card from any player’s discard pile on the bottom of its owner’s deck."
+      "abilityText": "After each time a minion is played here, its owner may place a card from any player's discard pile on the bottom of its owner's deck."
     },
     "base_mountains_of_madness": {
       "name": "Mountains of Madness",

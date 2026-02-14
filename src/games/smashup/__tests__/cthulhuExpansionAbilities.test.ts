@@ -22,12 +22,14 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
+    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });
@@ -80,11 +82,13 @@ const defaultRandom: RandomFn = {
     range: (_min: number, _max: number) => _min,
 };
 
-function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): SmashUpEvent[] {
-    return execute(makeMatchState(state), {
+function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): { events: SmashUpEvent[]; matchState: MatchState<SmashUpCore> } {
+    const ms = makeMatchState(state);
+    const events = execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
+    return { events, matchState: ms };
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -123,7 +127,7 @@ describe('印斯茅斯派系能力', () => {
                 ],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
             // m1, m2, m4 应获得 +1
             expect(powerEvents.length).toBe(3);
@@ -152,7 +156,7 @@ describe('印斯茅斯派系能力', () => {
                 }],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
             expect(powerEvents.length).toBe(0);
         });
@@ -172,7 +176,7 @@ describe('印斯茅斯派系能力', () => {
                 }],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
             const minion = newState.bases[0].minions.find(m => m.uid === 'm1');
             expect(minion!.powerModifier).toBe(1);
@@ -202,7 +206,7 @@ describe('印斯茅斯派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
             // P0 有1个随从在弃牌堆，P1 有2个
             expect(reshuffleEvents.length).toBe(2);
@@ -221,7 +225,7 @@ describe('印斯茅斯派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
             // 只有 P0 有随从
             expect(reshuffleEvents.length).toBe(1);
@@ -246,7 +250,7 @@ describe('印斯茅斯派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
             // P0: 牌库应包含 d1 + dis1（随从），弃牌堆应只剩 dis2（行动卡）+ a1（打出的行动卡）
             // 注意：DECK_RESHUFFLED reducer 合并 deck+discard，所以弃牌堆清空
@@ -276,7 +280,7 @@ describe('印斯茅斯派系能力', () => {
 
 describe('米斯卡塔尼克大学派系能力', () => {
     describe('miskatonic_those_meddling_kids（多管闲事的小鬼：消灭基地上行动卡）', () => {
-        it('消灭基地上所有持续行动卡', () => {
+        it('单基地有行动卡时也创建 Prompt 选择', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -294,15 +298,46 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 }],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const detachEvents = events.filter(e => e.type === SU_EVENTS.ONGOING_DETACHED);
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            // 单基地也应创建 Prompt 让玩家主动选择
+            const interaction = (matchState.sys as any)?.interaction;
+            const current = interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('miskatonic_those_meddling_kids');
+        });
+
+        it('消灭基地上所有持续行动卡（通过 interaction handler）', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'miskatonic_those_meddling_kids', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [{
+                    defId: 'b1',
+                    minions: [],
+                    ongoingActions: [
+                        { uid: 'o1', defId: 'test_ongoing', ownerId: '1' },
+                        { uid: 'o2', defId: 'test_ongoing2', ownerId: '0' },
+                    ],
+                }],
+            });
+
+            // 先打出卡 → 创建 interaction
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            // 通过 handler 选择基地 0
+            const handler = getInteractionHandler('miskatonic_those_meddling_kids');
+            expect(handler).toBeDefined();
+            const result = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
+            const detachEvents = result.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
             expect(detachEvents.length).toBe(2);
-            const uids = detachEvents.map(e => (e as any).payload.cardUid);
+            const uids = detachEvents.map((e: any) => e.payload.cardUid);
             expect(uids).toContain('o1');
             expect(uids).toContain('o2');
         });
 
-        it('消灭随从上附着的行动卡', () => {
+        it('消灭随从上附着的行动卡（通过 interaction handler）', () => {
             const minionWithActions: MinionOnBase = {
                 ...makeMinion('m1', 'test', '1', 3),
                 attachedActions: [
@@ -323,11 +358,14 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 }],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const detachEvents = events.filter(e => e.type === SU_EVENTS.ONGOING_DETACHED);
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            const handler = getInteractionHandler('miskatonic_those_meddling_kids');
+            expect(handler).toBeDefined();
+            const result = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
+            const detachEvents = result.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
             // 1 ongoing + 1 attached = 2
             expect(detachEvents.length).toBe(2);
-            const uids = detachEvents.map(e => (e as any).payload.cardUid);
+            const uids = detachEvents.map((e: any) => e.payload.cardUid);
             expect(uids).toContain('o1');
             expect(uids).toContain('att1');
         });
@@ -381,9 +419,12 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 }],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events, matchState } = execPlayAction(state, '0', 'a1');
             const detachEvents = events.filter(e => e.type === SU_EVENTS.ONGOING_DETACHED);
             expect(detachEvents.length).toBe(0);
+            // 无行动卡时也不应创建 interaction
+            const interaction = (matchState.sys as any)?.interaction;
+            expect(interaction?.current).toBeUndefined();
         });
 
         it('消灭后状态正确（reduce 验证）', () => {
@@ -403,8 +444,14 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 }],
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const newState = applyEvents(state, events);
+            // 先打出卡 → 创建 interaction
+            const { events: playEvents, matchState } = execPlayAction(state, '0', 'a1');
+            // 通过 handler 选择基地 0
+            const handler = getInteractionHandler('miskatonic_those_meddling_kids');
+            expect(handler).toBeDefined();
+            const result = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
+            const allEvents = [...playEvents, ...result.events];
+            const newState = applyEvents(state, allEvents);
             // 基地上不应有持续行动卡
             expect(newState.bases[0].ongoingActions.length).toBe(0);
             // o1 应在 P1 弃牌堆
@@ -437,7 +484,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
             expect(reshuffleEvents.length).toBe(1);
             const deckUids = (reshuffleEvents[0] as any).payload.deckUids;
@@ -463,7 +510,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
             expect(reshuffleEvents.length).toBe(0);
         });
@@ -482,7 +529,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
             // DECK_RESHUFFLED 合并 deck+discard，弃牌堆清空
             expect(newState.players['0'].discard.length).toBe(0);
@@ -510,7 +557,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
             expect(reshuffleEvents.length).toBe(1);
             const deckUids = (reshuffleEvents[0] as any).payload.deckUids;
@@ -533,7 +580,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
             expect(reshuffleEvents.length).toBe(0);
         });
@@ -553,7 +600,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
             // DECK_RESHUFFLED 合并 deck+discard，弃牌堆清空
             expect(newState.players['0'].discard.length).toBe(0);
@@ -586,7 +633,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvents.length).toBe(1);
             // 应找到 d2 和 d4（前2张行动卡）
@@ -611,7 +658,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
             expect(reshuffleEvents.length).toBe(1);
             const deckUids = (reshuffleEvents[0] as any).payload.deckUids;
@@ -636,7 +683,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvents.length).toBe(1);
             expect((drawEvents[0] as any).payload.cardUids).toEqual(['d2']);
@@ -657,7 +704,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvents.length).toBe(0);
         });
@@ -673,7 +720,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvents.length).toBe(0);
         });
@@ -694,7 +741,7 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
+            const { events } = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
             // d2 和 d3 应在手牌中（从牌库顶找到的2张行动卡）
             expect(newState.players['0'].hand.some(c => c.uid === 'd2')).toBe(true);

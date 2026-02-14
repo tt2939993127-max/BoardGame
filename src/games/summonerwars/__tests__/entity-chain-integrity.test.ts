@@ -50,7 +50,7 @@ const HANDLED_BY_UI_EVENTS = new Set([
     'blood_rune_choice',      // useGameEvents → setAbilityMode('blood_rune')
     'ice_shards_damage',      // useGameEvents → setAbilityMode('ice_shards')
     'feed_beast_check',       // useGameEvents → setAbilityMode('feed_beast')
-    'rapid_fire_extra_attack', // execute.ts DECLARE_ATTACK 后检查 + 授予额外攻击
+    'rapid_fire_extra_attack', // afterAttack 触发 → UI 显示确认 → ACTIVATE_ABILITY(rapid_fire) 消耗充能+授予额外攻击
 ]);
 
 /**

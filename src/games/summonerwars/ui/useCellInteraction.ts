@@ -17,6 +17,7 @@ import {
   getPlayerUnits, hasAvailableActions, isCellEmpty, isImmobile,
   getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
   manhattanDistance, getStructureAt, findUnitPosition, getSummoner,
+  getUnitAbilities,
 } from '../domain/helpers';
 import { isUndeadCard, getBaseCardId, CARD_IDS } from '../domain/ids';
 import { getSummonerWarsUIHints } from '../domain/uiHints';
@@ -253,7 +254,7 @@ export function useCellInteraction({
           const unit = core.board[row]?.[col]?.unit;
           const isAllyStructure = (structure && structure.owner === (myPlayerId as '0' | '1'))
             || (unit && unit.owner === (myPlayerId as '0' | '1')
-              && (unit.card.abilities ?? []).includes('mobile_structure'));
+              && getUnitAbilities(unit, core).includes('mobile_structure'));
           if (isAllyStructure) {
             const dist = manhattanDistance(sourcePos, pos);
             if (dist > 0 && dist <= 3) targets.push(pos);
@@ -517,7 +518,7 @@ export function useCellInteraction({
     if (currentPhase === 'summon' && !selectedHandCardId) {
       const clickedUnit = core.board[gameRow]?.[gameCol]?.unit;
       if (clickedUnit && clickedUnit.owner === myPlayerId) {
-        const abilities = clickedUnit.card.abilities ?? [];
+        const abilities = getUnitAbilities(clickedUnit, core);
         if (abilities.includes('revive_undead')) {
           const hasUndeadInDiscard = core.players[myPlayerId]?.discard.some(c =>
             isUndeadCard(c)

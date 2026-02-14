@@ -54,6 +54,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **多方案必须标注最正确方案（强制）**：当给出多个方案时，必须明确写出"最正确方案"，并说明理由。**评判标准优先级**：架构正确性 > 可维护性 > 一致性 > 风险/成本。**禁止以"改动最小"作为最正确方案的首要理由**。
 - **未讨论方案先自检（强制）**：准备直接执行未经讨论的方案时，必须先自检是否为最正确方案、是否符合现有架构；若存在不确定点，先提出并等待确认。
 - **最正确方案可直接执行（强制）**：已明确判断存在唯一"最正确方案"且不依赖用户偏好/取舍时，**不需要询问，直接执行**；仅在需要用户做价值取舍或关键事实缺失时才提问。
+- **设计面向扩展，编码面向抽象（强制）**：实现任何数据读取/查询时，必须先问"这个值未来会不会被 buff/共享/装备/光环等机制修改？"。如果答案是"可能"，则从第一天就必须通过统一查询函数访问（如 `getUnitAbilities(unit, state)` 而非 `unit.card.abilities`），禁止直接读底层字段再"等以后有需求了再改"。。
 - **重构清理遗留代码（强制）**：重构应尽可能删除/迁移不再使用的代码与资源；若确实无法清理，必须明确告知保留原因及后续清理计划。
 - **字段准入（Schema Gate）（强制）**：布局/契约结构只允许进入有架构意义的数据（稳定、可复用、跨模块共享）；严禁把历史回放数据、UI 状态、调试缓存回灌进布局结构。
 - **命名冲突裁决（强制）**：出现多种命名时，必须给出唯一裁决并做全链路统一（类型/文件名/导出名/调用点/文档），禁止保留多头命名。
@@ -67,7 +68,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **日志不需要开关，调试完后将移除（强制）**。日志格式用 key=value 展开关键字段。
 - **新增功能必须补充测试（强制）**：新增功能/技能/API 必须同步补充测试，覆盖正常+异常场景。详见 `docs/automated-testing.md`。
 - **单文件行数限制（强制）**：单个源码文件不得超过 1000 行，超过必须拆分。
-- **素材数据录入规范（强制）**：根据图片素材提取业务数据时，必须全口径核对、逻辑序列化、关键限定词显式核对，输出 Markdown 表格作为核对契约。
+- **素材数据录入规范（强制）**：根据图片素材提取业务数据时，必须全口径核对、逻辑序列化、关键限定词显式核对，输出 Markdown 表格作为核对契约。**图片文字辨识零猜测原则（强制）**：任何文字（名称、描述、数值、关键词）只要有一点看不清或不确定，必须立即停止当前数据录入工作，向用户说明哪些位置无法辨认，并索要更清晰的图片。禁止根据上下文、常识或英文原版"猜测"看不清的中文文字。已猜测录入的数据视为缺陷，必须重新核对。
 - **框架复用优先（强制）**：禁止为特定游戏实现无法复用的系统。三层模型：`/core/ui/` 契约层 → `/components/game/framework/` 骨架层 → `/games/<gameId>/` 游戏层。新增组件/Hook 前必须搜索已有实现。详见 `docs/ai-rules/engine-systems.md`。
 - **文档同步交付（强制）**：代码变更涉及以下任一场景时，必须在同一次交付中同步更新相关文档（`docs/` 下对应文件、`AGENTS.md` 子文档、游戏 `rule/*.md`），不得拆到后续任务：
   - **架构/框架变动**：引擎系统新增或重构、三层模型职责变化、adapter/pipeline 接口变更。
@@ -219,6 +220,8 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - ✅ 新增技能时只需：① 在 `abilities-*.ts` 添加 `AbilityDef` ② 在 `abilityResolver.ts` 注册执行器 ③ 在 i18n JSON 添加文案。不得修改 validate.ts、execute.ts、UI 组件。
   - **现有游戏的历史债务**：SummonerWars 和 SmashUp 的 abilityText 冗余已清理完毕（技能文本统一走 i18n，卡牌配置不再包含 abilityText 字段）。SummonerWars 的 execute 层 switch-case 已替换为 AbilityExecutorRegistry，UI 层已改为数据驱动。剩余轻微债务：SmashUp 的 `domain/abilityRegistry.ts` 自建注册表（模式合理但未使用引擎层）、DiceThrone 的 `CombatAbilityManager`（内部设计合理）。
 - **状态/buff/debuff 必须使用 `engine/primitives/tags.ts`**：禁止自行实现 statusEffects / tempAbilities，使用 `createTagContainer()` + `addTag/removeTag/matchTags/tickDurations`。支持层级前缀匹配和层数/持续时间。
+  - **SummonerWars 历史债务**：`BoardUnit` 上 `tempAbilities`/`boosts`/`extraAttacks`/`healingMode`/`wasAttackedThisTurn`/`originalOwner` 为 ad-hoc 字段，未用 TagContainer，回合清理靠手动解构。`attachedCards`/`attachedUnits`/`entanglementTargets` 为结构化数据，不适合 TagContainer。**新游戏禁止模仿**。
+- **Custom Action categories 语义正确性（强制）**：注册 `registerCustomActionHandler` 时声明的 `categories` 必须与 handler 实际输出的事件类型一致。**核心规则：handler 产生 `DAMAGE_DEALT` → categories 必须包含 `'damage'`**（`playerAbilityHasDamage` 依赖此判定是否进入防御投掷阶段）。新增/修改 handler 后必须运行 `customaction-category-consistency.test.ts` 验证。详见 `docs/ai-rules/testing-audit.md`「元数据语义一致性审计」节。
 - **数值修改管线必须使用 `engine/primitives/modifier.ts`**：禁止自行实现 DamageModifier / PowerModifierFn，使用 `createModifierStack()` + `addModifier/applyModifiers/tickModifiers`。
 - **可被 buff 修改的属性必须使用 `engine/primitives/attribute.ts`**：使用 `createAttributeSet()` + `addAttributeModifier/getCurrent`。与 `resources.ts` 互补。
 - **面向百游戏设计（强制）**
@@ -244,6 +247,13 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **Board.tsx 默认拆分**：业务 hooks → `hooks/`，子区域组件 → `ui/`。Board.tsx 只做布局组装。
 - **reducer.ts / execute.ts**：当命令/事件类型超过 15 个时，按实体/子系统拆分到子目录，主文件只做分发。
 - **统一底线**：无论是否默认拆分，任何单文件超过 1000 行必须立即拆分。
+
+#### 目录结构规范（强制）
+- **按子域分类建目录**：新增文件时按业务子域归入对应子目录，禁止平铺堆积在父目录。同一目录下同级文件不得超过 15 个（不含 index.ts/types.ts）。
+- **子目录命名**：kebab-case，反映业务含义（`combat/`、`overlays/`、`cards/`），禁止 `misc/`、`utils/`、`new/` 等无意义名称。
+- **拆分后保留 barrel**：父目录 `index.ts` 统一 re-export，消费方 import 路径不变。
+- **嵌套深度上限 5 层**（从 `src/` 起算），超过优先扁平化。
+- **现有超限目录**（`dicethrone/domain`、`dicethrone/ui`、`summonerwars/ui`）：新增文件时必须顺带拆分，禁止继续堆积。
 
 #### 游戏内工具函数单一来源（强制）
 - 每个游戏的 `domain/utils.ts` **从第一天就建立**，放置 `applyEvents`、`getOpponentId`、`updatePlayer` 等共享工具。
@@ -310,7 +320,11 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **截图规范**：禁止硬编码路径，必须用 `testInfo.outputPath('name.png')`。
 - **E2E 覆盖要求**：必须覆盖"关键交互面"（按钮/Modal/Tab/表单校验），不只是跑通 happy path。
 - **静态审计要求**：新增游戏时根据游戏特征选择引擎层审计工具。选型指南见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
-- **描述→实现全链路审查（强制）**：以下场景必须执行全链路审查——① 新增任何技能/Token/事件卡/被动效果/光环的实现 ② 修复"没效果"类 bug ③ 审查已有机制是否正确实现 ④ 重构涉及消费链路。审查方法：先从规则文档锁定权威描述（禁止仅凭代码注释），将描述拆分为**独立交互链**（任何需要独立触发条件、玩家输入或状态变更路径的效果 = 一条链），拆分后逐句回溯原文自检覆盖完整性，再逐链检查定义层→注册层→执行层→状态层→验证层→UI 层→i18n 层→测试层八层链路，最后做交叉影响检查（新链路是否触发已有机制连锁），输出"独立交互链 × 八层"矩阵（附权威描述原文）。**禁止只测注册/写入就判定"已实现"，禁止输出"看起来没问题"的模糊结论。** 详见 `docs/ai-rules/engine-systems.md`「描述→实现全链路审查规范」节。
+- **描述→实现全链路审查（强制）**：以下场景必须执行全链路审查——① 新增任何技能/Token/事件卡/被动效果/光环的实现 ② 修复"没效果"类 bug ③ 审查已有机制是否正确实现 ④ 重构涉及消费链路。审查方法：先从规则文档锁定权威描述（禁止仅凭代码注释），将描述拆分为**独立交互链**（任何需要独立触发条件、玩家输入或状态变更路径的效果 = 一条链），**再将每条链的描述逐动词拆解为原子操作步骤**（每个动词短语 = 一个可验证的代码行为），拆分后逐句逐动词回溯原文自检覆盖完整性，再逐链逐步骤检查定义层→注册层→执行层→状态层→验证层→UI 层→i18n 层→测试层八层链路，最后做交叉影响检查（新链路是否触发已有机制连锁），输出"独立交互链 × 八层"矩阵（附权威描述原文和原子步骤列表）。**禁止只测注册/写入就判定"已实现"，禁止输出"看起来没问题"的模糊结论。** **教训**：wizard_scry"搜索→展示→放入手牌→洗牌"四步只实现了两步，因为审计时没有逐动词拆解；zombie_outbreak"在没有你随从的基地额外打出"用 `grantExtraMinion` 全局额度实现，限定条件仅在入口检查、执行时不约束，玩家可在任意基地使用额度。详见 `docs/ai-rules/engine-systems.md`「描述→实现全链路审查规范」节。
+- **数据查询一致性审查（强制）**：新增任何"修改/增强/共享"类机制（buff、光环、装备、交缠等）后，必须 grep 原始字段访问（如 `.card.abilities`、`.card.strength`），确认所有消费点走统一查询入口（如 `getUnitAbilities`、`calculateEffectiveStrength`）。八层纵向链路全 ✅ 不代表实现完整——消费点绕过统一入口是最常见的"没效果"根因。详见 `docs/ai-rules/testing-audit.md`「数据查询一致性审查」节。
+- **元数据语义一致性审查（强制）**：新增/修改 custom action handler 后，必须确认 `categories` 声明与 handler 实际输出事件类型一致。**核心规则：handler 产生 `DAMAGE_DEALT` → categories 必须包含 `'damage'`**。运行 `customaction-category-consistency.test.ts` 验证。详见 `docs/ai-rules/testing-audit.md`「元数据语义一致性审计」节。
+- **"可以/可选"效果必须有交互确认（强制）**：描述中"你可以"/"may"→ 必须有确认/跳过 UI，禁止自动执行。
+- **测试必须验证状态变更（强制）**：事件发射 ≠ 状态生效，必须断言 reduce 后的最终状态。`as any` 在检测器中是红旗。详见 `docs/ai-rules/testing-audit.md`「审计反模式清单」。
 
 ---
 

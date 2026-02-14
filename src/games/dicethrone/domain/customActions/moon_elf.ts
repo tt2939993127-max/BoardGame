@@ -444,21 +444,21 @@ export function registerMoonElfCustomActions(): void {
 
     // 爆裂箭结算
     registerCustomActionHandler('moon_elf-exploding-arrow-resolve-1', handleExplodingArrowResolve1, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage'],
     });
     registerCustomActionHandler('moon_elf-exploding-arrow-resolve-2', handleExplodingArrowResolve2, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage'],
     });
     registerCustomActionHandler('moon_elf-exploding-arrow-resolve-3', handleExplodingArrowResolve3, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage', 'status'],
     });
 
     // 迷影步结算
     registerCustomActionHandler('moon_elf-elusive-step-resolve-1', handleElusiveStepResolve1, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage', 'defense', 'token'],
     });
     registerCustomActionHandler('moon_elf-elusive-step-resolve-2', handleElusiveStepResolve2, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage', 'defense', 'token', 'status'],
     });
 
     // 行动卡

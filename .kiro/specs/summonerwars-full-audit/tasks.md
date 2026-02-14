@@ -1,0 +1,283 @@
+# 实施计划：召唤师战争全链路审计
+
+## 概述
+
+按阵营逐个执行八层链路审计，每个任务是可独立执行的审计+修复单元。先修复已知问题，再逐阵营审计，最后做交叉影响检查。
+
+## 任务
+
+- [ ] 1. 修复已知问题（前轮审计发现）
+  - [x] 1.1 清理 useGameEvents.ts 中的 [rapid_fire-debug] 遗留调试日志
+    - 搜索并删除 `useGameEvents.ts` 第300行附近的 `[rapid_fire-debug]` 日志
+    - 运行相关测试确认无回归
+    - _Requirements: 10.1_
+  - [-] 1.2 修复感染验证中疫病体判断使用常量
+    - 在 `domain/abilities.ts` 的 infection customValidator 中，将 `card.id.includes('plague-zombie') || card.name.includes('疫病体')` 替换为 `domain/ids.ts` 中的常量或工具函数
+    - 运行感染相关测试确认无回归
+    - _Requirements: 10.2_
+  - [~] 1.3 修复交缠共享技能读取逻辑
+    - 审查 `domain/helpers.ts` 中 `getUnitAbilities` 函数，确认交缠颂歌连接的单位技能共享包含 tempAbilities
+    - 如果只读取 `card.abilities`，修改为同时包含 `tempAbilities`
+    - 运行交缠相关测试确认无回归
+    - _Requirements: 10.3_
+  - [~] 1.4 审查念力推拉对角线方向选择逻辑
+    - 审查 `domain/helpers.ts` 中 `calculatePushPullPosition` 函数
+    - 确认对角线目标时方向选择逻辑合理（优先行方向或列方向）
+    - 如果逻辑不合理，修复或添加玩家选择
+    - _Requirements: 10.4_
+
+- [ ] 2. 核心机制审计
+  - [~] 2.1 审计移动机制
+    - 审查 `helpers.ts` 中 `canMoveTo`、`getValidMoveTargets`、`getValidMoveTargetsEnhanced`
+    - 验证：最多3个单位、各移动2格、禁止对角线、不能穿过卡牌、建筑不可移动
+    - 输出八层链路矩阵，记录发现的问题
+    - _Requirements: 1.1_
+  - [~] 2.2 审计攻击机制
+    - 审查 `helpers.ts` 中 `canAttack`、`canAttackEnhanced`、`isRangedPathClear`、`getValidAttackTargets`
+    - 验证：近战相邻、远程3格直线+遮挡+护城墙穿透、骰子匹配、不活动惩罚
+    - 输出八层链路矩阵，记录发现的问题
+    - _Requirements: 1.2, 1.7_
+  - [~] 2.3 审计召唤、建造、魔力、抽牌机制
+    - 审查 `getValidSummonPositions`、`getValidBuildPositions`、`clampMagic`、`getDrawCount`
+    - 审查 `validate.ts` 中对应命令的验证逻辑
+    - 审查 `reduce.ts` 中对应事件的状态变更
+    - 输出八层链路矩阵，记录发现的问题
+    - _Requirements: 1.3, 1.4, 1.5, 1.6, 1.8_
+
+- [~] 3. 检查点 - 确认已知问题修复和核心机制审计完成
+  - 运行 `npm test -- src/games/summonerwars/` 确认所有测试通过
+  - 确认已知问题修复无回归，如有疑问请询问用户
+
+
+- [ ] 4. 堕落王国（亡灵法师）阵营审计
+  - [~] 4.1 审计召唤师能力：复活死灵（revive_undead）
+    - 权威描述→原子步骤拆解→八层链路检查
+    - 重点：多步交互链（选卡→选位置）、自伤2点、亡灵判定、相邻空格验证
+    - 审查文件：`abilities.ts`、`executors/necromancer.ts`、`reduce.ts`、`validate.ts`、UI 交互提示
+    - _Requirements: 2.1_
+  - [~] 4.2 审计冠军能力：火祀召唤、吸取生命、暴怒
+    - 火祀召唤（fire_sacrifice）：消灭友方→放置到该位置
+    - 吸取生命（life_drain）：消灭2格内友方→双倍战力
+    - 暴怒（rage）：伤害标记数量加成战力
+    - 每个能力输出八层链路矩阵
+    - _Requirements: 2.2, 2.3, 2.4_
+  - [~] 4.3 审计士兵能力：血腥狂怒、献祭、无魂、感染、灵魂转移
+    - 血腥狂怒（blood_rage）：任意单位消灭→充能→战力加成→回合结束衰减
+    - 献祭（sacrifice）：被消灭→相邻敌方1伤
+    - 无魂（soulless）：消灭疫病体不获魔力
+    - 感染（infection）：消灭敌方→弃牌堆召唤疫病体（高风险交互）
+    - 灵魂转移（soul_transfer）：消灭敌方→可选移动到该位置（高风险交互）
+    - _Requirements: 2.5, 2.6, 2.7, 2.8, 2.9_
+  - [~] 4.4 审计堕落王国事件卡
+    - 地狱火之刃（NECRO_HELLFIRE_BLADE）：附加到单位
+    - 葬火（NECRO_FUNERAL_PYRE）：持续事件
+    - 歼灭（NECRO_ANNIHILATE）：消灭友方+对目标造成伤害
+    - 血之召唤（NECRO_BLOOD_SUMMON）：特殊召唤
+    - 每张事件卡输出八层链路矩阵
+    - _Requirements: 2.10_
+
+- [ ] 5. 欺心巫族阵营审计
+  - [~] 5.1 审计召唤师能力：心灵捕获（mind_capture）
+    - 权威描述→原子步骤拆解→八层链路检查
+    - 重点：攻击伤害≥目标剩余生命时提示选择控制/伤害（高风险交互）
+    - 审查攻击流程中的 mind_capture_check 和 mind_capture_resolve
+    - _Requirements: 3.1_
+  - [~] 5.2 审计冠军能力：飞行、浮空术、高阶念力、稳固、读心传念
+    - 飞行（flying）：额外移动1格+穿越所有卡牌
+    - 浮空术（aerial_strike）：2格内友方士兵获得飞行光环
+    - 高阶念力（high_telekinesis）：攻击后推拉3格内非召唤师1格（高风险交互）
+    - 稳固（stable）：免疫推拉
+    - 读心传念（mind_transmission）：攻击后给3格内友方士兵额外攻击（高风险交互）
+    - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6_
+  - [~] 5.3 审计士兵能力：迅捷、远射、念力、幻化、迷魂、缠斗
+    - 迅捷（swift）：额外移动1格
+    - 远射（ranged）：攻击范围4格
+    - 念力（telekinesis）：攻击后推拉2格内非召唤师1格（高风险交互）
+    - 幻化（illusion）：移动阶段开始复制3格内士兵技能（高风险交互）
+    - 迷魂（evasion）：相邻敌方攻击掷出✦时减伤1
+    - 缠斗（rebound）：相邻敌方离开时造成1伤
+    - _Requirements: 3.7, 3.8, 3.9, 3.10, 3.11, 3.12_
+  - [~] 5.4 审计欺心巫族事件卡
+    - 心灵操控（TRICKSTER_MIND_CONTROL）：传奇，控制敌方单位
+    - 风暴侵袭（TRICKSTER_STORM_ASSAULT）：ACTIVE，减少移动
+    - 催眠引诱（TRICKSTER_HYPNOTIC_LURE）：拉目标+ACTIVE战力加成
+    - 震慑（TRICKSTER_STUN）：推拉+穿过+伤害
+    - _Requirements: 3.13_
+
+- [~] 6. 检查点 - 确认堕落王国和欺心巫族审计完成
+  - 运行 `npm test -- src/games/summonerwars/` 确认所有测试通过
+  - 汇总发现的问题，如有疑问请询问用户
+
+
+- [ ] 7. 先锋军团（圣骑士）阵营审计
+  - [~] 7.1 审计召唤师能力：城塞之力（fortress_power）
+    - 权威描述→原子步骤拆解→八层链路检查
+    - 重点：攻击后从弃牌堆拿取城塞单位到手牌（高风险交互）
+    - _Requirements: 4.1_
+  - [~] 7.2 审计冠军能力：指引、城塞精锐、辉光射击、神圣护盾
+    - 指引（guidance）：召唤阶段开始抓2张牌
+    - 城塞精锐（fortress_elite）：2格内友方城塞单位+1战力
+    - 辉光射击（radiant_shot）：每2点魔力+1战力
+    - 神圣护盾（divine_shield）：3格内友方城塞被攻击时投骰减伤
+    - _Requirements: 4.2, 4.3, 4.4, 4.5_
+  - [~] 7.3 审计士兵能力：治疗、裁决、缠斗、守卫、圣光箭
+    - 治疗（healing）：攻击友方时弃牌将伤害转为治疗（高风险交互）
+    - 裁决（judgment）：攻击后按✦数量抓牌
+    - 缠斗（entangle）：相邻敌方远离时造成1伤
+    - 守卫（guardian）：相邻敌方攻击时必须攻击守卫
+    - 圣光箭（holy_arrow）：攻击前弃牌获得魔力和战力加成（高风险交互）
+    - _Requirements: 4.6, 4.7, 4.8, 4.9, 4.10_
+  - [~] 7.4 审计先锋军团事件卡
+    - 重燃希望（PALADIN_REKINDLE_HOPE）：ACTIVE，任意阶段召唤
+    - 圣洁审判（PALADIN_HOLY_JUDGMENT）：传奇/ACTIVE，充能+友方士兵+1战力
+    - 圣灵庇护（PALADIN_HOLY_PROTECTION）：ACTIVE，庇护效果
+    - 群体治疗（PALADIN_MASS_HEALING）：召唤师2格内友方移除2伤害
+    - _Requirements: 4.11_
+
+- [ ] 8. 洞穴地精阵营审计
+  - [~] 8.1 审计召唤师能力：神出鬼没（vanish）
+    - 权威描述→原子步骤拆解→八层链路检查
+    - 重点：攻击阶段与0费友方交换位置（高风险交互）
+    - _Requirements: 5.1_
+  - [~] 8.2 审计冠军能力：鲜血符文、力量强化、魔力成瘾、凶残、喂养巨食兽
+    - 鲜血符文（blood_rune）：攻击阶段开始自伤1或花1魔力充能（高风险交互）
+    - 力量强化（power_boost）：充能加成战力（共享定义）
+    - 魔力成瘾（magic_addiction）：回合结束花1魔力或自毁
+    - 凶残（ferocity）：额外攻击不计入3次限制
+    - 喂养巨食兽（feed_beast）：攻击阶段结束未击杀则吃友方或自毁（高风险交互）
+    - _Requirements: 5.2, 5.3, 5.4, 5.5, 5.6_
+  - [~] 8.3 审计士兵能力：攀爬、冲锋、禁足、抓附
+    - 攀爬（climb）：额外移动1格+穿过建筑
+    - 冲锋（charge）：1-4格直线移动，3格以上+1战力
+    - 禁足（immobile）：不能移动
+    - 抓附（grab）：友方从相邻开始移动后可跟随（高风险交互）
+    - _Requirements: 5.7, 5.8, 5.9, 5.10_
+  - [~] 8.4 审计洞穴地精事件卡
+    - 不屈不挠（GOBLIN_RELENTLESS）：ACTIVE，友方士兵被消灭返回手牌
+    - 成群结队（GOBLIN_SWARM）：ACTIVE，围攻加成
+    - 群情激愤（GOBLIN_FRENZY）：传奇，0费友方额外攻击
+    - 潜行（GOBLIN_SNEAK）：推拉0费友方1格
+    - _Requirements: 5.11_
+
+- [~] 9. 检查点 - 确认先锋军团和洞穴地精审计完成
+  - 运行 `npm test -- src/games/summonerwars/` 确认所有测试通过
+  - 汇总发现的问题，如有疑问请询问用户
+
+- [ ] 10. 极地矮人阵营审计
+  - [~] 10.1 审计召唤师能力：结构变换（structure_shift）
+    - 权威描述→原子步骤拆解→八层链路检查
+    - 重点：移动后推拉3格内友方建筑1格（高风险交互，含活体结构判定）
+    - _Requirements: 6.1_
+  - [~] 10.2 审计冠军能力：寒流、威势、寒冰碎屑、高阶冰霜飞弹
+    - 寒流（cold_snap）：3格内友方建筑+1生命光环
+    - 威势（imposing）：攻击后充能（每回合一次）
+    - 寒冰碎屑（ice_shards）：建造阶段结束消耗充能对建筑相邻敌方1伤（高风险交互）
+    - 高阶冰霜飞弹（greater_frost_bolt）：2格内友方建筑+1战力
+    - _Requirements: 6.2, 6.3, 6.4, 6.6_
+  - [~] 10.3 审计士兵能力：冰霜飞弹、践踏、冰霜战斧、活体传送门、活体结构、缓慢
+    - 冰霜飞弹（frost_bolt）：相邻友方建筑+1战力
+    - 践踏（trample）：穿过士兵造成1伤
+    - 冰霜战斧（frost_axe）：充能或附加到友方士兵（高风险交互）
+    - 活体传送门（living_gate）：视为传送门可在相邻召唤
+    - 活体结构（mobile_structure）：视为建筑但可移动
+    - 缓慢（slow）：减少移动1格
+    - _Requirements: 6.5, 6.7, 6.8, 6.9, 6.10, 6.11_
+  - [~] 10.4 审计极地矮人事件卡
+    - 寒冰冲撞（FROST_ICE_RAM）：传奇/ACTIVE，建筑移动后对相邻造成1伤+推拉
+    - 冰川位移（FROST_GLACIAL_SHIFT）：召唤师3格内至多3个友方建筑推拉1-2格
+    - 寒冰修补（FROST_ICE_REPAIR）：每个友方建筑移除2伤害
+    - 护城墙（FROST_PARAPET）：建筑，允许友方远程穿过
+    - _Requirements: 6.12_
+
+- [ ] 11. 炽原精灵阵营审计
+  - [~] 11.1 审计召唤师能力：祖灵羁绊（ancestral_bond）
+    - 权威描述→原子步骤拆解→八层链路检查
+    - 重点：移动后充能3格内友方并转移自身充能（高风险交互）
+    - _Requirements: 7.1_
+  - [~] 11.2 审计冠军能力：力量强化、预备、连续射击、启悟、撤退
+    - 力量强化（power_up）：每点充能+1战力（最多+5）
+    - 预备（prepare）：充能代替移动（高风险交互）
+    - 连续射击（rapid_fire）：攻击后消耗1充能额外攻击（高风险交互）
+    - 启悟（inspire）：移动后相邻友方充能
+    - 撤退（withdraw）：攻击后消耗充能/魔力推拉自身（高风险交互）
+    - _Requirements: 7.2, 7.3, 7.4, 7.5, 7.6_
+  - [~] 11.3 审计士兵能力：威势、生命强化、速度强化、聚能、祖灵交流
+    - 威势（intimidate）：攻击后充能（每回合一次）
+    - 生命强化（life_up）：每点充能+1生命（最多+5）
+    - 速度强化（speed_up）：每点充能+1移动（最多+5）
+    - 聚能（gather_power）：召唤后充能
+    - 祖灵交流（spirit_bond）：充能自身或转移充能给友方（高风险交互）
+    - _Requirements: 7.7, 7.8, 7.9, 7.10, 7.11_
+  - [~] 11.4 审计炽原精灵事件卡
+    - 力量颂歌（BARBARIC_CHANT_OF_POWER）：传奇，目标获得 power_up
+    - 生长颂歌（BARBARIC_CHANT_OF_GROWTH）：目标和相邻友方充能
+    - 交缠颂歌（BARBARIC_CHANT_OF_ENTANGLEMENT）：ACTIVE，两个友方共享技能
+    - 编织颂歌（BARBARIC_CHANT_OF_WEAVING）：ACTIVE，目标相邻可召唤+充能
+    - _Requirements: 7.12_
+
+- [~] 12. 检查点 - 确认极地矮人和炽原精灵审计完成
+  - 运行 `npm test -- src/games/summonerwars/` 确认所有测试通过
+  - 汇总发现的问题，如有疑问请询问用户
+
+- [ ] 13. UI 交互提示友好性审查
+  - [~] 13.1 审查所有高风险交互能力的 UI 提示
+    - 逐个检查需要玩家选择目标的能力是否有清晰的操作提示
+    - 检查 `ui/AbilityButtonsPanel.tsx`、`ui/CardSelectorOverlay.tsx`、`ui/ActionBanner.tsx`
+    - 检查 `domain/uiHints.ts` 中的提示逻辑
+    - 重点关注：复活死灵、心灵捕获、念力推拉、幻化、感染、灵魂转移、治疗、圣光箭、鲜血符文、喂养巨食兽、冰霜战斧、祖灵交流、撤退、预备
+    - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
+  - [~] 13.2 修复发现的 UI 提示问题
+    - 对审查中发现的缺失或不友好的 UI 提示进行修复
+    - 确保每个交互能力都有明确的操作说明
+    - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7_
+
+- [ ] 14. 审计反模式与数据查询一致性检查
+  - [~] 14.1 "可以/可选"效果交互确认检查
+    - 逐个检查所有描述中含"你可以"/"可选"/"may"的能力
+    - 验证每个都有玩家确认 UI（确认/跳过按钮），禁止自动执行
+    - 重点：灵魂转移、连续射击、撤退、预备、鲜血符文、喂养巨食兽、冰霜战斧、祖灵交流
+    - _Requirements: 9.1_
+  - [~] 14.2 测试层全链路覆盖验证
+    - 抽查各阵营测试文件，确认测试断言覆盖"命令→事件→状态变更"全链路
+    - 标记仅断言事件发射但未验证 reduce 后状态的测试为不合格
+    - grep `as any` 逐个验证是否绕过类型检查
+    - _Requirements: 9.2, 9.3_
+  - [~] 14.3 限定条件全程约束检查
+    - 逐个检查描述含限定词的能力（"在…的基地"/"对…的随从"/"力量≤X"/"0费友方"等）
+    - 验证限定条件在执行路径全程被强制约束，不仅在入口检查
+    - 对 `grantExtra*` 类全局额度增加实现，追问"额度使用时限定条件是否仍被强制执行"
+    - _Requirements: 9.4_
+  - [~] 14.4 数据查询一致性 grep 审查
+    - grep `\.card\.abilities` — 排除 `getUnitAbilities` 内部和 `attachedUnits` 场景后，确认无绕过
+    - grep `\.card\.strength` — 排除 `calculateEffectiveStrength` 内部后，确认无绕过
+    - grep `\.card\.life` — 排除 `getEffectiveLife` 内部后，确认无绕过
+    - grep 范围必须包含 `.tsx` 文件（UI 层是最常见的绕过位置）
+    - 输出绕过清单（文件+行号+当前代码+应改为）
+    - _Requirements: 9.5, 9.6_
+
+- [ ] 15. 交叉影响检查
+  - [~] 15.1 检查共享技能 ID 和控制权转移
+    - 验证 power_boost、entangle/rebound 等共享技能在不同阵营单位上独立工作
+    - 验证心灵捕获/心灵操控后被控制单位的能力正确触发
+    - 审查 `getUnitAbilities` 在控制权转移场景下的行为
+    - _Requirements: 11.1, 11.2_
+  - [~] 15.2 检查临时能力叠加和推拉免疫
+    - 验证幻化复制、交缠共享、力量颂歌授予的临时能力正确叠加和清理
+    - 验证稳固（stable）在所有推拉来源（念力、高阶念力、震慑、结构变换）中一致生效
+    - _Requirements: 11.3, 11.4_
+
+- [~] 16. 最终检查点 - 审计完成
+  - 运行 `npm test -- src/games/summonerwars/` 确认所有测试通过
+  - 汇总所有审计发现，输出最终审计报告
+  - 确认所有修复无回归，如有疑问请询问用户
+
+## 备注
+
+- 每个审计任务输出八层链路矩阵，发现问题立即修复
+- 高风险能力（需要玩家交互的）优先审计
+- 修复后运行相关测试确认无回归
+- 检查点任务确保阶段性验证
+- 审计报告记录所有发现，按严重度分类
+- 审计方法论遵循 `docs/ai-rules/testing-audit.md`，六步流程：锁定权威描述→拆分交互链（含自检）→逐链追踪八层→grep消费点→交叉影响→数据查询一致性
+- 审计反模式清单（9条）在每个能力审查时逐条检查
+- 测试层标 ✅ 的条件：覆盖"命令→事件→状态变更"全链路（事件发射 ≠ 状态生效）

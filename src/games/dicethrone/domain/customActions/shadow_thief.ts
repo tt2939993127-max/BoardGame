@@ -731,7 +731,7 @@ export function registerShadowThiefCustomActions(): void {
     registerCustomActionHandler('shadow_thief-dagger-strike-cp', handleDaggerStrikeCp, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-dagger-strike-poison', handleDaggerStrikePoison, { categories: ['status'] });
     registerCustomActionHandler('shadow_thief-dagger-strike-draw', handleDaggerStrikeDraw, { categories: ['resource'] });
-    registerCustomActionHandler('shadow_thief-damage-half-cp', handleDamageHalfCp, { categories: ['resource'] });
+    registerCustomActionHandler('shadow_thief-damage-half-cp', handleDamageHalfCp, { categories: ['damage', 'resource'] });
 
     registerCustomActionHandler('shadow_thief-steal-cp', handleStealCp, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-steal-cp-2', handleStealCp2, { categories: ['resource'] });
@@ -740,17 +740,17 @@ export function registerShadowThiefCustomActions(): void {
     registerCustomActionHandler('shadow_thief-steal-cp-5', handleStealCp5, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-steal-cp-6', handleStealCp6, { categories: ['resource'] });
 
-    registerCustomActionHandler('shadow_thief-damage-full-cp', handleDamageFullCp, { categories: ['other'] });
-    registerCustomActionHandler('shadow_thief-shadow-dance-roll', handleShadowDanceRoll, { categories: ['dice'] });
-    registerCustomActionHandler('shadow_thief-shadow-dance-roll-2', handleShadowDanceRoll2, { categories: ['dice', 'resource'] });
+    registerCustomActionHandler('shadow_thief-damage-full-cp', handleDamageFullCp, { categories: ['damage'] });
+    registerCustomActionHandler('shadow_thief-shadow-dance-roll', handleShadowDanceRoll, { categories: ['dice', 'damage'] });
+    registerCustomActionHandler('shadow_thief-shadow-dance-roll-2', handleShadowDanceRoll2, { categories: ['dice', 'damage', 'resource', 'card'] });
     registerCustomActionHandler('shadow_thief-cornucopia-discard', handleCornucopiaDiscard, { categories: ['other'] });
     registerCustomActionHandler('shadow_thief-cornucopia-2', handleCornucopia2, { categories: ['other', 'resource'] });
-    registerCustomActionHandler('shadow_thief-shadow-shank-damage', handleShadowShankDamage, { categories: ['other'] });
+    registerCustomActionHandler('shadow_thief-shadow-shank-damage', handleShadowShankDamage, { categories: ['damage'] });
 
-    registerCustomActionHandler('shadow_thief-defense-resolve', handleDefenseResolve, { categories: ['other'] });
-    registerCustomActionHandler('shadow_thief-defense-resolve-2', handleShadowDefense2, { categories: ['other'] });
-    registerCustomActionHandler('shadow_thief-fearless-riposte', handleFearlessRiposte, { categories: ['other'] });
-    registerCustomActionHandler('shadow_thief-fearless-riposte-2', handleFearlessRiposte2, { categories: ['other'] });
+    registerCustomActionHandler('shadow_thief-defense-resolve', handleDefenseResolve, { categories: ['damage', 'defense', 'card'] });
+    registerCustomActionHandler('shadow_thief-defense-resolve-2', handleShadowDefense2, { categories: ['damage', 'defense', 'card'] });
+    registerCustomActionHandler('shadow_thief-fearless-riposte', handleFearlessRiposte, { categories: ['damage', 'defense'] });
+    registerCustomActionHandler('shadow_thief-fearless-riposte-2', handleFearlessRiposte2, { categories: ['damage', 'defense'] });
 
     registerCustomActionHandler('shadow_thief-one-with-shadows', handleOneWithShadows, { categories: ['dice', 'resource'] });
     registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other'] });

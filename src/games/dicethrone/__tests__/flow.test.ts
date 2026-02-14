@@ -14,6 +14,7 @@ import { CP_MAX, HAND_LIMIT, INITIAL_CP, INITIAL_HEALTH } from '../domain/types'
 import { STATUS_IDS, TOKEN_IDS, DICETHRONE_COMMANDS, DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
 import { MONK_CARDS } from '../heroes/monk/cards';
+import { BARBARIAN_CARDS } from '../heroes/barbarian/cards';
 import type { AbilityEffect } from '../domain/combat';
 import { GameTestRunner, type TestCase } from '../../../engine/testing';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
@@ -2285,6 +2286,118 @@ describe('王权骰铸流程测试', () => {
                 ],
                 expect: {
                     turnPhase: 'main2',
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('offensiveRoll 阶段打出大吉大利（instant 卡）不触发阶段推进', () => {
+            // 场景：玩家在 offensiveRoll 阶段打出"大吉大利"（card-lucky），
+            // 卡牌效果生成 BONUS_DICE_REROLL_REQUESTED(displayOnly)，
+            // 玩家关闭展示后 SKIP_BONUS_DICE_REROLL → BONUS_DICE_SETTLED，
+            // 阶段应停留在 offensiveRoll，不应自动推进
+            const random = createQueuedRandom([
+                // card-lucky 的 handleLuckyRollHeal 需要 3 次 d(6)
+                3, 3, 3,
+                1, 1, 1, 1, 1, // 额外随机数缓冲
+            ]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: createSetupWithHand([], {
+                    cp: 0,
+                    mutate: (core) => {
+                        // 手动注入野蛮人的"大吉大利"卡牌到玩家0手牌
+                        const luckyCard = BARBARIAN_CARDS.find(c => c.id === 'card-lucky');
+                        if (luckyCard) {
+                            core.players['0'].hand.push(JSON.parse(JSON.stringify(luckyCard)));
+                        }
+                    },
+                }),
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: 'offensiveRoll 打出大吉大利不推进阶段',
+                commands: [
+                    ...advanceTo('offensiveRoll'),
+                    cmd('PLAY_CARD', '0', { cardId: 'card-lucky' }),
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                ],
+                expect: {
+                    turnPhase: 'offensiveRoll',
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('flowHalted=true 状态下打出大吉大利不会误触发阶段推进', () => {
+            // 场景：攻击结算产生 BONUS_DICE_REROLL_REQUESTED → halt → flowHalted=true
+            // 此时玩家打出"大吉大利"（instant 卡），产生新的 displayOnly BONUS_DICE_REROLL_REQUESTED
+            // 关闭展示后 BONUS_DICE_SETTLED → resolveInteraction
+            // 阶段应停留在 offensiveRoll（因为攻击的 bonus dice 还未处理）
+            const random = createQueuedRandom([
+                // card-lucky 的 handleLuckyRollHeal 需要 3 次 d(6)
+                3, 3, 3,
+                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 额外随机数缓冲
+            ]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: (playerIds: PlayerId[], r: RandomFn) => {
+                    const state = createInitializedState(playerIds, r);
+                    // 模拟攻击结算 halt 后的状态：
+                    // 0. 阶段设为 offensiveRoll
+                    state.sys.phase = 'offensiveRoll';
+                    // 1. flowHalted=true（攻击结算 halt 设置）
+                    state.sys.flowHalted = true;
+                    // 2. 攻击的 bonus dice interaction 在 current
+                    state.sys.interaction = {
+                        ...state.sys.interaction,
+                        current: {
+                            id: 'dt-bonus-dice-attack-thunder',
+                            kind: 'dt:bonus-dice',
+                            playerId: '0',
+                            data: null,
+                        },
+                    };
+                    // 3. 注入攻击的 pendingBonusDiceSettlement
+                    state.core.pendingBonusDiceSettlement = {
+                        id: 'attack-thunder-bonus',
+                        sourceAbilityId: 'thunder-strike',
+                        attackerId: '0',
+                        targetId: '1',
+                        dice: [{ index: 0, value: 5, face: 'fist' }, { index: 1, value: 3, face: 'heart' }],
+                        rerollCostTokenId: TOKEN_IDS.TAIJI,
+                        rerollCostAmount: 1,
+                        rerollCount: 0,
+                        readyToSettle: false,
+                    };
+                    // 4. 注入"大吉大利"卡牌到手牌
+                    const luckyCard = BARBARIAN_CARDS.find(c => c.id === 'card-lucky');
+                    if (luckyCard) {
+                        state.core.players['0'].hand.push(JSON.parse(JSON.stringify(luckyCard)));
+                    }
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+            const result = runner.run({
+                name: 'flowHalted + 大吉大利不误推进',
+                commands: [
+                    // 打出"大吉大利"（instant 卡，不被 dt:bonus-dice interaction 阻塞）
+                    cmd('PLAY_CARD', '0', { cardId: 'card-lucky' }),
+                    // 关闭大吉大利的 displayOnly 展示
+                    cmd('SKIP_BONUS_DICE_REROLL', '0'),
+                ],
+                expect: {
+                    // 阶段应停留在 offensiveRoll（攻击的 bonus dice 还未处理）
+                    turnPhase: 'offensiveRoll',
                 },
             });
             expect(result.assertionErrors).toEqual([]);

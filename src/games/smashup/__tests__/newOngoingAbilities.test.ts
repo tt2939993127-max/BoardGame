@@ -12,9 +12,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- 测试文件：mock 随机数与事件 payload 断言 */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, PowerCounterAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, OngoingDetachedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, LimitModifiedEvent } from '../domain/types';
+import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, PowerCounterAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, LimitModifiedEvent } from '../domain/types';
 import { countMadnessCards, madnessVpPenalty } from '../domain/abilityHelpers';
-import { triggerBaseAbility } from '../domain/baseAbilities';
+import { triggerBaseAbility, triggerExtendedBaseAbility } from '../domain/baseAbilities';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
@@ -23,7 +23,6 @@ import { clearPowerModifierRegistry, getEffectivePower, getEffectiveBreakpoint }
 import {
     clearOngoingEffectRegistry,
     isMinionProtected,
-    isOperationRestricted,
     fireTriggers,
     interceptEvent,
 } from '../domain/ongoingEffects';
@@ -174,7 +173,7 @@ describe('bear_cavalry_cub_scout 触发', () => {
         const srcBase = makeBase({ minions: [moved] });
         const state = makeState({ bases: [destBase, srcBase] });
 
-        const events = fireTriggers(state, 'onMinionMoved', {
+        const { events } = fireTriggers(state, 'onMinionMoved', {
             state, playerId: '0', baseIndex: 0,
             triggerMinionUid: 'moved', triggerMinionDefId: 'test_minion',
             random: dummyRandom, now: 0,
@@ -189,7 +188,7 @@ describe('bear_cavalry_cub_scout 触发', () => {
         const srcBase = makeBase({ minions: [moved] });
         const state = makeState({ bases: [destBase, srcBase] });
 
-        const events = fireTriggers(state, 'onMinionMoved', {
+        const { events } = fireTriggers(state, 'onMinionMoved', {
             state, playerId: '0', baseIndex: 0,
             triggerMinionUid: 'moved', triggerMinionDefId: 'test_minion',
             random: dummyRandom, now: 0,
@@ -209,7 +208,7 @@ describe('bear_cavalry_high_ground 触发', () => {
         const srcBase = makeBase({ minions: [moved] });
         const state = makeState({ bases: [destBase, srcBase] });
 
-        const events = fireTriggers(state, 'onMinionMoved', {
+        const { events } = fireTriggers(state, 'onMinionMoved', {
             state, playerId: '0', baseIndex: 0,
             triggerMinionUid: 'moved', triggerMinionDefId: 'test_minion',
             random: dummyRandom, now: 0,
@@ -222,14 +221,14 @@ describe('bear_cavalry_high_ground 触发', () => {
 // 恐龙 - 保护 + 力量修正
 // ============================================================================
 
-describe('dino_upgrade 保护 + 力量', () => {
-    it('附着 upgrade 的随从不可被消灭', () => {
+describe('dino_upgrade 力量修正', () => {
+    it('附着 upgrade 的随从不提供消灭保护（仅 +2 力量）', () => {
         const minion = makeMinion('m1', 'test_minion', '0', 3, {
             attachedActions: [{ uid: 'up-1', defId: 'dino_upgrade', ownerId: '0' }],
         });
         const base = makeBase({ minions: [minion] });
         const state = makeState({ bases: [base] });
-        expect(isMinionProtected(state, minion, 0, '1', 'destroy')).toBe(true);
+        expect(isMinionProtected(state, minion, 0, '1', 'destroy')).toBe(false);
     });
 
     it('附着 upgrade 的随从 +2 力量', () => {
@@ -279,7 +278,7 @@ describe('cthulhu_altar 触发', () => {
         });
         const state = makeState({ bases: [base] });
 
-        const events = fireTriggers(state, 'onMinionPlayed', {
+        const { events } = fireTriggers(state, 'onMinionPlayed', {
             state, playerId: '0', baseIndex: 0,
             triggerMinionUid: 'm1', triggerMinionDefId: 'test',
             random: dummyRandom, now: 0,
@@ -293,7 +292,7 @@ describe('cthulhu_altar 触发', () => {
         });
         const state = makeState({ bases: [base] });
 
-        const events = fireTriggers(state, 'onMinionPlayed', {
+        const { events } = fireTriggers(state, 'onMinionPlayed', {
             state, playerId: '1', baseIndex: 0,
             triggerMinionUid: 'm1', triggerMinionDefId: 'test',
             random: dummyRandom, now: 0,
@@ -313,7 +312,7 @@ describe('cthulhu_furthering_the_cause 触发', () => {
             turnDestroyedMinions: [{ defId: 'test_minion', baseIndex: 0, owner: '1' }],
         });
 
-        const events = fireTriggers(state, 'onTurnEnd', {
+        const { events } = fireTriggers(state, 'onTurnEnd', {
             state, playerId: '0', random: dummyRandom, now: 0,
         });
         expect(events.some(e => e.type === SU_EVENTS.VP_AWARDED)).toBe(true);
@@ -328,7 +327,7 @@ describe('cthulhu_furthering_the_cause 触发', () => {
         // turnDestroyedMinions 为空，未消灭任何随从
         const state = makeState({ bases: [base], turnDestroyedMinions: [] });
 
-        const events = fireTriggers(state, 'onTurnEnd', {
+        const { events } = fireTriggers(state, 'onTurnEnd', {
             state, playerId: '0', random: dummyRandom, now: 0,
         });
         expect(events.some(e => e.type === SU_EVENTS.VP_AWARDED)).toBe(false);
@@ -392,7 +391,7 @@ describe('killer_plant_entangled 保护 + 自毁', () => {
         });
         const state = makeState({ bases: [base] });
 
-        const events = fireTriggers(state, 'onTurnStart', {
+        const { events } = fireTriggers(state, 'onTurnStart', {
             state, playerId: '0', random: dummyRandom, now: 0,
         });
         expect(events.some(e => e.type === SU_EVENTS.ONGOING_DETACHED)).toBe(true);
@@ -404,7 +403,7 @@ describe('killer_plant_entangled 保护 + 自毁', () => {
         });
         const state = makeState({ bases: [base] });
 
-        const events = fireTriggers(state, 'onTurnStart', {
+        const { events } = fireTriggers(state, 'onTurnStart', {
             state, playerId: '1', random: dummyRandom, now: 0,
         });
         const detachEvents = events.filter(
@@ -435,7 +434,7 @@ describe('elder_thing_dunwich_horror', () => {
         const base = makeBase({ minions: [minion] });
         const state = makeState({ bases: [base] });
 
-        const events = fireTriggers(state, 'onTurnEnd', {
+        const { events } = fireTriggers(state, 'onTurnEnd', {
             state, playerId: '0', random: dummyRandom, now: 0,
         });
         expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
@@ -454,7 +453,7 @@ describe('pirate_king beforeScoring', () => {
         const otherBase = makeBase({ minions: [king] });
         const state = makeState({ bases: [scoringBase, otherBase] });
 
-        const events = fireTriggers(state, 'beforeScoring', {
+        const { events } = fireTriggers(state, 'beforeScoring', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         const moveEvts = events.filter(e => e.type === SU_EVENTS.MINION_MOVED) as MinionMovedEvent[];
@@ -469,7 +468,7 @@ describe('pirate_king beforeScoring', () => {
         const scoringBase = makeBase({ minions: [king] });
         const state = makeState({ bases: [scoringBase] });
 
-        const events = fireTriggers(state, 'beforeScoring', {
+        const { events } = fireTriggers(state, 'beforeScoring', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         expect(events.filter(e => e.type === SU_EVENTS.MINION_MOVED).length).toBe(0);
@@ -483,7 +482,7 @@ describe('pirate_first_mate afterScoring', () => {
         const otherBase = makeBase({});
         const state = makeState({ bases: [scoringBase, otherBase] });
 
-        const events = fireTriggers(state, 'afterScoring', {
+        const { events } = fireTriggers(state, 'afterScoring', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         const moveEvts = events.filter(e => e.type === SU_EVENTS.MINION_MOVED) as MinionMovedEvent[];
@@ -497,7 +496,7 @@ describe('pirate_first_mate afterScoring', () => {
         const scoringBase = makeBase({ minions: [mate] });
         const state = makeState({ bases: [scoringBase] });
 
-        const events = fireTriggers(state, 'afterScoring', {
+        const { events } = fireTriggers(state, 'afterScoring', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         expect(events.filter(e => e.type === SU_EVENTS.MINION_MOVED).length).toBe(0);
@@ -514,7 +513,7 @@ describe('cthulhu_chosen beforeScoring', () => {
             nextUid: 200,
         });
 
-        const events = fireTriggers(state, 'beforeScoring', {
+        const { events } = fireTriggers(state, 'beforeScoring', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         // 应有疯狂卡抽取事件
@@ -536,7 +535,7 @@ describe('cthulhu_chosen beforeScoring', () => {
             nextUid: 200,
         });
 
-        const events = fireTriggers(state, 'beforeScoring', {
+        const { events } = fireTriggers(state, 'beforeScoring', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         const powerEvts = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as PowerCounterAddedEvent[];
@@ -544,13 +543,12 @@ describe('cthulhu_chosen beforeScoring', () => {
     });
 });
 
-describe('elder_thing_the_price_of_power beforeScoring', () => {
-    it('对手有随从且手牌有疑狂卡时给己方随从加力量', () => {
+describe('elder_thing_the_price_of_power special 能力', () => {
+    it('对手有随从且手牌有疯狂卡时给己方随从加力量', () => {
         const myMinion = makeMinion('m1', 'test_minion', '0', 3);
         const enemyMinion = makeMinion('e1', 'test_minion', '1', 4);
         const scoringBase = makeBase({
             minions: [myMinion, enemyMinion],
-            ongoingActions: [{ uid: 'pop-1', defId: 'elder_thing_the_price_of_power', ownerId: '0' }],
         });
         const state = makeState({
             bases: [scoringBase],
@@ -566,11 +564,16 @@ describe('elder_thing_the_price_of_power beforeScoring', () => {
             },
         });
 
-        const events = fireTriggers(state, 'beforeScoring', {
-            state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
-        });
-        const powerEvts = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as PowerCounterAddedEvent[];
-        // 对手有2张疑狂卡 → 己方随从获得2次+2力量
+        const executor = resolveAbility('elder_thing_the_price_of_power', 'special');
+        expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'scoreBases', interaction: { queue: [] } } } as any;
+        const result = executor!({
+            state, matchState: ms, playerId: '0',
+            cardUid: 'pop-1', defId: 'elder_thing_the_price_of_power',
+            baseIndex: 0, random: dummyRandom, now: 0,
+        } as AbilityContext);
+        const powerEvts = result.events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as PowerCounterAddedEvent[];
+        // 对手有2张疯狂卡 → 己方随从获得2次+2力量
         expect(powerEvts.length).toBe(2);
         expect(powerEvts.every(e => e.payload.amount === 2)).toBe(true);
     });
@@ -579,7 +582,6 @@ describe('elder_thing_the_price_of_power beforeScoring', () => {
         const myMinion = makeMinion('m1', 'test_minion', '0', 3);
         const scoringBase = makeBase({
             minions: [myMinion],
-            ongoingActions: [{ uid: 'pop-1', defId: 'elder_thing_the_price_of_power', ownerId: '0' }],
         });
         const state = makeState({
             bases: [scoringBase],
@@ -591,18 +593,22 @@ describe('elder_thing_the_price_of_power beforeScoring', () => {
             },
         });
 
-        const events = fireTriggers(state, 'beforeScoring', {
-            state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
-        });
-        expect(events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED).length).toBe(0);
+        const executor = resolveAbility('elder_thing_the_price_of_power', 'special');
+        expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'scoreBases', interaction: { queue: [] } } } as any;
+        const result = executor!({
+            state, matchState: ms, playerId: '0',
+            cardUid: 'pop-1', defId: 'elder_thing_the_price_of_power',
+            baseIndex: 0, random: dummyRandom, now: 0,
+        } as AbilityContext);
+        expect(result.events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED).length).toBe(0);
     });
 
-    it('对手手牌无疑狂卡时不触发', () => {
+    it('对手手牌无疯狂卡时不触发', () => {
         const myMinion = makeMinion('m1', 'test_minion', '0', 3);
         const enemyMinion = makeMinion('e1', 'test_minion', '1', 4);
         const scoringBase = makeBase({
             minions: [myMinion, enemyMinion],
-            ongoingActions: [{ uid: 'pop-1', defId: 'elder_thing_the_price_of_power', ownerId: '0' }],
         });
         const state = makeState({
             bases: [scoringBase],
@@ -614,66 +620,82 @@ describe('elder_thing_the_price_of_power beforeScoring', () => {
             },
         });
 
-        const events = fireTriggers(state, 'beforeScoring', {
-            state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
-        });
-        expect(events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED).length).toBe(0);
+        const executor = resolveAbility('elder_thing_the_price_of_power', 'special');
+        expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'scoreBases', interaction: { queue: [] } } } as any;
+        const result = executor!({
+            state, matchState: ms, playerId: '0',
+            cardUid: 'pop-1', defId: 'elder_thing_the_price_of_power',
+            baseIndex: 0, random: dummyRandom, now: 0,
+        } as AbilityContext);
+        expect(result.events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED).length).toBe(0);
     });
 });
 
-// ============================================================================
 // 任务 3：现有框架直接可做的 ongoing 能力
 // ============================================================================
 
-describe('alien_jammed_signals restriction + 自毁', () => {
-    it('禁止在有此卡的基地打出随从', () => {
-        const base = makeBase({
-            ongoingActions: [{ uid: 'js-1', defId: 'alien_jammed_signals', ownerId: '0' }],
+describe('alien_jammed_signal: 无视基地能力', () => {
+    it('压制常规基地触发（onActionPlayed）', () => {
+        const normalState = makeState({
+            bases: [makeBase({ defId: 'base_the_workshop' })],
         });
-        const state = makeState({ bases: [base] });
-        expect(isOperationRestricted(state, 0, '0', 'play_minion')).toBe(true);
-        expect(isOperationRestricted(state, 0, '1', 'play_minion')).toBe(true);
+        const normalResult = triggerBaseAbility('base_the_workshop', 'onActionPlayed', {
+            state: normalState,
+            baseIndex: 0,
+            baseDefId: 'base_the_workshop',
+            playerId: '0',
+            now: 0,
+        });
+        expect(normalResult.events.some(e => e.type === SU_EVENTS.LIMIT_MODIFIED)).toBe(true);
+
+        const suppressedState = makeState({
+            bases: [makeBase({
+                defId: 'base_the_workshop',
+                ongoingActions: [{ uid: 'jam-1', defId: 'alien_jammed_signal', ownerId: '1' }],
+            })],
+        });
+        const suppressedResult = triggerBaseAbility('base_the_workshop', 'onActionPlayed', {
+            state: suppressedState,
+            baseIndex: 0,
+            baseDefId: 'base_the_workshop',
+            playerId: '0',
+            now: 0,
+        });
+        expect(suppressedResult.events).toEqual([]);
     });
 
-    it('禁止在有此卡的基地打出行动卡', () => {
-        const base = makeBase({
-            ongoingActions: [{ uid: 'js-1', defId: 'alien_jammed_signals', ownerId: '0' }],
+    it('压制扩展基地触发（onMinionDestroyed）', () => {
+        const normalState = makeState({
+            bases: [makeBase({ defId: 'base_cave_of_shinies' })],
         });
-        const state = makeState({ bases: [base] });
-        expect(isOperationRestricted(state, 0, '0', 'play_action')).toBe(true);
-    });
+        const normalResult = triggerExtendedBaseAbility('base_cave_of_shinies', 'onMinionDestroyed', {
+            state: normalState,
+            baseIndex: 0,
+            baseDefId: 'base_cave_of_shinies',
+            playerId: '0',
+            minionUid: 'm1',
+            minionDefId: 'test_minion',
+            now: 0,
+        });
+        expect(normalResult.events.some(e => e.type === SU_EVENTS.VP_AWARDED)).toBe(true);
 
-    it('无此卡的基地不受限制', () => {
-        const base = makeBase({});
-        const state = makeState({ bases: [base] });
-        expect(isOperationRestricted(state, 0, '0', 'play_minion')).toBe(false);
-    });
-
-    it('拥有者回合开始时自毁', () => {
-        const base = makeBase({
-            ongoingActions: [{ uid: 'js-1', defId: 'alien_jammed_signals', ownerId: '0' }],
+        const suppressedState = makeState({
+            bases: [makeBase({
+                defId: 'base_cave_of_shinies',
+                ongoingActions: [{ uid: 'jam-1', defId: 'alien_jammed_signal', ownerId: '1' }],
+            })],
         });
-        const state = makeState({ bases: [base] });
-        const events = fireTriggers(state, 'onTurnStart', {
-            state, playerId: '0', random: dummyRandom, now: 0,
+        const suppressedResult = triggerExtendedBaseAbility('base_cave_of_shinies', 'onMinionDestroyed', {
+            state: suppressedState,
+            baseIndex: 0,
+            baseDefId: 'base_cave_of_shinies',
+            playerId: '0',
+            minionUid: 'm1',
+            minionDefId: 'test_minion',
+            now: 0,
         });
-        const detach = events.filter(e => e.type === SU_EVENTS.ONGOING_DETACHED) as OngoingDetachedEvent[];
-        expect(detach.length).toBe(1);
-        expect(detach[0].payload.defId).toBe('alien_jammed_signals');
-    });
-
-    it('非拥有者回合不自毁', () => {
-        const base = makeBase({
-            ongoingActions: [{ uid: 'js-1', defId: 'alien_jammed_signals', ownerId: '0' }],
-        });
-        const state = makeState({ bases: [base] });
-        const events = fireTriggers(state, 'onTurnStart', {
-            state, playerId: '1', random: dummyRandom, now: 0,
-        });
-        const detach = events.filter(
-            e => e.type === SU_EVENTS.ONGOING_DETACHED && (e as OngoingDetachedEvent).payload.defId === 'alien_jammed_signals'
-        );
-        expect(detach.length).toBe(0);
+        expect(suppressedResult.events).toEqual([]);
     });
 });
 
@@ -690,7 +712,7 @@ describe('cthulhu_complete_the_ritual onTurnStart', () => {
         });
         const state = makeState({ bases: [base], baseDeck: ['new_base_def'] });
 
-        const events = fireTriggers(state, 'onTurnStart', {
+        const { events } = fireTriggers(state, 'onTurnStart', {
             state, playerId: '0', random: dummyRandom, now: 0,
         });
         // 随从放回拥有者牌库底
@@ -710,7 +732,7 @@ describe('cthulhu_complete_the_ritual onTurnStart', () => {
             ongoingActions: [{ uid: 'ritual-1', defId: 'cthulhu_complete_the_ritual', ownerId: '0' }],
         });
         const state = makeState({ bases: [base] });
-        const events = fireTriggers(state, 'onTurnStart', {
+        const { events } = fireTriggers(state, 'onTurnStart', {
             state, playerId: '1', random: dummyRandom, now: 0,
         });
         expect(events.filter(e => e.type === SU_EVENTS.BASE_SCORED).length).toBe(0);
@@ -1176,7 +1198,7 @@ describe('killer_plant_choking_vines 触发修复', () => {
         const base = makeBase({ minions: [target, other] });
         const state = makeState({ bases: [base] });
 
-        const events = fireTriggers(state, 'onTurnStart', {
+        const { events } = fireTriggers(state, 'onTurnStart', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         const destroyEvts = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
@@ -1189,7 +1211,7 @@ describe('killer_plant_choking_vines 触发修复', () => {
         const base = makeBase({ minions: [m1] });
         const state = makeState({ bases: [base] });
 
-        const events = fireTriggers(state, 'onTurnStart', {
+        const { events } = fireTriggers(state, 'onTurnStart', {
             state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
         const destroyEvts = events.filter(e =>

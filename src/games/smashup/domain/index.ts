@@ -94,7 +94,8 @@ function scoreOneBase(
         random: rng,
         now,
     });
-    events.push(...beforeScoringEvents);
+    events.push(...beforeScoringEvents.events);
+    if (beforeScoringEvents.matchState) ms = beforeScoringEvents.matchState;
 
     // 计算排名
     const playerPowers = new Map<PlayerId, number>();
@@ -148,10 +149,12 @@ function scoreOneBase(
         timing: 'afterScoring',
         playerId: pid,
         baseIndex,
+        matchState: ms,
         random: rng,
         now,
     });
-    events.push(...afterScoringEvents);
+    events.push(...afterScoringEvents.events);
+    if (afterScoringEvents.matchState) ms = afterScoringEvents.matchState;
 
     // 替换基地
     let newBaseDeck = baseDeck;
@@ -283,7 +286,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 random,
                 now,
             });
-            events.push(...onTurnEndEvents);
+            events.push(...onTurnEndEvents.events);
 
             // 切换到下一个玩家
             const nextIndex = (core.currentPlayerIndex + 1) % core.turnOrder.length;
@@ -415,7 +418,10 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 random,
                 now,
             });
-            events.push(...onTurnStartEvents);
+            events.push(...onTurnStartEvents.events);
+            if (onTurnStartEvents.matchState) {
+                state.sys = onTurnStartEvents.matchState.sys;
+            }
         }
 
         if (to === 'scoreBases') {
@@ -538,9 +544,9 @@ function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore
             };
         }
     }
-    // 过滤 pendingReveal：非查看者隐藏卡牌内容
+    // 过滤 pendingReveal：非查看者隐藏卡牌内容（'all' 模式下所有玩家可见）
     let filteredReveal = state.pendingReveal;
-    if (filteredReveal && filteredReveal.viewerPlayerId !== playerId) {
+    if (filteredReveal && filteredReveal.viewerPlayerId !== 'all' && filteredReveal.viewerPlayerId !== playerId) {
         filteredReveal = { ...filteredReveal, cards: [] };
     }
     return { players: filtered, pendingReveal: filteredReveal };
@@ -581,7 +587,7 @@ function isGameOver(state: SmashUpCore): GameOverResult | undefined {
     return undefined;
 }
 
-function getScores(state: SmashUpCore): Record<PlayerId, number> {
+export function getScores(state: SmashUpCore): Record<PlayerId, number> {
     const scores: Record<PlayerId, number> = {};
     for (const pid of state.turnOrder) {
         const player = state.players[pid];
@@ -629,7 +635,8 @@ function postProcessSystemEvents(
 
     // 依次执行保护过滤 + trigger 后处理
     const afterDestroy = processDestroyTriggers(events, ms, pid, random, now);
-    return processMoveTriggers(afterDestroy, ms, pid, random, now);
+    const afterMove = processMoveTriggers(afterDestroy.events, ms, pid, random, now);
+    return afterMove.events;
 }
 
 // ============================================================================

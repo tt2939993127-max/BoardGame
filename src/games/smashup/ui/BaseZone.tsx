@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { Paperclip } from 'lucide-react';
 import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
-import { getTotalEffectivePowerOnBase } from '../domain/ongoingModifiers';
+import { getTotalEffectivePowerOnBase, getEffectivePower } from '../domain/ongoingModifiers';
 import { getBaseDef, getMinionDef, getCardDef, resolveCardName, resolveCardText } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
@@ -25,6 +25,8 @@ export const BaseZone: React.FC<{
     turnOrder: string[];
     isDeployMode: boolean;
     isMinionSelectMode?: boolean;
+    /** 交互驱动的随从选择：只有这些 UID 的随从可被选中 */
+    selectableMinionUids?: Set<string>;
     isMyTurn: boolean;
     myPlayerId: string | null;
     moves: Record<string, (payload?: unknown) => void>;
@@ -32,9 +34,10 @@ export const BaseZone: React.FC<{
     onMinionSelect?: (minionUid: string, baseIndex: number) => void;
     onViewMinion: (defId: string) => void;
     onViewAction: (defId: string) => void;
+    onViewBase: (defId: string) => void;
     tokenRef?: (el: HTMLDivElement | null) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, isMyTurn, myPlayerId, moves, onClick, onMinionSelect, onViewMinion, onViewAction, tokenRef, isTutorialTargetAllowed }) => {
+}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, isMyTurn, myPlayerId, moves, onClick, onMinionSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
     const { t } = useTranslation('game-smashup');
     const baseDef = getBaseDef(base.defId);
     const baseName = resolveCardName(baseDef, t) || base.defId;
@@ -133,6 +136,16 @@ export const BaseZone: React.FC<{
                     )}
                 </div>
 
+                {/* 放大镜按钮 - hover 时显示，部署模式下也能预览基地 */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
+                    className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover/base:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
+                >
+                    <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                    </svg>
+                </button>
+
                 {/* Power Token */}
                 <div className="absolute -top-[1.5vw] -right-[1.5vw] w-[4vw] h-[4vw] pointer-events-none z-30 flex items-center justify-center"
                     ref={tokenRef}
@@ -174,8 +187,8 @@ export const BaseZone: React.FC<{
                 {turnOrder.map(pid => {
                     const minions = minionsByController[pid] || [];
 
-                    // Calc Power
-                    const total = minions.reduce((sum, m) => sum + m.basePower + m.powerModifier, 0);
+                    // Calc Power（使用 getEffectivePower 包含 ongoing 修正和临时修正）
+                    const total = minions.reduce((sum, m) => sum + getEffectivePower(core, m, baseIndex), 0);
                     const basePowerTotal = minions.reduce((sum, m) => sum + m.basePower, 0);
                     const modifierDelta = total - basePowerTotal;
 
@@ -191,13 +204,14 @@ export const BaseZone: React.FC<{
                                         <MinionCard
                                             key={m.uid}
                                             minion={m}
+                                            effectivePower={getEffectivePower(core, m, baseIndex)}
                                             index={i}
                                             pid={pid}
                                             baseIndex={baseIndex}
                                             isMyTurn={isMyTurn}
                                             myPlayerId={myPlayerId}
                                             moves={moves}
-                                            isMinionSelectMode={isMinionSelectMode}
+                                            isMinionSelectMode={isMinionSelectMode && (!selectableMinionUids || selectableMinionUids.has(m.uid))}
                                             onMinionSelect={onMinionSelect}
                                             onView={() => onViewMinion(m.defId)}
                                             onViewAction={onViewAction}
@@ -244,12 +258,12 @@ export const BaseZone: React.FC<{
 
 /** 附着行动卡角标（纯视觉提示，不含交互） */
 const AttachedBadge: React.FC<{ count: number }> = ({ count }) => (
-    <div className="absolute -top-[0.3vw] -left-[0.3vw] w-[1.1vw] h-[1.1vw] rounded-full
+    <div className="absolute -bottom-[0.3vw] -left-[0.3vw] w-[1.1vw] h-[1.1vw] rounded-full
         bg-purple-600 border-[0.1vw] border-white shadow-md
         flex items-center justify-center pointer-events-none z-30">
         <Paperclip className="w-[0.6vw] h-[0.6vw] text-white" strokeWidth={3} />
         {count > 1 && (
-            <span className="absolute -bottom-[0.15vw] -right-[0.15vw] w-[0.5vw] h-[0.5vw] rounded-full
+            <span className="absolute -top-[0.15vw] -right-[0.15vw] w-[0.5vw] h-[0.5vw] rounded-full
                 bg-amber-400 text-[0.3vw] font-black text-slate-900 flex items-center justify-center border border-white">
                 {count}
             </span>
@@ -263,6 +277,7 @@ const AttachedBadge: React.FC<{ count: number }> = ({ count }) => (
 
 const MinionCard: React.FC<{
     minion: MinionOnBase;
+    effectivePower: number;
     index: number;
     pid: string;
     baseIndex: number;
@@ -274,7 +289,7 @@ const MinionCard: React.FC<{
     onView: () => void;
     onViewAction: (defId: string) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ minion, index, pid, baseIndex, isMyTurn, myPlayerId, moves, isMinionSelectMode, onMinionSelect, onView, onViewAction, isTutorialTargetAllowed }) => {
+}> = ({ minion, effectivePower, index, pid, baseIndex, isMyTurn, myPlayerId, moves, isMinionSelectMode, onMinionSelect, onView, onViewAction, isTutorialTargetAllowed }) => {
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
@@ -358,10 +373,20 @@ const MinionCard: React.FC<{
                 )}
             </div>
 
-            {/* 力量徽章 - 增益绿色/减益红色 */}
-            {((minion.powerModifier !== 0) || !def?.previewRef) && (
-                <div className={`absolute -top-[0.4vw] -right-[0.4vw] w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.7vw] font-black text-white shadow-sm border border-white ${minion.powerModifier > 0 ? 'bg-green-600' : (minion.powerModifier < 0 ? 'bg-red-600' : 'bg-slate-700')} z-10`}>
-                    {minion.basePower + minion.powerModifier}
+            {/* 放大镜按钮 - hover 时显示在右上角，z-40 确保不被力量徽章遮挡 */}
+            <button
+                onClick={(e) => { e.stopPropagation(); onView(); }}
+                className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-40 cursor-zoom-in"
+            >
+                <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                </svg>
+            </button>
+
+            {/* 力量徽章 - 增益绿色/减益红色（左上角，避免与放大镜重叠） */}
+            {((effectivePower !== minion.basePower) || !def?.previewRef) && (
+                <div className={`absolute -top-[0.4vw] -left-[0.4vw] w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.7vw] font-black text-white shadow-sm border border-white ${effectivePower > minion.basePower ? 'bg-green-600' : (effectivePower < minion.basePower ? 'bg-red-600' : 'bg-slate-700')} z-30`}>
+                    {effectivePower}
                 </div>
             )}
 

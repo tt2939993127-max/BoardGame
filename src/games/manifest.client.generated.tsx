@@ -4,10 +4,13 @@ import type { GameClientManifestEntry } from './manifest.client.types';
 import { ManifestGameThumbnail } from '../components/lobby/thumbnails';
 
 import manifest0 from './archview/manifest';
+import Thumbnail0 from './archview/thumbnail';
 
 import manifest1 from './assetslicer/manifest';
+import Thumbnail1 from './assetslicer/thumbnail';
 
 import manifest2 from './audiobrowser/manifest';
+import Thumbnail2 from './audiobrowser/thumbnail';
 
 import manifest3 from './dicethrone/manifest';
 import Game3 from './dicethrone/game';
@@ -16,6 +19,7 @@ import Tutorial3 from './dicethrone/tutorial';
 import Thumbnail3 from './dicethrone/thumbnail';
 
 import manifest4 from './fxpreview/manifest';
+import Thumbnail4 from './fxpreview/thumbnail';
 
 import manifest5 from './smashup/manifest';
 import Game5 from './smashup/game';
@@ -36,20 +40,21 @@ import Tutorial7 from './tictactoe/tutorial';
 import Thumbnail7 from './tictactoe/thumbnail';
 
 import manifest8 from './ugcbuilder/manifest';
+import Thumbnail8 from './ugcbuilder/thumbnail';
 
 const entry0: GameClientManifestEntry = {
     manifest: manifest0,
-    thumbnail: <ManifestGameThumbnail manifest={manifest0} />,
+    thumbnail: <Thumbnail0 />,
 };
 
 const entry1: GameClientManifestEntry = {
     manifest: manifest1,
-    thumbnail: <ManifestGameThumbnail manifest={manifest1} />,
+    thumbnail: <Thumbnail1 />,
 };
 
 const entry2: GameClientManifestEntry = {
     manifest: manifest2,
-    thumbnail: <ManifestGameThumbnail manifest={manifest2} />,
+    thumbnail: <Thumbnail2 />,
 };
 
 const entry3: GameClientManifestEntry = {
@@ -62,7 +67,7 @@ const entry3: GameClientManifestEntry = {
 
 const entry4: GameClientManifestEntry = {
     manifest: manifest4,
-    thumbnail: <ManifestGameThumbnail manifest={manifest4} />,
+    thumbnail: <Thumbnail4 />,
 };
 
 const entry5: GameClientManifestEntry = {
@@ -91,7 +96,7 @@ const entry7: GameClientManifestEntry = {
 
 const entry8: GameClientManifestEntry = {
     manifest: manifest8,
-    thumbnail: <ManifestGameThumbnail manifest={manifest8} />,
+    thumbnail: <Thumbnail8 />,
 };
 
 export const GAME_CLIENT_MANIFEST: GameClientManifestEntry[] = [

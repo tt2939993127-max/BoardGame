@@ -114,6 +114,28 @@ abilityExecutorRegistry.register('withdraw', (ctx: SWAbilityContext) => {
   return { events };
 }, { payloadContract: { required: ['costType', 'targetPosition'] } });
 
+/** 连续射击：消耗1充能，授予额外攻击 */
+abilityExecutorRegistry.register('rapid_fire', (ctx: SWAbilityContext) => {
+  const events: GameEvent[] = [];
+  const { sourceUnit, sourcePosition, timestamp } = ctx;
+  if ((sourceUnit.boosts ?? 0) < 1) return { events };
+  events.push({
+    type: SW_EVENTS.UNIT_CHARGED,
+    payload: { position: sourcePosition, delta: -1, sourceAbilityId: 'rapid_fire' },
+    timestamp,
+  });
+  events.push({
+    type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
+    payload: {
+      targetPosition: sourcePosition,
+      targetUnitId: sourceUnit.cardId,
+      sourceAbilityId: 'rapid_fire',
+    },
+    timestamp,
+  });
+  return { events };
+});
+
 /** 祖灵交流 */
 abilityExecutorRegistry.register('spirit_bond', (ctx: SWAbilityContext) => {
   const events: GameEvent[] = [];

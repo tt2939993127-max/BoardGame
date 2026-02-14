@@ -159,7 +159,7 @@ describe('忍者 ongoing/special 能力', () => {
             const base = makeBase({ minions: [target] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnEnd', {
+            const { events } = fireTriggers(state, 'onTurnEnd', {
                 state,
                 playerId: '0',
                 random: dummyRandom,
@@ -177,7 +177,7 @@ describe('忍者 ongoing/special 能力', () => {
             const base = makeBase({ minions: [target] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnEnd', {
+            const { events } = fireTriggers(state, 'onTurnEnd', {
                 state,
                 playerId: '0',
                 random: dummyRandom,
@@ -276,7 +276,7 @@ describe('机器人 ongoing 能力', () => {
             const base = makeBase({ minions: [archive] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionDestroyed', {
+            const { events } = fireTriggers(state, 'onMinionDestroyed', {
                 state,
                 playerId: '0',
                 baseIndex: 0,
@@ -296,7 +296,7 @@ describe('机器人 ongoing 能力', () => {
             const base = makeBase({ minions: [archive] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionDestroyed', {
+            const { events } = fireTriggers(state, 'onMinionDestroyed', {
                 state,
                 playerId: '1',
                 baseIndex: 0,
@@ -329,7 +329,7 @@ describe('巫师 ongoing 能力', () => {
             const base = makeBase({ minions: [archmage] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state,
                 playerId: '0',
                 random: dummyRandom,
@@ -348,7 +348,7 @@ describe('巫师 ongoing 能力', () => {
             const base = makeBase({ minions: [archmage] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state,
                 playerId: '1', // 对手回合
                 random: dummyRandom,
@@ -378,7 +378,7 @@ describe('诡术师 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '1',
                 baseIndex: 0,
@@ -402,7 +402,7 @@ describe('诡术师 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '0', // 自己
                 baseIndex: 0,
@@ -458,7 +458,7 @@ describe('诡术师 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '1',
                 baseIndex: 0,
@@ -481,7 +481,7 @@ describe('诡术师 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state,
                 playerId: '0',
                 random: dummyRandom,
@@ -499,7 +499,7 @@ describe('诡术师 ongoing 能力', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onTurnStart', {
+            const { events } = fireTriggers(state, 'onTurnStart', {
                 state,
                 playerId: '1',
                 random: dummyRandom,
@@ -521,7 +521,7 @@ describe('诡术师 ongoing 能力', () => {
             const base = makeBase({ minions: [leprechaun, weakMinion] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '1',
                 baseIndex: 0,

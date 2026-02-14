@@ -13,6 +13,7 @@ import {
     shuffleHandIntoDeck,
     getMinionPower,
     buildMinionTargetOptions,
+    revealDeckTop,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, SmashUpEvent, DeckReshuffledEvent, MinionCardDef, CardToDeckTopEvent } from '../domain/types';
@@ -229,7 +230,7 @@ function wizardScry(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `wizard_scry_${ctx.now}`, ctx.playerId,
-        '选择一张行动卡放入手牌', options, 'wizard_scry',
+        '占卜：选择一张行动卡放入手牌', options, 'wizard_scry',
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -374,16 +375,30 @@ export function registerWizardInteractionHandlers(): void {
         };
     });
 
-    // 占卜：选择行动卡→放入手牌
-    registerInteractionHandler('wizard_scry', (state, playerId, value, _iData, _random, timestamp) => {
-        const { cardUid } = value as { cardUid: string };
+    // 占卜：选择行动卡→展示给所有玩家→放入手牌→洗混牌库
+    registerInteractionHandler('wizard_scry', (state, playerId, value, _iData, random, timestamp) => {
+        const { cardUid, defId } = value as { cardUid: string; defId?: string };
+        const player = state.core.players[playerId];
+        // 展示给所有玩家
+        const revealCards = [{ uid: cardUid, defId: defId ?? cardUid }];
+        const revealEvt = revealDeckTop(playerId, 'all', revealCards, 1, 'wizard_scry', timestamp);
+        // 放入手牌
+        const drawEvt: SmashUpEvent = {
+            type: SU_EVENTS.CARDS_DRAWN,
+            payload: { playerId, count: 1, cardUids: [cardUid] },
+            timestamp,
+        };
+        // 洗混牌库（移除已抽取的卡后重新洗混）
+        const remainingDeck = player.deck.filter(c => c.uid !== cardUid);
+        const shuffled = random.shuffle([...remainingDeck]);
+        const reshuffleEvt: DeckReshuffledEvent = {
+            type: SU_EVENTS.DECK_RESHUFFLED,
+            payload: { playerId, deckUids: shuffled.map(c => c.uid) },
+            timestamp,
+        };
         return {
             state,
-            events: [{
-                type: SU_EVENTS.CARDS_DRAWN,
-                payload: { playerId, count: 1, cardUids: [cardUid] },
-                timestamp,
-            } as SmashUpEvent],
+            events: [revealEvt, drawEvt, reshuffleEvt],
         };
     });
 

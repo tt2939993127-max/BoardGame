@@ -16,7 +16,7 @@ import { useFxBus, FxLayer } from '../../../engine/fx';
 import { summonerWarsFxRegistry, SW_FX } from '../../../games/summonerwars/ui/fxSetup';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import {
-  type PreviewCardProps,
+  type PreviewCardProps, type EffectEntryMeta,
   EffectCard, TriggerButton, CardSprite,
   useEffectTrigger, usePerfCounter,
 } from './shared';
@@ -390,3 +390,17 @@ export const CombatShockwaveCard: React.FC<PreviewCardProps> = ({ iconColor }) =
     </EffectCard>
   );
 };
+
+// ============================================================================
+// 自动注册元数据
+// ============================================================================
+
+export const meta: EffectEntryMeta[] = [
+  { id: 'burst', label: '爆发粒子', icon: Sparkles, component: BurstCard, group: 'particle', usageDesc: '召唤师战争·单位被消灭' },
+  { id: 'shatter', label: '碎裂消散', icon: Skull, component: ShatterCard, group: 'particle', usageDesc: '召唤师战争·单位/建筑死亡碎裂' },
+  { id: 'victory', label: '胜利彩带', icon: Trophy, component: VictoryCard, group: 'particle', usageDesc: '通用·对局胜利结算' },
+  { id: 'summon', label: '召唤特效', icon: Wand2, component: SummonCard, group: 'particle', usageDesc: '召唤师战争·召唤单位入场' },
+  { id: 'summonShader', label: '召唤混合特效', icon: Zap, component: SummonShaderCard, group: 'particle', usageDesc: '召唤师战争·召唤单位入场（Shader + 粒子混合版）' },
+  { id: 'vortex', label: '充能旋涡', icon: RotateCw, component: VortexCard, group: 'particle', usageDesc: '召唤师战争·单位充能' },
+  { id: 'combatShockwave', label: '攻击气浪', icon: Zap, component: CombatShockwaveCard, group: 'particle', usageDesc: '召唤师战争·攻击受击反馈（FX 系统完整反馈）' },
+];

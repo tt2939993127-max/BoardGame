@@ -12,6 +12,7 @@ import {
   getPlayerUnits, isCellEmpty, getAdjacentCells,
   manhattanDistance, isInStraightLine,
   getStructureAt, isValidCoord, getSummoner, findUnitPosition,
+  hasStableAbility,
 } from '../domain/helpers';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import { getBaseCardId, CARD_IDS } from '../domain/ids';
@@ -213,7 +214,7 @@ export function useEventCardModes({
         for (let col = 0; col < BOARD_COLS; col++) {
           const unit = core.board[row]?.[col]?.unit;
           if (!unit || unit.card.unitClass === 'summoner') continue;
-          if ((unit.card.abilities ?? []).includes('stable')) continue;
+          if (hasStableAbility(unit, core)) continue;
           const dist = manhattanDistance(sourcePosition, { row, col });
           if (dist > 0 && dist <= maxRange) {
             positions.push({ row, col });

@@ -28,7 +28,11 @@ export const CardRevealOverlay: React.FC<Props> = ({ pendingReveal, playerID, on
 
     if (!pendingReveal) return null;
 
-    const isViewer = pendingReveal.viewerPlayerId === playerID;
+    const isViewer = pendingReveal.viewerPlayerId === 'all' || pendingReveal.viewerPlayerId === playerID;
+    // 'all' 模式下只有发起者（targetPlayerId）可以关闭展示
+    const canDismiss = pendingReveal.viewerPlayerId === 'all'
+        ? playerID === pendingReveal.targetPlayerId
+        : pendingReveal.viewerPlayerId === playerID;
     const cards = pendingReveal.cards;
 
     // 标题：根据展示类型和原因生成
@@ -107,7 +111,7 @@ export const CardRevealOverlay: React.FC<Props> = ({ pendingReveal, playerID, on
 
                     {/* 底部确认按钮 */}
                     <div className="bg-slate-100 p-3 text-center border-t border-slate-200">
-                        {isViewer ? (
+                        {canDismiss ? (
                             <GameButton
                                 variant="primary"
                                 size="sm"

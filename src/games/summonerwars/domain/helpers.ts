@@ -269,6 +269,35 @@ export function getValidMoveTargets(state: SummonerWarsCore, from: CellCoord): C
 // 攻击验证
 // ============================================================================
 
+/**
+ * 检查远程攻击路径是否畅通（无遮挡）
+ * 
+ * 规则：远程攻击路径上的中间格子不能有任何卡牌（单位或建筑）。
+ * 例外：友方护城墙（frost-parapet）允许友方远程攻击穿过。
+ */
+export function isRangedPathClear(
+  state: SummonerWarsCore,
+  attacker: CellCoord,
+  target: CellCoord,
+  attackerOwner: PlayerId,
+): boolean {
+  const path = getStraightLinePath(attacker, target);
+  // path 包含终点，中间格子是 path 去掉最后一个
+  for (let i = 0; i < path.length - 1; i++) {
+    const pos = path[i];
+    const unit = getUnitAt(state, pos);
+    const structure = getStructureAt(state, pos);
+    if (unit) return false; // 任何单位都遮挡
+    if (structure) {
+      // 友方护城墙允许穿过
+      const isOwnParapet = structure.owner === attackerOwner
+        && getBaseCardId(structure.card.id) === CARD_IDS.FROST_PARAPET;
+      if (!isOwnParapet) return false;
+    }
+  }
+  return true;
+}
+
 /** 检查是否可以攻击目标 */
 export function canAttack(
   state: SummonerWarsCore,
@@ -292,9 +321,10 @@ export function canAttack(
     // 近战：必须相邻
     return distance === 1;
   } else {
-    // 远程：最多3格直线
+    // 远程：最多3格直线，路径必须无遮挡
     if (distance > RANGED_ATTACK_RANGE || distance === 0) return false;
-    return isInStraightLine(attacker, target);
+    if (!isInStraightLine(attacker, target)) return false;
+    return isRangedPathClear(state, attacker, target, attackerUnit.owner);
   }
 }
 
@@ -333,9 +363,9 @@ export function getValidSummonPositions(state: SummonerWarsCore, playerId: Playe
     }
   }
 
-  // 活体传送门（living_gate 技能的单位，如寒冰魔像）
+  // 活体传送门（living_gate 技能的单位，如寒冰魔像，含交缠颂歌共享）
   const livingGateUnits = getPlayerUnits(state, playerId).filter(u =>
-    (u.card.abilities ?? []).includes('living_gate')
+    getUnitAbilities(u, state).includes('living_gate')
   );
   for (const lgUnit of livingGateUnits) {
     for (const adj of getAdjacentCells(lgUnit.position)) {
@@ -471,7 +501,11 @@ export function hasAvailableActions(state: SummonerWarsCore, playerId: PlayerId)
       const ferocityAvailable = units.some(u => 
         hasFerocityAbility(u, state) && !u.hasAttacked && getValidAttackTargetsEnhanced(state, u.position).length > 0
       );
-      return normalAttackAvailable || ferocityAvailable || hasPlayableEvents(player, phase);
+      // 有额外攻击的单位（连续射击/群情激愤）不受3次限制
+      const extraAttackAvailable = units.some(u =>
+        (u.extraAttacks ?? 0) > 0 && !u.hasAttacked && getValidAttackTargetsEnhanced(state, u.position).length > 0
+      );
+      return normalAttackAvailable || ferocityAvailable || extraAttackAvailable || hasPlayableEvents(player, phase);
     }
     case 'magic': {
       // 魔力阶段总是可以手动跳过（弃牌是可选的）
@@ -887,7 +921,8 @@ export function canAttackEnhanced(
   } else {
     const range = getEffectiveAttackRange(attackerUnit, state);
     if (distance > range || distance === 0) return false;
-    return isInStraightLine(attacker, target);
+    if (!isInStraightLine(attacker, target)) return false;
+    return isRangedPathClear(state, attacker, target, attackerUnit.owner);
   }
 }
 

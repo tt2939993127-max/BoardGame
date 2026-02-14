@@ -18,6 +18,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
@@ -35,7 +36,7 @@ beforeAll(() => {
 function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
         uid, defId, controller, owner: owner ?? controller,
-        basePower: power, powerModifier: 0, talentUsed: false, attachedActions: [],
+        basePower: power, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
     };
 }
 
@@ -69,7 +70,12 @@ function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
     return { core, sys: { phase: 'playCards', interaction: { queue: [] } } as any } as any;
 }
 
-const defaultRandom: RandomFn = { shuffle: (arr: any[]) => [...arr], random: () => 0.5 };
+const defaultRandom: RandomFn = {
+    shuffle: (arr: any[]) => [...arr],
+    random: () => 0.5,
+    d: () => 1,
+    range: (min: number) => min,
+};
 
 function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number) {
     const matchState = makeMatchState(state);
@@ -344,11 +350,14 @@ describe('僵尸派系能力', () => {
         expect(current?.data?.sourceId).toBe('zombie_lend_a_hand');
     });
 
-    it('zombie_outbreak: 有空基地时给予额外随从额度', () => {
+    it('zombie_outbreak: 有空基地且有可打随从时，先选基地再给予额外随从额度', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'zombie_outbreak', 'action', '0')],
+                    hand: [
+                        makeCard('a1', 'zombie_outbreak', 'action', '0'),
+                        makeCard('m2', 'zombie_walker', 'minion', '0'),
+                    ],
                 }),
                 '1': makePlayer('1'),
             },
@@ -358,10 +367,20 @@ describe('僵尸派系能力', () => {
             ],
         });
 
-        const { events } = execPlayAction(state, '0', 'a1');
-        const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-        expect(limitEvents.length).toBe(1);
-        expect((limitEvents[0] as any).payload.limitType).toBe('minion');
+        const { events, matchState } = execPlayAction(state, '0', 'a1');
+        // onPlay 只创建第一段交互，不立即发放额外额度
+        const immediateLimitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(immediateLimitEvents.length).toBe(0);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('zombie_outbreak_choose_base');
+
+        const chooseBaseHandler = getInteractionHandler('zombie_outbreak_choose_base');
+        expect(chooseBaseHandler).toBeDefined();
+        const resolved = chooseBaseHandler!(matchState, '0', { baseIndex: 1 }, undefined, defaultRandom, 1);
+        expect(resolved).toBeDefined();
+        const granted = resolved!.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(granted.length).toBe(1);
+        expect((granted[0] as any).payload.limitType).toBe('minion');
     });
 
     it('zombie_outbreak: 所有基地都有己方随从时不给额度', () => {

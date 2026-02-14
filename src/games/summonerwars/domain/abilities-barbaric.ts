@@ -173,7 +173,7 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
       requiredPhase: 'move',
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.inspire',
       buttonVariant: 'secondary',

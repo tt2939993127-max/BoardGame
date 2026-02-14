@@ -148,9 +148,15 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       const { attacker, target } = payload as { attacker: CellCoord; target: CellCoord };
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       const unit = newBoard[attacker.row][attacker.col].unit;
+      // 判断是否为额外攻击（extraAttacks > 0 时消耗一次，不增加 attackCount）
+      const isExtraAttack = (unit?.extraAttacks ?? 0) > 0;
       if (unit) {
-        // 攻击后清除治疗模式标记
-        newBoard[attacker.row][attacker.col].unit = { ...unit, hasAttacked: true, healingMode: false };
+        newBoard[attacker.row][attacker.col].unit = {
+          ...unit,
+          hasAttacked: true,
+          healingMode: false,
+          extraAttacks: isExtraAttack ? (unit.extraAttacks ?? 1) - 1 : unit.extraAttacks,
+        };
       }
       const pid = unit?.owner as PlayerId;
       if (!pid) return { ...core, board: newBoard };
@@ -167,7 +173,8 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
           ...core.players,
           [pid]: {
             ...core.players[pid],
-            attackCount: core.players[pid].attackCount + 1,
+            // 额外攻击不计入3次攻击限制
+            attackCount: isExtraAttack ? core.players[pid].attackCount : core.players[pid].attackCount + 1,
             hasAttackedEnemy: core.players[pid].hasAttackedEnemy || hasAttackedEnemy,
           },
         },
@@ -214,8 +221,8 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       const newBoard = core.board.map(row => row.map(cell => {
         const newCell = { ...cell };
         if (newCell.unit) {
-          // 回合切换：重置移动/攻击状态，清除临时技能（幻化）
-          const { tempAbilities: _removed, originalOwner: origOwner, ...unitWithoutTemp } = newCell.unit;
+          // 回合切换：重置移动/攻击状态，清除临时技能（幻化）和额外攻击
+          const { tempAbilities: _removed, originalOwner: origOwner, extraAttacks: _ea, ...unitWithoutTemp } = newCell.unit;
           // 心灵操控：归还临时控制的单位
           if (origOwner) {
             newCell.unit = { ...unitWithoutTemp, owner: origOwner, hasMoved: false, hasAttacked: false, wasAttackedThisTurn: false };
@@ -541,11 +548,25 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     case SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED:
     case SW_EVENTS.SOUL_TRANSFER_REQUESTED:
     case SW_EVENTS.MIND_CAPTURE_REQUESTED:
-    case SW_EVENTS.EXTRA_ATTACK_GRANTED:
     case SW_EVENTS.DAMAGE_REDUCED:
     case SW_EVENTS.GRAB_FOLLOW_REQUESTED: {
       // 通知事件，不修改状态（由 UI 消费）
       return core;
+    }
+
+    case SW_EVENTS.EXTRA_ATTACK_GRANTED: {
+      // 额外攻击：重置目标单位的 hasAttacked 并增加 extraAttacks 计数
+      const { targetPosition: eaPos } = payload as { targetPosition: CellCoord; targetUnitId: string };
+      const eaBoard = core.board.map(row => row.map(cell => ({ ...cell })));
+      const eaUnit = eaBoard[eaPos.row]?.[eaPos.col]?.unit;
+      if (eaUnit) {
+        eaBoard[eaPos.row][eaPos.col].unit = {
+          ...eaUnit,
+          hasAttacked: false,
+          extraAttacks: (eaUnit.extraAttacks ?? 0) + 1,
+        };
+      }
+      return { ...core, board: eaBoard };
     }
 
     case SW_EVENTS.UNIT_ATTACHED: {

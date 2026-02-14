@@ -268,4 +268,62 @@ describe('formatDiceThroneActionEntry', () => {
         expect(seg?.params?.phase).toBe('phase.offensiveRoll.label');
         expect(seg?.paramI18nKeys).toContain('phase');
     });
+
+    it('效果 entries 的 timestamp 严格大于命令 entry（newest-first 排序正确）', () => {
+        const state = createState();
+        const command: Command = {
+            type: 'PLAY_CARD',
+            playerId: '0',
+            payload: { cardId: 'test-card' },
+            timestamp: 100,
+        };
+        // 模拟卡牌打出后产生治疗效果
+        const healEvent: HealAppliedEvent = {
+            type: 'HEAL_APPLIED',
+            payload: { targetId: '0', amount: 3 },
+            timestamp: 100, // 与命令相同的 timestamp
+        };
+
+        // 手动在玩家手牌中添加测试卡牌
+        const testState = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    ...state.core.players,
+                    '0': {
+                        ...state.core.players['0'],
+                        hand: [
+                            ...state.core.players['0'].hand,
+                            {
+                                id: 'test-card',
+                                name: 'test.card.name',
+                                type: 'action' as const,
+                                cpCost: 0,
+                                timing: 'instant' as const,
+                                description: 'test',
+                                previewRef: { type: 'atlas' as const, atlasId: 'test', index: 0 },
+                            },
+                        ],
+                    },
+                },
+            },
+        };
+
+        const result = formatDiceThroneActionEntry({
+            command,
+            state: testState,
+            events: [healEvent] as GameEvent[],
+        });
+        const entries = normalizeEntries(result);
+
+        // 应有 2 个 entry：打出卡牌 + 治疗
+        expect(entries).toHaveLength(2);
+        const cardEntry = entries.find(e => e.kind === 'PLAY_CARD');
+        const healEntry = entries.find(e => e.kind === 'HEAL_APPLIED');
+        expect(cardEntry).toBeTruthy();
+        expect(healEntry).toBeTruthy();
+        // 效果 entry 的 timestamp 必须严格大于命令 entry
+        expect(healEntry!.timestamp).toBeGreaterThan(cardEntry!.timestamp);
+    });
 });

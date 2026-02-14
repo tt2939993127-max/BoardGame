@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { MatchState } from '../../engine/types';
 import type { SmashUpCore, CardInstance, ActionCardDef } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
+import { getScores } from './domain/index';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { getCardDef, getBaseDef, resolveCardName, resolveCardText } from './data/cards';
@@ -77,6 +78,9 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
     const needDiscard = phase === 'discard' && isMyTurn && myPlayer != null && myPlayer.hand.length > HAND_LIMIT;
     const discardCount = needDiscard ? myPlayer!.hand.length - HAND_LIMIT : 0;
 
+    // 含疯狂卡惩罚的最终分数（统一查询入口）
+    const finalScores = useMemo(() => getScores(core), [core]);
+
     // 手牌弃牌交互检测：当前 interaction 的所有选项都对应手牌时，用手牌区直接选择
     const currentInteraction = G.sys.interaction?.current;
     const currentPrompt = useMemo(() => asSimpleChoice(currentInteraction), [currentInteraction]);
@@ -90,6 +94,65 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                 return val?.cardUid && handUids.has(val.cardUid);
             });
     }, [currentPrompt, playerID, myPlayer]);
+
+    // 基地选择交互检测：当前 interaction 的所有选项都包含有效 baseIndex 时，用基地区直接点击选择
+    const isBaseSelectPrompt = useMemo(() => {
+        if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
+        const data = currentInteraction?.data as Record<string, unknown> | undefined;
+        // 优先使用 targetType 字段（数据驱动）
+        if (data?.targetType === 'base') return true;
+        // 兼容旧模式：所有选项都包含有效 baseIndex（≥0，排除"完成"等特殊选项）
+        return currentPrompt.options.length > 0 &&
+            currentPrompt.options.every(opt => {
+                const val = opt.value as { baseIndex?: number } | undefined;
+                return val != null && typeof val.baseIndex === 'number' && val.baseIndex >= 0;
+            });
+    }, [currentPrompt, playerID, currentInteraction]);
+
+    const baseSelectPromptTitle = isBaseSelectPrompt && currentPrompt ? currentPrompt.title : '';
+
+    // 可选基地索引集合（只高亮候选基地，避免浪费）
+    const selectableBaseIndices = useMemo<Set<number>>(() => {
+        if (!isBaseSelectPrompt || !currentPrompt) return new Set();
+        const indices = new Set<number>();
+        for (const opt of currentPrompt.options) {
+            const val = opt.value as { baseIndex?: number } | undefined;
+            if (val != null && typeof val.baseIndex === 'number') {
+                indices.add(val.baseIndex);
+            }
+        }
+        return indices;
+    }, [isBaseSelectPrompt, currentPrompt]);
+
+    // 随从选择交互检测：targetType === 'minion' 或所有选项都包含 minionUid
+    const isMinionSelectPrompt = useMemo(() => {
+        if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
+        const data = currentInteraction?.data as Record<string, unknown> | undefined;
+        if (data?.targetType === 'minion') return true;
+        return currentPrompt.options.length > 0 &&
+            currentPrompt.options.every(opt => {
+                const val = opt.value as { minionUid?: string } | undefined;
+                return val != null && typeof val.minionUid === 'string';
+            });
+    }, [currentPrompt, playerID, currentInteraction]);
+
+    // 可选随从 UID 集合（只高亮候选随从）
+    const selectableMinionUids = useMemo<Set<string>>(() => {
+        if (!isMinionSelectPrompt || !currentPrompt) return new Set();
+        const uids = new Set<string>();
+        for (const opt of currentPrompt.options) {
+            const val = opt.value as { minionUid?: string } | undefined;
+            if (val?.minionUid) uids.add(val.minionUid);
+        }
+        return uids;
+    }, [isMinionSelectPrompt, currentPrompt]);
+
+    // 交互驱动的选择提示标题
+    const interactionSelectTitle = useMemo(() => {
+        if (isBaseSelectPrompt && currentPrompt) return currentPrompt.title;
+        if (isMinionSelectPrompt && currentPrompt) return currentPrompt.title;
+        return '';
+    }, [isBaseSelectPrompt, isMinionSelectPrompt, currentPrompt]);
 
     // 事件流消费 → 动画驱动
     const myPid = playerID || '0';
@@ -226,6 +289,20 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
 
     const handleBaseClick = useCallback((index: number) => {
         const base = core.bases[index];
+        // 基地选择交互模式：直接响应 interaction
+        if (isBaseSelectPrompt && currentPrompt) {
+            if (!selectableBaseIndices.has(index)) {
+                toast(t('ui.invalid_base_target', { defaultValue: '该基地不可选择' }));
+                return;
+            }
+            const option = currentPrompt.options.find(
+                opt => (opt.value as { baseIndex?: number })?.baseIndex === index
+            );
+            if (option) {
+                moves[INTERACTION_COMMANDS.RESPOND]?.({ optionId: option.id });
+            }
+            return;
+        }
         if (selectedCardUid) {
             if (selectedCardMode === 'ongoing-minion') {
                 // 需要选择随从，点击基地无效
@@ -240,7 +317,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
         } else {
             setViewingCard({ defId: base.defId, type: 'base' });
         }
-    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases, t]);
+    }, [selectedCardUid, selectedCardMode, handlePlayMinion, handlePlayOngoingAction, core.bases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, moves]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
         // 手牌弃牌交互优先：直接响应 interaction
@@ -302,12 +379,24 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
         }
     }, [isMyTurn, phase, moves, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt]);
 
-    /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从 */
+    /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从，或交互驱动的随从选择 */
     const handleMinionSelect = useCallback((minionUid: string, baseIndex: number) => {
+        // 交互驱动的随从选择
+        if (isMinionSelectPrompt && currentPrompt) {
+            if (!selectableMinionUids.has(minionUid)) return;
+            const option = currentPrompt.options.find(
+                opt => (opt.value as { minionUid?: string })?.minionUid === minionUid
+            );
+            if (option) {
+                moves[INTERACTION_COMMANDS.RESPOND]?.({ optionId: option.id });
+            }
+            return;
+        }
+        // ongoing-minion 模式下附着行动卡到随从
         if (selectedCardUid && selectedCardMode === 'ongoing-minion') {
             handlePlayOngoingToMinion(selectedCardUid, baseIndex, minionUid);
         }
-    }, [selectedCardUid, selectedCardMode, handlePlayOngoingToMinion]);
+    }, [selectedCardUid, selectedCardMode, handlePlayOngoingToMinion, isMinionSelectPrompt, selectableMinionUids, currentPrompt, moves]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
         setViewingCard({ defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' });
@@ -416,13 +505,13 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                                         {isMe ? t('ui.you_short') : t('ui.player_short', { id: pid })}
                                     </span>
                                     <motion.div
-                                        key={`vp-${pid}-${player.vp}`}
+                                        key={`vp-${pid}-${finalScores[pid]}`}
                                         className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-black text-white shadow-md border-2 border-white ${conf.bg}`}
                                         initial={{ scale: 1 }}
                                         animate={{ scale: [1, 1.3, 1] }}
                                         transition={{ duration: 0.4, ease: 'easeOut' }}
                                     >
-                                        {player.vp}
+                                        {finalScores[pid]}
                                     </motion.div>
                                     {/* 派系图标 */}
                                     <div className="flex gap-0.5 mt-1">
@@ -494,6 +583,24 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                 </AnimatePresence>
             </div>
 
+            {/* --- 交互选择提示横幅（基地/随从选择） --- */}
+            <AnimatePresence>
+                {(isBaseSelectPrompt || isMinionSelectPrompt) && (
+                    <motion.div
+                        initial={{ y: -40, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: -40, opacity: 0 }}
+                        className="absolute top-[72px] inset-x-0 z-30 flex justify-center pointer-events-none"
+                    >
+                        <div className="bg-amber-600/90 text-white px-8 py-3 rounded-b-xl shadow-lg border-2 border-amber-400 border-t-0">
+                            <span className="font-black text-lg uppercase tracking-wide">
+                                {interactionSelectTitle}
+                            </span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* --- MAIN BOARD --- */}
             {/* Scrollable table area */}
             <div className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden z-10 no-scrollbar pt-12 pb-60" data-tutorial-id="su-base-area">
@@ -505,8 +612,9 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                             baseIndex={idx}
                             core={core}
                             turnOrder={core.turnOrder}
-                            isDeployMode={!!selectedCardUid}
-                            isMinionSelectMode={selectedCardMode === 'ongoing-minion'}
+                            isDeployMode={!!selectedCardUid || (isBaseSelectPrompt && selectableBaseIndices.has(idx))}
+                            isMinionSelectMode={selectedCardMode === 'ongoing-minion' || (isMinionSelectPrompt && selectableMinionUids.size > 0)}
+                            selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : undefined}
                             isMyTurn={isMyTurn}
                             myPlayerId={playerID}
                             moves={moves}
@@ -514,6 +622,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                             onMinionSelect={handleMinionSelect}
                             onViewMinion={(defId) => setViewingCard({ defId, type: 'minion' })}
                             onViewAction={handleViewAction}
+                            onViewBase={(defId) => setViewingCard({ defId, type: 'base' })}
                             isTutorialTargetAllowed={isTutorialTargetAllowed}
                             tokenRef={(el) => {
                                 if (el) baseRefsMap.current.set(idx, el);
@@ -652,8 +761,8 @@ const SmashUpBoard: React.FC<Props> = ({ G, moves, playerID, ctx }) => {
                 )}
             </AnimatePresence>
 
-            {/* PROMPT OVERLAY（手牌弃牌交互时隐藏，由手牌区直接处理） */}
-            {!isHandDiscardPrompt && (
+            {/* PROMPT OVERLAY（手牌弃牌/基地选择/随从选择交互时隐藏，由对应区域直接处理） */}
+            {!isHandDiscardPrompt && !isBaseSelectPrompt && !isMinionSelectPrompt && (
                 <PromptOverlay
                     interaction={G.sys.interaction?.current}
                     moves={moves}

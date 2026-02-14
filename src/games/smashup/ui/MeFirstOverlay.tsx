@@ -10,7 +10,8 @@ import { GameButton } from './GameButton';
 import type { MatchState } from '../../../engine/types';
 import type { SmashUpCore, ActionCardDef } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
-import { getCardDef, resolveCardName } from '../data/cards';
+import { getCardDef, resolveCardName, getBaseDef } from '../data/cards';
+import { getTotalEffectivePowerOnBase, getEffectiveBreakpoint } from '../domain/ongoingModifiers';
 import { UI_Z_INDEX } from '../../../core';
 import { PLAYER_CONFIG } from './playerConfig';
 
@@ -30,8 +31,8 @@ export const MeFirstOverlay: React.FC<{
         moves['RESPONSE_PASS']?.({});
     }, [moves]);
 
-    const handlePlaySpecial = useCallback((cardUid: string) => {
-        moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid });
+    const handlePlaySpecial = useCallback((cardUid: string, targetBaseIndex: number) => {
+        moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid, targetBaseIndex });
     }, [moves]);
 
     if (!responseWindow || responseWindow.windowType !== 'meFirst') return null;
@@ -47,6 +48,21 @@ export const MeFirstOverlay: React.FC<{
         const def = getCardDef(c.defId) as ActionCardDef | undefined;
         return def?.subtype === 'special';
     }) ?? [];
+
+    // 计算达到临界点的基地（Special 卡的目标基地）
+    const eligibleBases = React.useMemo(() => {
+        const result: { baseIndex: number; name: string }[] = [];
+        for (let i = 0; i < core.bases.length; i++) {
+            const base = core.bases[i];
+            const baseDef = getBaseDef(base.defId);
+            if (!baseDef) continue;
+            const totalPower = getTotalEffectivePowerOnBase(core, base, i);
+            if (totalPower >= getEffectiveBreakpoint(core, i)) {
+                result.push({ baseIndex: i, name: baseDef.name ?? `基地 ${i + 1}` });
+            }
+        }
+        return result;
+    }, [core]);
 
     return (
         <motion.div
@@ -83,17 +99,31 @@ export const MeFirstOverlay: React.FC<{
                                 {specialCards.map(card => {
                                     const def = getCardDef(card.defId);
                                     const resolvedName = resolveCardName(def, t) || card.defId;
-                                    return (
+                                    // 只有一个达标基地时直接打出，多个时为每个基地显示按钮
+                                    if (eligibleBases.length === 1) {
+                                        return (
+                                            <GameButton
+                                                key={card.uid}
+                                                variant="danger"
+                                                size="sm"
+                                                onClick={() => handlePlaySpecial(card.uid, eligibleBases[0].baseIndex)}
+                                                data-testid={`me-first-card-${card.uid}`}
+                                            >
+                                                {resolvedName}
+                                            </GameButton>
+                                        );
+                                    }
+                                    return eligibleBases.map(eb => (
                                         <GameButton
-                                            key={card.uid}
+                                            key={`${card.uid}-${eb.baseIndex}`}
                                             variant="danger"
                                             size="sm"
-                                            onClick={() => handlePlaySpecial(card.uid)}
-                                            data-testid={`me-first-card-${card.uid}`}
+                                            onClick={() => handlePlaySpecial(card.uid, eb.baseIndex)}
+                                            data-testid={`me-first-card-${card.uid}-base-${eb.baseIndex}`}
                                         >
-                                            {resolvedName}
+                                            {resolvedName} → {eb.name}
                                         </GameButton>
-                                    );
+                                    ));
                                 })}
                             </div>
                         )}

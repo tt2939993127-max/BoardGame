@@ -173,10 +173,8 @@ function buildFullSailChooseMinionInteraction(
     return { ...interaction, data: { ...interaction.data, continuationContext: { movedUids } } };
 }
 
-// TODO: pirate_full_sail special 时机（基地计分前打出�?
-// 规则：Full Sail �?special 行动卡，应在基地计分前（beforeScoring）打出�?
-// 当前实现�?onPlay（手动打出），需�?beforeScoring 阶段�?special action 机制支持�?
-// 清理触发条件：当 special action 机制（允许在 beforeScoring 阶段从手牌打�?special 卡）实现后回填�?
+// Full Sail 是 special 行动卡，通过 Me First! 响应窗口在基地计分前打出
+// onPlay 时机在 Me First! 窗口期间同样生效（commands.ts 允许 special 卡在响应窗口打出）
 
 // ============================================================================
 // 事件拦截器（替代效果�?

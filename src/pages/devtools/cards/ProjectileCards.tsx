@@ -11,7 +11,7 @@ import {
 } from '../../../components/common/animations/FlyingEffect';
 import { ConeBlast } from '../../../components/common/animations/ConeBlast';
 import {
-  type PreviewCardProps,
+  type PreviewCardProps, type EffectEntryMeta,
   EffectCard, TriggerButton, CardSprite,
   usePerfCounter, useEffectTrigger,
 } from './shared';
@@ -94,3 +94,12 @@ export const ConeBlastCard: React.FC<PreviewCardProps> = ({ useRealCards = true,
     </EffectCard>
   );
 };
+
+// ============================================================================
+// 自动注册元数据
+// ============================================================================
+
+export const meta: EffectEntryMeta[] = [
+  { id: 'flying', label: '飞行特效', icon: Rocket, component: FlyingCard, group: 'projectile', usageDesc: '骰铸王座·伤害/治疗/增益飞行数字' },
+  { id: 'coneblast', label: '锥形气浪', icon: Wind, component: ConeBlastCard, group: 'projectile', usageDesc: '召唤师战争·远程攻击投射' },
+];

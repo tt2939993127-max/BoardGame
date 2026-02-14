@@ -25,6 +25,9 @@ export type ProtectionType =
     | 'affect'        // 不受对手卡牌影响（广义保护）
     | 'action';       // 不受对手行动卡影响
 
+/** 基地能力压制检查函数：返回 true 表示该基地能力被压制 */
+export type BaseAbilitySuppressionChecker = (state: SmashUpCore, baseIndex: number) => boolean;
+
 /** 保护检查上下文 */
 export interface ProtectionCheckContext {
     state: SmashUpCore;
@@ -105,8 +108,15 @@ export interface TriggerContext {
     now: number;
 }
 
-/** 触发回调函数：返回产生的事件 */
-export type TriggerCallback = (ctx: TriggerContext) => SmashUpEvent[];
+/** 触发回调函数返回值 */
+export interface TriggerResult {
+    events: SmashUpEvent[];
+    /** 如果触发器需要创建交互（如玩家选择），返回更新后的 matchState */
+    matchState?: MatchState<SmashUpCore>;
+}
+
+/** 触发回调函数：返回产生的事件（和可选的 matchState） */
+export type TriggerCallback = (ctx: TriggerContext) => SmashUpEvent[] | TriggerResult;
 
 // ============================================================================
 // 拦截器注册条目
@@ -144,6 +154,7 @@ const protectionRegistry: ProtectionEntry[] = [];
 const restrictionRegistry: RestrictionEntry[] = [];
 const triggerRegistry: TriggerEntry[] = [];
 const interceptorRegistry: InterceptorEntry[] = [];
+const baseAbilitySuppressionRegistry: { sourceDefId: string; checker: BaseAbilitySuppressionChecker }[] = [];
 
 /** 注册保护拦截器 */
 export function registerProtection(
@@ -180,12 +191,21 @@ export function registerInterceptor(
     interceptorRegistry.push({ sourceDefId, interceptor });
 }
 
+/** 注册基地能力压制（如 alien_jammed_signal：所有玩家无视此基地能力） */
+export function registerBaseAbilitySuppression(
+    sourceDefId: string,
+    checker: BaseAbilitySuppressionChecker
+): void {
+    baseAbilitySuppressionRegistry.push({ sourceDefId, checker });
+}
+
 /** 清空所有注册表（测试用） */
 export function clearOngoingEffectRegistry(): void {
     protectionRegistry.length = 0;
     restrictionRegistry.length = 0;
     triggerRegistry.length = 0;
     interceptorRegistry.length = 0;
+    baseAbilitySuppressionRegistry.length = 0;
 }
 
 /** 获取注册表大小（调试用） */
@@ -209,10 +229,12 @@ export function getRegisteredOngoingEffectIds(): {
     restrictionIds: Set<string>;
     triggerIds: Map<string, TriggerTiming[]>;
     interceptorIds: Set<string>;
+    baseAbilitySuppressionIds: Set<string>;
 } {
     const protectionIds = new Set(protectionRegistry.map(e => e.sourceDefId));
     const restrictionIds = new Set(restrictionRegistry.map(e => e.sourceDefId));
     const interceptorIds = new Set(interceptorRegistry.map(e => e.sourceDefId));
+    const baseAbilitySuppressionIds = new Set(baseAbilitySuppressionRegistry.map(e => e.sourceDefId));
 
     // trigger 需要保留 timing 信息，用于更精确的审计
     const triggerIds = new Map<string, TriggerTiming[]>();
@@ -222,13 +244,31 @@ export function getRegisteredOngoingEffectIds(): {
         triggerIds.set(entry.sourceDefId, existing);
     }
 
-    return { protectionIds, restrictionIds, triggerIds, interceptorIds };
+    return { protectionIds, restrictionIds, triggerIds, interceptorIds, baseAbilitySuppressionIds };
 }
 
 
 // ============================================================================
 // 查询 API
 // ============================================================================
+
+/**
+ * 检查基地能力是否被压制
+ *
+ * 遍历所有基地能力压制注册器，只要有一个返回 true 就表示被压制。
+ * 用于 alien_jammed_signal 等"无视基地能力"效果。
+ */
+export function isBaseAbilitySuppressed(
+    state: SmashUpCore,
+    baseIndex: number
+): boolean {
+    if (baseAbilitySuppressionRegistry.length === 0) return false;
+    for (const entry of baseAbilitySuppressionRegistry) {
+        if (!isSourceActiveOnBase(state, entry.sourceDefId, baseIndex)) continue;
+        if (entry.checker(state, baseIndex)) return true;
+    }
+    return false;
+}
 
 /**
  * 检查随从是否受保护
@@ -355,25 +395,31 @@ export function interceptEvent(
 /**
  * 触发指定时机的所有拦截器
  *
- * 返回所有触发器产生的事件。
+ * 返回所有触发器产生的事件和可选的 matchState。
  */
 export function fireTriggers(
     state: SmashUpCore,
     timing: TriggerTiming,
     ctx: Omit<TriggerContext, 'timing'>
-): SmashUpEvent[] {
-    if (triggerRegistry.length === 0) return [];
+): TriggerResult {
+    if (triggerRegistry.length === 0) return { events: [] };
 
     const events: SmashUpEvent[] = [];
+    let matchState = ctx.matchState;
     const fullCtx: TriggerContext = { ...ctx, timing };
 
     for (const entry of triggerRegistry) {
         if (entry.timing !== timing) continue;
         if (!isSourceActive(state, entry.sourceDefId)) continue;
-        const result = entry.callback(fullCtx);
-        events.push(...result);
+        const result = entry.callback({ ...fullCtx, matchState });
+        if (Array.isArray(result)) {
+            events.push(...result);
+        } else {
+            events.push(...result.events);
+            if (result.matchState) matchState = result.matchState;
+        }
     }
-    return events;
+    return { events, matchState };
 }
 
 // ============================================================================

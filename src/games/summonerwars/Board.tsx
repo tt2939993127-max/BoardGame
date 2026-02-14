@@ -49,6 +49,7 @@ import { DiscardPileOverlay } from './ui/DiscardPileOverlay';
 import { FactionSelection } from './ui/FactionSelectionAdapter';
 import type { FactionId } from './domain/types';
 import { BOARD_ROWS, BOARD_COLS } from './config/board';
+import { MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN } from './domain/helpers';
 // 提取的子模块
 import { CardSprite } from './ui/CardSprite';
 import { getUnitSpriteConfig, getStructureSpriteConfig, getEventSpriteConfig } from './ui/spriteHelpers';
@@ -264,6 +265,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     soulTransferMode, setSoulTransferMode,
     mindCaptureMode, setMindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
+    rapidFireMode, setRapidFireMode,
     pendingAttackRef, handleCloseDiceResult: rawCloseDiceResult,
     clearPendingAttack, flushPendingDestroys,
   } = useGameEvents({
@@ -490,6 +492,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction.handleConfirmMindCapture(choice);
   }, [interaction]);
   const handleCancelAfterAttackAbility = useCallback(() => setAfterAttackAbilityMode(null), [setAfterAttackAbilityMode]);
+
+  // 连续射击确认/取消
+  const handleConfirmRapidFire = useCallback(() => {
+    if (!rapidFireMode) return;
+    moves.activateAbility?.({ abilityId: 'rapid_fire', sourceUnitId: rapidFireMode.sourceUnitId });
+    setRapidFireMode(null);
+  }, [moves, rapidFireMode, setRapidFireMode]);
+  const handleCancelRapidFire = useCallback(() => setRapidFireMode(null), [setRapidFireMode]);
   // 鲜血符文选择回调
   const handleConfirmBloodRune = useCallback((choice: 'damage' | 'charge') => {
     if (!abilityMode || abilityMode.abilityId !== 'blood_rune') return;
@@ -756,7 +766,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     )}
                     <GameButton onClick={interaction.handleEndPhase} disabled={!isMyTurn} variant={interaction.endPhaseConfirmPending ? 'danger' : 'primary'} size="md" data-testid="sw-end-phase" data-tutorial-id="sw-end-phase-btn">
                       {interaction.endPhaseConfirmPending
-                        ? t('action.confirmEndPhase', { count: interaction.actionableUnitPositions.length })
+                        ? t(currentPhase === 'move' ? 'action.confirmEndMove' : 'action.confirmEndAttack', {
+                            count: currentPhase === 'move'
+                              ? MAX_MOVES_PER_TURN - (core.players[myPlayerId]?.moveCount ?? 0)
+                              : MAX_ATTACKS_PER_TURN - (core.players[myPlayerId]?.attackCount ?? 0),
+                          })
                         : t('action.endPhase')}
                     </GameButton>
                   </div>
@@ -831,6 +845,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onCancelHypnoticLure={handleCancelHypnoticLure}
                     onConfirmMindCapture={handleConfirmMindCapture}
                     onCancelAfterAttackAbility={handleCancelAfterAttackAbility}
+                    rapidFireMode={rapidFireMode}
+                    onConfirmRapidFire={handleConfirmRapidFire}
+                    onCancelRapidFire={handleCancelRapidFire}
                     onConfirmTelekinesis={handleConfirmTelekinesis}
                     onCancelTelekinesis={handleCancelTelekinesis}
                     onAfterMoveSelfCharge={handleAfterMoveSelfCharge}

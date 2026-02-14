@@ -111,7 +111,7 @@ export const NODES: ArchNode[] = [
   { id: 'pipeline', label: '⚡ 回合执行引擎', desc: '每次操作经过8步处理：校验→执行→更新→通知', col: 0, row: 1, colSpan: 6, color: C.engine, layer: 'engine', expandable: 'pipeline', storyIndex: 2 },
   { id: 'systems', label: '🔌 系统插件', desc: '撤销·教学·日志…不改游戏规则就能加功能', col: 0, row: 2, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'systems' },
   { id: 'primitives', label: '🧩 基础能力库', desc: '骰子、卡牌、资源…现成的积木块，拼出任意游戏', col: 3, row: 2, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'primitives', details: ['🎯 所有游戏都能用的"积木块" — 15个独立模块', '底层: 骰子·卡牌·资源·条件·效果·棋盘格·表达式·目标选择·标签·属性·修饰器·UI提示', '中层: 注册技能 → 绑定执行逻辑 → 自动路由操作 → 图片映射', '游戏挑选需要的积木块，引擎负责组装和调度', '🎲 例: 骰子王座用能力框架注册6英雄技能，底层用[骰子+资源池+目标选择+效果处理+属性+修饰器]'] },
-  { id: 'testfw', label: '🧪 自动化测试', desc: '四轨验证：命令回放·实体完整性·交互完整性·E2E截图', col: 0, row: 3, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'testing', details: ['🎯 四轨并行确保改代码后游戏不坏', '① 命令驱动: 录制对局→回放命令→快照对比（最优先）', '② 实体完整性: 注册表+引用链+触发路径+效果契约', '③ 交互完整性: UI状态机payload覆盖 + Handler注册链', '④ E2E截图: Playwright无头浏览器+像素对比'] },
+  { id: 'testfw', label: '🧪 自动化测试+AI审计', desc: '五轨验证：命令回放·实体完整性·交互完整性·E2E截图·AI逻辑审计', col: 0, row: 3, colSpan: 3, color: C.engine, layer: 'engine', expandable: 'testing', details: ['🎯 四轨自动化 + 一轨AI审计 确保改代码后游戏不坏', '① 命令驱动: 录制对局→回放命令→快照对比（最优先）', '② 实体完整性: 注册表+引用链+触发路径+效果契约', '③ 交互完整性: UI状态机payload覆盖 + Handler注册链', '④ E2E截图: Playwright无头浏览器+像素对比', '⑤ AI逻辑审计: 描述→实现八层追踪+数据查询一致性+交叉影响'] },
   { id: 'eventstream', label: '📡 事件广播', desc: '实时通知界面播放特效和音效', col: 3, row: 3, colSpan: 3, color: C.engine, layer: 'engine', details: ['🎯 管线处理完后通知UI"发生了什么" → 播放对应特效', '每个事件有自增ID, 撤销时清空(防止重播旧动画)', '🎲 例: 管线产生[攻击命中, 扣血-3] → UI依次播放命中音效+飞字"-3"'] },
   // ── 框架核心 ──
   { id: 'matchstate', label: '💾 游戏状态', desc: '当前对局的完整快照：轮到谁、血量多少、骰子几个…', col: 0, row: 4, colSpan: 3, color: C.core, layer: 'core', storyIndex: 3,
@@ -325,7 +325,7 @@ export const OVERVIEW_LAYERS: OverviewLayer[] = [
     id: 'engine', emoji: '⚡', label: '引擎层',
     whatItDoes: '自动处理每一步操作：校验→执行→更新→通知',
     whyItExists: '没有它 → 每个游戏都要自己写回合管理、撤销、联机同步',
-    tags: ['8步管线', '11个系统插件', '15个基础能力', '4轨自动化测试'],
+    tags: ['8步管线', '11个系统插件', '15个基础能力', '5轨测试+AI审计'],
     color: C.engine, drillDown: 'sub-pipeline',
   },
   {
@@ -413,7 +413,7 @@ export const CONTAINER_LINKS: { from: string; to: string; label: string; color: 
 /** 每层组件摘要（L2 容器图显示） */
 export const LAYER_SUMMARIES: Record<string, string> = {
   game: '定义游戏规则 · 开局摆什么 · 能做什么 · 做了会怎样',
-  engine: '自动处理操作 · 8步管线 · 11个系统插件 · 15个基础能力 · 4轨测试框架',
+  engine: '自动处理操作 · 8步管线 · 11个系统插件 · 15个基础能力 · 5轨测试+AI审计',
   core: '管理对局数据 · 游戏定义 · 三种模式自动适配 · 资源加载',
   ui: '页面路由 · 游戏骨架 · 视觉特效 · 全局状态 · 工具库',
   server: '联机同步 · 实时通信 · 用户系统(13模块) · Docker部署 · MongoDB · Redis · Cloudflare CDN',
@@ -566,6 +566,23 @@ export const INTERACTION_AUDIT_STEPS: InteractionAuditStep[] = [
   { emoji: '🅱️', label: 'Mode B: Handler覆盖', desc: '所有sourceId都有对应handler注册', example: 'zombie_lord_choose → handler注册 ✓' },
   { emoji: '⛓️', label: 'Mode B: 链式完整性', desc: 'handler产出的后续sourceId也有handler', example: 'choose_minion→choose_base → 两端都有 ✓' },
   { emoji: '👻', label: '孤儿Handler检测', desc: '注册了handler但无能力引用=死代码', example: '38个handler · 0孤儿 · 2白名单' },
+];
+
+/** AI 逻辑审计步骤 */
+export interface AIAuditStep {
+  emoji: string;
+  label: string;
+  desc: string;
+  example?: string;
+}
+
+export const AI_AUDIT_STEPS: AIAuditStep[] = [
+  { emoji: '📖', label: '锁定权威描述', desc: '从规则文档/卡牌图片提取完整原文', example: '规则书: "打出时抽2张牌，之后每回合…"' },
+  { emoji: '🔀', label: '拆分交互链', desc: '逐句拆分独立触发条件/输入/状态路径', example: '1张卡 → 拆出3条链(即时+持续+可选)' },
+  { emoji: '🔍', label: '八层逐链追踪', desc: '定义→注册→执行→状态→验证→UI→i18n→测试', example: '链①: 定义✅ 注册✅ 执行❌(缺target)' },
+  { emoji: '🔗', label: 'grep消费点', desc: 'ID只在定义+注册=消费层缺失', example: 'grep "fireball" → 仅2处 → 执行层缺失' },
+  { emoji: '⚡', label: '交叉影响检查', desc: '新链路是否触发已有机制连锁反应', example: '推拉→触发"被推拉后"被动→需确认' },
+  { emoji: '📊', label: '数据查询一致性', desc: 'grep原始字段访问,确认走统一查询入口', example: '.card.abilities绕过getUnitAbilities→修复' },
 ];
 
 export const E2E_TEST_STEPS: E2EStep[] = [

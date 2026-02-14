@@ -134,7 +134,7 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.highTelekinesis',
       buttonVariant: 'secondary',
@@ -210,7 +210,7 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.mindTransmission',
       buttonVariant: 'secondary',
@@ -291,7 +291,7 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.telekinesis',
       buttonVariant: 'secondary',
@@ -351,7 +351,7 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.illusion',
       buttonVariant: 'secondary',

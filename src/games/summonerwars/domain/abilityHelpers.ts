@@ -31,7 +31,14 @@ export function getActivatableAbilities(
     const abilityDef = abilityRegistry.get(abilityId);
     if (!abilityDef) continue;
     
-    // 只考虑 'activated' 触发类型的技能
+    // 有 UI 按钮的技能（如 beforeAttack 的 holy_arrow）也视为可主动激活
+    if (abilityDef.ui?.requiresButton) {
+      if (abilityDef.ui.buttonPhase && abilityDef.ui.buttonPhase !== phase) continue;
+      activatable.push(abilityId);
+      continue;
+    }
+    
+    // 'activated' 触发类型的技能
     if (abilityDef.trigger !== 'activated') continue;
     
     // 检查阶段限制（如果有）

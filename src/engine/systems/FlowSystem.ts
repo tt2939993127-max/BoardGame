@@ -211,14 +211,20 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
 
     if (shouldHalt) {
         logDev(`[FlowSystem][${logLabel}] halt=true, not advancing`);
+        const haltedState = updatedState ?? state;
         return {
             halt: haltOnExit ? true : undefined,
-            state: updatedState ?? state,
+            state: {
+                ...haltedState,
+                sys: { ...haltedState.sys, flowHalted: true },
+            },
             events: exitEvents,
         };
     }
 
     const nextState = setPhase(state, to);
+    // 阶段成功推进，清除 halt 标记
+    nextState.sys = { ...nextState.sys, flowHalted: false };
     logDev(`[FlowSystem][${logLabel}] phase updated from=${from} to=${to}`);
 
     const activePlayerId = hooks.getActivePlayerId?.({ state: nextState, from, to, command, exitEvents }) ?? command.playerId;

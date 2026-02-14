@@ -611,15 +611,15 @@ describe('巫师派系能力（第6批）', () => {
 // ============================================================================
 
 describe('外星人派系能力（第6批）', () => {
-    it('alien_scout: 多个随从时创建 Prompt 选择', () => {
+    it('alien_scout: 打出时无 onPlay 交互（能力为 afterScoring 触发）', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
                     hand: [makeCard('m_scout', 'alien_scout', 'minion', '0')],
                     deck: [
-                        makeCard('d1', 'alien_invader', 'minion', '0'),   // 力量3
+                        makeCard('d1', 'alien_invader', 'minion', '0'),
                         makeCard('d2', 'test_action', 'action', '0'),
-                        makeCard('d3', 'alien_supreme_overlord', 'minion', '0'), // 力量5
+                        makeCard('d3', 'alien_supreme_overlord', 'minion', '0'),
                     ],
                 }),
                 '1': makePlayer('1'),
@@ -631,8 +631,8 @@ describe('外星人派系能力（第6批）', () => {
 
         const { matchState } = execPlayMinion(state, '0', 'm_scout', 0);
         const current = (matchState.sys as any).interaction?.current;
-        expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('alien_scout');
+        // 侦察兵没有 onPlay 能力，不应创建交互
+        expect(current).toBeUndefined();
     });
 
     it('alien_scout: 牌库无随从时无抽牌事件', () => {

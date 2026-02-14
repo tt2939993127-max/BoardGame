@@ -16,7 +16,7 @@ import type {
     DeckReshuffledEvent, MinionCardDef, OngoingDetachedEvent,
 } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
-import type { ProtectionCheckContext, TriggerContext } from '../domain/ongoingEffects';
+import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -89,10 +89,12 @@ function killerPlantWaterLilyTrigger(ctx: TriggerContext): SmashUpEvent[] {
 
 
 /**
- * sprout 触发：控制者回合开始时消灭自身 + Prompt 搜索牌库力量�?随从打出
+ * sprout 触发：控制者回合开始时消灭自身 + 搜索牌库力量≤3随从打出
+ * 多候选时创建交互让玩家选择
  */
-function killerPlantSproutTrigger(ctx: TriggerContext): SmashUpEvent[] {
+function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
     const events: SmashUpEvent[] = [];
+    let matchState = ctx.matchState;
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         for (const m of base.minions) {
@@ -100,7 +102,7 @@ function killerPlantSproutTrigger(ctx: TriggerContext): SmashUpEvent[] {
             if (m.controller !== ctx.playerId) continue;
             // 消灭自身
             events.push(destroyMinion(m.uid, m.defId, i, m.owner, 'killer_plant_sprout', ctx.now));
-            // 搜索牌库中力量≤3的随�?
+            // 搜索牌库中力量≤3的随从
             const player = ctx.state.players[m.controller];
             if (!player) continue;
             const eligible = player.deck.filter(c => {
@@ -116,8 +118,19 @@ function killerPlantSproutTrigger(ctx: TriggerContext): SmashUpEvent[] {
                     grantExtraMinion(m.controller, 'killer_plant_sprout', ctx.now),
                     buildDeckReshuffle(player, m.controller, [eligible[0].uid], ctx.now),
                 );
+            } else if (matchState) {
+                // 多候选：创建交互让玩家选择
+                const options = eligible.map((c, idx) => {
+                    const def = getMinionDef(c.defId);
+                    return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } };
+                });
+                const interaction = createSimpleChoice(
+                    `killer_plant_sprout_search_${m.uid}_${ctx.now}`, m.controller,
+                    '嫩芽：选择一个力量≤3的随从打出', options as any[], 'killer_plant_sprout_search',
+                );
+                matchState = queueInteraction(matchState, interaction);
             } else {
-                // TODO: 触发器返回事件数组，无法直接 queueInteraction，多候选暂自动选第一个
+                // 无 matchState 回退：自动选第一个（测试环境等）
                 events.push(
                     { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: m.controller, count: 1, cardUids: [eligible[0].uid] }, timestamp: ctx.now } as CardsDrawnEvent,
                     grantExtraMinion(m.controller, 'killer_plant_sprout', ctx.now),
@@ -126,8 +139,9 @@ function killerPlantSproutTrigger(ctx: TriggerContext): SmashUpEvent[] {
             }
         }
     }
-    return events;
+    return { events, matchState };
 }
+
 
 /**
  * choking_vines 触发：回合开始时消灭附着�?choking_vines 的随�?

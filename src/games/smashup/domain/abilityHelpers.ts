@@ -6,7 +6,9 @@
  */
 
 import type { PlayerId } from '../../../engine/types';
-import type { PromptOption as EnginePromptOption } from '../../../engine/systems/InteractionSystem';
+import type { PromptOption as EnginePromptOption, SimpleChoiceConfig } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import type { AbilityContext, AbilityResult } from './abilityRegistry';
 import type {
     SmashUpCore,
     MinionOnBase,
@@ -17,6 +19,11 @@ import type {
     PowerCounterRemovedEvent,
     CardRecoveredFromDiscardEvent,
     HandShuffledIntoDeckEvent,
+    TempPowerAddedEvent,
+    BreakpointModifiedEvent,
+    BaseDeckShuffledEvent,
+    RevealHandEvent,
+    RevealDeckTopEvent,
 } from './types';
 import { SU_EVENTS } from './types';
 import { getEffectivePower } from './ongoingModifiers';
@@ -104,6 +111,79 @@ export function removePowerCounter(
     return {
         type: SU_EVENTS.POWER_COUNTER_REMOVED,
         payload: { minionUid, baseIndex, amount, reason },
+        timestamp: now,
+    };
+}
+
+/** 生成临时力量修正事件（回合结束自动清零） */
+export function addTempPower(
+    minionUid: string,
+    baseIndex: number,
+    amount: number,
+    reason: string,
+    now: number
+): TempPowerAddedEvent {
+    return {
+        type: SU_EVENTS.TEMP_POWER_ADDED,
+        payload: { minionUid, baseIndex, amount, reason },
+        timestamp: now,
+    };
+}
+
+/** 生成临界点临时修正事件（回合结束自动清零） */
+export function modifyBreakpoint(
+    baseIndex: number,
+    delta: number,
+    reason: string,
+    now: number
+): BreakpointModifiedEvent {
+    return {
+        type: SU_EVENTS.BREAKPOINT_MODIFIED,
+        payload: { baseIndex, delta, reason },
+        timestamp: now,
+    };
+}
+
+/** 生成基地牌库洗混事件 */
+export function shuffleBaseDeck(
+    newBaseDeckDefIds: string[],
+    reason: string,
+    now: number
+): BaseDeckShuffledEvent {
+    return {
+        type: SU_EVENTS.BASE_DECK_SHUFFLED,
+        payload: { newBaseDeckDefIds, reason },
+        timestamp: now,
+    };
+}
+
+/** 生成展示手牌事件 */
+export function revealHand(
+    targetPlayerId: PlayerId,
+    viewerPlayerId: PlayerId,
+    cards: { uid: string; defId: string }[],
+    reason: string,
+    now: number
+): RevealHandEvent {
+    return {
+        type: SU_EVENTS.REVEAL_HAND,
+        payload: { targetPlayerId, viewerPlayerId, cards, reason },
+        timestamp: now,
+    };
+}
+
+/** 生成展示牌库顶事件 */
+export function revealDeckTop(
+    targetPlayerId: PlayerId,
+    viewerPlayerId: PlayerId,
+    cards: { uid: string; defId: string }[],
+    count: number,
+    reason: string,
+    now: number
+): RevealDeckTopEvent {
+    return {
+        type: SU_EVENTS.REVEAL_DECK_TOP,
+        payload: { targetPlayerId, viewerPlayerId, cards, count, reason },
         timestamp: now,
     };
 }
@@ -373,4 +453,53 @@ export function buildBaseTargetOptions(
         label: c.label,
         value: { baseIndex: c.baseIndex },
     }));
+}
+
+// ============================================================================
+// 数据驱动选择：resolveOrPrompt
+// ============================================================================
+
+/**
+ * 数据驱动的候选选择 helper。
+ *
+ * 替代各能力中硬编码的 `if (candidates.length === 1) { ... }` 模式。
+ * 根据配置决定：单候选自动执行 or 始终创建交互让玩家选择。
+ * UI 层根据 targetType 决定渲染方式（高亮基地/随从 vs 弹窗）。
+ *
+ * @param ctx 能力执行上下文
+ * @param options 已构建好的 PromptOption 数组（通过 buildBaseTargetOptions / buildMinionTargetOptions）
+ * @param config 选择配置
+ * @param resolve 单候选自动执行时的回调，返回 AbilityResult
+ */
+export function resolveOrPrompt<T>(
+    ctx: AbilityContext,
+    options: EnginePromptOption<T>[],
+    config: {
+        id: string;
+        title: string;
+        sourceId: string;
+        targetType: 'base' | 'minion' | 'generic';
+        /** 单候选自动执行（默认 true，强制效果）；false = 可选效果，始终让玩家选 */
+        autoResolveIfSingle?: boolean;
+    },
+    resolve: (value: T) => AbilityResult,
+): AbilityResult {
+    if (options.length === 0) return { events: [] };
+
+    const autoResolve = config.autoResolveIfSingle ?? true;
+    if (autoResolve && options.length === 1) {
+        return resolve(options[0].value);
+    }
+
+    // 创建交互，UI 层根据 targetType 高亮对应区域
+    const interaction = createSimpleChoice(
+        `${config.id}_${ctx.now}`, ctx.playerId,
+        config.title, options,
+        {
+            sourceId: config.sourceId,
+            targetType: config.targetType,
+            autoResolveIfSingle: autoResolve,
+        } as SimpleChoiceConfig,
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }

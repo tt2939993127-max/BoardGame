@@ -281,7 +281,7 @@ describe('持续效果拦截框架', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '1', // 对手打出随从
                 baseIndex: 0,
@@ -305,7 +305,7 @@ describe('持续效果拦截框架', () => {
             const base = makeBase(); // 无 ongoing
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '1',
                 random: dummyRandom,
@@ -327,7 +327,7 @@ describe('持续效果拦截框架', () => {
             const state = makeState([base]);
 
             // 查询 onMinionPlayed，但注册的是 onTurnEnd
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '0',
                 random: dummyRandom,
@@ -357,7 +357,7 @@ describe('持续效果拦截框架', () => {
             });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
                 playerId: '0',
                 random: dummyRandom,
@@ -406,7 +406,7 @@ describe('持续效果拦截框架', () => {
             const base = makeBase({ minions: [minion] });
             const state = makeState([base]);
 
-            const events = fireTriggers(state, 'onMinionDestroyed', {
+            const { events } = fireTriggers(state, 'onMinionDestroyed', {
                 state,
                 playerId: '0',
                 random: dummyRandom,

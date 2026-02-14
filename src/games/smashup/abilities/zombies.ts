@@ -145,13 +145,32 @@ function zombieLendAHand(ctx: AbilityContext): AbilityResult {
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
-/** 爆发 onPlay：在没有己方随从的基地额外打出随从 */
+/** 爆发 onPlay：在一个没有己方随从的基地额外打出一个随从（交互选择） */
 function zombieOutbreak(ctx: AbilityContext): AbilityResult {
-    const hasEmptyBase = ctx.state.bases.some(
-        base => !base.minions.some(m => m.controller === ctx.playerId)
+    // 找没有己方随从的基地
+    const emptyBases: { baseIndex: number; label: string }[] = [];
+    for (let i = 0; i < ctx.state.bases.length; i++) {
+        if (!ctx.state.bases[i].minions.some(m => m.controller === ctx.playerId)) {
+            const baseDef = getBaseDef(ctx.state.bases[i].defId);
+            emptyBases.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
+        }
+    }
+    if (emptyBases.length === 0) return { events: [] };
+    // 检查手牌中是否有随从
+    const player = ctx.state.players[ctx.playerId];
+    const handMinions = player.hand.filter(c => c.type === 'minion' && c.uid !== ctx.cardUid);
+    if (handMinions.length === 0) return { events: [] };
+    // 第一步：选择基地
+    const baseOptions = buildBaseTargetOptions(emptyBases);
+    const interaction = createSimpleChoice(
+        `zombie_outbreak_base_${ctx.now}`, ctx.playerId,
+        '爆发：选择一个没有你随从的基地', baseOptions as any[], 'zombie_outbreak_choose_base',
     );
-    if (!hasEmptyBase) return { events: [] };
-    return { events: [grantExtraMinion(ctx.playerId, 'zombie_outbreak', ctx.now)] };
+    const extended = {
+        ...interaction,
+        data: { ...interaction.data, targetType: 'base', continuationContext: { emptyBases } },
+    };
+    return { events: [], matchState: queueInteraction(ctx.matchState, extended) };
 }
 
 /** 僵尸领主 onPlay：在每个没有己方随从的基地从弃牌堆打出力量≤2的随从 */
@@ -403,6 +422,43 @@ export function registerZombieInteractionHandlers(): void {
                 { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: uids.length, cardUids: uids }, timestamp } as CardsDrawnEvent,
                 { type: SU_EVENTS.CARDS_DISCARDED, payload: { playerId, cardUids: uids }, timestamp } as CardsDiscardedEvent,
             ],
+        };
+    });
+
+    // 爆发第一步：选择空基地后 → 选择手牌随从
+    registerInteractionHandler('zombie_outbreak_choose_base', (state, playerId, value, _iData, _random, timestamp) => {
+        const { baseIndex } = value as { baseIndex: number };
+        const player = state.core.players[playerId];
+        const handMinions = player.hand.filter(c => c.type === 'minion');
+        if (handMinions.length === 0) return { state, events: [] };
+        const options = handMinions.map((c, i) => {
+            const def = getCardDef(c.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? c.defId;
+            const power = def?.power ?? 0;
+            return { id: `card-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId, power } };
+        });
+        const next = createSimpleChoice(
+            `zombie_outbreak_minion_${timestamp}`, playerId,
+            '爆发：选择要打出的随从', options, 'zombie_outbreak_choose_minion',
+        );
+        return {
+            state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { targetBaseIndex: baseIndex } } }),
+            events: [grantExtraMinion(playerId, 'zombie_outbreak', timestamp)],
+        };
+    });
+
+    // 爆发第二步：选择随从后打出到指定基地
+    registerInteractionHandler('zombie_outbreak_choose_minion', (state, playerId, value, iData, _random, timestamp) => {
+        const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
+        const contCtx = iData?.continuationContext as { targetBaseIndex: number };
+        if (!contCtx) return undefined;
+        return {
+            state,
+            events: [{
+                type: SU_EVENTS.MINION_PLAYED,
+                payload: { playerId, cardUid, defId, baseIndex: contCtx.targetBaseIndex, power },
+                timestamp,
+            } as MinionPlayedEvent],
         };
     });
 

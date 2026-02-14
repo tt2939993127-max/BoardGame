@@ -3,8 +3,15 @@
  *
  * 根据游戏阶段和玩家选择的阵营，确定需要预加载的精灵图集。
  *
- * - 派系选择阶段：召唤师 (hero.png) 图集为关键，tip 图片为暖加载（不阻塞）
- * - 确认派系后：已选派系的卡牌 (cards.png) 图集为关键
+ * - 阵营选择阶段（hostStarted=false）：
+ *   - critical：hero 图集（选角界面需要展示）+ 地图 + 卡背
+ *   - warm：骰子/传送门/tip（选角用不到，后台软加载，进入游戏时已缓存）
+ * - 游戏进行中（hostStarted=true）：
+ *   - critical：已选阵营 cards + hero + 通用资源（骰子/传送门/地图/卡背）
+ *   - warm：未选阵营 cards
+ *
+ * 注意：阵营选择阶段的判断依据是 hostStarted 而非 phase 字段，
+ * 因为初始状态 phase='summon' 但 hostStarted=false 表示仍在选角。
  */
 
 import type { CriticalImageResolver, CriticalImageResolverResult } from '../../core/types';
@@ -15,7 +22,6 @@ import type { MatchState } from '../../engine/types';
 // 阵营 → 图集路径映射
 // ============================================================================
 
-/** 阵营目录名（与资源目录一致） */
 const FACTION_DIR_MAP: Record<FactionId, string> = {
     necromancer: 'Necromancer',
     trickster: 'Trickster',
@@ -25,137 +31,114 @@ const FACTION_DIR_MAP: Record<FactionId, string> = {
     barbaric: 'Barbaric',
 };
 
-/** 所有阵营 ID 列表 */
 const ALL_FACTIONS: FactionId[] = ['necromancer', 'trickster', 'paladin', 'goblin', 'frost', 'barbaric'];
 
-/** 获取阵营的 hero 图集路径 */
 function getHeroAtlasPath(factionId: FactionId): string {
     const dir = FACTION_DIR_MAP[factionId];
     return `summonerwars/hero/${dir}/hero`;
 }
 
-/** 获取阵营的 cards 图集路径 */
 function getCardsAtlasPath(factionId: FactionId): string {
     const dir = FACTION_DIR_MAP[factionId];
     return `summonerwars/hero/${dir}/cards`;
 }
 
-/** 获取阵营的 tip 图片路径 */
 function getTipImagePath(factionId: FactionId): string {
     const dir = FACTION_DIR_MAP[factionId];
     return `summonerwars/hero/${dir}/tip`;
 }
 
-/** 通用资源（传送门、骰子、地图、卡背） */
-const COMMON_PATHS = {
-    portal: 'summonerwars/common/Portal',
-    dice: 'summonerwars/common/dice',
-    map: 'summonerwars/common/map',
-    cardback: 'summonerwars/common/cardback',
-} as const;
+/** 选角界面需要的关键资源（地图背景 + 卡背） */
+const SELECTION_CRITICAL = [
+    'summonerwars/common/map',
+    'summonerwars/common/cardback',
+] as const;
+
+/** 游戏中才用到的通用资源（选角阶段暖加载，游戏阶段提升为关键） */
+const GAMEPLAY_COMMON = [
+    'summonerwars/common/Portal',
+    'summonerwars/common/dice',
+] as const;
 
 // ============================================================================
 // 解析器实现
 // ============================================================================
 
-/**
- * 从对局状态中提取已选阵营（去重）
- */
 function extractSelectedFactions(core: SummonerWarsCore): FactionId[] {
     const selected = new Set<FactionId>();
-
-    // 从 selectedFactions 中提取已确认的阵营
     for (const factionId of Object.values(core.selectedFactions)) {
         if (factionId && factionId !== 'unselected') {
             selected.add(factionId as FactionId);
         }
     }
-
     return [...selected];
 }
 
 /**
- * 检查是否处于派系选择阶段
+ * 判断是否处于阵营选择阶段
+ * 初始状态 phase='summon' 但 hostStarted=false，此时仍在选角
  */
 function isInFactionSelectPhase(core: SummonerWarsCore): boolean {
-    return core.phase === 'factionSelect';
+    return !core.hostStarted;
 }
 
-/**
- * SummonerWars 关键图片解析器
- *
- * 策略：
- * 1. 派系选择阶段：
- *    - 关键：所有阵营的 hero 图集（选择界面需要展示所有召唤师）
- *    - 暖加载：所有 tip 图片（非阻塞）
- * 2. 确认派系后（游戏进行中）：
- *    - 关键：已选阵营的 cards 图集 + 通用资源（传送门）
- *    - 暖加载：未选阵营的 cards 图集（后台预取）
- */
 export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
     gameState: unknown,
 ): CriticalImageResolverResult => {
     const state = gameState as MatchState<SummonerWarsCore>;
     const core = state?.core;
 
-    // 无状态时，预加载所有 hero 图集（准备进入选择阶段）
+    // 无状态时，预加载选角界面所需资源
     if (!core) {
         const allHeroAtlases = ALL_FACTIONS.map(getHeroAtlasPath);
         const allTipImages = ALL_FACTIONS.map(getTipImagePath);
         return {
-            critical: [COMMON_PATHS.map, COMMON_PATHS.cardback, ...allHeroAtlases],
-            warm: [COMMON_PATHS.dice, COMMON_PATHS.portal, ...allTipImages],
+            critical: [...SELECTION_CRITICAL, ...allHeroAtlases],
+            warm: [...GAMEPLAY_COMMON, ...allTipImages],
+            phaseKey: 'init',
         };
     }
 
-    const selectedFactions = extractSelectedFactions(core);
-    const inFactionSelect = isInFactionSelectPhase(core);
-
-    if (inFactionSelect) {
-        // 派系选择阶段：hero 图集为关键，tip + 通用资源为暖加载
+    if (isInFactionSelectPhase(core)) {
+        // 选角阶段：hero 图集 + 地图/卡背为关键
+        // 骰子/传送门/tip 选角用不到，放 warm 后台软加载
         const allHeroAtlases = ALL_FACTIONS.map(getHeroAtlasPath);
         const allTipImages = ALL_FACTIONS.map(getTipImagePath);
 
         return {
-            critical: [COMMON_PATHS.map, COMMON_PATHS.cardback, ...allHeroAtlases],
-            warm: [COMMON_PATHS.dice, COMMON_PATHS.portal, ...allTipImages],
+            critical: [...SELECTION_CRITICAL, ...allHeroAtlases],
+            warm: [...GAMEPLAY_COMMON, ...allTipImages],
+            phaseKey: 'factionSelect',
         };
     }
 
-    // 游戏进行中：已选阵营的 cards 图集为关键
+    // 游戏进行中：通用资源 + 已选阵营资源全部为关键
+    const selectedFactions = extractSelectedFactions(core);
+
     if (selectedFactions.length === 0) {
-        // 异常情况：游戏已开始但无已选阵营，回退到全部预加载
+        // 异常：游戏已开始但无已选阵营，全量预加载
         const allCardsAtlases = ALL_FACTIONS.map(getCardsAtlasPath);
+        const allHeroAtlases = ALL_FACTIONS.map(getHeroAtlasPath);
         return {
-            critical: [
-                COMMON_PATHS.map,
-                COMMON_PATHS.cardback,
-                COMMON_PATHS.portal,
-                COMMON_PATHS.dice,
-                ...allCardsAtlases,
-            ],
+            critical: [...SELECTION_CRITICAL, ...GAMEPLAY_COMMON, ...allHeroAtlases, ...allCardsAtlases],
             warm: [],
+            phaseKey: 'playing',
         };
     }
 
-    // 已选阵营的 cards 图集
     const selectedCardsAtlases = selectedFactions.map(getCardsAtlasPath);
-    // 已选阵营的 hero 图集（游戏中也需要显示召唤师）
     const selectedHeroAtlases = selectedFactions.map(getHeroAtlasPath);
-
-    // 未选阵营的 cards 图集放到暖加载
     const unselectedFactions = ALL_FACTIONS.filter(f => !selectedFactions.includes(f));
     const unselectedCardsAtlases = unselectedFactions.map(getCardsAtlasPath);
 
     return {
         critical: [
-            COMMON_PATHS.map,
-            COMMON_PATHS.cardback,
-            COMMON_PATHS.portal,
-            COMMON_PATHS.dice,
+            ...SELECTION_CRITICAL,
+            ...GAMEPLAY_COMMON,
             ...selectedHeroAtlases,
             ...selectedCardsAtlases,
         ],
         warm: [...unselectedCardsAtlases],
+        phaseKey: 'playing',
     };
 };

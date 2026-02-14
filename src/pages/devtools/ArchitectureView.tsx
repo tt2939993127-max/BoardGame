@@ -14,6 +14,7 @@ import {
   PRIMITIVE_ITEMS, PIPELINE_STEPS, SYSTEM_ITEMS,
   TEST_FLOW_STEPS, E2E_TEST_STEPS, INTEGRITY_TEST_STEPS,
   INTERACTION_AUDIT_STEPS,
+  AI_AUDIT_STEPS,
   USER_STORY_STEPS,
   C4_CONTEXT, C4_CONTEXT_LINKS, CONTAINER_LINKS, LAYER_SUMMARIES,
   OVERVIEW_LAYERS, OVERVIEW_FLOW, OVERVIEW_CROSS_LINKS,
@@ -277,7 +278,7 @@ const ArchitectureView: React.FC = () => {
                   const tagDrillMap: Record<string, ViewMode> = {
                     '8步管线': 'sub-pipeline',
                     '11个系统插件': 'sub-systems',
-                    '4轨自动化测试': 'sub-testing',
+                    '5轨测试+AI审计': 'sub-testing',
                   };
                   const drillTarget = tagDrillMap[tag];
                   return (
@@ -474,18 +475,20 @@ const ArchitectureView: React.FC = () => {
     const e2eSteps = E2E_TEST_STEPS;
     const integritySteps = INTEGRITY_TEST_STEPS;
     const interactionSteps = INTERACTION_AUDIT_STEPS;
-    const stepH = 60, stepW = 260, gap = 10;
-    const trackGap = 14;
+    const aiAuditSteps = AI_AUDIT_STEPS;
+    const stepH = 60, stepW = 220, gap = 10;
+    const trackGap = 10;
     const allVitest = [...vitestRec, ...vitestVer];
-    const maxSteps = Math.max(allVitest.length, integritySteps.length, interactionSteps.length, e2eSteps.length);
-    const sx = 16, sy = 90;
+    const maxSteps = Math.max(allVitest.length, integritySteps.length, interactionSteps.length, e2eSteps.length, aiAuditSteps.length);
+    const sx = 12, sy = 90;
     const trackW = stepW + 12;
-    const vw = sx + trackW * 4 + trackGap * 3 + 16;
-    const vh = sy + maxSteps * (stepH + gap) + 140;
+    const vw = sx + trackW * 5 + trackGap * 4 + 16;
+    const vh = sy + maxSteps * (stepH + gap) + 200;
     const vitestColor = '#3fb950';
     const integrityColor = '#bc8cff';
     const interactionColor = '#f778ba';
     const e2eColor = '#58a6ff';
+    const aiColor = '#e3b341';
 
     const renderStepBox = (emoji: string, label: string, desc: string, example: string | undefined,
       i: number, x: number, y: number, color: string, circled: string, delay: number, total: number) => (
@@ -494,8 +497,8 @@ const ArchitectureView: React.FC = () => {
           fill="#161b22" stroke={color} strokeWidth={1.2} />
         <text x={x + 10} y={y + 17} fontSize={13} fill={color}>{emoji}</text>
         <text x={x + 30} y={y + 17} fontSize={9.5} fontWeight={700} fill={color}>{circled} {label}</text>
-        <text x={x + 10} y={y + 33} fontSize={8} fill="#8b949e">{desc.length > 36 ? desc.slice(0, 36) + '…' : desc}</text>
-        {example && <text x={x + 10} y={y + 47} fontSize={7} fill="#e3b341">{example.length > 42 ? example.slice(0, 42) + '…' : example}</text>}
+        <text x={x + 10} y={y + 33} fontSize={8} fill="#8b949e">{desc.length > 30 ? desc.slice(0, 30) + '…' : desc}</text>
+        {example && <text x={x + 10} y={y + 47} fontSize={7} fill="#e3b341">{example.length > 36 ? example.slice(0, 36) + '…' : example}</text>}
         {i < total - 1 && (
           <line x1={x + stepW / 2} y1={y + stepH} x2={x + stepW / 2} y2={y + stepH + gap}
             stroke={color} strokeWidth={2}
@@ -520,19 +523,20 @@ const ArchitectureView: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#0d1117] text-slate-200 p-4" onClick={() => setViewMode('overview')}>
         <button className="mb-3 text-sm text-slate-400 hover:text-white" onClick={e => { e.stopPropagation(); setViewMode('overview'); }}>← 返回</button>
-        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 — 四轨并列</h2>
-        <p className="text-xs text-slate-500 mb-2">命令驱动（最优先） · 实体完整性 · 交互完整性 · E2E截图 · 点击任意位置返回</p>
+        <h2 className="text-lg font-bold text-white mb-2">🧪 自动化测试 + AI 审计 — 五轨并列</h2>
+        <p className="text-xs text-slate-500 mb-2">命令驱动（最优先） · 实体完整性 · 交互完整性 · E2E截图 · AI逻辑审计 · 点击任意位置返回</p>
         <ZoomableSvg viewBox={`0 0 ${vw} ${vh}`}>
           <style>{`
             @keyframes archFadeIn { from { opacity: 0 } }
             @keyframes archDraw { to { stroke-dashoffset: 0 } }
           `}</style>
 
-          {/* 四列标题 */}
+          {/* 五列标题 */}
           {renderTrackTitle(trackX(0), '🧪 命令驱动测试（首选）', vitestColor, 0)}
           {renderTrackTitle(trackX(1), '🔗 实体链完整性', integrityColor, 0.05)}
           {renderTrackTitle(trackX(2), '🎯 交互完整性', interactionColor, 0.1)}
           {renderTrackTitle(trackX(3), '🌐 E2E 截图', e2eColor, 0.15)}
+          {renderTrackTitle(trackX(4), '🤖 AI 逻辑审计', aiColor, 0.2)}
 
           {/* 第1列: Vitest 步骤 */}
           {allVitest.map((step, i) => {
@@ -576,12 +580,19 @@ const ArchitectureView: React.FC = () => {
               i, trackX(3), y, e2eColor, circledNums[i] ?? '', 0.15 + i * 0.08, e2eSteps.length);
           })}
 
+          {/* 第5列: AI 逻辑审计 */}
+          {aiAuditSteps.map((step, i) => {
+            const y = sy + i * (stepH + gap);
+            return renderStepBox(step.emoji, step.label, step.desc, step.example,
+              i, trackX(4), y, aiColor, circledNums[i] ?? '', 0.2 + i * 0.08, aiAuditSteps.length);
+          })}
+
           {/* 底部总结 */}
           {(() => {
             const bottomY = sy + maxSteps * (stepH + gap) + 10;
             return (
               <g style={{ animation: 'archFadeIn 0.5s ease 0.8s both' }}>
-                <rect x={sx - 4} y={bottomY} width={vw - sx * 2 + 8} height={86} rx={8}
+                <rect x={sx - 4} y={bottomY} width={vw - sx * 2 + 8} height={146} rx={8}
                   fill="#161b22" stroke="#30363d" strokeWidth={1} />
                 <text x={sx + 10} y={bottomY + 18} fontSize={9} fill={vitestColor} fontWeight={600}>
                   🧪 命令驱动（最优先）: 纯函数引擎 + 确定性管线 → 命令回放验证规则正确性
@@ -594,6 +605,23 @@ const ArchitectureView: React.FC = () => {
                 </text>
                 <text x={sx + 10} y={bottomY + 72} fontSize={9} fill={e2eColor} fontWeight={600}>
                   🌐 E2E截图: 无头浏览器 + 像素对比 → 防止 UI 视觉回归
+                </text>
+                <text x={sx + 10} y={bottomY + 90} fontSize={9} fill={aiColor} fontWeight={600}>
+                  🤖 AI逻辑审计: 描述→实现八层追踪 + 数据查询一致性 + 交叉影响 → 发现"描述≠实现"类缺陷
+                </text>
+                {/* Bug 覆盖率估算 */}
+                <line x1={sx + 6} y1={bottomY + 100} x2={vw - sx - 6} y2={bottomY + 100} stroke="#21262d" strokeWidth={1} />
+                <text x={sx + 10} y={bottomY + 116} fontSize={8} fill="#6e7681" fontWeight={600}>
+                  📊 Bug 覆盖率估算:
+                </text>
+                <text x={sx + 110} y={bottomY + 116} fontSize={8} fill={vitestColor}>命令驱动 ~35%</text>
+                <text x={sx + 240} y={bottomY + 116} fontSize={8} fill={integrityColor}>实体完整性 ~15%</text>
+                <text x={sx + 370} y={bottomY + 116} fontSize={8} fill={interactionColor}>交互完整性 ~10%</text>
+                <text x={sx + 500} y={bottomY + 116} fontSize={8} fill={e2eColor}>E2E截图 ~10%</text>
+                <text x={sx + 620} y={bottomY + 116} fontSize={8} fill={aiColor}>AI审计 ~25%</text>
+                <text x={sx + 740} y={bottomY + 116} fontSize={8} fill="#6e7681">其他 ~5%</text>
+                <text x={sx + 10} y={bottomY + 134} fontSize={7} fill="#484f58">
+                  * 命令驱动覆盖规则逻辑/状态变更 · AI审计覆盖描述≠实现/查询绕过/交叉影响 · 其他含环境/并发/性能等难以自动化的问题
                 </text>
               </g>
             );

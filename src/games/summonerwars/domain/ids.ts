@@ -50,6 +50,7 @@ export const CARD_IDS = {
   FROST_ICE_RAM: 'frost-ice-ram',
   FROST_GLACIAL_SHIFT: 'frost-glacial-shift',
   FROST_ICE_REPAIR: 'frost-ice-repair',
+  FROST_PARAPET: 'frost-parapet',
 
   // 炽原精灵事件卡
   BARBARIC_CHANT_OF_WEAVING: 'barbaric-chant-of-weaving',

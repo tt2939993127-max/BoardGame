@@ -7,9 +7,9 @@
  * 3. 创建并注册 FxRegistry 单例
  */
 
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import { FxRegistry, type FxRendererProps, type FeedbackPack } from '../../../engine/fx';
-import { FlyingEffect } from '../../../components/common/animations/FlyingEffect';
+import { FlyingEffectsLayer, type FlyingEffectData } from '../../../components/common/animations/FlyingEffect';
 
 // ============================================================================
 // Cue 常量
@@ -17,8 +17,10 @@ import { FlyingEffect } from '../../../components/common/animations/FlyingEffect
 
 /** DiceThrone FX Cue 常量 */
 export const DT_FX = {
-  /** 伤害飞行数字 */
+  /** 伤害飞行数字（战斗伤害，带震动+裂隙闪光） */
   DAMAGE: 'fx.damage',
+  /** 持续伤害飞行数字（灼烧/中毒等 DoT，只有飞行数字+轻微音效，无震动） */
+  DOT_DAMAGE: 'fx.dot-damage',
   /** 治疗飞行数字 */
   HEAL: 'fx.heal',
   /** 状态效果飞行图标 */
@@ -45,14 +47,38 @@ const IMPACT_SFX = {
   TOKEN_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
 } as const;
 
+/** 状态效果冲击音效解析（获得/移除） */
+export function resolveStatusImpactKey(isRemove: boolean): string {
+  return isRemove ? IMPACT_SFX.STATUS_REMOVE : IMPACT_SFX.STATUS_GAIN;
+}
+
+/** Token 冲击音效解析（获得/移除） */
+export function resolveTokenImpactKey(isRemove: boolean): string {
+  return isRemove ? IMPACT_SFX.TOKEN_REMOVE : IMPACT_SFX.TOKEN_GAIN;
+}
+
 // ============================================================================
 // 稳定回调 hook（避免父组件重新渲染导致动画重播）
 // ============================================================================
 
 function useStableComplete(onComplete: () => void): () => void {
   const ref = useRef(onComplete);
-  ref.current = onComplete;
+
+  useEffect(() => {
+    ref.current = onComplete;
+  }, [onComplete]);
+
   return useCallback(() => ref.current(), []);
+}
+
+function renderSingleFlyingEffect(
+  effect: Omit<FlyingEffectData, 'id'>,
+  onComplete: () => void
+): React.ReactElement {
+  return React.createElement(FlyingEffectsLayer, {
+    effects: [{ id: '__single_fx__', ...effect }],
+    onEffectComplete: () => onComplete(),
+  });
 }
 
 // ============================================================================
@@ -78,15 +104,14 @@ const DamageRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact
     return null;
   }
 
-  return React.createElement(FlyingEffect, {
+  return renderSingleFlyingEffect({
     type: 'damage',
     content: `-${damage}`,
     startPos,
     endPos,
     intensity: damage,
-    onComplete: stableComplete,
     onImpact,
-  });
+  }, stableComplete);
 };
 
 // ============================================================================
@@ -111,15 +136,14 @@ const HealRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact }
     return null;
   }
 
-  return React.createElement(FlyingEffect, {
+  return renderSingleFlyingEffect({
     type: 'heal',
     content: `+${amount}`,
     startPos,
     endPos,
     intensity: amount,
-    onComplete: stableComplete,
     onImpact,
-  });
+  }, stableComplete);
 };
 
 // ============================================================================
@@ -147,15 +171,14 @@ const StatusRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact
     return null;
   }
 
-  return React.createElement(FlyingEffect, {
+  return renderSingleFlyingEffect({
     type: 'buff',
     content,
     color,
     startPos,
     endPos,
-    onComplete: stableComplete,
     onImpact,
-  });
+  }, stableComplete);
 };
 
 // ============================================================================
@@ -183,15 +206,14 @@ const TokenRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact 
     return null;
   }
 
-  return React.createElement(FlyingEffect, {
+  return renderSingleFlyingEffect({
     type: 'buff',
     content,
     color,
     startPos,
     endPos,
-    onComplete: stableComplete,
     onImpact,
-  });
+  }, stableComplete);
 };
 
 // ============================================================================
@@ -207,6 +229,15 @@ const DAMAGE_FEEDBACK: FeedbackPack = {
   shake: { intensity: 'normal', type: 'hit', timing: 'on-impact' },
 };
 
+/** 持续伤害反馈：只有轻微音效，无震动（灼烧/中毒等 DoT） */
+const DOT_DAMAGE_FEEDBACK: FeedbackPack = {
+  sound: {
+    key: IMPACT_SFX.SELF_HIT,
+    timing: 'on-impact',
+  },
+  // 无 shake — 持续伤害不应有震动
+};
+
 /** 治疗反馈：冲击瞬间播放音效 */
 const HEAL_FEEDBACK: FeedbackPack = {
   sound: {
@@ -218,15 +249,8 @@ const HEAL_FEEDBACK: FeedbackPack = {
 /** 状态效果获得反馈：冲击瞬间播放音效 */
 const STATUS_GAIN_FEEDBACK: FeedbackPack = {
   sound: {
+    source: 'params',
     key: IMPACT_SFX.STATUS_GAIN,
-    timing: 'on-impact',
-  },
-};
-
-/** 状态效果移除反馈：冲击瞬间播放音效 */
-const STATUS_REMOVE_FEEDBACK: FeedbackPack = {
-  sound: {
-    key: IMPACT_SFX.STATUS_REMOVE,
     timing: 'on-impact',
   },
 };
@@ -234,15 +258,8 @@ const STATUS_REMOVE_FEEDBACK: FeedbackPack = {
 /** Token 获得反馈：冲击瞬间播放音效 */
 const TOKEN_GAIN_FEEDBACK: FeedbackPack = {
   sound: {
+    source: 'params',
     key: IMPACT_SFX.TOKEN_GAIN,
-    timing: 'on-impact',
-  },
-};
-
-/** Token 消耗反馈：冲击瞬间播放音效 */
-const TOKEN_REMOVE_FEEDBACK: FeedbackPack = {
-  sound: {
-    key: IMPACT_SFX.TOKEN_REMOVE,
     timing: 'on-impact',
   },
 };
@@ -258,6 +275,10 @@ function createRegistry(): FxRegistry {
   registry.register(DT_FX.DAMAGE, DamageRenderer, {
     timeoutMs: 2000,
   }, DAMAGE_FEEDBACK);
+
+  registry.register(DT_FX.DOT_DAMAGE, DamageRenderer, {
+    timeoutMs: 2000,
+  }, DOT_DAMAGE_FEEDBACK);
 
   registry.register(DT_FX.HEAL, HealRenderer, {
     timeoutMs: 2000,

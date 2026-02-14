@@ -471,7 +471,7 @@ const UnitCell: React.FC<{
               : isMyUnit && props.actionableUnitPositions.some(p => p.row === row && p.col === col)
                 ? 'ring-2 ring-green-400 shadow-[0_10px_20px_rgba(0,0,0,0.4),0_0_10px_rgba(74,222,128,0.5)]'
                 : 'hover:ring-1 hover:ring-white/40 shadow-[0_4px_12px_rgba(0,0,0,0.5),0_12px_24px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.6),0_20px_40px_rgba(0,0,0,0.5)]'
-        } ${getBuffGlowStyle(unit, core.players[unit.owner]?.activeEvents ?? [])}`}
+        } ${getBuffGlowStyle(unit, core.players[unit.owner]?.activeEvents ?? [], core)}`}
         style={isUnitSelected ? { zIndex: BOARD_GRID_Z.overlay } : undefined}
       >
         {/* 技能准备就绪指示器（青色波纹） */}
@@ -545,6 +545,7 @@ const UnitCell: React.FC<{
           isMyUnit={true}
           activeEvents={core.players[unit.owner]?.activeEvents ?? []}
           myPlayerId={myPlayerId as PlayerId}
+          core={core}
         />
         
         {/* Buff 详细信息悬停面板 - 保持正向可读 */}
@@ -556,6 +557,7 @@ const UnitCell: React.FC<{
               const abilityNameKey = abilityRegistry.get(abilityId)?.name;
               return abilityNameKey ? t(abilityNameKey) : abilityId;
             }}
+            core={core}
           />
         </div>
         

@@ -1215,7 +1215,8 @@
       "name": "Soul Burn",
       "description": "Gain Fire Mastery equal to 2× Fire Soul faces and deal 1× Fire Soul damage to all opponents.",
       "effects": {
-        "main": "Gain Fire Mastery equal to 2× the number of Fire Soul faces, and deal that much (1× Fire Soul) undefendable damage to all opponents."
+        "fm": "Gain 2 Fire Mastery",
+        "damage": "Deal damage equal to the number of Fire Soul faces to all opponents"
       }
     },
     "fiery-combo": {

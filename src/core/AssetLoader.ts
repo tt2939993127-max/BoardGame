@@ -304,6 +304,12 @@ export function clearGameAssetsCache(gameId: string): void {
  */
 export function isImagePreloaded(src: string): boolean {
     if (preloadedImages.has(src)) return true;
+    // 如果 src 已经是 compressed/ 下的 URL，直接检查 avif/webp 变体
+    if (src.includes(`/${COMPRESSED_SUBDIR}/`)) {
+        const base = stripExtension(src);
+        return preloadedImages.has(`${base}.avif`) || preloadedImages.has(`${base}.webp`);
+    }
+    // 原始路径：转换为 optimized URL 后检查
     const { avif, webp } = getOptimizedImageUrls(src);
     return preloadedImages.has(avif) || preloadedImages.has(webp);
 }

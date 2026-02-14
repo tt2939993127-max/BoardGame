@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import type { BoardUnit, EventCard, PlayerId } from '../domain/types';
+import type { BoardUnit, EventCard, PlayerId, SummonerWarsCore } from '../domain/types';
 import { summonerWarsBuffRegistry } from './buffSystem';
 import { BuffIcons as GenericBuffIcons, BuffDetailsPanel as GenericBuffDetailsPanel, generateBuffGlowStyles } from '../../../components/game/framework/widgets/BuffSystem';
 
@@ -22,17 +22,19 @@ interface BuffIconsProps {
   isMyUnit: boolean;
   activeEvents: EventCard[];
   myPlayerId: PlayerId;
+  core?: SummonerWarsCore;
 }
 
 export const BuffIcons: React.FC<BuffIconsProps> = ({
   unit,
   isMyUnit,
   activeEvents,
+  core,
 }) => {
   return (
     <GenericBuffIcons
       entity={unit}
-      gameState={{ activeEvents }}
+      gameState={{ activeEvents, core }}
       registry={summonerWarsBuffRegistry}
       position={isMyUnit ? 'bottom-left' : 'top-right'}
     />
@@ -49,8 +51,8 @@ export const BuffIcons: React.FC<BuffIconsProps> = ({
  * 注意：此光效独立于现有的高亮系统（可移动、可攻击等），
  * 使用不同的 shadow 层级避免冲突
  */
-export function getBuffGlowStyle(unit: BoardUnit, activeEvents: EventCard[]): string {
-  return generateBuffGlowStyles(unit, { activeEvents }, summonerWarsBuffRegistry);
+export function getBuffGlowStyle(unit: BoardUnit, activeEvents: EventCard[], core?: SummonerWarsCore): string {
+  return generateBuffGlowStyles(unit, { activeEvents, core }, summonerWarsBuffRegistry);
 }
 
 // ============================================================================
@@ -61,27 +63,29 @@ interface BuffDetailsPanelProps {
   unit: BoardUnit;
   activeEvents: EventCard[];
   getAbilityName: (abilityId: string) => string;
+  core?: SummonerWarsCore;
 }
 
 export const BuffDetailsPanel: React.FC<BuffDetailsPanelProps> = ({
   unit,
   activeEvents,
   getAbilityName,
+  core,
 }) => {
   return (
     <GenericBuffDetailsPanel
       entity={unit}
-      gameState={{ activeEvents }}
+      gameState={{ activeEvents, core }}
       registry={summonerWarsBuffRegistry}
       title="当前状态"
       renderBuffDetail={(buff, visualConfig) => {
         const Icon = visualConfig.icon;
         let label = visualConfig.label;
         
-        // 临时技能：显示具体技能名称
-        if (buff.type === 'tempAbility' && buff.data) {
+        // 额外技能：显示具体技能名称
+        if (buff.type === 'extraAbilities' && buff.data) {
           const abilityNames = (buff.data as string[]).map(getAbilityName).join('、');
-          label = `临时技能：${abilityNames}`;
+          label = `额外技能：${abilityNames}`;
         }
         
         // 附加单位：显示具体单位名称

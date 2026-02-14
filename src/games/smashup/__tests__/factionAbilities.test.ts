@@ -227,23 +227,24 @@ describe('忍者派系能力', () => {
 // ============================================================================
 
 describe('恐龙派系能力', () => {
-    it('dino_wild_stuffing: 单个力量≤3随从时创建 Prompt', () => {
+    it('dino_rampage: 选择基地降低爆破点', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'dino_wild_stuffing', 'action', '0')],
+                    hand: [makeCard('a1', 'dino_rampage', 'action', '0')],
                 }),
                 '1': makePlayer('1'),
             },
             bases: [
-                { defId: 'b1', minions: [makeMinion('m1', 'test', '1', 3)], ongoingActions: [] },
+                { defId: 'b1', minions: [makeMinion('m0', 'test', '0', 3)], ongoingActions: [] },
+                { defId: 'b2', minions: [makeMinion('m1', 'test', '0', 2)], ongoingActions: [] },
             ],
         });
 
         const { matchState } = execPlayAction(state, '0', 'a1');
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('dino_wild_stuffing');
+        expect(current?.data?.sourceId).toBe('dino_rampage');
     });
 
     it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {
@@ -285,7 +286,7 @@ describe('恐龙派系能力', () => {
         expect(current?.data?.sourceId).toBe('dino_augmentation');
     });
 
-    it('dino_howl: 所有己方随从+1力量', () => {
+    it('dino_howl: 所有己方随从+1力量（临时，回合结束清零）', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -299,7 +300,7 @@ describe('恐龙派系能力', () => {
         });
 
         const { events, matchState } = execPlayAction(state, '0', 'a1');
-        const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
+        const powerEvents = events.filter(e => e.type === SU_EVENTS.TEMP_POWER_ADDED);
         expect(powerEvents.length).toBe(1); // 只有己方 m0
         expect((powerEvents[0] as any).payload.minionUid).toBe('m0');
     });
@@ -382,32 +383,7 @@ describe('恐龙派系能力', () => {
         expect(current).toBeUndefined();
     });
 
-    it('dino_wild_rampage: 目标基地己方随从+2力量', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'dino_wild_rampage', 'action', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-            bases: [
-                {
-                    defId: 'b1', minions: [
-                        makeMinion('m0', 'test', '0', 3),
-                        makeMinion('m1', 'test', '0', 2),
-                        makeMinion('m2', 'test', '1', 4),
-                    ], ongoingActions: [],
-                },
-            ],
-        });
-
-        const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
-        const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED);
-        expect(powerEvents.length).toBe(2); // m0 和 m1
-        expect((powerEvents[0] as any).payload.amount).toBe(2);
-    });
-
-    it('dino_survival_of_the_fittest: 消灭全场所有最低力量的随从', () => {
+    it('dino_survival_of_the_fittest: 每个基地消灭一个最低力量随从', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -671,11 +647,11 @@ describe('外星人派系能力', () => {
         expect(current?.data?.sourceId).toBe('alien_collector');
     });
 
-    it('alien_disintegrate: 单个力量≤3随从时创建 Prompt', () => {
+    it('alien_disintegrator: 单个力量≤3随从时创建 Prompt', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'alien_disintegrate', 'action', '0')],
+                    hand: [makeCard('a1', 'alien_disintegrator', 'action', '0')],
                 }),
                 '1': makePlayer('1'),
             },
@@ -689,7 +665,7 @@ describe('外星人派系能力', () => {
         const { matchState } = execPlayAction(state, '0', 'a1');
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('alien_disintegrate');
+        expect(current?.data?.sourceId).toBe('alien_disintegrator');
     });
 
     it('alien_crop_circles: 单个基地有随从时创建 Prompt', () => {

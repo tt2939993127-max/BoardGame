@@ -644,28 +644,8 @@ export function executeCommand(
         // afterAttack 技能需要玩家选择目标（推拉方向、额外攻击目标等）
         // 生成请求事件，由 UI 处理
         events.push(...afterAttackEvents);
-
-        // 连续射击（rapid_fire）：afterAttack 触发后，消耗1充能授予额外攻击
-        const hasRapidFireTrigger = afterAttackEvents.some(e =>
-          e.type === SW_EVENTS.ABILITY_TRIGGERED
-          && (e.payload as Record<string, unknown>).abilityId === 'rapid_fire_extra_attack'
-        );
-        if (hasRapidFireTrigger && (attackerUnit.boosts ?? 0) >= 1) {
-          events.push({
-            type: SW_EVENTS.UNIT_CHARGED,
-            payload: { position: attacker, delta: -1, sourceAbilityId: 'rapid_fire' },
-            timestamp,
-          });
-          events.push({
-            type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
-            payload: {
-              targetPosition: attacker,
-              targetUnitId: attackerUnit.cardId,
-              sourceAbilityId: 'rapid_fire',
-            },
-            timestamp,
-          });
-        }
+        // 连续射击（rapid_fire）：ABILITY_TRIGGERED 事件由 UI 检测，
+        // 玩家确认后通过 ACTIVATE_ABILITY 命令执行消耗充能+授予额外攻击
       }
       break;
     }

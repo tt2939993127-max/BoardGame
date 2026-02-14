@@ -156,7 +156,7 @@ describe('随从消灭能力集成', () => {
 describe('Property 9: 持续行动卡附着', () => {
     it('ongoing 行动卡打出后附着到基地而非弃牌堆', () => {
         const runner = createRunner();
-        // 使用 aliens（有 ongoing 行动卡 alien_jammed_signals）
+        // 使用 aliens（有 ongoing 行动卡 alien_jammed_signal）
         const result = runner.run({
             name: '选秀',
             commands: DRAFT_COMMANDS,
@@ -169,8 +169,8 @@ describe('Property 9: 持续行动卡附着', () => {
         // 找 ongoing 行动卡
         const ongoingCard = player.hand.find(c => {
             if (c.type !== 'action') return false;
-            // alien_jammed_signals 是 ongoing 类型
-            return c.defId === 'alien_jammed_signals';
+            // alien_jammed_signal 是 ongoing 类型
+            return c.defId === 'alien_jammed_signal';
         });
 
         if (!ongoingCard) {

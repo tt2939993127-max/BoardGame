@@ -25,6 +25,7 @@ function getActionableUnitHints(
     case 'move': {
       const remainingMoves = MAX_MOVES_PER_TURN - player.moveCount;
       if (remainingMoves > 0) {
+        // 显示所有可移动单位（不限制数量，玩家需要看到全部可选单位）
         for (const u of units) {
           if (!u.hasMoved && !isImmobile(u, core) && getValidMoveTargetsEnhanced(core, u.position).length > 0) {
             hints.push({
@@ -33,7 +34,6 @@ function getActionableUnitHints(
               entityId: u.cardId,
               actions: ['move'],
             });
-            if (hints.length >= remainingMoves) break;
           }
         }
       }
@@ -42,6 +42,7 @@ function getActionableUnitHints(
     case 'attack': {
       const remainingAttacks = MAX_ATTACKS_PER_TURN - player.attackCount;
       if (remainingAttacks > 0) {
+        // 显示所有可攻击单位（不限制数量，玩家需要看到全部可选单位）
         for (const u of units) {
           if (!u.hasAttacked && getValidAttackTargetsEnhanced(core, u.position).length > 0) {
             hints.push({
@@ -50,7 +51,20 @@ function getActionableUnitHints(
               entityId: u.cardId,
               actions: ['attack'],
             });
-            if (hints.length >= remainingAttacks) break;
+          }
+        }
+      }
+      // 有额外攻击的单位始终显示为可攻击（不受3次限制）
+      for (const u of units) {
+        if ((u.extraAttacks ?? 0) > 0 && !u.hasAttacked && getValidAttackTargetsEnhanced(core, u.position).length > 0) {
+          const alreadyHinted = hints.some(h => h.entityId === u.cardId);
+          if (!alreadyHinted) {
+            hints.push({
+              type: 'actionable',
+              position: u.position,
+              entityId: u.cardId,
+              actions: ['attack'],
+            });
           }
         }
       }
@@ -75,6 +89,8 @@ function getAbilityReadyHints(
   for (const u of units) {
     // 移动阶段：只显示未移动的单位
     if (phase === 'move' && u.hasMoved) continue;
+    // 攻击阶段：只显示未攻击的单位
+    if (phase === 'attack' && u.hasAttacked) continue;
 
     // 获取可激活的技能
     const activatableAbilities = getActivatableAbilities(u, phase, core);

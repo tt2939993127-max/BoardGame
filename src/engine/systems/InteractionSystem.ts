@@ -65,6 +65,19 @@ export interface SimpleChoiceData<T = unknown> {
     sourceId?: string;
     timeout?: number;
     multi?: PromptMultiConfig;
+    /**
+     * 选择目标类型，用于 UI 层决定渲染方式：
+     * - 'base': 高亮棋盘上的候选基地，点击基地完成选择
+     * - 'minion': 高亮棋盘上的候选随从，点击随从完成选择
+     * - undefined / 'generic': 使用通用弹窗选择
+     */
+    targetType?: 'base' | 'minion' | 'generic';
+    /**
+     * 单候选时是否自动解决（跳过玩家选择）。
+     * - true（默认）：强制效果，只有一个候选时自动执行
+     * - false：可选效果或"你可以"类效果，始终让玩家确认
+     */
+    autoResolveIfSingle?: boolean;
 }
 
 /**
@@ -110,6 +123,19 @@ export const INTERACTION_EVENTS = {
 // ============================================================================
 
 /**
+ * createSimpleChoice 的配置参数
+ */
+export interface SimpleChoiceConfig {
+    sourceId?: string;
+    timeout?: number;
+    multi?: PromptMultiConfig;
+    /** 选择目标类型，决定 UI 渲染方式（'base' | 'minion' | 'generic'） */
+    targetType?: 'base' | 'minion' | 'generic';
+    /** 单候选时是否自动解决，默认 true（强制效果自动跳过） */
+    autoResolveIfSingle?: boolean;
+}
+
+/**
  * 创建 simple-choice 交互（替代旧 createPrompt）
  */
 export function createSimpleChoice<T>(
@@ -117,15 +143,27 @@ export function createSimpleChoice<T>(
     playerId: PlayerId,
     title: string,
     options: PromptOption<T>[],
-    sourceId?: string,
+    sourceIdOrConfig?: string | SimpleChoiceConfig,
     timeout?: number,
     multi?: PromptMultiConfig,
 ): InteractionDescriptor<SimpleChoiceData<T>> {
+    // 兼容旧签名：第5个参数可以是 string（sourceId）或 config 对象
+    const config: SimpleChoiceConfig = typeof sourceIdOrConfig === 'string'
+        ? { sourceId: sourceIdOrConfig, timeout, multi }
+        : { ...sourceIdOrConfig, timeout: sourceIdOrConfig?.timeout ?? timeout, multi: sourceIdOrConfig?.multi ?? multi };
     return {
         id,
         kind: 'simple-choice',
         playerId,
-        data: { title, options, sourceId, timeout, multi },
+        data: {
+            title,
+            options,
+            sourceId: config.sourceId,
+            timeout: config.timeout,
+            multi: config.multi,
+            targetType: config.targetType,
+            autoResolveIfSingle: config.autoResolveIfSingle,
+        },
     };
 }
 

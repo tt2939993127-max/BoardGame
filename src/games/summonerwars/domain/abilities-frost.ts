@@ -18,7 +18,7 @@
  */
 
 import type { AbilityDef } from './abilities';
-import { getStructureAt, getUnitAt } from './helpers';
+import { getStructureAt, getUnitAt, getUnitAbilities } from './helpers';
 import { abilityText } from './abilityTextHelper';
 export const FROST_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -61,7 +61,7 @@ export const FROST_ABILITIES: AbilityDef[] = [
         const ssUnit = getUnitAt(ctx.core, ssTargetPos);
         const isAllyStructure = (ssStructure && ssStructure.owner === ctx.playerId)
           || (ssUnit && ssUnit.owner === ctx.playerId
-            && (ssUnit.card.abilities ?? []).includes('mobile_structure'));
+            && getUnitAbilities(ssUnit, ctx.core).includes('mobile_structure'));
         if (!isAllyStructure) {
           return { valid: false, error: '必须选择友方建筑' };
         }
@@ -136,7 +136,7 @@ export const FROST_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'build',
       buttonLabel: 'abilityButtons.iceShards',
       buttonVariant: 'secondary',
@@ -265,7 +265,7 @@ export const FROST_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'move',
       buttonLabel: 'abilityButtons.frostAxe',
       buttonVariant: 'secondary',

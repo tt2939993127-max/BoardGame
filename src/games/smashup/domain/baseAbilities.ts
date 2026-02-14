@@ -11,7 +11,8 @@ import type {
     SmashUpEvent,
     VpAwardedEvent,
     CardsDrawnEvent,
-    CardsDiscardedEvent,
+    CardsDiscardedEvent,
+
     LimitModifiedEvent,
     CardToDeckBottomEvent,
     MinionOnBase,
@@ -20,11 +21,12 @@ import type {
 } from './types';
 import { SU_EVENTS } from './types';
 import { getEffectivePower } from './ongoingModifiers';
-import { drawMadnessCards, destroyMinion, moveMinion } from './abilityHelpers';
+import { drawMadnessCards, destroyMinion, moveMinion, buildBaseTargetOptions } from './abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerExpansionBaseAbilities, registerExpansionBaseInteractionHandlers } from './baseAbilities_expansion';
+import { isBaseAbilitySuppressed } from './ongoingEffects';
 
 // ============================================================================
 // 类型定义
@@ -100,6 +102,8 @@ export function triggerBaseAbility(
     timing: BaseTriggerTiming,
     ctx: BaseAbilityContext
 ): BaseAbilityResult {
+    // 检查基地能力是否被压制（如 alien_jammed_signal）
+    if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
     const executor = baseAbilityRegistry.get(baseDefId)?.get(timing);
     if (!executor) return { events: [] };
     return executor(ctx);
@@ -188,6 +192,8 @@ export function triggerExtendedBaseAbility(
     timing: string,
     ctx: BaseAbilityContext
 ): BaseAbilityResult {
+    // 扩展触发同样遵循基地能力压制（如 alien_jammed_signal）
+    if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
     const executor = extendedRegistry.get(baseDefId)?.get(timing);
     if (!executor) return { events: [] };
     return executor(ctx);
@@ -197,6 +203,7 @@ export function triggerExtendedBaseAbility(
 // 基地能力注册（所有可 Prompt 实现的基地）
 // ============================================================================
 
+/** 注册所有基地能力（幂等） */
 /** 注册所有基地能力（幂等�?*/
 export function registerBaseAbilities(): void {
 
@@ -848,20 +855,49 @@ export function registerBaseInteractionHandlers(): void {
         return { state, events: [destroyMinion(selected.minionUid!, selected.minionDefId!, selected.baseIndex!, selected.ownerId!, 'base_ninja_dojo', timestamp)] };
     });
 
-    // 海盗湾：选择随从后，MVP 自动移动到第一个可用基地
-    // TODO: 链式交互选择目标基地需要更复杂的交互系统支持
-    registerInteractionHandler('base_pirate_cove', (state, _playerId, value, _iData, _random, timestamp) => {
+    // 海盗湾：选择随从后，链式选择目标基地
+    registerInteractionHandler('base_pirate_cove', (state, playerId, value, iData, _random, timestamp) => {
         const selected = value as { skip?: boolean; minionUid?: string; minionDefId?: string; owner?: string };
         if (selected.skip) return { state, events: [] };
-        // MVP：自动移动到第一个可用基地
-        if (state.core.bases.length === 0) return { state, events: [] };
+        const ctx = (iData as any)?.continuationContext as { baseIndex: number };
+        if (!ctx) return { state, events: [] };
+        // 收集可用的目标基地（排除原基地）
+        const baseCandidates: { baseIndex: number; label: string }[] = [];
+        for (let i = 0; i < state.core.bases.length; i++) {
+            if (i === ctx.baseIndex) continue;
+            const bDef = getBaseDef(state.core.bases[i].defId);
+            baseCandidates.push({ baseIndex: i, label: bDef?.name ?? `基地 ${i + 1}` });
+        }
+        // 只有一个目标基地→自动移动
+        if (baseCandidates.length <= 1) {
+            const targetBase = baseCandidates.length === 1 ? baseCandidates[0].baseIndex : 0;
+            return { state, events: [moveMinion(
+                selected.minionUid!, selected.minionDefId!, ctx.baseIndex, targetBase,
+                '海盗湾：移动随从到其他基地', timestamp,
+            )] };
+        }
+        // 多个目标基地→链式交互选择
+        const options = buildBaseTargetOptions(baseCandidates);
+        const interaction = createSimpleChoice(
+            `base_pirate_cove_choose_base_${timestamp}`, playerId,
+            '海盗湾：选择移动到的基地', options as any[], 'base_pirate_cove_choose_base',
+        );
+        (interaction.data as any).continuationContext = {
+            minionUid: selected.minionUid,
+            minionDefId: selected.minionDefId,
+            fromBaseIndex: ctx.baseIndex,
+        };
+        return { state: queueInteraction(state, interaction), events: [] };
+    });
+
+    // 海盗湾：第二步——选择目标基地后执行移动
+    registerInteractionHandler('base_pirate_cove_choose_base', (state, _playerId, value, iData, _random, timestamp) => {
+        const { baseIndex: targetBase } = value as { baseIndex: number };
+        const ctx = (iData as any)?.continuationContext as { minionUid: string; minionDefId: string; fromBaseIndex: number };
+        if (!ctx) return { state, events: [] };
         return { state, events: [moveMinion(
-            selected.minionUid!,
-            selected.minionDefId!,
-            -1,
-            0,
-            '海盗湾：移动随从到其他基地',
-            timestamp,
+            ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, targetBase,
+            '海盗湾：移动随从到其他基地', timestamp,
         )] };
     });
 

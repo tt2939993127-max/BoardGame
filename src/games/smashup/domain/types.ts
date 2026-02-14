@@ -139,8 +139,10 @@ export interface MinionOnBase {
     owner: PlayerId;
     /** 印刷力量（冗余，避免频繁查表） */
     basePower: number;
-    /** 力量修正（+1 指示物等） */
+    /** 力量修正（+1 指示物等，永久） */
     powerModifier: number;
+    /** 临时力量修正（回合结束自动清零，用于嚎叫/增强等"直到回合结束"效果） */
+    tempPowerModifier: number;
     /** 本回合是否已使用天赋 */
     talentUsed: boolean;
     /** 附着的行动卡列表（带 owner 追踪） */
@@ -247,6 +249,8 @@ export interface SmashUpCore {
     sleepMarkedPlayers?: PlayerId[];
     /** 本回合每位玩家移动随从到各基地的次数（用于牧场等"首次移动"触发） */
     minionsMovedToBaseThisTurn?: Record<string, Record<number, number>>;
+    /** 临时临界点修正（回合结束自动清零，baseIndex → delta） */
+    tempBreakpointModifiers?: Record<number, number>;
     /**
      * 待展示的卡牌信息（外星人/密大查看手牌/牌库顶能力，UI 层读取后展示，玩家确认后清除）
      *
@@ -255,7 +259,8 @@ export interface SmashUpCore {
     pendingReveal?: {
         type: 'hand' | 'deck_top';
         targetPlayerId: string;
-        viewerPlayerId: string;
+        /** 查看者玩家 ID，'all' 表示所有玩家可见 */
+        viewerPlayerId: string | 'all';
         cards: { uid: string; defId: string }[];
         reason: string;
     };
@@ -399,6 +404,12 @@ export const SU_EVENTS = {
     REVEAL_DECK_TOP: 'su:reveal_deck_top',
     /** 关闭卡牌展示 */
     REVEAL_DISMISSED: 'su:reveal_dismissed',
+    /** 临时力量修正（回合结束自动清零） */
+    TEMP_POWER_ADDED: 'su:temp_power_added',
+    /** 临界点临时修正（回合结束自动清零） */
+    BREAKPOINT_MODIFIED: 'su:breakpoint_modified',
+    /** 基地牌库洗混 */
+    BASE_DECK_SHUFFLED: 'su:base_deck_shuffled',
 } as const;
 
 export interface MinionPlayedEvent extends GameEvent<typeof SU_EVENTS.MINION_PLAYED> {
@@ -536,7 +547,10 @@ export type SmashUpEvent =
     | MadnessReturnedEvent
     | BaseDeckReorderedEvent
     | RevealHandEvent
-    | RevealDeckTopEvent;
+    | RevealDeckTopEvent
+    | TempPowerAddedEvent
+    | BreakpointModifiedEvent
+    | BaseDeckShuffledEvent;
 
 // ============================================================================
 // 新增事件接口
@@ -747,6 +761,34 @@ export interface RevealDeckTopEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DE
         /** 展示数量 */
         count: number;
         /** 触发原因 */
+        reason: string;
+    };
+}
+
+/** 临时力量修正事件（回合结束自动清零） */
+export interface TempPowerAddedEvent extends GameEvent<typeof SU_EVENTS.TEMP_POWER_ADDED> {
+    payload: {
+        minionUid: string;
+        baseIndex: number;
+        amount: number;
+        reason: string;
+    };
+}
+
+/** 临界点临时修正事件（回合结束自动清零） */
+export interface BreakpointModifiedEvent extends GameEvent<typeof SU_EVENTS.BREAKPOINT_MODIFIED> {
+    payload: {
+        baseIndex: number;
+        delta: number;
+        reason: string;
+    };
+}
+
+/** 基地牌库洗混事件 */
+export interface BaseDeckShuffledEvent extends GameEvent<typeof SU_EVENTS.BASE_DECK_SHUFFLED> {
+    payload: {
+        /** 洗混后的基地牌库 defId 列表（确定性） */
+        newBaseDeckDefIds: string[];
         reason: string;
     };
 }

@@ -12,6 +12,7 @@ import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion,
     getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions,
+    resolveOrPrompt,
 } from '../domain/abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -21,7 +22,7 @@ import { registerInteractionHandler } from '../domain/abilityInteractionHandlers
 /** 这些多管闲事的小鬼 onPlay：选择一个基地，消灭该基地上任意数量的行动卡 */
 function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
     // 找有行动卡的基地
-    const candidates: { baseIndex: number; label: string; actionCount: number }[] = [];
+    const candidates: { baseIndex: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         let actionCount = base.ongoingActions.length;
@@ -31,24 +32,16 @@ function miskatonicThoseMeddlingKids(ctx: AbilityContext): AbilityResult {
         if (actionCount === 0) continue;
         const baseDef = getBaseDef(base.defId);
         const baseName = baseDef?.name ?? `基地 ${i + 1}`;
-        candidates.push({ baseIndex: i, label: `${baseName}（${actionCount}张行动卡）`, actionCount });
+        candidates.push({ baseIndex: i, label: `${baseName}（${actionCount}张行动卡）` });
     }
-    if (candidates.length === 0) return { events: [] };
-    if (candidates.length === 1) {
-        // 只有一个基地有行动卡，直接消灭
-        return destroyAllActionsOnBase(ctx, candidates[0].baseIndex);
-    }
-    // 多个基地，让玩家选择
-    const options = candidates.map((c, i) => ({
-        id: `base-${i}`, label: c.label, value: { baseIndex: c.baseIndex },
-    }));
-    const interaction = createSimpleChoice(
-        `miskatonic_those_meddling_kids_${ctx.now}`, ctx.playerId,
-        '选择一个基地消灭其上所有行动卡',
-        options as any[],
-        'miskatonic_those_meddling_kids',
-    );
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return resolveOrPrompt(ctx, buildBaseTargetOptions(candidates), {
+        id: 'miskatonic_those_meddling_kids',
+        title: '选择一个基地消灭其上所有行动卡',
+        sourceId: 'miskatonic_those_meddling_kids',
+        targetType: 'base',
+        // "消灭任意数量"暗含可选性，始终让玩家确认
+        autoResolveIfSingle: false,
+    }, (value) => destroyAllActionsOnBase(ctx, value.baseIndex));
 }
 
 /** 辅助：消灭指定基地上所有行动卡 */
@@ -115,22 +108,22 @@ function miskatonicMandatoryReading(ctx: AbilityContext): AbilityResult {
         events.push(grantExtraAction(ctx.playerId, 'miskatonic_mandatory_reading', ctx.now));
         return { events };
     }
-    if (opponents.length === 1) {
-        // 只有一个对手，直接选择
-        const madnessEvt = drawMadnessCards(opponents[0], 2, ctx.state, 'miskatonic_mandatory_reading', ctx.now);
-        if (madnessEvt) events.push(madnessEvt);
-        events.push(grantExtraAction(ctx.playerId, 'miskatonic_mandatory_reading', ctx.now));
-        return { events };
-    }
-    // 多个对手，创建选择 Prompt
+    // 数据驱动：强制效果，单对手自动执行
     const options = opponents.map((pid, i) => ({
         id: `opp-${i}`, label: `玩家 ${pid}`, value: { pid },
     }));
-    const interaction = createSimpleChoice(
-        `miskatonic_mandatory_reading_${ctx.now}`, ctx.playerId,
-        '选择一位玩家抽两张疯狂卡', options as any[], 'miskatonic_mandatory_reading',
-    );
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return resolveOrPrompt(ctx, options, {
+        id: 'miskatonic_mandatory_reading',
+        title: '选择一位玩家抽两张疯狂卡',
+        sourceId: 'miskatonic_mandatory_reading',
+        targetType: 'generic',
+    }, (value) => {
+        const evts: SmashUpEvent[] = [];
+        const madnessEvt = drawMadnessCards(value.pid, 2, ctx.state, 'miskatonic_mandatory_reading', ctx.now);
+        if (madnessEvt) evts.push(madnessEvt);
+        evts.push(grantExtraAction(ctx.playerId, 'miskatonic_mandatory_reading', ctx.now));
+        return { events: evts };
+    });
 }
 
 /** 失落的知识 onPlay：手中有≥2张疯狂卡时，抽2张牌 + 额外随从 + 额外行动 */
@@ -308,30 +301,33 @@ function miskatonicBookOfIterTheUnseen(ctx: AbilityContext): AbilityResult {
         if (opponent.hand.length === 0) continue;
         opponents.push({ pid, label: `对手 ${pid}（${opponent.hand.length}张手牌）` });
     }
-    if (opponents.length === 1) {
-        // 只有一个对手，直接展示
-        const target = ctx.state.players[opponents[0].pid];
+    if (opponents.length === 0) return { events };
+    // 数据驱动：强制效果，单对手自动执行
+    const opOptions = opponents.map((o, i) => ({ id: `opp-${i}`, label: o.label, value: { pid: o.pid } }));
+    const resolveResult = resolveOrPrompt(ctx, opOptions, {
+        id: 'miskatonic_book_of_iter_choose_opponent',
+        title: '选择一个对手查看其手牌',
+        sourceId: 'miskatonic_book_of_iter_choose_opponent',
+        targetType: 'generic',
+    }, (value) => {
+        const target = ctx.state.players[value.pid];
         const cards = target.hand.map(c => ({ uid: c.uid, defId: c.defId }));
-        events.push({
+        return { events: [{
             type: SU_EVENTS.REVEAL_HAND,
             payload: {
-                targetPlayerId: opponents[0].pid,
+                targetPlayerId: value.pid,
                 viewerPlayerId: ctx.playerId,
                 cards,
                 reason: 'miskatonic_book_of_iter',
             },
             timestamp: ctx.now,
-        });
-    } else if (opponents.length > 1) {
-        // 多个对手，生成选择 Prompt
-        const options = opponents.map((o, i) => ({ id: `opp-${i}`, label: o.label, value: { pid: o.pid } }));
-        const interaction = createSimpleChoice(
-            `miskatonic_book_of_iter_choose_opponent_${ctx.now}`, ctx.playerId,
-            '选择一个对手查看其手牌', options as any[], 'miskatonic_book_of_iter_choose_opponent',
-        );
-        return { events, matchState: queueInteraction(ctx.matchState, interaction) };
-    }
-    return { events };
+        }] };
+    });
+    // 合并前面的事件（疯狂卡+额外行动）和选择结果
+    return {
+        events: [...events, ...resolveResult.events],
+        matchState: resolveResult.matchState,
+    };
 }
 
 /**

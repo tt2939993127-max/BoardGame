@@ -17,7 +17,10 @@ export interface CriticalImageGateProps {
  * 在关键资源加载完成前，阻塞棋盘渲染。
  *
  * 通过 resolver 返回的 phaseKey 感知游戏阶段变化，
- * 阶段切换时会重新触发预加载（如 setup → playing）。
+ * 阶段切换时会重新触发预加载（如 factionSelect → playing）。
+ *
+ * 关键设计：phaseKey 变化时同步立即阻塞（不等 useEffect），
+ * 避免 Board 在资源未就绪时渲染一帧导致卡图不完整。
  */
 export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     gameId,
@@ -40,6 +43,11 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     }, [enabled, gameId, gameState, locale]);
 
     const runKey = `${gameId ?? ''}:${locale ?? ''}:${phaseKey}:${stateKey}`;
+
+    // 同步判断：runKey 变了但还没完成预加载 → 立即阻塞
+    // 这比 useEffect 里的 setReady(false) 更早生效，避免 children 渲染一帧
+    const needsPreload = enabled && !!gameId && stateKey === 'ready'
+        && lastReadyKeyRef.current !== runKey;
 
     useEffect(() => {
         gameStateRef.current = gameState;
@@ -88,7 +96,8 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             });
     }, [enabled, gameId, locale, phaseKey, runKey, stateKey]);
 
-    if (!ready) {
+    // needsPreload 同步阻塞：phaseKey 变化的同一渲染帧就拦住，不泄漏一帧给 children
+    if (!ready || needsPreload) {
         return <LoadingScreen description={loadingDescription} />;
     }
 

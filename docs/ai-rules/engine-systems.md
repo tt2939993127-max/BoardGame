@@ -109,7 +109,11 @@ Cue 注册表 + 事件总线 + 渲染层 + WebGL Shader 子系统 + FeedbackPack
 
 ### 现有游戏迁移状态
 
-SummonerWars 已完成迁移（引擎层 Registry + ExecutorRegistry）。DiceThrone `CombatAbilityManager`、SmashUp `abilityRegistry.ts` 是历史实现（内部合理但未用引擎层），**新游戏禁止模仿**。
+**能力系统**：SummonerWars 已完成迁移（引擎层 Registry + ExecutorRegistry）。DiceThrone `CombatAbilityManager`、SmashUp `abilityRegistry.ts` 是历史实现（内部合理但未用引擎层），**新游戏禁止模仿**。
+
+**状态/buff 原语（TagContainer / ModifierStack）**：
+- **SummonerWars 历史债务**：`BoardUnit` 上 `tempAbilities`/`boosts`/`extraAttacks`/`healingMode`/`wasAttackedThisTurn`/`originalOwner` 为 ad-hoc 字段，未用 TagContainer，回合清理靠手动解构。**新游戏禁止模仿**，必须用 `createTagContainer()` + `tickDurations`。
+- DiceThrone 已用引擎层 TagContainer；SmashUp 无 buff 系统。
 
 ---
 
@@ -223,7 +227,7 @@ useEffect(() => {
 
 **检查清单**：① 首次挂载是否推进指针到最新？② 后续是否只处理 `id > lastSeenId`？③ 模式 B 的 `useRef` 初始值是否为 `currentEntry?.id ?? null`？④ 同一 Hook 内所有 effect 是否一致？
 
-**参考**：模式 A → `dicethrone/hooks/useCardSpotlight.ts`、`useActiveModifiers.ts`；模式 B → `useAnimationEffects.ts`；音效去重 → `lib/audio/useGameAudio.ts`
+**参考**：模式 A → `dicethrone/hooks/useCardSpotlight.ts`、`useActiveModifiers.ts`、`useAnimationEffects.ts`；模式 B → `lib/audio/useGameAudio.ts`
 
 ---
 
@@ -253,6 +257,16 @@ useEffect(() => {
 ## afterEventsRound 限制（强制）
 
 `FlowSystem.afterEvents` 在 `afterEventsRound > 0` 时传空 events 给 `onAutoContinueCheck`，基于事件的自动推进链单次 `executePipeline` 最多跨一个阶段。测试中 `createInitializedState` 返回 upkeep（非 main1），仍需手动 `cmd('ADVANCE_PHASE')` 推进。详见 `docs/refactor/dicethrone-auto-advance-upkeep-income.md`。
+
+---
+
+## flowHalted 状态追踪（强制）
+
+`FlowSystem` 在 `onPhaseExit` 返回 `halt: true` 时，自动在 `sys.flowHalted` 中设置 `true`；阶段成功推进后设置 `false`。
+
+- **用途**：`onAutoContinueCheck` 中，战斗阶段（如 `offensiveRoll`/`defensiveRoll`）只在 `state.sys.flowHalted === true` 时才尝试自动推进。这样可以精确区分"onPhaseExit halt 后的阻塞清除"和"卡牌效果中的阻塞清除"。
+- **禁止**：在业务数据（如 `PendingBonusDiceSettlement`）中打 `phaseExitHalt` 标记来区分来源。流程控制信息应由引擎层追踪，不应污染业务数据。
+- **所有游戏受益**：新游戏的 `onAutoContinueCheck` 可直接读取 `state.sys.flowHalted` 判断是否处于 halt 恢复状态。
 
 ---
 
@@ -352,10 +366,23 @@ domain/
 - 不同的触发时机（"打出时" vs "之后每当…时"）
 - 需要玩家做出新的选择（"你可以指定一个目标"）
 - 独立的条件→结果对（"如果…则…"）
+- **"可以/可选"语义（强制）**：描述中出现"你可以"/"可选"/"may"时，该效果必须作为独立交互链，且实现必须包含玩家确认 UI（确认/跳过按钮），禁止自动执行。审查时必须验证 UI 层存在确认入口。
 
-**第一步自检（强制）**：拆分完成后，将所有交互链的描述拼接起来，与原文逐句对照。原文中每一句话都必须被至少一条链覆盖，否则拆分不完整，禁止进入第二步。
+**第 1.5 步：逐链拆解原子操作步骤（强制）** — 对每条交互链，将描述文本中的**每个动词短语**拆解为一个原子操作步骤，形成有序步骤列表。审查时必须逐步骤验证代码实现，任何步骤缺失即为 ❌。
 
-> **常见遗漏模式**：一张卡牌的描述包含"即时效果"和"持续/触发效果"两段，只审查了前者。持续效果的后续触发往往是一条完整的独立交互链（触发条件 → 玩家选择 → 执行 → 状态变更），必须单独审查。
+拆解示例：
+- 描述："从你的牌库搜寻一个战术并展示给所有玩家。将它放入你的手中并重洗牌库。"
+- 原子步骤：① 搜索牌库中的行动卡 → ② 玩家选择一张 → ③ 展示给所有玩家（CARD_REVEALED 事件或等效 UI） → ④ 放入手牌（CARDS_DRAWN） → ⑤ 重洗牌库（DECK_RESHUFFLED）
+- 审查时 ①②④ 有实现但 ③⑤ 缺失 = 该链 ❌
+
+> **核心原则**：描述中的每个动词都对应一个可验证的代码行为（事件/状态变更/UI 反馈）。"展示"、"揭示"、"洗牌"、"弃置"、"返回"等动词不是修饰语，每一个都是必须实现的独立步骤。
+
+**第一步自检（强制）**：拆分完成后，将所有交互链的描述拼接起来，与原文逐句对照。原文中每一句话、每个动词短语都必须被至少一条链的至少一个原子步骤覆盖，否则拆分不完整，禁止进入第二步。
+
+> **常见遗漏模式**：
+> - 一张卡牌的描述包含"即时效果"和"持续/触发效果"两段，只审查了前者。持续效果的后续触发往往是一条完整的独立交互链（触发条件 → 玩家选择 → 执行 → 状态变更），必须单独审查。
+> - **多步骤效果只实现了首尾、遗漏中间步骤**：如"搜索→展示→放入手牌→洗牌"只实现了"搜索→放入手牌"，遗漏了"展示"和"洗牌"。这是最常见的审计盲区——中间步骤看似不影响游戏状态，但属于规则完整性要求。
+> - **限定条件被全局化实现丢失**：描述含限定词（"在没有你随从的基地"/"对力量≤3的随从"），但实现使用了不携带约束的全局机制（如 `grantExtraMinion` 增加全局额度），导致限定条件仅在入口检查、执行时不约束。审计时看到"有前置检查+有额度增加"容易误判为 ✅，必须追问"额度使用时限定条件是否仍被强制执行"。
 
 **第二步：逐链追踪八层**
 
@@ -363,9 +390,9 @@ domain/
 |----|----------|
 | 1. 定义层 | 效果在数据定义中声明（AbilityDef/TokenDef/CardDef），且字段值与权威描述一致 |
 | 2. 注册层 | 定义已注册到对应 registry（abilityRegistry/executorRegistry/customActionRegistry），白名单/映射表已同步更新 |
-| 3. 执行层 | 触发/执行逻辑存在（execute/abilityResolver/handler），逻辑与描述语义一致 |
+| 3. 执行层 | 触发/执行逻辑存在（execute/abilityResolver/handler），逻辑与描述语义一致。**限定条件全程约束检查（强制）**：描述中的限定词（"在…的基地"/"对…的随从"/"力量≤X"/"没有你随从的"）是否在执行路径全程被强制约束？仅在入口做前置检查但执行时不约束 = ❌。特别注意：`grantExtra*` 类全局额度增加不携带约束信息，用它实现限定效果必须配合交互流程锁定目标，否则玩家可将额度用在任意位置。 |
 | 4. 状态层 | 状态变更被 reduce 正确持久化 |
-| 5. 验证层 | 是否影响其他命令合法性（validate 放宽/收紧） |
+| 5. 验证层 | 是否影响其他命令合法性（validate 放宽/收紧）。**额度/权限泄漏检查（强制）**：效果给出的额度/权限，玩家能否绕过描述中的限定条件使用？如"在没有你随从的基地额外打出一个随从"→ 若实现为全局 `extraMinion+1`，玩家可在任意基地使用该额度 = ❌。正确做法：通过交互流程（选基地→选随从→直接打出）将限定条件固化在执行路径中，不给玩家绕过的机会。 |
 | 6. UI 层 | 视觉反馈/交互入口/状态提示同步（动态效果必须有 UI 提示） |
 | 7. i18n 层 | 所有面向玩家的文本（技能名/描述/状态提示/按钮文案）在全部语言文件中有对应条目，禁止依赖 fallback 字符串上线 |
 | 8. 测试层 | 端到端测试覆盖"触发→生效→状态正确" |
@@ -377,6 +404,12 @@ domain/
 ### 测试覆盖要求
 
 每条交互链：正向（触发→生效→验证状态）+ 负向（不触发→状态未变）+ 边界（0值/空目标/多次叠加）。**禁止只测注册/写入就判定"已实现"。**
+
+**测试必须验证状态变更（强制）**：事件发射 ≠ 状态生效，必须同时断言 reduce 后的最终状态。
+
+**"可以/可选"效果测试要求（强制）**：正向（确认→生效）+ 负向（跳过→不生效）+ 验证（条件不满足→拒绝）。禁止只测自动触发路径。
+
+**审计反模式详见** `docs/ai-rules/testing-audit.md`「审计反模式清单」节。
 
 ### 产出要求
 

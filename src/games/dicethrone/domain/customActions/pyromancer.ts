@@ -32,29 +32,34 @@ const getFireMasteryCount = (ctx: CustomActionContext): number => {
 // ============================================================================
 
 /**
- * 灵魂燃烧 (Soul Burn) 结算: 根据 base-ability.png 校准
- * 1. 获得 2 烈焰精通
- * 2. 所有对手造成 1x [灵魂/Fiery Soul] 伤害
+ * 灵魂燃烧 (Soul Burn) — FM 获取部分（preDefense 时机）
+ * 获得 2 烈焰精通
  */
-const resolveSoulBurn = (ctx: CustomActionContext): DiceThroneEvent[] => {
-    const events: DiceThroneEvent[] = [];
-    const timestamp = ctx.timestamp;
-
-    // 1. 获得 2 个烈焰精通
+const resolveSoulBurnFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const currentFM = getFireMasteryCount(ctx);
     const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
     const amountToGain = 2;
     const updatedFM = Math.min(currentFM + amountToGain, limit);
 
-    events.push({
+    return [{
         type: 'TOKEN_GRANTED',
         payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: amountToGain, newTotal: updatedFM, sourceAbilityId: ctx.sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
-        timestamp
-    } as TokenGrantedEvent);
+        timestamp: ctx.timestamp
+    } as TokenGrantedEvent];
+};
 
-    // 2. 所有对手造成 1x [灵魂] 伤害
-    const faces = getFaceCounts(getActiveDice(ctx.state));
+/**
+ * 灵魂燃烧 (Soul Burn) — 伤害部分（withDamage 时机）
+ * 所有对手造成 1x [灵魂/Fiery Soul] 伤害
+ * 注意：在 defensiveRoll exit 时执行，此时骰子已被防御方覆盖，
+ * 必须从 pendingAttack.attackDiceFaceCounts 读取攻击方骰面快照
+ */
+const resolveSoulBurnDamage = (ctx: CustomActionContext): DiceThroneEvent[] => {
+    const events: DiceThroneEvent[] = [];
+    // 优先从 pendingAttack 快照读取攻击方骰面（防御阶段骰子已被覆盖）
+    const faces = ctx.state.pendingAttack?.attackDiceFaceCounts
+        ?? getFaceCounts(getActiveDice(ctx.state));
     const dmg = faces[PYROMANCER_DICE_FACE_IDS.FIERY_SOUL] || 0;
 
     if (dmg > 0) {
@@ -64,7 +69,7 @@ const resolveSoulBurn = (ctx: CustomActionContext): DiceThroneEvent[] => {
                 type: 'DAMAGE_DEALT',
                 payload: { targetId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId },
                 sourceCommandType: 'ABILITY_EFFECT',
-                timestamp: timestamp + 0.1 + (idx * 0.01)
+                timestamp: ctx.timestamp + 0.1 + (idx * 0.01)
             } as DamageDealtEvent);
         });
     }
@@ -497,22 +502,23 @@ const resolveIncreaseFMLimit = (ctx: CustomActionContext): DiceThroneEvent[] => 
 // ============================================================================
 
 export function registerPyromancerCustomActions(): void {
-    registerCustomActionHandler('soul-burn-resolve', resolveSoulBurn, { categories: ['resource', 'other'] });
+    registerCustomActionHandler('soul-burn-fm', resolveSoulBurnFM, { categories: ['resource'] });
+    registerCustomActionHandler('soul-burn-damage', resolveSoulBurnDamage, { categories: ['damage'] });
     registerCustomActionHandler('soul-burn-4-resolve', resolveSoulBurn4, { categories: ['resource', 'other'] });
     registerCustomActionHandler('burning-soul-2-resolve', resolveSoulBurn4, { categories: ['resource', 'other'] });
 
-    registerCustomActionHandler('fiery-combo-resolve', resolveFieryCombo, { categories: ['other'] });
+    registerCustomActionHandler('fiery-combo-resolve', resolveFieryCombo, { categories: ['damage', 'resource'] });
     registerCustomActionHandler('fiery-combo-2-resolve', resolveFieryCombo2, { categories: ['damage'] });
     registerCustomActionHandler('hot-streak-2-resolve', resolveFieryCombo2, { categories: ['damage'] });
 
-    registerCustomActionHandler('meteor-resolve', resolveMeteor, { categories: ['other'] });
-    registerCustomActionHandler('meteor-2-resolve', resolveMeteor, { categories: ['other'] });
+    registerCustomActionHandler('meteor-resolve', resolveMeteor, { categories: ['damage', 'resource'] });
+    registerCustomActionHandler('meteor-2-resolve', resolveMeteor, { categories: ['damage', 'resource'] });
 
-    registerCustomActionHandler('burn-down-resolve', (ctx) => resolveBurnDown(ctx, 3, 4), { categories: ['other'] });
-    registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx, 4, 99), { categories: ['other'] });
+    registerCustomActionHandler('burn-down-resolve', (ctx) => resolveBurnDown(ctx, 3, 4), { categories: ['damage', 'resource'] });
+    registerCustomActionHandler('burn-down-2-resolve', (ctx) => resolveBurnDown(ctx, 4, 99), { categories: ['damage', 'resource'] });
 
-    registerCustomActionHandler('ignite-resolve', (ctx) => resolveIgnite(ctx, 4, 2), { categories: ['other'] });
-    registerCustomActionHandler('ignite-2-resolve', (ctx) => resolveIgnite(ctx, 5, 2), { categories: ['other'] });
+    registerCustomActionHandler('ignite-resolve', (ctx) => resolveIgnite(ctx, 4, 2), { categories: ['damage', 'resource'] });
+    registerCustomActionHandler('ignite-2-resolve', (ctx) => resolveIgnite(ctx, 5, 2), { categories: ['damage', 'resource'] });
 
     registerCustomActionHandler('magma-armor-resolve', (ctx) => resolveMagmaArmor(ctx, 1), { categories: ['resource', 'other'] });
     registerCustomActionHandler('magma-armor-2-resolve', (ctx) => resolveMagmaArmor(ctx, 2), { categories: ['resource', 'other'] });

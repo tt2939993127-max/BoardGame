@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, getMinionPower, buildMinionTargetOptions } from '../domain/abilityHelpers';
+import { destroyMinion, getMinionPower, buildMinionTargetOptions, resolveOrPrompt } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDiscardedEvent, CardsDrawnEvent, OngoingDetachedEvent, SmashUpEvent, LimitModifiedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -15,7 +15,6 @@ import { registerProtection, registerRestriction, registerTrigger } from '../dom
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
-import type { MatchState } from '../../../engine/types';
 
 /** 侏儒 onPlay：消灭力量低于己方随从数量的随从 */
 function tricksterGnome(ctx: AbilityContext): AbilityResult {
@@ -25,23 +24,23 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
     const targets = base.minions.filter(
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myMinionCount
     );
-    if (targets.length === 0) return { events: [] };
-    // 单目标自动执�?
-    if (targets.length === 1) {
-        const t = targets[0];
-        return { events: [destroyMinion(t.uid, t.defId, ctx.baseIndex, t.owner, 'trickster_gnome', ctx.now)] };
-    }
     const options = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
         const name = def?.name ?? t.defId;
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    const interaction = createSimpleChoice(
-        `trickster_gnome_${ctx.now}`, ctx.playerId,
-        '选择要消灭的随从（力量低于己方随从数量）', buildMinionTargetOptions(options), 'trickster_gnome',
-    );
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    // 强制效果：消灭一个力量低于己方随从数量的随从，单候选自动执行
+    return resolveOrPrompt(ctx, buildMinionTargetOptions(options), {
+        id: 'trickster_gnome',
+        title: '选择要消灭的随从（力量低于己方随从数量）',
+        sourceId: 'trickster_gnome',
+        targetType: 'minion',
+    }, (value) => {
+        const target = targets.find(t => t.uid === value.minionUid);
+        if (!target) return { events: [] };
+        return { events: [destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, 'trickster_gnome', ctx.now)] };
+    });
 }
 
 /** 带走宝物 onPlay：每个其他玩家随机弃两张手牌 */
@@ -294,8 +293,9 @@ function registerTricksterOngoingEffects(): void {
     });
 
     // 布朗尼：被对手卡牌效果影响时，对手弃两张牌
-    // TODO: 完整实现需要 onAffected trigger timing，当前简化为：
-    // 当 brownie 被消灭或被移动时（最常见的"被影响"场景），触发对手弃牌
+    // 简化实现：覆盖"被消灭"和"被移动"两种最常见的"被影响"场景
+    // 完整实现需要 onAffected trigger timing（在所有"对手效果作用于该随从"的事件后统一触发），
+    // 遗漏场景：被负力量修改、被附着对手行动卡等。优先级低，当前覆盖率已满足大多数对局
     registerTrigger('trickster_brownie', 'onMinionDestroyed', (trigCtx) => {
         if (!trigCtx.triggerMinionDefId || trigCtx.triggerMinionDefId !== 'trickster_brownie') return [];
         // 找到消灭 brownie 的来源玩家（即当前回合玩家，如果不是 brownie 拥有者）

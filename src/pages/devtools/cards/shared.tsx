@@ -266,3 +266,52 @@ export const ToggleChip: React.FC<{
 
 /** 预览卡片组件的 Props 类型（所有卡片组件通用） */
 export type PreviewCardProps = { useRealCards?: boolean; iconColor?: string };
+
+// ============================================================================
+// 自动注册元数据
+// ============================================================================
+
+/**
+ * 特效条目元数据 — 每个预览卡片组件自描述注册信息。
+ *
+ * 卡片文件只需导出 `meta: EffectEntryMeta[]`，
+ * EffectPreview 页面通过 `import.meta.glob` 自动收集，无需手动维护注册表。
+ */
+export interface EffectEntryMeta {
+  /** 唯一 ID */
+  id: string;
+  /** 显示名称 */
+  label: string;
+  /** 图标组件（Lucide 风格） */
+  icon: IconComponent;
+  /** 预览卡片组件 */
+  component: React.FC<PreviewCardProps>;
+  /** 所属分组 ID */
+  group: string;
+  /** 业务用途描述 */
+  usageDesc?: string;
+}
+
+/**
+ * 分组定义 — 描述一个特效分类。
+ */
+export interface EffectGroupDef {
+  id: string;
+  label: string;
+  icon: IconComponent;
+  colorClass: string;
+  /** 排序权重，越小越靠前 */
+  order: number;
+}
+
+/** 预置分组定义（卡片文件通过 group ID 引用） */
+export const EFFECT_GROUP_DEFS: EffectGroupDef[] = [
+  { id: 'particle', label: '粒子类', icon: Flame, colorClass: 'text-purple-400', order: 0 },
+  { id: 'impact', label: '打击类', icon: Swords, colorClass: 'text-rose-400', order: 1 },
+  { id: 'projectile', label: '投射类', icon: Send, colorClass: 'text-cyan-400', order: 2 },
+  { id: 'ui', label: 'UI 类', icon: Sparkles, colorClass: 'text-amber-400', order: 3 },
+  { id: 'loading', label: '加载类', icon: Hourglass, colorClass: 'text-emerald-400', order: 4 },
+];
+
+// 分组定义需要的图标（在此统一导入，避免每个卡片文件重复导入分组图标）
+import { Flame, Swords, Send, Sparkles, Hourglass } from 'lucide-react';

@@ -412,13 +412,13 @@ export function registerExpansionBaseAbilities(): void {
     });
 
     // ── 九命之屋（House of Nine Lives）──────────────────────────
-    // "当你的一个随从在其他基地被消灭时，你可以将它移动到这里�?
-    // 通过 registerInterceptor 注册，拦�?MINION_DESTROYED 事件
+    // "当你的一个随从在其他基地被消灭时，你可以将它移动到这里"
+    // 通过 registerInterceptor 注册，拦截 MINION_DESTROYED 事件
     registerInterceptor('base_house_of_nine_lives', (state, event) => {
         if (event.type !== SU_EVENTS.MINION_DESTROYED) return undefined;
         const { minionUid, minionDefId, fromBaseIndex } = (event as MinionDestroyedEvent).payload;
 
-        // 找到九命之屋的基地索�?
+        // 找到九命之屋的基地索引
         let houseBaseIndex = -1;
         for (let i = 0; i < state.bases.length; i++) {
             if (state.bases[i].defId === 'base_house_of_nine_lives') {
@@ -426,15 +426,16 @@ export function registerExpansionBaseAbilities(): void {
                 break;
             }
         }
-        // 九命之屋不在�?�?不拦�?
+        // 九命之屋不在场→不拦截
         if (houseBaseIndex === -1) return undefined;
 
-        // 随从在九命之屋本身被消灭 �?不拦截（只拦截其他基地）
+        // 随从在九命之屋本身被消灭→不拦截（只拦截其他基地）
         if (fromBaseIndex === houseBaseIndex) return undefined;
 
-        // 将消灭替换为移动到九命之�?
-        // MVP：自动移动，不生�?Prompt（与海盗 buccaneer 拦截器模式一致）
-        // TODO: 完整实现应生�?Prompt 让玩家选择是否移动，需要异步拦截机制支�?
+        // 规则："你可以将它移动到这里"——自动移动（有意简化）
+        // 完整实现需要异步拦截机制（interceptEvent 返回 matchState + 交互），
+        // 前置条件：扩展引擎层 DomainCore.interceptEvent 签名支持返回 { event, matchState }
+        // 当前自动移动覆盖绝大多数场景，仅在玩家故意想触发 onDestroy 效果时行为不同
         return moveMinion(minionUid, minionDefId, fromBaseIndex, houseBaseIndex, '九命之屋：随从移动到九命之屋而非被消灭', event.timestamp);
     });
 

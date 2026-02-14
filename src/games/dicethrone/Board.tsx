@@ -662,18 +662,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         return () => clearTimeout(timer);
     }, [G.activatingAbilityId, G.pendingAttack?.sourceAbilityId, triggerAbilityGlow]);
 
-    const damageStreamEntry = React.useMemo(() => {
-        const entries = rawG.sys?.eventStream?.entries ?? [];
-        for (let i = entries.length - 1; i >= 0; i -= 1) {
-            const entry = entries[i];
-            if ((entry.event as { type?: string }).type === 'DAMAGE_DEALT') {
-                return entry;
-            }
-        }
-        return undefined;
-    }, [rawG.sys?.eventStream?.entries]);
-
     // 使用 useAnimationEffects Hook 管理飞行动画效果（基于 FX 引擎）
+    // 事件流消费采用模式 A（单一游标），统一处理伤害/治疗等事件
     useAnimationEffects({
         fxBus,
         players: { player, opponent },
@@ -688,7 +678,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         getEffectStartPos,
         locale,
         statusIconAtlas,
-        damageStreamEntry,
         eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
     });
 

@@ -18,6 +18,7 @@ import { SW_FX } from './fxSetup';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { resolveDamageSoundKey, resolveDestroySoundKey } from '../audio.config';
 import type { UseVisualSequenceGateReturn } from '../../../components/game/framework/hooks/useVisualSequenceGate';
+import type { RapidFireModeState } from './modeTypes';
 
 // ============================================================================
 // 类型定义
@@ -171,6 +172,9 @@ export function useGameEvents({
   // 攻击后技能模式（念力/高阶念力/读心传念）
   const [afterAttackAbilityMode, setAfterAttackAbilityMode] = useState<AfterAttackAbilityModeState | null>(null);
 
+  // 连续射击确认模式
+  const [rapidFireMode, setRapidFireMode] = useState<RapidFireModeState | null>(null);
+
   // 阶段切换时清理技能模式
   useEffect(() => {
     // 移动后技能（ancestral_bond, spirit_bond, structure_shift, frost_axe）只在移动阶段有效
@@ -234,6 +238,7 @@ export function useGameEvents({
       if (entries.length > 0) {
         lastSeenEventId.current = entries[entries.length - 1].id;
       }
+      console.log('[SW-EVENT-DEBUG] firstMount skip, lastSeenEventId=', lastSeenEventId.current, 'entries=', entries.length);
       return;
     }
 
@@ -241,6 +246,16 @@ export function useGameEvents({
       entries,
       lastSeenEventId.current
     );
+
+    console.log('[SW-EVENT-DEBUG] delta', {
+      entriesLen: entries.length,
+      lastSeenBefore: lastSeenEventId.current,
+      newEntriesLen: newEntries.length,
+      nextLastSeenId,
+      shouldReset,
+      entryIds: entries.map(e => e.id),
+      newEntryTypes: newEntries.map(e => e.event.type),
+    });
 
     if (shouldReset) {
       pendingAttackRef.current = null;
@@ -253,6 +268,7 @@ export function useGameEvents({
       setSoulTransferMode(null);
       setMindCaptureMode(null);
       setAfterAttackAbilityMode(null);
+      setRapidFireMode(null);
       gateRef.current.reset();
     }
 
@@ -403,6 +419,19 @@ export function useGameEvents({
             };
             gateRef.current.scheduleInteraction(() => {
               setAfterAttackAbilityMode(captured);
+            });
+          }
+        }
+        // 连续射击：攻击后可选消耗充能进行额外攻击
+        if (p.abilityId === 'rapid_fire_extra_attack') {
+          const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
+          if (unit && unit.owner === myPlayerId && (unit.boosts ?? 0) >= 1) {
+            const captured = {
+              sourceUnitId: p.sourceUnitId,
+              sourcePosition: p.sourcePosition,
+            };
+            gateRef.current.scheduleInteraction(() => {
+              setRapidFireMode(captured);
             });
           }
         }
@@ -622,6 +651,8 @@ export function useGameEvents({
     setMindCaptureMode,
     afterAttackAbilityMode,
     setAfterAttackAbilityMode,
+    rapidFireMode,
+    setRapidFireMode,
     pendingAttackRef,
     handleCloseDiceResult,
     clearPendingAttack,

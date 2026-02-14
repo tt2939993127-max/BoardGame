@@ -478,9 +478,9 @@ export function resolveEffect(
     case 'pushPull': {
       const targets = resolveTargetUnits(effect.target, ctx);
       for (const target of targets) {
-        // 检查目标是否有稳固（stable）技能
-        const targetAbilities = target.card.abilities ?? [];
-        if (targetAbilities.includes('stable')) {
+        // 检查目标是否有稳固（stable）技能（含交缠颂歌共享）
+        const targetAbilityDefs = getUnitAbilities(target, ctx.state);
+        if (targetAbilityDefs.some(a => a.id === 'stable')) {
           // 稳固免疫推拉，不生成事件
           continue;
         }
@@ -733,6 +733,7 @@ export function calculateEffectiveStrength(
 ): number {
   let strength = unit.card.strength;
   const abilities = getUnitAbilities(unit, state);
+  const abilityIds = new Set(abilities.map(a => a.id));
 
   // 附加事件卡加成（如狱火铸剑 +2）
   if (unit.attachedCards) {
@@ -816,12 +817,12 @@ export function calculateEffectiveStrength(
   }
 
   // 冲锋加成：野兽骑手冲锋3+格时+1战力（通过 boosts 标记）
-  if ((unit.card.abilities ?? []).includes('charge') && unit.boosts > 0) {
+  if (abilityIds.has('charge') && unit.boosts > 0) {
     strength += unit.boosts;
   }
 
   // 城塞精锐：2格内每有一个友方城塞单位+1战力
-  if ((unit.card.abilities ?? []).includes('fortress_elite')) {
+  if (abilityIds.has('fortress_elite')) {
     for (let row = 0; row < BOARD_ROWS; row++) {
       for (let col = 0; col < BOARD_COLS; col++) {
         const other = state.board[row]?.[col]?.unit;
@@ -835,13 +836,13 @@ export function calculateEffectiveStrength(
   }
 
   // 辉光射击：每2点魔力+1战力
-  if ((unit.card.abilities ?? []).includes('radiant_shot')) {
+  if (abilityIds.has('radiant_shot')) {
     const playerMagic = state.players[unit.owner]?.magic ?? 0;
     strength += Math.floor(playerMagic / 2);
   }
 
   // 冰霜飞弹：相邻每有一个友方建筑+1战力
-  if ((unit.card.abilities ?? []).includes('frost_bolt')) {
+  if (abilityIds.has('frost_bolt')) {
     const dirs = [
       { row: -1, col: 0 }, { row: 1, col: 0 },
       { row: 0, col: -1 }, { row: 0, col: 1 },
@@ -854,14 +855,14 @@ export function calculateEffectiveStrength(
       if (adjCell?.structure && adjCell.structure.owner === unit.owner) {
         strength += 1;
       } else if (adjCell?.unit && adjCell.unit.owner === unit.owner
-        && (adjCell.unit.card.abilities ?? []).includes('mobile_structure')) {
+        && getUnitAbilities(adjCell.unit, state).map(a => a.id).includes('mobile_structure')) {
         strength += 1;
       }
     }
   }
 
   // 高阶冰霜飞弹：2格内每有一个友方建筑+1战力
-  if ((unit.card.abilities ?? []).includes('greater_frost_bolt')) {
+  if (abilityIds.has('greater_frost_bolt')) {
     for (let row = 0; row < BOARD_ROWS; row++) {
       for (let col = 0; col < BOARD_COLS; col++) {
         const dist = manhattanDistance(unit.position, { row, col });
@@ -870,7 +871,7 @@ export function calculateEffectiveStrength(
         if (cell?.structure && cell.structure.owner === unit.owner) {
           strength += 1;
         } else if (cell?.unit && cell.unit.owner === unit.owner
-          && (cell.unit.card.abilities ?? []).includes('mobile_structure')) {
+          && getUnitAbilities(cell.unit, state).map(a => a.id).includes('mobile_structure')) {
           strength += 1;
         }
       }
@@ -902,7 +903,8 @@ export function getStrengthBoostForDisplay(
   const effective = calculateEffectiveStrength(unit, state);
   let delta = Math.max(0, effective - unit.card.strength);
   // 冲锋加成已由蓝点指示器展示，扣除
-  if ((unit.card.abilities ?? []).includes('charge') && unit.boosts > 0) {
+  const displayAbilities = getUnitAbilities(unit, state);
+  if (displayAbilities.some(a => a.id === 'charge') && unit.boosts > 0) {
     delta = Math.max(0, delta - unit.boosts);
   }
   return delta;

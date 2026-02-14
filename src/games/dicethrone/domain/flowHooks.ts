@@ -369,16 +369,14 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             return undefined;
         }
 
-        // ====== 3. 战斗阶段（offensiveRoll/defensiveRoll）：阻塞清除后自动推进 ======
-        // 这些阶段的 onPhaseExit 可能因 TOKEN_RESPONSE / CHOICE / BONUS_DICE 而 halt，
-        // 当阻塞全部清除后需要重新尝试 ADVANCE_PHASE
+        // ====== 3. 战斗阶段（offensiveRoll/defensiveRoll）：仅在 flowHalted 时自动推进 ======
+        // onPhaseExit 因 TOKEN_RESPONSE / CHOICE / BONUS_DICE 而 halt 时，
+        // FlowSystem 会设置 sys.flowHalted = true。
+        // 当阻塞全部清除后重新尝试 ADVANCE_PHASE。
+        // 卡牌效果中的 BONUS_DICE_SETTLED / CHOICE_RESOLVED 等不会设置 flowHalted，
+        // 因此不会误触发阶段推进。
         if (phase === 'offensiveRoll' || phase === 'defensiveRoll') {
-            const hasBlockingResolved = events.some(e =>
-                e.type === 'TOKEN_RESPONSE_CLOSED'
-                || e.type === 'CHOICE_RESOLVED'
-                || e.type === 'BONUS_DICE_SETTLED'
-            );
-            if (!hasBlockingResolved) return undefined;
+            if (!state.sys.flowHalted) return undefined;
 
             // 确认所有阻塞已清除
             const hasActiveInteraction = state.sys.interaction?.current !== undefined;

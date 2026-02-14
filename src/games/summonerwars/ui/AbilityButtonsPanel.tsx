@@ -12,6 +12,7 @@ import { SW_COMMANDS, SummonerWarsDomain } from '../domain';
 import type { PlayerId } from '../domain/types';
 import { abilityRegistry } from '../domain/abilities';
 import type { AbilityDef, AbilityUIContext } from '../domain/abilities';
+import { getUnitAbilities } from '../domain/helpers';
 import { GameButton } from './GameButton';
 
 interface AbilityMode {
@@ -51,7 +52,7 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
   const unit = cell?.unit;
   if (!unit || unit.owner !== myPlayerId) return null;
 
-  const abilities = unit.card.abilities ?? [];
+  const abilities = getUnitAbilities(unit, core);
   const playerId = myPlayerId as PlayerId;
 
   // 构建 UI 上下文

@@ -321,6 +321,8 @@ export interface SystemState {
     turnNumber: number;
     /** 当前阶段（单一权威；没有阶段概念的游戏使用空字符串） */
     phase: string;
+    /** FlowSystem: onPhaseExit 返回 halt 后置为 true，阶段成功推进后置为 false */
+    flowHalted?: boolean;
 }
 
 // ============================================================================

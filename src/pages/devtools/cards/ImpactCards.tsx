@@ -12,7 +12,7 @@ import { ImpactContainer } from '../../../components/common/animations/ImpactCon
 import { DamageFlash } from '../../../components/common/animations/DamageFlash';
 import { RiftSlash, useRiftSlash, RIFT_PRESETS } from '../../../components/common/animations/RiftSlash';
 import {
-  type PreviewCardProps,
+  type PreviewCardProps, type EffectEntryMeta,
   EffectCard, TriggerButton, CardSprite, ToggleChip,
   usePerfCounter, useEffectTrigger,
 } from './shared';
@@ -265,3 +265,15 @@ export const DamageFlashCard: React.FC<PreviewCardProps> = ({ useRealCards = tru
     </EffectCard>
   );
 };
+
+// ============================================================================
+// 自动注册元数据
+// ============================================================================
+
+export const meta: EffectEntryMeta[] = [
+  { id: 'shake', label: '震动+钝帧', icon: Bomb, component: ShakeHitStopCard, group: 'impact', usageDesc: '骰铸王座·受击震动 / 召唤师战争·棋格受击' },
+  { id: 'slash', label: '弧形刀光', icon: Swords, component: SlashCard, group: 'impact', usageDesc: '暂未接入业务' },
+  { id: 'rift', label: '次元裂隙', icon: Aperture, component: RiftSlashCard, group: 'impact', usageDesc: '受伤反馈·斜切视觉（DamageFlash 内部）' },
+  { id: 'impactCombo', label: '打击感组合', icon: Hammer, component: ImpactCard, group: 'impact', usageDesc: '测试台·自由组合各效果' },
+  { id: 'dmgflash', label: '受伤反馈', icon: Droplets, component: DamageFlashCard, group: 'impact', usageDesc: '召唤师战争·伤害反馈覆盖层' },
+];

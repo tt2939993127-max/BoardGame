@@ -112,7 +112,7 @@ describe('卡牌展示系统', () => {
                     viewerPlayerId: '0',
                     cards: [{ uid: 'c10', defId: 'pirate_saucy_wench' }],
                     count: 1,
-                    reason: 'alien_scout_ship',
+                    reason: 'alien_probe',
                 },
                 timestamp: 200,
             };
@@ -121,7 +121,7 @@ describe('卡牌展示系统', () => {
             expect(newState.pendingReveal).toBeDefined();
             expect(newState.pendingReveal!.type).toBe('deck_top');
             expect(newState.pendingReveal!.cards).toHaveLength(1);
-            expect(newState.pendingReveal!.reason).toBe('alien_scout_ship');
+            expect(newState.pendingReveal!.reason).toBe('alien_probe');
         });
     });
 

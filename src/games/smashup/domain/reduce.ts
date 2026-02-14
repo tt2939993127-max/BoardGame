@@ -24,6 +24,9 @@ import type {
     BaseReplacedEvent,
     RevealHandEvent,
     RevealDeckTopEvent,
+    TempPowerAddedEvent,
+    BreakpointModifiedEvent,
+    BaseDeckShuffledEvent,
     MinionOnBase,
     CardInstance,
     BaseInPlay,
@@ -116,6 +119,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 owner: playerId,
                 basePower: power,
                 powerModifier: 0,
+                tempPowerModifier: 0,
                 talentUsed: false,
                 attachedActions: [],
             };
@@ -147,6 +151,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const card = player.hand.find(c => c.uid === cardUid);
             const def = card ? getCardDef(card.defId) : undefined;
             const isOngoing = def && def.type === 'action' && (def as ActionCardDef).subtype === 'ongoing';
+            const isSpecial = def && def.type === 'action' && (def as ActionCardDef).subtype === 'special';
 
             const newHand = player.hand.filter(c => c.uid !== cardUid);
             // ongoing 行动卡不进弃牌堆（由 ONGOING_ATTACHED 处理）
@@ -159,7 +164,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         ...player,
                         hand: newHand,
                         discard: newDiscard,
-                        actionsPlayed: player.actionsPlayed + 1,
+                        // Special 卡不消耗行动额度（规则：打出 Special 不算作你的行动）
+                        actionsPlayed: isSpecial ? player.actionsPlayed : player.actionsPlayed + 1,
                     },
                 },
             };
@@ -327,12 +333,13 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.TURN_STARTED: {
             const { playerId, turnNumber } = event.payload;
             const player = state.players[playerId];
-            // 重置天赋使用状态
+            // 重置天赋使用状态 + 清零临时力量修正
             const newBases = state.bases.map(base => ({
                 ...base,
                 minions: base.minions.map(m => ({
                     ...m,
                     talentUsed: m.controller === playerId ? false : m.talentUsed,
+                    tempPowerModifier: 0,
                 })),
             }));
             // 检查沉睡印记：被标记的玩家本回合 actionLimit 设为 0
@@ -350,6 +357,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 turnDestroyedMinions: [],
                 // 清空本回合移动追踪
                 minionsMovedToBaseThisTurn: undefined,
+                // 清空临时临界点修正
+                tempBreakpointModifiers: undefined,
                 sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
                 players: {
                     ...state.players,
@@ -527,6 +536,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                             controller: card.owner,
                             basePower: minionDef?.power ?? 0,
                             powerModifier: 0,
+                            tempPowerModifier: 0,
                             attachedActions: [],
                         };
                         // 从弃牌堆移除
@@ -927,6 +937,41 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 ...state,
                 pendingReveal: undefined,
             };
+        }
+
+        // 临时力量修正（回合结束自动清零）
+        case SU_EVENTS.TEMP_POWER_ADDED: {
+            const { minionUid, baseIndex, amount } = (event as TempPowerAddedEvent).payload;
+            const newBases = state.bases.map((base, i) => {
+                if (i !== baseIndex) return base;
+                return {
+                    ...base,
+                    minions: base.minions.map(m => {
+                        if (m.uid !== minionUid) return m;
+                        return { ...m, tempPowerModifier: (m.tempPowerModifier ?? 0) + amount };
+                    }),
+                };
+            });
+            return { ...state, bases: newBases };
+        }
+
+        // 临界点临时修正（回合结束自动清零）
+        case SU_EVENTS.BREAKPOINT_MODIFIED: {
+            const { baseIndex, delta } = (event as BreakpointModifiedEvent).payload;
+            const prev = state.tempBreakpointModifiers ?? {};
+            return {
+                ...state,
+                tempBreakpointModifiers: {
+                    ...prev,
+                    [baseIndex]: (prev[baseIndex] ?? 0) + delta,
+                },
+            };
+        }
+
+        // 基地牌库洗混
+        case SU_EVENTS.BASE_DECK_SHUFFLED: {
+            const { newBaseDeckDefIds } = (event as BaseDeckShuffledEvent).payload;
+            return { ...state, baseDeck: newBaseDeckDefIds };
         }
 
         default:

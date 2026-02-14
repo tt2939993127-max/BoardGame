@@ -3,7 +3,7 @@
  *
  * 通过 GameTestRunner 走完整管线验证技能效果：
  * 1. fireball-3 — 3 火 → 4 伤害 + 1 火焰精通（可防御）
- * 2. soul-burn — 2 焚魂 → +2 FM + 焚魂数×1 伤害（跳过防御）
+ * 2. soul-burn — 2 焚魂 → +2 FM(preDefense) + 焚魂数×1 伤害(withDamage)（可防御）
  * 3. meteor — 4 陨石 → 不可防御：眩晕 + +2 FM + FM 伤害 + 2 全体伤害
  * 4. ultimate-inferno — 5 陨石 → 终极：击倒 + 燃烧 + 3 FM + 12 伤害 + 2 全体伤害
  *
@@ -11,7 +11,8 @@
  * - 炎术士骰面：1,2,3→fire  4→magma  5→fiery_soul  6→meteor
  * - FIRE_MASTERY 无 activeUse → 不触发 TOKEN_RESPONSE_REQUESTED
  * - magma-armor 基础版投 1 骰（diceCount=1），不生成 displayOnly settlement
- * - 多数技能使用 custom action（target: 'self'）→ playerAbilityHasDamage=false → 跳过防御
+ * - 多数纯 buff 技能使用 custom action（target: 'self'，categories 全为 resource/token）→ 跳过防御
+ * - soul-burn 拆分为 FM(preDefense) + 伤害(withDamage)，伤害从 pendingAttack.attackDiceFaceCounts 读取骰面
  */
 
 import { describe, it, expect } from 'vitest';
@@ -116,15 +117,20 @@ describe('炎术士 GTR 技能覆盖', () => {
     });
 
     // ========================================================================
-    // soul-burn — 焚魂（2 焚魂 → custom: +2 FM + 焚魂数×1 伤害）
-    // custom action target='self' → playerAbilityHasDamage=false → 跳过防御
+    // soul-burn — 焚魂（2 焚魂 → FM获取(preDefense) + 焚魂数×1 伤害(withDamage)）
+    // 修复：拆分为两个 effect，FM 在 preDefense 结算，伤害在 withDamage 结算
+    // 伤害 target='opponent' → playerAbilityHasDamage=true → 进入防御阶段
     // ========================================================================
     describe('焚魂 (soul-burn)', () => {
-        it('2 焚魂获得 2 FM + 造成焚魂数伤害（跳过防御）', () => {
+        it('2 焚魂获得 2 FM + 造成焚魂数伤害（经过防御阶段）', () => {
             // 进攻骰: [5,5,1,4,6] → 2 fiery_soul + 1 fire + 1 magma + 1 meteor
-            // soul-burn-resolve: +2 FM, 然后按骰面上 fiery_soul 数量造成伤害 = 2
-            // 流程：offensiveRoll exit → custom action → 跳过防御 → main2
-            const random = createQueuedRandom([5, 5, 1, 4, 6]);
+            // soul-burn-fm: +2 FM (preDefense)
+            // soul-burn-damage: 按骰面上 fiery_soul 数量造成伤害 = 2 (withDamage)
+            // 防御骰: [6,6,6,6,6] → 5 meteor（magma-armor 投 1 骰）
+            // magma-armor 额外骰: 消耗 1 个 random → 值 6 → meteor → 无效果
+            // 流程：offensiveRoll exit → preDefense: +2 FM → isDefendable=true → defensiveRoll
+            //   → magma-armor 投 1 骰 → 2 伤害 → main2
+            const random = createQueuedRandom([5, 5, 1, 4, 6, 6, 6, 6, 6, 6, 6]);
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain, systems: testSystems,
                 playerIds: ['0', '1'], random,
@@ -137,7 +143,10 @@ describe('炎术士 GTR 技能覆盖', () => {
                     cmd('ROLL_DICE', '0'),
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'soul-burn' }),
-                    cmd('ADVANCE_PHASE', '0'),       // offensiveRoll exit → main2
+                    cmd('ADVANCE_PHASE', '0'),       // → defensiveRoll
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'),       // defensiveRoll exit → main2
                 ],
                 expect: {
                     turnPhase: 'main2',

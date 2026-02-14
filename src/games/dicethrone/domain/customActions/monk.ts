@@ -341,19 +341,19 @@ export function registerMonkCustomActions(): void {
         categories: ['resource'],
     });
     registerCustomActionHandler('meditation-damage', handleMeditationDamage, {
-        categories: ['other'],
+        categories: ['damage'],
     });
     registerCustomActionHandler('meditation-2-taiji', handleMeditationTaiji, {
         categories: ['resource'],
     });
     registerCustomActionHandler('meditation-2-damage', handleMeditationDamage, {
-        categories: ['other'],
+        categories: ['damage'],
     });
     registerCustomActionHandler('meditation-3-taiji', handleMeditation3Taiji, {
         categories: ['resource', 'choice'],
     });
     registerCustomActionHandler('meditation-3-damage', handleMeditationDamage, {
-        categories: ['other'],
+        categories: ['damage'],
     });
 
     // --- 技能效果相关 ---
@@ -370,10 +370,10 @@ export function registerMonkCustomActions(): void {
         categories: ['resource'],
     });
     registerCustomActionHandler('thunder-strike-roll-damage', handleThunderStrikeRollDamage, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage'],
     });
     registerCustomActionHandler('thunder-strike-2-roll-damage', handleThunderStrike2RollDamage, {
-        categories: ['dice', 'other'],
+        categories: ['dice', 'damage'],
     });
 
     // --- 资源相关 ---

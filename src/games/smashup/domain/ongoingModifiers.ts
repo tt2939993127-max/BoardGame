@@ -147,14 +147,15 @@ export function getOngoingPowerModifier(
 /**
  * 获取随从的有效力量（含持续修正）
  * 
- * = basePower + powerModifier（指示物） + ongoingModifier（持续能力）
+ * = basePower + powerModifier（永久指示物） + tempPowerModifier（临时，回合结束清零） + ongoingModifier（持续能力）
  */
 export function getEffectivePower(
     state: SmashUpCore,
     minion: MinionOnBase,
     baseIndex: number
 ): number {
-    return minion.basePower + minion.powerModifier + getOngoingPowerModifier(state, minion, baseIndex);
+    // 力量最低为 0（规则：睡眠孢子等负面修正不能使力量低于 0）
+    return Math.max(0, minion.basePower + minion.powerModifier + (minion.tempPowerModifier ?? 0) + getOngoingPowerModifier(state, minion, baseIndex));
 }
 
 /**
@@ -184,9 +185,9 @@ export function getTotalEffectivePowerOnBase(
 }
 
 /**
- * 获取基地的有效临界点（含持续修正）
+ * 获取基地的有效临界点（含持续修正 + 临时修正）
  * 
- * = baseDef.breakpoint + 所有临界点修正
+ * = baseDef.breakpoint + 持续修正 + 临时修正（回合结束清零）
  */
 export function getEffectiveBreakpoint(
     state: SmashUpCore,
@@ -197,17 +198,20 @@ export function getEffectiveBreakpoint(
     const baseDef = getBaseDef(base.defId);
     if (!baseDef) return Infinity;
 
-    if (breakpointModifierRegistry.length === 0) return baseDef.breakpoint;
-
     let total = 0;
-    for (const entry of breakpointModifierRegistry) {
-        const ctx: BreakpointModifierContext = {
-            state,
-            baseIndex,
-            base,
-            originalBreakpoint: baseDef.breakpoint,
-        };
-        total += entry.modifier(ctx);
+    if (breakpointModifierRegistry.length > 0) {
+        for (const entry of breakpointModifierRegistry) {
+            const ctx: BreakpointModifierContext = {
+                state,
+                baseIndex,
+                base,
+                originalBreakpoint: baseDef.breakpoint,
+            };
+            total += entry.modifier(ctx);
+        }
     }
-    return baseDef.breakpoint + total;
+
+    // 加上临时临界点修正（如 dino_rampage）
+    const tempDelta = state.tempBreakpointModifiers?.[baseIndex] ?? 0;
+    return Math.max(0, baseDef.breakpoint + total + tempDelta);
 }

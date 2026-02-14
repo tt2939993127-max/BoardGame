@@ -59,7 +59,7 @@ export function registerElderThingAbilities(): void {
     // 郦威奇恐怖：回合结束时消灭附着了此卡的随从
     registerTrigger('elder_thing_dunwich_horror', 'onTurnEnd', elderThingDunwichHorrorTrigger);
     // 力量的代价：基地计分前按对手疑狂卡数给己方随�?力量
-    registerTrigger('elder_thing_the_price_of_power', 'beforeScoring', elderThingPriceOfPowerBeforeScoring);
+    registerAbility('elder_thing_the_price_of_power', 'special', elderThingPriceOfPowerSpecial);
     // 远古之物：不收回受对手卡牌影响（保护 destroy + move�?
     registerProtection('elder_thing_elder_thing', 'destroy', elderThingProtectionChecker);
     registerProtection('elder_thing_elder_thing', 'move', elderThingProtectionChecker);
@@ -340,7 +340,7 @@ function elderThingShoggoth(ctx: AbilityContext): AbilityResult {
         { id: 'decline', label: '拒绝（被消灭一个随从）', value: { choice: 'decline' } },
     ];
     const interaction = createSimpleChoice(
-        `elder_thing_shoggoth_opponent_${ctx.now}`, ctx.playerId,
+        `elder_thing_shoggoth_opponent_${ctx.now}`, opponents[0],
         '修格斯：你可以抽一张疯狂卡，否则你在此基地的一个随从将被消灭', options as any[], 'elder_thing_shoggoth_opponent',
     );
     (interaction.data as any).continuationContext = {
@@ -398,7 +398,7 @@ export function registerElderThingInteractionHandlers(): void {
         return { state, events };
     });
 
-    registerInteractionHandler('elder_thing_shoggoth_opponent', (state, playerId, value, iData, _random, timestamp) => {
+    registerInteractionHandler('elder_thing_shoggoth_opponent', (state, _playerId, value, iData, _random, timestamp) => {
         const { choice } = value as { choice: string };
         const ctx = (iData as any)?.continuationContext as { baseIndex: number; opponents: string[]; opponentIdx: number; targetPlayerId: string };
         if (!ctx) return { state, events: [] };
@@ -419,12 +419,25 @@ export function registerElderThingInteractionHandlers(): void {
             }
         }
 
-        // TODO: 链式垂询下一个对手需要更复杂的交互系统支持，MVP 先自动处理剩余对手
+        // 链式垂询下一个对手
         const nextIdx = ctx.opponentIdx + 1;
-        for (let i = nextIdx; i < ctx.opponents.length; i++) {
-            const targetPid = ctx.opponents[i];
-            const madEvt = drawMadnessCards(targetPid, 1, state.core, 'elder_thing_shoggoth', timestamp);
-            if (madEvt) events.push(madEvt);
+        if (nextIdx < ctx.opponents.length) {
+            const nextPid = ctx.opponents[nextIdx];
+            const options = [
+                { id: 'draw_madness', label: '抽一张疯狂卡', value: { choice: 'draw_madness' } },
+                { id: 'decline', label: '拒绝（被消灭一个随从）', value: { choice: 'decline' } },
+            ];
+            const interaction = createSimpleChoice(
+                `elder_thing_shoggoth_opponent_${nextIdx}_${timestamp}`, nextPid,
+                '修格斯：你可以抽一张疯狂卡，否则你在此基地的一个随从将被消灭', options as any[], 'elder_thing_shoggoth_opponent',
+            );
+            (interaction.data as any).continuationContext = {
+                targetPlayerId: nextPid,
+                baseIndex: ctx.baseIndex,
+                opponents: ctx.opponents,
+                opponentIdx: nextIdx,
+            };
+            return { state: queueInteraction(state, interaction), events };
         }
 
         return { state, events };
@@ -445,37 +458,38 @@ export function registerElderThingInteractionHandlers(): void {
 // ongoing 效果触发器
 // ============================================================================
 
-/** 力量的代价 beforeScoring：对手手牌中的疑狂卡，每张给己方随从+2力量 */
-function elderThingPriceOfPowerBeforeScoring(ctx: TriggerContext): SmashUpEvent[] {
+/**
+ * 力量的代价 special 能力：基地计分前打出
+ *
+ * 效果：在计分基地上，每个对手手牌中的疯狂卡给己方随从 +2 力量
+ * ctx.baseIndex 为计分基地索引（由 Me First! 窗口传入）
+ */
+function elderThingPriceOfPowerSpecial(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const scoringBaseIndex = ctx.baseIndex;
-    if (scoringBaseIndex === undefined) return events;
-
     const base = ctx.state.bases[scoringBaseIndex];
-    if (!base) return events;
+    if (!base) return { events };
 
-    for (const ongoing of base.ongoingActions) {
-        if (ongoing.defId !== 'elder_thing_the_price_of_power') continue;
-        const ownerId = ongoing.ownerId;
-
-        let totalMadness = 0;
-        for (const pid of ctx.state.turnOrder) {
-            if (pid === ownerId) continue;
-            if (!base.minions.some(m => m.controller === pid)) continue;
-            const opponent = ctx.state.players[pid];
-            totalMadness += opponent.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length;
-        }
-        if (totalMadness === 0) continue;
-
-        const myMinions = base.minions.filter(m => m.controller === ownerId);
-        if (myMinions.length === 0) continue;
-        for (let i = 0; i < totalMadness; i++) {
-            const target = myMinions[i % myMinions.length];
-            events.push(addPowerCounter(target.uid, scoringBaseIndex, 2, 'elder_thing_the_price_of_power', ctx.now));
-        }
+    // 统计所有对手手牌中的疯狂卡数量（对手必须在该基地有随从）
+    let totalMadness = 0;
+    for (const pid of ctx.state.turnOrder) {
+        if (pid === ctx.playerId) continue;
+        if (!base.minions.some(m => m.controller === pid)) continue;
+        const opponent = ctx.state.players[pid];
+        totalMadness += opponent.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length;
     }
-    return events;
+    if (totalMadness === 0) return { events };
+
+    // 给己方在该基地的随从轮流 +2 力量
+    const myMinions = base.minions.filter(m => m.controller === ctx.playerId);
+    if (myMinions.length === 0) return { events };
+    for (let i = 0; i < totalMadness; i++) {
+        const target = myMinions[i % myMinions.length];
+        events.push(addPowerCounter(target.uid, scoringBaseIndex, 2, 'elder_thing_the_price_of_power', ctx.now));
+    }
+    return { events };
 }
+
 
 /** 邓威奇恐怖触发：回合结束时消灭附着了此卡的随从 */
 function elderThingDunwichHorrorTrigger(ctx: TriggerContext): SmashUpEvent[] {
