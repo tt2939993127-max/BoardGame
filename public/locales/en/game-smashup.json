@@ -72,7 +72,9 @@
     "reveal_no_cards": "No cards to reveal",
     "confirm": "Confirm",
     "prompt_no_options": "No options available",
-    "invalid_base_target": "This base cannot be selected"
+    "invalid_base_target": "This base cannot be selected",
+    "discard_play_available": "Play from discard pile",
+    "click_base_to_deploy": "Click a base to deploy"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",

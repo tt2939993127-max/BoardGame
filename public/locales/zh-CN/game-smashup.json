@@ -72,7 +72,9 @@
     "reveal_no_cards": "没有可展示的卡牌",
     "confirm": "确认",
     "prompt_no_options": "暂无可选项",
-    "invalid_base_target": "该基地不可选择"
+    "invalid_base_target": "该基地不可选择",
+    "discard_play_available": "可从弃牌堆打出",
+    "click_base_to_deploy": "点击基地部署"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",
