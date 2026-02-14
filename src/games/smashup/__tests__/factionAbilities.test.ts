@@ -423,7 +423,28 @@ describe('恐龙派系能力', () => {
 // ============================================================================
 
 describe('机器人派系能力', () => {
-    it('robot_zapbot: 额外打出随从', () => {
+    it('robot_zapbot: 手牌有力量≤2随从时创建交互', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('m1', 'robot_zapbot', 'minion', '0'),
+                        makeCard('m2', 'robot_microbot_guard', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
+        // 不再直接发 LIMIT_MODIFIED，而是创建交互
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('robot_zapbot');
+    });
+
+    it('robot_zapbot: 手牌无力量≤2随从时无交互', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -436,8 +457,7 @@ describe('机器人派系能力', () => {
 
         const { events, matchState } = execPlayMinion(state, '0', 'm1', 0);
         const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-        expect(limitEvents.length).toBe(1);
-        expect((limitEvents[0] as any).payload.limitType).toBe('minion');
+        expect(limitEvents.length).toBe(0);
     });
 
     it('robot_tech_center: 单个基地时创建 Prompt', () => {

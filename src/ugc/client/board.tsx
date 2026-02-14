@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { BoardProps } from 'boardgame.io/react';
+import type { GameBoardProps } from '../../engine/transport/protocol';
 import type { MatchState } from '../../engine/types';
 import type { UGCGameState, PlayerId } from '../sdk/types';
 import { createHostBridge, type UGCHostBridge } from '../runtime/hostBridge';
@@ -24,7 +24,7 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
     const { packageId, viewUrl, allowedOrigins, previewConfig } = options;
     const iframeSrc = viewUrl && viewUrl.trim() ? viewUrl.trim() : DEFAULT_RUNTIME_VIEW_URL;
 
-    const UgcRemoteHostBoard = ({ G, ctx, moves, playerID, matchID, credentials }: BoardProps<MatchState<UGCGameState>>) => {
+    const UgcRemoteHostBoard = ({ G, ctx, dispatch, playerID, matchData }: GameBoardProps<UGCGameState>) => {
         const iframeRef = useRef<HTMLIFrameElement | null>(null);
         const bridgeRef = useRef<UGCHostBridge | null>(null);
         const stateRef = useRef<UGCGameState | null>(null);
@@ -40,11 +40,12 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
             : {};
 
         const playerIds = useMemo<PlayerId[]>(() => {
-            const playOrder = (ctx.playOrder as Array<string | number> | undefined) ?? [];
-            const normalized = playOrder.map((id) => String(id));
-            if (normalized.length > 0) return normalized;
+            // 从 matchData 获取玩家列表，或从 core state 获取
+            if (matchData && matchData.length > 0) {
+                return matchData.map((p) => String(p.id));
+            }
             return Object.keys(corePlayers);
-        }, [ctx.playOrder, corePlayers]);
+        }, [matchData, corePlayers]);
 
         const currentPlayerId = useMemo<PlayerId>(() => {
             if (coreState.activePlayerId) return coreState.activePlayerId;
@@ -55,8 +56,8 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
         }, [coreState.activePlayerId, ctx.currentPlayer, playerIds]);
 
         const buildState = useCallback((): UGCGameState => {
-            const phase = typeof coreState.phase === 'string' ? coreState.phase : (ctx.phase ?? '');
-            const turnNumber = typeof coreState.turnNumber === 'number' ? coreState.turnNumber : (ctx.turn ?? 0);
+            const phase = typeof coreState.phase === 'string' ? coreState.phase : (G?.sys?.phase ?? '');
+            const turnNumber = typeof coreState.turnNumber === 'number' ? coreState.turnNumber : (G?.sys?.turnNumber ?? 0);
             const ctxGameOver = ctx.gameover && typeof ctx.gameover === 'object'
                 ? (ctx.gameover as { winner?: PlayerId; draw?: boolean })
                 : undefined;
@@ -73,7 +74,7 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
                 return attachBuilderPreviewConfig(baseState, previewConfig);
             }
             return baseState;
-        }, [coreState, corePlayers, ctx.phase, ctx.turn, ctx.gameover, currentPlayerId, previewConfig]);
+        }, [coreState, corePlayers, G?.sys?.phase, G?.sys?.turnNumber, ctx.gameover, currentPlayerId, previewConfig]);
 
         useEffect(() => {
             buildStateRef.current = buildState;
@@ -93,31 +94,14 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
             runtimePlayerId: PlayerId,
             params: Record<string, unknown>
         ) => {
-            console.log(`[UGC Board] handleCommand: ${commandType}`, { 
-                runtimePlayerId, 
-                currentPlayerID: playerID,
-                params 
-            });
-
-            // UGC online 模式：直接调用 move，让 boardgame.io 处理权限验证
-            // 注意：boardgame.io 会自动使用当前客户端的 playerID
-            // 如果需要跨玩家操作，应该为每个玩家创建独立的客户端连接
-
-            const moveFn = (moves as Record<string, (payload: unknown) => void>)[commandType];
-            console.log(`[UGC Board] Available moves:`, Object.keys(moves || {}));
-            console.log(`[UGC Board] Move function exists:`, !!moveFn);
-            if (!moveFn) {
-                return { success: false, error: `未知命令: ${commandType}` };
-            }
+            // 通过 dispatch 发送命令到引擎
             try {
-                moveFn(params);
-                console.log(`[UGC Board] Command executed successfully`);
+                dispatch(commandType, params);
                 return { success: true };
             } catch (error) {
-                console.error(`[UGC Board] Command execution error:`, error);
                 return { success: false, error: error instanceof Error ? error.message : '命令执行失败' };
             }
-        }, [moves, playerID]);
+        }, [dispatch]);
 
         useEffect(() => {
             handleCommandRef.current = handleCommand;

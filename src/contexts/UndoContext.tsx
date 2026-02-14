@@ -4,8 +4,7 @@ import type { MatchState } from '../engine/types';
 
 interface UndoContextValue {
     G: MatchState<unknown>;
-    ctx: any;
-    moves: any;
+    moves: Record<string, (payload?: unknown) => void>;
     playerID: string | null;
     isGameOver: boolean;
     isLocalMode?: boolean; // 是否本地同屏模式
@@ -47,7 +46,6 @@ export const UndoProvider: React.FC<UndoProviderProps> = ({ children, value }) =
         const prev = lastValueRef.current;
         const isSame = prev
             && prev.G === value.G
-            && prev.ctx === value.ctx
             && prev.moves === value.moves
             && prev.playerID === value.playerID
             && prev.isGameOver === value.isGameOver

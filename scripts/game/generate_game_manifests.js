@@ -127,7 +127,7 @@ const buildClientManifestFile = ({ entries, outputPath }) => {
     entries.forEach((entry, index) => {
         lines.push(`import manifest${index} from '${entry.manifestImport}';`);
         if (entry.gameImport) {
-            lines.push(`import Game${index} from '${entry.gameImport}';`);
+            lines.push(`import { engineConfig as engineConfig${index} } from '${entry.gameImport}';`);
         }
         if (entry.boardImport) {
             lines.push(`import Board${index} from '${entry.boardImport}';`);
@@ -145,7 +145,7 @@ const buildClientManifestFile = ({ entries, outputPath }) => {
         lines.push(`const entry${index}: GameClientManifestEntry = {`);
         lines.push(`    manifest: manifest${index},`);
         if (entry.gameImport) {
-            lines.push(`    game: Game${index},`);
+            lines.push(`    engineConfig: engineConfig${index},`);
         }
         if (entry.boardImport) {
             lines.push(`    board: Board${index},`);
@@ -185,14 +185,14 @@ const buildServerManifestFile = ({ entries, outputPath }) => {
 
     entries.forEach((entry, index) => {
         lines.push(`import manifest${index} from '${entry.manifestImport}';`);
-        lines.push(`import Game${index} from '${entry.gameImport}';`);
+        lines.push(`import { engineConfig as engineConfig${index} } from '${entry.gameImport}';`);
     });
     lines.push('');
 
     entries.forEach((_, index) => {
         lines.push(`const entry${index}: GameServerManifestEntry = {`);
         lines.push(`    manifest: manifest${index},`);
-        lines.push(`    game: Game${index},`);
+        lines.push(`    engineConfig: engineConfig${index},`);
         lines.push('};');
         lines.push('');
     });

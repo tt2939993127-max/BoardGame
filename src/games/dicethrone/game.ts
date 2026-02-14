@@ -6,7 +6,6 @@
 
 import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
 import {
-    createGameAdapter,
     createActionLogSystem,
     createCheatSystem,
     createEventStreamSystem,
@@ -18,6 +17,7 @@ import {
     createTutorialSystem,
     createUndoSystem,
 } from '../../engine';
+import { createGameEngine } from '../../engine/adapter';
 import { DiceThroneDomain } from './domain';
 import { DICETHRONE_COMMANDS } from './domain/ids';
 import type {
@@ -516,16 +516,19 @@ const COMMAND_TYPES = [
     'SKIP_BONUS_DICE_REROLL',
 ];
 
-// 使用适配器创建 Boardgame.io Game
-export const DiceThroneGame = createGameAdapter({
+// 适配器配置
+const adapterConfig = {
     domain: DiceThroneDomain,
     systems,
     minPlayers: 2,
-    maxPlayers: 2, // 固定 2 人游戏
+    maxPlayers: 2,
     commandTypes: COMMAND_TYPES,
-});
+};
 
-export default DiceThroneGame;
+// 引擎配置
+export const engineConfig = createGameEngine(adapterConfig);
+
+export default engineConfig;
 
 // 导出 ActionLog 格式化函数供测试
 export { formatDiceThroneActionEntry };

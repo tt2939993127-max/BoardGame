@@ -7,9 +7,8 @@ import React, { useMemo, useState } from 'react';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface DiceThroneDebugConfigProps {
-    G: any;
-    ctx: any;
-    moves: any;
+    G: unknown;
+    moves: Record<string, (payload?: unknown) => void>;
 }
 
 export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G, moves }) => {

@@ -1,36 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import jwt from 'jsonwebtoken';
-import type { Server, State } from 'boardgame.io';
+import type { MatchMetadata, StoredMatchState } from '../../engine/transport/storage';
 import { createClaimSeatHandler } from '../claimSeat';
 
-const buildState = (ownerKey: string): State => ({
+const buildState = (ownerKey: string): StoredMatchState => ({
     G: { __setupData: { ownerKey } },
-    ctx: {
-        numPlayers: 2,
-        playOrder: ['0', '1'],
-        playOrderPos: 0,
-        activePlayers: null,
-        currentPlayer: '0',
-        turn: 0,
-        phase: 'default',
-        gameover: null,
-    },
-    plugins: {},
-    _undo: [],
-    _redo: [],
     _stateID: 0,
 });
 
-const buildMetadata = (ownerKey: string, playerName?: string): Server.MatchData => ({
+const buildMetadata = (ownerKey: string, playerName?: string): MatchMetadata => ({
     gameName: 'tictactoe',
     players: {
-        0: { id: 0, name: playerName },
-        1: { id: 1, name: 'P1' },
+        0: { name: playerName },
+        1: { name: 'P1' },
     },
     setupData: { ownerKey },
     createdAt: Date.now(),
     updatedAt: Date.now(),
-});
+} as MatchMetadata);
 
 type SavedMatchData = {
     players?: Record<string, { name?: string; credentials?: string }>;

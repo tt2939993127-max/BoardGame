@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { LobbyClient } from 'boardgame.io/client';
+import * as matchApi from '../../../../services/matchApi';
 import { motion, useMotionValue } from 'framer-motion';
 import { CheckCircle, Clipboard, X, Edit } from 'lucide-react';
 import { useDebug } from '../../../../contexts/DebugContext';
@@ -20,7 +20,6 @@ const STORAGE_KEY = 'debug_panel_position';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface DebugPanelProps {
     G: any;
-    ctx: any;
     moves: any;
     events?: any;
     playerID?: string | null;
@@ -28,9 +27,7 @@ interface DebugPanelProps {
     children?: React.ReactNode; // 支持自定义调试项
 }
 
-const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
-
-export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, events, playerID, autoSwitch = true, children }) => {
+export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, moves, events, playerID, autoSwitch = true, children }) => {
     const { t } = useTranslation(['game', 'lobby']);
     const navigate = useNavigate();
     const { gameId, matchId: currentMatchId } = useParams<{ gameId: string; matchId: string }>();
@@ -166,9 +163,9 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
     }, [stateInput, moves, t]);
 
     // 监听当前玩家变化，实现自动切换视角
-    // 优先使用领域内核的当前玩家字段（G.core.currentPlayer），回退到 ctx.currentPlayer
+    // 从领域内核读取当前玩家字段（G.core.currentPlayer）
     const coreCurrentPlayer = G?.core?.currentPlayer as string | undefined;
-    const activePlayer = coreCurrentPlayer ?? ctx.currentPlayer;
+    const activePlayer = coreCurrentPlayer;
     useEffect(() => {
         if (!autoSwitch) return;
         if (activePlayer && activePlayer !== playerID) {
@@ -360,15 +357,15 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                 <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm space-y-2">
                                     <div className="flex justify-between text-xs border-b border-gray-100 pb-2">
                                         <span className="text-gray-700 font-bold">{t('debug.state.phase')}</span>
-                                        <span className="font-mono bg-purple-100 text-purple-700 px-1.5 rounded">{ctx.phase}</span>
+                                        <span className="font-mono bg-purple-100 text-purple-700 px-1.5 rounded">{G?.sys?.phase ?? ''}</span>
                                     </div>
                                     <div className="flex justify-between text-xs border-b border-gray-100 pb-2">
                                         <span className="text-gray-700 font-bold">{t('debug.state.turn')}</span>
-                                        <span className="font-mono bg-blue-100 text-blue-700 px-1.5 rounded">{ctx.turn}</span>
+                                        <span className="font-mono bg-blue-100 text-blue-700 px-1.5 rounded">{G?.sys?.turnNumber ?? 0}</span>
                                     </div>
                                     <div className="flex justify-between text-xs pt-1">
                                         <span className="text-gray-700 font-bold">{t('debug.state.activePlayer')}</span>
-                                        <span className="font-mono bg-green-100 text-green-700 px-1.5 rounded">{ctx.currentPlayer}</span>
+                                        <span className="font-mono bg-green-100 text-green-700 px-1.5 rounded">{G?.core?.currentPlayer ?? '-'}</span>
                                     </div>
                                 </div>
 
@@ -480,12 +477,12 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                                 const guestId = user?.id ? undefined : getGuestId();
                                                 
                                                 // 1. 创建新房间
-                                                const { matchID: newMatchID } = await lobbyClient.createMatch(
+                                                const { matchID: newMatchID } = await matchApi.createMatch(
                                                     gameId,
                                                     { numPlayers: 2, setupData: guestId ? { guestId } : undefined },
                                                     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
                                                 );
-                                                const { playerCredentials: newCredentials } = await lobbyClient.joinMatch(gameId, newMatchID, {
+                                                const { playerCredentials: newCredentials } = await matchApi.joinMatch(gameId, newMatchID, {
                                                     playerID: '0',
                                                     playerName,
                                                 });
@@ -503,12 +500,13 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, ctx, moves, event
                                                             const parsed = JSON.parse(storedCreds) as { credentials?: string } | null;
                                                             oldCredentials = parsed?.credentials ?? null;
                                                             if (oldCredentials) {
-                                                                await lobbyClient.leaveMatch(gameId, currentMatchId, {
+                                                                await matchApi.leaveMatch(gameId, currentMatchId, {
                                                                     playerID: currentPlayerID,
                                                                     credentials: oldCredentials,
                                                                 });
                                                             }
                                                         } catch {
+                                                            // 离开房间失败可忽略（房间可能已不存在）
                                                         }
                                                         localStorage.removeItem(`match_creds_${currentMatchId}`);
                                                     }

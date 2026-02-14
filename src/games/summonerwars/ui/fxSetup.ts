@@ -12,7 +12,7 @@
  * - 委托底层动画组件（SummonEffect、VortexEffect 等）
  */
 
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import { FxRegistry, type FxRendererProps, type FeedbackPack } from '../../../engine/fx';
 import { SummonHybridEffect } from '../../../components/common/animations/SummonHybridEffect';
 import { VortexShaderEffect } from '../../../components/common/animations/VortexShaderEffect';
@@ -146,9 +146,22 @@ const ChargeVortexRenderer: React.FC<FxRendererProps> = ({ event, getCellPositio
  * - source: { row, col }        — 攻击来源坐标
  * - damageAmount?: number
  */
-const ShockwaveRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact: _onImpact }) => {
+const ShockwaveRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact }) => {
   // Hooks 必须在所有条件分支之前调用
   const stableComplete = useStableComplete(onComplete);
+  // 近战 impact：渲染即 impact（碰撞瞬间触发音效+震动）
+  const impactFiredRef = useRef(false);
+  // 远程 impact：气浪到达目标时触发音效+震动，然后通知完成
+  const handleRangedComplete = useCallback(() => {
+    onImpact();
+    stableComplete();
+  }, [onImpact, stableComplete]);
+  useEffect(() => {
+    if (!impactFiredRef.current && event.params?.attackType !== 'ranged') {
+      impactFiredRef.current = true;
+      onImpact();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cell = event.ctx.cell;
   const source = event.params?.source as { row: number; col: number } | undefined;
@@ -203,7 +216,7 @@ const ShockwaveRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, 
     start: { xPct: srcCx, yPct: srcCy },
     end: { xPct: tgtCx, yPct: tgtCy },
     intensity: event.ctx.intensity ?? 'normal',
-    onComplete: stableComplete,
+    onComplete: handleRangedComplete,
     className: 'z-30',
   });
 };
@@ -216,9 +229,17 @@ const ShockwaveRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, 
  * params:
  * - damageAmount?: number
  */
-const DamageRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact: _onImpact }) => {
+const DamageRenderer: React.FC<FxRendererProps> = ({ event, getCellPosition, onComplete, onImpact }) => {
   // Hooks 必须在所有条件分支之前调用
   const stableComplete = useStableComplete(onComplete);
+  // 受伤 impact：渲染即 impact（伤害闪光出现瞬间触发音效+震动）
+  const impactFiredRef = useRef(false);
+  useEffect(() => {
+    if (!impactFiredRef.current) {
+      impactFiredRef.current = true;
+      onImpact();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cell = event.ctx.cell;
   if (!cell) { stableComplete(); return null; }

@@ -72,9 +72,9 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
 };
 
 export const SummonerWarsBoard: React.FC<Props> = ({
-  ctx, G, moves, playerID, reset, matchData, isMultiplayer,
+  G, moves, dispatch, playerID, reset, matchData, isMultiplayer,
 }) => {
-  const isGameOver = ctx.gameover;
+  const isGameOver = (G.core as Record<string, unknown>).gameover as import('../../engine/types').GameOverResult | undefined;
   const gameMode = useGameMode();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
@@ -97,14 +97,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 阵营选择回调
   const handleSelectFaction = useCallback((factionId: FactionId) => {
-    moves[SW_COMMANDS.SELECT_FACTION]?.({ factionId });
-  }, [moves]);
+    dispatch(SW_COMMANDS.SELECT_FACTION, { factionId });
+  }, [dispatch]);
   const handlePlayerReady = useCallback(() => {
-    moves[SW_COMMANDS.PLAYER_READY]?.({});
-  }, [moves]);
+    dispatch(SW_COMMANDS.PLAYER_READY, {});
+  }, [dispatch]);
   const handleHostStart = useCallback(() => {
-    moves[SW_COMMANDS.HOST_START_GAME]?.({});
-  }, [moves]);
+    dispatch(SW_COMMANDS.HOST_START_GAME, {});
+  }, [dispatch]);
 
   // 教学系统集成
   useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
@@ -175,7 +175,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 游戏状态
   const core = G.core;
   const currentPhase = core.phase;
-  const activePlayerId = core.currentPlayer ?? ctx.currentPlayer;
+  const activePlayerId = core.currentPlayer;
   const isMyTurn = isLocalMatch || (playerID !== null && playerID !== undefined && activePlayerId === playerID);
   const myPlayerId = isLocalMatch ? '0' : (playerID === '1' ? '1' : '0');
   const opponentPlayerId = myPlayerId === '0' ? '1' : '0';
@@ -283,7 +283,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 格子交互 Hook
   const interaction = useCellInteraction({
-    core, moves: moves as Record<string, (payload?: unknown) => void>,
+    core, dispatch,
     currentPhase, isMyTurn, isGameOver: !!isGameOver,
     myPlayerId, activePlayerId, myHand, fromViewCoord,
     undoSnapshotCount: G.sys?.undo?.snapshots?.length ?? 0,
@@ -411,7 +411,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     // 寒冰冲撞推拉步骤跳过：仍然发送命令（造成伤害但不推拉）
     if (abilityMode?.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection'
       && abilityMode.targetPosition && abilityMode.structurePosition) {
-      moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+      dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
         abilityId: 'ice_ram',
         sourceUnitId: 'ice_ram',
         targetPosition: abilityMode.targetPosition,
@@ -419,7 +419,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       });
     }
     setAbilityMode(null);
-  }, [setAbilityMode, abilityMode, moves]);
+  }, [setAbilityMode, abilityMode, dispatch]);
   const handleCancelBeforeAttack = useCallback(() => interaction.handleCancelBeforeAttack(), [interaction]);
   const handleCancelBloodSummon = useCallback(() => {
     interaction.setBloodSummonMode(null);
@@ -456,32 +456,32 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     if (nextIndex < interaction.annihilateMode.selectedTargets.length) {
       interaction.setAnnihilateMode({ ...interaction.annihilateMode, damageTargets: newDamageTargets, currentTargetIndex: nextIndex });
     } else {
-      moves[SW_COMMANDS.PLAY_EVENT]?.({
+      dispatch(SW_COMMANDS.PLAY_EVENT, {
         cardId: interaction.annihilateMode.cardId,
         targets: interaction.annihilateMode.selectedTargets,
         damageTargets: newDamageTargets,
       });
       interaction.setAnnihilateMode(null);
     }
-  }, [interaction, moves]);
+  }, [interaction, dispatch]);
   const handleConfirmSoulTransfer = useCallback(() => {
     if (!soulTransferMode) return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'soul_transfer',
       sourceUnitId: soulTransferMode.sourceUnitId,
       targetPosition: soulTransferMode.victimPosition,
     });
     setSoulTransferMode(null);
-  }, [soulTransferMode, moves, setSoulTransferMode]);
+  }, [soulTransferMode, dispatch, setSoulTransferMode]);
   const handleSkipSoulTransfer = useCallback(() => setSoulTransferMode(null), [setSoulTransferMode]);
   const handleSkipFuneralPyre = useCallback(() => {
     if (!interaction.funeralPyreMode) return;
-    moves[SW_COMMANDS.FUNERAL_PYRE_HEAL]?.({
+    dispatch(SW_COMMANDS.FUNERAL_PYRE_HEAL, {
       cardId: interaction.funeralPyreMode.cardId,
       skip: true,
     });
     interaction.setFuneralPyreMode(null);
-  }, [interaction, moves]);
+  }, [interaction, dispatch]);
 
   // 欺心巫族事件卡回调
   const handleConfirmMindControl = useCallback(() => interaction.handleConfirmMindControl(), [interaction]);
@@ -530,39 +530,39 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 连续射击确认/取消
   const handleConfirmRapidFire = useCallback(() => {
     if (!rapidFireMode) return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({ abilityId: 'rapid_fire', sourceUnitId: rapidFireMode.sourceUnitId });
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, { abilityId: 'rapid_fire', sourceUnitId: rapidFireMode.sourceUnitId });
     setRapidFireMode(null);
-  }, [moves, rapidFireMode, setRapidFireMode]);
+  }, [dispatch, rapidFireMode, setRapidFireMode]);
   const handleCancelRapidFire = useCallback(() => setRapidFireMode(null), [setRapidFireMode]);
   // 鲜血符文选择回调
   const handleConfirmBloodRune = useCallback((choice: 'damage' | 'charge') => {
     if (!abilityMode || abilityMode.abilityId !== 'blood_rune') return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'blood_rune',
       sourceUnitId: abilityMode.sourceUnitId,
       choice,
     });
     setAbilityMode(null);
-  }, [abilityMode, moves, setAbilityMode]);
+  }, [abilityMode, dispatch, setAbilityMode]);
   // 寒冰碎屑确认回调
   const handleConfirmIceShards = useCallback(() => {
     if (!abilityMode || abilityMode.abilityId !== 'ice_shards') return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ice_shards',
       sourceUnitId: abilityMode.sourceUnitId,
     });
     setAbilityMode(null);
-  }, [abilityMode, moves, setAbilityMode]);
+  }, [abilityMode, dispatch, setAbilityMode]);
   // 喂养巨食兽自毁回调
   const handleConfirmFeedBeastSelfDestroy = useCallback(() => {
     if (!abilityMode || abilityMode.abilityId !== 'feed_beast') return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'feed_beast',
       sourceUnitId: abilityMode.sourceUnitId,
       choice: 'self_destroy',
     });
     setAbilityMode(null);
-  }, [abilityMode, moves, setAbilityMode]);
+  }, [abilityMode, dispatch, setAbilityMode]);
   const handleConfirmTelekinesis = useCallback((direction: 'push' | 'pull') => {
     interaction.handleConfirmTelekinesis(direction);
   }, [interaction]);
@@ -570,13 +570,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // afterMove 技能：充能自身
   const handleAfterMoveSelfCharge = useCallback(() => {
     if (!abilityMode) return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: abilityMode.abilityId,
       sourceUnitId: abilityMode.sourceUnitId,
       choice: 'self',
     });
     setAbilityMode(null);
-  }, [abilityMode, moves, setAbilityMode]);
+  }, [abilityMode, dispatch, setAbilityMode]);
   // 冰霜战斧：进入附加目标选择
   const handleFrostAxeAttach = useCallback(() => {
     if (!abilityMode || abilityMode.abilityId !== 'frost_axe') return;
@@ -586,8 +586,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const handleSaveLayout = useCallback(async (config: BoardLayoutConfig) => saveSummonerWarsLayout(config), []);
 
   const debugPanel = !isSpectator ? (
-    <GameDebugPanel G={G} ctx={ctx} moves={moves} playerID={playerID} autoSwitch={!isMultiplayer}>
-      <SummonerWarsDebugConfig G={G} ctx={ctx} moves={moves} />
+    <GameDebugPanel G={G} moves={moves} playerID={playerID} autoSwitch={!isMultiplayer}>
+      <SummonerWarsDebugConfig G={G} moves={moves} />
       <button
         onClick={() => { if (isEditingLayout) { void handleExitLayoutEditor(); return; } setIsEditingLayout(true); }}
         className="px-2 py-1 text-xs bg-cyan-600 text-white rounded hover:bg-cyan-500"
@@ -598,7 +598,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   ) : null;
 
   return (
-    <UndoProvider value={{ G, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
+    <UndoProvider value={{ G, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
       {/* 阵营选择阶段 */}
       {isInFactionSelection ? (
         <TutorialSelectionGate
@@ -933,13 +933,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   }) ?? []}
                   onSelect={(card) => {
                     if (abilityMode.abilityId === 'infection' && abilityMode.targetPosition) {
-                      moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+                      dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
                         abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
                         targetCardId: card.id, targetPosition: abilityMode.targetPosition,
                       });
                       setAbilityMode(null);
                     } else if (abilityMode.abilityId === 'fortress_power') {
-                      moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+                      dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
                         abilityId: 'fortress_power', sourceUnitId: abilityMode.sourceUnitId,
                         targetCardId: card.id,
                       });
@@ -962,7 +962,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 abilityMode={abilityMode}
                 bloodSummonMode={interaction.bloodSummonMode}
                 eventTargetMode={interaction.eventTargetMode}
-                moves={moves as Record<string, (payload?: unknown) => void>}
+                dispatch={dispatch}
                 setAbilityMode={setAbilityMode}
                 setWithdrawMode={interaction.setWithdrawMode}
               />

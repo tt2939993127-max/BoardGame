@@ -1,13 +1,12 @@
 /**
  * 框架核心类型定义
  * 
- * 定义与 Boardgame.io 集成的核心接口，与具体游戏逻辑无关。
+ * 定义游戏实现注册的核心接口。
  * 禁止使用 `any` 类型。
  */
 
-import type { Game } from 'boardgame.io';
-import type { BoardProps } from 'boardgame.io/react';
 import type { TutorialManifest } from '../contexts/TutorialContext';
+import type { GameEngineConfig } from '../engine/transport/server';
 
 // ============================================================================
 // 游戏实现注册类型
@@ -16,19 +15,12 @@ import type { TutorialManifest } from '../contexts/TutorialContext';
 /**
  * 游戏实现配置
  * 用于在 registry 中注册一个完整的游戏
- * 
- * 设计说明：
- * - 由于 Boardgame.io 的 Game<G> 和 BoardProps<G> 存在泛型逆变问题，
- *   在异构映射表中无法使用精确泛型约束
- * - 此处使用 Game 和 BoardProps 的基础形式作为框架边界类型
- * - 具体类型安全由各游戏模块内部 (game.ts / Board.tsx) 保证
- * - 运行时类型由 Boardgame.io 框架保证一致性
  */
 export interface GameImplementation {
-    /** Boardgame.io 游戏定义 */
-    game: Game;
-    /** React 棋盘组件（接收 BoardProps） */
-    board: React.ComponentType<BoardProps>;
+    /** 引擎配置 */
+    engineConfig: GameEngineConfig;
+    /** React 棋盘组件 */
+    board: React.ComponentType<Record<string, unknown>>;
     /** 可选的教程配置 */
     tutorial?: TutorialManifest;
 }

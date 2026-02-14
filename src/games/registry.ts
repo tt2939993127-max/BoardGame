@@ -10,7 +10,7 @@ const buildGameImplementations = () => {
     const manifestGameIds = new Set<string>();
 
     for (const entry of GAME_CLIENT_MANIFEST) {
-        const { manifest, game, board, tutorial } = entry;
+        const { manifest, engineConfig, board, tutorial } = entry;
         if (manifest.type !== 'game') continue;
         if (manifestGameIds.has(manifest.id)) {
             throw new Error(`[GameManifest] 游戏 ID 重复: ${manifest.id}`);
@@ -18,10 +18,11 @@ const buildGameImplementations = () => {
         manifestGameIds.add(manifest.id);
 
         if (!manifest.enabled) continue;
-        if (!game || !board) {
+        if (!board || !engineConfig) {
             throw new Error(`[GameManifest] 游戏实现缺失: ${manifest.id}`);
         }
-        implementations[manifest.id] = { game, board, tutorial };
+
+        implementations[manifest.id] = { engineConfig, board, tutorial };
     }
 
     return implementations;

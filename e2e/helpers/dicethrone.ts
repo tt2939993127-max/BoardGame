@@ -6,8 +6,6 @@
  */
 
 import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
-// @ts-expect-error - boardgame.io CJS 客户端缺少类型声明
-import { LobbyClient } from 'boardgame.io/dist/cjs/client.js';
 import {
     initContext,
     getGameServerBaseURL,
@@ -18,8 +16,6 @@ import {
 } from './common';
 
 export const GAME_NAME = 'dicethrone';
-
-const lobbyClient = new LobbyClient({ server: getGameServerBaseURL() });
 
 // ============================================================================
 // 棋盘就绪检测
@@ -112,11 +108,14 @@ export const createRoomViaAPI = async (page: Page): Promise<string | null> => {
             guestId,
         );
 
-        const { matchID } = await lobbyClient.createMatch('dicethrone', 2, {
-            guestId,
-            ownerKey: `guest:${guestId}`,
-            ownerType: 'guest',
-        });
+        const res = await page.request.post(
+            `${getGameServerBaseURL()}/games/dicethrone/create`,
+            { data: { numPlayers: 2, setupData: { guestId, ownerKey: `guest:${guestId}`, ownerType: 'guest' } } },
+        );
+        if (!res.ok()) return null;
+        const resData = (await res.json().catch(() => null)) as { matchID?: string } | null;
+        const matchID = resData?.matchID;
+        if (!matchID) return null;
 
         const claimRes = await page.request.post(
             `${getGameServerBaseURL()}/games/dicethrone/${matchID}/claim-seat`,

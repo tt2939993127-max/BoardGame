@@ -1,7 +1,11 @@
 /**
- * DiceThrone Move 映射与解析
- * 从 Board.tsx 提取
+ * DiceThrone Move 映射
+ *
+ * 基于 dispatch 的类型安全包装器。
+ * 保留 DiceThroneMoveMap 接口供子组件使用。
  */
+
+import { DICETHRONE_COMMANDS } from '../domain/ids';
 
 export type DiceThroneMoveMap = {
     advancePhase: () => void;
@@ -36,74 +40,39 @@ export type DiceThroneMoveMap = {
     playerReady: () => void;
 };
 
-const requireMove = <T extends (...args: unknown[]) => void>(value: unknown, name: string): T => {
-    if (typeof value !== 'function') {
-        throw new Error(`[DiceThroneBoard] 缺少 move: ${name}`);
-    }
-    return value as T;
-};
-
-export const resolveMoves = (raw: Record<string, unknown>): DiceThroneMoveMap => {
-    // 统一把 payload 包装成领域命令结构，避免 die_not_found 等校验失败
-    const advancePhase = requireMove(raw.advancePhase ?? raw.ADVANCE_PHASE, 'advancePhase');
-    const rollDice = requireMove(raw.rollDice ?? raw.ROLL_DICE, 'rollDice');
-    const toggleDieLock = requireMove(raw.toggleDieLock ?? raw.TOGGLE_DIE_LOCK, 'toggleDieLock');
-    const confirmRoll = requireMove(raw.confirmRoll ?? raw.CONFIRM_ROLL, 'confirmRoll');
-    const selectAbility = requireMove(raw.selectAbility ?? raw.SELECT_ABILITY, 'selectAbility');
-    const playCard = requireMove(raw.playCard ?? raw.PLAY_CARD, 'playCard');
-    const sellCard = requireMove(raw.sellCard ?? raw.SELL_CARD, 'sellCard');
-    const undoSellCardRaw = (raw.undoSellCard ?? raw.UNDO_SELL_CARD) as ((payload?: unknown) => void) | undefined;
-    const resolveChoice = requireMove(raw.resolveChoice ?? raw.RESOLVE_CHOICE, 'resolveChoice');
-
-    const responsePassRaw = (raw.responsePass ?? raw.RESPONSE_PASS) as ((payload?: unknown) => void) | undefined;
-    // 卡牌交互 moves
-    const modifyDieRaw = (raw.modifyDie ?? raw.MODIFY_DIE) as ((payload: unknown) => void) | undefined;
-    const rerollDieRaw = (raw.rerollDie ?? raw.REROLL_DIE) as ((payload: unknown) => void) | undefined;
-    const removeStatusRaw = (raw.removeStatus ?? raw.REMOVE_STATUS) as ((payload: unknown) => void) | undefined;
-    const transferStatusRaw = (raw.transferStatus ?? raw.TRANSFER_STATUS) as ((payload: unknown) => void) | undefined;
-    const confirmInteractionRaw = (raw.confirmInteraction ?? raw.CONFIRM_INTERACTION) as ((payload: unknown) => void) | undefined;
-    const cancelInteractionRaw = (raw.cancelInteraction ?? raw.CANCEL_INTERACTION) as ((payload: unknown) => void) | undefined;
-    // Token 响应 moves
-    const useTokenRaw = (raw.useToken ?? raw.USE_TOKEN) as ((payload: unknown) => void) | undefined;
-    const skipTokenResponseRaw = (raw.skipTokenResponse ?? raw.SKIP_TOKEN_RESPONSE) as ((payload: unknown) => void) | undefined;
-    const usePurifyRaw = (raw.usePurify ?? raw.USE_PURIFY) as ((payload: unknown) => void) | undefined;
-    const payToRemoveKnockdownRaw = (raw.payToRemoveKnockdown ?? raw.PAY_TO_REMOVE_KNOCKDOWN) as ((payload: unknown) => void) | undefined;
-    // 奖励骰重掷 moves
-    const rerollBonusDieRaw = (raw.rerollBonusDie ?? raw.REROLL_BONUS_DIE) as ((payload: unknown) => void) | undefined;
-    const skipBonusDiceRerollRaw = (raw.skipBonusDiceReroll ?? raw.SKIP_BONUS_DICE_REROLL) as ((payload: unknown) => void) | undefined;
-    const selectCharacterRaw = (raw.selectCharacter ?? raw.SELECT_CHARACTER) as ((payload: unknown) => void) | undefined;
-    const hostStartGameRaw = (raw.hostStartGame ?? raw.HOST_START_GAME) as ((payload: unknown) => void) | undefined;
-    const playerReadyRaw = (raw.playerReady ?? raw.PLAYER_READY) as ((payload: unknown) => void) | undefined;
-
-    return {
-        advancePhase: () => advancePhase({}),
-        rollDice: () => rollDice({}),
-        toggleDieLock: (id) => toggleDieLock({ dieId: id }),
-        confirmRoll: () => confirmRoll({}),
-        selectAbility: (abilityId) => selectAbility({ abilityId }),
-        playCard: (cardId) => playCard({ cardId }),
-        sellCard: (cardId) => sellCard({ cardId }),
-        undoSellCard: undoSellCardRaw ? () => undoSellCardRaw({}) : undefined,
-        resolveChoice: (statusId) => resolveChoice({ statusId }),
-        responsePass: (forPlayerId) => responsePassRaw?.(forPlayerId ? { forPlayerId } : {}),
-        // 卡牌交互
-        modifyDie: (dieId, newValue) => modifyDieRaw?.({ dieId, newValue }),
-        rerollDie: (dieId) => rerollDieRaw?.({ dieId }),
-        removeStatus: (targetPlayerId, statusId) => removeStatusRaw?.({ targetPlayerId, statusId }),
-        transferStatus: (fromPlayerId, toPlayerId, statusId) => transferStatusRaw?.({ fromPlayerId, toPlayerId, statusId }),
-        confirmInteraction: (interactionId, selectedDiceIds) => confirmInteractionRaw?.({ interactionId, selectedDiceIds }),
-        cancelInteraction: () => cancelInteractionRaw?.({}),
-        // Token 响应
-        useToken: (tokenId, amount) => useTokenRaw?.({ tokenId, amount }),
-        skipTokenResponse: () => skipTokenResponseRaw?.({}),
-        usePurify: (statusId) => usePurifyRaw?.({ statusId }),
-        // 击倒移除
-        payToRemoveKnockdown: () => payToRemoveKnockdownRaw?.({}),
-        // 奖励骰重掷
-        rerollBonusDie: (dieIndex) => rerollBonusDieRaw?.({ dieIndex }),
-        skipBonusDiceReroll: () => skipBonusDiceRerollRaw?.({}),
-        selectCharacter: (characterId) => selectCharacterRaw?.({ characterId }),
-        hostStartGame: () => hostStartGameRaw?.({}),
-        playerReady: () => playerReadyRaw?.({}),
-    };
-};
+/**
+ * 从 dispatch 创建类型安全的 DiceThroneMoveMap
+ */
+export const resolveMoves = (
+    dispatch: (type: string, payload?: unknown) => void,
+): DiceThroneMoveMap => ({
+    advancePhase: () => dispatch('ADVANCE_PHASE', {}),
+    rollDice: () => dispatch('ROLL_DICE', {}),
+    toggleDieLock: (id) => dispatch('TOGGLE_DIE_LOCK', { dieId: id }),
+    confirmRoll: () => dispatch('CONFIRM_ROLL', {}),
+    selectAbility: (abilityId) => dispatch('SELECT_ABILITY', { abilityId }),
+    playCard: (cardId) => dispatch('PLAY_CARD', { cardId }),
+    sellCard: (cardId) => dispatch('SELL_CARD', { cardId }),
+    undoSellCard: () => dispatch('UNDO_SELL_CARD', {}),
+    resolveChoice: (statusId) => dispatch('RESOLVE_CHOICE', { statusId }),
+    responsePass: (forPlayerId) => dispatch('RESPONSE_PASS', forPlayerId ? { forPlayerId } : {}),
+    // 卡牌交互
+    modifyDie: (dieId, newValue) => dispatch('MODIFY_DIE', { dieId, newValue }),
+    rerollDie: (dieId) => dispatch('REROLL_DIE', { dieId }),
+    removeStatus: (targetPlayerId, statusId) => dispatch('REMOVE_STATUS', { targetPlayerId, statusId }),
+    transferStatus: (fromPlayerId, toPlayerId, statusId) => dispatch('TRANSFER_STATUS', { fromPlayerId, toPlayerId, statusId }),
+    confirmInteraction: (interactionId, selectedDiceIds) => dispatch('CONFIRM_INTERACTION', { interactionId, selectedDiceIds }),
+    cancelInteraction: () => dispatch('CANCEL_INTERACTION', {}),
+    // Token 响应
+    useToken: (tokenId, amount) => dispatch('USE_TOKEN', { tokenId, amount }),
+    skipTokenResponse: () => dispatch('SKIP_TOKEN_RESPONSE', {}),
+    usePurify: (statusId) => dispatch('USE_PURIFY', { statusId }),
+    // 击倒移除
+    payToRemoveKnockdown: () => dispatch(DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN, {}),
+    // 奖励骰重掷
+    rerollBonusDie: (dieIndex) => dispatch('REROLL_BONUS_DIE', { dieIndex }),
+    skipBonusDiceReroll: () => dispatch('SKIP_BONUS_DICE_REROLL', {}),
+    selectCharacter: (characterId) => dispatch('SELECT_CHARACTER', { characterId }),
+    hostStartGame: () => dispatch('HOST_START_GAME', {}),
+    playerReady: () => dispatch('PLAYER_READY', {}),
+});

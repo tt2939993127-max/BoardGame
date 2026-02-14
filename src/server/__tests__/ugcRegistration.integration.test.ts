@@ -68,11 +68,12 @@ describe('UGC 动态注册集成', () => {
     });
 
     it('应从数据库与本地文件构建动态游戏列表', async () => {
-        const { games, gameIds } = await buildUgcServerGames();
+        const { engineConfigs, gameIds } = await buildUgcServerGames();
         expect(gameIds).toEqual(['pkg-1']);
-        expect(games.length).toBe(1);
-        expect(games[0]?.minPlayers).toBe(2);
-        expect(games[0]?.maxPlayers).toBe(4);
+        expect(engineConfigs.length).toBe(1);
+        expect(engineConfigs[0]?.gameId).toBe('pkg-1');
+        expect(engineConfigs[0]?.minPlayers).toBe(2);
+        expect(engineConfigs[0]?.maxPlayers).toBe(4);
     });
 
     it('应跳过重复 gameId 的包', async () => {

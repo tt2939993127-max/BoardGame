@@ -513,6 +513,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       const abilityPayload = event.payload as {
         abilityId?: string; sourceUnitId?: string;
         grantedAbility?: string; targetUnitId?: string;
+        skipUsageCount?: boolean;
       };
 
       let updatedCore = core;
@@ -561,7 +562,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         }
       }
 
-      if (abilityPayload.abilityId && abilityPayload.sourceUnitId) {
+      if (abilityPayload.abilityId && abilityPayload.sourceUnitId && !abilityPayload.skipUsageCount) {
         const usageKey = `${abilityPayload.sourceUnitId}:${abilityPayload.abilityId}`;
         return {
           ...updatedCore,

@@ -162,10 +162,11 @@ abilityExecutorRegistry.register('ice_ram', (ctx: SWAbilityContext) => {
     timestamp,
   });
 
-  // 可选推拉1格
+  // 可选推拉1格（稳固免疫推拉）
   if (pushNewPos && isValidCoord(pushNewPos)
     && manhattanDistance(targetPos, pushNewPos) === 1
-    && isCellEmpty(core, pushNewPos)) {
+    && isCellEmpty(core, pushNewPos)
+    && !getUnitAbilities(targetUnit, core).includes('stable')) {
     events.push({
       type: SW_EVENTS.UNIT_PUSHED,
       payload: { targetPosition: targetPos, newPosition: pushNewPos },

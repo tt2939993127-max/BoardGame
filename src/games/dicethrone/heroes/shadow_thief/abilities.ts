@@ -230,6 +230,7 @@ export const SHADOW_DANCE_2: AbilityDef = {
     type: 'offensive',
     description: abilityText('shadow-dance-2', 'description'),
     sfxKey: SHADOW_THIEF_SFX_SHADOW,
+    tags: ['unblockable'], // 真实伤害 = 不可防御，通过 tags 声明而非 handler 直接修改 state
     trigger: { type: 'diceSet', faces: { [FACE.SHADOW]: 3 } },
     effects: [
         { description: '投掷1骰造成一半伤害(真实)', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-shadow-dance-roll-2' }, timing: 'withDamage' },

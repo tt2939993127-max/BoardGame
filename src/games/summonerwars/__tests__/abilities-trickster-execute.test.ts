@@ -313,6 +313,55 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
     expect(newState.board[4][4].unit).toBeUndefined();
   });
 
+  it('推拉导致远离缠斗单位时，伤害应作用在推拉后的位置', () => {
+    const state = createTricksterState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-telekinetic',
+      card: makeTelekinetic('test-telekinetic'),
+      owner: '0',
+    });
+
+    // 目标敌方单位（被推拉者）
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy'),
+      owner: '1',
+    });
+
+    // 与目标相邻的友方缠斗单位（rebound），目标被推走后会远离它
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-rebound',
+      card: makeEnemy('test-rebound', { abilities: ['rebound'] }),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'telekinesis',
+      sourceUnitId: 'test-telekinetic',
+      targetPosition: { row: 4, col: 4 },
+      direction: 'push',
+    });
+
+    const entangleDamageEvents = events.filter((event) => {
+      if (event.type !== SW_EVENTS.UNIT_DAMAGED) return false;
+      const payload = event.payload as { position?: CellCoord; reason?: string };
+      return payload.reason === 'entangle';
+    });
+    expect(entangleDamageEvents.length).toBe(1);
+    const damagePayload = entangleDamageEvents[0].payload as { position: CellCoord; damage: number };
+    expect(damagePayload.position).toEqual({ row: 4, col: 5 });
+    expect(damagePayload.damage).toBe(1);
+
+    // 目标被推到新位置并在该位置受伤
+    expect(newState.board[4][5].unit?.cardId).toBe('test-enemy');
+    expect(newState.board[4][5].unit?.damage).toBe(1);
+  });
+
   it('拉近敌方士兵1格', () => {
     const state = createTricksterState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
@@ -892,5 +941,198 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
 
     const copyEvents = events.filter(e => e.type === SW_EVENTS.ABILITIES_COPIED);
     expect(copyEvents.length).toBe(0);
+  });
+});
+
+
+// ============================================================================
+// 念力代替攻击 (telekinesis_instead) ACTIVATE_ABILITY 测试
+// ============================================================================
+
+function makeWindMage(id: string): UnitCard {
+  return {
+    id, cardType: 'unit', name: '清风法师', unitClass: 'common',
+    faction: 'trickster', strength: 1, life: 3, cost: 1,
+    attackType: 'ranged', attackRange: 3,
+    abilities: ['telekinesis', 'telekinesis_instead'], deckSymbols: [],
+  };
+}
+
+describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
+  it('代替攻击推拉2格内敌方士兵1格', () => {
+    const state = createTricksterState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-windmage',
+      card: makeWindMage('test-windmage'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy'),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'telekinesis_instead',
+      sourceUnitId: 'test-windmage',
+      targetPosition: { row: 4, col: 4 },
+      direction: 'push',
+    });
+
+    // 应有推拉事件
+    const pushEvents = events.filter(e => e.type === SW_EVENTS.UNIT_PUSHED);
+    expect(pushEvents.length).toBe(1);
+
+    // 敌方被推到 (4,5)
+    expect(newState.board[4][5].unit?.cardId).toBe('test-enemy');
+    expect(newState.board[4][4].unit).toBeUndefined();
+  });
+
+  it('已攻击的单位不能使用代替攻击', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-windmage',
+      card: makeWindMage('test-windmage'),
+      owner: '0',
+      hasAttacked: true,
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy'),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'telekinesis_instead',
+        sourceUnitId: 'test-windmage',
+        targetPosition: { row: 4, col: 3 },
+        direction: 'push',
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('已攻击');
+  });
+
+  it('攻击次数用完时不能使用代替攻击', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-windmage',
+      card: makeWindMage('test-windmage'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy'),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+    state.players['0'].attackCount = 3;
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'telekinesis_instead',
+        sourceUnitId: 'test-windmage',
+        targetPosition: { row: 4, col: 3 },
+        direction: 'push',
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('攻击次数');
+  });
+
+  it('超过2格时验证拒绝', () => {
+    const state = createTricksterState();
+    clearArea(state, [1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-windmage',
+      card: makeWindMage('test-windmage'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 1, col: 2 }, {
+      cardId: 'test-far-enemy',
+      card: makeEnemy('test-far-enemy'),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'telekinesis_instead',
+        sourceUnitId: 'test-windmage',
+        targetPosition: { row: 1, col: 2 },
+        direction: 'push',
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('2格');
+  });
+
+  it('不能推拉召唤师', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-windmage',
+      card: makeWindMage('test-windmage'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-enemy-summoner',
+      card: makeEnemy('test-enemy-summoner', { unitClass: 'summoner' }),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'telekinesis_instead',
+        sourceUnitId: 'test-windmage',
+        targetPosition: { row: 4, col: 3 },
+        direction: 'push',
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('召唤师');
   });
 });

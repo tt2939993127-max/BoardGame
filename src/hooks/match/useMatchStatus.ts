@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { LobbyClient } from 'boardgame.io/client';
+import * as matchApi from '../../services/matchApi';
 import { GAME_SERVER_URL } from '../../config/server';
-
-const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
 export interface PlayerStatus {
     id: number;
@@ -520,7 +518,7 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
 
         try {
             const effectiveGameName = gameName || 'tictactoe';
-            const match = await lobbyClient.getMatch(effectiveGameName, matchID);
+            const match = await matchApi.getMatch(effectiveGameName, matchID);
             setPlayers(match.players.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -599,7 +597,7 @@ export async function leaveMatch(
     credentials: string
 ): Promise<ExitMatchResult> {
     try {
-        await lobbyClient.leaveMatch(gameName, matchID, {
+        await matchApi.leaveMatch(gameName, matchID, {
             playerID,
             credentials,
         });
@@ -644,7 +642,7 @@ export async function rejoinMatch(
     options?: { guestId?: string }
 ): Promise<{ success: boolean; credentials?: string }> {
     try {
-        const { playerCredentials } = await lobbyClient.joinMatch(gameName, matchID, {
+        const { playerCredentials } = await matchApi.joinMatch(gameName, matchID, {
             playerID,
             playerName,
             data: options?.guestId ? { guestId: options.guestId } : undefined,

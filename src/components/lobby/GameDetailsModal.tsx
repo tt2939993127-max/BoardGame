@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { LobbyClient } from 'boardgame.io/client';
+import * as matchApi from '../../services/matchApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { lobbySocket, type LobbyMatch } from '../../services/lobbySocket';
 import { claimSeat, exitMatch, getOwnerActiveMatch, setOwnerActiveMatch, clearOwnerActiveMatch, isOwnerActiveMatchSuppressed, suppressOwnerActiveMatch, clearMatchCredentials, readStoredMatchCredentials, listStoredMatchCredentials, getLatestStoredMatchCredentials, pruneStoredMatchCredentials, persistMatchCredentials } from '../../hooks/match/useMatchStatus';
@@ -19,8 +19,6 @@ import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
 import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, type Room } from './roomActions';
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
-
-const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
 
 interface GameDetailsModalProps {
@@ -259,18 +257,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 ...(guestId ? { guestId } : {}),
                 ...(password ? { password } : {}),
             };
-            let matchID: string;
-            try {
-                const result = await lobbyClient.createMatch(
+            const result = await matchApi.createMatch(
                     gameId,
                     { numPlayers, setupData },
                     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
                 );
-                matchID = result.matchID;
-            } catch (createError) {
-                // 将创建阶段的错误抛出，由外层 catch 统一处理
-                throw createError;
-            }
+            const matchID = result.matchID;
 
             if (!matchID) {
                 console.error('[handleCreateRoom] 服务器返回空 matchID');
@@ -289,11 +281,27 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         } catch (error) {
             console.error('Failed to create match:', error);
             const message = error instanceof Error ? error.message : String(error);
-            // 解析 ACTIVE_MATCH_EXISTS:游戏编号:matchID 格式
-            const activeMatchPattern = /ACTIVE_MATCH_EXISTS:([^:]+):([^:]+)/;
-            const activeMatch = message.match(activeMatchPattern);
-            if (activeMatch) {
-                const [, existingGameName, existingMatchID] = activeMatch;
+            // 解析 ACTIVE_MATCH_EXISTS — 支持 JSON 响应和旧的冒号分隔格式
+            let existingGameName: string | undefined;
+            let existingMatchID: string | undefined;
+            // 尝试从 JSON 响应体解析（409 响应）
+            const jsonMatch = message.match(/\{.*"error"\s*:\s*"ACTIVE_MATCH_EXISTS".*\}/);
+            if (jsonMatch) {
+                try {
+                    const parsed = JSON.parse(jsonMatch[0]) as { gameName?: string; matchID?: string };
+                    existingGameName = parsed.gameName;
+                    existingMatchID = parsed.matchID;
+                } catch { /* 降级到正则 */ }
+            }
+            // 降级：旧的冒号分隔格式
+            if (!existingMatchID) {
+                const activeMatchPattern = /ACTIVE_MATCH_EXISTS:([^:]+):([^:]+)/;
+                const activeMatch = message.match(activeMatchPattern);
+                if (activeMatch) {
+                    [, existingGameName, existingMatchID] = activeMatch;
+                }
+            }
+            if (existingGameName && existingMatchID) {
                 setOwnerActiveMatch({
                     matchID: existingMatchID,
                     gameName: existingGameName,
@@ -342,7 +350,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 const storedPlayerName = data.playerName ?? user?.username ?? null;
 
                 try {
-                    const matchInfo = await lobbyClient.getMatch(roomGameName, matchID);
+                    const matchInfo = await matchApi.getMatch(roomGameName, matchID);
                     const seat = matchInfo.players.find(p => String(p.id) === String(data?.playerID));
                     const seatTakenByOther = !!(seat?.name && storedPlayerName && seat.name !== storedPlayerName);
 
@@ -385,7 +393,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         let targetPlayerID = '';
 
         try {
-            const matchInfo = await lobbyClient.getMatch(roomGameName, matchID);
+            const matchInfo = await matchApi.getMatch(roomGameName, matchID);
             const openSeat = [...matchInfo.players]
                 .sort((a, b) => a.id - b.id)
                 .find(p => !p.name);
@@ -406,7 +414,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             // 获取用户名或生成游客名
             const playerName = user?.username || getGuestName();
 
-            const { playerCredentials } = await lobbyClient.joinMatch(roomGameName, matchID, {
+            const { playerCredentials } = await matchApi.joinMatch(roomGameName, matchID, {
                 playerID: targetPlayerID,
                 playerName,
                 data: password ? { password } : undefined,
@@ -756,7 +764,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         activeMatchCheckRef.current = activeMatch.matchID;
 
-        lobbyClient.getMatch(activeMatch.gameName, activeMatch.matchID)
+        matchApi.getMatch(activeMatch.gameName, activeMatch.matchID)
             .catch((err) => {
                 const status = (err as { status?: number }).status;
                 const message = (err as { message?: string }).message ?? '';

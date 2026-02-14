@@ -582,12 +582,14 @@ export function resolveAbilityEffects(
   // 解析所有效果
   const events: GameEvent[] = [];
   
-  // 先触发技能激活事件
+  // 先触发技能激活事件（自动触发的通知事件，不消耗 usageCount）
+  // usageCount 的消耗由 executeActivateAbility 中的 ABILITY_TRIGGERED 事件负责
   events.push(createAbilityTriggeredEvent({
     abilityId: ability.id,
     abilityName: ability.name,
     sourceUnitId: ctx.sourceUnit.cardId,
     sourcePosition: ctx.sourcePosition,
+    skipUsageCount: true,
   }, ctx.timestamp));
 
   // 解析效果

@@ -1,10 +1,10 @@
-import type { Server, State } from 'boardgame.io';
+import type { MatchMetadata, StoredMatchState } from '../engine/transport/storage';
 import { claimSeatUtils } from './claimSeat';
 import { hasOccupiedPlayers } from './matchOccupancy';
 
 type JoinGuardInput = {
-    metadata?: Server.MatchData | null;
-    state?: State | null;
+    metadata?: MatchMetadata | null;
+    state?: StoredMatchState | null;
     authHeader?: string;
     guestId?: string | null;
     jwtSecret: string;
@@ -20,9 +20,10 @@ export type JoinGuardResult = {
     reason?: 'not_owner' | 'invalid_token' | 'missing_owner';
 };
 
-const resolveOwnerKey = (metadata?: Server.MatchData | null, state?: State | null): string | undefined => {
+const resolveOwnerKey = (metadata?: MatchMetadata | null, state?: StoredMatchState | null): string | undefined => {
     const setupDataFromMeta = (metadata?.setupData as { ownerKey?: string } | undefined) || undefined;
-    const setupDataFromState = (state?.G?.__setupData as { ownerKey?: string } | undefined) || undefined;
+    const stateG = state?.G as Record<string, unknown> | undefined;
+    const setupDataFromState = (stateG?.__setupData as { ownerKey?: string } | undefined) || undefined;
     return setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey;
 };
 

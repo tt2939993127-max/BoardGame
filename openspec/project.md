@@ -4,9 +4,9 @@
 开发一个 AI 驱动的现代化桌游平台，核心解决“桌游教学”与“轻量级联机”需求，并支持 UGC 制作简单原型。支持从规则文档自动生成游戏逻辑，并兼容主流桌游模拟器 (TTS) 的美术资源。
 
 ## Tech Stack
-- **Frontend**: React 19 (Vite, TypeScript), Tailwind CSS 4
-- **Game Engine**: Boardgame.io 0.50
-- **Realtime**: Socket.io (Lobby/Match)
+- **Frontend**: React 19 (Vite 7, TypeScript), Tailwind CSS 4
+- **Game Engine**: 自研引擎（DomainCore + Pipeline + Systems 架构）
+- **Realtime**: Socket.io（GameTransportServer 游戏状态同步 + Lobby/Match 实时通信）
 - **Backend**: Node.js (Koa 游戏服务 + NestJS 认证/社交), MongoDB
 - **Infrastructure**: Docker / Docker Compose
 
@@ -19,9 +19,9 @@
 - Chinese UI/Comments as primary language
 
 ### Architecture Patterns
-- **Game Logic**: Pure functions (State Machine) via Boardgame.io
+- **Game Logic**: Pure functions (DomainCore: setup/validate/execute/reduce/playerView) + Pipeline 执行管线
 - **UI Components**: Atomic Design, localized game boards in `src/games/<game>/`
-- **State Sync**: WebSocket (Socket.io) for multiplayer
+- **State Sync**: WebSocket (Socket.io) for multiplayer, GameTransportServer/Client 架构
 
 ### Testing Strategy
 - Vitest（游戏/接口）与 Playwright（E2E）
@@ -35,10 +35,11 @@
 - Conventional Commits (feat, fix, docs, etc.)
 
 ## Domain Context
-- **Boardgame.io State (G)**: Serializable JSON object representing game state.
-- **Context (ctx)**: Metadata like current player, turn, phase.
-- **Moves**: Functions that modify G.
-- **Phases**: Game flow segments (e.g., Setup, Play, End).
+- **MatchState<TCore>**: 游戏状态，包含 `core`（领域状态）和 `sys`（系统状态）。
+- **DomainCore**: 游戏领域内核接口（setup/validate/execute/reduce/playerView/isGameOver）。
+- **Command**: 玩家操作指令（type + playerId + payload）。
+- **GameEvent**: 领域事件（type + payload），由 execute 产生，由 reduce 消费。
+- **Pipeline**: 执行管线，串联 validate → execute → reduce → systems。
 
 ## Important Constraints
 - UI must be responsive (Desktop/Tablet).
@@ -47,7 +48,8 @@
 - Support lightweight UGC prototypes with minimal setup.
 
 ## External Dependencies
-- Boardgame.io
 - React / ReactDOM
 - Tailwind CSS
 - Vite
+- Socket.io
+- framer-motion

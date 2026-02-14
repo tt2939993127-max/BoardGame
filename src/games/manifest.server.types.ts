@@ -1,7 +1,8 @@
-import type { Game } from 'boardgame.io';
 import type { GameManifestEntry } from './manifest.types';
+import type { GameEngineConfig } from '../engine/transport/server';
 
 export interface GameServerManifestEntry {
     manifest: GameManifestEntry;
-    game: Game;
+    /** 引擎配置 */
+    engineConfig: GameEngineConfig;
 }

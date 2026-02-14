@@ -18,6 +18,7 @@
 
 import type { AbilityDef } from './abilities';
 import { abilityText } from './abilityTextHelper';
+import { isFortressUnit } from './ids';
 
 export const PALADIN_ABILITIES: AbilityDef[] = [
   // ============================================================================
@@ -51,7 +52,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
         for (let row = 0; row < ctx.core.board.length; row++) {
           for (let col = 0; col < (ctx.core.board[0]?.length ?? 0); col++) {
             const u = ctx.core.board[row]?.[col]?.unit;
-            if (u && u.owner === ctx.playerId && u.card.id.includes('fortress')) {
+            if (u && u.owner === ctx.playerId && isFortressUnit(u.card)) {
               hasFortressOnBoard = true;
               break;
             }
@@ -70,7 +71,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
           return { valid: false, error: '弃牌堆中没有该单位卡' };
         }
         
-        if (!(fpCard as import('./types').UnitCard).id.includes('fortress')) {
+        if (!isFortressUnit(fpCard as import('./types').UnitCard)) {
           return { valid: false, error: '只能拿取城塞单位' };
         }
         
@@ -84,7 +85,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       buttonVariant: 'secondary',
       activationStep: 'selectCard',
       quickCheck: ({ core, playerId }) =>
-        core.players[playerId]?.discard.some(c => c.cardType === 'unit' && c.id.includes('fortress')) ?? false,
+        core.players[playerId]?.discard.some(c => c.cardType === 'unit' && isFortressUnit(c)) ?? false,
     },
   },
 

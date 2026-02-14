@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import type { Server, State } from 'boardgame.io';
+import type { MatchMetadata, StoredMatchState } from '../../engine/transport/storage';
 import { shouldForceCancelInteraction } from '../interactionAdjudication';
 
-const buildMetadata = (connected: boolean): Server.MatchData => ({
+const buildMetadata = (connected: boolean): MatchMetadata => ({
     gameName: 'dicethrone',
     players: {
-        0: { id: 0, isConnected: connected },
-        1: { id: 1, isConnected: true },
+        0: { isConnected: connected },
+        1: { isConnected: true },
     },
     createdAt: Date.now(),
     updatedAt: Date.now(),
-} as Server.MatchData);
+});
 
 const buildState = (pendingInteraction?: { id: string; playerId: string }) => {
     const matchState = {
@@ -29,7 +29,7 @@ const buildState = (pendingInteraction?: { id: string; playerId: string }) => {
     return {
         G: matchState,
         ctx: { gameover: undefined },
-    } as unknown as State;
+    } as unknown as StoredMatchState;
 };
 
 describe('interactionAdjudication', () => {

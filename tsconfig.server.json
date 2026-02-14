@@ -20,7 +20,7 @@
     }
   },
   "include": [
-    "server.ts",
+    "server.new.ts",
     "src/server/**/*",
     "src/shared/**/*",
     "src/lib/i18n/**/*",

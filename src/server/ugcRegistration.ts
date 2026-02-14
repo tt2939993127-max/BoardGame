@@ -1,4 +1,3 @@
-import type { Game } from 'boardgame.io';
 import { readFile } from 'fs/promises';
 import { join, resolve, sep } from 'path';
 import { createUgcGame } from '../games/ugc-wrapper/game';
@@ -90,10 +89,12 @@ export const resolvePlayerRange = (manifest: Record<string, unknown> | null | un
 
 const normalizeGameId = (name?: string) => (name || '').toLowerCase();
 
+import type { GameEngineConfig } from '../engine/transport/server';
+
 export const buildUgcServerGames = async (options?: {
     existingGameIds?: Set<string>;
-}): Promise<{ games: Game[]; gameIds: string[] }> => {
-    const games: Game[] = [];
+}): Promise<{ engineConfigs: GameEngineConfig[]; gameIds: string[] }> => {
+    const engineConfigs: GameEngineConfig[] = [];
     const gameIds: string[] = [];
     const manifestGameIds = options?.existingGameIds ?? new Set<string>();
 
@@ -134,7 +135,7 @@ export const buildUgcServerGames = async (options?: {
             : undefined;
         console.log(`[UGC] 注册包: packageId=${packageId}, gameId=${gameId}, commandTypes=`, commandTypes);
         try {
-            const ugcGame = await createUgcGame({
+            const ugcResult = await createUgcGame({
                 packageId: gameId,
                 domainCode,
                 minPlayers,
@@ -142,7 +143,7 @@ export const buildUgcServerGames = async (options?: {
                 commandTypes,
             });
             console.log(`[UGC] 成功创建游戏: gameId=${gameId}`);
-            games.push(ugcGame);
+            engineConfigs.push(ugcResult.engineConfig);
             manifestGameIds.add(gameId);
             gameIds.push(gameId);
         } catch (error) {
@@ -150,5 +151,5 @@ export const buildUgcServerGames = async (options?: {
         }
     }
 
-    return { games, gameIds };
+    return { engineConfigs, gameIds };
 };

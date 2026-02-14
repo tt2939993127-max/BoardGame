@@ -93,7 +93,7 @@ export interface InteractionState {
 // ============================================================================
 
 export const INTERACTION_COMMANDS = {
-    /** simple-choice 响应（payload: { optionId?, optionIds? }） */
+    /** simple-choice 响应（payload: { optionId?, optionIds?, mergedValue? }） */
     RESPOND: 'SYS_INTERACTION_RESPOND',
     /** simple-choice 超时 */
     TIMEOUT: 'SYS_INTERACTION_TIMEOUT',
@@ -313,7 +313,7 @@ export function createInteractionSystem<TCore>(
 function handleSimpleChoiceRespond<TCore>(
     state: MatchState<TCore>,
     playerId: PlayerId,
-    payload: { optionId?: string; optionIds?: string[] },
+    payload: { optionId?: string; optionIds?: string[]; mergedValue?: unknown },
     timestamp: number,
 ): HookResult<TCore> {
     const current = state.sys.interaction.current;
@@ -378,6 +378,12 @@ function handleSimpleChoiceRespond<TCore>(
 
     const newState = resolveInteraction(state);
 
+    const resolvedValue = payload.mergedValue !== undefined
+        ? payload.mergedValue
+        : isMulti
+            ? selectedOptions.map((o) => o.value)
+            : selectedOptions[0]?.value;
+
     const event: GameEvent = {
         type: INTERACTION_EVENTS.RESOLVED,
         payload: {
@@ -386,9 +392,7 @@ function handleSimpleChoiceRespond<TCore>(
             optionId:
                 selectedOptionIds.length > 0 ? selectedOptionIds[0] : null,
             optionIds: isMulti ? selectedOptionIds : undefined,
-            value: isMulti
-                ? selectedOptions.map((o) => o.value)
-                : selectedOptions[0]?.value,
+            value: resolvedValue,
             sourceId: data.sourceId,
             interactionData: current.data,
         },

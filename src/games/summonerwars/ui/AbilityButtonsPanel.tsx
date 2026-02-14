@@ -33,7 +33,7 @@ interface Props {
   abilityMode: AbilityMode | null;
   bloodSummonMode: unknown;
   eventTargetMode: unknown;
-  moves: Record<string, (payload?: unknown) => void>;
+  dispatch: (type: string, payload?: unknown) => void;
   setAbilityMode: (mode: AbilityMode | null) => void;
   setWithdrawMode: (mode: { sourceUnitId: string; step: string } | null) => void;
 }
@@ -41,7 +41,7 @@ interface Props {
 export const AbilityButtonsPanel: React.FC<Props> = ({
   core, currentPhase, isMyTurn, myPlayerId, myHand,
   abilityMode, bloodSummonMode, eventTargetMode,
-  moves, setAbilityMode, setWithdrawMode,
+  dispatch, setAbilityMode, setWithdrawMode,
 }) => {
   const { t } = useTranslation('game-summonerwars');
 
@@ -79,7 +79,7 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
     // 按钮点击处理
     const handleClick = () => {
       if (ui.activationType === 'directExecute') {
-        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({ abilityId, sourceUnitId: unit.cardId });
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, { abilityId, sourceUnitId: unit.cardId });
       } else if (ui.activationType === 'withdrawMode') {
         setWithdrawMode({ sourceUnitId: unit.cardId, step: 'selectCost' });
       } else {

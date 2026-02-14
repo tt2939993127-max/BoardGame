@@ -4,7 +4,6 @@
  * 加载 UGC domain.js 并转换为引擎 DomainCore。
  */
 
-import type { Game } from 'boardgame.io';
 import type {
     Command,
     DomainCore,
@@ -13,7 +12,7 @@ import type {
     MatchState,
     ValidationResult,
 } from '../../engine/types';
-import { createBaseSystems, createGameAdapter } from '../../engine';
+import { createBaseSystems, createGameEngine } from '../../engine';
 import { createSandboxExecutor } from '../../ugc/server/sandbox';
 import type { UGCDomainCore } from '../../ugc/server/sandbox';
 
@@ -71,7 +70,11 @@ const buildDomainCore = (packageId: string, domain: UGCDomainCore): DomainCore<u
     };
 };
 
-export const createUgcGame = async (options: UgcGameOptions): Promise<Game> => {
+export interface UgcGameResult {
+    engineConfig: import('../../engine/transport/server').GameEngineConfig;
+}
+
+export const createUgcGame = async (options: UgcGameOptions): Promise<UgcGameResult> => {
     const executor = createSandboxExecutor();
     const loadResult = await executor.loadCode(options.domainCode);
     if (!loadResult.success) {
@@ -87,12 +90,16 @@ export const createUgcGame = async (options: UgcGameOptions): Promise<Game> => {
     const domain = buildDomainCore(options.packageId, domainCore);
     const systems = createBaseSystems();
 
-    return createGameAdapter({
+    const adapterConfig = {
         domain,
         systems,
         minPlayers: options.minPlayers ?? DEFAULT_MIN_PLAYERS,
         maxPlayers: options.maxPlayers ?? DEFAULT_MAX_PLAYERS,
         commandTypes: options.commandTypes,
         disableUndo: true,
-    });
+    };
+
+    return {
+        engineConfig: createGameEngine(adapterConfig),
+    };
 };

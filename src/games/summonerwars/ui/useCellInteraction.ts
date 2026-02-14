@@ -41,7 +41,7 @@ export type {
 
 interface UseCellInteractionParams {
   core: SummonerWarsCore;
-  moves: Record<string, (payload?: unknown) => void>;
+  dispatch: (type: string, payload?: unknown) => void;
   currentPhase: GamePhase;
   isMyTurn: boolean;
   isGameOver: boolean;
@@ -67,7 +67,7 @@ interface UseCellInteractionParams {
 // ============================================================================
 
 export function useCellInteraction({
-  core, moves, currentPhase, isMyTurn, isGameOver,
+  core, dispatch, currentPhase, isMyTurn, isGameOver,
   myPlayerId, activePlayerId, myHand, fromViewCoord,
   undoSnapshotCount,
   abilityMode, setAbilityMode, soulTransferMode,
@@ -90,7 +90,7 @@ export function useCellInteraction({
 
   // ---------- 事件卡模式子 hook ----------
   const eventCardModes = useEventCardModes({
-    core, moves, currentPhase, myPlayerId, myHand, setSelectedHandCardId,
+    core, dispatch, currentPhase, myPlayerId, myHand, setSelectedHandCardId,
     soulTransferMode, mindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
   });
@@ -413,7 +413,7 @@ export function useCellInteraction({
     const { row: gameRow, col: gameCol } = fromViewCoord({ row, col });
 
     // 任何格子交互都重置结束阶段确认状态
-    // eslint-disable-next-line react-hooks/rules-of-hooks -- useState 声明在后方，运行时 useCallback 内无 TDZ 问题
+     
     setEndPhaseConfirmPending(false);
 
     // 事件卡/多步骤模式优先处理
@@ -423,7 +423,7 @@ export function useCellInteraction({
     if (abilityMode && abilityMode.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget') {
       const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
-        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId: 'frost_axe',
           sourceUnitId: abilityMode.sourceUnitId,
           choice: 'attach',
@@ -465,32 +465,32 @@ export function useCellInteraction({
               targetUnitId: targetUnit.cardId,
             });
           } else if (abilityMode.abilityId === 'illusion') {
-            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'illusion',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
             });
           } else if (abilityMode.abilityId === 'ancestral_bond') {
-            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'ancestral_bond',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
             });
           } else if (abilityMode.abilityId === 'spirit_bond') {
-            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'spirit_bond',
               sourceUnitId: abilityMode.sourceUnitId,
               choice: 'transfer',
               targetPosition: { row: gameRow, col: gameCol },
             });
           } else if (abilityMode.abilityId === 'feed_beast') {
-            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'feed_beast',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
             });
           } else if (abilityMode.abilityId === 'vanish') {
-            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'vanish',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
@@ -518,7 +518,7 @@ export function useCellInteraction({
             });
             return;
           } else {
-            moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: abilityMode.abilityId,
               sourceUnitId: abilityMode.sourceUnitId,
               targetUnitId: targetUnit.cardId,
@@ -534,7 +534,7 @@ export function useCellInteraction({
     if (abilityMode && abilityMode.abilityId === 'structure_shift' && abilityMode.step === 'selectNewPosition') {
       const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid && abilityMode.targetPosition) {
-        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId: 'structure_shift',
           sourceUnitId: abilityMode.sourceUnitId,
           targetPosition: abilityMode.targetPosition,
@@ -548,7 +548,7 @@ export function useCellInteraction({
     } else if (abilityMode && abilityMode.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection') {
       const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid && abilityMode.targetPosition && abilityMode.structurePosition) {
-        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId: 'ice_ram',
           sourceUnitId: 'ice_ram',
           targetPosition: abilityMode.targetPosition,
@@ -564,7 +564,7 @@ export function useCellInteraction({
     if (abilityMode && abilityMode.step === 'selectPosition') {
       const isValid = validAbilityPositions.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
-        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId: abilityMode.abilityId,
           sourceUnitId: abilityMode.sourceUnitId,
           targetCardId: abilityMode.selectedCardId,
@@ -596,7 +596,7 @@ export function useCellInteraction({
     if (currentPhase === 'summon' && selectedHandCardId) {
       const isValidPosition = validSummonPositions.some(p => p.row === gameRow && p.col === gameCol);
       if (isValidPosition) {
-        moves[SW_COMMANDS.SUMMON_UNIT]?.({ cardId: selectedHandCardId, position: { row: gameRow, col: gameCol } });
+        dispatch(SW_COMMANDS.SUMMON_UNIT, { cardId: selectedHandCardId, position: { row: gameRow, col: gameCol } });
       } else {
         showToast.warning(t('interaction.cannotSummonThere'));
       }
@@ -608,7 +608,7 @@ export function useCellInteraction({
     if (currentPhase === 'build' && selectedHandCardId) {
       const isValidPosition = validBuildPositions.some(p => p.row === gameRow && p.col === gameCol);
       if (isValidPosition) {
-        moves[SW_COMMANDS.BUILD_STRUCTURE]?.({ cardId: selectedHandCardId, position: { row: gameRow, col: gameCol } });
+        dispatch(SW_COMMANDS.BUILD_STRUCTURE, { cardId: selectedHandCardId, position: { row: gameRow, col: gameCol } });
       } else {
         showToast.warning(t('interaction.cannotBuildThere'));
       }
@@ -620,25 +620,25 @@ export function useCellInteraction({
     if (currentPhase === 'move') {
       if (core.selectedUnit) {
         if (gameRow === core.selectedUnit.row && gameCol === core.selectedUnit.col) {
-          moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } });
+          dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: -1, col: -1 } });
           return;
         }
         const isValidMove = validMovePositions.some(p => p.row === gameRow && p.col === gameCol);
         if (isValidMove) {
-          moves[SW_COMMANDS.MOVE_UNIT]?.({ from: core.selectedUnit, to: { row: gameRow, col: gameCol } });
+          dispatch(SW_COMMANDS.MOVE_UNIT, { from: core.selectedUnit, to: { row: gameRow, col: gameCol } });
         } else {
           const clickedUnit = core.board[gameRow]?.[gameCol]?.unit;
           if (clickedUnit && clickedUnit.owner === myPlayerId) {
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
+            dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: gameRow, col: gameCol } });
           } else {
             if (!clickedUnit || clickedUnit.owner !== myPlayerId) {
               showToast.warning(t('interaction.cannotMoveThere'));
             }
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } });
+            dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: -1, col: -1 } });
           }
         }
       } else {
-        moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
+        dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: gameRow, col: gameCol } });
       }
       return;
     }
@@ -647,12 +647,12 @@ export function useCellInteraction({
     if (currentPhase === 'attack') {
       if (core.selectedUnit) {
         if (gameRow === core.selectedUnit.row && gameCol === core.selectedUnit.col) {
-          moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } });
+          dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: -1, col: -1 } });
           return;
         }
         const isValidAttack = validAttackPositions.some(p => p.row === gameRow && p.col === gameCol);
         if (isValidAttack) {
-          moves[SW_COMMANDS.DECLARE_ATTACK]?.({
+          dispatch(SW_COMMANDS.DECLARE_ATTACK, {
             attacker: core.selectedUnit,
             target: { row: gameRow, col: gameCol },
             beforeAttack: activeBeforeAttack
@@ -670,23 +670,23 @@ export function useCellInteraction({
         } else {
           const clickedUnit = core.board[gameRow]?.[gameCol]?.unit;
           if (clickedUnit && clickedUnit.owner === myPlayerId) {
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
+            dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: gameRow, col: gameCol } });
           } else {
             if (clickedUnit && clickedUnit.owner !== myPlayerId) {
               showToast.warning(t('interaction.cannotAttackThere'));
             }
-            moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: -1, col: -1 } });
+            dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: -1, col: -1 } });
           }
         }
       } else {
-        moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
+        dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: gameRow, col: gameCol } });
       }
       return;
     }
 
     // 其他阶段：普通选择
-    moves[SW_COMMANDS.SELECT_UNIT]?.({ position: { row: gameRow, col: gameCol } });
-  }, [core, moves, currentPhase, selectedHandCardId, validSummonPositions, validBuildPositions,
+    dispatch(SW_COMMANDS.SELECT_UNIT, { position: { row: gameRow, col: gameCol } });
+  }, [core, dispatch, currentPhase, selectedHandCardId, validSummonPositions, validBuildPositions,
     validMovePositions, validAttackPositions, myPlayerId, fromViewCoord,
     abilityMode, validAbilityPositions, validAbilityUnits,
     eventCardModes.handleEventModeClick,
@@ -775,10 +775,10 @@ export function useCellInteraction({
   // 确认弃牌换魔力
   const handleConfirmDiscard = useCallback(() => {
     if (selectedCardsForDiscard.length > 0) {
-      moves[SW_COMMANDS.DISCARD_FOR_MAGIC]?.({ cardIds: selectedCardsForDiscard });
+      dispatch(SW_COMMANDS.DISCARD_FOR_MAGIC, { cardIds: selectedCardsForDiscard });
       setSelectedCardsForDiscard([]);
     }
-  }, [moves, selectedCardsForDiscard]);
+  }, [dispatch, selectedCardsForDiscard]);
 
   // ---------- 阶段控制 ----------
 
@@ -792,22 +792,22 @@ export function useCellInteraction({
     }
     if (endPhaseConfirmPending) {
       setEndPhaseConfirmPending(false);
-      moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({});
+      dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
       return;
     }
     if ((currentPhase === 'move' || currentPhase === 'attack') && actionableUnitPositions.length > 0) {
       setEndPhaseConfirmPending(true);
       return;
     }
-    moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({});
-  }, [moves, currentPhase, actionableUnitPositions.length, endPhaseConfirmPending,
+    dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
+  }, [dispatch, currentPhase, actionableUnitPositions.length, endPhaseConfirmPending,
     eventCardModes.hasActiveEventMode, eventCardModes.clearAllEventModes]);
 
   // ---------- 外部技能确认 ----------
 
   const handleConfirmMindCapture = useCallback((choice: 'control' | 'damage') => {
     if (!mindCaptureMode) return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'mind_capture_resolve',
       sourceUnitId: mindCaptureMode.sourceUnitId,
       choice,
@@ -815,7 +815,7 @@ export function useCellInteraction({
       hits: mindCaptureMode.hits,
     });
     setMindCaptureMode(null);
-  }, [moves, mindCaptureMode, setMindCaptureMode]);
+  }, [dispatch, mindCaptureMode, setMindCaptureMode]);
 
   const handleConfirmBeforeAttackCards = useCallback(() => {
     if (!abilityMode || abilityMode.step !== 'selectCards') return;
@@ -867,8 +867,8 @@ export function useCellInteraction({
     && (window as Window & { __SW_DISABLE_AUTO_SKIP__?: boolean }).__SW_DISABLE_AUTO_SKIP__;
 
   const advancePhase = useCallback(() => {
-    moves[FLOW_COMMANDS.ADVANCE_PHASE]?.({});
-  }, [moves]);
+    dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
+  }, [dispatch]);
 
   useAutoSkipPhase({
     isMyTurn,

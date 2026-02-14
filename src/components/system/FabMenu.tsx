@@ -319,7 +319,7 @@ export const FabMenu = ({
                     item={items[0]}
                     onClick={handleMainClick}
                     isActive={activeItemId === items[0].id && isOpen}
-                    showGlow={hasAnyNotification}
+                    showGlow={!isOpen ? hasAnyNotification : Boolean(items[0].active)}
                     isMain={true}
                     isDark={isDark}
                     alignment={alignment}

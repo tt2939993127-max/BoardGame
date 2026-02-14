@@ -1,14 +1,16 @@
-import type { State, Server, LogEntry, StorageAPI } from 'boardgame.io';
+import type {
+    MatchStorage,
+    MatchMetadata,
+    StoredMatchState,
+    CreateMatchData,
+    FetchOpts,
+    FetchResult,
+    ListMatchesOpts,
+} from '../../engine/transport/storage';
 import { mongoStorage, MongoStorage } from './MongoStorage';
-
-const STORAGE_TYPE = {
-    SYNC: 0,
-    ASYNC: 1,
-} as const;
 
 const DISCONNECT_GRACE_MS = 5 * 60 * 1000;
 
-type StorageTypeValue = (typeof STORAGE_TYPE)[keyof typeof STORAGE_TYPE];
 type OwnerType = 'user' | 'guest';
 type StorageTarget = 'mongo' | 'memory';
 
@@ -29,10 +31,10 @@ const parseSetupData = (value: unknown): MatchSetupData => {
     };
 };
 
-const resolveSetupData = (opts: StorageAPI.CreateMatchOpts): MatchSetupData => {
-    const stateG = (opts.initialState as State | undefined)?.G as Record<string, unknown> | undefined;
+const resolveSetupDataFromCreateMatch = (data: CreateMatchData): MatchSetupData => {
+    const stateG = data.initialState?.G as Record<string, unknown> | undefined;
     const setupDataFromState = parseSetupData(stateG?.__setupData);
-    const setupDataFromMetadata = parseSetupData((opts.metadata as { setupData?: unknown } | undefined)?.setupData);
+    const setupDataFromMetadata = parseSetupData((data.metadata as { setupData?: unknown } | undefined)?.setupData);
     return { ...setupDataFromMetadata, ...setupDataFromState };
 };
 
@@ -44,79 +46,52 @@ const resolveStorageTarget = (setupData: MatchSetupData): StorageTarget => {
     return 'memory';
 };
 
-const hasConnectedPlayer = (metadata: Server.MatchData): boolean => {
+const hasConnectedPlayer = (metadata: MatchMetadata): boolean => {
     const players = metadata.players as Record<string, { isConnected?: boolean }> | undefined;
     if (!players) return false;
     return Object.values(players).some(player => Boolean(player?.isConnected));
 };
 
-const hasFetchResult = <O extends StorageAPI.FetchOpts>(
-    result: StorageAPI.FetchResult<O>,
-    opts: O
-): boolean => {
-    const typed = result as unknown as {
-        state?: State;
-        metadata?: Server.MatchData;
-        log?: LogEntry[];
-        initialState?: State;
-    };
-    if (opts.state && typeof typed.state !== 'undefined') return true;
-    if (opts.metadata && typeof typed.metadata !== 'undefined') return true;
-    if (opts.log && typeof typed.log !== 'undefined') return true;
-    if (opts.initialState && typeof typed.initialState !== 'undefined') return true;
+const hasFetchResult = (result: FetchResult, opts: FetchOpts): boolean => {
+    if (opts.state && typeof result.state !== 'undefined') return true;
+    if (opts.metadata && typeof result.metadata !== 'undefined') return true;
     return false;
 };
 
-class InMemoryStorage implements StorageAPI.Sync {
-    private readonly state = new Map<string, State>();
-    private readonly initial = new Map<string, State>();
-    private readonly metadata = new Map<string, Server.MatchData>();
-    private readonly log = new Map<string, LogEntry[]>();
+/**
+ * 内存存储（游客房间使用）
+ */
+class InMemoryStorage {
+    private readonly stateMap = new Map<string, StoredMatchState>();
+    private readonly metadataMap = new Map<string, MatchMetadata>();
 
-    type(): StorageTypeValue {
-        return STORAGE_TYPE.SYNC;
+    createMatch(matchID: string, data: CreateMatchData): void {
+        this.stateMap.set(matchID, data.initialState);
+        this.metadataMap.set(matchID, data.metadata);
     }
 
-    connect(): void {
-        return;
+    setState(matchID: string, state: StoredMatchState): void {
+        this.stateMap.set(matchID, state);
     }
 
-    createMatch(matchID: string, opts: StorageAPI.CreateMatchOpts): void {
-        this.initial.set(matchID, opts.initialState);
-        this.setState(matchID, opts.initialState);
-        this.setMetadata(matchID, opts.metadata);
+    setMetadata(matchID: string, metadata: MatchMetadata): void {
+        this.metadataMap.set(matchID, metadata);
     }
 
-    setState(matchID: string, state: State, deltalog?: LogEntry[]): void {
-        if (deltalog && deltalog.length > 0) {
-            const existing = this.log.get(matchID) || [];
-            this.log.set(matchID, [...existing, ...deltalog]);
-        }
-        this.state.set(matchID, state);
-    }
-
-    setMetadata(matchID: string, metadata: Server.MatchData): void {
-        this.metadata.set(matchID, metadata);
-    }
-
-    fetch<O extends StorageAPI.FetchOpts>(matchID: string, opts: O): StorageAPI.FetchResult<O> {
-        const result = {} as Partial<StorageAPI.FetchFields>;
-        if (opts.state) result.state = this.state.get(matchID);
-        if (opts.metadata) result.metadata = this.metadata.get(matchID);
-        if (opts.log) result.log = this.log.get(matchID) || [];
-        if (opts.initialState) result.initialState = this.initial.get(matchID);
-        return result as StorageAPI.FetchResult<O>;
+    fetch(matchID: string, opts: FetchOpts): FetchResult {
+        const result: FetchResult = {};
+        if (opts.state) result.state = this.stateMap.get(matchID);
+        if (opts.metadata) result.metadata = this.metadataMap.get(matchID);
+        return result;
     }
 
     wipe(matchID: string): void {
-        this.state.delete(matchID);
-        this.metadata.delete(matchID);
-        this.log.delete(matchID);
-        this.initial.delete(matchID);
+        this.stateMap.delete(matchID);
+        this.metadataMap.delete(matchID);
     }
 
-    listMatches(opts?: StorageAPI.ListMatchesOpts): string[] {
-        return [...this.metadata.entries()]
+    listMatches(opts?: ListMatchesOpts): string[] {
+        return [...this.metadataMap.entries()]
             .filter(([, metadata]) => {
                 if (!opts) return true;
                 if (opts.gameName !== undefined && metadata.gameName !== opts.gameName) return false;
@@ -138,9 +113,9 @@ class InMemoryStorage implements StorageAPI.Sync {
     }
 }
 
-export class HybridStorage implements StorageAPI.Async {
+export class HybridStorage implements MatchStorage {
     private readonly mongo: MongoStorage;
-    private readonly memory: StorageAPI.Sync;
+    private readonly memory: InMemoryStorage;
     private readonly matchStorage = new Map<string, StorageTarget>();
     private readonly guestOwnerIndex = new Map<string, string>();
     private readonly guestMatchOwner = new Map<string, string>();
@@ -150,17 +125,12 @@ export class HybridStorage implements StorageAPI.Async {
         this.memory = new InMemoryStorage();
     }
 
-    type(): StorageTypeValue {
-        return STORAGE_TYPE.ASYNC;
-    }
-
     async connect(): Promise<void> {
-        this.memory.connect();
         await this.mongo.connect();
     }
 
-    async createMatch(matchID: string, opts: StorageAPI.CreateMatchOpts): Promise<void> {
-        const setupData = resolveSetupData(opts);
+    async createMatch(matchID: string, data: CreateMatchData): Promise<void> {
+        const setupData = resolveSetupDataFromCreateMatch(data);
         const target = resolveStorageTarget(setupData);
         const ownerKey = setupData.ownerKey;
 
@@ -176,28 +146,28 @@ export class HybridStorage implements StorageAPI.Async {
                 this.guestMatchOwner.set(matchID, ownerKey);
             }
             this.matchStorage.set(matchID, 'memory');
-            this.memory.createMatch(matchID, opts);
+            this.memory.createMatch(matchID, data);
             return;
         }
 
         this.matchStorage.set(matchID, 'mongo');
-        await this.mongo.createMatch(matchID, opts);
+        await this.mongo.createMatch(matchID, data);
     }
 
-    async setState(matchID: string, state: State, deltalog?: LogEntry[]): Promise<void> {
+    async setState(matchID: string, state: StoredMatchState): Promise<void> {
         const target = await this.resolveStorageForMatch(matchID);
         if (target === 'mongo') {
-            await this.mongo.setState(matchID, state, deltalog);
+            await this.mongo.setState(matchID, state);
             return;
         }
         if (target === 'memory') {
-            this.memory.setState(matchID, state, deltalog);
+            this.memory.setState(matchID, state);
             return;
         }
         console.warn(`[HybridStorage] setState 未找到房间 matchID=${matchID}`);
     }
 
-    async setMetadata(matchID: string, metadata: Server.MatchData): Promise<void> {
+    async setMetadata(matchID: string, metadata: MatchMetadata): Promise<void> {
         const target = await this.resolveStorageForMatch(matchID);
         if (target === 'mongo') {
             await this.mongo.setMetadata(matchID, metadata);
@@ -211,13 +181,13 @@ export class HybridStorage implements StorageAPI.Async {
         console.warn(`[HybridStorage] setMetadata 未找到房间 matchID=${matchID}`);
     }
 
-    async fetch<O extends StorageAPI.FetchOpts>(matchID: string, opts: O): Promise<StorageAPI.FetchResult<O>> {
+    async fetch(matchID: string, opts: FetchOpts): Promise<FetchResult> {
         const target = this.matchStorage.get(matchID);
         if (target === 'mongo') {
             return await this.mongo.fetch(matchID, opts);
         }
         if (target === 'memory') {
-            return this.memory.fetch(matchID, opts) as StorageAPI.FetchResult<O>;
+            return this.memory.fetch(matchID, opts);
         }
 
         const mongoResult = await this.mongo.fetch(matchID, opts);
@@ -226,7 +196,7 @@ export class HybridStorage implements StorageAPI.Async {
             return mongoResult;
         }
 
-        const memoryResult = this.memory.fetch(matchID, opts) as StorageAPI.FetchResult<O>;
+        const memoryResult = this.memory.fetch(matchID, opts);
         if (hasFetchResult(memoryResult, opts)) {
             this.matchStorage.set(matchID, 'memory');
             return memoryResult;
@@ -245,7 +215,7 @@ export class HybridStorage implements StorageAPI.Async {
         this.matchStorage.delete(matchID);
     }
 
-    async listMatches(opts?: StorageAPI.ListMatchesOpts): Promise<string[]> {
+    async listMatches(opts?: ListMatchesOpts): Promise<string[]> {
         const mongoMatches = await this.mongo.listMatches(opts);
         const memoryMatches = this.memory.listMatches(opts);
         const merged = new Set<string>([...mongoMatches, ...memoryMatches]);
@@ -259,15 +229,13 @@ export class HybridStorage implements StorageAPI.Async {
 
         const memoryMatches = this.memory.listMatches();
         for (const matchID of memoryMatches) {
-            const { metadata } = this.memory.fetch(matchID, { metadata: true }) as StorageAPI.FetchResult<{
-                metadata: true;
-            }>;
+            const { metadata } = this.memory.fetch(matchID, { metadata: true });
             if (!metadata) continue;
             const setupData = parseSetupData((metadata as { setupData?: unknown }).setupData);
             const ttlSeconds = setupData.ttlSeconds ?? 0;
             if (ttlSeconds !== 0) continue;
 
-            const metaWith = metadata as Server.MatchData & { disconnectedSince?: number | null };
+            const metaWith = metadata as MatchMetadata & { disconnectedSince?: number | null };
             const connected = hasConnectedPlayer(metadata);
             if (connected) {
                 if (metaWith.disconnectedSince) {
@@ -307,7 +275,7 @@ export class HybridStorage implements StorageAPI.Async {
             return 'mongo';
         }
 
-        const memoryCheck = this.memory.fetch(matchID, { metadata: true }) as StorageAPI.FetchResult<{ metadata: true }>;
+        const memoryCheck = this.memory.fetch(matchID, { metadata: true });
         if (memoryCheck?.metadata) {
             this.matchStorage.set(matchID, 'memory');
             return 'memory';
@@ -325,10 +293,10 @@ export class HybridStorage implements StorageAPI.Async {
         }
     }
 
-    private applyDisconnectionSince(metadata: Server.MatchData): Server.MatchData {
+    private applyDisconnectionSince(metadata: MatchMetadata): MatchMetadata {
         const setupData = parseSetupData((metadata as { setupData?: unknown }).setupData);
         const ttlSeconds = setupData.ttlSeconds ?? 0;
-        const nextMetadata = metadata as Server.MatchData & { disconnectedSince?: number | null };
+        const nextMetadata = metadata as MatchMetadata & { disconnectedSince?: number | null };
         if (ttlSeconds !== 0) {
             if (nextMetadata.disconnectedSince) {
                 delete nextMetadata.disconnectedSince;

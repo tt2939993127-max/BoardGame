@@ -4,8 +4,16 @@
  * 定义底层 Hook 的返回值类型契约，供完全自定义 UI 时使用。
  */
 
-import type { Ctx } from 'boardgame.io';
 import type { DragOffset } from './types';
+
+// 兼容层 ctx 类型（替代 boardgame.io Ctx）
+interface CompatCtx {
+    gameover?: unknown;
+    currentPlayer?: string;
+    turn?: number;
+    numPlayers?: number;
+    phase?: string;
+}
 
 // ============================================================================
 // useGameBoard
@@ -19,8 +27,8 @@ import type { DragOffset } from './types';
 export interface UseGameBoardReturn<G> {
     /** 游戏状态 */
     G: G;
-    /** boardgame.io 上下文 */
-    ctx: Ctx;
+    /** 游戏上下文 */
+    ctx: CompatCtx;
     /** 是否是当前玩家回合 */
     isMyTurn: boolean;
     /** 当前阶段 ID */

@@ -1,0 +1,225 @@
+/**
+ * 游戏状态同步客户端
+ *
+ * 替代 boardgame.io 的 SocketIO transport + Client，基于 socket.io 实现：
+ * - 连接 /game namespace → 发送 sync → 接收状态
+ * - 发送命令 → 接收状态更新
+ * - 自动重连 + 凭证验证
+ */
+
+import { io, type Socket } from 'socket.io-client';
+import type { MatchPlayerInfo, ServerToClientEvents, ClientToServerEvents } from './protocol';
+
+// ============================================================================
+// 客户端配置
+// ============================================================================
+
+export interface GameTransportClientConfig {
+    /** 服务端地址（如 '' 表示同源，或 'http://localhost:8000'） */
+    server: string;
+    /** 对局 ID */
+    matchID: string;
+    /** 玩家 ID（观战者为 null） */
+    playerID: string | null;
+    /** 认证凭证 */
+    credentials?: string;
+    /** 状态更新回调 */
+    onStateUpdate?: (state: unknown, matchPlayers: MatchPlayerInfo[]) => void;
+    /** 连接状态变更回调 */
+    onConnectionChange?: (connected: boolean) => void;
+    /** 玩家连接/断开回调 */
+    onPlayerConnectionChange?: (playerID: string, connected: boolean) => void;
+    /** 错误回调 */
+    onError?: (error: string) => void;
+}
+
+// ============================================================================
+// 客户端状态
+// ============================================================================
+
+export type ClientConnectionState = 'disconnected' | 'connecting' | 'connected';
+
+// ============================================================================
+// GameTransportClient
+// ============================================================================
+
+export class GameTransportClient {
+    private socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;
+    private readonly config: GameTransportClientConfig;
+    private _connectionState: ClientConnectionState = 'disconnected';
+    private _latestState: unknown = null;
+    private _matchPlayers: MatchPlayerInfo[] = [];
+    private _destroyed = false;
+    private _syncTimer: ReturnType<typeof setTimeout> | null = null;
+    private _syncRetries = 0;
+    private static readonly SYNC_TIMEOUT_MS = 5000;
+    private static readonly SYNC_MAX_RETRIES = 5;
+
+    constructor(config: GameTransportClientConfig) {
+        this.config = config;
+    }
+
+    /** 当前连接状态 */
+    get connectionState(): ClientConnectionState {
+        return this._connectionState;
+    }
+
+    /** 是否已连接 */
+    get isConnected(): boolean {
+        return this._connectionState === 'connected';
+    }
+
+    /** 最新游戏状态 */
+    get latestState(): unknown {
+        return this._latestState;
+    }
+
+    /** 对局玩家信息 */
+    get matchPlayers(): MatchPlayerInfo[] {
+        return this._matchPlayers;
+    }
+
+    /** 连接到服务端 */
+    connect(): void {
+        if (this._destroyed || this.socket) return;
+
+        this._connectionState = 'connecting';
+        this.config.onConnectionChange?.(false);
+
+        const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
+            `${this.config.server}/game`,
+            {
+                transports: ['websocket'],
+                reconnection: true,
+                reconnectionAttempts: Infinity,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                autoConnect: true,
+            },
+        );
+
+        this.socket = socket;
+
+        socket.on('connect', () => {
+            if (this._destroyed) return;
+            // 连接后立即发送 sync 请求
+            this.sendSync();
+        });
+
+        socket.on('state:sync', (matchID, state, matchPlayers) => {
+            if (this._destroyed || matchID !== this.config.matchID) return;
+            this.clearSyncTimer();
+            this._syncRetries = 0;
+            this._connectionState = 'connected';
+            this._latestState = state;
+            this._matchPlayers = matchPlayers;
+            this.config.onConnectionChange?.(true);
+            this.config.onStateUpdate?.(state, matchPlayers);
+        });
+
+        socket.on('state:update', (matchID, state, matchPlayers) => {
+            if (this._destroyed || matchID !== this.config.matchID) return;
+            this._latestState = state;
+            this._matchPlayers = matchPlayers;
+            this.config.onStateUpdate?.(state, matchPlayers);
+        });
+
+        socket.on('error', (matchID, error) => {
+            if (this._destroyed || matchID !== this.config.matchID) return;
+            this.config.onError?.(error);
+        });
+
+        socket.on('player:connected', (matchID, playerID) => {
+            if (this._destroyed || matchID !== this.config.matchID) return;
+            this.config.onPlayerConnectionChange?.(playerID, true);
+        });
+
+        socket.on('player:disconnected', (matchID, playerID) => {
+            if (this._destroyed || matchID !== this.config.matchID) return;
+            this.config.onPlayerConnectionChange?.(playerID, false);
+        });
+
+        socket.on('disconnect', () => {
+            if (this._destroyed) return;
+            this._connectionState = 'disconnected';
+            this.config.onConnectionChange?.(false);
+        });
+
+        // socket.io 自动重连成功后重新 sync
+        socket.io.on('reconnect', () => {
+            if (this._destroyed) return;
+            this._connectionState = 'connecting';
+            this._syncRetries = 0;
+            this.sendSync();
+        });
+    }
+
+    /** 发送命令 */
+    sendCommand(commandType: string, payload: unknown): void {
+        if (!this.socket || this._destroyed) return;
+        this.socket.emit(
+            'command',
+            this.config.matchID,
+            commandType,
+            payload,
+            this.config.credentials,
+        );
+    }
+
+    /** 断开连接并清理资源 */
+    disconnect(): void {
+        this._destroyed = true;
+        this.clearSyncTimer();
+        if (this.socket) {
+            this.socket.removeAllListeners();
+            this.socket.disconnect();
+            this.socket = null;
+        }
+        this._connectionState = 'disconnected';
+    }
+
+    /** 发送 sync 请求并启动超时重试 */
+    private sendSync(): void {
+        if (this._destroyed || !this.socket?.connected) return;
+        this.clearSyncTimer();
+        this.socket.emit(
+            'sync',
+            this.config.matchID,
+            this.config.playerID,
+            this.config.credentials,
+        );
+        // 如果 SYNC_TIMEOUT_MS 内没收到 state:sync，自动重试
+        this._syncTimer = setTimeout(() => {
+            if (this._destroyed || this._connectionState === 'connected') return;
+            this._syncRetries += 1;
+            if (this._syncRetries <= GameTransportClient.SYNC_MAX_RETRIES) {
+                console.warn(`[GameTransport] sync 超时，重试 ${this._syncRetries}/${GameTransportClient.SYNC_MAX_RETRIES}`);
+                this.sendSync();
+            } else {
+                console.error(`[GameTransport] sync 重试耗尽，matchID=${this.config.matchID}`);
+                this.config.onError?.('sync_timeout');
+            }
+        }, GameTransportClient.SYNC_TIMEOUT_MS);
+    }
+
+    private clearSyncTimer(): void {
+        if (this._syncTimer) {
+            clearTimeout(this._syncTimer);
+            this._syncTimer = null;
+        }
+    }
+
+    /** 更新玩家 ID（调试面板切换视角时使用） */
+    updatePlayerID(playerID: string | null): void {
+        (this.config as { playerID: string | null }).playerID = playerID;
+        // 重新 sync 以获取新视角的状态
+        if (this.socket?.connected) {
+            this.socket.emit(
+                'sync',
+                this.config.matchID,
+                playerID,
+                this.config.credentials,
+            );
+        }
+    }
+}

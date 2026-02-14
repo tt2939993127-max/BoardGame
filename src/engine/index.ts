@@ -17,7 +17,7 @@ export {
 
 // 适配器
 export {
-    createGameAdapter,
+    createGameEngine,
     createReplayAdapter,
     type AdapterConfig,
 } from './adapter';

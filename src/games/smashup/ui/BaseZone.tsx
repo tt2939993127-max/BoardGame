@@ -27,6 +27,8 @@ export const BaseZone: React.FC<{
     isMinionSelectMode?: boolean;
     /** 交互驱动的随从选择：只有这些 UID 的随从可被选中 */
     selectableMinionUids?: Set<string>;
+    /** 基地选择交互模式：该基地可被直接点击选中 */
+    isSelectable?: boolean;
     isMyTurn: boolean;
     myPlayerId: string | null;
     moves: Record<string, (payload?: unknown) => void>;
@@ -37,7 +39,7 @@ export const BaseZone: React.FC<{
     onViewBase: (defId: string) => void;
     tokenRef?: (el: HTMLDivElement | null) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, isMyTurn, myPlayerId, moves, onClick, onMinionSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
+}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, isSelectable, isMyTurn, myPlayerId, moves, onClick, onMinionSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
     const { t } = useTranslation('game-smashup');
     const baseDef = getBaseDef(base.defId);
     const baseName = resolveCardName(baseDef, t) || base.defId;
@@ -102,7 +104,9 @@ export const BaseZone: React.FC<{
                 onClick={onClick}
                 className={`
                     relative w-[14vw] aspect-[1.43] bg-white p-[0.4vw] shadow-sm rounded-sm transition-all duration-300 z-20
-                    ${isDeployMode && !isMinionSelectMode
+                    ${isSelectable
+                        ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2.5vw_rgba(251,191,36,0.6)] ring-4 ring-amber-400'
+                        : isDeployMode && !isMinionSelectMode
                         ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2vw_rgba(255,255,255,0.4)] ring-4 ring-green-400'
                         : 'rotate-1 hover:rotate-0 hover:shadow-xl cursor-zoom-in'}
                 `}
@@ -135,6 +139,16 @@ export const BaseZone: React.FC<{
                         </div>
                     )}
                 </div>
+
+                {/* 基地可选时的脉冲发光叠层 */}
+                {isSelectable && (
+                    <motion.div
+                        className="absolute inset-0 pointer-events-none z-25 rounded-sm"
+                        animate={{ opacity: [0.1, 0.3, 0.1] }}
+                        transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                        style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.4) 0%, transparent 70%)' }}
+                    />
+                )}
 
                 {/* 放大镜按钮 - hover 时显示，部署模式下也能预览基地 */}
                 <button
@@ -402,8 +416,9 @@ const MinionCard: React.FC<{
                 <>
                     <AttachedBadge count={minion.attachedActions.length} />
                     {/* hover 随从时显示的小卡片列，高 z-index 避免被相邻随从遮挡 */}
+                    {/* right-0 + pl 桥接：容器左边界与随从卡右边界重叠，消除鼠标移动死区 */}
                     <div
-                        className="absolute top-0 -right-[2.4vw] flex flex-col gap-[0.2vw]
+                        className="absolute top-0 left-full flex flex-col gap-[0.2vw] pl-[0.6vw]
                             opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100
                             transition-all duration-150 pointer-events-none group-hover:pointer-events-auto"
                         style={{ zIndex: UI_Z_INDEX.tooltip }}

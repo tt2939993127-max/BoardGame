@@ -1544,6 +1544,65 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     // TURN_CHANGED 通过解构移除 extraAttacks 字段
     expect(newState.board[4][2].unit?.extraAttacks).toBeUndefined();
   });
+
+  it('完整流程：攻击→afterAttack触发→确认→ACTIVATE_ABILITY 不被 usageCount 阻止', () => {
+    // 此测试验证 afterAttack 自动触发的 ABILITY_TRIGGERED 事件不会提前消耗 usageCount，
+    // 导致后续 ACTIVATE_ABILITY 验证失败（曾经的 bug）
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
+      boosts: 2,
+    });
+
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'enemy-1', card: makeEnemy('enemy-1', { life: 10 }), owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    // 第一步：攻击，触发 afterAttack → ABILITY_TRIGGERED(rapid_fire)
+    const { newState: afterAttackState, events: attackEvents } = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
+      attacker: { row: 4, col: 2 },
+      target: { row: 4, col: 4 },
+    });
+
+    // 确认 afterAttack 触发了 rapid_fire 通知事件
+    const triggerEvents = attackEvents.filter(e =>
+      e.type === SW_EVENTS.ABILITY_TRIGGERED
+      && (e.payload as Record<string, unknown>).abilityId === 'rapid_fire_extra_attack'
+    );
+    expect(triggerEvents.length).toBe(1);
+
+    // 关键断言：afterAttack 的通知事件不应该消耗 usageCount
+    expect(afterAttackState.abilityUsageCount['test-makinda:rapid_fire']).toBeUndefined();
+
+    // 第二步：玩家确认连续射击
+    const fullState = { core: afterAttackState, sys: {} as any };
+    const validateResult = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: { abilityId: 'rapid_fire', sourceUnitId: 'test-makinda' },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    // 验证应该通过（不被 usageCount 阻止）
+    expect(validateResult.valid).toBe(true);
+
+    // 第三步：执行 ACTIVATE_ABILITY
+    const { newState: afterActivateState } = executeAndReduce(afterAttackState, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'rapid_fire',
+      sourceUnitId: 'test-makinda',
+    });
+
+    // 执行后 usageCount 应该增加
+    expect(afterActivateState.abilityUsageCount['test-makinda:rapid_fire']).toBe(1);
+    // hasAttacked 重置
+    expect(afterActivateState.board[4][2].unit?.hasAttacked).toBe(false);
+    // extraAttacks 增加
+    expect(afterActivateState.board[4][2].unit?.extraAttacks).toBe(1);
+  });
 });
 
 // ============================================================================

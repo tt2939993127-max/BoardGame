@@ -11,7 +11,6 @@ import { SPRITE_INDEX } from './config/factions/necromancer';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface SummonerWarsDebugConfigProps {
     G: { core: SummonerWarsCore };
-    ctx: any;
     moves: any;
 }
 

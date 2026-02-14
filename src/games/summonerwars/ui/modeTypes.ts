@@ -86,8 +86,9 @@ export interface PendingBeforeAttack {
 
 /** 念力推拉方向选择模式 */
 export interface TelekinesisTargetModeState {
-  abilityId: 'telekinesis' | 'high_telekinesis';
+  abilityId: 'telekinesis' | 'high_telekinesis' | 'high_telekinesis_instead' | 'telekinesis_instead';
   sourceUnitId: string;
+  sourcePosition?: CellCoord;
   targetPosition: CellCoord;
 }
 

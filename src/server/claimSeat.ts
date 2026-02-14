@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import type { Server, State } from 'boardgame.io';
+import type { MatchMetadata, StoredMatchState } from '../engine/transport/storage';
 
 export type GameJwtPayload = {
     userId?: string;
@@ -7,13 +7,13 @@ export type GameJwtPayload = {
 };
 
 type ClaimSeatFetchResult = {
-    metadata?: Server.MatchData;
-    state?: State;
+    metadata?: MatchMetadata;
+    state?: StoredMatchState;
 };
 
 type ClaimSeatDb = {
     fetch: (matchID: string, opts: { metadata?: boolean; state?: boolean }) => Promise<ClaimSeatFetchResult>;
-    setMetadata: (matchID: string, metadata: Server.MatchData) => Promise<void>;
+    setMetadata: (matchID: string, metadata: MatchMetadata) => Promise<void>;
 };
 
 type ClaimSeatContext = {
@@ -98,7 +98,8 @@ export const createClaimSeatHandler = ({
         }
 
         const setupDataFromMeta = (metadata.setupData as { ownerKey?: string } | undefined) || undefined;
-        const setupDataFromState = (state?.G?.__setupData as { ownerKey?: string } | undefined) || undefined;
+        const stateG = state?.G as Record<string, unknown> | undefined;
+        const setupDataFromState = (stateG?.__setupData as { ownerKey?: string } | undefined) || undefined;
         const ownerKey = setupDataFromMeta?.ownerKey ?? setupDataFromState?.ownerKey;
         if (!ownerKey || ownerKey !== expectedOwnerKey) {
             console.warn(

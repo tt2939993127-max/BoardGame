@@ -1,0 +1,331 @@
+import { describe, expect, it } from 'vitest';
+import { GameTransportServer, type GameEngineConfig } from '../server';
+import type {
+    CreateMatchData,
+    FetchOpts,
+    FetchResult,
+    MatchMetadata,
+    MatchStorage,
+    StoredMatchState,
+} from '../storage';
+
+type EventHandler = (...args: unknown[]) => void | Promise<void>;
+
+type SocketEvent = {
+    event: string;
+    args: unknown[];
+};
+
+class MockSocket {
+    readonly id: string;
+    readonly sent: SocketEvent[] = [];
+    readonly rooms = new Set<string>();
+    disconnected = false;
+
+    private handlers = new Map<string, EventHandler[]>();
+    private namespace: MockNamespace | null = null;
+
+    constructor(id: string) {
+        this.id = id;
+    }
+
+    on(event: string, handler: EventHandler): void {
+        const list = this.handlers.get(event) ?? [];
+        list.push(handler);
+        this.handlers.set(event, list);
+    }
+
+    bindNamespace(namespace: MockNamespace): void {
+        this.namespace = namespace;
+    }
+
+    emit(event: string, ...args: unknown[]): void {
+        this.sent.push({ event, args });
+    }
+
+    join(room: string): void {
+        this.rooms.add(room);
+    }
+
+    to(target: string): { emit: (event: string, ...args: unknown[]) => void } {
+        return {
+            emit: (event: string, ...args: unknown[]) => {
+                this.namespace?.emitToTarget(target, event, args, this.id);
+            },
+        };
+    }
+
+    disconnect(_force?: boolean): void {
+        this.disconnected = true;
+        const handlers = this.handlers.get('disconnect') ?? [];
+        for (const handler of handlers) {
+            void handler();
+        }
+    }
+
+    async clientEmit(event: string, ...args: unknown[]): Promise<void> {
+        const handlers = this.handlers.get(event) ?? [];
+        for (const handler of handlers) {
+            await handler(...args);
+        }
+    }
+}
+
+class MockNamespace {
+    private connectionHandler: ((socket: MockSocket) => void) | null = null;
+    private readonly sockets = new Map<string, MockSocket>();
+
+    on(event: string, handler: (socket: MockSocket) => void): void {
+        if (event === 'connection') {
+            this.connectionHandler = handler;
+        }
+    }
+
+    connectSocket(socket: MockSocket): void {
+        this.sockets.set(socket.id, socket);
+        socket.bindNamespace(this);
+        this.connectionHandler?.(socket);
+    }
+
+    emitToTarget(
+        target: string,
+        event: string,
+        args: unknown[],
+        excludeSocketId?: string,
+    ): void {
+        if (target.startsWith('game:')) {
+            for (const socket of this.sockets.values()) {
+                if (!socket.rooms.has(target)) continue;
+                if (excludeSocketId && socket.id === excludeSocketId) continue;
+                socket.emit(event, ...args);
+            }
+            return;
+        }
+
+        const socket = this.sockets.get(target);
+        if (!socket) return;
+        if (excludeSocketId && socket.id === excludeSocketId) return;
+        socket.emit(event, ...args);
+    }
+
+    to(target: string): { emit: (event: string, ...args: unknown[]) => void } {
+        return {
+            emit: (event: string, ...args: unknown[]) => {
+                this.emitToTarget(target, event, args);
+            },
+        };
+    }
+
+    in(room: string): { fetchSockets: () => Promise<MockSocket[]> } {
+        return {
+            fetchSockets: async () => {
+                return Array.from(this.sockets.values()).filter((socket) => socket.rooms.has(room));
+            },
+        };
+    }
+}
+
+class MockIO {
+    readonly gameNamespace = new MockNamespace();
+
+    of(namespace: string): MockNamespace {
+        if (namespace !== '/game') {
+            throw new Error(`Unexpected namespace: ${namespace}`);
+        }
+        return this.gameNamespace;
+    }
+}
+
+class InMemoryStorage implements MatchStorage {
+    private readonly states = new Map<string, StoredMatchState>();
+    private readonly metadata = new Map<string, MatchMetadata>();
+
+    async connect(): Promise<void> {
+        return;
+    }
+
+    async createMatch(matchID: string, data: CreateMatchData): Promise<void> {
+        this.states.set(matchID, data.initialState);
+        this.metadata.set(matchID, data.metadata);
+    }
+
+    async setState(matchID: string, state: StoredMatchState): Promise<void> {
+        this.states.set(matchID, state);
+    }
+
+    async setMetadata(matchID: string, metadata: MatchMetadata): Promise<void> {
+        this.metadata.set(matchID, metadata);
+    }
+
+    async fetch(matchID: string, opts: FetchOpts): Promise<FetchResult> {
+        return {
+            state: opts.state ? this.states.get(matchID) : undefined,
+            metadata: opts.metadata ? this.metadata.get(matchID) : undefined,
+        };
+    }
+
+    async wipe(matchID: string): Promise<void> {
+        this.states.delete(matchID);
+        this.metadata.delete(matchID);
+    }
+
+    async listMatches(): Promise<string[]> {
+        return Array.from(this.states.keys());
+    }
+}
+
+const createEngineConfig = (): GameEngineConfig => ({
+    gameId: 'test-game',
+    domain: {
+        gameId: 'test-game',
+        setup: () => ({ currentPlayer: '0' }),
+        validate: () => ({ valid: true }),
+        execute: () => [],
+        reduce: (core) => core,
+    },
+    systems: [],
+});
+
+const createStoredState = (): StoredMatchState => ({
+    G: {
+        core: { currentPlayer: '0' },
+        sys: { phase: 'main', turnNumber: 1 },
+    },
+    _stateID: 0,
+    randomSeed: 'seed',
+    randomCursor: 0,
+});
+
+const createMetadata = (credentials: string): MatchMetadata => ({
+    gameName: 'test-game',
+    players: {
+        '0': {
+            name: '玩家0',
+            credentials,
+            isConnected: false,
+        },
+    },
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    setupData: {},
+});
+
+const hasEvent = (socket: MockSocket, event: string, predicate?: (args: unknown[]) => boolean): boolean => {
+    return socket.sent.some((item) => item.event === event && (predicate ? predicate(item.args) : true));
+};
+
+const nextTick = async (): Promise<void> => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+};
+
+describe('GameTransportServer（离座与重连）', () => {
+    it('sync 应使用存储层最新凭证，旧凭证在 metadata 更新后必须失效', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const initialMetadata = createMetadata('old-cred');
+        await storage.createMatch('match-1', {
+            initialState: createStoredState(),
+            metadata: initialMetadata,
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            authenticate: async (_matchID, playerID, credentials, metadata) => {
+                return metadata.players[playerID]?.credentials === credentials;
+            },
+        });
+        server.start();
+
+        const oldSocket = new MockSocket('socket-old');
+        io.gameNamespace.connectSocket(oldSocket);
+        await oldSocket.clientEmit('sync', 'match-1', '0', 'old-cred');
+        expect(hasEvent(oldSocket, 'state:sync')).toBe(true);
+
+        const refreshedMetadata: MatchMetadata = {
+            ...initialMetadata,
+            players: {
+                ...initialMetadata.players,
+                '0': {
+                    ...initialMetadata.players['0'],
+                    credentials: 'new-cred',
+                },
+            },
+            updatedAt: Date.now(),
+        };
+        await storage.setMetadata('match-1', refreshedMetadata);
+
+        // 不更新 active match 缓存，验证 sync 会主动读取存储层最新 metadata。
+        await oldSocket.clientEmit('sync', 'match-1', '0', 'old-cred');
+        expect(hasEvent(oldSocket, 'error', (args) => args[1] === 'unauthorized')).toBe(true);
+
+        const newSocket = new MockSocket('socket-new');
+        io.gameNamespace.connectSocket(newSocket);
+        await newSocket.clientEmit('sync', 'match-1', '0', 'new-cred');
+        expect(hasEvent(newSocket, 'state:sync')).toBe(true);
+        expect(hasEvent(newSocket, 'error', (args) => args[1] === 'unauthorized')).toBe(false);
+    });
+
+    it('离座后断开旧连接，使用新凭证可继续同一 seat 进度', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const initialMetadata = createMetadata('seat-cred-old');
+        await storage.createMatch('match-2', {
+            initialState: createStoredState(),
+            metadata: initialMetadata,
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            authenticate: async (_matchID, playerID, credentials, metadata) => {
+                return metadata.players[playerID]?.credentials === credentials;
+            },
+        });
+        server.start();
+
+        const oldSocket = new MockSocket('socket-seat-old');
+        io.gameNamespace.connectSocket(oldSocket);
+        await oldSocket.clientEmit('sync', 'match-2', '0', 'seat-cred-old');
+        expect(hasEvent(oldSocket, 'state:sync')).toBe(true);
+
+        const leftMetadata: MatchMetadata = {
+            ...initialMetadata,
+            players: {
+                ...initialMetadata.players,
+                '0': {
+                    isConnected: false,
+                },
+            },
+            updatedAt: Date.now(),
+        };
+        await storage.setMetadata('match-2', leftMetadata);
+        server.updateMatchMetadata('match-2', leftMetadata);
+        server.disconnectPlayer('match-2', '0', { disconnectSockets: true });
+        await nextTick();
+        expect(oldSocket.disconnected).toBe(true);
+
+        const rejoinMetadata: MatchMetadata = {
+            ...leftMetadata,
+            players: {
+                ...leftMetadata.players,
+                '0': {
+                    name: '接替玩家',
+                    credentials: 'seat-cred-new',
+                    isConnected: false,
+                },
+            },
+            updatedAt: Date.now(),
+        };
+        await storage.setMetadata('match-2', rejoinMetadata);
+        server.updateMatchMetadata('match-2', rejoinMetadata);
+
+        const newSocket = new MockSocket('socket-seat-new');
+        io.gameNamespace.connectSocket(newSocket);
+        await newSocket.clientEmit('sync', 'match-2', '0', 'seat-cred-new');
+        expect(hasEvent(newSocket, 'state:sync')).toBe(true);
+        expect(hasEvent(newSocket, 'error', (args) => args[1] === 'unauthorized')).toBe(false);
+    });
+});

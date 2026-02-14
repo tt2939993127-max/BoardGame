@@ -5,6 +5,7 @@
 import type { GameEvent } from '../../../../engine/types';
 import type { UnitCard } from '../types';
 import { SW_EVENTS } from '../types';
+import { isFortressUnit } from '../ids';
 import { abilityExecutorRegistry } from './registry';
 import type { SWAbilityContext } from './types';
 
@@ -18,7 +19,7 @@ abilityExecutorRegistry.register('fortress_power', (ctx: SWAbilityContext) => {
   const fpPlayer = core.players[playerId as '0' | '1'];
   const fpCard = fpPlayer.discard.find(c => c.id === targetCardId);
   if (!fpCard || fpCard.cardType !== 'unit') return { events };
-  if (!(fpCard as UnitCard).id.includes('fortress')) return { events };
+  if (!isFortressUnit(fpCard as UnitCard)) return { events };
 
   events.push({
     type: SW_EVENTS.CARD_RETRIEVED,

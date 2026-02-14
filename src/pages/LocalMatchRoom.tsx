@@ -1,15 +1,16 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Client } from 'boardgame.io/react';
 import { GAME_IMPLEMENTATIONS } from '../games/registry';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { getGameById } from '../config/games.config';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { LoadingScreen } from '../components/system/LoadingScreen';
-import { useState } from 'react';
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 import { CriticalImageGate } from '../components/game/framework';
+import { LocalGameProvider, BoardBridge } from '../engine/transport/react';
+import type { GameBoardProps } from '../engine/transport/protocol';
+import type { ComponentType } from 'react';
 
 export const LocalMatchRoom = () => {
     usePerformanceMonitor();
@@ -32,12 +33,17 @@ export const LocalMatchRoom = () => {
             .catch(() => setIsGameNamespaceReady(true));
     }, [gameId, i18n]);
 
-
-    const LocalClient = useMemo(() => {
+    // 从游戏实现中获取引擎配置
+    const engineConfig = useMemo(() => {
         if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
-        const impl = GAME_IMPLEMENTATIONS[gameId];
-        const Board = impl.board;
-        const WrappedBoard: React.ComponentType<any> = (props) => (
+        return GAME_IMPLEMENTATIONS[gameId].engineConfig;
+    }, [gameId]);
+
+    // 包装 Board 组件，注入 CriticalImageGate
+    const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
+        if (!gameId || !GAME_IMPLEMENTATIONS[gameId]) return null;
+        const Board = GAME_IMPLEMENTATIONS[gameId].board as unknown as ComponentType<GameBoardProps>;
+        const Wrapped: ComponentType<GameBoardProps> = (props) => (
             <CriticalImageGate
                 gameId={gameId}
                 gameState={props?.G}
@@ -47,16 +53,9 @@ export const LocalMatchRoom = () => {
                 <Board {...props} />
             </CriticalImageGate>
         );
-        const gameWithSeed = { ...impl.game, seed: gameSeed };
-        console.log('[LocalMatch] 创建游戏，种子:', gameSeed);
-        return Client({
-            game: gameWithSeed,
-            board: WrappedBoard,
-            debug: false,
-            numPlayers: 2,
-            loading: () => <LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />
-        }) as React.ComponentType<{ playerID?: string | null }>;
-    }, [gameId, gameSeed, i18n.language, t]);
+        Wrapped.displayName = 'WrappedLocalBoard';
+        return Wrapped;
+    }, [gameId, i18n.language, t]);
 
     if (!gameConfig) {
         return <div className="text-white">{t('matchRoom.noGame')}</div>;
@@ -66,12 +65,21 @@ export const LocalMatchRoom = () => {
         return <LoadingScreen description={t('matchRoom.loadingResources')} />;
     }
 
+    console.log('[LocalMatch] 创建游戏，种子:', gameSeed);
+
     return (
         <div className="relative w-full h-screen bg-black overflow-hidden font-sans">
             <GameHUD mode="local" />
             <div className="w-full h-full">
                 <GameModeProvider mode="local">
-                    {LocalClient ? <LocalClient /> : (
+                    {engineConfig && WrappedBoard ? (
+                        <LocalGameProvider config={engineConfig} numPlayers={2} seed={gameSeed}>
+                            <BoardBridge
+                                board={WrappedBoard}
+                                loading={<LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
+                            />
+                        </LocalGameProvider>
+                    ) : (
                         <div className="w-full h-full flex items-center justify-center text-white/50">
                             {t('matchRoom.noClient')}
                         </div>

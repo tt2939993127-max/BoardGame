@@ -4,7 +4,6 @@
 
 import type { EngineSystem } from '../../engine/systems/types';
 import {
-    createGameAdapter,
     createFlowSystem,
     createCheatSystem,
     createActionLogSystem,
@@ -16,6 +15,7 @@ import {
     createTutorialSystem,
     createUndoSystem,
 } from '../../engine';
+import { createGameEngine } from '../../engine/adapter';
 import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type SmashUpEvent } from './domain';
 import type { ActionCardDef } from './domain/types';
 import { getCardDef } from './data/cards';
@@ -73,15 +73,19 @@ const systems: EngineSystem<SmashUpCore>[] = [
     createCheatSystem<SmashUpCore>(smashUpCheatModifier),
 ];
 
-export const SmashUp = createGameAdapter<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+// 适配器配置
+const adapterConfig = {
     domain: SmashUpDomain,
     systems,
     minPlayers: 2,
     maxPlayers: 4,
     commandTypes: [...Object.values(SU_COMMANDS)],
-});
+};
 
-export default SmashUp;
+// 引擎配置
+export const engineConfig = createGameEngine<SmashUpCore, SmashUpCommand, SmashUpEvent>(adapterConfig);
+
+export default engineConfig;
 
 // 导出系统配置供测试复用
 export { systems as smashUpSystemsForTest };

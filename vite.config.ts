@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:18000',
           changeOrigin: true,
         },
-        // boardgame.io multiplayer uses socket.io under `/socket.io`.
+        // socket.io 传输层（/game namespace 用于游戏状态同步）
         '/socket.io': {
           target: 'http://127.0.0.1:18000',
           changeOrigin: true,

@@ -1,41 +1,28 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import type { State, Server, StorageAPI } from 'boardgame.io';
+import type { MatchMetadata, StoredMatchState, CreateMatchData } from '../../../engine/transport/storage';
 import { mongoStorage } from '../MongoStorage';
 
-const buildState = (setupData: Record<string, unknown>): State => ({
+const buildState = (setupData: Record<string, unknown>): StoredMatchState => ({
     G: { __setupData: setupData },
-    ctx: {
-        numPlayers: 2,
-        playOrder: ['0', '1'],
-        playOrderPos: 0,
-        activePlayers: null,
-        currentPlayer: '0',
-        turn: 0,
-        phase: 'default',
-        gameover: null,
-    },
-    plugins: {},
-    _undo: [],
-    _redo: [],
     _stateID: 0,
 });
 
 const buildMetadata = (
     setupData: Record<string, unknown> | undefined,
-    gameover?: Server.MatchData['gameover']
-): Server.MatchData => ({
+    gameover?: unknown
+): MatchMetadata => ({
     gameName: 'tictactoe',
     players: {
-        0: { id: 0, name: 'P0' },
-        1: { id: 1, name: 'P1' },
+        0: { name: 'P0' },
+        1: { name: 'P1' },
     },
     setupData,
     gameover,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-});
+} as MatchMetadata);
 
 const buildSetupData = (ownerKey?: string, ttlSeconds?: number): Record<string, unknown> => {
     const setupData: Record<string, unknown> = {};
@@ -44,11 +31,11 @@ const buildSetupData = (ownerKey?: string, ttlSeconds?: number): Record<string, 
     return setupData;
 };
 
-const buildCreateOpts = (
+const buildCreateData = (
     ownerKey?: string,
-    gameover?: Server.MatchData['gameover'],
+    gameover?: unknown,
     ttlSeconds?: number
-): StorageAPI.CreateMatchOpts => {
+): CreateMatchData => {
     const setupData = buildSetupData(ownerKey, ttlSeconds);
     return {
         initialState: buildState(setupData),
@@ -77,14 +64,14 @@ describe('MongoStorage 行为', () => {
     });
 
     it('同一 ownerKey 创建新房间会被阻止', async () => {
-        await mongoStorage.createMatch('match-1', buildCreateOpts('user:1'));
-        await expect(mongoStorage.createMatch('match-2', buildCreateOpts('user:1')))
+        await mongoStorage.createMatch('match-1', buildCreateData('user:1'));
+        await expect(mongoStorage.createMatch('match-2', buildCreateData('user:1')))
             .rejects.toThrow('[Lobby] ACTIVE_MATCH_EXISTS');
     });
 
     it('不同 ownerKey 允许创建多个房间', async () => {
-        await mongoStorage.createMatch('match-1', buildCreateOpts('user:1'));
-        await expect(mongoStorage.createMatch('match-2', buildCreateOpts('user:2')))
+        await mongoStorage.createMatch('match-1', buildCreateData('user:1'));
+        await expect(mongoStorage.createMatch('match-2', buildCreateData('user:2')))
             .resolves.toBeUndefined();
     });
 
@@ -107,7 +94,7 @@ describe('MongoStorage 行为', () => {
             },
             ttlSeconds: 0,
         });
-        await expect(mongoStorage.createMatch('match-2', buildCreateOpts('user:1')))
+        await expect(mongoStorage.createMatch('match-2', buildCreateData('user:1')))
             .rejects.toThrow('[Lobby] ACTIVE_MATCH_EXISTS');
     });
 
@@ -298,7 +285,7 @@ describe('MongoStorage 行为', () => {
 
     it('createMatch 设置 1 天游留存时写入 TTL 与 expiresAt', async () => {
         const start = Date.now();
-        await mongoStorage.createMatch('ttl-1day', buildCreateOpts('user:ttl', undefined, 86400));
+        await mongoStorage.createMatch('ttl-1day', buildCreateData('user:ttl', undefined, 86400));
         const end = Date.now();
 
         const Match = mongoose.model('Match');

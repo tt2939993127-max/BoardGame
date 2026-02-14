@@ -21,6 +21,8 @@ import {
   isCellEmpty,
   getPlayerUnits,
   calculatePushPullPosition,
+  getUnitAbilities,
+  isInStraightLine,
   BOARD_ROWS,
   BOARD_COLS,
 } from '../helpers';
@@ -171,64 +173,80 @@ export function executePlayEvent(
           const stunTarget = targets[0];
           const stunUnit = getUnitAt(core, stunTarget);
           if (stunUnit && stunUnit.card.unitClass !== 'summoner') {
+            // 执行层验证：距离≤3 且直线
+            const stunDist = manhattanDistance(stunSummoner.position, stunTarget);
+            if (stunDist > 3 || stunDist === 0 || !isInStraightLine(stunSummoner.position, stunTarget)) break;
+
             const stunDirection = (payload.stunDirection as 'push' | 'pull') ?? 'push';
             const stunDistance = Math.min(3, Math.max(1, (payload.stunDistance as number) ?? 1));
 
-            // 计算推拉方向向量
-            const dr = stunTarget.row - stunSummoner.position.row;
-            const dc = stunTarget.col - stunSummoner.position.col;
-            let moveRow = 0;
-            let moveCol = 0;
-            if (stunDirection === 'push') {
-              if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr > 0 ? 1 : -1; }
-              else { moveCol = dc > 0 ? 1 : -1; }
-            } else {
-              if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr > 0 ? -1 : 1; }
-              else { moveCol = dc > 0 ? -1 : 1; }
-            }
+            // 稳固免疫检查：有 stable 技能的单位不受推拉，但仍受伤害
+            const isStable = getUnitAbilities(stunUnit, core).includes('stable');
 
-            // 逐格推拉，可穿过士兵和英雄，对穿过的单位造成1伤害
-            let currentPos = { ...stunTarget };
-            for (let step = 0; step < stunDistance; step++) {
-              const nextPos = {
-                row: currentPos.row + moveRow,
-                col: currentPos.col + moveCol,
-              };
-              if (!isValidCoord(nextPos)) break;
+            if (!isStable) {
+              // 计算推拉方向向量
+              const dr = stunTarget.row - stunSummoner.position.row;
+              const dc = stunTarget.col - stunSummoner.position.col;
+              let moveRow = 0;
+              let moveCol = 0;
+              if (stunDirection === 'push') {
+                if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr > 0 ? 1 : -1; }
+                else { moveCol = dc > 0 ? 1 : -1; }
+              } else {
+                if (Math.abs(dr) >= Math.abs(dc)) { moveRow = dr > 0 ? -1 : 1; }
+                else { moveCol = dc > 0 ? -1 : 1; }
+              }
 
-          const occupant = getUnitAt(core, nextPos);
-              if (occupant) {
-                // 穿过单位：对被穿过的单位造成1伤害
+              // 逐格推拉，可穿过士兵和英雄，对穿过的单位造成1伤害
+              let currentPos = { ...stunTarget };
+              let lastEmptyPos: CellCoord | null = null;
+              for (let step = 0; step < stunDistance; step++) {
+                const nextPos = {
+                  row: currentPos.row + moveRow,
+                  col: currentPos.col + moveCol,
+                };
+                if (!isValidCoord(nextPos)) break;
+
+                const occupant = getUnitAt(core, nextPos);
+                if (occupant) {
+                  // 穿过单位：对被穿过的单位造成1伤害
+                  events.push({
+                    type: SW_EVENTS.UNIT_DAMAGED,
+                    payload: { position: nextPos, damage: 1, reason: 'stun_passthrough', sourcePlayerId: playerId },
+                    timestamp,
+                  });
+                  // 继续穿过（震慑可穿过士兵和英雄）
+                  currentPos = nextPos;
+                } else if (getStructureAt(core, nextPos)) {
+                  // 建筑阻挡，停止
+                  break;
+                } else {
+                  // 空格：记录为最后一个可停留位置
+                  currentPos = nextPos;
+                  lastEmptyPos = nextPos;
+                }
+              }
+
+              // 移动目标到最终空位置
+              const finalPos = lastEmptyPos ?? (
+                (currentPos.row !== stunTarget.row || currentPos.col !== stunTarget.col)
+                  && isCellEmpty(core, currentPos) ? currentPos : null
+              );
+              if (finalPos) {
                 events.push({
-                  type: SW_EVENTS.UNIT_DAMAGED,
-                  payload: { position: nextPos, damage: 1, reason: 'stun_passthrough', sourcePlayerId: playerId },
+                  type: SW_EVENTS.UNIT_PUSHED,
+                  payload: { targetPosition: stunTarget, newPosition: finalPos },
                   timestamp,
                 });
-                // 继续穿过（震慑可穿过士兵和英雄）
-              } else if (getStructureAt(core, nextPos)) {
-                // 建筑阻挡，停止
-                break;
               }
-              currentPos = nextPos;
             }
 
-            // 对目标造成1伤害
+            // 对目标造成1伤害（无论是否有 stable，伤害都生效）
             events.push({
               type: SW_EVENTS.UNIT_DAMAGED,
               payload: { position: stunTarget, damage: 1, reason: 'stun', sourcePlayerId: playerId },
               timestamp,
             });
-
-            // 移动目标到最终位置（如果位置变了且目标位置为空）
-            if (currentPos.row !== stunTarget.row || currentPos.col !== stunTarget.col) {
-              if (isCellEmpty(core, currentPos)) {
-                events.push({
-                  type: SW_EVENTS.UNIT_PUSHED,
-                  payload: { targetPosition: stunTarget, newPosition: currentPos },
-                  timestamp,
-                });
-              }
-            }
           }
         }
         break;
@@ -238,21 +256,28 @@ export function executePlayEvent(
         // 催眠引诱：拉目标向召唤师靠近1格 + ACTIVE（攻击该目标时+1战力）
         // targets[0] = 目标位置
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
+        // payload.skipPull = true 时跳过拉动（"你可以"可选效果）
         const lureSummoner = getSummoner(core, playerId);
         if (lureSummoner && targets && targets.length > 0) {
           const lureTarget = targets[0];
           const lureUnit = getUnitAt(core, lureTarget);
           if (lureUnit && lureUnit.card.unitClass !== 'summoner') {
-            // 拉向召唤师1格
-            const pullPos = calculatePushPullPosition(
-              core, lureTarget, lureSummoner.position, 1, 'pull'
-            );
-            if (pullPos) {
-              events.push({
-                type: SW_EVENTS.UNIT_PULLED,
-                payload: { targetPosition: lureTarget, newPosition: pullPos },
-                timestamp,
-              });
+            // 拉向召唤师1格（可选，且需检查 stable 免疫）
+            const skipPull = payload.skipPull as boolean | undefined;
+            if (!skipPull) {
+              const isLureStable = getUnitAbilities(lureUnit, core).includes('stable');
+              if (!isLureStable) {
+                const pullPos = calculatePushPullPosition(
+                  core, lureTarget, lureSummoner.position, 1, 'pull'
+                );
+                if (pullPos) {
+                  events.push({
+                    type: SW_EVENTS.UNIT_PULLED,
+                    payload: { targetPosition: lureTarget, newPosition: pullPos },
+                    timestamp,
+                  });
+                }
+              }
             }
             // 标记被催眠的目标（用于主动事件区的战力加成）
             events.push({
@@ -507,7 +532,7 @@ export function executePlayEvent(
         break;
       }
 
-      case 'barbaric-chant-of-weaving': {
+      case CARD_IDS.BARBARIC_CHANT_OF_WEAVING: {
         // 编织颂歌（ACTIVE）：可在目标相邻召唤，召唤时充能目标
         // isActive=true，已由 EVENT_PLAYED 处理放入主动区域
         if (targets && targets.length > 0) {

@@ -1,10 +1,9 @@
 /**
  * UGC 客户端 Game 构建器
  *
- * 加载 rules 入口并创建 boardgame.io Game。
+ * 加载 rules 入口并创建引擎配置。
  */
 
-import type { Game } from 'boardgame.io';
 import type {
     Command,
     DomainCore,
@@ -13,16 +12,19 @@ import type {
     MatchState,
     ValidationResult,
 } from '../../engine/types';
-import { createBaseSystems, createGameAdapter } from '../../engine';
+import { createBaseSystems } from '../../engine';
+import { createGameEngine } from '../../engine/adapter';
+import type { GameEngineConfig } from '../../engine/transport/server';
 import { RuntimeDomainExecutor, type RuntimeDomainCore } from '../runtime/domainExecutor';
 import type { UGCGameState } from '../sdk/types';
 import { loadUgcRuntimeConfig, type UgcRuntimeConfig } from './loader';
 
 export interface UgcClientGameResult {
-    game: Game;
+    engineConfig: GameEngineConfig;
     config: UgcRuntimeConfig;
     rulesCode: string;
 }
+
 
 export interface UgcDraftGameOptions {
     packageId?: string;
@@ -121,7 +123,11 @@ interface CreateGameFromRulesOptions {
     commandTypes?: string[];
 }
 
-const createGameFromRules = async (options: CreateGameFromRulesOptions): Promise<Game> => {
+interface CreateGameFromRulesResult {
+    engineConfig: GameEngineConfig;
+}
+
+const createGameFromRules = async (options: CreateGameFromRulesOptions): Promise<CreateGameFromRulesResult> => {
     const { packageId, rulesCode, minPlayers, maxPlayers, commandTypes } = options;
     if (!rulesCode.trim()) {
         throw new Error(`[UGC] 规则代码为空: ${packageId}`);
@@ -142,14 +148,18 @@ const createGameFromRules = async (options: CreateGameFromRulesOptions): Promise
     const domain = buildDomainCore(packageId, domainCore);
     const systems = createBaseSystems<UGCGameState>();
 
-    return createGameAdapter({
+    const adapterConfig = {
         domain,
         systems,
         minPlayers: minPlayers ?? DEFAULT_MIN_PLAYERS,
         maxPlayers: maxPlayers ?? DEFAULT_MAX_PLAYERS,
         commandTypes,
         disableUndo: true,
-    });
+    };
+
+    const engineConfig = createGameEngine(adapterConfig);
+
+    return { engineConfig };
 };
 
 export const createUgcClientGame = async (packageId: string): Promise<UgcClientGameResult> => {
@@ -159,7 +169,7 @@ export const createUgcClientGame = async (packageId: string): Promise<UgcClientG
     }
 
     const rulesCode = await fetchText(config.rulesUrl);
-    const game = await createGameFromRules({
+    const { engineConfig } = await createGameFromRules({
         packageId,
         rulesCode,
         minPlayers: config.minPlayers ?? DEFAULT_MIN_PLAYERS,
@@ -167,10 +177,14 @@ export const createUgcClientGame = async (packageId: string): Promise<UgcClientG
         commandTypes: config.commandTypes,
     });
 
-    return { game, config, rulesCode };
+    return { engineConfig, config, rulesCode };
 };
 
-export const createUgcDraftGame = async (options: UgcDraftGameOptions): Promise<Game> => {
+export interface UgcDraftGameResult {
+    engineConfig: GameEngineConfig;
+}
+
+export const createUgcDraftGame = async (options: UgcDraftGameOptions): Promise<UgcDraftGameResult> => {
     const packageId = options.packageId?.trim() || DEFAULT_DRAFT_PACKAGE_ID;
     return createGameFromRules({
         packageId,

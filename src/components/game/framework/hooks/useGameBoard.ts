@@ -1,18 +1,26 @@
 /**
  * useGameBoard - 游戏 Board 基础状态管理 Hook
  *
- * 封装 boardgame.io 的常用状态判断逻辑。
+ * 封装游戏常用状态判断逻辑。
  */
 
 import { useMemo } from 'react';
-import type { Ctx } from 'boardgame.io';
 import type { UseGameBoardReturn } from '../../../../core/ui/hooks';
+
+// 兼容层 ctx 类型
+interface CompatCtx {
+    gameover?: unknown;
+    currentPlayer?: string;
+    turn?: number;
+    numPlayers?: number;
+    phase?: string;
+}
 
 export interface UseGameBoardConfig<G> {
     /** 游戏状态 */
     G: G;
-    /** boardgame.io 上下文 */
-    ctx: Ctx;
+    /** 游戏上下文 */
+    ctx: CompatCtx;
     /** 当前玩家 ID */
     playerID: string | null | undefined;
     /** 是否是多人模式 */

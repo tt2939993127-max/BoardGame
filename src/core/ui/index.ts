@@ -7,7 +7,6 @@
 
 // 核心类型
 export type {
-    GameBoardProps,
     PhaseInfo,
     ActionBarAction,
     ActionBarConfig,
@@ -19,7 +18,6 @@ export type {
     AnimationConfig,
     DragOffset,
     DragState,
-    Ctx,
 } from './types';
 
 // 角色选择类型

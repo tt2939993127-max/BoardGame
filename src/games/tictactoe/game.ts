@@ -7,7 +7,6 @@
 import type { ActionLogEntry, Command, GameEvent, MatchState } from '../../engine/types';
 import {
     createActionLogSystem,
-    createGameAdapter,
     createLogSystem,
     createInteractionSystem,
     createRematchSystem,
@@ -15,6 +14,7 @@ import {
     createTutorialSystem,
     createUndoSystem,
 } from '../../engine';
+import { createGameEngine } from '../../engine/adapter';
 import { TicTacToeDomain } from './domain';
 
 // ============================================================================
@@ -62,9 +62,8 @@ const systems = [
     createTutorialSystem(),
 ];
 
-// 使用适配器创建 Boardgame.io Game
-// 注意：重赛投票已迁移至 socket 层（见 RematchContext），不再通过 move 实现
-export const TicTacToe = createGameAdapter({
+// 适配器配置
+const adapterConfig = {
     domain: TicTacToeDomain,
     systems,
     minPlayers: 2,
@@ -72,9 +71,10 @@ export const TicTacToe = createGameAdapter({
     commandTypes: [
         'CLICK_CELL',
     ],
-});
+};
 
-export default TicTacToe;
+// 引擎配置
+export const engineConfig = createGameEngine(adapterConfig);
 
-// 导出类型（兼容旧代码）
+export default engineConfig;
 export type { TicTacToeCore as TicTacToeState } from './domain';

@@ -63,16 +63,16 @@ import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
 // --- Main Layout ---
-export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, moves, playerID, reset, matchData, isMultiplayer }) => {
+export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves, dispatch, playerID, reset, matchData, isMultiplayer }) => {
     const G = rawG.core;
     const access = useDiceThroneState(rawG);
     const choice = useCurrentChoice(access);
     const gameMode = useGameMode();
     const isSpectator = !!gameMode?.isSpectator;
 
-    // 使用引擎层 useSpectatorMoves Hook 自动拦截观察者操作（消除88行重复代码）
+    // 使用引擎层 useSpectatorMoves Hook 自动拦截观察者操作
     const engineMoves = useSpectatorMoves(
-        resolveMoves(moves as Record<string, unknown>),
+        resolveMoves(dispatch),
         isSpectator,
         playerID || undefined,
         { logPrefix: 'Spectate[DiceThrone]' }
@@ -84,7 +84,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
     const locale = i18n.resolvedLanguage ?? i18n.language;
     const tutorialStartRequestedRef = React.useRef(false);
 
-    const isGameOver = ctx.gameover;
+    const isGameOver = (rawG.core as Record<string, unknown>).gameover as import('../../engine/types').GameOverResult | undefined;
     const rootPid = playerID || '0';
     const player = G.players[rootPid] || G.players['0'];
     const otherPid = Object.keys(G.players).find(id => id !== rootPid) || '1';
@@ -138,7 +138,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
 
     // 判断游戏结果
-    const isWinner = isGameOver && ctx.gameover?.winner === rootPid;
+    const isWinner = isGameOver && isGameOver?.winner === rootPid;
 
     // 获取所有玩家名称映射
     const playerNames = React.useMemo(() => {
@@ -698,7 +698,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                 containerClassName="bg-[#0F0F23] text-white"
                 textClassName="text-[1.5vw] font-bold"
             >
-                <UndoProvider value={{ G: rawG, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
+                <UndoProvider value={{ G: rawG, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
                     <div className="relative w-full h-dvh bg-[#0a0a0c] overflow-hidden font-sans select-none">
                         <DiceThroneCharacterSelection
                             isOpen={true}
@@ -720,12 +720,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
 
     // --- 游戏进行阶段：渲染完整棋盘 UI ---
     return (
-        <UndoProvider value={{ G: rawG, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
+        <UndoProvider value={{ G: rawG, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
             <div className="relative w-full h-dvh bg-black overflow-hidden font-sans select-none text-slate-200">
                 {!isSpectator && (
-                    <GameDebugPanel G={rawG} ctx={ctx} moves={moves} playerID={playerID}>
+                    <GameDebugPanel G={rawG} moves={moves} playerID={playerID}>
                         {/* DiceThrone 专属作弊工具 */}
-                        <DiceThroneDebugConfig G={rawG} ctx={ctx} moves={moves} />
+                        <DiceThroneDebugConfig G={rawG} moves={moves} />
 
                         {/* 测试工具 */}
                         <div className="pt-4 border-t border-gray-200 mt-4 space-y-3">

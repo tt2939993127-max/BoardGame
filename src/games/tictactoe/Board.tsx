@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { BoardProps } from 'boardgame.io/react';
+import type { GameBoardProps } from '../../engine/transport/protocol';
 import type { MatchState } from '../../engine/types';
 import type { TicTacToeCore } from './domain';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
@@ -16,7 +16,7 @@ import { TIC_TAC_TOE_AUDIO_CONFIG } from './audio.config';
 import { TIC_TAC_TOE_MANIFEST } from './manifest';
 import { UI_Z_INDEX } from '../../core';
 
-type Props = BoardProps<MatchState<TicTacToeCore>>;
+type Props = GameBoardProps<TicTacToeCore>;
 
 type LocalScoreboard = {
     xWins: number;
@@ -118,11 +118,11 @@ const IconO = ({ className }: { className?: string }) => (
     </svg>
 );
 
-export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerID, reset, matchData, isMultiplayer }) => {
-    const isGameOver = ctx.gameover;
+export const TicTacToeBoard: React.FC<Props> = ({ G, moves, playerID, reset, matchData, isMultiplayer }) => {
+    const isGameOver = (G.core as Record<string, unknown>).gameover as { winner?: string; draw?: boolean } | undefined;
     const isWinner = isGameOver?.winner !== undefined;
     const coreCurrentPlayer = G.core.currentPlayer;
-    const currentPlayer = coreCurrentPlayer ?? ctx.currentPlayer;
+    const currentPlayer = coreCurrentPlayer;
     const gameMode = useGameMode();
     const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
     const isSpectator = !!gameMode?.isSpectator;
@@ -173,7 +173,10 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
         config: TIC_TAC_TOE_AUDIO_CONFIG,
         gameId: TIC_TAC_TOE_MANIFEST.id,
         G: G.core,
-        ctx,
+        ctx: {
+            currentPlayer,
+            isGameOver: !!isGameOver,
+        },
         eventEntries: G.sys.eventStream.entries,
     });
 
@@ -284,16 +287,16 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
             }
         }
 
-        if (previousActiveRef.current && !isActive && (ctx.turn > 0 || ctx.gameover != null)) {
+        if (previousActiveRef.current && !isActive && (G.sys.turnNumber > 0 || isGameOver != null)) {
             if (!isTutorialMode) {
                 setTimeout(() => resetGame(), 300);
             }
         }
         previousActiveRef.current = isActive;
-    }, [isActive, ctx.turn, ctx.gameover, isTutorialMode, resetGame]);
+    }, [isActive, G.sys.turnNumber, isGameOver, isTutorialMode, resetGame]);
 
     return (
-        <UndoProvider value={{ G, ctx, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
+        <UndoProvider value={{ G, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
             <div className="flex flex-col items-center h-[100dvh] w-full font-sans bg-black overflow-hidden relative pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] select-none">
 
                 {/* 增加一个径向渐变使光晕分布更自然 (放底层) */}
@@ -423,7 +426,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
                             {isGameOver ? (
                                 <div className="text-xl md:text-2xl font-black italic text-white tracking-widest animate-pulse whitespace-nowrap drop-shadow-lg">
                                     {isWinner ?
-                                        (String(ctx.gameover.winner) === '0'
+                                        (String(isGameOver.winner) === '0'
                                             ? <span className="text-neon-pink">{t('status.win', { player: getPlayerName('0') })}</span>
                                             : <span className="text-neon-blue">{t('status.win', { player: getPlayerName('1') })}</span>)
                                         : t('status.draw')
@@ -472,7 +475,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ ctx, G, moves, events, playerI
                     onVote={isSpectator ? undefined : handleRematchVote}
                 />
                 {!isSpectator && (
-                    <GameDebugPanel G={G} ctx={ctx} moves={moves} events={events} playerID={playerID} autoSwitch={!isMultiplayer} />
+                    <GameDebugPanel G={G} moves={moves} playerID={playerID} autoSwitch={!isMultiplayer} />
                 )}
             </div>
         </UndoProvider>

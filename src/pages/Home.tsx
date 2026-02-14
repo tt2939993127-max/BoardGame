@@ -34,13 +34,10 @@ import { useModalStack } from '../contexts/ModalStackContext';
 import { useToast } from '../contexts/ToastContext';
 import { useUrlModal } from '../hooks/routing/useUrlModal';
 import clsx from 'clsx';
-import { LobbyClient } from 'boardgame.io/client';
-import { GAME_SERVER_URL } from '../config/server';
+import * as matchApi from '../services/matchApi';
 import { SEO } from '../components/common/SEO';
 import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
-
-const lobbyClient = new LobbyClient({ server: GAME_SERVER_URL });
 
 export const Home = () => {
     const [activeCategory, setActiveCategory] = useState<Category>('All');
@@ -267,7 +264,7 @@ export const Home = () => {
             gameName: local.gameName,
         });
 
-        void lobbyClient.getMatch(local.gameName, local.matchID)
+        void matchApi.getMatch(local.gameName, local.matchID)
             .then(match => {
                 if (cancelled) return;
                 const stored = readStoredMatchCredentials(local.matchID);
@@ -413,7 +410,7 @@ export const Home = () => {
                 }
 
                 // 无凭证：尝试重新加入空位
-                const matchInfo = await lobbyClient.getMatch(gameId, activeMatch.matchID);
+                const matchInfo = await matchApi.getMatch(gameId, activeMatch.matchID);
                 const player0 = matchInfo.players.find(p => p.id === 0);
                 const player1 = matchInfo.players.find(p => p.id === 1);
                 let targetPlayerID = '';
@@ -437,7 +434,7 @@ export const Home = () => {
         if (!activeMatch || !myMatchRole) return;
 
         const { playerID, credentials } = myMatchRole;
-        let effectiveCredentials = credentials;
+        const effectiveCredentials = credentials;
 
         if (!effectiveCredentials) {
             return;

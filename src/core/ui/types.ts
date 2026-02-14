@@ -4,21 +4,7 @@
  * 定义通用的游戏 UI 类型契约，供骨架组件和游戏皮肤层使用。
  */
 
-import type { BoardProps } from 'boardgame.io/react';
-import type { Ctx } from 'boardgame.io';
 import type { ReactNode } from 'react';
-
-// ============================================================================
-// 游戏 Board Props 契约
-// ============================================================================
-
-/**
- * 游戏 Board 的标准 Props 契约
- * 所有游戏 Board 组件必须接收此类型的 Props
- */
-export interface GameBoardProps<G = unknown> extends BoardProps<G> {
-    // boardgame.io 原生 Props 已包含: G, ctx, moves, playerID, isActive, ...
-}
 
 // ============================================================================
 // 阶段信息
@@ -266,8 +252,3 @@ export interface DragState {
     startPos: DragOffset;
 }
 
-// ============================================================================
-// 重新导出 boardgame.io 类型（方便使用）
-// ============================================================================
-
-export type { Ctx };

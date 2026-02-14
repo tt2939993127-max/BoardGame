@@ -3,9 +3,12 @@ import net from 'node:net';
 
 const args = process.argv.slice(2);
 
-// 前端只需要等 API 服务器就绪即可启动。
-// 游戏服务器（18000）通过 Vite proxy 访问，启动慢时代理返回 502 不影响前端。
-const defaultPorts = [Number(process.env.API_SERVER_PORT) || 18001];
+// 前端需要等游戏服务器和 API 服务器都就绪后再启动，
+// 避免 Vite 代理 WebSocket 连接到未就绪的游戏服务器时报 ECONNABORTED。
+const defaultPorts = [
+    Number(process.env.GAME_SERVER_PORT) || 18000,
+    Number(process.env.API_SERVER_PORT) || 18001,
+];
 
 const portsFromArgs = args.map((value) => Number(value)).filter((value) => Number.isFinite(value));
 const ports = portsFromArgs.length > 0 ? portsFromArgs : defaultPorts;

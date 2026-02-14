@@ -6,7 +6,6 @@
 
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Client } from 'boardgame.io/react';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { GameModeProvider } from '../../../contexts/GameModeContext';
 import { createUgcDraftGame } from '../../client/game';
@@ -15,6 +14,9 @@ import type { BuilderState } from '../context';
 import { migrateLayoutComponents } from '../../utils/layout';
 import { LoadingScreen } from '../../../components/system/LoadingScreen';
 import { useTranslation } from 'react-i18next';
+import { LocalGameProvider, BoardBridge } from '../../../engine/transport/react';
+import type { GameEngineConfig } from '../../../engine/transport/server';
+import type { GameBoardProps } from '../../../engine/transport/protocol';
 
 const STORAGE_KEY = 'ugc-builder-state';
 
@@ -88,7 +90,7 @@ export function UGCSandbox() {
   const { t } = useTranslation('lobby');
   const [draft, setDraft] = useState<DraftSaveData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [sandboxClient, setSandboxClient] = useState<ComponentType<{ playerID?: string | null }> | null>(null);
+  const [sandboxConfig, setSandboxConfig] = useState<{ engineConfig: GameEngineConfig; board: ComponentType<GameBoardProps> } | null>(null);
   const [sandboxLoading, setSandboxLoading] = useState(false);
   const [sandboxError, setSandboxError] = useState<string | null>(null);
 
@@ -152,21 +154,21 @@ export function UGCSandbox() {
 
   useEffect(() => {
     if (!draft || !previewConfig) {
-      setSandboxClient(null);
+      setSandboxConfig(null);
       setSandboxLoading(false);
       return;
     }
 
     const rulesCode = String(draft.rulesCode || '').trim();
     if (!rulesCode) {
-      setSandboxClient(null);
+      setSandboxConfig(null);
       setSandboxLoading(false);
       setSandboxError('规则代码为空，无法启动沙盒');
       return;
     }
 
     let cancelled = false;
-    setSandboxClient(null);
+    setSandboxConfig(null);
     setSandboxLoading(true);
     setSandboxError(null);
 
@@ -176,27 +178,20 @@ export function UGCSandbox() {
       minPlayers: previewPlayerCount,
       maxPlayers: previewPlayerCount,
     })
-      .then((game) => {
+      .then(({ engineConfig }) => {
         if (cancelled) return;
         const board = createUgcRemoteHostBoard({
           packageId: 'ugc-builder-sandbox',
           viewUrl: '/dev/ugc/runtime-view',
           previewConfig,
-        });
-        const client = Client({
-          game,
-          board,
-          debug: false,
-          numPlayers: previewPlayerCount,
-          loading: () => <LoadingScreen title={t('matchRoom.title.sandbox')} description={t('matchRoom.sandbox.initializing')} />
-        });
-        setSandboxClient(() => client as ComponentType<{ playerID?: string | null }>);
+        }) as ComponentType<GameBoardProps>;
+        setSandboxConfig({ engineConfig, board });
       })
       .catch((error) => {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : '沙盒加载失败';
         setSandboxError(message);
-        setSandboxClient(null);
+        setSandboxConfig(null);
       })
       .finally(() => {
         if (cancelled) return;
@@ -243,13 +238,19 @@ export function UGCSandbox() {
           </div>
         ) : sandboxLoading ? (
           <LoadingScreen description={t('matchRoom.sandbox.initializing')} />
-        ) : sandboxClient ? (
+        ) : sandboxConfig ? (
           <div className="ugc-preview-container flex-1">
             <GameModeProvider mode="local">
-              {(() => {
-                const SandboxClient = sandboxClient;
-                return <SandboxClient playerID="0" />;
-              })()}
+              <LocalGameProvider
+                config={sandboxConfig.engineConfig}
+                numPlayers={previewPlayerCount}
+                seed={`sandbox-${Date.now()}`}
+              >
+                <BoardBridge
+                  board={sandboxConfig.board}
+                  loading={<LoadingScreen title={t('matchRoom.title.sandbox')} description={t('matchRoom.sandbox.initializing')} />}
+                />
+              </LocalGameProvider>
             </GameModeProvider>
           </div>
         ) : (

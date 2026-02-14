@@ -5,12 +5,11 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { LobbyClient } from 'boardgame.io/client';
 import { matchSocket, type RematchVoteState } from '../services/matchSocket';
-import { GAME_SERVER_URL } from '../config/server';
 import { claimSeat, readStoredMatchCredentials } from '../hooks/match/useMatchStatus';
 import { getOrCreateGuestId } from '../hooks/match/ownerIdentity';
 import { useAuth } from './AuthContext';
+import * as matchApi from '../services/matchApi';
 
 interface RematchContextValue {
     /** 重赛投票状态 */
@@ -45,7 +44,6 @@ export function RematchProvider({
     const [isConnected, setIsConnected] = useState(false);
     const resetCallbackRef = useRef<(() => void) | null>(null);
     const hasRematchStartedRef = useRef(false);
-    const lobbyClientRef = useRef(new LobbyClient({ server: GAME_SERVER_URL }));
     const resetTimeoutRef = useRef<number | null>(null);
     const { user, token } = useAuth();
 
@@ -98,7 +96,7 @@ export function RematchProvider({
             if (currentMatchId && currentPlayerId && gameName && credentials) {
                 if (currentPlayerId === '0') {
                     try {
-                        const { nextMatchID } = await lobbyClientRef.current.playAgain(gameName, currentMatchId, {
+                        const { nextMatchID } = await matchApi.playAgain(gameName, currentMatchId, {
                             playerID: currentPlayerId,
                             credentials,
                         });

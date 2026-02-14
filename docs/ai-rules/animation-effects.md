@@ -111,6 +111,7 @@ registry.register('fx.summon', SummonRenderer, { timeoutMs: 4000 }, {
 
 - `timing: 'immediate'`：事件推入 FxBus 时立即触发
 - `timing: 'on-impact'`：渲染器调用 `props.onImpact()` 时触发（爆发/命中关键帧）
+- **渲染器必须调用 `onImpact`（强制）**：当 FeedbackPack 配置了 `timing: 'on-impact'` 的音效或震动时，对应的 FxRenderer **必须**在动画关键帧（命中/爆发瞬间）调用 `props.onImpact()`。禁止将 `onImpact` 解构为 `_onImpact` 后忽略。不调用 `onImpact` 会导致 `useFxBus.fireImpact()` 永远不触发，音效和震动静默丢失。近战/即时类特效在 `useEffect` mount 时触发；飞行/远程类特效在动画到达目标时触发（如 `onComplete` 前）。
 - 震动强度支持动态覆盖：`event.ctx.intensity` 优先于注册时的默认值
 - `useFxBus` 接受 `{ playSound, triggerShake }` 选项，由游戏层注入实际播放/震动函数
 - **禁止在 useGameEvents 中手动传 `params.onImpact` 回调**，震动由 FeedbackPack 声明式管理
@@ -144,7 +145,7 @@ fxBus.pushSequence([
 
 ### 新增特效流程
 1. 在 `src/components/common/animations/` 实现底层动画组件（如已有则复用）
-2. 在游戏侧 `fxSetup.ts` 中创建 FxRenderer 适配器，注册到 registry，声明 FeedbackPack
+2. 在游戏侧 `fxSetup.ts` 中创建 FxRenderer 适配器，注册到 registry，声明 FeedbackPack。**若 FeedbackPack 含 `timing: 'on-impact'`，渲染器必须在动画关键帧调用 `props.onImpact()`**
 3. 在事件消费处（`useGameEvents.ts` 或 `Board.tsx`）调用 `fxBus.push(cue, ctx, params)`
 4. 在 `EffectPreview.tsx` 添加预览
 

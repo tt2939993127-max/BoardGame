@@ -787,7 +787,7 @@
     },
     "shadow-dance-2": {
       "name": "Shadow Dance II",
-      "description": "3 Shadow: Roll 1 die for half true damage"
+      "description": "3 Shadow: Roll 1 die for half true damage (round up), gain Sneak and Sneak Attack, draw 1"
     },
     "steal-2": {
       "name": "Steal II",

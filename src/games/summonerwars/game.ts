@@ -9,7 +9,6 @@ import {
     createCheatSystem,
     createEventStreamSystem,
     createFlowSystem,
-    createGameAdapter,
     createInteractionSystem,
     createLogSystem,
     createRematchSystem,
@@ -18,6 +17,7 @@ import {
     createUndoSystem,
     type CheatResourceModifier,
 } from '../../engine';
+import { createGameEngine } from '../../engine/adapter';
 import { SummonerWarsDomain, SW_COMMANDS } from './domain';
 import type { GamePhase, PlayerId, SummonerWarsCore } from './domain/types';
 import { summonerWarsFlowHooks } from './domain/flowHooks';
@@ -145,8 +145,8 @@ const systems = [
     createCheatSystem<SummonerWarsCore>(summonerWarsCheatModifier),
 ];
 
-// 使用适配器创建 Boardgame.io Game
-export const SummonerWars = createGameAdapter({
+// 适配器配置
+const adapterConfig = {
     domain: SummonerWarsDomain,
     systems,
     minPlayers: 2,
@@ -168,9 +168,12 @@ export const SummonerWars = createGameAdapter({
         SW_COMMANDS.BLOOD_SUMMON_STEP,
         SW_COMMANDS.ACTIVATE_ABILITY,
     ],
-});
+};
 
-export default SummonerWars;
+// 引擎配置
+export const engineConfig = createGameEngine(adapterConfig);
+
+export default engineConfig;
 
 // 注册卡牌预览获取函数
 registerCardPreviewGetter('summonerwars', getSummonerWarsCardPreviewRef);

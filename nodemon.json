@@ -2,7 +2,12 @@
   "$schema": "https://json.schemastore.org/nodemon.json",
   "watch": [
     "server.ts",
-    "src/server/"
+    "src/server/",
+    "src/games/manifest.server.ts"
+  ],
+  "ignore": [
+    "**/*.test.*",
+    "**/*.spec.*"
   ],
   "ext": "ts",
   "exec": "tsx server.ts",

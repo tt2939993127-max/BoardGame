@@ -30,7 +30,7 @@ import type {
 
 interface UseEventCardModesParams {
   core: SummonerWarsCore;
-  moves: Record<string, (payload?: unknown) => void>;
+  dispatch: (type: string, payload?: unknown) => void;
   currentPhase: GamePhase;
   myPlayerId: string;
   myHand: import('../domain/types').Card[];
@@ -47,7 +47,7 @@ interface UseEventCardModesParams {
 // ============================================================================
 
 export function useEventCardModes({
-  core, moves, currentPhase, myPlayerId, myHand, setSelectedHandCardId,
+  core, dispatch, currentPhase, myPlayerId, myHand, setSelectedHandCardId,
   soulTransferMode, mindCaptureMode,
   afterAttackAbilityMode, setAfterAttackAbilityMode,
 }: UseEventCardModesParams) {
@@ -247,7 +247,7 @@ export function useEventCardModes({
     if (funeralPyreMode) {
       const targetUnit = core.board[gameRow]?.[gameCol]?.unit;
       if (targetUnit && targetUnit.damage > 0) {
-        moves[SW_COMMANDS.FUNERAL_PYRE_HEAL]?.({
+        dispatch(SW_COMMANDS.FUNERAL_PYRE_HEAL, {
           cardId: funeralPyreMode.cardId,
           targetPosition: { row: gameRow, col: gameCol },
         });
@@ -267,7 +267,7 @@ export function useEventCardModes({
       const isValid = afterAttackAbilityHighlights.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
         if (afterAttackAbilityMode.abilityId === 'mind_transmission') {
-          moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+          dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
             abilityId: 'mind_transmission',
             sourceUnitId: afterAttackAbilityMode.sourceUnitId,
             targetPosition: { row: gameRow, col: gameCol },
@@ -300,9 +300,9 @@ export function useEventCardModes({
         if (isValid) {
           const isFirstUse = (bloodSummonMode.completedCount ?? 0) === 0;
           if (isFirstUse && bloodSummonMode.cardId) {
-            moves[SW_COMMANDS.PLAY_EVENT]?.({ cardId: bloodSummonMode.cardId });
+            dispatch(SW_COMMANDS.PLAY_EVENT, { cardId: bloodSummonMode.cardId });
           }
-          moves[SW_COMMANDS.BLOOD_SUMMON_STEP]?.({
+          dispatch(SW_COMMANDS.BLOOD_SUMMON_STEP, {
             targetUnitPosition: bloodSummonMode.targetPosition,
             summonCardId: bloodSummonMode.summonCardId,
             summonPosition: { row: gameRow, col: gameCol },
@@ -349,7 +349,7 @@ export function useEventCardModes({
             if (nextIndex < annihilateMode.selectedTargets.length) {
               setAnnihilateMode({ ...annihilateMode, damageTargets: newDamageTargets, currentTargetIndex: nextIndex });
             } else {
-              moves[SW_COMMANDS.PLAY_EVENT]?.({
+              dispatch(SW_COMMANDS.PLAY_EVENT, {
                 cardId: annihilateMode.cardId,
                 targets: annihilateMode.selectedTargets,
                 damageTargets: newDamageTargets,
@@ -397,7 +397,7 @@ export function useEventCardModes({
     if (withdrawMode && withdrawMode.step === 'selectPosition') {
       const isValid = withdrawHighlights.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
-        moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
           abilityId: 'withdraw',
           sourceUnitId: withdrawMode.sourceUnitId,
           costType: withdrawMode.costType,
@@ -420,7 +420,7 @@ export function useEventCardModes({
         if (isValid) {
           const newRecorded = [...glacialShiftMode.recorded, { position: glacialShiftMode.currentBuilding, newPosition: { row: gameRow, col: gameCol } }];
           if (newRecorded.length >= 3) {
-            moves[SW_COMMANDS.PLAY_EVENT]?.({
+            dispatch(SW_COMMANDS.PLAY_EVENT, {
               cardId: glacialShiftMode.cardId,
               shiftDirections: newRecorded,
             });
@@ -476,7 +476,7 @@ export function useEventCardModes({
     if (hypnoticLureMode) {
       const isValid = hypnoticLureMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
       if (isValid) {
-        moves[SW_COMMANDS.PLAY_EVENT]?.({
+        dispatch(SW_COMMANDS.PLAY_EVENT, {
           cardId: hypnoticLureMode.cardId,
           targets: [{ row: gameRow, col: gameCol }],
         });
@@ -490,7 +490,7 @@ export function useEventCardModes({
     if (eventTargetMode) {
       const isValidTarget = eventTargetMode.validTargets.some(p => p.row === gameRow && p.col === gameCol);
       if (isValidTarget) {
-        moves[SW_COMMANDS.PLAY_EVENT]?.({ cardId: eventTargetMode.cardId, targets: [{ row: gameRow, col: gameCol }] });
+        dispatch(SW_COMMANDS.PLAY_EVENT, { cardId: eventTargetMode.cardId, targets: [{ row: gameRow, col: gameCol }] });
       }
       setEventTargetMode(null);
       setSelectedHandCardId(null);
@@ -499,7 +499,7 @@ export function useEventCardModes({
 
     // 未匹配任何事件模式
     return false;
-  }, [core, moves, myPlayerId, setSelectedHandCardId,
+  }, [core, dispatch, myPlayerId, setSelectedHandCardId,
     funeralPyreMode, soulTransferMode, mindCaptureMode,
     afterAttackAbilityMode, afterAttackAbilityHighlights, setAfterAttackAbilityMode,
     telekinesisTargetMode,
@@ -520,7 +520,7 @@ export function useEventCardModes({
     const baseId = getBaseCardId(eventCard.id);
 
     switch (baseId) {
-      case 'necro-hellfire-blade': {
+      case CARD_IDS.NECRO_HELLFIRE_BLADE: {
         const friendlyCommons = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.unitClass === 'common');
         if (friendlyCommons.length === 0) return;
@@ -528,14 +528,14 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'necro-blood-summon': {
+      case CARD_IDS.NECRO_BLOOD_SUMMON: {
         const friendlyUnits = getPlayerUnits(core, myPlayerId as '0' | '1');
         if (friendlyUnits.length === 0) return;
         setBloodSummonMode({ step: 'selectTarget', cardId });
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'necro-annihilate': {
+      case CARD_IDS.NECRO_ANNIHILATE: {
         const friendlyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.unitClass !== 'summoner');
         if (friendlyUnits.length === 0) return;
@@ -543,7 +543,7 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'trickster-mind-control': {
+      case CARD_IDS.TRICKSTER_MIND_CONTROL: {
         const summoner = getSummoner(core, myPlayerId as '0' | '1');
         if (!summoner) return;
         const opponentId = myPlayerId === '0' ? '1' : '0';
@@ -554,7 +554,7 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'trickster-stun': {
+      case CARD_IDS.TRICKSTER_STUN: {
         const stunSummoner = getSummoner(core, myPlayerId as '0' | '1');
         if (!stunSummoner) return;
         const stunOpponentId = myPlayerId === '0' ? '1' : '0';
@@ -569,7 +569,7 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'trickster-hypnotic-lure': {
+      case CARD_IDS.TRICKSTER_HYPNOTIC_LURE: {
         const lureOpponentId = myPlayerId === '0' ? '1' : '0';
         const lureTargets = getPlayerUnits(core, lureOpponentId as '0' | '1')
           .filter(u => u.card.unitClass !== 'summoner');
@@ -578,7 +578,7 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'barbaric-chant-of-power': {
+      case CARD_IDS.BARBARIC_CHANT_OF_POWER: {
         const cpSummoner = getSummoner(core, myPlayerId as '0' | '1');
         if (!cpSummoner) return;
         const cpTargets = getPlayerUnits(core, myPlayerId as '0' | '1')
@@ -588,21 +588,21 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'barbaric-chant-of-growth': {
+      case CARD_IDS.BARBARIC_CHANT_OF_GROWTH: {
         const cgTargets = getPlayerUnits(core, myPlayerId as '0' | '1');
         if (cgTargets.length === 0) return;
         setEventTargetMode({ cardId, card: eventCard, validTargets: cgTargets.map(u => u.position) });
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'barbaric-chant-of-weaving': {
+      case CARD_IDS.BARBARIC_CHANT_OF_WEAVING: {
         const cwTargets = getPlayerUnits(core, myPlayerId as '0' | '1');
         if (cwTargets.length === 0) return;
         setEventTargetMode({ cardId, card: eventCard, validTargets: cwTargets.map(u => u.position) });
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'frost-glacial-shift': {
+      case CARD_IDS.FROST_GLACIAL_SHIFT: {
         const gsSummoner = getSummoner(core, myPlayerId as '0' | '1');
         if (!gsSummoner) return;
         const gsBuildings: CellCoord[] = [];
@@ -620,7 +620,7 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'goblin-sneak': {
+      case CARD_IDS.GOBLIN_SNEAK: {
         const sneakUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.cost === 0 && u.card.unitClass !== 'summoner');
         if (sneakUnits.length === 0) return;
@@ -628,7 +628,7 @@ export function useEventCardModes({
         setSelectedHandCardId(cardId);
         return;
       }
-      case 'barbaric-chant-of-entanglement': {
+      case CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT: {
         const summoner = getSummoner(core, myPlayerId as '0' | '1');
         if (!summoner) return;
         const friendlyCommons = getPlayerUnits(core, myPlayerId as '0' | '1')
@@ -639,27 +639,27 @@ export function useEventCardModes({
         return;
       }
       default: {
-        moves[SW_COMMANDS.PLAY_EVENT]?.({ cardId });
+        dispatch(SW_COMMANDS.PLAY_EVENT, { cardId });
         return;
       }
     }
-  }, [core, myHand, myPlayerId, moves, setSelectedHandCardId]);
+  }, [core, myHand, myPlayerId, dispatch, setSelectedHandCardId]);
 
   // ---------- 确认回调 ----------
 
   const handleConfirmMindControl = useCallback(() => {
     if (!mindControlMode || mindControlMode.selectedTargets.length === 0) return;
-    moves[SW_COMMANDS.PLAY_EVENT]?.({
+    dispatch(SW_COMMANDS.PLAY_EVENT, {
       cardId: mindControlMode.cardId,
       targets: mindControlMode.selectedTargets,
     });
     setMindControlMode(null);
     setSelectedHandCardId(null);
-  }, [moves, mindControlMode, setSelectedHandCardId]);
+  }, [dispatch, mindControlMode, setSelectedHandCardId]);
 
   const handleConfirmStun = useCallback((direction: 'push' | 'pull', distance: number) => {
     if (!stunMode || !stunMode.targetPosition) return;
-    moves[SW_COMMANDS.PLAY_EVENT]?.({
+    dispatch(SW_COMMANDS.PLAY_EVENT, {
       cardId: stunMode.cardId,
       targets: [stunMode.targetPosition],
       stunDirection: direction,
@@ -667,48 +667,48 @@ export function useEventCardModes({
     });
     setStunMode(null);
     setSelectedHandCardId(null);
-  }, [moves, stunMode, setSelectedHandCardId]);
+  }, [dispatch, stunMode, setSelectedHandCardId]);
 
   const handleConfirmGlacialShift = useCallback(() => {
     if (!glacialShiftMode || glacialShiftMode.recorded.length === 0) return;
-    moves[SW_COMMANDS.PLAY_EVENT]?.({
+    dispatch(SW_COMMANDS.PLAY_EVENT, {
       cardId: glacialShiftMode.cardId,
       shiftDirections: glacialShiftMode.recorded,
     });
     setGlacialShiftMode(null);
     setSelectedHandCardId(null);
-  }, [moves, glacialShiftMode, setSelectedHandCardId]);
+  }, [dispatch, glacialShiftMode, setSelectedHandCardId]);
 
   const handleConfirmSneak = useCallback(() => {
     if (!sneakMode || sneakMode.recorded.length === 0) return;
-    moves[SW_COMMANDS.PLAY_EVENT]?.({
+    dispatch(SW_COMMANDS.PLAY_EVENT, {
       cardId: sneakMode.cardId,
       sneakDirections: sneakMode.recorded,
     });
     setSneakMode(null);
     setSelectedHandCardId(null);
-  }, [moves, sneakMode, setSelectedHandCardId]);
+  }, [dispatch, sneakMode, setSelectedHandCardId]);
 
   const handleConfirmEntanglement = useCallback(() => {
     if (!chantEntanglementMode || chantEntanglementMode.selectedTargets.length < 2) return;
-    moves[SW_COMMANDS.PLAY_EVENT]?.({
+    dispatch(SW_COMMANDS.PLAY_EVENT, {
       cardId: chantEntanglementMode.cardId,
       targets: chantEntanglementMode.selectedTargets,
     });
     setChantEntanglementMode(null);
     setSelectedHandCardId(null);
-  }, [moves, chantEntanglementMode, setSelectedHandCardId]);
+  }, [dispatch, chantEntanglementMode, setSelectedHandCardId]);
 
   const handleConfirmTelekinesis = useCallback((direction: 'push' | 'pull') => {
     if (!telekinesisTargetMode) return;
-    moves[SW_COMMANDS.ACTIVATE_ABILITY]?.({
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: telekinesisTargetMode.abilityId,
       sourceUnitId: telekinesisTargetMode.sourceUnitId,
       targetPosition: telekinesisTargetMode.targetPosition,
       direction,
     });
     setTelekinesisTargetMode(null);
-  }, [moves, telekinesisTargetMode]);
+  }, [dispatch, telekinesisTargetMode]);
 
   // ---------- 副作用 ----------
 

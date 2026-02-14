@@ -1,30 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import jwt from 'jsonwebtoken';
-import type { Server, State } from 'boardgame.io';
+import type { MatchMetadata, StoredMatchState, PlayerMetadata } from '../../engine/transport/storage';
 import { evaluateEmptyRoomJoinGuard } from '../joinGuard';
 
-const buildState = (ownerKey?: string): State => ({
+const buildState = (ownerKey?: string): StoredMatchState => ({
     G: { __setupData: ownerKey ? { ownerKey } : {} },
-    ctx: {
-        numPlayers: 2,
-        playOrder: ['0', '1'],
-        playOrderPos: 0,
-        activePlayers: null,
-        currentPlayer: '0',
-        turn: 0,
-        phase: 'default',
-        gameover: null,
-    },
-    plugins: {},
-    _undo: [],
-    _redo: [],
     _stateID: 0,
 });
 
-const buildPlayers = (overrides: Record<string, Partial<Server.PlayerMetadata>> = {}) => {
-    const base: Record<string, Server.PlayerMetadata> = {
-        0: { id: 0 },
-        1: { id: 1 },
+const buildPlayers = (overrides: Record<string, Partial<PlayerMetadata>> = {}) => {
+    const base: Record<string, PlayerMetadata> = {
+        0: {},
+        1: {},
     };
     Object.entries(overrides).forEach(([key, value]) => {
         base[key] = { ...base[key], ...value };
@@ -32,13 +19,13 @@ const buildPlayers = (overrides: Record<string, Partial<Server.PlayerMetadata>> 
     return base;
 };
 
-const buildMetadata = (ownerKey?: string, players?: Record<string, Server.PlayerMetadata>): Server.MatchData => ({
+const buildMetadata = (ownerKey?: string, players?: Record<string, PlayerMetadata>): MatchMetadata => ({
     gameName: 'tictactoe',
     players: players ?? buildPlayers(),
     setupData: ownerKey ? { ownerKey } : undefined,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-});
+} as MatchMetadata);
 
 describe('evaluateEmptyRoomJoinGuard', () => {
     it('允许非空房间加入', () => {

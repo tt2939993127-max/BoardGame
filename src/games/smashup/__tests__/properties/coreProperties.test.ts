@@ -63,7 +63,7 @@ function makeMinion(
 ): MinionOnBase {
     return {
         uid, defId, controller, owner: controller,
-        basePower: power, powerModifier: 0,
+        basePower: power, powerModifier: 0, tempPowerModifier: 0,
         talentUsed: false, attachedActions: [],
     };
 }
@@ -407,6 +407,66 @@ describe('Property 9: 持续行动卡附着', () => {
         const m = s.bases[0].minions.find(x => x.uid === 'm-1');
         expect(m?.attachedActions.some(a => a.uid === 'og-2')).toBe(true);
         expect(s.players['0'].discard.some(c => c.uid === 'og-2')).toBe(false);
+    });
+
+    test('ongoing（基地目标）缺少 targetBaseIndex 时应校验失败', () => {
+        const card = makeCard('og-3', 'trickster_enshrouding_mist', 'action');
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.TRICKSTERS, SMASHUP_FACTION_IDS.GHOSTS], { hand: [card] }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [makeBase('test_base')],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        const result = validate(
+            { core: state, sys: { phase: 'playCards' } as any },
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'og-3' } } as any,
+        );
+        expect(result.valid).toBe(false);
+    });
+
+    test('ongoing（随从目标）缺少 targetMinionUid 时应校验失败', () => {
+        const card = makeCard('og-4', 'dino_upgrade', 'action');
+        const minion = makeMinion('m-1', 'test', '0', 3);
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.DINOSAURS, SMASHUP_FACTION_IDS.NINJAS], { hand: [card] }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [makeBase('test_base', { minions: [minion] })],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        const result = validate(
+            { core: state, sys: { phase: 'playCards' } as any },
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'og-4', targetBaseIndex: 0 } } as any,
+        );
+        expect(result.valid).toBe(false);
+    });
+
+    test('ongoing（基地目标）携带 targetMinionUid 时应校验失败', () => {
+        const card = makeCard('og-5', 'trickster_enshrouding_mist', 'action');
+        const minion = makeMinion('m-1', 'test', '0', 3);
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.TRICKSTERS, SMASHUP_FACTION_IDS.GHOSTS], { hand: [card] }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [makeBase('test_base', { minions: [minion] })],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        const result = validate(
+            { core: state, sys: { phase: 'playCards' } as any },
+            {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'og-5', targetBaseIndex: 0, targetMinionUid: 'm-1' },
+            } as any,
+        );
+        expect(result.valid).toBe(false);
     });
 });
 
@@ -813,6 +873,102 @@ describe('Property 18: Me First 窗口协议', () => {
             payload: { cardUid: 's-1' },
         } as any);
         expect(r.valid).toBe(false);
+    });
+
+    test('specialNeedsBase=true 的特殊行动卡必须显式选择达标基地', () => {
+        const specialCard = makeCard('s-1', 'ninja_hidden_ninja', 'action');
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.NINJAS, SMASHUP_FACTION_IDS.GHOSTS], { hand: [specialCard] }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [
+                makeBase('base_central_brain'),
+                makeBase('base_central_brain', {
+                    minions: [makeMinion('m-1', 'test', '1', 99)],
+                }),
+            ],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        const matchState: MatchState<SmashUpCore> = {
+            core: state,
+            sys: {
+                phase: 'scoreBases',
+                responseWindow: {
+                    current: {
+                        windowId: 'meFirst_test',
+                        windowType: 'meFirst',
+                        responderQueue: ['0', '1'],
+                        currentResponderIndex: 0,
+                        consecutivePasses: 0,
+                    },
+                },
+            } as any,
+        };
+
+        const missingTarget = validate(matchState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 's-1' },
+        } as any);
+        expect(missingTarget.valid).toBe(false);
+
+        const invalidBase = validate(matchState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 's-1', targetBaseIndex: 0 },
+        } as any);
+        expect(invalidBase.valid).toBe(false);
+
+        const validBase = validate(matchState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 's-1', targetBaseIndex: 1 },
+        } as any);
+        expect(validBase.valid).toBe(true);
+    });
+
+    test('无需基地目标的特殊行动卡不能携带 targetBaseIndex', () => {
+        const specialCard = makeCard('s-1', 'pirate_full_sail', 'action');
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS], { hand: [specialCard] }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [makeBase('base_central_brain')],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        const matchState: MatchState<SmashUpCore> = {
+            core: state,
+            sys: {
+                phase: 'scoreBases',
+                responseWindow: {
+                    current: {
+                        windowId: 'meFirst_test',
+                        windowType: 'meFirst',
+                        responderQueue: ['0', '1'],
+                        currentResponderIndex: 0,
+                        consecutivePasses: 0,
+                    },
+                },
+            } as any,
+        };
+
+        const withTarget = validate(matchState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 's-1', targetBaseIndex: 0 },
+        } as any);
+        expect(withTarget.valid).toBe(false);
+
+        const withoutTarget = validate(matchState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 's-1' },
+        } as any);
+        expect(withoutTarget.valid).toBe(true);
     });
 });
 

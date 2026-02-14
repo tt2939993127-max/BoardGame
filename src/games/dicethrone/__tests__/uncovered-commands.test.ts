@@ -285,7 +285,7 @@ describe('USE_TOKEN 伤害响应窗口使用 Token', () => {
         responseType: 'beforeDamageDealt' | 'beforeDamageReceived',
         damage = 6,
     ): MatchState<DiceThroneCore> {
-        let state = setupToMain1();
+        const state = setupToMain1();
         state.core.pendingDamage = {
             id: 'pd-test',
             sourcePlayerId: '0',
@@ -335,7 +335,7 @@ describe('USE_TOKEN 伤害响应窗口使用 Token', () => {
     });
 
     it('没有 pendingDamage 时使用 Token 失败', () => {
-        let state = setupToMain1();
+        const state = setupToMain1();
         state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 3;
 
         const result = tryCmd(state, cmd('USE_TOKEN', '0', {
@@ -346,7 +346,7 @@ describe('USE_TOKEN 伤害响应窗口使用 Token', () => {
     });
 
     it('Token 不足时使用失败', () => {
-        let state = setupWithPendingDamage('0', 'beforeDamageDealt');
+        const state = setupWithPendingDamage('0', 'beforeDamageDealt');
         state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 0;
 
         const result = tryCmd(state, cmd('USE_TOKEN', '0', {
@@ -386,7 +386,7 @@ describe('牌库耗尽洗牌', () => {
     });
 
     it('牌库和弃牌堆都为空时抽牌失败', () => {
-        let state = setupToMain1();
+        const state = setupToMain1();
         state.core.players['0'].deck = [];
         state.core.players['0'].discard = [];
 

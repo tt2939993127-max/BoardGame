@@ -31,7 +31,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/ai-rules/animation-effects.md` — **开发/修改任何动画、特效、粒子效果时必读**。含动效选型表、Canvas 粒子引擎、特效组件/架构/视觉质量规范。
 - `docs/ai-rules/asset-pipeline.md` — **新增/修改图片或音频资源引用时必读**。含压缩流程、路径规范、✅/❌ 示例。
 - `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、框架解耦/复用、EventStream、动画表现与逻辑分离规范（`useVisualStateBuffer`/`useVisualSequenceGate`）、领域建模前置审查。
-- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**描述→实现全链路审查规范**（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
+- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**通用实现缺陷检查维度（D1-D10 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
 - `docs/ai-rules/ui-ux.md` — **开发/修改 UI 组件、布局、样式、游戏界面时必读**。含审美准则、多端布局、游戏 UI 特化、设计系统引用。
 - `docs/ai-rules/global-systems.md` — **使用/修改全局 Context（Toast/Modal/音频/教学/认证）时必读**。含 Context 系统、实时服务层。
 - `docs/ai-rules/doc-index.md` — **不确定该读哪个文档时必读**。按场景查找需要阅读的文档。
@@ -41,7 +41,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## 📋 角色与背景
 
-你是一位**资深全栈游戏开发工程师**，专精 React 19 + TypeScript、Boardgame.io、现代化 UI/UX、AI 驱动开发。
+你是一位**资深全栈游戏开发工程师**，专精 React 19 + TypeScript、自研游戏引擎（DomainCore + Pipeline + Systems）、现代化 UI/UX、AI 驱动开发。
 项目是 AI 驱动的现代化桌游平台，核心解决"桌游教学"与"轻量级联机"，支持 UGC。包含用户系统（JWT）、游戏大厅、状态机驱动的游戏核心、分步教学系统、UGC 原型工具。
 
 ---
@@ -124,14 +124,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ## 🛠️ 技术栈
 
-React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒子引擎 / i18next / howler / socket.io / boardgame.io / Node.js (Koa + NestJS) / MongoDB (Docker) / Vitest + Playwright
+React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒子引擎 / i18next / howler / socket.io / Node.js (Koa + NestJS) / MongoDB (Docker) / Vitest + Playwright
 
 ### TypeScript 规范（强制）
 - 禁止 `any`，使用 `unknown` + 类型守卫。框架边界例外需注释。
 - 游戏状态 → `src/games/<游戏名>/types.ts`；框架类型 → `src/core/types.ts`；引擎原语类型 → `src/engine/primitives/`；系统类型 → `src/engine/systems/`。
 - 资源管理使用 `src/core/AssetLoader.ts`。
 - **禁止用可选参数掩盖正确性依赖（强制）**：当某个参数影响规则校验/执行逻辑的正确性时，**禁止将其声明为可选参数（`param?: Type`）**。可选参数会导致 TypeScript 无法在编译期捕获"忘记传参"的错误，使缺陷静默传播。正确做法：拆分为两个函数——`fooBase(unit)` 不需要该参数（用于测试/纯查询），`foo(unit, state)` 要求该参数（用于所有规则/执行代码）。示例：`getUnitAbilities(unit, state)` vs `getUnitBaseAbilities(unit)`。此规则适用于所有层级（helpers/resolver/validation/execute），不限于特定游戏。
-- **禁止点号访问 moves 对象（强制）**：boardgame.io 的 `moves` 类型是 `Record<string, Function>`，任何 key 都合法，TypeScript 不会报错。`moves.activateAbility?.()` 在命令名不存在时静默跳过。**正确做法**：所有 moves 调用必须通过命令常量表索引（`moves[SW_COMMANDS.XXX]`），禁止 `moves.xxx()` 点号访问。
+- **禁止点号访问 dispatch（强制）**：所有命令分发必须通过 `dispatch(COMMANDS.XXX, payload)` 调用，使用命令常量表确保类型安全。
 
 ### 文件编码规范（强制）
 - **UTF-8 without BOM**：所有源码文件必须使用此编码。
@@ -154,7 +154,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 
 ```
 / (repo root)
-├── server.ts                     # 游戏服务入口（Boardgame.io + socket.io）
+├── server.ts                      # 游戏服务入口（Koa + socket.io + GameTransportServer）
 ├── src/
 │   ├── pages/                    # 页面入口（Home/MatchRoom/LocalMatchRoom）
 │   ├── components/               # 通用 UI 组件

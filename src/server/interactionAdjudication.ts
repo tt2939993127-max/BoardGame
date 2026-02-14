@@ -1,4 +1,4 @@
-import type { Server, State } from 'boardgame.io';
+import type { MatchMetadata, StoredMatchState } from '../engine/transport/storage';
 import type { MatchState } from '../engine/types';
 
 export type InteractionAdjudicationResult = {
@@ -17,8 +17,8 @@ export type InteractionAdjudicationResult = {
 };
 
 export type InteractionAdjudicationContext = {
-    state?: State;
-    metadata?: Server.MatchData;
+    state?: StoredMatchState;
+    metadata?: MatchMetadata;
     playerId: string;
 };
 
@@ -34,7 +34,10 @@ export const shouldForceCancelInteraction = ({
     if (!state?.G) {
         return { shouldCancel: false, reason: 'missing_state' };
     }
-    if (state.ctx?.gameover) {
+    // 从 MatchState.core 中读取 gameover（各游戏的 isGameOver 结果存储在 metadata 中，
+    // 但 core 上也可能有 gameover 字段；同时检查 metadata.gameover）
+    const matchState = state.G as MatchState<{ gameover?: unknown }>;
+    if (matchState.core?.gameover || metadata?.gameover) {
         return { shouldCancel: false, reason: 'game_over' };
     }
     if (!metadata?.players) {

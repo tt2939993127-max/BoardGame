@@ -13,7 +13,7 @@ import manifest2 from './audiobrowser/manifest';
 import Thumbnail2 from './audiobrowser/thumbnail';
 
 import manifest3 from './dicethrone/manifest';
-import Game3 from './dicethrone/game';
+import { engineConfig as engineConfig3 } from './dicethrone/game';
 import Board3 from './dicethrone/Board';
 import Tutorial3 from './dicethrone/tutorial';
 import Thumbnail3 from './dicethrone/thumbnail';
@@ -22,19 +22,19 @@ import manifest4 from './fxpreview/manifest';
 import Thumbnail4 from './fxpreview/thumbnail';
 
 import manifest5 from './smashup/manifest';
-import Game5 from './smashup/game';
+import { engineConfig as engineConfig5 } from './smashup/game';
 import Board5 from './smashup/Board';
 import Tutorial5 from './smashup/tutorial';
 import Thumbnail5 from './smashup/thumbnail';
 
 import manifest6 from './summonerwars/manifest';
-import Game6 from './summonerwars/game';
+import { engineConfig as engineConfig6 } from './summonerwars/game';
 import Board6 from './summonerwars/Board';
 import Tutorial6 from './summonerwars/tutorial';
 import Thumbnail6 from './summonerwars/thumbnail';
 
 import manifest7 from './tictactoe/manifest';
-import Game7 from './tictactoe/game';
+import { engineConfig as engineConfig7 } from './tictactoe/game';
 import Board7 from './tictactoe/Board';
 import Tutorial7 from './tictactoe/tutorial';
 import Thumbnail7 from './tictactoe/thumbnail';
@@ -59,7 +59,7 @@ const entry2: GameClientManifestEntry = {
 
 const entry3: GameClientManifestEntry = {
     manifest: manifest3,
-    game: Game3,
+    engineConfig: engineConfig3,
     board: Board3,
     tutorial: Tutorial3,
     thumbnail: <Thumbnail3 />,
@@ -72,7 +72,7 @@ const entry4: GameClientManifestEntry = {
 
 const entry5: GameClientManifestEntry = {
     manifest: manifest5,
-    game: Game5,
+    engineConfig: engineConfig5,
     board: Board5,
     tutorial: Tutorial5,
     thumbnail: <Thumbnail5 />,
@@ -80,7 +80,7 @@ const entry5: GameClientManifestEntry = {
 
 const entry6: GameClientManifestEntry = {
     manifest: manifest6,
-    game: Game6,
+    engineConfig: engineConfig6,
     board: Board6,
     tutorial: Tutorial6,
     thumbnail: <Thumbnail6 />,
@@ -88,7 +88,7 @@ const entry6: GameClientManifestEntry = {
 
 const entry7: GameClientManifestEntry = {
     manifest: manifest7,
-    game: Game7,
+    engineConfig: engineConfig7,
     board: Board7,
     tutorial: Tutorial7,
     thumbnail: <Thumbnail7 />,

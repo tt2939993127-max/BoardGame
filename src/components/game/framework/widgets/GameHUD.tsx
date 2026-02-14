@@ -118,7 +118,7 @@ export const GameHUD = ({
     // 撤回状态
     const undoState = useUndo();
     const { status: undoStatus, hasNotification: _hasUndoNotification } = useUndoStatus();
-    const currentPlayerId = undoState?.ctx?.currentPlayer;
+    const currentPlayerId = (undoState?.G?.core as Record<string, unknown>)?.currentPlayer as string | undefined;
 
     const isOnline = mode === 'online';
     const isLocal = mode === 'local';

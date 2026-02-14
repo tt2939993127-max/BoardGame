@@ -169,7 +169,7 @@ export const NODES: ArchNode[] = [
     ],
     realExample: [
       '// 骰子王座接入代码 (dicethrone/game.ts)',
-      'export const DiceThrone = createGameAdapter({',
+      'export default createGameEngine({',
       '  domain: DiceThroneDomain,  // 规则逻辑',
       '  systems: [                 // 按需组装系统',
       '    createFlowSystem({ hooks }),',

@@ -94,6 +94,10 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
     flushRegisteredShaders();
   }, [registry]);
 
+  // registry ref（供 removeEffect 闭包内安全访问）
+  const registryRef = useRef(registry);
+  registryRef.current = registry;
+
   // 反馈回调 ref（避免闭包过期）
   const playSoundRef = useRef(options?.playSound);
   playSoundRef.current = options?.playSound;
@@ -105,7 +109,7 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
   // 安全超时定时器：id → timeoutId
   const timeoutsRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   // 事件 → 注册条目映射（用于 fireImpact 查找反馈包）
-  const eventEntryMapRef = useRef(new Map<string, { cue: FxCue }>());
+  const eventEntryMapRef = useRef(new Map<string, { cue: FxCue; impactFired: boolean }>());
 
   // ========================================================================
   // 序列管理
@@ -130,6 +134,18 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
     if (timer) {
       clearTimeout(timer);
       timeoutsRef.current.delete(id);
+    }
+    // 开发环境检测：注册了 on-impact 反馈但渲染器从未调用 onImpact
+    if (resolveDevFlag()) {
+      const meta = eventEntryMapRef.current.get(id);
+      if (meta && !meta.impactFired) {
+        const entry = registryRef.current.resolve(meta.cue);
+        const fb = entry?.feedback;
+        const hasOnImpact = (fb?.sound?.timing === 'on-impact') || ((fb?.shake?.timing ?? 'on-impact') === 'on-impact' && !!fb?.shake);
+        if (hasOnImpact) {
+          console.warn(`[FxBus] 渲染器未调用 onImpact: cue="${meta.cue}" id="${id}"。FeedbackPack 配置了 timing='on-impact' 的音效/震动，但渲染器从未触发。请确保渲染器在动画关键帧调用 props.onImpact()。`);
+        }
+      }
     }
     eventEntryMapRef.current.delete(id);
     setEffects(prev => prev.filter(e => e.id !== id));
@@ -159,6 +175,7 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
   const fireImpact = useCallback((id: string) => {
     const meta = eventEntryMapRef.current.get(id);
     if (!meta) return;
+    meta.impactFired = true;
     const entry = registry.resolve(meta.cue);
     if (!entry?.feedback) return;
 
@@ -206,8 +223,8 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
     const id = generateFxId();
     const event: FxEvent = { ...input, id };
 
-    // 记录事件元信息（用于 fireImpact）
-    eventEntryMapRef.current.set(id, { cue: input.cue });
+    // 记录事件元信息（用于 fireImpact + on-impact 检测）
+    eventEntryMapRef.current.set(id, { cue: input.cue, impactFired: false });
 
     setEffects(prev => {
       // 并发上限检查
@@ -232,6 +249,18 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
     if (timeoutMs > 0) {
       const timer = setTimeout(() => {
         timeoutsRef.current.delete(id);
+        // 超时也检测 on-impact 遗漏
+        if (resolveDevFlag()) {
+          const meta = eventEntryMapRef.current.get(id);
+          if (meta && !meta.impactFired) {
+            const timeoutEntry = registryRef.current.resolve(meta.cue);
+            const fb = timeoutEntry?.feedback;
+            const hasOnImpact = (fb?.sound?.timing === 'on-impact') || ((fb?.shake?.timing ?? 'on-impact') === 'on-impact' && !!fb?.shake);
+            if (hasOnImpact) {
+              console.warn(`[FxBus] 渲染器超时且未调用 onImpact: cue="${meta.cue}" id="${id}"。`);
+            }
+          }
+        }
         eventEntryMapRef.current.delete(id);
         setEffects(prev => prev.filter(e => e.id !== id));
 

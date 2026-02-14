@@ -1,28 +1,29 @@
 /**
- * MongoDB 存储适配器 for boardgame.io
- * 
- * 实现 StorageAPI.Async 接口，支持 TTL 自动过期
+ * MongoDB 存储实现
+ *
+ * 实现 MatchStorage 接口，支持 TTL 自动过期
  */
 
 import mongoose, { Schema, Document, Model, type SchemaDefinitionProperty } from 'mongoose';
-import type { State, Server, LogEntry, StorageAPI } from 'boardgame.io';
+import type {
+    MatchStorage,
+    MatchMetadata,
+    StoredMatchState,
+    CreateMatchData,
+    FetchOpts,
+    FetchResult,
+    ListMatchesOpts,
+} from '../../engine/transport/storage';
 import { hasOccupiedPlayers } from '../matchOccupancy';
-
-const STORAGE_TYPE = {
-    SYNC: 0,
-    ASYNC: 1,
-} as const;
-
-type StorageTypeValue = (typeof STORAGE_TYPE)[keyof typeof STORAGE_TYPE];
 
 // 房间文档接口
 interface IMatchDocument extends Document {
     matchID: string;
     gameName: string;
-    state: State | null;
-    initialState: State | null;
-    metadata: Server.MatchData | null;
-    log: LogEntry[];
+    state: StoredMatchState | null;
+    initialState: StoredMatchState | null;
+    metadata: MatchMetadata | null;
+    log: unknown[];
     /** TTL 秒数，0 表示不保存（所有人离开即销毁）*/
     ttlSeconds: number;
     /** 过期时间（MongoDB TTL 索引使用） */
@@ -39,12 +40,13 @@ const MatchSchema = new Schema<IMatchDocument>(
         state: { type: Schema.Types.Mixed, default: null },
         initialState: { type: Schema.Types.Mixed, default: null },
         metadata: { type: Schema.Types.Mixed, default: null },
-        log: { type: [Schema.Types.Mixed], default: [] } as SchemaDefinitionProperty<LogEntry[]>,
+        log: { type: [Schema.Types.Mixed], default: [] } as SchemaDefinitionProperty<unknown[]>,
         ttlSeconds: { type: Number, default: 0 },
         expiresAt: { type: Date, default: null }, // TTL 索引
     },
     {
         timestamps: true,
+        minimize: false, // 保留空对象（如 players: { "0": {}, "1": {} }），防止 Mongoose 默认移除
     }
 );
 
@@ -74,12 +76,8 @@ const calculateExpiresAt = (ttlSeconds: number): Date | null => {
 /**
  * MongoDB 存储实现
  */
-export class MongoStorage implements StorageAPI.Async {
+export class MongoStorage implements MatchStorage {
     private bootTimeMs = Date.now();
-
-    type(): StorageTypeValue {
-        return STORAGE_TYPE.ASYNC;
-    }
 
     async connect(): Promise<void> {
         // mongoose 连接由 connectDB() 统一管理
@@ -89,7 +87,7 @@ export class MongoStorage implements StorageAPI.Async {
         console.log('[MongoStorage] 已连接');
     }
 
-    async createMatch(matchID: string, opts: StorageAPI.CreateMatchOpts): Promise<void> {
+    async createMatch(matchID: string, data: CreateMatchData): Promise<void> {
         const Match = getMatchModel();
         
         type MatchSetupData = { ttlSeconds?: number; ownerKey?: string; ownerType?: 'user' | 'guest' };
@@ -104,16 +102,16 @@ export class MongoStorage implements StorageAPI.Async {
         };
 
         // 从 setupData 中提取 TTL / owner 配置
-        const stateG = (opts.initialState as State | undefined)?.G as Record<string, unknown> | undefined;
+        const stateG = data.initialState?.G as Record<string, unknown> | undefined;
         const setupDataFromState = parseSetupData(stateG?.__setupData);
-        const setupDataFromMetadata = parseSetupData((opts.metadata as { setupData?: unknown } | undefined)?.setupData);
+        const setupDataFromMetadata = parseSetupData((data.metadata as { setupData?: unknown } | undefined)?.setupData);
         const setupData = { ...setupDataFromMetadata, ...setupDataFromState };
         const ttlSeconds = setupData.ttlSeconds ?? 0;
         const ownerKey = setupData.ownerKey;
         const ownerType = setupData.ownerType;
         const isGuestOwner = setupData.ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false);
 
-        // 全局单房间限制：同一 ownerKey 只能有一个占用房间（gameover 仍视为占用）
+        // 全局单房间限制：同一 ownerKey 只能有一个活跃房间（gameover 的房间不计入）
         if (ownerKey) {
             if (isGuestOwner) {
                 const existingMatches = await Match.find({
@@ -128,6 +126,7 @@ export class MongoStorage implements StorageAPI.Async {
             } else {
                 const existing = await Match.findOne({
                     'metadata.setupData.ownerKey': ownerKey,
+                    'metadata.gameover': null,
                 }).select('matchID gameName').sort({ updatedAt: -1 }).lean();
 
                 if (existing) {
@@ -140,10 +139,10 @@ export class MongoStorage implements StorageAPI.Async {
 
         await Match.create({
             matchID,
-            gameName: opts.metadata.gameName,
-            state: opts.initialState,
-            initialState: opts.initialState,
-            metadata: opts.metadata,
+            gameName: data.metadata.gameName,
+            state: data.initialState,
+            initialState: data.initialState,
+            metadata: data.metadata,
             log: [],
             ttlSeconds,
             expiresAt,
@@ -152,7 +151,7 @@ export class MongoStorage implements StorageAPI.Async {
         console.log(`[MongoStorage] 创建房间 matchID=${matchID} ttlSeconds=${ttlSeconds} ownerKey=${ownerKey ?? 'null'} ownerType=${ownerType ?? 'unknown'}`);
     }
 
-    async setState(matchID: string, state: State, deltalog?: LogEntry[]): Promise<void> {
+    async setState(matchID: string, state: StoredMatchState): Promise<void> {
         const Match = getMatchModel();
         
         // 存储时裁剪 undo 快照和过多日志，避免超过 MongoDB 16MB 限制
@@ -166,11 +165,6 @@ export class MongoStorage implements StorageAPI.Async {
         }
         
         const update: Record<string, unknown> = { state: stateToSave };
-        
-        // 限制 Match.log 大小（只保留最近 10 条）
-        if (deltalog && deltalog.length > 0) {
-            update.$push = { log: { $each: deltalog, $slice: -10 } };
-        }
 
         await Match.updateOne({ matchID }, update);
     }
@@ -179,13 +173,12 @@ export class MongoStorage implements StorageAPI.Async {
      * 清理 state 以便安全存储（剔除不需要持久化的大对象）
      * 防止超过 MongoDB 16MB 文档限制
      */
-    private sanitizeStateForStorage(state: State): State {
+    private sanitizeStateForStorage(state: StoredMatchState): StoredMatchState {
         if (!state || typeof state !== 'object') {
             console.warn('[MongoStorage] sanitize: state 不是对象');
             return state;
         }
-        
-        // boardgame.io State 结构是 { G, ctx, ... }
+        // 状态结构是 { G: { sys, core }, _stateID, ... }
         // 游戏状态在 G 里面，G 的结构是 { sys, core }
         const G = (state as { G?: Record<string, unknown> }).G;
         if (!G) {
@@ -226,53 +219,15 @@ export class MongoStorage implements StorageAPI.Async {
             }
         }
 
-        const sanitizedState = {
+        const sanitizedState: StoredMatchState = {
             ...state,
             G: {
                 ...G,
                 sys: sanitizedSys,
             },
-        } as State & Record<string, unknown>;
+        };
         
-        // 清理 boardgame.io 的 plugins 字段（这是状态膨胀的主要来源）
-        if (sanitizedState.plugins && typeof sanitizedState.plugins === 'object') {
-            const plugins = sanitizedState.plugins as Record<string, unknown>;
-            // 遍历所有插件并清理
-            for (const pluginName of Object.keys(plugins)) {
-                const plugin = plugins[pluginName] as Record<string, unknown> | undefined;
-                if (!plugin || typeof plugin !== 'object') continue;
-                
-                // 清理 data 数组（log/events 插件都有）
-                if (Array.isArray(plugin.data)) {
-                    const originalLen = plugin.data.length;
-                    if (originalLen > 10) {
-                        plugin.data = plugin.data.slice(-10);
-                    }
-                }
-                
-                // 清理 api 字段（可能包含历史记录）
-                if (plugin.api && typeof plugin.api === 'object') {
-                    const api = plugin.api as Record<string, unknown>;
-                    // events 插件的 api 里可能有大量事件
-                    if (Array.isArray(api.events)) {
-                        const originalLen = api.events.length;
-                        if (originalLen > 10) {
-                            api.events = api.events.slice(-10);
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 清空 boardgame.io 的 _undo/_redo 字段（如果存在）
-        if (sanitizedState._undo) {
-            sanitizedState._undo = [];
-        }
-        if (sanitizedState._redo) {
-            sanitizedState._redo = [];
-        }
-        
-        return sanitizedState as State;
+        return sanitizedState;
     }
 
     /**
@@ -311,7 +266,7 @@ export class MongoStorage implements StorageAPI.Async {
         };
     }
 
-    async setMetadata(matchID: string, metadata: Server.MatchData): Promise<void> {
+    async setMetadata(matchID: string, metadata: MatchMetadata): Promise<void> {
         const Match = getMatchModel();
         let refreshedExpiresAt: Date | null | undefined;
         let ttlSeconds = 0;
@@ -337,7 +292,7 @@ export class MongoStorage implements StorageAPI.Async {
         if (ttlSeconds === 0) {
             const players = metadata.players as Record<string, { isConnected?: boolean }> | undefined;
             const connected = players ? Object.values(players).some(player => Boolean(player?.isConnected)) : false;
-            const metadataWith = metadata as Server.MatchData & { disconnectedSince?: number | null };
+            const metadataWith = metadata as MatchMetadata & { disconnectedSince?: number | null };
             if (connected) {
                 if (metadataWith.disconnectedSince) {
                     console.log(`[MongoStorage] 清理断线标记 matchID=${matchID} reason=reconnected`);
@@ -357,33 +312,27 @@ export class MongoStorage implements StorageAPI.Async {
         await Match.updateOne({ matchID }, update);
     }
 
-    async fetch<O extends StorageAPI.FetchOpts>(
+    async fetch(
         matchID: string,
-        opts: O
-    ): Promise<StorageAPI.FetchResult<O>> {
+        opts: FetchOpts
+    ): Promise<FetchResult> {
         const Match = getMatchModel();
         const doc = await Match.findOne({ matchID }).lean();
 
         if (!doc) {
-            return {} as StorageAPI.FetchResult<O>;
+            return {};
         }
 
-        const result: Partial<StorageAPI.FetchFields> = {};
+        const result: FetchResult = {};
 
         if (opts.state) {
-            result.state = doc.state as State;
-        }
-        if (opts.log) {
-            result.log = doc.log as LogEntry[];
+            result.state = doc.state as StoredMatchState;
         }
         if (opts.metadata) {
-            result.metadata = doc.metadata as Server.MatchData;
-        }
-        if (opts.initialState) {
-            result.initialState = doc.initialState as State;
+            result.metadata = doc.metadata as MatchMetadata;
         }
 
-        return result as StorageAPI.FetchResult<O>;
+        return result;
     }
 
     async wipe(matchID: string): Promise<void> {
@@ -392,7 +341,7 @@ export class MongoStorage implements StorageAPI.Async {
         console.log(`[MongoStorage] 删除房间 ${matchID}`);
     }
 
-    async listMatches(opts?: StorageAPI.ListMatchesOpts): Promise<string[]> {
+    async listMatches(opts?: ListMatchesOpts): Promise<string[]> {
         const Match = getMatchModel();
         
         const query: Record<string, unknown> = {};
@@ -443,9 +392,7 @@ export class MongoStorage implements StorageAPI.Async {
         const toDelete: string[] = [];
 
         for (const doc of emptyMatches) {
-            const metadata = doc.metadata as Server.MatchData | null;
-
-            // 仅删除无 metadata.players 的损坏房间
+            const metadata = doc.metadata as MatchMetadata | null;
             if (!metadata?.players) {
                 toDelete.push(doc.matchID);
                 console.log(`[Cleanup] 删除 ${doc.matchID}: 无 metadata.players（损坏数据）`);
@@ -472,7 +419,7 @@ export class MongoStorage implements StorageAPI.Async {
         const now = Date.now();
 
         for (const doc of ephemeralMatches) {
-            const metadata = doc.metadata as (Server.MatchData & { disconnectedSince?: number | null }) | null;
+            const metadata = doc.metadata as (MatchMetadata & { disconnectedSince?: number | null }) | null;
             const players = metadata?.players as Record<string, { isConnected?: boolean }> | undefined;
             const hasConnectedPlayer = players
                 ? Object.values(players).some(player => Boolean(player?.isConnected))
@@ -486,7 +433,7 @@ export class MongoStorage implements StorageAPI.Async {
 
             if (hasConnectedPlayer) {
                 if (isStaleConnected) {
-                    const metadataWith = metadata as Server.MatchData & { disconnectedSince?: number | null };
+                    const metadataWith = metadata as MatchMetadata & { disconnectedSince?: number | null };
                     const seatValues = playerValues as Array<{ isConnected?: boolean | null }>;
                     let changed = false;
                     seatValues.forEach((seat) => {
@@ -597,7 +544,7 @@ export class MongoStorage implements StorageAPI.Async {
 
         const toDelete: string[] = [];
         for (const doc of legacyMatches) {
-            const metadata = doc.metadata as Server.MatchData | null;
+            const metadata = doc.metadata as MatchMetadata | null;
             const players = metadata?.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean }> | undefined;
             if (!hasOccupiedPlayers(players)) {
                 toDelete.push(doc.matchID);

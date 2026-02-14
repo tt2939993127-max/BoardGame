@@ -54,6 +54,8 @@ export const LeftSidebar = ({
     selfDamageFlashActive?: boolean;
     /** 自己受击伤害值 */
     selfDamageFlashDamage?: number;
+    /** 视觉状态缓冲覆盖的 HP 值（飞行动画到达前冻结） */
+    overrideHp?: number;
 }) => {
     return (
         <div
@@ -117,6 +119,7 @@ export const LeftSidebar = ({
                         isShaking={isSelfShaking}
                         damageFlashActive={selfDamageFlashActive}
                         damageFlashDamage={selfDamageFlashDamage}
+                        overrideHp={overrideHp}
                     />
                 </div>
                 <div className="w-full px-[1vw] pt-[0.5vw]" data-tutorial-id="draw-deck">
