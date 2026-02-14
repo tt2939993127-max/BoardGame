@@ -421,7 +421,7 @@ describe('巫师派系能力（第6批）', () => {
         expect(drawEvents.length).toBe(0);
     });
 
-    it('wizard_portal: 从牌库顶5张中取出随从放入手牌', () => {
+    it('wizard_portal: 有随从时创建选择 Prompt 让玩家选随从', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -439,11 +439,16 @@ describe('巫师派系能力（第6批）', () => {
         });
 
         const { events, matchState } = execPlayAction(state, '0', 'a1');
+        // 不应该自动抽牌，而是创建选择随从的 Interaction
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        // 应该抽到2个随从
-        expect((drawEvents[0] as any).payload.cardUids).toEqual(['d2', 'd4']);
-        expect((drawEvents[0] as any).payload.count).toBe(2);
+        expect(drawEvents.length).toBe(0);
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('wizard_portal_pick');
+        // 应该有2个随从选项
+        expect(current?.data?.options?.length).toBe(2);
+        // 多选配置：min=0, max=2
+        expect(current?.data?.multi).toEqual({ min: 0, max: 2 });
     });
 
     it('wizard_portal: 牌库为空时无事件', () => {

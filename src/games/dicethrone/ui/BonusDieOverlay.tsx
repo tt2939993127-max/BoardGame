@@ -30,7 +30,7 @@ interface BonusDieOverlayProps {
     onClose: () => void;
     /** 语言 */
     locale?: string;
-    /** 自动关闭延迟（毫秒），默认 2500 */
+    /** 自动关闭延迟（毫秒），默认 3000 */
     autoCloseDelay?: number;
     
     // ===== 重掷交互模式 =====
@@ -62,7 +62,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     isVisible,
     onClose,
     locale,
-    autoCloseDelay = 2500,
+    autoCloseDelay = 3000,
     bonusDice,
     canReroll,
     onReroll,

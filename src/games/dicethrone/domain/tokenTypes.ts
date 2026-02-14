@@ -151,8 +151,18 @@ export interface RollDieConditionalEffect {
     bonusDamage?: number;
     heal?: number;
     cp?: number;
-    grantStatus?: { statusId: string; value: number };
-    grantToken?: { tokenId: string; value: number };
+    grantStatus?: { 
+        statusId: string; 
+        value: number;
+        /** 目标：self=施法者，opponent=对手。如果未指定，根据 statusId 的 category 自动推断（debuff→opponent, buff→self） */
+        target?: 'self' | 'opponent';
+    };
+    grantToken?: { 
+        tokenId: string; 
+        value: number;
+        /** 目标：self=施法者，opponent=对手。如果未指定，默认为 self */
+        target?: 'self' | 'opponent';
+    };
     triggerChoice?: {
         titleKey: string;
         options: ChoiceOption[];

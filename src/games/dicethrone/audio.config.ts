@@ -1,6 +1,9 @@
 /**
  * DiceThrone 音频配置
- * 仅保留事件解析/规则，音效资源统一来自 registry
+ * 
+ * 职责：
+ * - feedbackResolver：处理无动画的即时音效（投骰子、阶段切换、CP 变化等）
+ * - 有动画的事件音效（伤害、治疗、状态、Token）由 animationSoundConfig.ts 管理
  */
 import type { AudioEvent, AudioRuntimeContext, GameAudioConfig, SoundKey } from '../../lib/audio/types';
 import { pickDiceRollSoundKey } from '../../lib/audio/audioUtils';
@@ -13,37 +16,6 @@ const resolveTokenSfx = (state: DiceThroneCore, tokenId?: string): string | null
     if (!tokenId) return null;
     const def = state.tokenDefinitions?.find(token => token.id === tokenId);
     return def?.sfxKey ?? null;
-};
-
-// ============================================================================
-// 冲击帧音效 key（统一由 feedbackResolver 的 on-impact 输出）
-// ============================================================================
-
-/** 重击阈值（伤害 >= 此值使用重击音效） */
-const HEAVY_HIT_THRESHOLD = 8;
-
-export const IMPACT_SFX = {
-    HEAVY_HIT: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst',
-    LIGHT_HIT: 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst',
-    SELF_HIT: 'combat.general.mini_games_sound_effects_and_music_pack.body_hit.sfx_body_hit_generic_small_1',
-    HEAL: 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a',
-    STATUS_GAIN: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a',
-    STATUS_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
-    TOKEN_GAIN: 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a',
-    TOKEN_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
-} as const;
-
-/** 根据伤害值和目标解析命中音效（供动画层调用） */
-export const resolveDamageImpactKey = (
-    damage: number,
-    targetId: string | undefined,
-    currentPlayerId: string | undefined
-): string => {
-    const isOpponent = targetId !== currentPlayerId;
-    if (isOpponent) {
-        return damage >= HEAVY_HIT_THRESHOLD ? IMPACT_SFX.HEAVY_HIT : IMPACT_SFX.LIGHT_HIT;
-    }
-    return IMPACT_SFX.SELF_HIT;
 };
 
 // DT 专属 BGM
@@ -166,8 +138,11 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             return null;
         }
 
-        // DAMAGE_DEALT：音效由动画层在 onImpact 播放，feedbackResolver 不处理
+        // DAMAGE_DEALT：音效由动画层在 onImpact 播放（配置见 domain/animationSoundConfig.ts）
         if (event.type === 'DAMAGE_DEALT') return null;
+
+        // HEAL_APPLIED：音效由动画层在 onImpact 播放（配置见 domain/animationSoundConfig.ts）
+        if (event.type === 'HEAL_APPLIED') return null;
 
         const type = event.type;
 
@@ -216,7 +191,7 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
             }
         }
 
-        // STATUS / TOKEN 事件：有飞行动画，音效由动画层 onImpact 播放，feedbackResolver 不处理
+        // STATUS / TOKEN 事件：有飞行动画，音效由动画层 onImpact 播放（配置见 domain/animationSoundConfig.ts）
         if (type === 'STATUS_APPLIED') return null;
         if (type === 'STATUS_REMOVED') return null;
         if (type === 'TOKEN_GRANTED') return null;

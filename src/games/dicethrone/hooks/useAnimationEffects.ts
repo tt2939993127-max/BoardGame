@@ -1,42 +1,44 @@
 /**
  * useAnimationEffects Hook
  * 
- * 统一管理 HP 和状态效果变化的飞行动画效果。
- * 自动追踪变化并触发相应的动画，消除重复的 useEffect 逻辑。
+ * 基于事件流驱动 FX 特效（伤害/治疗/状态/Token）。
+ * 使用 FX 引擎（useFxBus + FeedbackPack）自动处理音效和震动。
  * 
  * @example
  * ```typescript
  * useAnimationEffects({
+ *   fxBus,
  *   players: { player, opponent },
  *   currentPlayerId: rootPid,
  *   opponentId: otherPid,
  *   refs: { opponentHp, selfHp, opponentBuff, selfBuff },
  *   getEffectStartPos,
- *   pushFlyingEffect,
- *   triggerOpponentShake,
  *   locale,
- *   statusIconAtlas
+ *   statusIconAtlas,
+ *   damageStreamEntry,
+ *   eventStreamEntries,
  * });
  * ```
  */
 
 import { useEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
-import type { DamageDealtEvent, HeroState } from '../domain/types';
+import type { DamageDealtEvent, HealAppliedEvent, HeroState } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import type { StatusAtlases } from '../ui/statusEffects';
 import { getStatusEffectIconNode } from '../ui/statusEffects';
 import { STATUS_EFFECT_META, TOKEN_META } from '../domain/statusEffects';
 import { getElementCenter } from '../../../components/common/animations/FlyingEffect';
 import { RESOURCE_IDS } from '../domain/resources';
-import { playSound } from '../../../lib/audio/useGameAudio';
-import { resolveDamageImpactKey, IMPACT_SFX } from '../audio.config';
-
+import type { FxBus } from '../../../engine/fx';
+import { DT_FX, resolveDamageImpactKey } from '../ui/fxSetup';
 
 /**
  * 动画效果配置
  */
 export interface AnimationEffectsConfig {
+    /** FX Bus（用于推送特效） */
+    fxBus: FxBus;
     /** 玩家状态（包含自己和对手） */
     players: {
         player: HeroState;
@@ -55,56 +57,37 @@ export interface AnimationEffectsConfig {
     };
     /** 获取效果起始位置的函数 */
     getEffectStartPos: (targetId?: string) => { x: number; y: number };
-    /** 推送飞行效果的函数 */
-    pushFlyingEffect: (effect: {
-        type: 'damage' | 'buff' | 'heal';
-        content: string | React.ReactNode;
-        startPos: { x: number; y: number };
-        endPos: { x: number; y: number };
-        color?: string;
-        /** 效果强度（伤害/治疗量），影响尾迹粒子密度 */
-        intensity?: number;
-        /** 飞行体到达目标（冲击帧）时触发的回调，用于同步播放音效/震屏等 */
-        onImpact?: () => void;
-    }) => void;
-    /** 触发对手受击全套反馈（震动+钝帧+裂隙闪光） */
-    triggerOpponentImpact?: (damage: number) => void;
-    /** 触发自己受击全套反馈（震动+钝帧+裂隙闪光） */
-    triggerSelfImpact?: (damage: number) => void;
     /** 当前语言 */
     locale?: string;
     /** 状态图标图集配置 */
     statusIconAtlas?: StatusAtlases | null;
     /** 伤害事件流条目（用于以事件驱动伤害动画，避免重复触发） */
     damageStreamEntry?: EventStreamEntry;
+    /** 事件流所有条目（用于监听 HEAL_APPLIED 事件） */
+    eventStreamEntries?: EventStreamEntry[];
 }
 
 /**
  * 管理动画效果的 Hook
  * 
- * 自动追踪 HP 和状态效果变化，触发飞行动画
+ * 自动追踪 HP 和状态效果变化，触发 FX 特效
  */
 export function useAnimationEffects(config: AnimationEffectsConfig) {
     const {
+        fxBus,
         players: { player, opponent },
         currentPlayerId,
         opponentId,
         refs,
         getEffectStartPos,
-        pushFlyingEffect,
-        triggerOpponentImpact,
-        triggerSelfImpact,
         locale,
         statusIconAtlas,
         damageStreamEntry,
+        eventStreamEntries = [],
     } = config;
 
     // 首次挂载标记：跳过初始渲染的"变化"，避免刷新后历史状态被当成新变化触发动画
     const mountedRef = useRef(false);
-
-    // 追踪上一次的 HP 值（防御性读取，player/opponent 可能 undefined）
-    const prevOpponentHealthRef = useRef(opponent?.resources?.[RESOURCE_IDS.HP]);
-    const prevPlayerHealthRef = useRef(player?.resources?.[RESOURCE_IDS.HP]);
 
     // 追踪上一次的状态效果
     const prevOpponentStatusRef = useRef<Record<string, number>>({ ...(opponent?.statusEffects || {}) });
@@ -114,6 +97,8 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
     const prevPlayerTokensRef = useRef<Record<string, number>>({ ...(player?.tokens || {}) });
     // 首次挂载时将指针推进到当前最新伤害事件，跳过历史事件（防止刷新重播）
     const lastDamageEventIdRef = useRef<number | null>(damageStreamEntry?.id ?? null);
+    // 追踪最后处理的治疗事件 ID
+    const lastHealEventIdRef = useRef<number | null>(null);
 
     // 首次挂载后标记为已就绪，后续 effect 才允许触发动画
     useEffect(() => {
@@ -136,35 +121,25 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         const damage = event.payload.actualDamage ?? 0;
         if (damage <= 0) return;
 
-        // 解析伤害音效 key，嵌入 onImpact 回调直接播放
-        const impactKey = resolveDamageImpactKey(damage, event.payload.targetId, currentPlayerId);
+        // 解析伤害音效 key，注入 params.soundKey
+        const soundKey = resolveDamageImpactKey(damage, event.payload.targetId, currentPlayerId);
 
         if (event.payload.targetId === opponentId && opponent) {
-            pushFlyingEffect({
-                type: 'damage',
-                content: `-${damage}`,
-                intensity: damage,
+            fxBus.push(DT_FX.DAMAGE, {}, {
+                damage,
                 startPos: getEffectStartPos(opponentId),
                 endPos: getElementCenter(refs.opponentHp.current),
-                onImpact: () => {
-                    playSound(impactKey);
-                    triggerOpponentImpact?.(damage);
-                },
+                soundKey, // 动态音效 key
             });
             return;
         }
 
         if (event.payload.targetId === currentPlayerId) {
-            pushFlyingEffect({
-                type: 'damage',
-                content: `-${damage}`,
-                intensity: damage,
+            fxBus.push(DT_FX.DAMAGE, {}, {
+                damage,
                 startPos: getEffectStartPos(currentPlayerId),
                 endPos: getElementCenter(refs.selfHp.current),
-                onImpact: () => {
-                    playSound(impactKey);
-                    triggerSelfImpact?.(damage);
-                },
+                soundKey, // 动态音效 key
             });
         }
     }, [
@@ -175,107 +150,62 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
         refs.opponentHp,
         refs.selfHp,
         getEffectStartPos,
-        pushFlyingEffect,
-        triggerOpponentImpact,
-        triggerSelfImpact,
+        fxBus,
     ]);
 
     /**
-     * 监听对手 HP 变化（伤害/治疗动画）
+     * 基于事件流触发治疗动画（独立于 HP 变化）
      */
     useEffect(() => {
-        if (!opponent) return;
+        if (!mountedRef.current) return;
+        if (eventStreamEntries.length === 0) return;
 
-        const currentHealth = opponent.resources?.[RESOURCE_IDS.HP] ?? 0;
-        const prevHealth = prevOpponentHealthRef.current;
-
-        if (mountedRef.current) {
-            // 检测 HP 下降（受到伤害）— fallback 路径（无事件流时），无 DeferredSound 可消费
-            if (!damageStreamEntry && prevHealth !== undefined && currentHealth < prevHealth) {
-                const damage = prevHealth - currentHealth;
-                pushFlyingEffect({
-                    type: 'damage',
-                    content: `-${damage}`,
-                    intensity: damage,
-                    startPos: getEffectStartPos(opponentId),
-                    endPos: getElementCenter(refs.opponentHp.current),
-                    onImpact: () => {
-                        triggerOpponentImpact?.(damage);
-                    },
-                });
+        // 从最新的事件开始向前查找未处理的 HEAL_APPLIED 事件
+        for (let i = eventStreamEntries.length - 1; i >= 0; i--) {
+            const entry = eventStreamEntries[i];
+            
+            // 跳过已处理的事件
+            if (lastHealEventIdRef.current !== null && entry.id <= lastHealEventIdRef.current) {
+                break;
             }
 
-            // 检测 HP 上升（治疗）
-            if (prevHealth !== undefined && currentHealth > prevHealth) {
-                const heal = currentHealth - prevHealth;
-                pushFlyingEffect({
-                    type: 'heal',
-                    content: `+${heal}`,
-                    intensity: heal,
+            const event = entry.event as HealAppliedEvent;
+            if (event.type !== 'HEAL_APPLIED') continue;
+
+            const { targetId, amount } = event.payload;
+            
+            // 跳过 amount=0 的治疗（无实际效果）
+            if (amount <= 0) continue;
+
+            // 标记为已处理
+            if (lastHealEventIdRef.current === null || entry.id > lastHealEventIdRef.current) {
+                lastHealEventIdRef.current = entry.id;
+            }
+
+            // 触发治疗动画
+            if (targetId === opponentId && opponent) {
+                fxBus.push(DT_FX.HEAL, {}, {
+                    amount,
                     startPos: getEffectStartPos(opponentId),
                     endPos: getElementCenter(refs.opponentHp.current),
+                });
+            } else if (targetId === currentPlayerId) {
+                fxBus.push(DT_FX.HEAL, {}, {
+                    amount,
+                    startPos: getEffectStartPos(currentPlayerId),
+                    endPos: getElementCenter(refs.selfHp.current),
                 });
             }
         }
-
-        prevOpponentHealthRef.current = currentHealth;
     }, [
-        opponent?.resources,
-        opponent,
-        damageStreamEntry,
-        pushFlyingEffect,
-        triggerOpponentImpact,
-        getEffectStartPos,
+        eventStreamEntries,
         opponentId,
-        refs.opponentHp,
-    ]);
-
-    /**
-     * 监听玩家 HP 变化（伤害/治疗动画）
-     */
-    useEffect(() => {
-        if (!player?.resources) return;
-        const currentHealth = player.resources[RESOURCE_IDS.HP] ?? 0;
-        const prevHealth = prevPlayerHealthRef.current;
-
-        if (mountedRef.current) {
-            // 检测 HP 下降（受到伤害）— fallback 路径
-            if (!damageStreamEntry && prevHealth !== undefined && currentHealth < prevHealth) {
-                const damage = prevHealth - currentHealth;
-                pushFlyingEffect({
-                    type: 'damage',
-                    content: `-${damage}`,
-                    intensity: damage,
-                    startPos: getEffectStartPos(currentPlayerId),
-                    endPos: getElementCenter(refs.selfHp.current),
-                    onImpact: () => {
-                        triggerSelfImpact?.(damage);
-                    },
-                });
-            }
-
-            // 检测 HP 上升（治疗）
-            if (prevHealth !== undefined && currentHealth > prevHealth) {
-                const heal = currentHealth - prevHealth;
-                pushFlyingEffect({
-                    type: 'heal',
-                    content: `+${heal}`,
-                    intensity: heal,
-                    startPos: getEffectStartPos(currentPlayerId),
-                    endPos: getElementCenter(refs.selfHp.current),
-                });
-            }
-        }
-
-        prevPlayerHealthRef.current = currentHealth;
-    }, [
-        player.resources,
-        damageStreamEntry,
-        pushFlyingEffect,
-        getEffectStartPos,
+        opponent,
         currentPlayerId,
-        triggerSelfImpact,
+        refs.opponentHp,
         refs.selfHp,
+        getEffectStartPos,
+        fxBus,
     ]);
 
     /**
@@ -298,13 +228,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-500 to-slate-600'
                     };
 
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
                         startPos: getEffectStartPos(opponentId),
                         endPos: getElementCenter(refs.opponentBuff.current),
-                    onImpact: () => { playSound(IMPACT_SFX.STATUS_GAIN); },
                     });
                 }
             });
@@ -317,20 +245,19 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         icon: '✨',
                         color: 'from-slate-500 to-slate-600'
                     };
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.opponentBuff.current),
                         endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
-                    onImpact: () => { playSound(IMPACT_SFX.STATUS_REMOVE); },
+                        isRemove: true,
                     });
                 }
             });
         }
 
         prevOpponentStatusRef.current = { ...currentStatus };
-    }, [opponent?.statusEffects, opponent, pushFlyingEffect, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff]);
+    }, [opponent?.statusEffects, opponent, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff, fxBus]);
 
     /**
      * 监听玩家状态效果变化（增益/减益/移除动画）
@@ -349,13 +276,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-500 to-slate-600'
                     };
 
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
                         startPos: getEffectStartPos(currentPlayerId),
                         endPos: getElementCenter(refs.selfBuff.current),
-                        onImpact: () => { playSound(IMPACT_SFX.STATUS_GAIN); },
                     });
                 }
             });
@@ -367,20 +292,19 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         icon: '✨',
                         color: 'from-slate-500 to-slate-600'
                     };
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.selfBuff.current),
                         endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
-                    onImpact: () => { playSound(IMPACT_SFX.STATUS_REMOVE); },
+                        isRemove: true,
                     });
                 }
             });
         }
 
         prevPlayerStatusRef.current = { ...currentStatus };
-    }, [player.statusEffects, pushFlyingEffect, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff]);
+    }, [player.statusEffects, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff, fxBus]);
 
     /**
      * 监听对手 Token 变化（获得/消耗动画）
@@ -400,13 +324,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-500 to-slate-600'
                     };
 
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
                         startPos: getEffectStartPos(opponentId),
                         endPos: getElementCenter(refs.opponentBuff.current),
-                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_GAIN); },
                     });
                 }
             });
@@ -418,20 +340,19 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         icon: '✨',
                         color: 'from-slate-500 to-slate-600'
                     };
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.opponentBuff.current),
                         endPos: { x: getElementCenter(refs.opponentBuff.current).x, y: getElementCenter(refs.opponentBuff.current).y - 60 },
-                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_REMOVE); },
+                        isRemove: true,
                     });
                 }
             });
         }
 
         prevOpponentTokensRef.current = { ...currentTokens };
-    }, [opponent?.tokens, opponent, pushFlyingEffect, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff]);
+    }, [opponent?.tokens, opponent, getEffectStartPos, opponentId, locale, statusIconAtlas, refs.opponentBuff, fxBus]);
 
     /**
      * 监听玩家 Token 变化（获得/消耗动画）
@@ -449,13 +370,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         color: 'from-slate-500 to-slate-600'
                     };
 
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
                         startPos: getEffectStartPos(currentPlayerId),
                         endPos: getElementCenter(refs.selfBuff.current),
-                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_GAIN); },
                     });
                 }
             });
@@ -467,18 +386,17 @@ export function useAnimationEffects(config: AnimationEffectsConfig) {
                         icon: '✨',
                         color: 'from-slate-500 to-slate-600'
                     };
-                    pushFlyingEffect({
-                        type: 'buff',
+                    fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',
                         startPos: getElementCenter(refs.selfBuff.current),
                         endPos: { x: getElementCenter(refs.selfBuff.current).x, y: getElementCenter(refs.selfBuff.current).y - 60 },
-                        onImpact: () => { playSound(IMPACT_SFX.TOKEN_REMOVE); },
+                        isRemove: true,
                     });
                 }
             });
         }
 
         prevPlayerTokensRef.current = { ...currentTokens };
-    }, [player.tokens, pushFlyingEffect, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff]);
+    }, [player.tokens, getEffectStartPos, currentPlayerId, locale, statusIconAtlas, refs.selfBuff, fxBus]);
 }

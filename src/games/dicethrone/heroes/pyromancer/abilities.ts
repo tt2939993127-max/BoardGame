@@ -127,7 +127,7 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
                 description: abilityEffectText('pyro-blast', 'bonusRoll'),
                 action: {
                     type: 'rollDie',
-                    target: 'self',
+                    target: 'opponent',
                     diceCount: 1,
                     conditionalEffects: [
                         { face: PYROMANCER_DICE_FACE_IDS.FIRE, bonusDamage: 3 },

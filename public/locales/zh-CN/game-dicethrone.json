@@ -240,6 +240,7 @@
       "unknown": "未知来源"
     },
     "damageOriginal": "（原始 {{amount}}）",
+    "damageModifiers": "（原始 {{original}}，{{modifiers}}）",
     "healApplied": "为玩家{{targetPlayerId}}回复 {{amount}} 点生命",
     "statusApplied": "对玩家{{targetPlayerId}}施加状态 {{statusLabel}}",
     "statusAppliedDelta": "（+{{stacks}}，当前 {{total}}）",

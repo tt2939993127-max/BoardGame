@@ -689,9 +689,22 @@ function resolveConditionalEffect(
 
     // 处理 grantStatus
     if (effect.grantStatus) {
-        const { statusId, value } = effect.grantStatus;
-        const target = state.players[targetId];
-        const currentStacks = target?.statusEffects[statusId] ?? 0;
+        const { statusId, value, target: targetSpec } = effect.grantStatus;
+        
+        // 优先使用显式 target，否则根据 category 自动推断
+        let actualTargetId: PlayerId;
+        if (targetSpec) {
+            // 显式指定了 target
+            actualTargetId = targetSpec === 'self' ? ctx.attackerId : ctx.defenderId;
+        } else {
+            // 未指定 target，根据 category 自动推断
+            const def = state.tokenDefinitions.find(e => e.id === statusId);
+            const isDebuff = def?.category === 'debuff';
+            actualTargetId = isDebuff ? ctx.defenderId : ctx.attackerId;
+        }
+        
+        const targetPlayer = state.players[actualTargetId];
+        const currentStacks = targetPlayer?.statusEffects[statusId] ?? 0;
         const def = state.tokenDefinitions.find(e => e.id === statusId);
         const maxStacks = def?.stackLimit || 99;
         const newTotal = Math.min(currentStacks + value, maxStacks);
@@ -699,7 +712,7 @@ function resolveConditionalEffect(
         const event: StatusAppliedEvent = {
             type: 'STATUS_APPLIED',
             payload: {
-                targetId,
+                targetId: actualTargetId,
                 statusId,
                 stacks: value,
                 newTotal,
@@ -714,16 +727,22 @@ function resolveConditionalEffect(
 
     // 处理 grantToken
     if (effect.grantToken) {
-        const { tokenId, value } = effect.grantToken;
-        const target = state.players[targetId];
-        const currentAmount = target?.tokens[tokenId] ?? 0;
-        const maxStacks = getTokenStackLimit(state, targetId, tokenId);
+        const { tokenId, value, target: targetSpec } = effect.grantToken;
+        
+        // 优先使用显式 target，否则默认为 self
+        const actualTargetId = targetSpec 
+            ? (targetSpec === 'self' ? ctx.attackerId : ctx.defenderId)
+            : ctx.attackerId;
+        
+        const targetPlayer = state.players[actualTargetId];
+        const currentAmount = targetPlayer?.tokens[tokenId] ?? 0;
+        const maxStacks = getTokenStackLimit(state, actualTargetId, tokenId);
         const newTotal = Math.min(currentAmount + value, maxStacks);
 
         const tokenEvent: TokenGrantedEvent = {
             type: 'TOKEN_GRANTED',
             payload: {
-                targetId,
+                targetId: actualTargetId,
                 tokenId,
                 amount: value,
                 newTotal,
@@ -737,10 +756,11 @@ function resolveConditionalEffect(
     }
 
     if (typeof effect.heal === 'number' && effect.heal > 0) {
+        // 治疗永远施加给自己，不受 rollDie.target 影响
         const event: HealAppliedEvent = {
             type: 'HEAL_APPLIED',
             payload: {
-                targetId,
+                targetId: ctx.attackerId,
                 amount: effect.heal,
                 sourceAbilityId,
             },
@@ -752,12 +772,13 @@ function resolveConditionalEffect(
     }
 
     if (typeof effect.cp === 'number' && effect.cp !== 0) {
-        const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
+        // CP 永远施加给自己，不受 rollDie.target 影响
+        const currentCp = state.players[ctx.attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
         const newValue = Math.max(0, Math.min(currentCp + effect.cp, CP_MAX));
         const event: CpChangedEvent = {
             type: 'CP_CHANGED',
             payload: {
-                playerId: targetId,
+                playerId: ctx.attackerId,
                 delta: effect.cp,
                 newValue,
             },

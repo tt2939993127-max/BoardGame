@@ -127,7 +127,7 @@ function robotTechCenter(ctx: AbilityContext): AbilityResult {
         if (count > 0) {
             const baseDef = getBaseDef(ctx.state.bases[i].defId);
             const baseName = baseDef?.name ?? `基地 ${i + 1}`;
-            candidates.push({ baseIndex: i, count, label: `${baseName} (${count} 个随�?` });
+            candidates.push({ baseIndex: i, count, label: `${baseName} (${count} 个随从)` });
         }
     }
     if (candidates.length === 0) return { events: [] };

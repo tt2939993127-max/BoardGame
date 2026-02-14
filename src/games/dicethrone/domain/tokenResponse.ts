@@ -366,6 +366,7 @@ export function finalizeTokenResponse(
                 amount: pendingDamage.currentDamage,
                 actualDamage,
                 sourceAbilityId: pendingDamage.sourceAbilityId,
+                modifiers: pendingDamage.modifiers,
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,

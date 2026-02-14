@@ -143,39 +143,62 @@ export function registerWizardAbilities(): void {
     registerWizardOngoingEffects();
 }
 
-/** 传送门 onPlay：展示牌库顶5张，将其中随从放入手牌，其余放牌库底（MVP：自动取所有随从） */
+/** 传送门 onPlay：展示牌库顶5张，玩家选择要拿的随从放入手牌，其余以玩家选择的顺序放牌库顶 */
 function wizardPortal(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     if (player.deck.length === 0) return { events: [] };
 
-    const events: SmashUpEvent[] = [];
     const topCards = player.deck.slice(0, 5);
     const minions = topCards.filter(c => c.type === 'minion');
     const others = topCards.filter(c => c.type !== 'minion');
 
-    // 随从放入手牌
-    if (minions.length > 0) {
-        const drawEvt: CardsDrawnEvent = {
-            type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: ctx.playerId, count: minions.length, cardUids: minions.map(c => c.uid) },
-            timestamp: ctx.now,
-        };
-        events.push(drawEvt);
+    // 没有随从：直接进入排序流程
+    if (minions.length === 0) {
+        return wizardPortalOrderRemaining(ctx, others, []);
     }
 
-    // 其余放牌库顶（以玩家选择的顺序）
-    if (others.length === 0) return { events };
-    if (others.length === 1) {
-        // 只有一张，直接放牌库顶
-        events.push({
-            type: SU_EVENTS.CARD_TO_DECK_TOP,
-            payload: { cardUid: others[0].uid, defId: others[0].defId, ownerId: ctx.playerId, reason: 'wizard_portal' },
-            timestamp: ctx.now,
-        } as CardToDeckTopEvent);
-        return { events };
+    // 有随从：让玩家选择要拿哪些（可以不拿）
+    const options = minions.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `minion-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+    });
+    const interaction = createSimpleChoice(
+        `wizard_portal_pick_${ctx.now}`, ctx.playerId,
+        '传送：选择要放入手牌的随从（可以不选）', options, 'wizard_portal_pick',
+        undefined, { min: 0, max: minions.length },
+    );
+    const allTopCards = topCards.map(c => ({ uid: c.uid, defId: c.defId, type: c.type }));
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, {
+            ...interaction,
+            data: { ...interaction.data, continuationContext: { allTopCards } },
+        }),
+    };
+}
+
+/** 传送门辅助：对剩余牌排序放回牌库顶 */
+function wizardPortalOrderRemaining(
+    ctx: AbilityContext,
+    remaining: { uid: string; defId: string }[],
+    drawEvents: SmashUpEvent[],
+): AbilityResult {
+    if (remaining.length === 0) return { events: drawEvents };
+    if (remaining.length === 1) {
+        return {
+            events: [
+                ...drawEvents,
+                {
+                    type: SU_EVENTS.CARD_TO_DECK_TOP,
+                    payload: { cardUid: remaining[0].uid, defId: remaining[0].defId, ownerId: ctx.playerId, reason: 'wizard_portal' },
+                    timestamp: ctx.now,
+                } as CardToDeckTopEvent,
+            ],
+        };
     }
-    // 多张：让玩家逐个选择放回顺序（先选的放最上面）
-    const options = others.map((c, i) => {
+    // 多张：让玩家逐个选择放回顺序
+    const options = remaining.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
         return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
@@ -184,10 +207,13 @@ function wizardPortal(ctx: AbilityContext): AbilityResult {
         `wizard_portal_order_${ctx.now}`, ctx.playerId,
         '传送：选择放回牌库顶的第一张牌（最先选的在最上面）', options, 'wizard_portal_order',
     );
-    const remainingUids = others.map(c => ({ uid: c.uid, defId: c.defId }));
+    const remainingUids = remaining.map(c => ({ uid: c.uid, defId: c.defId }));
     return {
-        events,
-        matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { remaining: remainingUids, ordered: [] as { uid: string; defId: string }[] } } }),
+        events: drawEvents,
+        matchState: queueInteraction(ctx.matchState, {
+            ...interaction,
+            data: { ...interaction.data, continuationContext: { remaining: remainingUids, ordered: [] as { uid: string; defId: string }[] } },
+        }),
     };
 }
 
@@ -358,6 +384,56 @@ export function registerWizardInteractionHandlers(): void {
                 payload: { playerId, count: 1, cardUids: [cardUid] },
                 timestamp,
             } as SmashUpEvent],
+        };
+    });
+
+    // 传送：玩家选择要拿的随从
+    registerInteractionHandler('wizard_portal_pick', (state, playerId, value, iData, _random, timestamp) => {
+        const ctx = (iData as any)?.continuationContext as { allTopCards: { uid: string; defId: string; type: string }[] };
+        if (!ctx) return undefined;
+
+        // value 是多选结果数组（每项 { cardUid, defId }）
+        const picks = Array.isArray(value) ? value as { cardUid: string; defId: string }[] : [value as { cardUid: string; defId: string }];
+        const pickedUids = new Set(picks.map(p => p.cardUid));
+
+        // 选中的随从放入手牌
+        const events: SmashUpEvent[] = [];
+        if (pickedUids.size > 0) {
+            events.push({
+                type: SU_EVENTS.CARDS_DRAWN,
+                payload: { playerId, count: pickedUids.size, cardUids: [...pickedUids] },
+                timestamp,
+            } as CardsDrawnEvent);
+        }
+
+        // 剩余的牌（未选随从 + 非随从）需要排序放回牌库顶
+        const remaining = ctx.allTopCards
+            .filter(c => !pickedUids.has(c.uid))
+            .map(c => ({ uid: c.uid, defId: c.defId }));
+
+        if (remaining.length === 0) return { state, events };
+        if (remaining.length === 1) {
+            events.push({
+                type: SU_EVENTS.CARD_TO_DECK_TOP,
+                payload: { cardUid: remaining[0].uid, defId: remaining[0].defId, ownerId: playerId, reason: 'wizard_portal' },
+                timestamp,
+            } as CardToDeckTopEvent);
+            return { state, events };
+        }
+
+        // 多张：进入排序流程
+        const options = remaining.map((c, i) => {
+            const def = getCardDef(c.defId);
+            const name = def?.name ?? c.defId;
+            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+        });
+        const next = createSimpleChoice(
+            `wizard_portal_order_${timestamp}`, playerId,
+            '传送：选择放回牌库顶的第一张牌（最先选的在最上面）', options, 'wizard_portal_order',
+        );
+        return {
+            state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered: [] } } }),
+            events,
         };
     });
 

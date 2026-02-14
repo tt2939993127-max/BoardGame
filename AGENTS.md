@@ -193,6 +193,11 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 > **修改引擎/框架层代码或游戏 move/command 时必须先阅读 `docs/ai-rules/engine-systems.md`**
 
 - **数据驱动优先**：规则/配置做成可枚举数据，引擎解析执行，避免分支硬编码。
+- **数据结构完整性（强制）**：数据定义必须包含所有执行所需的字段，禁止在执行层"猜测"或"自动推断"缺失的关键信息。
+  - ✅ 正确：`grantStatus: { statusId, value, target: 'opponent' }` — 目标显式声明
+  - ❌ 错误：`grantStatus: { statusId, value }` + 执行层根据 category 猜测目标 — 数据不完整
+  - **例外**：允许为向后兼容提供默认值（如 `target` 未指定时自动推断），但必须在类型注释中说明
+  - **契约测试必须检查**：数据语义正确性（debuff 目标、buff 目标、数值范围），不只是结构完整性
 - **领域 ID 常量表**：所有稳定 ID 在 `domain/ids.ts` 定义（`as const`），禁止字符串字面量。
 - **三层模型**：`/core/ui/` 契约 → `/components/game/framework/` 骨架 → `/games/<gameId>/` 游戏层。
 - **禁止框架层 import 游戏层**；游戏特化下沉到 `games/<gameId>/`。
@@ -279,13 +284,19 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - **游戏配置**（`audio.config.ts`）：定义事件→音效的映射规则（`feedbackResolver`），使用通用注册表中的 key。
   - **FX 系统**（`fxSetup.ts`）：直接使用通用注册表中的 key 定义 `FeedbackPack`，不依赖游戏配置常量。
   - **禁止重复定义**：音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用 key 字符串，不再定义常量。
-- **音效两条路径 + UI 交互音（强制）**：
-  - **路径① 即时播放（feedbackResolver）**：无动画的事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `SoundKey`（纯字符串）即时播放。有动画的事件（伤害/状态/Token）`feedbackResolver` 返回 `null`，由动画层 `onImpact` 回调直接调用 `playSound(key)`。
-  - **路径② 动画驱动（params.soundKey / onImpact）**：有 FX 特效的事件音（召唤光柱/攻击气浪/充能旋涡）通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 在 push 时从 `event.params.soundKey` 读取。飞行动画（伤害数字/状态增减/Token 获得消耗）在 `onImpact` 回调中直接 `playSound(resolvedKey)`。
-  - **UI 交互音**：UI 点击音走 `GameButton`，拒绝音走 `playDeniedSound()`，key 来自通用注册表。
-  - **选择原则**：有 FX 特效 → 路径②（FeedbackPack）；有飞行动画无特效 → 路径②（onImpact 回调）；无动画 → 路径①；UI 交互 → UI 交互音。
-  - **避免重复**：同一事件只能选择一条路径，有动画的事件 `feedbackResolver` 必须返回 `null`。
-  - **已废弃**：`DeferredSoundMap` 已删除，`AudioTiming`/`EventSoundResult` 已移除，`feedbackResolver` 不再返回 `{ key, timing }` 对象。
+- **音效配置路径（当前 + 长期规划）**：
+  - **当前架构（过渡期）**：
+    - **路径① 即时播放（feedbackResolver）**：无动画的事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `SoundKey`（纯字符串）即时播放。有动画的事件（伤害/状态/Token）`feedbackResolver` 返回 `null`，由动画层 `onImpact` 回调直接调用 `playSound(key)`。
+    - **路径② 动画驱动（params.soundKey / onImpact）**：有 FX 特效的事件音（召唤光柱/攻击气浪/充能旋涡）通过 `FeedbackPack` 在 `fxSetup.ts` 注册时声明，`useFxBus` 在 push 时从 `event.params.soundKey` 读取。飞行动画（伤害数字/状态增减/Token 获得消耗）在 `onImpact` 回调中直接 `playSound(resolvedKey)`。
+    - **UI 交互音**：UI 点击音走 `GameButton`，拒绝音走 `playDeniedSound()`，key 来自通用注册表。
+    - **选择原则**：有 FX 特效 → 路径②（FeedbackPack）；有飞行动画无特效 → 路径②（onImpact 回调）；无动画 → 路径①；UI 交互 → UI 交互音。
+    - **避免重复**：同一事件只能选择一条路径，有动画的事件 `feedbackResolver` 必须返回 `null`。
+    - **已废弃**：`DeferredSoundMap` 已删除，`AudioTiming`/`EventSoundResult` 已移除，`feedbackResolver` 不再返回 `{ key, timing }` 对象。
+  - **长期目标架构（FeedbackPack 单一配置源）**：
+    - **核心变化**：`feedbackResolver` 只处理"无动画的即时音效"，所有有动画的事件音效统一在 `fxSetup.ts` 的 `FeedbackPack` 中声明，删除动画层的硬编码 `playSound()` 调用。
+    - **迁移状态**：✅ SummonerWars 已完成；✅ DiceThrone 已完成迁移到 FX 引擎；⏸️ SmashUp 无事件音效系统。
+    - **新游戏规范**：新增游戏必须直接采用长期架构。
+    - **详见**：`docs/refactor/audio-architecture-improvement.md`
 
 ---
 
@@ -299,7 +310,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **截图规范**：禁止硬编码路径，必须用 `testInfo.outputPath('name.png')`。
 - **E2E 覆盖要求**：必须覆盖"关键交互面"（按钮/Modal/Tab/表单校验），不只是跑通 happy path。
 - **静态审计要求**：新增游戏时根据游戏特征选择引擎层审计工具。选型指南见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
-- **描述→实现全链路审查（强制）**：以下场景必须执行全链路审查——① 新增任何技能/Token/事件卡/被动效果/光环的实现 ② 修复"没效果"类 bug ③ 审查已有机制是否正确实现 ④ 重构涉及消费链路。审查方法：将描述拆分为**独立交互链**（任何需要独立触发条件、玩家输入或状态变更路径的效果 = 一条链，一个机制拆出几条就审查几条），逐链检查定义层→执行层→状态层→验证层→UI 层→测试层六层链路，输出"独立交互链 × 六层"矩阵。**禁止只测注册/写入就判定"已实现"，禁止输出"看起来没问题"的模糊结论。** 详见 `docs/ai-rules/engine-systems.md`「描述→实现全链路审查规范」节。
+- **描述→实现全链路审查（强制）**：以下场景必须执行全链路审查——① 新增任何技能/Token/事件卡/被动效果/光环的实现 ② 修复"没效果"类 bug ③ 审查已有机制是否正确实现 ④ 重构涉及消费链路。审查方法：先从规则文档锁定权威描述（禁止仅凭代码注释），将描述拆分为**独立交互链**（任何需要独立触发条件、玩家输入或状态变更路径的效果 = 一条链），拆分后逐句回溯原文自检覆盖完整性，再逐链检查定义层→注册层→执行层→状态层→验证层→UI 层→i18n 层→测试层八层链路，最后做交叉影响检查（新链路是否触发已有机制连锁），输出"独立交互链 × 八层"矩阵（附权威描述原文）。**禁止只测注册/写入就判定"已实现"，禁止输出"看起来没问题"的模糊结论。** 详见 `docs/ai-rules/engine-systems.md`「描述→实现全链路审查规范」节。
 
 ---
 

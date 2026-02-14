@@ -255,6 +255,49 @@ const abilityEffectRules: EffectContractRule<AbilityEffect>[] = [
             `rollDie 缺少 conditionalEffects（投掷后无条件效果，骰子结果不会产生任何作用）`,
     },
     {
+        name: 'conditionalEffects 中 debuff 的 target 必须是 opponent（或不指定）',
+        appliesTo: (e) => {
+            if (getActionType(e) !== 'rollDie') return false;
+            const conditionalEffects = e.action!.conditionalEffects ?? [];
+            return conditionalEffects.some(ce => ce.grantStatus);
+        },
+        check: (e) => {
+            const conditionalEffects = e.action!.conditionalEffects ?? [];
+            for (const ce of conditionalEffects) {
+                if (ce.grantStatus) {
+                    const { statusId, target } = ce.grantStatus;
+                    const def = ALL_TOKEN_DEFINITIONS.find(d => d.id === statusId);
+                    // debuff 如果显式指定 target，必须是 'opponent'
+                    if (def?.category === 'debuff' && target && target !== 'opponent') {
+                        return false;
+                    }
+                    // buff 如果显式指定 target，必须是 'self'
+                    if (def?.category === 'buff' && target && target !== 'self') {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        },
+        describeViolation: (e) => {
+            const conditionalEffects = e.action!.conditionalEffects ?? [];
+            const violations: string[] = [];
+            for (const ce of conditionalEffects) {
+                if (ce.grantStatus) {
+                    const { statusId, target } = ce.grantStatus;
+                    const def = ALL_TOKEN_DEFINITIONS.find(d => d.id === statusId);
+                    if (def?.category === 'debuff' && target && target !== 'opponent') {
+                        violations.push(`debuff "${statusId}" 的 target="${target}" 错误，应该是 "opponent" 或不指定（自动推断）`);
+                    }
+                    if (def?.category === 'buff' && target && target !== 'self') {
+                        violations.push(`buff "${statusId}" 的 target="${target}" 错误，应该是 "self" 或不指定（自动推断）`);
+                    }
+                }
+            }
+            return violations.join('; ');
+        },
+    },
+    {
         name: 'custom action 的 customActionId 必须在注册表中',
         appliesTo: (e) => getActionType(e) === 'custom' && !!e.action!.customActionId,
         check: (e) => getRegisteredCustomActionIds().has(e.action!.customActionId!),

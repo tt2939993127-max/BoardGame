@@ -359,10 +359,36 @@ export const handleTokenUsed: EventHandler<Extract<DiceThroneEvent, { type: 'TOK
     // 更新 pendingDamage
     let pendingDamage = state.pendingDamage;
     if (state.pendingDamage) {
+        // 获取 Token 名称用于显示
+        const tokenDef = state.tokenDefinitions?.find(t => t.id === tokenId);
+        const tokenName = tokenDef?.name || tokenId;
+        
         if (effectType === 'damageBoost' && damageModifier) {
-            pendingDamage = { ...state.pendingDamage, currentDamage: state.pendingDamage.currentDamage + damageModifier };
+            const modifiers = [...(state.pendingDamage.modifiers || [])];
+            modifiers.push({
+                type: 'token',
+                value: damageModifier,
+                sourceId: tokenId,
+                sourceName: tokenName,
+            });
+            pendingDamage = { 
+                ...state.pendingDamage, 
+                currentDamage: state.pendingDamage.currentDamage + damageModifier,
+                modifiers,
+            };
         } else if (effectType === 'damageReduction' && damageModifier) {
-            pendingDamage = { ...state.pendingDamage, currentDamage: Math.max(0, state.pendingDamage.currentDamage + damageModifier) };
+            const modifiers = [...(state.pendingDamage.modifiers || [])];
+            modifiers.push({
+                type: 'token',
+                value: damageModifier,
+                sourceId: tokenId,
+                sourceName: tokenName,
+            });
+            pendingDamage = { 
+                ...state.pendingDamage, 
+                currentDamage: Math.max(0, state.pendingDamage.currentDamage + damageModifier),
+                modifiers,
+            };
         } else if (effectType === 'evasionAttempt') {
             if (evasionRoll?.success) {
                 pendingDamage = { ...state.pendingDamage, currentDamage: 0, isFullyEvaded: true, lastEvasionRoll: evasionRoll };

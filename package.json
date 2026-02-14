@@ -45,6 +45,7 @@
     "test:api": "vitest run apps/api",
     "test:api:docker": "cross-env MONGO_URI=mongodb://localhost:27017/boardgame npm run test:api",
     "test:e2e": "npx playwright test",
+    "test:e2e:critical": "npx playwright test e2e/smashup.e2e.ts e2e/tictactoe-rematch.e2e.ts",
     "init:admin": "tsx scripts/db/init_admin.ts",
     "check:arch": "node scripts/infra/check-architecture.cjs",
     "typecheck": "tsc --noEmit",

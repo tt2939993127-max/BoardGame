@@ -2,9 +2,9 @@
  * 大杀四方 (Smash Up) - 基地区域 + 随从卡片组件
  */
 
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Paperclip } from 'lucide-react';
 import type { SmashUpCore, BaseInPlay, MinionOnBase } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
@@ -316,7 +316,7 @@ const MinionCard: React.FC<{
             onClick={handleClick}
             className={`
                 relative w-[5.5vw] aspect-[0.714] bg-white p-[0.2vw] rounded-[0.2vw] 
-                transition-shadow duration-200 group hover:z-50 hover:scale-110 hover:rotate-0
+                transition-shadow duration-200 group hover:!z-[999] hover:scale-110 hover:rotate-0
                 border-[0.15vw] shadow-md
                 ${isSelectableMinion
                     ? 'cursor-pointer border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'

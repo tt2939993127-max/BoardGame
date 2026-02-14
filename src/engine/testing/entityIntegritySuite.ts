@@ -154,6 +154,10 @@ export interface TriggerPathSuiteConfig<TDef> {
   incompleteBranches?: Map<string, string[]>;
   /** 最少定义数量 */
   minCount?: number;
+  /** 严格模式：TODO 非空时失败（用于 release 门禁） */
+  failOnTodo?: boolean;
+  /** 严格模式：INCOMPLETE_BRANCHES 非空时失败（用于 release 门禁） */
+  failOnIncompleteBranches?: boolean;
 }
 
 /**
@@ -162,10 +166,13 @@ export interface TriggerPathSuiteConfig<TDef> {
 export function createTriggerPathSuite<TDef>(config: TriggerPathSuiteConfig<TDef>): void {
   describe(config.suiteName, () => {
     const items = config.getItems();
+    const failOnTodo = config.failOnTodo ?? false;
+    const failOnIncompleteBranches = config.failOnIncompleteBranches ?? false;
 
-    if (config.minCount !== undefined) {
-      it(`至少存在 ${config.minCount} 个定义`, () => {
-        expect(items.length).toBeGreaterThanOrEqual(config.minCount);
+    const minCount = config.minCount;
+    if (minCount !== undefined) {
+      it(`至少存在 ${minCount} 个定义`, () => {
+        expect(items.length).toBeGreaterThanOrEqual(minCount);
       });
     }
 
@@ -190,19 +197,27 @@ export function createTriggerPathSuite<TDef>(config: TriggerPathSuiteConfig<TDef
       expect(stale).toEqual([]);
     });
 
-    it('待实装清单警告（不失败）', () => {
+    it(failOnTodo ? '待实装清单（严格模式：失败）' : '待实装清单警告（不失败）', () => {
       if (config.todo.size > 0) {
         const lines = [...config.todo.entries()].map(([id, desc]) => `  ${id}: ${desc}`);
+        if (failOnTodo) {
+          expect(lines, '严格模式下不允许 TODO 待实装项').toEqual([]);
+          return;
+        }
         console.warn(`\n⚠️ ${config.todo.size} 个待实装:\n${lines.join('\n')}`);
       }
     });
 
     if (config.incompleteBranches) {
       const ib = config.incompleteBranches;
-      it('未完成分支警告（不失败）', () => {
+      it(failOnIncompleteBranches ? '未完成分支（严格模式：失败）' : '未完成分支警告（不失败）', () => {
         if (ib.size > 0) {
           const lines = [...ib.entries()]
             .flatMap(([id, branches]) => branches.map(b => `  ${id}: ${b}`));
+          if (failOnIncompleteBranches) {
+            expect(lines, '严格模式下不允许 INCOMPLETE_BRANCHES').toEqual([]);
+            return;
+          }
           console.warn(`\n⚠️ ${ib.size} 个存在未完成分支:\n${lines.join('\n')}`);
         }
       });

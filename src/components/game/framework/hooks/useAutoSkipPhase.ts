@@ -4,8 +4,9 @@
  * 当游戏阶段无可用操作且无活跃交互时，延迟后自动推进阶段。
  * 游戏层注入判定逻辑，框架统一处理守卫、延迟和 cleanup。
  *
- * 撤回保护：当检测到 undo 快照数减少（即发生了撤回恢复），
+ * 撤回保护（框架内置）：当检测到 undo 快照数减少（即发生了撤回恢复），
  * 在冷却期内抑制自动跳过，避免撤回后立刻被自动推进覆盖。
+ * 所有游戏必须传入 undoSnapshotCount，确保撤回保护全局生效。
  */
 
 import { useEffect, useRef } from 'react';
@@ -25,8 +26,12 @@ export interface UseAutoSkipPhaseConfig {
   delay?: number;
   /** 额外的全局禁用判定（如 hostStarted 等游戏特定条件） */
   enabled?: boolean;
-  /** 当前 undo 快照数量（用于检测撤回恢复） */
-  undoSnapshotCount?: number;
+  /**
+   * 当前 undo 快照数量（G.sys.undo.snapshots.length）。
+   * 框架层通过监测此值减少来检测撤回恢复，进入冷却期抑制自动跳过。
+   * 所有游戏必传，确保撤回保护全局生效。
+   */
+  undoSnapshotCount: number;
   /** 撤回恢复后的冷却时间（毫秒），默认 2000 */
   undoCooldown?: number;
 }
@@ -57,11 +62,10 @@ export function useAutoSkipPhase({
   undoCooldown = DEFAULT_UNDO_COOLDOWN,
 }: UseAutoSkipPhaseConfig): void {
   // 撤回恢复检测：快照数减少 → 进入冷却期
-  const prevSnapshotCountRef = useRef(undoSnapshotCount ?? 0);
+  const prevSnapshotCountRef = useRef(undoSnapshotCount);
   const suppressUntilRef = useRef(0);
 
   useEffect(() => {
-    if (undoSnapshotCount == null) return;
     const prev = prevSnapshotCountRef.current;
     prevSnapshotCountRef.current = undoSnapshotCount;
 

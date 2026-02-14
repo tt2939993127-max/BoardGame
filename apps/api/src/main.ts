@@ -40,11 +40,12 @@ async function bootstrap() {
 
     // 不使用 app.use(path, proxy) 挂载方式，因为 Express 会剥掉挂载前缀导致路径错误。
     // 改用全局挂载 + pathFilter 让代理自行匹配路径，保留完整 URL 转发到 game-server。
+    // 注意：pathFilter 不能混用字符串和 glob，必须全用 glob 模式
     const gameProxy = createProxyMiddleware({
         target: gameServerTarget,
         changeOrigin: true,
         ws: true,
-        pathFilter: ['/games', '/games/**', '/default', '/default/**', '/lobby-socket', '/lobby-socket/**', '/socket.io', '/socket.io/**'],
+        pathFilter: ['/games/**', '/default/**', '/lobby-socket/**', '/socket.io/**'],
     });
 
     // 全局挂载，代理内部通过 pathFilter 决定是否转发

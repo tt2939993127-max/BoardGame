@@ -12,16 +12,11 @@ import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { DiceThroneDebugConfig } from './debug-config';
-import {
-    FlyingEffectsLayer,
-    useFlyingEffects,
-    getViewportCenter,
-    getElementCenter,
-} from '../../components/common/animations/FlyingEffect';
+import { getViewportCenter, getElementCenter } from '../../components/common/animations/FlyingEffect';
 import { usePulseGlow } from '../../components/common/animations/PulseGlow';
-import {
-    useImpactFeedback,
-} from '../../components/common/animations';
+import { useImpactFeedback } from '../../components/common/animations';
+import { useFxBus, FxLayer } from '../../engine/fx';
+import { diceThroneFxRegistry } from './ui/fxSetup';
 import { getLocalizedAssetPath } from '../../core';
 import { useToast } from '../../contexts/ToastContext';
 import { UndoProvider } from '../../contexts/UndoContext';
@@ -243,8 +238,20 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         pendingAttack: G.pendingAttack ?? null,
     });
 
-    // 使用动画库 Hooks
-    const { effects: flyingEffects, pushEffect: pushFlyingEffect, removeEffect: handleEffectComplete } = useFlyingEffects();
+    // 使用 FX 引擎
+    const fxBus = useFxBus(diceThroneFxRegistry, {
+        playSound: (key) => {
+            // 音效由 FeedbackPack 自动触发，这里只是注入播放函数
+            const { playSound } = require('../../lib/audio/useGameAudio');
+            playSound(key);
+        },
+        triggerShake: (intensity, type) => {
+            // 震动由 FeedbackPack 自动触发
+            if (type === 'hit') {
+                opponentImpact.trigger(intensity === 'strong' ? 8 : 3);
+            }
+        },
+    });
     const opponentImpact = useImpactFeedback();
     const selfImpact = useImpactFeedback();
     const { triggerGlow: triggerAbilityGlow } = usePulseGlow(800);
@@ -666,8 +673,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
         return undefined;
     }, [rawG.sys?.eventStream?.entries]);
 
-    // 使用 useAnimationEffects Hook 管理飞行动画效果（替代170行重复代码）
+    // 使用 useAnimationEffects Hook 管理飞行动画效果（基于 FX 引擎）
     useAnimationEffects({
+        fxBus,
         players: { player, opponent },
         currentPlayerId: rootPid,
         opponentId: otherPid,
@@ -678,12 +686,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
             selfBuff: selfBuffRef,
         },
         getEffectStartPos,
-        pushFlyingEffect,
-        triggerOpponentImpact: (damage) => opponentImpact.trigger(damage),
-        triggerSelfImpact: (damage) => selfImpact.trigger(damage),
         locale,
         statusIconAtlas,
         damageStreamEntry,
+        eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
     });
 
     const advanceLabel = currentPhase === 'offensiveRoll'
@@ -782,7 +788,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, ctx, 
                     />
                 )}
 
-                <FlyingEffectsLayer effects={flyingEffects} onEffectComplete={handleEffectComplete} />
+                <FxLayer bus={fxBus} getCellPosition={() => ({ left: 0, top: 0, width: 0, height: 0 })} />
                 <div className="absolute inset-x-0 top-[2vw] bottom-0 z-10 pointer-events-none">
                     <LeftSidebar
                         currentPhase={currentPhase}

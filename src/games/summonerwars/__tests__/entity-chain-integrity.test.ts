@@ -223,6 +223,8 @@ const ACTIVATED_UI_TODO = new Map<string, string>([
 const ACTIVATED_INCOMPLETE_BRANCHES = new Map<string, string[]>([
 ]);
 
+const RELEASE_AUDIT_MODE = process.env.AUDIT_RELEASE_MODE === '1';
+
 createTriggerPathSuite<AbilityDef>({
     suiteName: 'Activated 技能 UI 触发路径',
     getItems: () => abilityRegistry.getByTrigger('activated'),
@@ -232,6 +234,8 @@ createTriggerPathSuite<AbilityDef>({
     todo: ACTIVATED_UI_TODO,
     incompleteBranches: ACTIVATED_INCOMPLETE_BRANCHES,
     minCount: 5,
+    failOnTodo: RELEASE_AUDIT_MODE,
+    failOnIncompleteBranches: RELEASE_AUDIT_MODE,
 });
 
 // ============================================================================

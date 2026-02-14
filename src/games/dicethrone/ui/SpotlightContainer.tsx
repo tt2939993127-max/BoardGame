@@ -19,7 +19,7 @@ interface SpotlightContainerProps {
     isVisible: boolean;
     /** 关闭回调 */
     onClose: () => void;
-    /** 自动关闭延迟（毫秒），默认 1000 */
+    /** 自动关闭延迟（毫秒），默认 3000 */
     autoCloseDelay?: number;
     /** 子内容 */
     children: React.ReactNode;
@@ -51,7 +51,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     id,
     isVisible,
     onClose,
-    autoCloseDelay = 2500,
+    autoCloseDelay = 3000,
     children,
     zIndex = UI_Z_INDEX.overlayRaised,
     contentMotion,

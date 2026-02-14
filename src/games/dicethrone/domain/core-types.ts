@@ -270,6 +270,13 @@ export interface PendingDamage {
         value: number;
         success: boolean;
     };
+    /** 伤害修改记录（用于 ActionLog 展示） */
+    modifiers?: Array<{
+        type: 'defense' | 'token' | 'shield' | 'status';
+        value: number;
+        sourceId?: string;
+        sourceName?: string;
+    }>;
 }
 
 /**

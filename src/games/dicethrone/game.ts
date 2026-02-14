@@ -4,7 +4,7 @@
  * 使用领域内核 + 引擎适配器
  */
 
-import type { ActionLogEntry, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
+import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
 import {
     createGameAdapter,
     createActionLogSystem,
@@ -213,7 +213,7 @@ function formatDiceThroneActionEntry({
 
         if (event.type === 'DAMAGE_DEALT') {
             const damageEvent = event as DamageDealtEvent;
-            const { targetId, amount, actualDamage, sourceAbilityId } = damageEvent.payload;
+            const { targetId, amount, actualDamage, sourceAbilityId, modifiers } = damageEvent.payload;
             let actorId = targetId;
             if (attackResolved) {
                 if (targetId === attackResolved.payload.defenderId) {
@@ -249,7 +249,21 @@ function formatDiceThroneActionEntry({
                     })];
                 }
             }
-            if (amount !== undefined && actualDamage !== undefined && amount !== actualDamage) {
+            
+            // 如果有修改器，显示详细的伤害计算过程
+            if (modifiers && modifiers.length > 0 && amount !== dealt) {
+                const modifierParts: string[] = [];
+                modifiers.forEach(mod => {
+                    const modValue = mod.value;
+                    const modLabel = mod.sourceName || mod.sourceId || mod.type;
+                    modifierParts.push(`${modLabel} ${modValue > 0 ? '+' : ''}${modValue}`);
+                });
+                segments.push(i18nSeg('actionLog.damageModifiers', {
+                    original: amount,
+                    modifiers: modifierParts.join(', '),
+                }));
+            } else if (amount !== undefined && actualDamage !== undefined && amount !== actualDamage) {
+                // 兼容旧逻辑：如果没有 modifiers 但伤害不同，显示原始伤害
                 segments.push(i18nSeg('actionLog.damageOriginal', { amount }));
             }
             entries.push({

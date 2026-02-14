@@ -49,7 +49,7 @@ interface CardSpotlightOverlayProps {
     onClose: (id: string) => void;
     /** 对手悬浮窗元素引用（用于计算起始位置） */
     opponentHeaderRef?: React.RefObject<HTMLElement | null>;
-    /** 自动关闭延迟（毫秒），默认 2500 */
+    /** 自动关闭延迟（毫秒），默认 3000 */
     autoCloseDelay?: number;
 }
 
@@ -58,7 +58,7 @@ export const CardSpotlightOverlay: React.FC<CardSpotlightOverlayProps> = ({
     locale,
     onClose,
     opponentHeaderRef,
-    autoCloseDelay = 2500,
+    autoCloseDelay = 3000,
 }) => {
     const currentItem = queue[0];
     const currentItemId = currentItem?.id;

@@ -100,6 +100,18 @@ export interface AbilityActivatedEvent extends GameEvent<'ABILITY_ACTIVATED'> {
     };
 }
 
+/** 伤害修改器（用于 ActionLog 展示） */
+export interface DamageModifier {
+    /** 修改来源类型 */
+    type: 'defense' | 'token' | 'shield' | 'status';
+    /** 修改量（正数为增伤，负数为减伤） */
+    value: number;
+    /** 来源 ID（技能 ID、Token ID 等） */
+    sourceId?: string;
+    /** 来源名称（用于显示，可选） */
+    sourceName?: string;
+}
+
 /** 伤害事件 */
 export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
     payload: {
@@ -107,6 +119,8 @@ export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
         amount: number;
         actualDamage: number;
         sourceAbilityId?: string;
+        /** 伤害修改记录（用于 ActionLog 展示完整的伤害计算过程） */
+        modifiers?: DamageModifier[];
     };
 }
 

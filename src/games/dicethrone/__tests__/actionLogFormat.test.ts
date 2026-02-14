@@ -123,6 +123,58 @@ describe('formatDiceThroneActionEntry', () => {
         expect(origSeg?.params?.amount).toBe(5);
     });
 
+    it('伤害修改器应记录在 ActionLog 中（太极减伤）', () => {
+        const state = createState();
+        const command: Command = {
+            type: 'SKIP_TOKEN_RESPONSE',
+            playerId: '0',
+            payload: {},
+            timestamp: 10,
+        };
+        const damageEvent: DamageDealtEvent = {
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId: '1',
+                amount: 8,
+                actualDamage: 5,
+                sourceAbilityId: 'test-ability',
+                modifiers: [
+                    { type: 'token', value: -3, sourceId: 'taiji', sourceName: 'tokens.taiji.name' },
+                ],
+            },
+            timestamp: 10,
+        };
+        const attackResolved: AttackResolvedEvent = {
+            type: 'ATTACK_RESOLVED',
+            payload: {
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'test-ability',
+                totalDamage: 5,
+            },
+            timestamp: 11,
+        };
+
+        const entries = normalizeEntries(formatDiceThroneActionEntry({ 
+            command, 
+            state, 
+            events: [damageEvent, attackResolved] as GameEvent[] 
+        }));
+
+        expect(entries).toHaveLength(1);
+        const keys = getI18nKeys(entries[0].segments);
+        expect(keys).toContain('actionLog.damageDealt');
+        expect(keys).toContain('actionLog.damageModifiers');
+
+        const dealSeg = findI18nSegment(entries[0].segments, 'actionLog.damageDealt');
+        expect(dealSeg?.params?.amount).toBe(5);
+        expect(dealSeg?.params?.targetPlayerId).toBe('1');
+        
+        const modSeg = findI18nSegment(entries[0].segments, 'actionLog.damageModifiers');
+        expect(modSeg?.params?.original).toBe(8);
+        expect(modSeg?.params?.modifiers).toContain('tokens.taiji.name -3');
+    });
+
     it('HEAL_APPLIED/STATUS_APPLIED/TOKEN_USED 生成正确的 i18n segment', () => {
         const state = createState();
         const command: Command = {

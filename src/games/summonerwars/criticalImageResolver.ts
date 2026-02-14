@@ -152,9 +152,10 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
             COMMON_PATHS.map,
             COMMON_PATHS.cardback,
             COMMON_PATHS.portal,
+            COMMON_PATHS.dice,
             ...selectedHeroAtlases,
             ...selectedCardsAtlases,
         ],
-        warm: [COMMON_PATHS.dice, ...unselectedCardsAtlases],
+        warm: [...unselectedCardsAtlases],
     };
 };

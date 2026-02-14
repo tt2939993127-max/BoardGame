@@ -48,8 +48,8 @@ interface UseCellInteractionParams {
   activePlayerId: string;
   myHand: import('../domain/types').Card[];
   fromViewCoord: (coord: CellCoord) => CellCoord;
-  /** undo 快照数量，用于检测撤回恢复后抑制自动跳过 */
-  undoSnapshotCount?: number;
+  /** undo 快照数量（G.sys.undo.snapshots.length），框架层撤回保护必传 */
+  undoSnapshotCount: number;
   // 外部模式状态
   abilityMode: AbilityModeState | null;
   setAbilityMode: (mode: AbilityModeState | null) => void;

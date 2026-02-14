@@ -182,7 +182,9 @@ registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
 - **必须**使用 registry 的完整 key（如 `ui.general....uiclick_dialog_choice_01_krst_none`）。
 - **路径规则**：`getOptimizedAudioUrl()` 自动插入 `compressed/`，配置中**不得**手写 `compressed/`。
 
-### ✅ 音效触发规范（统一标准）
+### ✅ 音效触发规范（当前 + 长期规划）
+
+#### 当前架构（过渡期）
 
 **音效两条路径 + UI 交互音**：
 1. **路径① 即时播放（feedbackResolver）**：无动画的事件音（投骰子/出牌/阶段切换/魔法值变化）走 EventStream，`feedbackResolver` 返回 `SoundKey`（纯字符串）即时播放。有动画的事件（伤害/状态/Token）`feedbackResolver` 返回 `null`，由动画层在 `onImpact` 回调中直接 `playSound(key)` 播放。
@@ -194,6 +196,28 @@ registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
 **避免重复**：同一事件只能选择一条路径，有动画的事件 `feedbackResolver` 必须返回 `null`。
 
 **已废弃**：`DeferredSoundMap` 已删除，`AudioTiming`/`EventSoundResult` 已移除，`feedbackResolver` 不再返回 `{ key, timing }` 对象。
+
+**过渡方案（未迁移到 FX 引擎的游戏）**：
+- 创建 `domain/animationSoundConfig.ts` 集中管理所有 `onImpact` 音效配置
+- 提供音效解析函数（如 `resolveDamageImpactKey`）
+- 在 `useAnimationEffects.ts` 中从配置读取音效 key，而不是硬编码
+- 详见 `docs/refactor/audio-architecture-improvement.md`
+
+#### 长期目标架构（FeedbackPack 单一配置源）
+
+> **详见**：`docs/refactor/audio-architecture-improvement.md`
+
+**核心变化**：
+- `feedbackResolver` 只处理"无动画的即时音效"（如投骰子、阶段切换）
+- 所有有动画的事件音效统一在 `fxSetup.ts` 的 `FeedbackPack` 中声明
+- 删除动画层的硬编码 `playSound()` 调用，由 FxLayer 自动触发
+
+**迁移状态**：
+- ✅ SummonerWars：已完成迁移，参考实现
+- ✅ DiceThrone：已完成迁移到 FX 引擎
+- ⏸️ SmashUp：无事件音效系统，暂不处理
+
+**新游戏规范**：新增游戏必须直接采用长期架构，禁止使用过渡期的"两条路径"模式。
 
 ### ✅ 当前正确示例（音频）
 

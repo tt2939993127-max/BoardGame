@@ -53,9 +53,12 @@ function extractContextPreview(prompt: any): CardPreviewRef | undefined {
     return def?.previewRef;
 }
 
-/** 解析标题中嵌入的 i18n key（如 cards.xxx.name） */
-function resolveTitle(title: string, t: (key: string, opts?: any) => string): string {
-    return title.replace(/cards\.[\w-]+\.name/g, key => t(key, { defaultValue: key }));
+/** 解析文本中嵌入的 i18n key（如 cards.xxx.name / cards.xxx.abilityText） */
+function resolveI18nKeys(text: string, t: (key: string, opts?: any) => string): string {
+    return text.replace(/cards\.[\w-]+\.\w+/gi, key => {
+        const resolved = t(key.toLowerCase(), { defaultValue: '' });
+        return resolved || key;
+    });
 }
 
 export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID }) => {
@@ -90,7 +93,16 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
     const useInlineMode = !useCardMode && hasOptions && (prompt?.options?.length ?? 0) <= 3;
 
     // 解析标题中的 i18n key
-    const title = prompt ? resolveTitle(prompt.title, t) : '';
+    const title = prompt ? resolveI18nKeys(prompt.title, t) : '';
+
+    // 解析所有选项 label 中的 i18n key
+    const resolvedOptions = useMemo(() => {
+        if (!prompt?.options) return [];
+        return prompt.options.map(opt => ({
+            ...opt,
+            label: resolveI18nKeys(opt.label, t),
+        }));
+    }, [prompt?.options, t]);
 
     if (!prompt) return null;
 
@@ -147,7 +159,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
                             </div>
                         ) : (
                             <div className="flex gap-3">
-                                {prompt.options.map((opt, idx) => (
+                                {resolvedOptions.map((opt, idx) => (
                                     <GameButton
                                         key={`${idx}-${opt.id}`}
                                         variant={idx === 0 ? 'primary' : 'secondary'}
@@ -168,8 +180,8 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
 
     // ====== 卡牌展示模式（多卡选择） ======
     if (useCardMode) {
-        const cardOptions = prompt.options.filter(opt => isCardOption(opt.value));
-        const textOptions = prompt.options.filter(opt => !isCardOption(opt.value));
+        const cardOptions = resolvedOptions.filter(opt => isCardOption(opt.value));
+        const textOptions = resolvedOptions.filter(opt => !isCardOption(opt.value));
 
         return (
             <AnimatePresence>
@@ -308,7 +320,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, moves, playerID })
 
                     {/* 选项列表 */}
                     <div className="p-4 max-h-[50vh] overflow-y-auto custom-scrollbar flex flex-col gap-2">
-                        {isMyPrompt && hasOptions ? prompt.options.map((option, idx) => {
+                        {isMyPrompt && hasOptions ? resolvedOptions.map((option, idx) => {
                             const isSelected = selectedIds.includes(option.id);
                             return (
                                 <GameButton

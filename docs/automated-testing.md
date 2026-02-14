@@ -418,19 +418,25 @@ npx vitest <文件路径>
 
 ## 持续集成
 
-在 CI 环境中，建议：
-1. 并行运行不同模块的测试
-2. 缓存 node_modules 和测试结果
-3. 失败时显示详细的错误信息
+当前仓库采用 `quality-gate.yml` 作为主门禁，PR/主分支推送必须通过：
+
+1. `npm run typecheck`
+2. `npm run test:games`
+3. `npm run i18n:check`
+4. `npm run test:e2e:critical`
+
+其中 `test:e2e:critical` 为关键 E2E 烟测（当前覆盖 SmashUp 与 TicTacToe rematch）。
 
 ```yaml
-# GitHub Actions 示例
-- name: Run Core Tests
-  run: npm run test:core
+# GitHub Actions 示例（quality gate）
+- name: Typecheck
+  run: npm run typecheck
 - name: Run Game Tests
   run: npm run test:games
-- name: Run Server Tests
-  run: npm run test:server
+- name: Run i18n Contract Check
+  run: npm run i18n:check
+- name: Run Critical E2E
+  run: npm run test:e2e:critical
 ```
 
 ---

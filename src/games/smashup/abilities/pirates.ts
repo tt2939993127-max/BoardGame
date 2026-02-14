@@ -80,7 +80,7 @@ function pirateBroadside(ctx: AbilityContext): AbilityResult {
         const baseDef = getBaseDef(base.defId);
         const baseName = baseDef?.name ?? `基地 ${i + 1}`;
         for (const [pid, count] of opponentCounts) {
-            candidates.push({ baseIndex: i, opponentId: pid, count, label: `${baseName} �?对手 ${pid}�?{count}个弱随从）` });
+            candidates.push({ baseIndex: i, opponentId: pid, count, label: `${baseName}（对手 ${pid}，${count}个弱随从）` });
         }
     }
     if (candidates.length === 0) return { events: [] };
@@ -360,7 +360,8 @@ function buildMoveToBaseInteraction(
     minionUid: string,
     minionDefId: string,
     fromBaseIndex: number,
-    abilityId: string,
+    interactionIdPrefix: string,
+    sourceId: string,
     playerId: string,
     now: number,
     extraData?: Record<string, unknown>,
@@ -373,8 +374,8 @@ function buildMoveToBaseInteraction(
     }
     if (candidates.length === 0) return null;
     const interaction = createSimpleChoice(
-        `${abilityId}_base_${now}`, playerId,
-        '选择目标基地', buildBaseTargetOptions(candidates), `${abilityId}_choose_base`,
+        `${interactionIdPrefix}_base_${now}`, playerId,
+        '选择目标基地', buildBaseTargetOptions(candidates), sourceId,
     );
     return {
         ...interaction,
@@ -455,7 +456,16 @@ export function registerPirateInteractionHandlers(): void {
         if (!base) return undefined;
         const minion = base.minions.find(m => m.uid === minionUid);
         if (!minion) return undefined;
-        const next = buildMoveToBaseInteraction(state.core, minionUid, minion.defId, baseIndex, 'pirate_shanghai', playerId, timestamp);
+        const next = buildMoveToBaseInteraction(
+            state.core,
+            minionUid,
+            minion.defId,
+            baseIndex,
+            'pirate_shanghai',
+            'pirate_shanghai_choose_base',
+            playerId,
+            timestamp,
+        );
         return next ? { state: queueInteraction(state, next), events: [] } : undefined;
     });
 
@@ -536,7 +546,16 @@ export function registerPirateInteractionHandlers(): void {
         if (!base) return undefined;
         const minion = base.minions.find(m => m.uid === minionUid);
         if (!minion) return undefined;
-        const next = buildMoveToBaseInteraction(state.core, minionUid, minion.defId, baseIndex, 'pirate_dinghy_first', playerId, timestamp);
+        const next = buildMoveToBaseInteraction(
+            state.core,
+            minionUid,
+            minion.defId,
+            baseIndex,
+            'pirate_dinghy_first',
+            'pirate_dinghy_first_choose_base',
+            playerId,
+            timestamp,
+        );
         return next ? { state: queueInteraction(state, next), events: [] } : undefined;
     });
 
@@ -574,7 +593,16 @@ export function registerPirateInteractionHandlers(): void {
         if (!base) return undefined;
         const minion = base.minions.find(m => m.uid === minionUid);
         if (!minion) return undefined;
-        const next = buildMoveToBaseInteraction(state.core, minionUid, minion.defId, baseIndex, 'pirate_dinghy_second', playerId, timestamp);
+        const next = buildMoveToBaseInteraction(
+            state.core,
+            minionUid,
+            minion.defId,
+            baseIndex,
+            'pirate_dinghy_second',
+            'pirate_dinghy_second_choose_base',
+            playerId,
+            timestamp,
+        );
         return next ? { state: queueInteraction(state, next), events: [] } : undefined;
     });
 
@@ -597,8 +625,14 @@ export function registerPirateInteractionHandlers(): void {
         if (!minion) return undefined;
         const movedUids = ((iData as any)?.continuationContext as { movedUids?: string[] })?.movedUids ?? [];
         const next = buildMoveToBaseInteraction(
-            state.core, minionUid!, minion.defId, baseIndex!,
-            'pirate_full_sail', playerId, timestamp,
+            state.core,
+            minionUid!,
+            minion.defId,
+            baseIndex!,
+            'pirate_full_sail',
+            'pirate_full_sail_choose_base',
+            playerId,
+            timestamp,
             { movedUids },
         );
         return next ? { state: queueInteraction(state, next), events: [] } : undefined;

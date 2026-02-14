@@ -241,6 +241,7 @@
       "unknown": "Unknown"
     },
     "damageOriginal": "(Original {{amount}})",
+    "damageModifiers": "(Original {{original}}, {{modifiers}})",
     "healApplied": "Heal Player {{targetPlayerId}} for {{amount}}",
     "statusApplied": "Applied status {{statusLabel}} to Player {{targetPlayerId}}",
     "statusAppliedDelta": "(+{{stacks}}, now {{total}})",
