@@ -22,6 +22,7 @@ import { swCustomActionRegistry } from '../domain/customActionHandlers';
 import { createInitializedCore, placeTestUnit, generateInstanceId, resetInstanceCounter } from './test-helpers';
 import { executeCommand } from '../domain/execute';
 import { validateCommand } from '../domain/validate';
+import { SummonerWarsDomain } from '../domain';
 import { SW_COMMANDS, SW_EVENTS } from '../domain/types';
 import type { SummonerWarsCore, PlayerId, CellCoord, BoardUnit, UnitCard, StructureCard } from '../domain/types';
 import type { RandomFn, MatchState } from '../../../engine/types';
@@ -150,10 +151,11 @@ describe('多步交互链 — 执行器 payload 防御性', () => {
     expect(pushEvent).toBeDefined();
   });
 
-  // --- withdraw: 缺少 costType 时执行器防御性返回 ---
-  it('[withdraw] 缺少 costType 时执行器防御性返回空事件', () => {
+  // --- withdraw: 缺少 costType 时走 magic 路径（else 分支） ---
+  it('[withdraw] 缺少 costType 且无魔力时不产生移动事件', () => {
     core.phase = 'attack';
     core.currentPlayer = '1' as PlayerId;
+    core.players['1'].magic = 0; // 无魔力
     const kairu = mkUnit('kairu', { abilities: ['withdraw'], unitClass: 'champion', faction: 'barbaric' });
     const unit = putUnit(core, { row: 4, col: 3 }, kairu, '1', { boosts: 1 });
 
@@ -161,9 +163,9 @@ describe('多步交互链 — 执行器 payload 防御性', () => {
       abilityId: 'withdraw',
       sourceUnitId: unit.instanceId,
       targetPosition: { row: 4, col: 5 },
-      // 缺少 costType
+      // 缺少 costType → 走 else（magic）分支，但无魔力
     });
-    // 执行器应防御性处理，不产生移动事件
+    // 执行器走 magic 路径但魔力不足，不产生移动事件
     const moveEvent = events.find(e => e.type === SW_EVENTS.UNIT_MOVED);
     expect(moveEvent).toBeUndefined();
   });
@@ -470,12 +472,13 @@ describe('单步目标选择技能 — payload 完整性', () => {
     const kara = mkUnit('kara', { abilities: ['high_telekinesis_instead'], unitClass: 'champion', faction: 'trickster' });
     const unit = putUnit(core, { row: 4, col: 3 }, kara, '0', { hasAttacked: false });
     const enemy = mkUnit('skeleton', { faction: 'necromancer' });
-    putUnit(core, { row: 4, col: 5 }, enemy, '1');
+    // 敌人在 (4,4)，推拉后到 (4,5)，确保目标位置在棋盘内
+    putUnit(core, { row: 4, col: 4 }, enemy, '1');
 
     const events = exec(core, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'high_telekinesis_instead',
       sourceUnitId: unit.instanceId,
-      targetPosition: { row: 4, col: 5 },
+      targetPosition: { row: 4, col: 4 },
       direction: 'push',
     });
     const pushEvent = events.find(e => e.type === SW_EVENTS.UNIT_PUSHED);
@@ -489,12 +492,12 @@ describe('单步目标选择技能 — payload 完整性', () => {
     const kara = mkUnit('kara', { abilities: ['high_telekinesis_instead'], unitClass: 'champion', faction: 'trickster' });
     const unit = putUnit(core, { row: 4, col: 3 }, kara, '0', { hasAttacked: true });
     const enemy = mkUnit('skeleton', { faction: 'necromancer' });
-    putUnit(core, { row: 4, col: 5 }, enemy, '1');
+    putUnit(core, { row: 4, col: 4 }, enemy, '1');
 
     const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'high_telekinesis_instead',
       sourceUnitId: unit.instanceId,
-      targetPosition: { row: 4, col: 5 },
+      targetPosition: { row: 4, col: 4 },
       direction: 'push',
     });
     expect(result.valid).toBe(false);
@@ -678,6 +681,837 @@ describe('亡灵法师交互链', () => {
       abilityId: 'ancestral_bond',
       sourceUnitId: unit.instanceId,
       targetPosition: { row: 4, col: 3 },
+    });
+    expect(result.valid).toBe(false);
+  });
+});
+
+// ============================================================================
+// Section 4: 先锋军团交互链
+// ============================================================================
+
+describe('先锋军团交互链', () => {
+  let core: SummonerWarsCore;
+
+  beforeEach(() => {
+    resetInstanceCounter();
+    core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'paladin', faction1: 'necromancer' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+  });
+
+  // --- vanish: 神出鬼没 ---
+  it('[vanish] 与0费友方交换位置', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('sneeks', { abilities: ['vanish'], unitClass: 'summoner', faction: 'goblin' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '0');
+    const zeroCost = mkUnit('goblin-minion', { cost: 0, faction: 'goblin' });
+    putUnit(core, { row: 4, col: 5 }, zeroCost, '0');
+
+    const events = exec(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'vanish',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 5 },
+    });
+    const swapEvent = events.find(e => e.type === SW_EVENTS.UNITS_SWAPPED);
+    expect(swapEvent).toBeDefined();
+  });
+
+  // --- vanish: 目标费用不为0 ---
+  it('[vanish] 目标费用不为0时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('sneeks', { abilities: ['vanish'], unitClass: 'summoner', faction: 'goblin' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '0');
+    const costUnit = mkUnit('goblin-champ', { cost: 3, faction: 'goblin' });
+    putUnit(core, { row: 4, col: 5 }, costUnit, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'vanish',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- vanish: 目标是敌方 ---
+  it('[vanish] 目标是敌方时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('sneeks', { abilities: ['vanish'], unitClass: 'summoner', faction: 'goblin' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '0');
+    const enemy = mkUnit('skeleton', { cost: 0, faction: 'necromancer' });
+    putUnit(core, { row: 4, col: 5 }, enemy, '1');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'vanish',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- prepare: 预备充能 ---
+  it('[prepare] 未移动时充能成功', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const archer = mkUnit('archer', { abilities: ['prepare'], faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, archer, '0', { hasMoved: false });
+
+    const events = exec(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'prepare',
+      sourceUnitId: unit.instanceId,
+    });
+    const chargeEvent = events.find(e => e.type === SW_EVENTS.UNIT_CHARGED);
+    expect(chargeEvent).toBeDefined();
+  });
+
+  // --- prepare: 已移动时拒绝 ---
+  it('[prepare] 已移动时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const archer = mkUnit('archer', { abilities: ['prepare'], faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, archer, '0', { hasMoved: true });
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'prepare',
+      sourceUnitId: unit.instanceId,
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- inspire: 启悟充能相邻友方 ---
+  it('[inspire] 充能相邻友方单位', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const kairu = mkUnit('kairu', { abilities: ['inspire'], unitClass: 'champion', faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, kairu, '0');
+    const ally1 = mkUnit('ally1', { faction: 'barbaric' });
+    putUnit(core, { row: 4, col: 4 }, ally1, '0');
+    const ally2 = mkUnit('ally2', { faction: 'barbaric' });
+    putUnit(core, { row: 3, col: 3 }, ally2, '0');
+
+    const events = exec(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'inspire',
+      sourceUnitId: unit.instanceId,
+    });
+    const chargeEvents = events.filter(e => e.type === SW_EVENTS.UNIT_CHARGED);
+    expect(chargeEvents.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ============================================================================
+// Section 5: 验证层有效性门控 — 有代价技能的前置条件
+// ============================================================================
+
+describe('验证层有效性门控', () => {
+  let core: SummonerWarsCore;
+
+  beforeEach(() => {
+    resetInstanceCounter();
+    core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'frost', faction1: 'barbaric' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+  });
+
+  // --- withdraw: 无充能且无魔力时拒绝 ---
+  it('[withdraw] 无充能且无魔力时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '1' as PlayerId;
+    core.players['1'].magic = 0;
+    const kairu = mkUnit('kairu', { abilities: ['withdraw'], unitClass: 'champion', faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, kairu, '1', { boosts: 0 });
+
+    // charge 路径
+    const result1 = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'withdraw',
+      sourceUnitId: unit.instanceId,
+      costType: 'charge',
+      targetPosition: { row: 4, col: 5 },
+    });
+    expect(result1.valid).toBe(false);
+
+    // magic 路径
+    const result2 = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'withdraw',
+      sourceUnitId: unit.instanceId,
+      costType: 'magic',
+      targetPosition: { row: 4, col: 5 },
+    });
+    expect(result2.valid).toBe(false);
+  });
+
+  // --- frost_axe: attach 路径充能不足时拒绝 ---
+  it('[frost_axe] attach 路径充能不足时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const smith = mkUnit('smith', { abilities: ['frost_axe'], faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, smith, '0', { boosts: 0 }); // 无充能
+    const target = mkUnit('soldier', { unitClass: 'common', faction: 'frost' });
+    putUnit(core, { row: 4, col: 4 }, target, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'frost_axe',
+      sourceUnitId: unit.instanceId,
+      choice: 'attach',
+      targetPosition: { row: 4, col: 4 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- spirit_bond: transfer 路径充能不足时拒绝 ---
+  it('[spirit_bond] transfer 路径充能不足时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '1' as PlayerId;
+    const shaman = mkUnit('shaman', { abilities: ['spirit_bond'], faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, shaman, '1', { boosts: 0 }); // 无充能
+    const ally = mkUnit('ally', { faction: 'barbaric' });
+    putUnit(core, { row: 4, col: 4 }, ally, '1');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'spirit_bond',
+      sourceUnitId: unit.instanceId,
+      choice: 'transfer',
+      targetPosition: { row: 4, col: 4 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- blood_rune: charge 路径魔力不足时拒绝 ---
+  it('[blood_rune] charge 路径魔力不足时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    core.players['0'].magic = 0;
+    const brav = mkUnit('brav', { abilities: ['blood_rune'], unitClass: 'champion', faction: 'goblin' });
+    const unit = putUnit(core, { row: 4, col: 3 }, brav, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'blood_rune',
+      sourceUnitId: unit.instanceId,
+      choice: 'charge',
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- blood_rune: damage 路径始终可用 ---
+  it('[blood_rune] damage 路径始终可用', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    core.players['0'].magic = 0;
+    const brav = mkUnit('brav', { abilities: ['blood_rune'], unitClass: 'champion', faction: 'goblin' });
+    const unit = putUnit(core, { row: 4, col: 3 }, brav, '0');
+
+    const events = exec(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'blood_rune',
+      sourceUnitId: unit.instanceId,
+      choice: 'damage',
+    });
+    const damageEvent = events.find(e =>
+      e.type === SW_EVENTS.UNIT_DAMAGED
+      && (e.payload as Record<string, unknown>).reason === 'blood_rune'
+    );
+    expect(damageEvent).toBeDefined();
+  });
+
+  // --- mind_capture_resolve: 无效 choice ---
+  it('[mind_capture_resolve] 无效 choice 时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('tekelu', { abilities: ['mind_capture_resolve'], unitClass: 'summoner', faction: 'trickster' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'mind_capture_resolve',
+      sourceUnitId: unit.instanceId,
+      choice: 'invalid',
+    });
+    expect(result.valid).toBe(false);
+  });
+});
+
+// ============================================================================
+// Section 6: 阶段限制验证 — 错误阶段使用技能
+// ============================================================================
+
+describe('阶段限制验证', () => {
+  let core: SummonerWarsCore;
+
+  beforeEach(() => {
+    resetInstanceCounter();
+    core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'frost', faction1: 'barbaric' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+  });
+
+  // --- structure_shift: 非 move 阶段拒绝 ---
+  it('[structure_shift] 非 move 阶段时验证失败', () => {
+    core.phase = 'attack'; // 错误阶段
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('svara', { abilities: ['structure_shift'], unitClass: 'summoner', faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '0');
+    putStructure(core, { row: 4, col: 4 }, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'structure_shift',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 4 },
+      newPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- withdraw: 非 attack 阶段拒绝 ---
+  it('[withdraw] 非 attack 阶段时验证失败', () => {
+    core.phase = 'move'; // 错误阶段
+    core.currentPlayer = '1' as PlayerId;
+    const kairu = mkUnit('kairu', { abilities: ['withdraw'], unitClass: 'champion', faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, kairu, '1', { boosts: 1 });
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'withdraw',
+      sourceUnitId: unit.instanceId,
+      costType: 'charge',
+      targetPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- prepare: 非 move 阶段拒绝 ---
+  it('[prepare] 非 move 阶段时验证失败', () => {
+    core.phase = 'attack'; // 错误阶段
+    core.currentPlayer = '0' as PlayerId;
+    const archer = mkUnit('archer', { abilities: ['prepare'], faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, archer, '0', { hasMoved: false });
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'prepare',
+      sourceUnitId: unit.instanceId,
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- frost_axe: 非 move 阶段拒绝 ---
+  it('[frost_axe] 非 move 阶段时验证失败', () => {
+    core.phase = 'attack'; // 错误阶段
+    core.currentPlayer = '0' as PlayerId;
+    const smith = mkUnit('smith', { abilities: ['frost_axe'], faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, smith, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'frost_axe',
+      sourceUnitId: unit.instanceId,
+      choice: 'self',
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- vanish: 非 attack 阶段拒绝 ---
+  it('[vanish] 非 attack 阶段时验证失败', () => {
+    core.phase = 'move'; // 错误阶段
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('sneeks', { abilities: ['vanish'], unitClass: 'summoner', faction: 'goblin' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '0');
+    const zeroCost = mkUnit('goblin-minion', { cost: 0, faction: 'goblin' });
+    putUnit(core, { row: 4, col: 5 }, zeroCost, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'vanish',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+});
+
+// ============================================================================
+// Section 7: 交互链边界情况 — 距离/位置/所有权验证
+// ============================================================================
+
+describe('交互链边界情况', () => {
+  let core: SummonerWarsCore;
+
+  beforeEach(() => {
+    resetInstanceCounter();
+    core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'frost', faction1: 'trickster' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+  });
+
+  // --- structure_shift: 目标不是友方建筑 ---
+  it('[structure_shift] 目标不是友方建筑时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('svara', { abilities: ['structure_shift'], unitClass: 'summoner', faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '0');
+    putStructure(core, { row: 4, col: 4 }, '1'); // 敌方建筑
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'structure_shift',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 4 },
+      newPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- structure_shift: 目标超出3格 ---
+  it('[structure_shift] 目标超出3格时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const summoner = mkUnit('svara', { abilities: ['structure_shift'], unitClass: 'summoner', faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 0 }, summoner, '0');
+    putStructure(core, { row: 4, col: 5 }, '0'); // 距离5格
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'structure_shift',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 5 },
+      newPosition: { row: 3, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- withdraw: 移动距离超出2格 ---
+  it('[withdraw] 移动距离超出2格时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '1' as PlayerId;
+    const kairu = mkUnit('kairu', { abilities: ['withdraw'], unitClass: 'champion', faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, kairu, '1', { boosts: 1 });
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'withdraw',
+      sourceUnitId: unit.instanceId,
+      costType: 'charge',
+      targetPosition: { row: 1, col: 3 }, // 距离3格
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- withdraw: 非直线移动 ---
+  it('[withdraw] 非直线移动时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '1' as PlayerId;
+    const kairu = mkUnit('kairu', { abilities: ['withdraw'], unitClass: 'champion', faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, kairu, '1', { boosts: 1 });
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'withdraw',
+      sourceUnitId: unit.instanceId,
+      costType: 'charge',
+      targetPosition: { row: 3, col: 4 }, // 对角线
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- frost_axe: attach 目标不是友方 ---
+  it('[frost_axe] attach 目标不是友方时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const smith = mkUnit('smith', { abilities: ['frost_axe'], faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, smith, '0', { boosts: 2 });
+    const enemy = mkUnit('enemy', { unitClass: 'common', faction: 'trickster' });
+    putUnit(core, { row: 4, col: 4 }, enemy, '1');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'frost_axe',
+      sourceUnitId: unit.instanceId,
+      choice: 'attach',
+      targetPosition: { row: 4, col: 4 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- frost_axe: attach 目标不是士兵 ---
+  it('[frost_axe] attach 目标不是士兵时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const smith = mkUnit('smith', { abilities: ['frost_axe'], faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, smith, '0', { boosts: 2 });
+    const champion = mkUnit('champion', { unitClass: 'champion', faction: 'frost' });
+    putUnit(core, { row: 4, col: 4 }, champion, '0');
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'frost_axe',
+      sourceUnitId: unit.instanceId,
+      choice: 'attach',
+      targetPosition: { row: 4, col: 4 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- frost_axe: attach 目标是自身 ---
+  it('[frost_axe] attach 目标是自身时验证失败', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const smith = mkUnit('smith', { abilities: ['frost_axe'], faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, smith, '0', { boosts: 2 });
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'frost_axe',
+      sourceUnitId: unit.instanceId,
+      choice: 'attach',
+      targetPosition: { row: 4, col: 3 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- telekinesis: 目标超出2格 ---
+  it('[telekinesis] 目标超出2格时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    const mage = mkUnit('wind-mage', { abilities: ['telekinesis'], faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 0 }, mage, '0');
+    const enemy = mkUnit('enemy', { faction: 'trickster' });
+    putUnit(core, { row: 4, col: 5 }, enemy, '1'); // 距离5格
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'telekinesis',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 5 },
+      direction: 'push',
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  // --- high_telekinesis: 目标超出3格 ---
+  it('[high_telekinesis] 目标超出3格时验证失败', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    const kara = mkUnit('kara', { abilities: ['high_telekinesis'], unitClass: 'champion', faction: 'trickster' });
+    const unit = putUnit(core, { row: 4, col: 0 }, kara, '0');
+    const enemy = mkUnit('enemy', { faction: 'trickster' });
+    putUnit(core, { row: 4, col: 5 }, enemy, '1'); // 距离5格
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'high_telekinesis',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 5 },
+      direction: 'push',
+    });
+    expect(result.valid).toBe(false);
+  });
+});
+
+// ============================================================================
+// Section 8: 执行器注册表完整性 — 所有 interactionChain 技能都有执行器
+// ============================================================================
+
+describe('执行器注册表完整性', () => {
+  const allAbilities = abilityRegistry.getAll();
+  const executorIds = abilityExecutorRegistry.getRegisteredIds();
+
+  it('所有声明了 interactionChain 的技能都有对应执行器', () => {
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (!def.interactionChain) continue;
+      if (!executorIds.has(def.id)) {
+        violations.push(`[${def.id}]（${def.name}）声明了 interactionChain 但无对应执行器`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有 activated 技能都有对应执行器', () => {
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (def.trigger !== 'activated') continue;
+      if (!executorIds.has(def.id)) {
+        violations.push(`[${def.id}]（${def.name}）是 activated 技能但无对应执行器`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有 afterAttack 需要目标选择的技能都有对应执行器', () => {
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (def.trigger !== 'afterAttack') continue;
+      if (!def.requiresTargetSelection) continue;
+      if (!executorIds.has(def.id)) {
+        violations.push(`[${def.id}]（${def.name}）是 afterAttack+目标选择技能但无对应执行器`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有 beforeAttack 需要目标选择的技能都有对应执行器', () => {
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (def.trigger !== 'beforeAttack') continue;
+      if (!def.requiresTargetSelection) continue;
+      if (!executorIds.has(def.id)) {
+        violations.push(`[${def.id}]（${def.name}）是 beforeAttack+目标选择技能但无对应执行器`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有 onPhaseStart 需要目标选择的技能都有对应执行器', () => {
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (def.trigger !== 'onPhaseStart') continue;
+      if (!def.requiresTargetSelection) continue;
+      if (!executorIds.has(def.id)) {
+        violations.push(`[${def.id}]（${def.name}）是 onPhaseStart+目标选择技能但无对应执行器`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有 onPhaseEnd 需要目标选择的技能都有对应执行器', () => {
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (def.trigger !== 'onPhaseEnd') continue;
+      if (!def.requiresTargetSelection) continue;
+      if (!executorIds.has(def.id)) {
+        violations.push(`[${def.id}]（${def.name}）是 onPhaseEnd+目标选择技能但无对应执行器`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Section 9: interactionChain 契约全量校验（扩展版）
+// ============================================================================
+
+describe('interactionChain 契约全量校验', () => {
+  const allAbilities = abilityRegistry.getAll();
+  const defsWithChain = allAbilities.filter(d => d.interactionChain);
+
+  it('至少存在 6 个声明了 interactionChain 的技能', () => {
+    expect(defsWithChain.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it('steps 产出字段覆盖 payloadContract.required', () => {
+    const violations: string[] = [];
+    for (const def of defsWithChain) {
+      const chain = def.interactionChain!;
+      const produced = new Set(chain.steps.map(s => s.producesField));
+      for (const field of chain.payloadContract.required) {
+        if (!produced.has(field)) {
+          violations.push(`[${def.id}] required 字段 '${field}' 未被任何 step 产出`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('steps 无重复产出字段', () => {
+    const violations: string[] = [];
+    for (const def of defsWithChain) {
+      const chain = def.interactionChain!;
+      const seen = new Set<string>();
+      for (const step of chain.steps) {
+        if (seen.has(step.producesField)) {
+          violations.push(`[${def.id}] step '${step.step}' 产出字段 '${step.producesField}' 重复`);
+        }
+        seen.add(step.producesField);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('optional 字段在 steps 中标记为 optional', () => {
+    const violations: string[] = [];
+    for (const def of defsWithChain) {
+      const chain = def.interactionChain!;
+      const optionalFields = chain.payloadContract.optional ?? [];
+      for (const field of optionalFields) {
+        const step = chain.steps.find(s => s.producesField === field);
+        if (step && !step.optional) {
+          violations.push(`[${def.id}] payload optional 字段 '${field}' 对应的 step '${step.step}' 未标记 optional`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('payloadContract.required 与执行器 payloadContract 双向对齐', () => {
+    const violations: string[] = [];
+    for (const def of defsWithChain) {
+      const chain = def.interactionChain!;
+      const execContract = abilityExecutorRegistry.getPayloadContract?.(def.id);
+      if (!execContract) continue; // 无执行器契约声明，跳过
+
+      // 执行器 required ⊆ 定义 required ∪ optional
+      const defAll = new Set([
+        ...chain.payloadContract.required,
+        ...(chain.payloadContract.optional ?? []),
+      ]);
+      for (const field of execContract.required) {
+        if (!defAll.has(field)) {
+          violations.push(`[${def.id}] 执行器需要 '${field}' 但 AbilityDef payloadContract 未声明`);
+        }
+      }
+
+      // 定义 required ⊆ 执行器 required ∪ optional
+      const execAll = new Set([
+        ...execContract.required,
+        ...(execContract.optional ?? []),
+      ]);
+      for (const field of chain.payloadContract.required) {
+        if (!execAll.has(field)) {
+          violations.push(`[${def.id}] AbilityDef 声明 '${field}' 但执行器 payloadContract 未包含`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有 interactionChain 技能的 validation.customValidator 存在', () => {
+    const violations: string[] = [];
+    for (const def of defsWithChain) {
+      if (!def.validation?.customValidator) {
+        violations.push(`[${def.id}]（${def.name}）声明了 interactionChain 但无 customValidator`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Section 10: 需要目标选择但未声明 interactionChain 的技能审计
+// 确保这些技能的 payload 字段在 UI 层有对应的收集逻辑
+// ============================================================================
+
+describe('目标选择技能 payload 字段审计', () => {
+  const allAbilities = abilityRegistry.getAll();
+
+  /**
+   * 需要目标选择但未声明 interactionChain 的技能
+   * 这些技能通过 UI 事件系统或单步交互收集 payload
+   */
+  const singleStepTargetAbilities = allAbilities.filter(
+    d => d.requiresTargetSelection && !d.interactionChain
+  );
+
+  it('列出所有需要目标选择但未声明 interactionChain 的技能', () => {
+    // 这些技能应该是单步交互或由特殊系统处理
+    expect(singleStepTargetAbilities.length).toBeGreaterThan(0);
+  });
+
+  it('所有需要目标选择的技能都有 validation.customValidator', () => {
+    // 白名单：被动技能由特殊系统处理，不需要 customValidator
+    const whitelist = new Set(['fire_sacrifice_passive']);
+    const violations: string[] = [];
+    for (const def of singleStepTargetAbilities) {
+      if (whitelist.has(def.id)) continue;
+      if (!def.validation?.customValidator) {
+        violations.push(`[${def.id}]（${def.name}）需要目标选择但无 customValidator`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有 activated + requiresTargetSelection 技能都有 ui 配置', () => {
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (def.trigger !== 'activated') continue;
+      if (!def.requiresTargetSelection) continue;
+      if (!def.ui) {
+        violations.push(`[${def.id}]（${def.name}）是 activated+目标选择技能但无 ui 配置`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('所有有 ui.activationStep 的技能 activationStep 值合法', () => {
+    const validSteps = new Set([
+      'selectCard', 'selectPosition', 'selectUnit', 'selectCards',
+      'selectChoice', 'selectAttachTarget', 'selectNewPosition', 'selectPushDirection',
+    ]);
+    const violations: string[] = [];
+    for (const def of allAbilities) {
+      if (!def.ui?.activationStep) continue;
+      if (!validSteps.has(def.ui.activationStep)) {
+        violations.push(`[${def.id}] activationStep '${def.ui.activationStep}' 不在合法值列表中`);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Section 11: 交互链 — 非当前玩家操作拒绝
+// ============================================================================
+
+describe('非当前玩家操作拒绝', () => {
+  let core: SummonerWarsCore;
+
+  beforeEach(() => {
+    resetInstanceCounter();
+    core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'frost', faction1: 'barbaric' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+  });
+
+  it('[structure_shift] 非当前玩家的单位操作时拒绝', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    // 放置属于玩家1的单位，但当前回合是玩家0
+    const summoner = mkUnit('svara', { abilities: ['structure_shift'], unitClass: 'summoner', faction: 'frost' });
+    const unit = putUnit(core, { row: 4, col: 3 }, summoner, '1'); // 属于玩家1
+    putStructure(core, { row: 4, col: 4 }, '1');
+
+    // 验证层应拒绝（单位不属于当前玩家）
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'structure_shift',
+      sourceUnitId: unit.instanceId,
+      targetPosition: { row: 4, col: 4 },
+      newPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it('[withdraw] 非当前玩家的单位操作时拒绝', () => {
+    core.phase = 'attack';
+    core.currentPlayer = '0' as PlayerId;
+    // 放置属于玩家1的单位，但当前回合是玩家0
+    const kairu = mkUnit('kairu', { abilities: ['withdraw'], unitClass: 'champion', faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, kairu, '1', { boosts: 1 });
+
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'withdraw',
+      sourceUnitId: unit.instanceId,
+      costType: 'charge',
+      targetPosition: { row: 4, col: 5 },
+    });
+    expect(result.valid).toBe(false);
+  });
+});
+
+// ============================================================================
+// Section 12: 交互链 — usesPerTurn 限制
+// ============================================================================
+
+describe('usesPerTurn 限制', () => {
+  let core: SummonerWarsCore;
+
+  beforeEach(() => {
+    resetInstanceCounter();
+    core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'frost', faction1: 'barbaric' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+  });
+
+  it('[prepare] usesPerTurn=1 第二次使用时拒绝', () => {
+    core.phase = 'move';
+    core.currentPlayer = '0' as PlayerId;
+    const archer = mkUnit('archer', { abilities: ['prepare'], faction: 'barbaric' });
+    const unit = putUnit(core, { row: 4, col: 3 }, archer, '0', { hasMoved: false });
+
+    // 第一次使用
+    const events1 = exec(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'prepare',
+      sourceUnitId: unit.instanceId,
+    });
+    expect(events1.find(e => e.type === SW_EVENTS.UNIT_CHARGED)).toBeDefined();
+
+    // 应用事件到 core（模拟 reduce）
+    for (const event of events1) {
+      core = SummonerWarsDomain.reduce(core, event);
+    }
+
+    // 第二次使用应被拒绝（usesPerTurn=1）
+    const result = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'prepare',
+      sourceUnitId: unit.instanceId,
     });
     expect(result.valid).toBe(false);
   });

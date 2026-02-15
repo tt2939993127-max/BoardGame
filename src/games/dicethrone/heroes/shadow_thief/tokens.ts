@@ -62,4 +62,5 @@ export const SHADOW_THIEF_TOKENS: TokenDef[] = [
 export const SHADOW_THIEF_INITIAL_TOKENS: TokenState = {
     [TOKEN_IDS.SNEAK]: 0,
     [TOKEN_IDS.SNEAK_ATTACK]: 0,
+    [STATUS_IDS.POISON]: 0,
 };

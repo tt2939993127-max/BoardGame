@@ -159,15 +159,6 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
         statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
         statusAtlasPath: 'dicethrone/images/Paladin/status-icons-atlas.json',
     },
-    ninja: { ...BARBARIAN_DATA, id: 'ninja' },
-    treant: { ...BARBARIAN_DATA, id: 'treant' },
-    vampire_lord: { ...BARBARIAN_DATA, id: 'vampire_lord' },
-    cursed_pirate: { ...BARBARIAN_DATA, id: 'cursed_pirate' },
-    gunslinger: { ...BARBARIAN_DATA, id: 'gunslinger' },
-    samurai: { ...BARBARIAN_DATA, id: 'samurai' },
-    tactician: { ...BARBARIAN_DATA, id: 'tactician' },
-    huntress: { ...BARBARIAN_DATA, id: 'huntress' },
-    seraph: { ...BARBARIAN_DATA, id: 'seraph' },
 };
 
 /**

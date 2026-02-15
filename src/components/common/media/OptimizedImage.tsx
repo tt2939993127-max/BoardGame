@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ImgHTMLAttributes } from 'react';
-import { getOptimizedImageUrls, getLocalizedImageUrls, isImagePreloaded } from '../../../core/AssetLoader';
+import { getOptimizedImageUrls, getLocalizedImageUrls, isImagePreloaded, isLocalizedImagePreloaded, markImageLoaded } from '../../../core/AssetLoader';
 
 type OptimizedImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
     /** 原始资源路径（不含 locale 前缀），组件内部自动处理 locale 转换 */
@@ -22,43 +22,97 @@ export const SHIMMER_BG: React.CSSProperties = {
     animation: 'img-shimmer 1.5s linear infinite',
 };
 
+/**
+ * 回退层级（从高到低）：
+ * 0 = localized 路径（locale 存在时）或原始路径（无 locale）
+ * 1 = 原始路径（locale 存在时的自动回退）
+ * 2 = fallbackSrc（显式指定的备选源）
+ */
 export const OptimizedImage = ({ src, fallbackSrc, locale, alt, onError, onLoad: onLoadProp, style: styleProp, placeholder = true, className, ...rest }: OptimizedImageProps) => {
-    const [useFallback, setUseFallback] = React.useState(false);
-    // 预加载缓存以原始路径为 key，所以用 src（原始路径）检查
-    const [loaded, setLoaded] = React.useState(() => isImagePreloaded(src));
+    // 如果有 locale 但 localized 路径未预加载而原始路径已预加载，
+    // 直接从 fallbackLevel=1（原始路径）开始，避免无效 404
+    const skipLocale = Boolean(locale) && !isLocalizedImagePreloaded(src, locale!) && isImagePreloaded(src);
+    const [fallbackLevel, setFallbackLevel] = React.useState(skipLocale ? 1 : 0);
+    const preloaded = isImagePreloaded(src, locale) || isImagePreloaded(src);
+    const [loaded, setLoaded] = React.useState(() => preloaded);
     const [errored, setErrored] = React.useState(false);
     const imgRef = React.useRef<HTMLImageElement>(null);
 
-    // 生成 localized + 原始的 URL 集合
+    // DEBUG: 组件渲染时的缓存命中和 shimmer 状态
+    const debugOnce = React.useRef(false);
+    if (!debugOnce.current) {
+        debugOnce.current = true;
+        console.warn(`[OptimizedImage] 首次渲染 src=${src} locale=${locale} preloaded=${preloaded} → loaded=${preloaded} showShimmer=${!preloaded}`);
+    }
+
+    // 预计算所有层级的 URL
     const localizedUrls = locale ? getLocalizedImageUrls(src, locale) : null;
-    const primaryUrls = localizedUrls ? localizedUrls.primary : getOptimizedImageUrls(src);
-    const originalUrls = localizedUrls ? localizedUrls.fallback : null;
-    const fallbackUrls = fallbackSrc ? getOptimizedImageUrls(fallbackSrc) : null;
+    const level0Urls = localizedUrls ? localizedUrls.primary : getOptimizedImageUrls(src);
+    const level1Urls = localizedUrls ? localizedUrls.fallback : null;
+    const level2Urls = fallbackSrc ? getOptimizedImageUrls(fallbackSrc) : null;
 
-    // 活跃 URL：优先 localized → 原始 → fallbackSrc
-    const activeUrls = useFallback && fallbackUrls ? fallbackUrls : primaryUrls;
+    // 根据当前 fallbackLevel 选择活跃 URL
+    let activeUrls = level0Urls;
+    if (fallbackLevel === 1 && level1Urls) {
+        activeUrls = level1Urls;
+    } else if (fallbackLevel >= 2 && level2Urls) {
+        activeUrls = level2Urls;
+    } else if (fallbackLevel === 1 && !level1Urls && level2Urls) {
+        activeUrls = level2Urls;
+    }
+
     const isSvg = isSvgSource(activeUrls.webp);
-
     const currentSrc = activeUrls.webp;
+
+    // src 或 locale 变化时完全重置
     React.useLayoutEffect(() => {
+        const skip = Boolean(locale) && !isImagePreloaded(src, locale) && isImagePreloaded(src);
+        setFallbackLevel(skip ? 1 : 0);
+        setErrored(false);
         if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
             setLoaded(true);
-        } else if (isImagePreloaded(src)) {
+        } else if (isImagePreloaded(src, locale) || isImagePreloaded(src)) {
             setLoaded(true);
         } else {
             setLoaded(false);
         }
-        setErrored(false);
-    }, [currentSrc, src]);
+    }, [src, locale]);
+
+    // currentSrc 变化时（fallbackLevel 切换导致）检查新 URL 是否已缓存
+    const prevSrcRef = React.useRef(currentSrc);
+    React.useLayoutEffect(() => {
+        if (prevSrcRef.current !== currentSrc) {
+            prevSrcRef.current = currentSrc;
+            if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+                setLoaded(true);
+            } else if (isImagePreloaded(src, locale)) {
+                // fallback URL 已在预加载缓存中，不显示 shimmer
+                setLoaded(true);
+            } else {
+                setLoaded(false);
+            }
+            setErrored(false);
+        }
+    }, [currentSrc, src, locale]);
 
     const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
         setLoaded(true);
+        // 将成功加载的图片注册到缓存，同一图片的其他实例（如放大预览）可跳过 shimmer
+        markImageLoaded(src, locale);
         onLoadProp?.(event);
     };
+
     const handleError: React.ReactEventHandler<HTMLImageElement> = (event) => {
-        if (fallbackUrls && !useFallback) {
-            setUseFallback(true);
+        // DEBUG: 图片加载失败详情
+        console.warn(`[OptimizedImage] onError src=${src} fallbackLevel=${fallbackLevel} currentSrc=${currentSrc}`);
+        if (fallbackLevel === 0 && level1Urls) {
+            // localized 失败 → 回退到原始路径
+            setFallbackLevel(1);
+        } else if (fallbackLevel <= 1 && level2Urls) {
+            // 原始路径也失败 → 回退到 fallbackSrc
+            setFallbackLevel(2);
         } else {
+            // 全部失败
             setErrored(true);
             setLoaded(true);
         }
@@ -78,17 +132,10 @@ export const OptimizedImage = ({ src, fallbackSrc, locale, alt, onError, onLoad:
         return <img ref={imgRef} src={activeUrls.webp} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />;
     }
 
-    // 构建 <source> 链：localized avif → localized webp → 原始 avif → 原始 webp
     return (
         <picture>
             <source type="image/avif" srcSet={activeUrls.avif} />
             <source type="image/webp" srcSet={activeUrls.webp} />
-            {originalUrls && originalUrls.avif !== activeUrls.avif && (
-                <source type="image/avif" srcSet={originalUrls.avif} />
-            )}
-            {originalUrls && originalUrls.webp !== activeUrls.webp && (
-                <source type="image/webp" srcSet={originalUrls.webp} />
-            )}
             <img ref={imgRef} src={activeUrls.webp} alt={alt ?? ''} onError={handleError} onLoad={handleLoad} style={imgStyle} className={className} {...rest} />
         </picture>
     );

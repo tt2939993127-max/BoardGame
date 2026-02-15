@@ -273,6 +273,121 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
     });
     expect(result.valid).toBe(false);
   });
+
+  it('验证层：持有 mind_capture 的单位可激活 mind_capture_resolve', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-summoner',
+      card: makeSummoner('test-summoner'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'mind_capture_resolve',
+        sourceUnitId: summoner.instanceId,
+        choice: 'control',
+        targetPosition: { row: 4, col: 4 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('验证层：未持有 mind_capture 的单位不能激活 mind_capture_resolve', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-telekinetic',
+      card: makeTelekinetic('test-telekinetic'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'mind_capture_resolve',
+        sourceUnitId: telekinetic.instanceId,
+        choice: 'control',
+        targetPosition: { row: 4, col: 4 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('该单位没有此技能');
+  });
+
+  it('方案A：心灵捕获决策结算后才触发 afterAttack', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-summoner',
+      card: { ...makeSummoner('test-summoner'), abilities: ['mind_capture', 'imposing'] },
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy', { life: 1 }),
+      owner: '1',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const attackResult = executeAndReduce(state, SW_COMMANDS.DECLARE_ATTACK, {
+      attacker: { row: 4, col: 2 },
+      target: { row: 4, col: 4 },
+    });
+
+    const mindCaptureRequested = attackResult.events.find(e => e.type === SW_EVENTS.MIND_CAPTURE_REQUESTED);
+    expect(mindCaptureRequested).toBeDefined();
+
+    const earlyAfterAttack = attackResult.events.find(e =>
+      e.type === SW_EVENTS.ABILITY_TRIGGERED
+      && (e.payload as Record<string, unknown>).abilityId === 'imposing'
+    );
+    expect(earlyAfterAttack).toBeUndefined();
+
+    const requestPayload = mindCaptureRequested!.payload as { hits: number };
+    const resolveResult = executeAndReduce(attackResult.newState, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'mind_capture_resolve',
+      sourceUnitId: summoner.instanceId,
+      choice: 'control',
+      targetPosition: { row: 4, col: 4 },
+      hits: requestPayload.hits,
+    });
+
+    const afterAttackTriggered = resolveResult.events.find(e =>
+      e.type === SW_EVENTS.ABILITY_TRIGGERED
+      && (e.payload as Record<string, unknown>).abilityId === 'imposing'
+    );
+    expect(afterAttackTriggered).toBeDefined();
+
+    const chargeEvent = resolveResult.events.find(e =>
+      e.type === SW_EVENTS.UNIT_CHARGED
+      && (e.payload as Record<string, unknown>).sourceAbilityId === 'imposing'
+    );
+    expect(chargeEvent).toBeDefined();
+    expect(resolveResult.newState.board[4][2].unit?.boosts).toBe(1);
+  });
 });
 
 // ============================================================================

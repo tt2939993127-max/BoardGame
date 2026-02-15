@@ -52,9 +52,17 @@ export type DieFace =
 // 角色编目
 // ============================================================================
 
-export type CharacterId = 'unselected' | 'monk' | 'barbarian' | 'pyromancer' | 'shadow_thief' | 'moon_elf' | 'paladin' | 'ninja' | 'treant' | 'vampire_lord' | 'cursed_pirate' | 'gunslinger' | 'samurai' | 'tactician' | 'huntress' | 'seraph';
+export const IMPLEMENTED_DICETHRONE_CHARACTER_IDS = [
+    'monk',
+    'barbarian',
+    'pyromancer',
+    'shadow_thief',
+    'moon_elf',
+    'paladin',
+] as const;
 
-export type SelectableCharacterId = Exclude<CharacterId, 'unselected'>;
+export type SelectableCharacterId = (typeof IMPLEMENTED_DICETHRONE_CHARACTER_IDS)[number];
+export type CharacterId = 'unselected' | SelectableCharacterId;
 
 export interface CharacterDefinition {
     id: SelectableCharacterId;
@@ -68,15 +76,6 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
     { id: 'moon_elf', nameKey: 'characters.moon_elf' },
     { id: 'paladin', nameKey: 'characters.paladin' },
-    { id: 'ninja', nameKey: 'characters.ninja' },
-    { id: 'treant', nameKey: 'characters.treant' },
-    { id: 'vampire_lord', nameKey: 'characters.vampire_lord' },
-    { id: 'cursed_pirate', nameKey: 'characters.cursed_pirate' },
-    { id: 'gunslinger', nameKey: 'characters.gunslinger' },
-    { id: 'samurai', nameKey: 'characters.samurai' },
-    { id: 'tactician', nameKey: 'characters.tactician' },
-    { id: 'huntress', nameKey: 'characters.huntress' },
-    { id: 'seraph', nameKey: 'characters.seraph' },
 ];
 
 /**

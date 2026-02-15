@@ -159,15 +159,15 @@ describe('炎术士 GTR 技能覆盖', () => {
     });
 
     // ========================================================================
-    // meteor — 陨石（4 陨石 → 不可防御：眩晕 + +2 FM + FM 伤害 + 2 全体伤害）
+    // meteor — 陨石（4 陨石 → 不可防御：眩晕 + +2 FM + FM 伤害 + 2 对手伤害）
     // ========================================================================
     describe('陨石 (meteor)', () => {
-        it('4 陨石造成不可防御伤害 + 眩晕 + 全体 2 伤害', () => {
+        it('4 陨石造成不可防御伤害 + 眩晕 + 对所有对手 2 伤害', () => {
             // 进攻骰: [6,6,6,6,1] → 4 meteor + 1 fire
             // 效果顺序：
             //   preDefense: inflictStatus(stun, 1) → 对手眩晕
             //   withDamage: meteor-resolve → +2 FM → FM(2) 伤害
-            //   withDamage: damage(2, target: 'all') → 双方各 2 伤害
+            //   withDamage: damage(2, target: 'allOpponents') → 对手 2 伤害（不伤自己）
             // 不可防御 → 跳过防御 → main2
             const random = createQueuedRandom([6, 6, 6, 6, 1]);
             const runner = new GameTestRunner({
@@ -176,7 +176,7 @@ describe('炎术士 GTR 技能覆盖', () => {
                 setup: createPyromancerSetup(), assertFn: assertState, silent: true,
             });
             const result = runner.run({
-                name: '陨石 4陨石=眩晕+FM伤害+全体2',
+                name: '陨石 4陨石=眩晕+FM伤害+对手2',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),
@@ -188,11 +188,11 @@ describe('炎术士 GTR 技能覆盖', () => {
                     turnPhase: 'main2',
                     players: {
                         '0': {
-                            hp: 48,  // 50 - 2(全体伤害) = 48
+                            hp: 50,  // 不再自伤
                             tokens: { [TOKEN_IDS.FIRE_MASTERY]: 2 },
                         },
                         '1': {
-                            hp: 46,  // 50 - 2(FM伤害) - 2(全体伤害) = 46
+                            hp: 46,  // 50 - 2(FM伤害) - 2(对手伤害) = 46
                             statusEffects: { [STATUS_IDS.STUN]: 1 },
                         },
                     },
@@ -203,14 +203,14 @@ describe('炎术士 GTR 技能覆盖', () => {
     });
 
     // ========================================================================
-    // ultimate-inferno — 终极烈焰（5 陨石 → 终极：击倒+燃烧+3FM+12伤害+2全体）
+    // ultimate-inferno — 终极烈焰（5 陨石 → 终极：击倒+燃烧+3FM+12伤害+2对手伤害）
     // ========================================================================
     describe('终极烈焰 (ultimate-inferno)', () => {
         it('5 陨石造成 12+2 伤害 + 击倒 + 燃烧 + 3 FM', () => {
             // 进攻骰: [6,6,6,6,6] → 5 meteor → ultimate
             // 效果顺序：
             //   preDefense: inflictStatus(knockdown, 1) + inflictStatus(burn, 1) + grantToken(FM, 3)
-            //   withDamage: damage(12) + damage(2, target: 'all')
+            //   withDamage: damage(12) + damage(2, target: 'allOpponents')
             // ultimate → 跳过防御 → main2
             const random = createQueuedRandom([6, 6, 6, 6, 6]);
             const runner = new GameTestRunner({
@@ -231,11 +231,11 @@ describe('炎术士 GTR 技能覆盖', () => {
                     turnPhase: 'main2',
                     players: {
                         '0': {
-                            hp: 48,  // 50 - 2(全体伤害) = 48
+                            hp: 50,  // 不再自伤
                             tokens: { [TOKEN_IDS.FIRE_MASTERY]: 3 },
                         },
                         '1': {
-                            hp: 36,  // 50 - 12 - 2(全体伤害) = 36
+                            hp: 36,  // 50 - 12 - 2(对手伤害) = 36
                             statusEffects: {
                                 [STATUS_IDS.KNOCKDOWN]: 1,
                                 [STATUS_IDS.BURN]: 1,
@@ -246,5 +246,102 @@ describe('炎术士 GTR 技能覆盖', () => {
             });
             expect(result.assertionErrors).toEqual([]);
         });
+    });
+});
+
+
+// ============================================================================
+// METEOR_2 升级后变体优先级测试
+// ============================================================================
+import { METEOR_2 } from '../heroes/pyromancer/abilities';
+
+describe('炎术士 METEOR_2 升级后变体', () => {
+    /**
+     * 升级后 meteor 有两个变体：
+     * - meteor-shower (3 陨石, priority 1): 击倒+燃烧+眩晕（无伤害）
+     * - meteor-2 (4 陨石, priority 2): 眩晕 + +2FM + FM伤害 + 3全体伤害
+     *
+     * 掷出 4 陨石时两个变体都满足条件。
+     * getAvailableAbilityIds 按 priority 降序返回 → UI 的 find() 取第一个 = meteor-2（最强）
+     */
+    function createMeteor2Setup() {
+        return (playerIds: PlayerId[], random: RandomFn): MatchState<DiceThroneCore> => {
+            const base = createPyromancerSetup()(playerIds, random);
+            // 升级 meteor → METEOR_2
+            const idx = base.core.players['0'].abilities.findIndex(a => a.id === 'meteor');
+            if (idx >= 0) base.core.players['0'].abilities[idx] = METEOR_2 as any;
+            base.core.players['0'].abilityLevels['meteor'] = 2;
+            return base;
+        };
+    }
+
+    it('4 陨石 → getAvailableAbilityIds 返回 meteor-2 在 meteor-shower 前面', () => {
+        // 进攻骰: [6,6,6,6,1] → 4 meteor + 1 fire
+        const random = createQueuedRandom([6, 6, 6, 6, 1]);
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain, systems: testSystems,
+            playerIds: ['0', '1'], random,
+            setup: createMeteor2Setup(), assertFn: assertState, silent: true,
+        });
+        const result = runner.run({
+            name: 'METEOR_2 升级后 4陨石选择 meteor-2',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                // 选择 meteor-2（priority 2，有伤害）而非 meteor-shower（priority 1，无伤害）
+                cmd('SELECT_ABILITY', '0', { abilityId: 'meteor-2' }),
+                cmd('ADVANCE_PHASE', '0'),       // offensiveRoll exit → main2
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '0': {
+                        hp: 50,  // 不再自伤
+                        tokens: { [TOKEN_IDS.FIRE_MASTERY]: 2 },
+                    },
+                    '1': {
+                        hp: 45,  // 50 - 2(FM伤害) - 3(对手伤害) = 45
+                        statusEffects: { [STATUS_IDS.STUN]: 1 },
+                    },
+                },
+            },
+        });
+        expect(result.assertionErrors).toEqual([]);
+    });
+
+    it('3 陨石 → 只有 meteor-shower 满足条件（无伤害，只有状态）', () => {
+        // 进攻骰: [6,6,6,1,1] → 3 meteor + 2 fire
+        // meteor-shower 只有 inflictStatus 效果，无伤害 → 不进入防御阶段
+        const random = createQueuedRandom([6, 6, 6, 1, 1]);
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain, systems: testSystems,
+            playerIds: ['0', '1'], random,
+            setup: createMeteor2Setup(), assertFn: assertState, silent: true,
+        });
+        const result = runner.run({
+            name: 'METEOR_2 升级后 3陨石=meteor-shower',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'meteor-shower' }),
+                cmd('ADVANCE_PHASE', '0'),       // offensiveRoll exit → main2（无伤害，跳过防御）
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        hp: 50,  // 无伤害
+                        statusEffects: {
+                            [STATUS_IDS.KNOCKDOWN]: 1,
+                            [STATUS_IDS.BURN]: 1,
+                            [STATUS_IDS.STUN]: 1,
+                        },
+                    },
+                },
+            },
+        });
+        expect(result.assertionErrors).toEqual([]);
     });
 });

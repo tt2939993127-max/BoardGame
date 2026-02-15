@@ -237,9 +237,16 @@ export async function preloadCriticalImages(
     const warmPaths = [...new Set([...staticWarm, ...resolved.warm])];
 
     if (criticalPaths.length === 0) {
+        console.warn(`[AssetLoader] criticalPaths 为空，跳过预加载 gameId=${gameId} staticCritical=${staticCritical.length} resolved=${resolved.critical.length}`);
         return warmPaths;
     }
 
+    // DEBUG: 打印即将预加载的路径
+    console.warn(`[AssetLoader] 开始预加载 gameId=${gameId} locale=${locale} criticalPaths=`, criticalPaths);
+
+    // 预加载原始路径（保证缓存有值）
+    // localized 路径由 OptimizedImage 的 <picture> fallback 机制处理
+    // handleLoad 时通过 markImageLoaded 注册缓存，后续实例可命中
     const promises = criticalPaths
         .filter(Boolean)
         .map((p) => preloadOptimizedImage(p));
@@ -250,7 +257,10 @@ export async function preloadCriticalImages(
         new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),
     ]);
 
-    console.log(`[AssetLoader] 游戏 ${gameId} 关键图片预加载完成 (${criticalPaths.length} 张)`);
+    // DEBUG: 预加载完成后打印缓存状态
+    const cachedKeys = [...preloadedImages.keys()];
+    console.warn(`[AssetLoader] 预加载完成 gameId=${gameId} locale=${locale} critical=${criticalPaths.length}张 缓存总数=${cachedKeys.length}`);
+    console.warn(`[AssetLoader] 缓存keys(含player-board):`, cachedKeys.filter(k => k.includes('player-board')));
     return warmPaths;
 }
 
@@ -299,19 +309,65 @@ export function clearGameAssetsCache(gameId: string): void {
 }
 
 /**
+ * 检查 localized 路径是否已被预加载（不检查原始路径 fallback）
+ * 用于判断是否应该跳过 locale 直接用原始路径
+ */
+export function isLocalizedImagePreloaded(src: string, locale: string): boolean {
+    const localizedPath = getLocalizedAssetPath(src, locale);
+    const localized = getOptimizedImageUrls(localizedPath);
+    return preloadedImages.has(localized.avif) || preloadedImages.has(localized.webp);
+}
+
+/**
+ * 将已加载的图片 URL 注册到缓存（供 OptimizedImage 在 onLoad 时调用）
+ * 这样同一张图片的其他实例可以跳过 shimmer
+ */
+export function markImageLoaded(src: string, locale?: string): void {
+    // 注册原始路径的 optimized URL
+    const { avif, webp } = getOptimizedImageUrls(src);
+    if (avif) preloadedImages.set(avif, new Image());
+    if (webp && webp !== avif) preloadedImages.set(webp, new Image());
+    // 有 locale 时也注册 localized 路径
+    if (locale) {
+        const localizedPath = getLocalizedAssetPath(src, locale);
+        const localized = getOptimizedImageUrls(localizedPath);
+        if (localized.avif) preloadedImages.set(localized.avif, new Image());
+        if (localized.webp && localized.webp !== localized.avif) preloadedImages.set(localized.webp, new Image());
+    }
+}
+
+/**
  * 查询图片是否已被预加载（供渲染组件跳过 shimmer）
  * 接受原始资源路径（自动转换）或已转换的 optimized URL
+ * 传入 locale 时同时检查 localized 路径是否已缓存
  */
-export function isImagePreloaded(src: string): boolean {
+export function isImagePreloaded(src: string, locale?: string): boolean {
     if (preloadedImages.has(src)) return true;
     // 如果 src 已经是 compressed/ 下的 URL，直接检查 avif/webp 变体
     if (src.includes(`/${COMPRESSED_SUBDIR}/`)) {
         const base = stripExtension(src);
         return preloadedImages.has(`${base}.avif`) || preloadedImages.has(`${base}.webp`);
     }
+
+    // 有 locale 时优先检查 localized 路径（与 OptimizedImage 实际渲染的 URL 一致）
+    if (locale) {
+        const localizedPath = getLocalizedAssetPath(src, locale);
+        const localized = getOptimizedImageUrls(localizedPath);
+        if (preloadedImages.has(localized.avif) || preloadedImages.has(localized.webp)) {
+            return true;
+        }
+    }
+
     // 原始路径：转换为 optimized URL 后检查
     const { avif, webp } = getOptimizedImageUrls(src);
-    return preloadedImages.has(avif) || preloadedImages.has(webp);
+    const found = preloadedImages.has(avif) || preloadedImages.has(webp);
+    // DEBUG: 未命中时打印详情（只打一次全量 key）
+    if (!found) {
+        const localizedPath = locale ? getLocalizedAssetPath(src, locale) : null;
+        const locUrls = localizedPath ? getOptimizedImageUrls(localizedPath) : null;
+        console.warn(`[isImagePreloaded] MISS src=${src} locale=${locale} locAvif=${locUrls?.avif?.slice(-60)} origAvif=${avif.slice(-60)} cacheSize=${preloadedImages.size} allKeys=`, [...preloadedImages.keys()]);
+    }
+    return found;
 }
 
 // ============================================================================
@@ -350,6 +406,8 @@ async function preloadImageWithResult(src: string): Promise<boolean> {
 
 async function preloadOptimizedImage(src: string): Promise<void> {
     const { avif, webp } = getOptimizedImageUrls(src);
+    // DEBUG: 记录预加载的实际 URL
+    console.warn(`[preloadOptimized] src=${src} → avif=${avif.slice(-60)} webp=${webp.slice(-60)}`);
     if (!avif && !webp) return;
     if (avif === webp) {
         if (preloadedImages.has(avif)) return;

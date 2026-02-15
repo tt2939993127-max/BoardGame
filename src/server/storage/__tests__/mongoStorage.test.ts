@@ -63,10 +63,17 @@ describe('MongoStorage 行为', () => {
         await mongo.stop();
     });
 
-    it('同一 ownerKey 创建新房间会被阻止', async () => {
+    it('同一 ownerKey 创建新房间会自动清理旧房间', async () => {
         await mongoStorage.createMatch('match-1', buildCreateData('user:1'));
+        // 新行为：自动覆盖旧房间，不再抛异常
         await expect(mongoStorage.createMatch('match-2', buildCreateData('user:1')))
-            .rejects.toThrow('[Lobby] ACTIVE_MATCH_EXISTS');
+            .resolves.toBeUndefined();
+
+        // 验证旧房间已被清理
+        const Match = mongoose.model('Match');
+        const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
+        expect(remaining).toHaveLength(1);
+        expect(remaining[0].matchID).toBe('match-2');
     });
 
     it('不同 ownerKey 允许创建多个房间', async () => {
@@ -75,7 +82,7 @@ describe('MongoStorage 行为', () => {
             .resolves.toBeUndefined();
     });
 
-    it('空房间依然阻止新建房间', async () => {
+    it('空房间也会被自动清理', async () => {
         const Match = mongoose.model('Match');
         await Match.create({
             matchID: 'match-1',
@@ -94,8 +101,14 @@ describe('MongoStorage 行为', () => {
             },
             ttlSeconds: 0,
         });
+        // 新行为：自动覆盖旧房间
         await expect(mongoStorage.createMatch('match-2', buildCreateData('user:1')))
-            .rejects.toThrow('[Lobby] ACTIVE_MATCH_EXISTS');
+            .resolves.toBeUndefined();
+
+        // 验证旧房间已被清理
+        const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
+        expect(remaining).toHaveLength(1);
+        expect(remaining[0].matchID).toBe('match-2');
     });
 
     it('cleanupDuplicateOwnerMatches 仅保留最新房间', async () => {

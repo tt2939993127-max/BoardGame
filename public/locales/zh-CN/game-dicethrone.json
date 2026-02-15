@@ -493,7 +493,6 @@
     "cannotPlayCard": "无法打出此卡",
     "playerNotFound": "找不到玩家",
     "notUpgradeCard": "该卡不是升级卡",
-    "player_mismatch": "不是你的回合",
     "player_not_found": "找不到玩家",
     "card_not_in_hand": "卡牌不在手牌中",
     "invalid_phase": "当前阶段无法执行此操作",
@@ -1961,6 +1960,10 @@
     "action-card-trick": {
       "name": "卡牌戏法！",
       "description": "对手弃1牌。抽1牌（若有潜行则抽2牌）。"
+    },
+    "action-shadow-manipulation": {
+      "name": "暗影操控！",
+      "description": "改变任意1颗骰子的数值。若拥有暗影，转而改变任意2颗骰子的数值。"
     },
     "upgrade-dagger-strike-2": {
       "name": "匕首打击 II",

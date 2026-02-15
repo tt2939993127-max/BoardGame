@@ -17,10 +17,12 @@ interface FriendsChatModalProps {
         matchId: string;
         gameName: string;
     };
+    /** 初始选中的会话 ID（如系统通知） */
+    initialFriendId?: string;
 }
 
-export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatModalProps) => {
-    const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
+export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId }: FriendsChatModalProps) => {
+    const [selectedFriendId, setSelectedFriendId] = useState<string | null>(initialFriendId ?? null);
     const { t } = useTranslation(['social']);
 
     if (!isOpen) return null;

@@ -41,6 +41,7 @@ import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 import { CriticalImageGate } from '../components/game/framework';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
+import { resolveCommandError } from '../engine/transport/errorI18n';
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
@@ -64,14 +65,14 @@ export const MatchRoom = () => {
     const handleGameError = useCallback((error: string) => {
         if (SYSTEM_ERRORS.has(error)) return; // 系统错误由其他逻辑处理
         playDeniedSound();
-        toast.warning(error);
-    }, [toast]);
+        toast.warning(resolveCommandError(i18n, error, gameId));
+    }, [toast, i18n, gameId]);
 
     // 本地/教学模式：命令被引擎拒绝时的统一反馈
     const handleCommandRejected = useCallback((_type: string, error: string) => {
         playDeniedSound();
-        toast.warning(error);
-    }, [toast]);
+        toast.warning(resolveCommandError(i18n, error, gameId));
+    }, [toast, i18n, gameId]);
 
     // 包装 Board 组件（注入 CriticalImageGate）
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {

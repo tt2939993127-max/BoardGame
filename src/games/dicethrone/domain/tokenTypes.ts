@@ -175,7 +175,7 @@ export interface RollDieConditionalEffect {
  */
 export interface EffectAction {
     type: 'damage' | 'heal' | 'modifyStat' | 'grantStatus' | 'removeStatus' | 'grantToken' | 'grantDamageShield' | 'choice' | 'rollDie' | 'custom' | 'drawCard' | 'replaceAbility' | 'modifyDie' | 'rerollDie' | 'removeAllStatus' | 'transferStatus' | 'grantExtraRoll' | 'skipPhase' | 'extraAttack';
-    target: 'self' | 'opponent' | 'all' | 'select';
+    target: 'self' | 'opponent' | 'all' | 'allOpponents' | 'select';
     value?: number;
     statusId?: string;
     tokenId?: string;

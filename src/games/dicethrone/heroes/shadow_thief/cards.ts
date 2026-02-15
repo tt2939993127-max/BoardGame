@@ -119,6 +119,18 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 9 },
         effects: [{ description: '卡牌戏法结算', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-card-trick' }, timing: 'immediate' }]
     },
+    // 10.5 暗影操控!
+    {
+        id: 'action-shadow-manipulation',
+        name: cardText('action-shadow-manipulation', 'name'),
+        type: 'action',
+        cpCost: 4,
+        timing: 'roll',
+        description: cardText('action-shadow-manipulation', 'description'),
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 13 },
+        playCondition: { requireDiceExists: true, requireHasRolled: true },
+        effects: [{ description: '暗影操控结算', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-shadow-manipulation' }, timing: 'immediate' }]
+    },
     // 11. 匕首打击 II
     {
         id: 'upgrade-dagger-strike-2',

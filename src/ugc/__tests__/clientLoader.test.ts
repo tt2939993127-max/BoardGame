@@ -97,8 +97,7 @@ describe('UGC 客户端加载器', () => {
 
         const result = await createUgcClientGame('demo');
 
-        expect(result.game).toBeDefined();
-        expect(result.game.name).toBe('demo');
+        expect(result.engineConfig).toBeDefined();
         expect(result.config.commandTypes).toEqual(['PLAY']);
         expect(result.rulesCode).toContain('const domain');
     });

@@ -11,7 +11,7 @@ const PYROMANCER_SFX_BURN_DOWN = 'magic.general.simple_magic_sound_fx_pack_vol.f
 const PYROMANCER_SFX_IGNITE = 'magic.general.simple_magic_sound_fx_pack_vol.fire.blazing_comet';
 const PYROMANCER_SFX_ULTIMATE = 'magic.general.simple_magic_sound_fx_pack_vol.fire.phoenix_burst';
 
-const damage = (value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition; target?: 'opponent' | 'self' | 'all' }): AbilityEffect => ({
+const damage = (value: number, description: string, opts?: { timing?: EffectTiming; condition?: EffectCondition; target?: 'opponent' | 'self' | 'allOpponents' }): AbilityEffect => ({
     description,
     action: { type: 'damage', target: opts?.target ?? 'opponent', value },
     timing: opts?.timing,
@@ -115,7 +115,7 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
                 description: abilityEffectText('meteor', 'unblockable'),
                 action: { type: 'custom', target: 'self', customActionId: 'meteor-resolve' }
             },
-            damage(2, abilityEffectText('meteor', 'collateral'), { target: 'all' })
+            damage(2, abilityEffectText('meteor', 'collateral'), { target: 'allOpponents' })
         ]
     },
     {
@@ -207,7 +207,7 @@ export const PYROMANCER_ABILITIES: AbilityDef[] = [
             inflictStatus(STATUS_IDS.BURN, 1, abilityEffectText('ultimate-inferno', 'inflictBurn')),
             grantToken(TOKEN_IDS.FIRE_MASTERY, 3, abilityEffectText('ultimate-inferno', 'gainFM3')),
             damage(12, abilityEffectText('ultimate-inferno', 'damage12')),
-            damage(2, abilityEffectText('ultimate-inferno', 'collateral'), { target: 'all' })
+            damage(2, abilityEffectText('ultimate-inferno', 'collateral'), { target: 'allOpponents' })
         ]
     }
 ];
@@ -337,7 +337,7 @@ export const METEOR_2: AbilityDef = {
                     description: abilityEffectText('meteor-2', 'unblockable'),
                     action: { type: 'custom', target: 'self', customActionId: 'meteor-resolve' }
                 },
-                damage(3, abilityEffectText('meteor-2', 'collateral'), { target: 'all' })
+                damage(3, abilityEffectText('meteor-2', 'collateral'), { target: 'allOpponents' })
             ],
             priority: 2,
             tags: ['unblockable']

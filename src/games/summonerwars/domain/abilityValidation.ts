@@ -12,6 +12,11 @@ import { getUnitAbilities, getUnitAt, manhattanDistance, isValidCoord, isCellEmp
 import { CARD_IDS, getBaseCardId } from './ids';
 import { buildUsageKey } from './utils';
 
+const ACTIVATION_ABILITY_ALIASES: Record<string, readonly string[]> = {
+  // mind_capture_resolve 是“心灵捕获”交互确认分支，不会直接挂在卡面 abilities 上
+  mind_capture_resolve: ['mind_capture'],
+};
+
 /**
  * 验证技能是否可以激活
  * 
@@ -72,7 +77,10 @@ export function validateAbilityActivation(
   
   // 检查单位是否拥有该技能
   const unitAbilities = getUnitAbilities(sourceUnit, core);
-  if (!unitAbilities.includes(abilityId)) {
+  const aliasAbilities = ACTIVATION_ABILITY_ALIASES[abilityId] ?? [];
+  const hasAbility = unitAbilities.includes(abilityId)
+    || aliasAbilities.some(aliasAbility => unitAbilities.includes(aliasAbility));
+  if (!hasAbility) {
     return { valid: false, error: '该单位没有此技能' };
   }
   

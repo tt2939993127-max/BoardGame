@@ -18,6 +18,7 @@ export {
     preloadCriticalImages,
     preloadWarmImages,
     isImagePreloaded,
+    markImageLoaded,
     // 便捷工具 API
     assetsPath,
     getOptimizedImageUrls,

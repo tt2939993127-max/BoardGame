@@ -31,7 +31,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/ai-rules/animation-effects.md` — **开发/修改任何动画、特效、粒子效果时必读**。含动效选型表、Canvas 粒子引擎、特效组件/架构/视觉质量规范。
 - `docs/ai-rules/asset-pipeline.md` — **新增/修改图片或音频资源引用时必读**。含压缩流程、路径规范、✅/❌ 示例。
 - `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、传输层架构（`GameBoardProps`/`GameTransportServer`）、游戏结束检测（`sys.gameover`）、框架解耦/复用、EventStream、动画表现与逻辑分离规范（`useVisualStateBuffer`/`useVisualSequenceGate`）、`createSimpleChoice` API 使用规范（两种调用约定、multi 参数位置、`PromptOption.displayMode` 渲染模式声明、选项 defId 要求）、领域建模前置审查。
-- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**通用实现缺陷检查维度（D1-D20 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、引擎 API 调用契约审计（D3 子项）、交互模式语义匹配（D5 子项）、验证层有效性门控（D7 子项）、验证-执行前置条件对齐（D2 子项）、引擎批处理时序与 UI 交互对齐（D8 子项）、事件产生门控普适性检查（D8 子项）、Reducer 消耗路径审计（D11）、写入-消耗对称（D12）、多来源竞争（D13）、回合清理完整（D14）、UI 状态同步（D15）、条件优先级（D16）、隐式依赖（D17）、否定路径（D18）、组合场景（D19）、状态可观测性（D20）、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
+- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**通用实现缺陷检查维度（D1-D20 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、引擎 API 调用契约审计（D3 子项）、交互模式语义匹配（D5 子项）、验证层有效性门控（D7 子项）、验证-执行前置条件对齐（D2 子项）、引擎批处理时序与 UI 交互对齐（D8 子项）、事件产生门控普适性检查（D8 子项）、Reducer 消耗路径审计（D11）、写入-消耗对称（D12）、多来源竞争（D13）、回合清理完整（D14）、UI 状态同步（D15）、条件优先级（D16）、隐式依赖（D17）、否定路径（D18）、组合场景（D19）、状态可观测性（D20）、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审计"、"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
 - `docs/ai-rules/ui-ux.md` — **开发/修改 UI 组件、布局、样式、游戏界面时必读**。含审美准则、多端布局、游戏 UI 特化、设计系统引用。
 - `docs/ai-rules/global-systems.md` — **使用/修改全局 Context（Toast/Modal/音频/教学/认证）时必读**。含 Context 系统、实时服务层。
 - `docs/ai-rules/doc-index.md` — **不确定该读哪个文档时必读**。按场景查找需要阅读的文档。
@@ -151,10 +151,14 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - **禁止批量修改**：必须用 `strReplace` 逐个修复，每次只修复一处。
   - 常见截断：`随�?` → `随从`、`能�?` → `能力`、`消�?` → `消灭`、`牌库�?` → `牌库底`。
   - **禁止 `git restore` 恢复用户已修改的文件**。
-- **PowerShell 文件操作**：写入文件时必须指定 UTF-8 编码：
-  ```powershell
-  [System.IO.File]::WriteAllText($file, $content, [System.Text.UTF8Encoding]::new($false))
-  ```
+- **PowerShell 文件操作（强制）**：
+  - **禁止使用 `Set-Content`、`Out-File`、`>` 重定向写入源码文件**——这些命令默认编码不是 UTF-8 without BOM，会破坏中文字符。
+  - **唯一允许的 PowerShell 写入方式**：
+    ```powershell
+    [System.IO.File]::WriteAllText($file, $content, [System.Text.UTF8Encoding]::new($false))
+    ```
+  - **推荐做法**：优先使用 IDE 工具（`fsWrite`/`strReplace`/`editCode`）写文件，避免 PowerShell 编码陷阱。
+  - **`-replace` 管道 + `Set-Content` 是典型反模式**：即使只替换英文内容，文件中的中文也会被破坏。
 
 ---
 
@@ -349,7 +353,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **截图规范**：禁止硬编码路径，必须用 `testInfo.outputPath('name.png')`。
 - **E2E 覆盖要求**：必须覆盖"关键交互面"（按钮/Modal/Tab/表单校验），不只是跑通 happy path。
 - **静态审计要求**：新增游戏时根据游戏特征选择引擎层审计工具。选型指南见 `docs/ai-rules/engine-systems.md`「引擎测试工具总览」节。
-- **描述→实现全链路审查（强制）**：以下场景必须执行——① 新增技能/Token/事件卡/被动/光环 ② 修复"没效果"类 bug ③ 审查已有机制 ④ 重构消费链路。**当用户说"审查"/"审核"/"检查实现"/"核对"等词时，必须先阅读 `docs/ai-rules/testing-audit.md`「描述→实现全链路审查规范」节，按规范流程执行并输出矩阵，禁止凭印象回答。** 该文档为审查规范的唯一权威来源。
+- **描述→实现全链路审查（强制）**：以下场景必须执行——① 新增技能/Token/事件卡/被动/光环 ② 修复"没效果"类 bug ③ 审查已有机制 ④ 重构消费链路。**当用户说"审计"/"审查"/"审核"/"检查实现"/"核对"等词时，必须先阅读 `docs/ai-rules/testing-audit.md`「描述→实现全链路审查规范」节，按规范流程执行并输出矩阵，禁止凭印象回答。** 该文档为审查规范的唯一权威来源。
 - **数据查询一致性审查（强制）**：新增"修改/增强/共享"类机制后，必须 grep 原始字段访问，确认所有消费点走统一查询入口。详见 `docs/ai-rules/testing-audit.md`「数据查询一致性审查」节。
 - **元数据语义一致性审查（强制）**：新增/修改 custom action handler 后，必须确认 `categories` 声明与实际输出一致。详见 `docs/ai-rules/testing-audit.md`「元数据语义一致性审计」节。
 - **Custom Action target 间接引用审查（强制）**：新增/修改 custom action handler 后，必须确认 handler 中 DAMAGE_DEALT/STATUS_APPLIED 的 targetId 来源正确——进攻伤害/debuff 用 `ctx.ctx.defenderId`，自我增益用 `ctx.targetId`。详见 `docs/ai-rules/testing-audit.md`「D10 子项：Custom Action target 间接引用审计」。

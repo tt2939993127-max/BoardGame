@@ -5,12 +5,14 @@
  */
 
 import type { GameEvent } from '../../../../engine/types';
-import type { SummonerWarsCore, PlayerId } from '../types';
+import type { SummonerWarsCore, PlayerId, CellCoord } from '../types';
 import { SW_EVENTS } from '../types';
+import { getUnitAt } from '../helpers';
 import { findBoardUnitByInstanceId, createAbilityTriggeredEvent } from './helpers';
 import { abilityExecutorRegistry } from '../executors';
 import { abilityRegistry } from '../abilities';
 import type { SWAbilityContext } from '../executors/types';
+import { triggerAbilities, type AbilityContext } from '../abilityResolver';
 
 /**
  * 执行主动技能命令
@@ -78,6 +80,21 @@ export function executeActivateAbility(
 
   const result = executor(ctx);
   events.push(...result.events);
+
+  // 方案 A：心灵捕获在玩家完成“控制/伤害”决策并结算后，才触发 afterAttack 技能
+  if (abilityId === 'mind_capture_resolve') {
+    const targetPosition = payload.targetPosition as CellCoord | undefined;
+    const afterAttackCtx: AbilityContext = {
+      state: core,
+      sourceUnit,
+      sourcePosition,
+      ownerId: playerId,
+      targetUnit: targetPosition ? getUnitAt(core, targetPosition) : undefined,
+      targetPosition,
+      timestamp,
+    };
+    events.push(...triggerAbilities('afterAttack', afterAttackCtx));
+  }
 
   // 通用机制：技能声明 costsMoveAction 时自动消耗一次移动行动
   const abilityDef = abilityRegistry.get(abilityId);

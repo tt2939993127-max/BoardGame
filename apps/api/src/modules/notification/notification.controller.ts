@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, NotFoundException, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { AdminGuard } from '../admin/guards/admin.guard';
 import { Roles } from '../admin/guards/roles.decorator';
@@ -10,7 +10,7 @@ import { CreateNotificationDto, UpdateNotificationDto } from './dto';
 @Roles('admin')
 @Controller('admin/notifications')
 export class NotificationAdminController {
-    constructor(private readonly notificationService: NotificationService) {}
+    constructor(@Inject(NotificationService) private readonly notificationService: NotificationService) {}
 
     @Get()
     async findAll() {
@@ -43,7 +43,7 @@ export class NotificationAdminController {
 /** 用户端：获取当前有效通知（无需登录） */
 @Controller('notifications')
 export class NotificationPublicController {
-    constructor(private readonly notificationService: NotificationService) {}
+    constructor(@Inject(NotificationService) private readonly notificationService: NotificationService) {}
 
     @Get()
     async findActive() {

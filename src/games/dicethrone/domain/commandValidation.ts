@@ -49,6 +49,7 @@ import {
 } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
+import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
 
 // ============================================================================
 // 验证函数
@@ -56,6 +57,7 @@ import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
 
 const ok = (): ValidationResult => ({ valid: true });
 const fail = (error: string): ValidationResult => ({ valid: false, error });
+const SELECTABLE_CHARACTER_ID_SET = new Set<string>(DICETHRONE_CHARACTER_CATALOG.map(character => character.id));
 
 const isCommandType = <TType extends DiceThroneCommand['type']>(
     command: DiceThroneCommand,
@@ -111,6 +113,10 @@ const validateSelectCharacter = (
 
     if (!cmd.payload.characterId) {
         return fail('invalid_character');
+    }
+
+    if (!SELECTABLE_CHARACTER_ID_SET.has(cmd.payload.characterId)) {
+        return fail('unsupported_character');
     }
 
     return ok();
@@ -509,7 +515,7 @@ const validatePlayUpgradeCard = (
  * 验证解决选择命令
  * 注意：pendingChoice 已迁移到 sys.interaction，这里仅做基础验证
  */
-/* eslint-disable @typescript-eslint/no-unused-vars -- 占位验证器，参数需匹配签名 */
+ 
 const validateResolveChoice = (
     _state: DiceThroneCore,
     _cmd: ResolveChoiceCommand,
@@ -518,7 +524,7 @@ const validateResolveChoice = (
     // 实际验证需在 pipeline 层通过 sys.interaction 进行
     return ok();
 };
-/* eslint-enable @typescript-eslint/no-unused-vars */
+ 
 
 /**
  * 验证推进阶段命令
@@ -549,7 +555,7 @@ const validateAdvancePhase = (
  * 验证跳过响应窗口命令
  * 注意：实际验证由 ResponseWindowSystem 在 beforeCommand hook 中处理
  */
-/* eslint-disable @typescript-eslint/no-unused-vars -- 占位验证器，参数需匹配签名 */
+ 
 const validateResponsePass = (
     _state: DiceThroneCore,
     _cmd: ResponsePassCommand,
@@ -558,7 +564,7 @@ const validateResponsePass = (
     // 实际验证由系统层处理
     return ok();
 };
-/* eslint-enable @typescript-eslint/no-unused-vars */
+ 
 
 /**
  * 验证修改骰子命令

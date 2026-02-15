@@ -1,11 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Mail, History, Image, MessageSquare } from 'lucide-react';
+import { LogOut, Mail, History, Image, MessageSquare, Bell } from 'lucide-react';
 import { MatchHistoryModal } from './MatchHistoryModal';
-import { FriendsChatModal } from './FriendsChatModal';
+import { FriendsChatModal, SYSTEM_NOTIFICATION_ID } from './FriendsChatModal';
 import { AvatarUpdateModal } from '../auth/AvatarUpdateModal';
+import { NOTIFICATION_API_URL } from '../../config/server';
+
+const NOTIFICATION_SEEN_KEY = 'notification_last_seen';
 
 interface UserMenuProps {
     onLogout: () => void;
@@ -17,8 +20,26 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
     const { openModal, closeModal } = useModalStack();
     const { t } = useTranslation(['auth', 'social']);
     const [isOpen, setIsOpen] = useState(false);
+    const [hasNewNotification, setHasNewNotification] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const avatarModalIdRef = useRef<string | null>(null);
+
+    // 检查是否有新通知（对比 localStorage 记录的上次查看时间）
+    useEffect(() => {
+        let active = true;
+        fetch(NOTIFICATION_API_URL)
+            .then(res => res.ok ? res.json() : Promise.reject())
+            .then(data => {
+                if (!active) return;
+                const list = data.notifications as { _id: string; createdAt: string }[];
+                if (list.length === 0) return;
+                const lastSeen = localStorage.getItem(NOTIFICATION_SEEN_KEY) || '';
+                const latestTime = list[0].createdAt;
+                if (latestTime > lastSeen) setHasNewNotification(true);
+            })
+            .catch(() => {});
+        return () => { active = false; };
+    }, []);
 
     // 点击外部关闭
     useEffect(() => {
@@ -36,6 +57,11 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
         };
     }, [isOpen]);
 
+    const markNotificationsSeen = useCallback(() => {
+        setHasNewNotification(false);
+        localStorage.setItem(NOTIFICATION_SEEN_KEY, new Date().toISOString());
+    }, []);
+
     const handleOpenFriends = () => {
         setIsOpen(false);
         openModal({
@@ -43,6 +69,18 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
             closeOnEsc: true,
             render: ({ close }) => (
                 <FriendsChatModal isOpen onClose={close} />
+            ),
+        });
+    };
+
+    const handleOpenNotifications = () => {
+        setIsOpen(false);
+        markNotificationsSeen();
+        openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            render: ({ close }) => (
+                <FriendsChatModal isOpen onClose={close} initialFriendId={SYSTEM_NOTIFICATION_ID} />
             ),
         });
     };
@@ -84,7 +122,19 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
     if (!user) return null;
 
     return (
-        <div className="relative" ref={menuRef}>
+        <div className="relative flex items-center gap-1" ref={menuRef}>
+            {/* 通知铃铛 */}
+            <button
+                onClick={handleOpenNotifications}
+                className="relative p-1.5 text-parchment-base-text hover:text-parchment-brown transition-colors"
+                aria-label="通知"
+            >
+                <Bell size={18} />
+                {hasNewNotification && (
+                    <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-red-500 rounded-full" />
+                )}
+            </button>
+
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="group relative flex items-center gap-2 cursor-pointer transition-colors px-2 py-1 outline-none"

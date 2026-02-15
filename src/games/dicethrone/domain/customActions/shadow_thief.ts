@@ -20,6 +20,8 @@ import type {
     TokenConsumedEvent,
     PreventDamageEvent,
     DamagePreventedEvent,
+    PendingInteraction,
+    InteractionRequestedEvent,
 } from '../types';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
 
@@ -157,6 +159,28 @@ function handleStealCpWithAmount({ targetId, attackerId, state, timestamp }: Cus
     }
 
     return events;
+}
+
+/** 暗影操控：改1骰；若有 Sneak 则改2骰 */
+function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    const sneakStacks = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK] ?? 0;
+    const selectCount = sneakStacks > 0 ? 2 : 1;
+    const interaction: PendingInteraction = {
+        id: `${sourceAbilityId}-${timestamp}`,
+        playerId: attackerId,
+        sourceCardId: sourceAbilityId,
+        type: 'modifyDie',
+        titleKey: selectCount === 2 ? 'interaction.selectDiceToChange' : 'interaction.selectDieToChange',
+        selectCount,
+        selected: [],
+        dieModifyConfig: { mode: 'any' },
+    };
+    return [{
+        type: 'INTERACTION_REQUESTED',
+        payload: { interaction },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as InteractionRequestedEvent];
 }
 
 /** 肾击：造成等同CP的伤害 (Gain passed beforehand, so use current CP + bonus) */
@@ -748,6 +772,10 @@ export function registerShadowThiefCustomActions(): void {
 
     registerCustomActionHandler('shadow_thief-one-with-shadows', handleOneWithShadows, { categories: ['dice', 'resource'] });
     registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other'] });
+    registerCustomActionHandler('shadow_thief-shadow-manipulation', handleShadowManipulation, {
+        categories: ['dice'],
+        requiresInteraction: true,
+    });
 
     registerCustomActionHandler('shadow_thief-remove-all-debuffs', handleRemoveAllDebuffs, { categories: ['status'] });
 

@@ -13,6 +13,7 @@ import type { GameBoardProps } from '../engine/transport/protocol';
 import type { ComponentType } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
+import { resolveCommandError } from '../engine/transport/errorI18n';
 
 export const LocalMatchRoom = () => {
     usePerformanceMonitor();
@@ -63,8 +64,8 @@ export const LocalMatchRoom = () => {
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
     const handleCommandRejected = useCallback((_type: string, error: string) => {
         playDeniedSound();
-        toast.warning(error);
-    }, [toast]);
+        toast.warning(resolveCommandError(i18n, error, gameId));
+    }, [toast, i18n, gameId]);
 
     if (!gameConfig) {
         return <div className="text-white">{t('matchRoom.noGame')}</div>;

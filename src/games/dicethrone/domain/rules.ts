@@ -309,11 +309,18 @@ export const getAvailableAbilityIds = (
         if (expectedType && def.type !== expectedType) continue;
 
         if (def.variants?.length) {
+            // 收集满足条件的变体，按 priority 降序排列后加入
+            // 确保 UI 层 find() 取第一个匹配时自动选中最高优先级变体
+            const matched: { id: string; priority: number }[] = [];
             for (const variant of def.variants) {
                 const result = combatAbilityManager.checkTrigger(variant.trigger, context);
                 if (result) {
-                    available.push(variant.id);
+                    matched.push({ id: variant.id, priority: variant.priority ?? 0 });
                 }
+            }
+            matched.sort((a, b) => b.priority - a.priority);
+            for (const m of matched) {
+                available.push(m.id);
             }
             continue;
         }

@@ -90,12 +90,17 @@ export class CombatAbilityManager {
       // 检查标签阻塞
       if (context.blockedTags?.some(tag => def.tags?.includes(tag as AbilityTag))) continue;
 
-      // 检查变体
+      // 检查变体：按 priority 降序排列
       if (def.variants?.length) {
+        const matched: { id: string; priority: number }[] = [];
         for (const variant of def.variants) {
           if (this.checkTrigger(variant.trigger, context)) {
-            available.push(variant.id);
+            matched.push({ id: variant.id, priority: variant.priority ?? 0 });
           }
+        }
+        matched.sort((a, b) => b.priority - a.priority);
+        for (const m of matched) {
+          available.push(m.id);
         }
         continue;
       }

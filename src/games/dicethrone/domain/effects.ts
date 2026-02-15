@@ -349,10 +349,12 @@ function resolveEffectAction(
 
     switch (action.type) {
         case 'damage': {
-            // target: 'all' → 对所有玩家分别生成伤害事件
+            // target: 'all' → 对所有玩家（含自己）; 'allOpponents' → 除自己外所有玩家
             const damageTargets = action.target === 'all'
                 ? Object.keys(state.players)
-                : [targetId];
+                : action.target === 'allOpponents'
+                    ? Object.keys(state.players).filter(id => id !== attackerId)
+                    : [targetId];
 
             for (const dmgTargetId of damageTargets) {
                 let totalValue = (action.value ?? 0) + (bonusDamage ?? 0);
@@ -369,8 +371,8 @@ function resolveEffectAction(
 
                 if (totalValue <= 0) continue;
 
-                // target: 'all' 的全体伤害不触发 Token 响应窗口
-                if (action.target !== 'all') {
+                // target: 'all'/'allOpponents' 的全体伤害不触发 Token 响应窗口
+                if (action.target !== 'all' && action.target !== 'allOpponents') {
                     // 检查是否需要打开 Token 响应窗口
                     const tokenResponseType = shouldOpenTokenResponse(
                         state,

@@ -479,7 +479,6 @@
     "cannotPlayCard": "Cannot play this card",
     "playerNotFound": "Player not found",
     "notUpgradeCard": "This card is not an upgrade card",
-    "player_mismatch": "Not your turn",
     "player_not_found": "Player not found",
     "card_not_in_hand": "Card is not in hand",
     "invalid_phase": "Cannot perform this action in current phase",

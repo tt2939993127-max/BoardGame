@@ -44,21 +44,15 @@ export const NeonTicTacToeThumbnail = () => (
     </div>
 );
 
-type DefaultGameThumbnailProps = {
-    titleKey: string;
-    icon?: string;
-};
-
-export const DefaultGameThumbnail = (_props: DefaultGameThumbnailProps) => {
+export const DefaultGameThumbnail = ({ titleKey, icon }: DefaultGameThumbnailProps) => {
+    const { t } = useTranslation('lobby');
     return (
-        <div
-            className="w-full h-full bg-parchment-cream"
-            style={{
-                backgroundImage: 'linear-gradient(100deg, rgba(0,0,0,0.03) 40%, rgba(0,0,0,0.08) 50%, rgba(0,0,0,0.03) 60%)',
-                backgroundSize: '200% 100%',
-                animation: 'img-shimmer 1.5s linear infinite',
-            }}
-        />
+        <div className="w-full h-full bg-parchment-cream flex flex-col items-center justify-center gap-2">
+            {icon && <span className="text-3xl">{icon}</span>}
+            <span className="text-sm text-stone-600 font-medium px-2 text-center truncate max-w-full">
+                {t(titleKey, { defaultValue: titleKey })}
+            </span>
+        </div>
     );
 };
 
