@@ -27,11 +27,13 @@ export interface UndoSystemConfig {
 
     /**
      * 哪些命令需要进入撤回快照历史。
-     * - 不传：默认对所有“非 SYS_/CHEAT_/UI_/DEV_”命令做快照（兼容旧行为，但更危险）。
+     * - 不传：默认对所有"非 SYS_/CHEAT_/UI_/DEV_"命令做快照（兼容旧行为，但更危险）。
      * - 传入：只对白名单命令做快照（推荐，最正确方案）。
      */
     snapshotCommandAllowlist?: CommandAllowlist;
+
 }
+
 
 function clearPendingRequest<TCore>(state: MatchState<TCore>): MatchState<TCore> {
     const { undo } = state.sys;
@@ -137,6 +139,13 @@ export function createUndoSystem<TCore>(
             // 最正确方案：由具体游戏提供白名单。
             // 不提供时保持兼容（对所有非系统命令快照），但这会导致 UI 高频动作也可能进入快照。
             if (!isCommandAllowlisted(type, normalizedAllowlist, { fallbackToAllowAll: false })) {
+                return;
+            }
+
+            // 通用标记：payload._noSnapshot === true 时跳过快照
+            // 用于「移动后触发的技能」等场景与前一个命令共享同一个撤回点
+            const pl = command.payload as Record<string, unknown> | undefined;
+            if (pl?._noSnapshot === true) {
                 return;
             }
 

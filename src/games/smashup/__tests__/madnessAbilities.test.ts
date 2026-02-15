@@ -20,7 +20,7 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
@@ -594,12 +594,23 @@ describe('印斯茅斯 - 疯狂卡能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            execPlayAction(state, '0', 'a1');
+            // 应创建选择交互
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBeGreaterThan(0);
+            const current = interactions[0];
+            expect(current?.data?.sourceId).toBe('innsmouth_recruitment');
+
+            // 通过 handler 选择抽 3 张
+            const handler = getInteractionHandler('innsmouth_recruitment');
+            expect(handler).toBeDefined();
+            const ms = makeMatchState(state);
+            const result = handler!(ms, '0', { count: 3 }, undefined, defaultRandom, 0);
+            const madnessEvents = result.events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
             expect((madnessEvents[0] as any).payload.count).toBe(3);
 
-            const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
             const minionLimits = limitEvents.filter(e => (e as any).payload.limitType === 'minion');
             expect(minionLimits.length).toBe(3);
         });
@@ -615,12 +626,19 @@ describe('印斯茅斯 - 疯狂卡能力', () => {
                 madnessDeck: [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID], // 只有2张
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            execPlayAction(state, '0', 'a1');
+            // 通过 handler 选择抽 3 张（实际只能抽 2 张）
+            const handler = getInteractionHandler('innsmouth_recruitment');
+            expect(handler).toBeDefined();
+            const ms = makeMatchState(state);
+            // 修改 madnessDeck 为只有 2 张
+            (ms.core as any).madnessDeck = [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID];
+            const result = handler!(ms, '0', { count: 3 }, undefined, defaultRandom, 0);
+            const madnessEvents = result.events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
             expect((madnessEvents[0] as any).payload.count).toBe(2); // 只能抽2张
 
-            const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
             const minionLimits = limitEvents.filter(e => (e as any).payload.limitType === 'minion');
             expect(minionLimits.length).toBe(2); // 只有2个额外随从
         });
@@ -637,6 +655,7 @@ describe('印斯茅斯 - 疯狂卡能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
+            // 疯狂牌库为空，不创建交互
             const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(0);
             const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
@@ -654,8 +673,17 @@ describe('印斯茅斯 - 疯狂卡能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const newState = applyEvents(state, events);
+            // 通过 handler 验证 reduce
+            const handler = getInteractionHandler('innsmouth_recruitment');
+            expect(handler).toBeDefined();
+            const ms = makeMatchState(state);
+            const result = handler!(ms, '0', { count: 3 }, undefined, defaultRandom, 0);
+            // 先 apply ACTION_PLAYED 事件
+            const playEvents: SmashUpEvent[] = [
+                { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId: '0', cardUid: 'a1', defId: 'innsmouth_recruitment' }, timestamp: 0 } as any,
+                ...result.events,
+            ];
+            const newState = applyEvents(state, playEvents);
             // 手牌有3张疯狂卡
             expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(3);
             // 随从额度 = 1(原) + 3(额外) = 4

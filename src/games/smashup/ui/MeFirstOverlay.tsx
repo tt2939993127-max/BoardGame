@@ -25,19 +25,19 @@ export interface MeFirstPendingCard {
 
 export const MeFirstOverlay: React.FC<{
     G: MatchState<SmashUpCore>;
-    moves: Record<string, (payload?: unknown) => void>;
+    dispatch: (type: string, payload?: unknown) => void;
     playerID: string | null;
     /** 当前待选基地的 Special 卡（需要基地目标时） */
     pendingCard: MeFirstPendingCard | null;
     onSelectCard: (card: MeFirstPendingCard | null) => void;
-}> = ({ G, moves, playerID, pendingCard, onSelectCard }) => {
+}> = ({ G, dispatch, playerID, pendingCard, onSelectCard }) => {
     const { t } = useTranslation('game-smashup');
     const responseWindow = G.sys.responseWindow?.current;
 
     const handlePass = useCallback(() => {
         onSelectCard(null);
-        moves['RESPONSE_PASS']?.({});
-    }, [moves, onSelectCard]);
+        dispatch('RESPONSE_PASS');
+    }, [dispatch, onSelectCard]);
 
     const handleCardClick = useCallback((cardUid: string, defId: string) => {
         const def = getCardDef(defId) as ActionCardDef | undefined;
@@ -47,9 +47,9 @@ export const MeFirstOverlay: React.FC<{
         } else {
             // 不需要选基地（如全速航行）：直接打出（不传 targetBaseIndex）
             onSelectCard(null);
-            moves[SU_COMMANDS.PLAY_ACTION]?.({ cardUid });
+            dispatch(SU_COMMANDS.PLAY_ACTION, { cardUid });
         }
-    }, [moves, onSelectCard]);
+    }, [dispatch, onSelectCard]);
 
     if (!responseWindow || responseWindow.windowType !== 'meFirst') return null;
 

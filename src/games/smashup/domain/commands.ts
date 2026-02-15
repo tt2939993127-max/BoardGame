@@ -13,6 +13,7 @@ import {
     getTotalEffectivePowerOnBase,
 } from './ongoingModifiers';
 import { canPlayFromDiscard } from './discardPlayability';
+import { isSpecialLimitBlocked } from './abilityHelpers';
 
 export function validate(
     state: MatchState<SmashUpCore>,
@@ -77,6 +78,14 @@ export function validate(
             const card = player.hand.find(c => c.uid === command.payload.cardUid);
             if (!card) return { valid: false, error: '手牌中没有该卡牌' };
             if (card.type !== 'minion') return { valid: false, error: '该卡牌不是随从' };
+            // 全局力量限制检查：额外出牌机会可能有力量上限（如家园：力量≤2）
+            if (player.extraMinionPowerMax !== undefined && player.minionsPlayed >= 1) {
+                const minionDef = getMinionDef(card.defId);
+                const basePower = minionDef?.power ?? 0;
+                if (basePower > player.extraMinionPowerMax) {
+                    return { valid: false, error: `额外出牌只能打出力量≤${player.extraMinionPowerMax}的随从` };
+                }
+            }
             // 限制检查：是否禁止打出随从到此基地（包括基地效果和 ongoing 效果）
             const minionDef = getMinionDef(card.defId);
             const basePower = minionDef?.power ?? 0;
@@ -132,6 +141,11 @@ export function validate(
                     const breakpoint = getEffectiveBreakpoint(core, targetBaseIndex);
                     if (totalPower < breakpoint) {
                         return { valid: false, error: '只能选择达到临界点的基地' };
+                    }
+
+                    // specialLimitGroup 检查：该基地本回合是否已使用过同组 special 能力
+                    if (isSpecialLimitBlocked(core, rCard.defId, targetBaseIndex)) {
+                        return { valid: false, error: '该基地本回合已使用过同组特殊能力' };
                     }
                 } else if (targetBase !== undefined) {
                     return { valid: false, error: '该特殊行动卡不需要基地目标' };
@@ -269,15 +283,19 @@ export function validate(
             if (!core.pendingReveal) {
                 return { valid: false, error: '没有待展示的卡牌' };
             }
-            // 'all' 模式下由发起者关闭展示
+            // 'all' 模式下：所有非被展示者都需要确认，排除已确认的玩家
             if (core.pendingReveal.viewerPlayerId === 'all') {
-                const dismisser = core.pendingReveal.sourcePlayerId ?? (
-                    Array.isArray(core.pendingReveal.targetPlayerId)
-                        ? core.pendingReveal.targetPlayerId[0]
-                        : core.pendingReveal.targetPlayerId
-                );
-                if (command.playerId !== dismisser) {
-                    return { valid: false, error: '只有发起者可以关闭展示' };
+                const targetIds = Array.isArray(core.pendingReveal.targetPlayerId)
+                    ? core.pendingReveal.targetPlayerId
+                    : [core.pendingReveal.targetPlayerId];
+                // 被展示者不需要确认
+                if (targetIds.includes(command.playerId)) {
+                    return { valid: false, error: '被展示者不需要确认' };
+                }
+                // 已确认的玩家不能重复确认
+                const confirmed = core.pendingReveal.confirmedPlayerIds ?? [];
+                if (confirmed.includes(command.playerId)) {
+                    return { valid: false, error: '你已经确认过了' };
                 }
             } else if (command.playerId !== core.pendingReveal.viewerPlayerId) {
                 return { valid: false, error: '只有查看者可以关闭展示' };

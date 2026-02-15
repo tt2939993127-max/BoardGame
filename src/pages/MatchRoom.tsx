@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import type { ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -40,6 +40,10 @@ import { ConnectionLoadingScreen } from '../components/system/ConnectionLoadingS
 import { usePerformanceMonitor } from '../hooks/ui/usePerformanceMonitor';
 import { CriticalImageGate } from '../components/game/framework';
 import { UI_Z_INDEX } from '../core';
+import { playDeniedSound } from '../lib/audio/useGameAudio';
+
+// 系统级错误（连接/认证），不需要 toast 提示给玩家
+const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
 
 export const MatchRoom = () => {
     usePerformanceMonitor();
@@ -55,6 +59,19 @@ export const MatchRoom = () => {
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const isUgcGame = Boolean(gameConfig?.isUgc);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
+
+    // 在线模式：命令被服务端拒绝时的统一反馈
+    const handleGameError = useCallback((error: string) => {
+        if (SYSTEM_ERRORS.has(error)) return; // 系统错误由其他逻辑处理
+        playDeniedSound();
+        toast.warning(error);
+    }, [toast]);
+
+    // 本地/教学模式：命令被引擎拒绝时的统一反馈
+    const handleCommandRejected = useCallback((_type: string, error: string) => {
+        playDeniedSound();
+        toast.warning(error);
+    }, [toast]);
 
     // 包装 Board 组件（注入 CriticalImageGate）
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
@@ -348,9 +365,13 @@ export const MatchRoom = () => {
         if (!resolvedPlayerID) return undefined;
         const stored = localStorage.getItem(`match_creds_${matchId}`);
         if (stored) {
-            const data = JSON.parse(stored);
-            if (data.playerID === resolvedPlayerID) {
-                return data.credentials;
+            try {
+                const data = JSON.parse(stored) as { playerID?: string; credentials?: string };
+                if (data.playerID === resolvedPlayerID) {
+                    return data.credentials;
+                }
+            } catch {
+                return undefined;
             }
         }
         return undefined;
@@ -613,9 +634,9 @@ export const MatchRoom = () => {
         }
 
         setIsLeaving(true);
-        const ok = await leaveMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
+        const result = await leaveMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
         setIsLeaving(false);
-        if (!ok) {
+        if (!result.success) {
             toast.error({ kind: 'i18n', key: 'matchRoom.leaveFailed', ns: 'lobby' });
             return;
         }
@@ -629,8 +650,8 @@ export const MatchRoom = () => {
         }
 
         setIsLeaving(true);
-        const ok = await destroyMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
-        if (!ok) {
+        const result = await destroyMatch(gameId || 'tictactoe', matchId, statusPlayerID, credentials);
+        if (!result.success) {
             // 关键：销毁失败时不要清理本地凭证，也不要跳转。
             // 否则会出现「后端房间仍存在 + 前端以为销毁了」的累加/脏数据问题。
             toast.error({ kind: 'i18n', key: 'matchRoom.destroy.failed', ns: 'lobby' });
@@ -802,7 +823,7 @@ export const MatchRoom = () => {
                 {isTutorialRoute ? (
                     <GameModeProvider mode="tutorial">
                         {hasTutorialBoard && engineConfig && WrappedBoard ? (
-                            <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`}>
+                            <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} onCommandRejected={handleCommandRejected}>
                                 <BoardBridge
                                     board={WrappedBoard}
                                     loading={<LoadingScreen title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
@@ -833,6 +854,7 @@ export const MatchRoom = () => {
                                     matchId={matchId}
                                     playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
                                     credentials={credentials}
+                                    onError={handleGameError}
                                 >
                                     <BoardBridge
                                         board={ugcBoard}
@@ -853,6 +875,7 @@ export const MatchRoom = () => {
                                     matchId={matchId}
                                     playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
                                     credentials={credentials}
+                                    onError={handleGameError}
                                 >
                                     <BoardBridge
                                         board={WrappedBoard}

@@ -5,7 +5,7 @@
 import type { GameEvent } from '../../../../engine/types';
 import type { CellCoord } from '../types';
 import { SW_EVENTS } from '../types';
-import { getUnitAt, manhattanDistance, isValidCoord, isCellEmpty } from '../helpers';
+import { getUnitAt, manhattanDistance, isValidCoord, isForceMovePathClear, isInStraightLine } from '../helpers';
 import { abilityExecutorRegistry } from './registry';
 import type { SWAbilityContext } from './types';
 
@@ -68,7 +68,7 @@ abilityExecutorRegistry.register('inspire', (ctx: SWAbilityContext) => {
     const adjPos = { row: sourcePosition.row + d.row, col: sourcePosition.col + d.col };
     if (!isValidCoord(adjPos)) continue;
     const adjUnit = getUnitAt(core, adjPos);
-    if (adjUnit && adjUnit.owner === playerId && adjUnit.cardId !== sourceUnit.cardId) {
+    if (adjUnit && adjUnit.owner === playerId && adjUnit.instanceId !== sourceUnit.instanceId) {
       events.push({
         type: SW_EVENTS.UNIT_CHARGED,
         payload: { position: adjPos, delta: 1, sourceAbilityId: 'inspire' },
@@ -104,7 +104,9 @@ abilityExecutorRegistry.register('withdraw', (ctx: SWAbilityContext) => {
   }
 
   const wdDist = manhattanDistance(sourcePosition, wdNewPos);
-  if (wdDist >= 1 && wdDist <= 2 && isCellEmpty(core, wdNewPos)) {
+  if (wdDist >= 1 && wdDist <= 2
+    && isInStraightLine(sourcePosition, wdNewPos)
+    && isForceMovePathClear(core, sourcePosition, wdNewPos)) {
     events.push({
       type: SW_EVENTS.UNIT_MOVED,
       payload: { from: sourcePosition, to: wdNewPos, unitId: sourceUnitId, reason: 'withdraw' },
@@ -128,7 +130,7 @@ abilityExecutorRegistry.register('rapid_fire', (ctx: SWAbilityContext) => {
     type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
     payload: {
       targetPosition: sourcePosition,
-      targetUnitId: sourceUnit.cardId,
+      targetUnitId: sourceUnit.instanceId,
       sourceAbilityId: 'rapid_fire',
     },
     timestamp,

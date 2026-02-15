@@ -13,8 +13,8 @@
 ## Decisions
 - 决定引入 `games/manifest.ts` 作为单一权威清单（纯数据：id、type、enabled 等），禁止包含 React/DOM 依赖。
 - 前端展示配置与实现映射必须从 manifest 派生，禁止再新增手工枚举游戏 ID。
-- 服务端注册 BoardgameServer 仅使用 manifest 中 `type=game` 且 `enabled=true` 的条目。
-- 战绩归档改为在每个游戏的 `game.onEnd` 中触发持久化，统一复用一个归档辅助函数（boardgame.io Game 文档已确认提供 onEnd）。
+- 服务端注册仅使用 manifest 中 `type=game` 且 `enabled=true` 的条目。
+- 战绩归档改为在每个游戏的 `isGameOver` 中触发持久化，统一复用一个归档辅助函数。
 
 ## Alternatives Considered
 - 继续多处维护并增加一致性检查：降低迁移成本但仍有重复源，违背“单一权威”目标。

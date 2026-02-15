@@ -12,7 +12,7 @@ import {
   hasChargeAbility,
 } from '../domain/helpers';
 import { calculateEffectiveStrength } from '../domain/abilityResolver';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 function createTestRandom(): RandomFn {
   return { shuffle: <T>(a: T[]) => a, random: () => 0.5, d: (m: number) => Math.ceil(m / 2), range: (a: number, b: number) => Math.floor((a + b) / 2) };
@@ -40,8 +40,8 @@ describe('交缠颂歌共享技能实际效果验证', () => {
     // unit2: 远程，有 flying（飞行），无 charge
     const card2: UnitCard = { id: 't2', cardType: 'unit', name: '飞行兵', unitClass: 'common', faction: 'barbaric', strength: 1, life: 4, cost: 3, attackType: 'ranged', attackRange: 3, abilities: ['flying'], deckSymbols: [] };
 
-    state.board[4][2].unit = { cardId: 'target-1', card: card1, owner: '0' as PlayerId, position: { row: 4, col: 2 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false };
-    state.board[4][4].unit = { cardId: 'target-2', card: card2, owner: '0' as PlayerId, position: { row: 4, col: 4 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false };
+    state.board[4][2].unit = { instanceId: generateInstanceId('target-1'), cardId: 'target-1', card: card1, owner: '0' as PlayerId, position: { row: 4, col: 2 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false };
+    state.board[4][4].unit = { instanceId: generateInstanceId('target-2'), cardId: 'target-2', card: card2, owner: '0' as PlayerId, position: { row: 4, col: 4 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false };
 
     state.phase = 'summon';
     state.currentPlayer = '0';
@@ -102,8 +102,8 @@ describe('交缠颂歌共享技能实际效果验证', () => {
     // unit2: 无特殊技能，2 充能
     const card2: UnitCard = { id: 't2', cardType: 'unit', name: '普通兵', unitClass: 'common', faction: 'barbaric', strength: 2, life: 3, cost: 2, attackType: 'melee', attackRange: 1, abilities: [], deckSymbols: [] };
 
-    state.board[4][2].unit = { cardId: 'target-1', card: card1, owner: '0' as PlayerId, position: { row: 4, col: 2 }, damage: 0, boosts: 3, hasMoved: false, hasAttacked: false };
-    state.board[4][4].unit = { cardId: 'target-2', card: card2, owner: '0' as PlayerId, position: { row: 4, col: 4 }, damage: 0, boosts: 2, hasMoved: false, hasAttacked: false };
+    state.board[4][2].unit = { instanceId: generateInstanceId('target-1'), cardId: 'target-1', card: card1, owner: '0' as PlayerId, position: { row: 4, col: 2 }, damage: 0, boosts: 3, hasMoved: false, hasAttacked: false };
+    state.board[4][4].unit = { instanceId: generateInstanceId('target-2'), cardId: 'target-2', card: card2, owner: '0' as PlayerId, position: { row: 4, col: 4 }, damage: 0, boosts: 2, hasMoved: false, hasAttacked: false };
 
     state.phase = 'summon';
     state.currentPlayer = '0';
@@ -128,17 +128,17 @@ describe('交缠颂歌共享技能实际效果验证', () => {
 
 
 describe('交缠颂歌共享 tempAbilities 验证', () => {
-  it('交缠共享应包含伙伴的 tempAbilities', () => {
+  it('交缠共享只包含基础技能（card.abilities），不含 tempAbilities', () => {
     const state = createInitializedCore(['0', '1'], createTestRandom(), { faction0: 'barbaric', faction1: 'necromancer' });
     for (let r = 0; r <= 7; r++) for (let c = 0; c < 6; c++) { state.board[r][c].unit = undefined; state.board[r][c].structure = undefined; }
 
     // unit1: 无技能
     const card1: UnitCard = { id: 't1', cardType: 'unit', name: '普通兵A', unitClass: 'common', faction: 'barbaric', strength: 2, life: 3, cost: 2, attackType: 'melee', attackRange: 1, abilities: [], deckSymbols: [] };
-    // unit2: 有 tempAbilities（如幻化复制获得的临时技能）
+    // unit2: card.abilities=['swift'], tempAbilities=['flying']（幻化复制获得的临时技能）
     const card2: UnitCard = { id: 't2', cardType: 'unit', name: '普通兵B', unitClass: 'common', faction: 'barbaric', strength: 1, life: 4, cost: 3, attackType: 'melee', attackRange: 1, abilities: ['swift'], deckSymbols: [] };
 
-    state.board[4][2].unit = { cardId: 'target-1', card: card1, owner: '0' as PlayerId, position: { row: 4, col: 2 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false };
-    state.board[4][4].unit = { cardId: 'target-2', card: card2, owner: '0' as PlayerId, position: { row: 4, col: 4 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false, tempAbilities: ['flying'] };
+    state.board[4][2].unit = { instanceId: generateInstanceId('target-1'), cardId: 'target-1', card: card1, owner: '0' as PlayerId, position: { row: 4, col: 2 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false };
+    state.board[4][4].unit = { instanceId: generateInstanceId('target-2'), cardId: 'target-2', card: card2, owner: '0' as PlayerId, position: { row: 4, col: 4 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false, tempAbilities: ['flying'] };
 
     state.phase = 'summon';
     state.currentPlayer = '0';
@@ -157,14 +157,15 @@ describe('交缠颂歌共享 tempAbilities 验证', () => {
     const unit1 = newState.board[4][2].unit!;
     const abilities1 = getUnitAbilities(unit1, newState);
 
-    // unit1 应该获得 unit2 的 card.abilities（swift）和 tempAbilities（flying）
+    // 规则：基础能力 = 单位卡上印刷的能力，不包括其他卡牌添加的能力
+    // unit1 应获得 unit2 的 card.abilities（swift），但不含 tempAbilities（flying）
     expect(abilities1).toContain('swift');
-    expect(abilities1).toContain('flying');
+    expect(abilities1).not.toContain('flying');
 
     const unit2 = newState.board[4][4].unit!;
     const abilities2 = getUnitAbilities(unit2, newState);
 
-    // unit2 自身应保留 swift + flying（temp），不从 unit1 获得新技能（unit1 无技能）
+    // unit2 自身保留 swift（base）+ flying（temp），不从 unit1 获得新技能（unit1 无基础技能）
     expect(abilities2).toContain('swift');
     expect(abilities2).toContain('flying');
   });

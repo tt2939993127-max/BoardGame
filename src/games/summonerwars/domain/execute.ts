@@ -32,7 +32,7 @@ import {
   getUnitAbilities,
   getUnitMoveEnhancements,
   getPassedThroughUnitPositions,
-  findUnitPosition,
+  findUnitPositionByInstanceId,
   HAND_SIZE,
 } from './helpers';
 import { rollDice, countHits } from '../config/dice';
@@ -43,6 +43,7 @@ import { reduceEvent } from './reduce';
 import type { AbilityContext } from './abilityResolver';
 import {
   findBoardUnitByCardId,
+  findBoardUnitByInstanceId,
   createAbilityTriggeredEvent,
   emitDestroyWithTriggers,
   postProcessDeathChecks,
@@ -119,7 +120,7 @@ export function executeCommand(
           getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_WEAVING && ev.targetUnitId
         );
         if (cwEvent) {
-          const cwTargetPos = findUnitPosition(core, cwEvent.targetUnitId!);
+          const cwTargetPos = findUnitPositionByInstanceId(core, cwEvent.targetUnitId!);
           if (cwTargetPos && manhattanDistance(position, cwTargetPos) === 1) {
             events.push({
               type: SW_EVENTS.UNIT_CHARGED,
@@ -174,7 +175,7 @@ export function executeCommand(
                 position: from,
                 damage: 1,
                 reason: 'entangle',
-                sourceUnitId: eu.cardId,
+                sourceUnitId: eu.instanceId,
                 sourcePlayerId: eu.owner,
               },
               timestamp,
@@ -184,7 +185,7 @@ export function executeCommand(
 
         events.push({
           type: SW_EVENTS.UNIT_MOVED,
-          payload: { from, to, unitId: unit.cardId },
+          payload: { from, to, unitId: unit.instanceId },
           timestamp,
         });
 
@@ -212,7 +213,7 @@ export function executeCommand(
                 position: pos,
                 damage: moveEnhancements.damageOnPassThrough,
                 reason: 'trample',
-                sourceUnitId: unit.cardId,
+                sourceUnitId: unit.instanceId,
                 sourcePlayerId: unit.owner,
               },
               timestamp,
@@ -223,7 +224,7 @@ export function executeCommand(
         // 抓附检查：友方单位从抓附手相邻位置移动后，抓附手可跟随
         if (unit.owner === playerId) {
           const grabbers = getPlayerUnits(core, playerId).filter(u =>
-            u.cardId !== unit.cardId
+            u.instanceId !== unit.instanceId
             && getUnitAbilities(u, core).includes('grab')
             && manhattanDistance(u.position, from) === 1
           );
@@ -231,9 +232,9 @@ export function executeCommand(
             events.push({
               type: SW_EVENTS.GRAB_FOLLOW_REQUESTED,
               payload: {
-                grabberUnitId: grabber.cardId,
+                grabberUnitId: grabber.instanceId,
                 grabberPosition: grabber.position,
-                movedUnitId: unit.cardId,
+                movedUnitId: unit.instanceId,
                 movedTo: to,
               },
               timestamp,
@@ -255,7 +256,7 @@ export function executeCommand(
               const adjPos = { row: to.row + d.row, col: to.col + d.col };
               if (!isValidCoord(adjPos)) continue;
               const adjUnit = getUnitAt(core, adjPos);
-              if (adjUnit && adjUnit.owner === playerId && adjUnit.cardId !== unit.cardId) {
+              if (adjUnit && adjUnit.owner === playerId && adjUnit.instanceId !== unit.instanceId) {
                 events.push({
                   type: SW_EVENTS.UNIT_CHARGED,
                   payload: { position: adjPos, delta: 1, sourceAbilityId: 'inspire' },
@@ -273,7 +274,7 @@ export function executeCommand(
           ];
           for (const abilityId of afterMoveChoiceAbilities) {
             if (unitAbilities.includes(abilityId)) {
-              events.push(createAbilityTriggeredEvent(`afterMove:${abilityId}`, unit.cardId, to, timestamp));
+              events.push(createAbilityTriggeredEvent(`afterMove:${abilityId}`, unit.instanceId, to, timestamp));
             }
           }
         }
@@ -313,7 +314,7 @@ export function executeCommand(
             continue;
           }
 
-          const abilityTriggeredEvent = createAbilityTriggeredEvent(beforeAttack.abilityId, sourceUnit.cardId, attacker, timestamp);
+          const abilityTriggeredEvent = createAbilityTriggeredEvent(beforeAttack.abilityId, sourceUnit.instanceId, attacker, timestamp);
 
           switch (beforeAttack.abilityId) {
             case 'life_drain': {
@@ -321,7 +322,9 @@ export function executeCommand(
                 applyBeforeAttackEvents([abilityTriggeredEvent]);
                 break;
               }
-              const victim = findBoardUnitByCardId(workingCore, beforeAttack.targetUnitId, playerId);
+              // 优先用 instanceId 查找，兼容旧的 cardId
+              const victim = findBoardUnitByInstanceId(workingCore, beforeAttack.targetUnitId)
+                ?? findBoardUnitByCardId(workingCore, beforeAttack.targetUnitId, playerId);
               const lifeDrainEvents: GameEvent[] = [abilityTriggeredEvent];
               if (victim) {
                 lifeDrainEvents.push(...emitDestroyWithTriggers(workingCore, victim.unit, victim.position, {
@@ -380,7 +383,7 @@ export function executeCommand(
                 });
                 healingEvents.push({
                   type: SW_EVENTS.HEALING_MODE_SET,
-                  payload: { position: attacker, unitId: sourceUnit.cardId },
+                  payload: { position: attacker, unitId: sourceUnit.instanceId },
                   timestamp,
                 });
               }
@@ -413,7 +416,7 @@ export function executeCommand(
             type: SW_EVENTS.UNIT_ATTACKED,
             payload: {
               attacker, target,
-              attackerId: attackerUnit.cardId,
+              attackerId: attackerUnit.instanceId,
               attackType: healAttackType, diceCount: healStrength,
               baseStrength: attackerUnit.card.strength,
               diceResults: healDiceResults, hits: 0,
@@ -459,7 +462,7 @@ export function executeCommand(
               events.push({
                 type: SW_EVENTS.DAMAGE_REDUCED,
                 payload: {
-                  sourceUnitId: eu.cardId,
+                  sourceUnitId: eu.instanceId,
                   sourcePosition: eu.position,
                   value: 1,
                   condition: 'onSpecialDice',
@@ -491,7 +494,7 @@ export function executeCommand(
                     events.push({
                       type: SW_EVENTS.DAMAGE_REDUCED,
                       payload: {
-                        sourceUnitId: shieldUnit.cardId,
+                        sourceUnitId: shieldUnit.instanceId,
                         sourcePosition: { row, col },
                         value: reduction,
                         condition: 'divine_shield',
@@ -511,7 +514,7 @@ export function executeCommand(
           type: SW_EVENTS.UNIT_ATTACKED,
           payload: {
             attacker, target,
-            attackerId: attackerUnit.cardId,
+            attackerId: attackerUnit.instanceId,
             attackType, diceCount: effectiveStrength,
             baseStrength: attackerUnit.card.strength,
             diceResults, hits,
@@ -531,10 +534,10 @@ export function executeCommand(
             events.push({
               type: SW_EVENTS.MIND_CAPTURE_REQUESTED,
               payload: {
-                sourceUnitId: attackerUnit.cardId,
+                sourceUnitId: attackerUnit.instanceId,
                 sourcePosition: attacker,
                 targetPosition: target,
-                targetUnitId: targetUnit.cardId,
+                targetUnitId: targetUnit.instanceId,
                 ownerId: playerId,
                 hits,
               },
@@ -882,7 +885,7 @@ export function executeCommand(
             position: ppPayload.newPosition,
             damage: 1,
             reason: 'entangle',
-            sourceUnitId: eu.cardId,
+            sourceUnitId: eu.instanceId,
             sourcePlayerId: eu.owner,
           },
           timestamp,
@@ -904,10 +907,11 @@ export function executeCommand(
   }
 
   // 后处理3：交缠颂歌清理 — 被消灭的单位是交缠目标时，弃置交缠颂歌
-  const destroyedCardIds = processedEvents
+  const destroyedInstanceIds = processedEvents
     .filter(e => e.type === SW_EVENTS.UNIT_DESTROYED)
-    .map(e => (e.payload as Record<string, unknown>).cardId as string);
-  if (destroyedCardIds.length > 0) {
+    .map(e => (e.payload as Record<string, unknown>).instanceId as string)
+    .filter(Boolean);
+  if (destroyedInstanceIds.length > 0) {
     for (const pid of ['0', '1'] as import('./types').PlayerId[]) {
       const player = core.players[pid];
       if (!player) continue;
@@ -915,7 +919,7 @@ export function executeCommand(
         if (getBaseCardId(ev.id) !== CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT) continue;
         if (!ev.entanglementTargets) continue;
         const [t1, t2] = ev.entanglementTargets;
-        if (destroyedCardIds.includes(t1) || destroyedCardIds.includes(t2)) {
+        if (destroyedInstanceIds.includes(t1) || destroyedInstanceIds.includes(t2)) {
           processedEvents.push({
             type: SW_EVENTS.ACTIVE_EVENT_DISCARDED,
             payload: { playerId: pid, cardId: ev.id },
@@ -937,8 +941,8 @@ export function executeCommand(
   const mobileStructureMoveEvents = processedEvents.filter(e => {
     if (e.type !== SW_EVENTS.UNIT_MOVED) return false;
     const p = e.payload as { from: CellCoord; to: CellCoord; unitId: string };
-    // 检查移动的单位是否有 mobile_structure 技能
-    const found = findBoardUnitByCardId(core, p.unitId);
+    // 检查移动的单位是否有 mobile_structure 技能（unitId 现在是 instanceId）
+    const found = findBoardUnitByInstanceId(core, p.unitId) ?? findBoardUnitByCardId(core, p.unitId);
     return found && getUnitAbilities(found.unit, core).includes('mobile_structure');
   });
   const allStructureMoveEvents = [...structurePushEvents, ...mobileStructureMoveEvents];
@@ -958,7 +962,7 @@ export function executeCommand(
           // mobile_structure 正常移动
           const mp = moveEvent.payload as { from: CellCoord; to: CellCoord; unitId: string };
           structureNewPos = mp.to;
-          const found = findBoardUnitByCardId(core, mp.unitId);
+          const found = findBoardUnitByInstanceId(core, mp.unitId) ?? findBoardUnitByCardId(core, mp.unitId);
           structureOwner = found?.unit.owner;
           structureCardId = found?.unit.cardId ?? mp.unitId;
         } else {

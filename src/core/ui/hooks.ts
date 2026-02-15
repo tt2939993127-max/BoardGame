@@ -6,15 +6,6 @@
 
 import type { DragOffset } from './types';
 
-// 兼容层 ctx 类型（替代 boardgame.io Ctx）
-interface CompatCtx {
-    gameover?: unknown;
-    currentPlayer?: string;
-    turn?: number;
-    numPlayers?: number;
-    phase?: string;
-}
-
 // ============================================================================
 // useGameBoard
 // ============================================================================
@@ -27,8 +18,6 @@ interface CompatCtx {
 export interface UseGameBoardReturn<G> {
     /** 游戏状态 */
     G: G;
-    /** 游戏上下文 */
-    ctx: CompatCtx;
     /** 是否是当前玩家回合 */
     isMyTurn: boolean;
     /** 当前阶段 ID */

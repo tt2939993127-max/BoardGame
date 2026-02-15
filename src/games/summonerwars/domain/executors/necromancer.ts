@@ -5,7 +5,7 @@
 import type { GameEvent } from '../../../../engine/types';
 import type { UnitCard, CellCoord } from '../types';
 import { SW_EVENTS } from '../types';
-import { findBoardUnitByCardId, emitDestroyWithTriggers } from '../execute/helpers';
+import { findBoardUnitByCardId, findBoardUnitByInstanceId, emitDestroyWithTriggers } from '../execute/helpers';
 import { abilityExecutorRegistry } from './registry';
 import type { SWAbilityContext } from './types';
 
@@ -41,14 +41,15 @@ abilityExecutorRegistry.register('fire_sacrifice_summon', (ctx: SWAbilityContext
   const targetUnitId = payload.targetUnitId as string | undefined;
   if (!targetUnitId) return { events };
 
-  const fsVictim = findBoardUnitByCardId(core, targetUnitId, playerId as '0' | '1');
+  const fsVictim = findBoardUnitByInstanceId(core, targetUnitId)
+    ?? findBoardUnitByCardId(core, targetUnitId, playerId as '0' | '1');
   if (fsVictim) {
     events.push(...emitDestroyWithTriggers(core, fsVictim.unit, fsVictim.position, {
       playerId: playerId as '0' | '1', timestamp, reason: 'fire_sacrifice_summon',
     }));
     events.push({
       type: SW_EVENTS.UNIT_MOVED,
-      payload: { from: sourcePosition, to: fsVictim.position, unitId: sourceUnit.cardId, reason: 'fire_sacrifice_summon' },
+      payload: { from: sourcePosition, to: fsVictim.position, unitId: sourceUnit.instanceId, reason: 'fire_sacrifice_summon' },
       timestamp,
     });
   }
@@ -62,7 +63,8 @@ abilityExecutorRegistry.register('life_drain', (ctx: SWAbilityContext) => {
   const targetUnitId = payload.targetUnitId as string | undefined;
   if (!targetUnitId) return { events };
 
-  const ldVictim = findBoardUnitByCardId(core, targetUnitId, playerId as '0' | '1');
+  const ldVictim = findBoardUnitByInstanceId(core, targetUnitId)
+    ?? findBoardUnitByCardId(core, targetUnitId, playerId as '0' | '1');
   if (ldVictim) {
     events.push(...emitDestroyWithTriggers(core, ldVictim.unit, ldVictim.position, {
       playerId: playerId as '0' | '1', timestamp, reason: 'life_drain',

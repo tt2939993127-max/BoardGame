@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
-import { getLocalizedAssetPath } from '../../../core';
 import { ASSETS } from './assets';
 
 export const DrawDeck = React.forwardRef<HTMLDivElement, { count: number; locale?: string }>(({ count, locale }, ref) => {
@@ -11,8 +10,8 @@ export const DrawDeck = React.forwardRef<HTMLDivElement, { count: number; locale
             <div className="absolute inset-0 bg-slate-800 rounded-[0.5vw] transform translate-x-[0.2vw] translate-y-[0.2vw]"></div>
             <div className="w-full aspect-[0.7] rounded-[0.5vw] overflow-hidden shadow-2xl border border-slate-600 relative z-10 bg-slate-900">
                 <OptimizedImage
-                    src={getLocalizedAssetPath(ASSETS.CARD_BG, locale)}
-                    fallbackSrc={ASSETS.CARD_BG}
+                    src={ASSETS.CARD_BG}
+                    locale={locale}
                     className="w-full h-full object-cover"
                     alt={t('imageAlt.deck')}
                 />

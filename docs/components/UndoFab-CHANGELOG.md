@@ -42,7 +42,7 @@
 {showUndoControls && (
     <div className="absolute bottom-2 left-0 w-full z-30 pointer-events-none">
         <div className="flex items-center justify-center pointer-events-auto">
-            <GameControls G={G} ctx={ctx} moves={moves} playerID={playerID} />
+            <GameControls G={G} moves={moves} playerID={playerID} />
         </div>
     </div>
 )}
@@ -51,10 +51,9 @@
 {!isSpectator && (
     <UndoFab
         G={G}
-        ctx={ctx}
         moves={moves}
         playerID={playerID}
-        isGameOver={!!isGameOver}
+        isGameOver={!!G.sys.gameover}
     />
 )}
 ```
@@ -129,10 +128,9 @@ import { UndoFab } from '../../components/game/UndoFab';
 {!isSpectator && (
     <UndoFab
         G={G}
-        ctx={ctx}
         moves={moves}
         playerID={playerID}
-        isGameOver={!!isGameOver}
+        isGameOver={!!G.sys.gameover}
     />
 )}
 ```
@@ -194,5 +192,5 @@ import { UndoFab } from '../../components/game/UndoFab';
 
 ## 版本信息
 - 创建日期：2026-01-27
-- 基于框架：boardgame.io + React + TypeScript
+- 基于框架：自研引擎传输层 + React + TypeScript
 - 测试环境：井字棋游戏

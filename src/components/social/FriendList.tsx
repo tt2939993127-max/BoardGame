@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSocial } from '../../contexts/SocialContext';
-import { User, Search, UserPlus, Inbox, Check, X, MessageSquare } from 'lucide-react';
+import { User, Search, UserPlus, Inbox, Check, X, MessageSquare, Bell } from 'lucide-react';
+import { SYSTEM_NOTIFICATION_ID } from './FriendsChatModal';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 
@@ -81,6 +82,27 @@ export const FriendList = ({ onSelectFriend, activeFriendId }: FriendListProps) 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {tab === 'chats' && (
                     <div className="p-2 space-y-1">
+                        {/* 固定置顶：系统通知 */}
+                        <button
+                            onClick={() => onSelectFriend(SYSTEM_NOTIFICATION_ID)}
+                            className={clsx(
+                                "w-full flex items-center p-2 rounded gap-3 transition-all",
+                                activeFriendId === SYSTEM_NOTIFICATION_ID
+                                    ? "bg-parchment-card-border/20 shadow-inner"
+                                    : "hover:bg-parchment-base-bg"
+                            )}
+                        >
+                            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                <Bell size={18} />
+                            </div>
+                            <div className="flex-1 text-left">
+                                <div className="font-bold text-parchment-base-text text-sm">{t('social:notification.title')}</div>
+                                <div className="text-xs text-parchment-light-text truncate">{t('social:notification.subtitle')}</div>
+                            </div>
+                        </button>
+
+                        <div className="h-px bg-parchment-card-border/20 mx-1" />
+
                         {sortedConversations.length === 0 && (
                             <div className="text-center text-parchment-light-text py-8 text-sm italic opacity-70">
                                 {t('social:chats.empty')}

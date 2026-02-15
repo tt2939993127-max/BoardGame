@@ -79,8 +79,8 @@ abilityExecutorRegistry.register('ice_shards', (ctx: SWAbilityContext) => {
         const adjPos = { row: r + d.row, col: c + d.col };
         if (!isValidCoord(adjPos)) continue;
         const adjUnit = getUnitAt(core, adjPos);
-        if (adjUnit && adjUnit.owner !== playerId && !damagedSet.has(adjUnit.cardId)) {
-          damagedSet.add(adjUnit.cardId);
+        if (adjUnit && adjUnit.owner !== playerId && !damagedSet.has(adjUnit.instanceId)) {
+          damagedSet.add(adjUnit.instanceId);
           events.push({
             type: SW_EVENTS.UNIT_DAMAGED,
             payload: { position: adjPos, damage: 1, reason: 'ice_shards' },

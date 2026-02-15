@@ -118,8 +118,8 @@ const IconO = ({ className }: { className?: string }) => (
     </svg>
 );
 
-export const TicTacToeBoard: React.FC<Props> = ({ G, moves, playerID, reset, matchData, isMultiplayer }) => {
-    const isGameOver = (G.core as Record<string, unknown>).gameover as { winner?: string; draw?: boolean } | undefined;
+export const TicTacToeBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, matchData, isMultiplayer }) => {
+    const isGameOver = G.sys.gameover;
     const isWinner = isGameOver?.winner !== undefined;
     const coreCurrentPlayer = G.core.currentPlayer;
     const currentPlayer = coreCurrentPlayer;
@@ -154,7 +154,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, moves, playerID, reset, mat
     };
 
     // 教学系统集成
-    useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
+    useTutorialBridge(G.sys.tutorial, dispatch);
     const { isActive, currentStep } = useTutorial();
     const { setPlayerID } = useDebug();
 
@@ -271,12 +271,12 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, moves, playerID, reset, mat
                 const targetId = `cell-${id}`;
                 if (currentStep.highlightTarget && currentStep.highlightTarget !== targetId) return;
 
-                moves.CLICK_CELL({ cellId: id });
+                dispatch('CLICK_CELL', { cellId: id });
             } else {
                 return;
             }
         } else {
-            moves.CLICK_CELL({ cellId: id });
+            dispatch('CLICK_CELL', { cellId: id });
         }
     };
 
@@ -296,7 +296,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, moves, playerID, reset, mat
     }, [isActive, G.sys.turnNumber, isGameOver, isTutorialMode, resetGame]);
 
     return (
-        <UndoProvider value={{ G, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
+        <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
             <div className="flex flex-col items-center h-[100dvh] w-full font-sans bg-black overflow-hidden relative pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] select-none">
 
                 {/* 增加一个径向渐变使光晕分布更自然 (放底层) */}
@@ -475,7 +475,7 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, moves, playerID, reset, mat
                     onVote={isSpectator ? undefined : handleRematchVote}
                 />
                 {!isSpectator && (
-                    <GameDebugPanel G={G} moves={moves} playerID={playerID} autoSwitch={!isMultiplayer} />
+                    <GameDebugPanel G={G} dispatch={dispatch} playerID={playerID} autoSwitch={!isMultiplayer} />
                 )}
             </div>
         </UndoProvider>

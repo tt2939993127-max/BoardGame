@@ -5,7 +5,7 @@
  * 禁止使用 `any` 类型。
  */
 
-import type { TutorialManifest } from '../contexts/TutorialContext';
+import type { TutorialManifest } from '../engine/types';
 import type { GameEngineConfig } from '../engine/transport/server';
 
 // ============================================================================

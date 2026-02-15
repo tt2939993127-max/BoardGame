@@ -65,6 +65,11 @@ const FACTION_MOVE_KEYS: Partial<Record<FactionId, string[]>> = {
     ],
 };
 const BUILD_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
+const WALL_BUILD_KEYS = [
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none',
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_02_krst_none',
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_03_krst_none',
+];
 const GATE_BUILD_KEYS = [
     'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_01_krst',
     'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_02_krst',
@@ -352,6 +357,7 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
         SUMMON_KEY,
         MOVE_FALLBACK_KEY,
         BUILD_KEY,
+        ...WALL_BUILD_KEYS,
         CARD_DRAW_KEY,
         CARD_DISCARD_KEY,
         DAMAGE_LIGHT_KEY,
@@ -414,7 +420,6 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
         if (type === SW_EVENTS.UNIT_DAMAGED) return null;
         if (type === SW_EVENTS.UNIT_DESTROYED) return null;
         if (type === SW_EVENTS.STRUCTURE_DESTROYED) return null;
-        if (type === SW_EVENTS.STRUCTURE_DAMAGED) return null;
         if (type === SW_EVENTS.UNIT_SUMMONED) return null;
 
         // ==== 能力音效（战斗事件已排除，此处仅处理非战斗能力） ====
@@ -444,7 +449,7 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
             if (buildPayload?.card?.isGate) {
                 return pickRandomSoundKey('summonerwars.gate_build', GATE_BUILD_KEYS, { minGap: 1 });
             }
-            return BUILD_KEY;
+            return pickRandomSoundKey('summonerwars.wall_build', WALL_BUILD_KEYS, { minGap: 1 });
         }
 
         if (type === SW_EVENTS.UNIT_HEALED || type === SW_EVENTS.STRUCTURE_HEALED) return HEAL_KEY;
@@ -469,6 +474,11 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
             return delta >= 0 ? UNIT_CHARGE_KEY : MAGIC_SPEND_KEY;
         }
         if (type === SW_EVENTS.ABILITIES_COPIED) return MAGIC_SHOCK_KEY;
+
+        // 冰霜战斧附加（无动画，路径①即时播放冰系音效）
+        if (type === SW_EVENTS.UNIT_ATTACHED) {
+            return pickRandomSoundKey('summonerwars.unit_attached', ICE_KEYS, { minGap: 1 });
+        }
 
         if (type === SW_EVENTS.UNIT_PUSHED || type === SW_EVENTS.UNIT_PULLED || type === SW_EVENTS.UNITS_SWAPPED) {
             return pickRandomSoundKey('summonerwars.move_swing', MOVE_SWING_KEYS, { minGap: 1 });
@@ -538,6 +548,7 @@ export const SUMMONER_WARS_AUDIO_CONFIG: GameAudioConfig = {
         keys.add(STRUCTURE_DAMAGE_KEY);
         keys.add(STRUCTURE_DESTROY_KEY);
         GATE_BUILD_KEYS.forEach(key => keys.add(key));
+        WALL_BUILD_KEYS.forEach(key => keys.add(key));
         GATE_DESTROY_KEYS.forEach(key => keys.add(key));
 
         // 阵营专属音效（移动 + 技能）

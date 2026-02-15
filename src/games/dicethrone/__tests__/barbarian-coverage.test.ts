@@ -7,7 +7,7 @@
  * 3. powerful-strike — 小顺 9 伤害
  * 4. steadfast — 治疗变体
  * 5. violent-assault — 不可防御 + 眩晕
- * 6. reckless-strike — 终极技能（大顺 15 伤害 + 自伤 4）
+ * 6. reckless-strike — 终极技能（5个力量面 15 伤害 + 自伤 4）
  * 7. suppress — 自定义投骰伤害
  *
  * 注意：
@@ -257,19 +257,19 @@ describe('狂战士 GTR 技能覆盖', () => {
     });
 
     // ========================================================================
-    // reckless-strike — 鲁莽打击（终极技能，大顺，不可防御）
+    // reckless-strike — 鲁莽打击（终极技能，5个力量面，不可防御）
     // ========================================================================
     describe('鲁莽打击 (reckless-strike)', () => {
-        it('大顺造成 15 伤害 + 自伤 4（0心防御）', () => {
-            // 大顺: [2,3,4,5,6]
-            const random = createQueuedRandom([2, 3, 4, 5, 6]);
+        it('5个力量面造成 15 伤害 + 自伤 4（0心防御）', () => {
+            // 5个力量面(6): [6,6,6,6,6]
+            const random = createQueuedRandom([6, 6, 6, 6, 6]);
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain, systems: testSystems,
                 playerIds: ['0', '1'], random,
                 setup: createBarbarianSetup(), assertFn: assertState, silent: true,
             });
             const result = runner.run({
-                name: '鲁莽打击 大顺=15伤害+自伤4',
+                name: '鲁莽打击 5力量面=15伤害+自伤4',
                 commands: [
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '0'),

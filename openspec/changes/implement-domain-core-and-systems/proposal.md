@@ -1,5 +1,7 @@
 # Proposal: 引入领域内核与系统层（激进引擎化）
 
+> **状态：已完成**。旧框架（boardgame.io）已完全移除，自研引擎（DomainCore + Pipeline + Systems + Transport）已全面接管。本文档保留为历史记录。
+
 ## 背景
 当前项目已经具备多游戏运行基础，并且平台能力在快速增长：
 
@@ -12,7 +14,7 @@
 随着计划覆盖更多类型桌游（骰子对战、卡牌驱动、德式计分、隐藏信息/推理），平台能力将继续扩张（撤销、教程、回放/审计、统一 prompt/choice、成就、统计、AI 等）。如果这些能力继续散落在每个 `game.ts` 里，会导致维护成本急剧上升。
 
 ## 问题
-目前 Boardgame.io 被用作“主要规则运行时”，游戏规则通常直接写在 moves/turn/stage 内，并直接修改 `G`。
+目前 旧框架被用作"主要规则运行时"，游戏规则通常直接写在 moves/turn/stage 内，并直接修改 `G`。
 
 平台能力的实现方式存在两个问题：
 
@@ -31,7 +33,7 @@
 
 - 引入自研“领域内核（Domain Core）”：command -> events -> reduce 的确定性规则模型。
 - 引入“系统层（Systems）”：以插件方式承载撤销、prompt/choice、日志、能力/效果等跨游戏能力。
-- 保留 Boardgame.io 作为“网络/会话驱动器”，但将其降级为适配层：Boardgame.io moves 只做输入翻译与管线调用，不承载规则本体。
+- 使用自研传输层（GameTransportServer + GameTransportClient）作为网络/会话驱动器。
 - 为现有游戏（tictactoe、dicethrone）提供分阶段迁移路径，不阻塞新增游戏。
 
 ## 非目标
@@ -84,7 +86,7 @@
 - reduce(state, event) -> newState（确定性）
 - validate(state, command, actor) -> ok|error
 
-游戏提供一个 Domain Core 模块（纯 TS），不依赖 Boardgame.io 的 ctx/events/random。
+游戏提供一个 Domain Core 模块（纯 TS），不依赖外部框架。
 
 ### 3) 系统层（Systems）
 系统通过 hook 参与 command/event 管线：
@@ -100,10 +102,10 @@
 - LogSystem：统一事件日志格式（回放/审计/调试）。
 - Ability/Effect System：将 `AbilitySystem` 演进为可选系统，服务骰子/卡牌类游戏。
 
-### 4) Boardgame.io 适配层
-为每个游戏提供一个 Boardgame.io Game 定义，但规则主体由 Domain Core + Systems 承担：
+### 4) 引擎适配层（已由传输层替代）
+为每个游戏提供引擎配置，规则主体由 Domain Core + Systems 承担：
 
-- 将 move 调用翻译为 Domain Command
+- 接收 dispatch 调用的 Domain Command
 - 运行管线：Systems.beforeCommand -> Core.validate -> Core.produceEvents -> reduce -> Systems.afterEvents
 - 将结果写回 `G.core`/`G.sys`
 

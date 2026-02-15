@@ -30,7 +30,7 @@
 ## 2. 实时服务层 (`src/lib/` & `src/services/`)
 
 - **LobbySocket (`LobbySocketService`)**：
-    - 独立于 boardgame.io 的 WebSocket 通道，用于：
+    - 独立于游戏传输层的 WebSocket 通道，用于：
         1. 大厅房间列表实时更新。
         2. 房间内成员状态（在线/离线）同步。
         3. 关键连接错误（`connect_error`）的上报。

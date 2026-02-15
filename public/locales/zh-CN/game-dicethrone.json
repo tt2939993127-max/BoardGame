@@ -232,7 +232,20 @@
     "damageTakenPlain": "受到 {{amount}} 点伤害",
     "damageDealt": "以【{{source}}】对玩家{{targetPlayerId}}造成 {{amount}} 点伤害",
     "damageDealtPlain": "对玩家{{targetPlayerId}}造成 {{amount}} 点伤害",
+    "damageBefore": {
+      "taken": "受到 ",
+      "takenWithSource": "受到 ",
+      "dealt": "以【{{source}}】对玩家{{targetPlayerId}}造成 ",
+      "dealtPlain": "对玩家{{targetPlayerId}}造成 "
+    },
+    "damageAfter": {
+      "taken": " 点伤害",
+      "takenWithSource": " 点伤害（{{source}}）",
+      "dealt": " 点伤害",
+      "dealtPlain": " 点伤害"
+    },
     "damageSource": {
+      "original": "原始伤害",
       "upkeepBurn": "燃烧",
       "upkeepPoison": "中毒",
       "retribution": "报复反伤",
@@ -242,6 +255,14 @@
     "damageOriginal": "（原始 {{amount}}）",
     "damageModifiers": "（原始 {{original}}，{{modifiers}}）",
     "healApplied": "为玩家{{targetPlayerId}}回复 {{amount}} 点生命",
+    "healBefore": "为玩家{{targetPlayerId}}回复 ",
+    "healAfter": {
+      "plain": " 点生命",
+      "withSource": " 点生命（{{source}}）"
+    },
+    "healSource": {
+      "label": "治疗来源"
+    },
     "statusApplied": "对玩家{{targetPlayerId}}施加状态 {{statusLabel}}",
     "statusAppliedDelta": "（+{{stacks}}，当前 {{total}}）",
     "statusRemoved": "对玩家{{targetPlayerId}}移除状态 {{statusLabel}}",
@@ -470,6 +491,8 @@
     "upgradeCardTargetMismatch": "升级卡与目标技能不匹配",
     "unknownCardTiming": "该卡牌无法在当前时机使用",
     "cannotPlayCard": "无法打出此卡",
+    "playerNotFound": "找不到玩家",
+    "notUpgradeCard": "该卡不是升级卡",
     "player_mismatch": "不是你的回合",
     "player_not_found": "找不到玩家",
     "card_not_in_hand": "卡牌不在手牌中",
@@ -487,9 +510,21 @@
     "requireDiceExists": "需要有骰子结果才能打出此卡",
     "requireOpponentDiceExists": "需要对手有骰子结果才能打出此卡",
     "requireIsRoller": "此卡只能由当前投掷方使用",
+    "requireIsNotRoller": "此卡只能由非投掷方使用（响应对手骰面）",
+    "requireRollConfirmed": "需要骰面已确认后才能打出此卡",
+    "requireNotRollConfirmed": "骰面已确认，无法再打出此卡",
+    "requireMinDamageDealt": "本次攻击未造成足够伤害，无法打出此卡",
     "tutorial_manifest_invalid": "教程配置无效",
     "tutorial_command_blocked": "教程中禁止该操作",
-    "tutorial_step_locked": "当前步骤不能跳过"
+    "tutorial_step_locked": "当前步骤不能跳过",
+    "defense_ability_not_selected": "需要先选择防御技能才能掷骰",
+    "invalid_character": "无效的角色选择",
+    "character_not_selected": "请先选择角色",
+    "roll_not_confirmed": "请先确认投掷结果",
+    "no_pending_attack": "没有待防御的攻击",
+    "deck_empty": "牌库和弃牌堆均为空",
+    "no_card_to_undo": "没有可撤回的售出卡牌",
+    "card_not_in_discard": "弃牌堆中找不到该卡牌"
   },
   "actions": {
     "resolveAttack": "结算攻击",
@@ -527,6 +562,7 @@
   "choices": {
     "title": "技能结算选择",
     "option": "选项 {{index}}",
+    "sliderLabel": "选择花费数量",
     "evasiveOrPurify": "请选择获得的状态效果",
     "evasiveOrPurifyToken": "请选择获得的道具",
     "lotusPalmUnblockable": {
@@ -536,11 +572,9 @@
     },
     "pyroSpendCpForFM": {
       "title": "花费CP获得火焰专精（每1CP=1火焰专精）",
-      "pay_1": "花费1CP：获得1火焰专精",
-      "pay_2": "花费2CP：获得2火焰专精",
-      "pay_3": "花费3CP：获得3火焰专精",
-      "pay_4": "花费4CP：获得4火焰专精",
-      "pay_5": "花费5CP：获得5火焰专精",
+      "confirm": "确认花费",
+      "confirmSpend": "花费 {{count}} CP",
+      "sliderHint": "花费 {{value}} CP → 获得 {{value}} 火焰专精",
       "skip": "不花费"
     }
   },

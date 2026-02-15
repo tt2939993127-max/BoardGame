@@ -26,7 +26,7 @@ import type { RandomFn, GameEvent } from '../../../engine/types';
 import { canMoveToEnhanced } from '../domain/helpers';
 import { calculateEffectiveStrength, getEffectiveLifeBase } from '../domain/abilityResolver';
 import { getSummonerWarsUIHints } from '../domain/uiHints';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -57,8 +57,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -359,7 +361,7 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner', card: makeBarbaricSummoner('test-summoner'), owner: '0',
       boosts: 3,
     });
@@ -373,7 +375,7 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ancestral_bond',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       targetPosition: { row: 4, col: 4 },
     });
 
@@ -387,7 +389,7 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner', card: makeBarbaricSummoner('test-summoner'), owner: '0',
       boosts: 0,
     });
@@ -401,7 +403,7 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ancestral_bond',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       targetPosition: { row: 4, col: 4 },
     });
 
@@ -409,11 +411,49 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
     expect(newState.board[4][2].unit?.boosts).toBe(0);
   });
 
+  it('同 cardId 的不同实例可作为目标（按 instanceId 判定自身）', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'shared-ancestral-card', card: makeBarbaricSummoner('shared-ancestral-source'), owner: '0', boosts: 2,
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'shared-ancestral-card', card: makeLioness('shared-ancestral-target'), owner: '0',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const validateResult = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'ancestral_bond',
+        sourceUnitId: summoner.instanceId,
+        targetPosition: { row: 4, col: 3 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(validateResult.valid).toBe(true);
+
+    const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'ancestral_bond',
+      sourceUnitId: summoner.instanceId,
+      targetPosition: { row: 4, col: 3 },
+    });
+
+    expect(newState.board[4][2].unit?.boosts).toBe(0);
+    expect(newState.board[4][3].unit?.boosts).toBe(3);
+  });
+
   it('超过3格验证拒绝', () => {
     const state = createBarbaricState();
     clearArea(state, [1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 0 }, {
+    const summoner = placeUnit(state, { row: 4, col: 0 }, {
       cardId: 'test-summoner', card: makeBarbaricSummoner('test-summoner'), owner: '0',
     });
 
@@ -429,7 +469,7 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'ancestral_bond',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetPosition: { row: 4, col: 5 },
       },
       playerId: '0',
@@ -443,7 +483,7 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner', card: makeBarbaricSummoner('test-summoner'), owner: '0',
     });
 
@@ -459,7 +499,7 @@ describe('阿布亚·石 - 祖灵羁绊 (ancestral_bond)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'ancestral_bond',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
@@ -480,7 +520,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const makinda = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
       boosts: 0,
     });
@@ -490,7 +530,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'prepare',
-      sourceUnitId: 'test-makinda',
+      sourceUnitId: makinda.instanceId,
     });
 
     const chargeEvents = events.filter(e => e.type === SW_EVENTS.UNIT_CHARGED);
@@ -505,7 +545,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer', card: makeArcher('test-archer'), owner: '0',
     });
 
@@ -515,7 +555,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
     const fullState = { core: state, sys: {} as any };
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'prepare', sourceUnitId: 'test-archer' },
+      payload: { abilityId: 'prepare', sourceUnitId: archer.instanceId },
       playerId: '0',
       timestamp: fixedTimestamp,
     });
@@ -527,7 +567,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer', card: makeArcher('test-archer'), owner: '0',
       boosts: 2,
     });
@@ -537,7 +577,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'prepare',
-      sourceUnitId: 'test-archer',
+      sourceUnitId: archer.instanceId,
     });
 
     expect(newState.board[4][2].unit?.boosts).toBe(3);
@@ -550,7 +590,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer', card: makeArcher('test-archer'), owner: '0',
       boosts: 0,
     });
@@ -561,7 +601,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
     // 第一次使用成功
     const { newState: state1 } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'prepare',
-      sourceUnitId: 'test-archer',
+      sourceUnitId: archer.instanceId,
     });
     expect(state1.board[4][2].unit?.boosts).toBe(1);
 
@@ -569,7 +609,7 @@ describe('梅肯达·露 / 边境弓箭手 - 预备 (prepare)', () => {
     const fullState = { core: state1, sys: {} as any };
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'prepare', sourceUnitId: 'test-archer' },
+      payload: { abilityId: 'prepare', sourceUnitId: archer.instanceId },
       playerId: '0',
       timestamp: fixedTimestamp,
     });
@@ -587,7 +627,7 @@ describe('凯鲁尊者 - 启悟 (inspire)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kalu = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kalu', card: makeKalu('test-kalu'), owner: '0',
     });
 
@@ -614,7 +654,7 @@ describe('凯鲁尊者 - 启悟 (inspire)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'inspire',
-      sourceUnitId: 'test-kalu',
+      sourceUnitId: kalu.instanceId,
     });
 
     const chargeEvents = events.filter(e => e.type === SW_EVENTS.UNIT_CHARGED);
@@ -630,7 +670,7 @@ describe('凯鲁尊者 - 启悟 (inspire)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kalu = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kalu', card: makeKalu('test-kalu'), owner: '0',
     });
 
@@ -639,7 +679,7 @@ describe('凯鲁尊者 - 启悟 (inspire)', () => {
 
     const { events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'inspire',
-      sourceUnitId: 'test-kalu',
+      sourceUnitId: kalu.instanceId,
     });
 
     const chargeEvents = events.filter(e => e.type === SW_EVENTS.UNIT_CHARGED);
@@ -656,7 +696,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kalu = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kalu', card: makeKalu('test-kalu'), owner: '0',
       boosts: 1,
     });
@@ -666,7 +706,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'withdraw',
-      sourceUnitId: 'test-kalu',
+      sourceUnitId: kalu.instanceId,
       costType: 'charge',
       targetPosition: { row: 4, col: 4 },
     });
@@ -682,7 +722,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kalu = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kalu', card: makeKalu('test-kalu'), owner: '0',
       boosts: 0,
     });
@@ -693,7 +733,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'withdraw',
-      sourceUnitId: 'test-kalu',
+      sourceUnitId: kalu.instanceId,
       costType: 'magic',
       targetPosition: { row: 4, col: 3 },
     });
@@ -706,7 +746,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kalu = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kalu', card: makeKalu('test-kalu'), owner: '0',
       boosts: 0,
     });
@@ -720,7 +760,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'withdraw',
-        sourceUnitId: 'test-kalu',
+        sourceUnitId: kalu.instanceId,
         costType: 'charge',
         targetPosition: { row: 4, col: 3 },
       },
@@ -735,7 +775,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kalu = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kalu', card: makeKalu('test-kalu'), owner: '0',
       boosts: 1,
     });
@@ -748,7 +788,7 @@ describe('凯鲁尊者 - 撤退 (withdraw)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'withdraw',
-        sourceUnitId: 'test-kalu',
+        sourceUnitId: kalu.instanceId,
         costType: 'charge',
         targetPosition: { row: 4, col: 5 },
       },
@@ -882,7 +922,7 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const mage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-mage', card: makeSpiritMage('test-mage'), owner: '0',
       boosts: 0,
     });
@@ -892,7 +932,7 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'spirit_bond',
-      sourceUnitId: 'test-mage',
+      sourceUnitId: mage.instanceId,
       choice: 'self',
     });
 
@@ -903,7 +943,7 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const mage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-mage', card: makeSpiritMage('test-mage'), owner: '0',
       boosts: 1,
     });
@@ -917,7 +957,7 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'spirit_bond',
-      sourceUnitId: 'test-mage',
+      sourceUnitId: mage.instanceId,
       choice: 'transfer',
       targetPosition: { row: 4, col: 4 },
     });
@@ -926,11 +966,51 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
     expect(newState.board[4][4].unit?.boosts).toBe(1); // 获得1充能
   });
 
+  it('同 cardId 的不同实例可作为转移目标（按 instanceId 判定自身）', () => {
+    const state = createBarbaricState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    const mage = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'shared-spirit-card', card: makeSpiritMage('shared-spirit-source'), owner: '0', boosts: 1,
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'shared-spirit-card', card: makeLioness('shared-spirit-target'), owner: '0',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const validateResult = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'spirit_bond',
+        sourceUnitId: mage.instanceId,
+        choice: 'transfer',
+        targetPosition: { row: 4, col: 3 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(validateResult.valid).toBe(true);
+
+    const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'spirit_bond',
+      sourceUnitId: mage.instanceId,
+      choice: 'transfer',
+      targetPosition: { row: 4, col: 3 },
+    });
+
+    expect(newState.board[4][2].unit?.boosts).toBe(0);
+    expect(newState.board[4][3].unit?.boosts).toBe(1);
+  });
+
   it('无充能时转移验证拒绝', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const mage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-mage', card: makeSpiritMage('test-mage'), owner: '0',
       boosts: 0,
     });
@@ -947,7 +1027,7 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'spirit_bond',
-        sourceUnitId: 'test-mage',
+        sourceUnitId: mage.instanceId,
         choice: 'transfer',
         targetPosition: { row: 4, col: 3 },
       },
@@ -962,7 +1042,7 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
     const state = createBarbaricState();
     clearArea(state, [1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 0 }, {
+    const mage = placeUnit(state, { row: 4, col: 0 }, {
       cardId: 'test-mage', card: makeSpiritMage('test-mage'), owner: '0',
       boosts: 1,
     });
@@ -979,7 +1059,7 @@ describe('祖灵法师 - 祖灵交流 (spirit_bond)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'spirit_bond',
-        sourceUnitId: 'test-mage',
+        sourceUnitId: mage.instanceId,
         choice: 'transfer',
         targetPosition: { row: 4, col: 5 },
       },
@@ -1283,7 +1363,7 @@ describe('炽原精灵事件卡', () => {
       clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
       // 目标放在棋盘中央（远离城门）
-      placeUnit(state, { row: 3, col: 3 }, {
+      const weaveTarget = placeUnit(state, { row: 3, col: 3 }, {
         cardId: 'weave-target', card: makeLioness('weave-target'), owner: '0',
       });
 
@@ -1291,20 +1371,18 @@ describe('炽原精灵事件卡', () => {
       state.currentPlayer = '0';
 
       // 手动设置 activeEvent（模拟已打出编织颂歌）
+      // targetUnitId 必须使用 instanceId（D3 规则：写入→读取 ID 一致性）
       state.players['0'].activeEvents.push({
         id: 'barbaric-chant-of-weaving-0',
-        card: {
-          id: 'barbaric-chant-of-weaving',
-          cardType: 'event',
-          name: '编织颂歌',
-          faction: 'barbaric',
-          cost: 0,
-          playPhase: 'summon',
-          effect: '可在目标相邻召唤，召唤时充能目标。',
-          isActive: true,
-          deckSymbols: [],
-        },
-        targetUnitId: 'weave-target',
+        cardType: 'event',
+        name: '编织颂歌',
+        faction: 'barbaric',
+        cost: 0,
+        playPhase: 'summon',
+        effect: '可在目标相邻召唤，召唤时充能目标。',
+        isActive: true,
+        deckSymbols: [],
+        targetUnitId: weaveTarget.instanceId,
       });
 
       // 在手牌中放一个可召唤的单位
@@ -1391,7 +1469,7 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const makinda = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
       boosts: 2,
       hasAttacked: true, // 攻击后
@@ -1407,7 +1485,7 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     // 玩家确认连续射击
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'rapid_fire',
-      sourceUnitId: 'test-makinda',
+      sourceUnitId: makinda.instanceId,
     });
 
     // 应该消耗1充能
@@ -1437,7 +1515,7 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer', card: makeArcher('test-archer'), owner: '0',
       boosts: 0, // 无充能
       hasAttacked: true,
@@ -1449,7 +1527,7 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     const fullState = { core: state, sys: {} as any };
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'rapid_fire', sourceUnitId: 'test-archer' },
+      payload: { abilityId: 'rapid_fire', sourceUnitId: archer.instanceId },
       playerId: '0',
       timestamp: fixedTimestamp,
     });
@@ -1551,7 +1629,7 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     const state = createBarbaricState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const makinda = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-makinda', card: makeMakinda('test-makinda'), owner: '0',
       boosts: 2,
     });
@@ -1577,13 +1655,13 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     expect(triggerEvents.length).toBe(1);
 
     // 关键断言：afterAttack 的通知事件不应该消耗 usageCount
-    expect(afterAttackState.abilityUsageCount['test-makinda:rapid_fire']).toBeUndefined();
+    expect(afterAttackState.abilityUsageCount[`${makinda.instanceId}:rapid_fire`]).toBeUndefined();
 
     // 第二步：玩家确认连续射击
     const fullState = { core: afterAttackState, sys: {} as any };
     const validateResult = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'rapid_fire', sourceUnitId: 'test-makinda' },
+      payload: { abilityId: 'rapid_fire', sourceUnitId: makinda.instanceId },
       playerId: '0',
       timestamp: fixedTimestamp,
     });
@@ -1593,11 +1671,11 @@ describe('梅肯达·露 / 边境弓箭手 - 连续射击 (rapid_fire)', () => {
     // 第三步：执行 ACTIVATE_ABILITY
     const { newState: afterActivateState } = executeAndReduce(afterAttackState, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'rapid_fire',
-      sourceUnitId: 'test-makinda',
+      sourceUnitId: makinda.instanceId,
     });
 
     // 执行后 usageCount 应该增加
-    expect(afterActivateState.abilityUsageCount['test-makinda:rapid_fire']).toBe(1);
+    expect(afterActivateState.abilityUsageCount[`${makinda.instanceId}:rapid_fire`]).toBe(1);
     // hasAttacked 重置
     expect(afterActivateState.board[4][2].unit?.hasAttacked).toBe(false);
     // extraAttacks 增加
@@ -1738,7 +1816,9 @@ describe('充能验证', () => {
     core.currentPlayer = '0';
     core.players['0'].magic = 0; // 没有魔力
 
+    const keruInstanceId = generateInstanceId('barbaric-keru-champion-0-0');
     const keru: BoardUnit = {
+      instanceId: keruInstanceId,
       cardId: 'barbaric-keru-champion-0-0',
       owner: '0',
       life: 3,
@@ -1765,7 +1845,7 @@ describe('充能验证', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'withdraw',
-        sourceUnitId: 'barbaric-keru-champion-0-0',
+        sourceUnitId: keruInstanceId,
         costType: 'charge',
       },
       playerId: '0',
@@ -1781,7 +1861,9 @@ describe('充能验证', () => {
     core.phase = 'attack';
     core.currentPlayer = '0';
 
+    const keruInstanceId = generateInstanceId('barbaric-keru-champion-0-0');
     const keru: BoardUnit = {
+      instanceId: keruInstanceId,
       cardId: 'barbaric-keru-champion-0-0',
       owner: '0',
       life: 3,
@@ -1807,7 +1889,7 @@ describe('充能验证', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'withdraw',
-        sourceUnitId: 'barbaric-keru-champion-0-0',
+        sourceUnitId: keruInstanceId,
         costType: 'charge',
         targetPosition: { row: 3, col: 4 }, // 移动1格
       },
@@ -1824,7 +1906,9 @@ describe('充能验证', () => {
     core.currentPlayer = '0';
     core.players['0'].magic = 0; // 没有魔力
 
+    const keruInstanceId = generateInstanceId('barbaric-keru-champion-0-0');
     const keru: BoardUnit = {
+      instanceId: keruInstanceId,
       cardId: 'barbaric-keru-champion-0-0',
       owner: '0',
       life: 3,
@@ -1850,7 +1934,7 @@ describe('充能验证', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'withdraw',
-        sourceUnitId: 'barbaric-keru-champion-0-0',
+        sourceUnitId: keruInstanceId,
         costType: 'magic',
       },
       playerId: '0',
@@ -1873,7 +1957,7 @@ describe('边境弓箭手 - 青色波纹 (ability hint)', () => {
     state.phase = 'move';
     state.currentPlayer = '0';
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const archer = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-archer',
       card: makeArcher('test-archer'),
       owner: '0',
@@ -1886,7 +1970,7 @@ describe('边境弓箭手 - 青色波纹 (ability hint)', () => {
       phase: 'move',
     });
 
-    const archerHint = hints.find((h: { entityId: string }) => h.entityId === 'test-archer');
+    const archerHint = hints.find((h: { entityId: string }) => h.entityId === archer.instanceId);
     expect(archerHint).toBeDefined();
     expect(archerHint.actions).toContain('prepare');
   });
@@ -1897,7 +1981,7 @@ describe('边境弓箭手 - 青色波纹 (ability hint)', () => {
     state.phase = 'move';
     state.currentPlayer = '0';
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const archerMoved = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-archer-moved',
       card: makeArcher('test-archer-moved'),
       owner: '0',
@@ -1910,7 +1994,7 @@ describe('边境弓箭手 - 青色波纹 (ability hint)', () => {
       phase: 'move',
     });
 
-    const archerHint = hints.find((h: { entityId: string }) => h.entityId === 'test-archer-moved');
+    const archerHint = hints.find((h: { entityId: string }) => h.entityId === archerMoved.instanceId);
     expect(archerHint).toBeUndefined();
   });
 });

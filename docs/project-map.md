@@ -30,7 +30,7 @@
 
 - `src/components/system/`：系统级 UI 浮层聚合区（悬浮球/Fab、全局 HUD、Modal 栈渲染根、Toast 视口、引擎通知监听）。
 - `src/contexts/`：全局状态与服务注入点（Auth/Audio/ModalStack/Undo/Rematch/GameMode 等）。
-- `src/services/`：独立于 boardgame.io 的实时通道（match/lobby/social socket），用于大厅/社交/重赛投票等。
+- `src/services/`：独立的实时通道（match/lobby/social socket），用于大厅/社交/重赛投票等。
 - `src/engine/systems/`：引擎插件系统（Undo/Prompt/Flow/Rematch/Tutorial/ResponseWindow/Log 等），通过 hook 介入 command/event 管线。
 
 ```

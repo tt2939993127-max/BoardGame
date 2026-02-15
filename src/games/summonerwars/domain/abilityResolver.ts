@@ -37,6 +37,7 @@ import {
   type ExpressionNode as PrimitiveExpressionNode,
 } from '../../../engine/primitives';
 import { getBaseCardId, isUndeadCard, isPlagueZombieCard, isFortressUnit, CARD_IDS } from './ids';
+import { buildUsageKey } from './utils';
 
 // ============================================================================
 // 效果解析上下文
@@ -369,8 +370,11 @@ export function resolveEffect(
           payload: {
             position: target.position,
             cardId: target.cardId,
+            instanceId: target.instanceId,
             cardName: target.card.name,
             owner: target.owner,
+            killerPlayerId: ctx.ownerId,
+            killerUnitId: ctx.sourceUnit.instanceId,
             sourceAbilityId: abilityId,
           },
           timestamp,
@@ -390,7 +394,7 @@ export function resolveEffect(
           payload: {
             from: target.position,
             to: toPosition,
-            unitId: target.cardId,
+            unitId: target.instanceId,
             sourceAbilityId: abilityId,
           },
           timestamp,
@@ -418,7 +422,7 @@ export function resolveEffect(
       events.push(createAbilityTriggeredEvent({
         abilityId: 'soulless',
         effectType: 'preventMagicGain',
-        sourceUnitId: ctx.sourceUnit.cardId,
+        sourceUnitId: ctx.sourceUnit.instanceId,
         sourcePosition: ctx.sourcePosition,
       }, timestamp));
       break;
@@ -450,7 +454,7 @@ export function resolveEffect(
             cardType: effect.cardType,
             position,
             sourceAbilityId: abilityId,
-            sourceUnitId: ctx.sourceUnit.cardId,
+            sourceUnitId: ctx.sourceUnit.instanceId,
           },
           timestamp,
         });
@@ -468,7 +472,7 @@ export function resolveEffect(
         events.push(createAbilityTriggeredEvent({
           abilityId: effect.actionId,
           params: effect.params,
-          sourceUnitId: ctx.sourceUnit.cardId,
+          sourceUnitId: ctx.sourceUnit.instanceId,
           sourcePosition: ctx.sourcePosition,
         }, timestamp));
       }
@@ -480,7 +484,7 @@ export function resolveEffect(
       for (const target of targets) {
         // 检查目标是否有稳固（stable）技能（含交缠颂歌共享）
         const targetAbilityIds = getUnitAbilities(target, ctx.state);
-        if (targetAbilityIds.includes('stable')) {
+        if (targetAbilityIds.some((ability) => ability.id === 'stable')) {
           // 稳固免疫推拉，不生成事件
           continue;
         }
@@ -489,7 +493,7 @@ export function resolveEffect(
           type: eventType,
           payload: {
             targetPosition: target.position,
-            targetUnitId: target.cardId,
+            targetUnitId: target.instanceId,
             distance: effect.distance,
             direction: effect.direction,
             sourcePosition: ctx.sourcePosition,
@@ -508,7 +512,7 @@ export function resolveEffect(
         effectType: 'extraMove',
         value: effect.value,
         canPassThrough: effect.canPassThrough,
-        sourceUnitId: ctx.sourceUnit.cardId,
+        sourceUnitId: ctx.sourceUnit.instanceId,
         sourcePosition: ctx.sourcePosition,
       }, timestamp));
       break;
@@ -521,7 +525,7 @@ export function resolveEffect(
           type: SW_EVENTS.CONTROL_TRANSFERRED,
           payload: {
             targetPosition: target.position,
-            targetUnitId: target.cardId,
+            targetUnitId: target.instanceId,
             newOwner: ctx.ownerId,
             duration: effect.duration ?? 'permanent',
             sourceAbilityId: abilityId,
@@ -536,7 +540,7 @@ export function resolveEffect(
       events.push({
         type: SW_EVENTS.DAMAGE_REDUCED,
         payload: {
-          sourceUnitId: ctx.sourceUnit.cardId,
+          sourceUnitId: ctx.sourceUnit.instanceId,
           sourcePosition: ctx.sourcePosition,
           value: effect.value,
           condition: effect.condition,
@@ -554,7 +558,7 @@ export function resolveEffect(
           type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
           payload: {
             targetPosition: target.position,
-            targetUnitId: target.cardId,
+            targetUnitId: target.instanceId,
             sourceAbilityId: abilityId,
           },
           timestamp,
@@ -587,7 +591,7 @@ export function resolveAbilityEffects(
   events.push(createAbilityTriggeredEvent({
     abilityId: ability.id,
     abilityName: ability.name,
-    sourceUnitId: ctx.sourceUnit.cardId,
+    sourceUnitId: ctx.sourceUnit.instanceId,
     sourcePosition: ctx.sourcePosition,
     skipUsageCount: true,
   }, ctx.timestamp));
@@ -634,19 +638,16 @@ export function getUnitAbilities(unit: UnitInstance, state: SummonerWarsCore): A
       if (!ev.entanglementTargets) continue;
       const [t1, t2] = ev.entanglementTargets;
       let partnerBaseAbilities: string[] | undefined;
-      if (t1 === unit.cardId) {
-        const partner = findUnitOnBoard(state, t2);
+      if (t1 === unit.instanceId) {
+        const partner = findUnitByInstanceIdOnBoard(state, t2);
         if (partner) {
-          const base = partner.card.abilities ?? [];
-          const temp = partner.tempAbilities ?? [];
-          partnerBaseAbilities = temp.length > 0 ? [...base, ...temp] : [...base];
+          // 规则定义：基础能力 = 单位卡上印刷的能力，不含 tempAbilities
+          partnerBaseAbilities = [...(partner.card.abilities ?? [])];
         }
-      } else if (t2 === unit.cardId) {
-        const partner = findUnitOnBoard(state, t1);
+      } else if (t2 === unit.instanceId) {
+        const partner = findUnitByInstanceIdOnBoard(state, t1);
         if (partner) {
-          const base = partner.card.abilities ?? [];
-          const temp = partner.tempAbilities ?? [];
-          partnerBaseAbilities = temp.length > 0 ? [...base, ...temp] : [...base];
+          partnerBaseAbilities = [...(partner.card.abilities ?? [])];
         }
       }
       if (partnerBaseAbilities) {
@@ -662,12 +663,12 @@ export function getUnitAbilities(unit: UnitInstance, state: SummonerWarsCore): A
     .filter((def): def is AbilityDef => def !== undefined);
 }
 
-/** 按 cardId 在棋盘上查找单位 */
-function findUnitOnBoard(state: SummonerWarsCore, cardId: string): UnitInstance | undefined {
+/** 按 instanceId 在棋盘上查找单位 */
+function findUnitByInstanceIdOnBoard(state: SummonerWarsCore, instanceId: string): UnitInstance | undefined {
   for (let row = 0; row < state.board.length; row++) {
     for (let col = 0; col < (state.board[row]?.length ?? 0); col++) {
       const unit = state.board[row]?.[col]?.unit;
-      if (unit && unit.cardId === cardId) return unit;
+      if (unit && unit.instanceId === instanceId) return unit;
     }
   }
   return undefined;
@@ -687,7 +688,7 @@ export function triggerAbilities(
   for (const ability of matchingAbilities) {
     // 检查使用次数限制（usesPerTurn）
     if (ability.usesPerTurn !== undefined) {
-      const usageKey = `${ctx.sourceUnit.cardId}:${ability.id}`;
+      const usageKey = buildUsageKey(ctx.sourceUnit.instanceId, ability.id);
       const usageCount = ctx.state.abilityUsageCount[usageKey] ?? 0;
       if (usageCount >= ability.usesPerTurn) {
         // 已达到使用次数上限，跳过
@@ -758,7 +759,7 @@ export function calculateEffectiveStrength(
   if (targetUnit && unit.card.unitClass === 'summoner') {
     const player = state.players[unit.owner];
     for (const ev of player.activeEvents) {
-      if (getBaseCardId(ev.id) === CARD_IDS.TRICKSTER_HYPNOTIC_LURE && ev.targetUnitId === targetUnit.cardId) {
+      if (getBaseCardId(ev.id) === CARD_IDS.TRICKSTER_HYPNOTIC_LURE && ev.targetUnitId === targetUnit.instanceId) {
         strength += 1;
       }
     }
@@ -786,13 +787,9 @@ export function calculateEffectiveStrength(
           const value = typeof effect.value === 'number'
             ? effect.value
             : evaluateExpression(effect.value, ctx);
-          
-          // 力量强化最多+5
-          if (ability.id === 'power_boost' || ability.id === 'power_up') {
-            strength += Math.min(value, 5);
-          } else {
-            strength += value;
-          }
+          // 数据驱动上限：由 AbilityDef 的 maxBonus 字段控制
+          const capped = effect.maxBonus != null ? Math.min(value, effect.maxBonus) : value;
+          strength += capped;
         }
       }
     }
@@ -818,7 +815,7 @@ export function calculateEffectiveStrength(
         if (adjPos.row < 0 || adjPos.row >= state.board.length) continue;
         if (adjPos.col < 0 || adjPos.col >= (state.board[0]?.length ?? 0)) continue;
         const adjUnit = state.board[adjPos.row]?.[adjPos.col]?.unit;
-        if (adjUnit && adjUnit.owner === unit.owner && adjUnit.cardId !== unit.cardId) {
+        if (adjUnit && adjUnit.owner === unit.owner && adjUnit.instanceId !== unit.instanceId) {
           adjacentAllies++;
         }
       }
@@ -836,7 +833,7 @@ export function calculateEffectiveStrength(
     for (let row = 0; row < BOARD_ROWS; row++) {
       for (let col = 0; col < BOARD_COLS; col++) {
         const other = state.board[row]?.[col]?.unit;
-        if (other && other.owner === unit.owner && other.cardId !== unit.cardId
+        if (other && other.owner === unit.owner && other.instanceId !== unit.instanceId
           && isFortressUnit(other.card)
           && manhattanDistance(unit.position, { row, col }) <= 2) {
           strength += 1;
@@ -945,8 +942,29 @@ export function getEffectiveLife(unit: UnitInstance, state: SummonerWarsCore): n
           const value = typeof effect.value === 'number'
             ? effect.value
             : (unit.boosts ?? 0); // 充能值
-          // 生命强化最多+5
-          life += Math.min(value, 5);
+          // 数据驱动上限：由 AbilityDef 的 maxBonus 字段控制
+          const capped = effect.maxBonus != null ? Math.min(value, effect.maxBonus) : value;
+          life += capped;
+        }
+      }
+    }
+  }
+
+  // mobile_structure 单位视为建筑，受 auraStructureLife 光环加成（如 cold_snap）
+  if (abilities.some(a => a.id === 'mobile_structure')) {
+    const friendlyUnits = getPlayerUnits(state, unit.owner);
+    for (const ally of friendlyUnits) {
+      if (ally.instanceId === unit.instanceId) continue; // 跳过自身
+      const allyAbilities = getUnitAbilities(ally, state);
+      for (const ability of allyAbilities) {
+        if (ability.trigger !== 'passive') continue;
+        for (const effect of ability.effects) {
+          if (effect.type === 'auraStructureLife') {
+            const dist = manhattanDistance(ally.position, unit.position);
+            if (dist <= effect.range) {
+              life += effect.value;
+            }
+          }
         }
       }
     }
@@ -970,7 +988,9 @@ export function getEffectiveLifeBase(unit: UnitInstance): number {
           const value = typeof effect.value === 'number'
             ? effect.value
             : (unit.boosts ?? 0);
-          life += Math.min(value, 5);
+          // 数据驱动上限：由 AbilityDef 的 maxBonus 字段控制
+          const capped = effect.maxBonus != null ? Math.min(value, effect.maxBonus) : value;
+          life += capped;
         }
       }
     }

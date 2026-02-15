@@ -3,7 +3,7 @@
 ## 关键入口
 - `src/games/<gameId>/`：每个游戏的独立目录
 - `src/games/<gameId>/manifest.ts`：游戏清单条目（id 必须与目录名一致）
-- `src/games/<gameId>/game.ts`：使用引擎适配器创建 Boardgame.io Game
+- `src/games/<gameId>/game.ts`：使用 createGameEngine 创建游戏引擎配置
 - `src/games/<gameId>/Board.tsx`：渲染与交互 UI
 - `src/games/<gameId>/tutorial.ts`：教程配置
 - `src/games/<gameId>/audio.config.ts`：游戏音频配置
@@ -15,7 +15,7 @@
 - `src/games/<gameId>/__tests__/`：测试文件
 
 ## 引擎与系统
-- `src/engine/adapter.ts`：`createGameAdapter`（Boardgame.io 适配器，自动合并系统命令）
+- `src/engine/adapter.ts`：`createGameEngine`（引擎入口工厂，自动合并系统命令）
 - `src/engine/systems/`：引擎系统（Flow/Undo/Interaction/Log/Rematch/Tutorial/ResponseWindow/EventStream/ActionLog/Cheat）
 - `src/engine/systems/index.ts`：`createBaseSystems` 入口
 - `src/engine/primitives/`：引擎原语（expression/condition/target/effects/zones/dice/resources/grid）

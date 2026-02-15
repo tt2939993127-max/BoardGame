@@ -8,6 +8,7 @@
 import { registerPowerModifier, registerBreakpointModifier } from '../domain/ongoingModifiers';
 import type { PowerModifierContext, BreakpointModifierContext } from '../domain/ongoingModifiers';
 import { getBaseDef } from '../data/cards';
+import { isMicrobot } from '../domain/utils';
 
 // ============================================================================
 // 恐龙派系
@@ -63,23 +64,20 @@ function registerRobotModifiers(): void {
         return otherMinionCount;
     });
 
-    // 微型机修理者?ongoing：己方每个微型机 +1 力量
-    // "你的微型? = 所有己方随从（因为阿尔法号让所有随从视为微型机?
-    // MVP：对同控制者的所有随从生效，每个在场的修理者叠加?+1
+    // 微型机修理者 ongoing：己方每个微型机 +1 力量
+    // 描述："你的每个微型机的力量+1"
+    // alpha 在场时所有己方随从视为微型机；alpha 不在场时仅原始微型机受益
     registerPowerModifier('robot_microbot_fixer', (ctx: PowerModifierContext) => {
-        // 计算场上与目标随从同控制者的修理者数?
+        // 目标随从必须是微型机才能受益
+        if (!isMicrobot(ctx.state, ctx.minion)) return 0;
+        // 计算场上与目标随从同控制者的修理者数量
         let fixerCount = 0;
         for (const base of ctx.state.bases) {
             fixerCount += base.minions.filter(
                 m => m.defId === 'robot_microbot_fixer' && m.controller === ctx.minion.controller
             ).length;
         }
-        if (fixerCount === 0) return 0;
-        // 只对同控制者的随从生效
-        const anyFixer = ctx.state.bases.flatMap(b => b.minions)
-            .find(m => m.defId === 'robot_microbot_fixer');
-        if (!anyFixer || anyFixer.controller !== ctx.minion.controller) return 0;
-        return fixerCount; // 每个修理?+1
+        return fixerCount; // 每个修理者 +1
     });
 }
 

@@ -9,7 +9,7 @@
 - **新增 VOTE_REMATCH 命令**：玩家投票/取消投票
 - **新增 RematchActions 组件**：通用 UI，显示投票状态与按钮
 - **BREAKING**：移除 TicTacToe 中基于 `lobbyClient.playAgain` 的旧逻辑
-- 重开使用 boardgame.io 的 `reset()` 函数，在同一 match 内重置状态
+- 重开使用引擎的 `reset()` 函数，在同一 match 内重置状态
 
 ## Impact
 - Affected specs: `game-registry`（新增 rematch 系统支持声明）

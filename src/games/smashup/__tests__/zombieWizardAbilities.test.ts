@@ -421,6 +421,60 @@ describe('僵尸派系能力', () => {
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('zombie_mall_crawl');
     });
+
+    it('zombie_mall_crawl: 选择卡名后同名卡进入弃牌堆，牌库重洗', () => {
+        // 模拟 interaction 解决时的状态：a1 已打出（在弃牌堆中），牌库有 4 张卡
+        const stateAtInteraction = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [],
+                    deck: [
+                        makeCard('d1', 'zombie_walker', 'minion', '0'),
+                        makeCard('d2', 'zombie_grave_digger', 'minion', '0'),
+                        makeCard('d3', 'zombie_walker', 'minion', '0'),
+                        makeCard('d4', 'test_card', 'action', '0'),
+                    ],
+                    discard: [
+                        makeCard('a1', 'zombie_mall_crawl', 'action', '0'),
+                        makeCard('x1', 'old_discard', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState = makeMatchState(stateAtInteraction);
+
+        // 解决交互：选择 zombie_walker
+        const handler = getInteractionHandler('zombie_mall_crawl');
+        expect(handler).toBeDefined();
+        const result = handler!(matchState, '0', { defId: 'zombie_walker' }, undefined, defaultRandom, 1);
+        expect(result).toBeDefined();
+
+        // 应用事件
+        const finalState = applyEvents(stateAtInteraction, result!.events);
+
+        // 验证：d1, d3 (zombie_walker) 应在弃牌堆中
+        const discardUids = finalState.players['0'].discard.map(c => c.uid);
+        expect(discardUids).toContain('d1');
+        expect(discardUids).toContain('d3');
+
+        // 验证：a1, x1（原弃牌堆的卡）应在牌库中（被 DECK_RESHUFFLED 合并进牌库）
+        const deckUids = finalState.players['0'].deck.map(c => c.uid);
+        expect(deckUids).toContain('a1');
+        expect(deckUids).toContain('x1');
+
+        // 验证：d2, d4 应在牌库中（非同名卡留在牌库）
+        expect(deckUids).toContain('d2');
+        expect(deckUids).toContain('d4');
+
+        // 验证：牌库中不应有 zombie_walker
+        const walkersInDeck = finalState.players['0'].deck.filter(c => c.defId === 'zombie_walker');
+        expect(walkersInDeck.length).toBe(0);
+
+        // 验证：总卡牌数守恒（4 deck + 2 discard = 6）
+        const totalCards = finalState.players['0'].deck.length + finalState.players['0'].discard.length + finalState.players['0'].hand.length;
+        expect(totalCards).toBe(6);
+    });
 });
 
 

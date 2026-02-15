@@ -23,6 +23,8 @@ export interface BuffInstance<TData = any> {
   count?: number;
   /** 额外数据（游戏特定） */
   data?: TData;
+  /** 来源卡牌精灵图配置（有值时图标可点击打开大图） */
+  spriteConfig?: { atlasId: string; frameIndex: number };
 }
 
 /**
@@ -123,15 +125,19 @@ export class BuffRegistry<TGameState = any, TEntity = any> {
 interface BuffIconBadgeProps {
   buff: BuffInstance;
   visualConfig: BuffVisualConfig;
+  onClick?: (buff: BuffInstance) => void;
 }
 
-export const BuffIconBadge: React.FC<BuffIconBadgeProps> = ({ buff, visualConfig }) => {
+export const BuffIconBadge: React.FC<BuffIconBadgeProps> = ({ buff, visualConfig, onClick }) => {
   const Icon = visualConfig.icon;
+  // 只有来源卡牌有精灵图配置时才可点击
+  const clickable = !!onClick && !!buff.spriteConfig;
 
   return (
     <div
-      className={`relative w-[1.4vw] h-[1.4vw] rounded-full ${visualConfig.bgColor} flex items-center justify-center shadow-lg border-2 border-white/40`}
+      className={`relative w-[1.4vw] h-[1.4vw] rounded-full ${visualConfig.bgColor} flex items-center justify-center shadow-lg border-2 border-white/40 ${clickable ? 'cursor-pointer pointer-events-auto hover:brightness-125 transition-[filter]' : ''}`}
       title={visualConfig.label}
+      onClick={clickable ? (e) => { e.stopPropagation(); onClick(buff); } : undefined}
     >
       <Icon className={`w-[0.9vw] h-[0.9vw] ${visualConfig.iconColor}`} />
       {buff.count !== undefined && buff.count > 1 && (
@@ -153,6 +159,8 @@ interface BuffIconsProps<TGameState = any, TEntity = any> {
   registry: BuffRegistry<TGameState, TEntity>;
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   className?: string;
+  /** 点击 buff 图标的回调，传入则图标可点击 */
+  onBuffClick?: (buff: BuffInstance) => void;
 }
 
 export function BuffIcons<TGameState = any, TEntity = any>({
@@ -161,6 +169,7 @@ export function BuffIcons<TGameState = any, TEntity = any>({
   registry,
   position,
   className = '',
+  onBuffClick,
 }: BuffIconsProps<TGameState, TEntity>) {
   const buffs = registry.detectBuffs(entity, gameState);
 
@@ -188,6 +197,7 @@ export function BuffIcons<TGameState = any, TEntity = any>({
             key={`${buff.type}-${index}`}
             buff={buff}
             visualConfig={visualConfig}
+            onClick={onBuffClick}
           />
         );
       })}

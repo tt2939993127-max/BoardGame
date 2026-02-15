@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, PlayerId } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -40,8 +40,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -141,7 +143,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeSummoner('test-summoner'),
       owner: '0',
@@ -158,7 +160,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'mind_capture_resolve',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       choice: 'control',
       targetPosition: { row: 4, col: 4 },
     });
@@ -176,7 +178,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeSummoner('test-summoner'),
       owner: '0',
@@ -193,7 +195,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'mind_capture_resolve',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       choice: 'damage',
       targetPosition: { row: 4, col: 4 },
       hits: 3,
@@ -216,7 +218,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeSummoner('test-summoner'),
       owner: '0',
@@ -233,7 +235,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'mind_capture_resolve',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       choice: 'damage',
       targetPosition: { row: 4, col: 4 },
       hits: 3,
@@ -249,7 +251,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeSummoner('test-summoner'),
       owner: '0',
@@ -263,7 +265,7 @@ describe('泰珂露 - 心灵捕获决策 (mind_capture_resolve)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'mind_capture_resolve',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         choice: 'invalid',
       },
       playerId: '0',
@@ -282,7 +284,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-telekinetic',
       card: makeTelekinetic('test-telekinetic'),
       owner: '0',
@@ -299,7 +301,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'telekinesis',
-      sourceUnitId: 'test-telekinetic',
+      sourceUnitId: telekinetic.instanceId,
       targetPosition: { row: 4, col: 4 },
       direction: 'push',
     });
@@ -317,7 +319,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-telekinetic',
       card: makeTelekinetic('test-telekinetic'),
       owner: '0',
@@ -342,7 +344,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'telekinesis',
-      sourceUnitId: 'test-telekinetic',
+      sourceUnitId: telekinetic.instanceId,
       targetPosition: { row: 4, col: 4 },
       direction: 'push',
     });
@@ -366,7 +368,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-telekinetic',
       card: makeTelekinetic('test-telekinetic'),
       owner: '0',
@@ -383,7 +385,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'telekinesis',
-      sourceUnitId: 'test-telekinetic',
+      sourceUnitId: telekinetic.instanceId,
       targetPosition: { row: 4, col: 4 },
       direction: 'pull',
     });
@@ -401,7 +403,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-telekinetic',
       card: makeTelekinetic('test-telekinetic'),
       owner: '0',
@@ -419,7 +421,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'telekinesis',
-      sourceUnitId: 'test-telekinetic',
+      sourceUnitId: telekinetic.instanceId,
       targetPosition: { row: 4, col: 4 },
       direction: 'push',
     });
@@ -436,7 +438,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-telekinetic',
       card: makeTelekinetic('test-telekinetic'),
       owner: '0',
@@ -456,7 +458,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'telekinesis',
-        sourceUnitId: 'test-telekinetic',
+        sourceUnitId: telekinetic.instanceId,
         targetPosition: { row: 4, col: 3 },
         direction: 'push',
       },
@@ -471,7 +473,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-telekinetic',
       card: makeTelekinetic('test-telekinetic'),
       owner: '0',
@@ -491,7 +493,7 @@ describe('掷术师 - 念力 (telekinesis) ACTIVATE_ABILITY', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'telekinesis',
-        sourceUnitId: 'test-telekinetic',
+        sourceUnitId: telekinetic.instanceId,
         targetPosition: { row: 1, col: 2 },
         direction: 'push',
       },
@@ -513,7 +515,7 @@ describe('卡拉 - 高阶念力 (high_telekinesis) ACTIVATE_ABILITY', () => {
     // 清除包括 row 0，确保推拉目标位置为空
     clearArea(state, [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kara = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kara',
       card: makeKara('test-kara'),
       owner: '0',
@@ -531,7 +533,7 @@ describe('卡拉 - 高阶念力 (high_telekinesis) ACTIVATE_ABILITY', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'high_telekinesis',
-      sourceUnitId: 'test-kara',
+      sourceUnitId: kara.instanceId,
       targetPosition: { row: 1, col: 2 },
       direction: 'push',
     });
@@ -548,7 +550,7 @@ describe('卡拉 - 高阶念力 (high_telekinesis) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kara = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kara',
       card: makeKara('test-kara'),
       owner: '0',
@@ -568,7 +570,7 @@ describe('卡拉 - 高阶念力 (high_telekinesis) ACTIVATE_ABILITY', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'high_telekinesis',
-        sourceUnitId: 'test-kara',
+        sourceUnitId: kara.instanceId,
         targetPosition: { row: 0, col: 2 },
         direction: 'push',
       },
@@ -589,13 +591,13 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kara = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kara',
       card: makeKara('test-kara'),
       owner: '0',
     });
 
-    placeUnit(state, { row: 4, col: 4 }, {
+    const ally = placeUnit(state, { row: 4, col: 4 }, {
       cardId: 'test-ally',
       card: makeAllyCommon('test-ally'),
       owner: '0',
@@ -606,14 +608,14 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
 
     const { events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'mind_transmission',
-      sourceUnitId: 'test-kara',
+      sourceUnitId: kara.instanceId,
       targetPosition: { row: 4, col: 4 },
     });
 
     // 应有额外攻击事件
     const extraAttackEvents = events.filter(e => e.type === SW_EVENTS.EXTRA_ATTACK_GRANTED);
     expect(extraAttackEvents.length).toBe(1);
-    expect((extraAttackEvents[0].payload as any).targetUnitId).toBe('test-ally');
+    expect((extraAttackEvents[0].payload as any).targetUnitId).toBe(ally.instanceId);
     expect((extraAttackEvents[0].payload as any).sourceAbilityId).toBe('mind_transmission');
   });
 
@@ -621,7 +623,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kara = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kara',
       card: makeKara('test-kara'),
       owner: '0',
@@ -641,7 +643,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'mind_transmission',
-        sourceUnitId: 'test-kara',
+        sourceUnitId: kara.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
@@ -655,7 +657,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kara = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kara',
       card: makeKara('test-kara'),
       owner: '0',
@@ -676,7 +678,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'mind_transmission',
-        sourceUnitId: 'test-kara',
+        sourceUnitId: kara.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
@@ -690,7 +692,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
     const state = createTricksterState();
     clearArea(state, [0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const kara = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-kara',
       card: makeKara('test-kara'),
       owner: '0',
@@ -710,7 +712,7 @@ describe('卡拉 - 读心传念 (mind_transmission) ACTIVATE_ABILITY', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'mind_transmission',
-        sourceUnitId: 'test-kara',
+        sourceUnitId: kara.instanceId,
         targetPosition: { row: 0, col: 2 },
       },
       playerId: '0',
@@ -732,7 +734,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
     clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
 
     // 心灵女巫在 (4,3)
-    placeUnit(state, { row: 4, col: 3 }, {
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-witch',
       card: makeMindWitch('test-witch'),
       owner: '0',
@@ -752,7 +754,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'illusion',
-      sourceUnitId: 'test-witch',
+      sourceUnitId: witch.instanceId,
       targetPosition: { row: 4, col: 5 },
     });
 
@@ -762,15 +764,15 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
     expect((copyEvents[0].payload as any).copiedAbilities).toEqual(['ranged', 'charge']);
 
     // 心灵女巫应获得临时技能
-    const witch = newState.board[4][3].unit!;
-    expect(witch.tempAbilities).toEqual(['ranged', 'charge']);
+    const updatedWitch = newState.board[4][3].unit!;
+    expect(updatedWitch.tempAbilities).toEqual(['ranged', 'charge']);
   });
 
   it('目标必须是士兵（common），不能是召唤师或冠军', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-witch',
       card: makeMindWitch('test-witch'),
       owner: '0',
@@ -791,7 +793,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'illusion',
-        sourceUnitId: 'test-witch',
+        sourceUnitId: witch.instanceId,
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
@@ -805,7 +807,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
     const state = createTricksterState();
     clearArea(state, [1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-witch',
       card: makeMindWitch('test-witch'),
       owner: '0',
@@ -826,7 +828,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'illusion',
-        sourceUnitId: 'test-witch',
+        sourceUnitId: witch.instanceId,
         targetPosition: { row: 1, col: 2 },
       },
       playerId: '0',
@@ -840,7 +842,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-witch',
       card: makeMindWitch('test-witch'),
       owner: '0',
@@ -860,7 +862,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'illusion',
-        sourceUnitId: 'test-witch',
+        sourceUnitId: witch.instanceId,
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
@@ -917,7 +919,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-witch',
       card: makeMindWitch('test-witch'),
       owner: '0',
@@ -935,7 +937,7 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
 
     const { events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'illusion',
-      sourceUnitId: 'test-witch',
+      sourceUnitId: witch.instanceId,
       targetPosition: { row: 4, col: 4 },
     });
 
@@ -963,7 +965,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
     const state = createTricksterState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const windmage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-windmage',
       card: makeWindMage('test-windmage'),
       owner: '0',
@@ -980,7 +982,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'telekinesis_instead',
-      sourceUnitId: 'test-windmage',
+      sourceUnitId: windmage.instanceId,
       targetPosition: { row: 4, col: 4 },
       direction: 'push',
     });
@@ -998,7 +1000,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const windmage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-windmage',
       card: makeWindMage('test-windmage'),
       owner: '0',
@@ -1019,7 +1021,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'telekinesis_instead',
-        sourceUnitId: 'test-windmage',
+        sourceUnitId: windmage.instanceId,
         targetPosition: { row: 4, col: 3 },
         direction: 'push',
       },
@@ -1034,7 +1036,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const windmage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-windmage',
       card: makeWindMage('test-windmage'),
       owner: '0',
@@ -1055,7 +1057,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'telekinesis_instead',
-        sourceUnitId: 'test-windmage',
+        sourceUnitId: windmage.instanceId,
         targetPosition: { row: 4, col: 3 },
         direction: 'push',
       },
@@ -1070,7 +1072,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
     const state = createTricksterState();
     clearArea(state, [1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const windmage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-windmage',
       card: makeWindMage('test-windmage'),
       owner: '0',
@@ -1090,7 +1092,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'telekinesis_instead',
-        sourceUnitId: 'test-windmage',
+        sourceUnitId: windmage.instanceId,
         targetPosition: { row: 1, col: 2 },
         direction: 'push',
       },
@@ -1105,7 +1107,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
     const state = createTricksterState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const windmage = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-windmage',
       card: makeWindMage('test-windmage'),
       owner: '0',
@@ -1125,7 +1127,7 @@ describe('清风法师 - 念力代替攻击 (telekinesis_instead)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'telekinesis_instead',
-        sourceUnitId: 'test-windmage',
+        sourceUnitId: windmage.instanceId,
         targetPosition: { row: 4, col: 3 },
         direction: 'push',
       },

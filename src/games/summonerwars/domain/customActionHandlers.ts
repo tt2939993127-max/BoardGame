@@ -47,7 +47,7 @@ export const swCustomActionRegistry = new ActionHandlerRegistry<SWCustomActionCo
 swCustomActionRegistry.register('soul_transfer_request', ({ ctx, timestamp }) => [{
     type: SW_EVENTS.SOUL_TRANSFER_REQUESTED,
     payload: {
-        sourceUnitId: ctx.sourceUnit.cardId,
+        sourceUnitId: ctx.sourceUnit.instanceId,
         sourcePosition: ctx.sourcePosition,
         victimPosition: ctx.victimPosition,
         ownerId: ctx.ownerId,
@@ -59,7 +59,7 @@ swCustomActionRegistry.register('soul_transfer_request', ({ ctx, timestamp }) =>
 swCustomActionRegistry.register('mind_capture_check', ({ ctx, timestamp }) => [{
     type: SW_EVENTS.MIND_CAPTURE_REQUESTED,
     payload: {
-        sourceUnitId: ctx.sourceUnit.cardId,
+        sourceUnitId: ctx.sourceUnit.instanceId,
         sourcePosition: ctx.sourcePosition,
         targetPosition: ctx.targetPosition,
         ownerId: ctx.ownerId,

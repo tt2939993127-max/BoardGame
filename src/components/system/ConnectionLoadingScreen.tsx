@@ -17,7 +17,7 @@ interface ConnectionLoadingScreenProps {
 /**
  * 带超时检测的连接加载屏幕
  *
- * boardgame.io Client 的 loading 回调在游戏状态为 null 时显示。
+ * GameProvider 在游戏状态为 null 时显示 loading。
  * 如果 SocketIO 连接失败或服务端不返回状态，loading 会永远卡住。
  * 本组件在超时后叠加"重试"和"返回大厅"按钮。
  */

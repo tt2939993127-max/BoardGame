@@ -435,7 +435,7 @@ export async function destroyMatch(
         // 不做“兜底直连”以掩盖问题：销毁必须明确走 proxy 或生产反代。
         // 诊断：
         // - 5173 404：Vite proxy 未生效（或请求没到 Vite dev server）。
-        // - 18000 404：后端没有命中 destroy 中间件（中间件顺序或 boardgame.io 路由吞掉）。
+        // - 18000 404：后端没有命中 destroy 中间件（中间件顺序或路由吞掉）。
 
         const response = await fetch(url, {
             method: 'POST',

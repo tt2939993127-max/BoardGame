@@ -24,9 +24,11 @@ import type {
     BaseReplacedEvent,
     RevealHandEvent,
     RevealDeckTopEvent,
+    RevealDismissedEvent,
     TempPowerAddedEvent,
     BreakpointModifiedEvent,
     BaseDeckShuffledEvent,
+    SpecialLimitUsedEvent,
     MinionOnBase,
     CardInstance,
     BaseInPlay,
@@ -82,11 +84,16 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
 
             for (const [pid, data] of Object.entries(readiedPlayers)) {
                 if (newPlayers[pid]) {
+                    const selectedFactions = state.factionSelection?.playerSelections[pid];
+                    const factions = Array.isArray(selectedFactions) && selectedFactions.length === 2
+                        ? [selectedFactions[0], selectedFactions[1]] as PlayerState['factions']
+                        : newPlayers[pid].factions;
+
                     newPlayers[pid] = {
                         ...newPlayers[pid],
                         deck: data.deck,
                         hand: data.hand,
-                        factions: state.factionSelection?.playerSelections[pid] || [],
+                        factions,
                     };
                 }
             }
@@ -387,6 +394,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 minionsMovedToBaseThisTurn: undefined,
                 // 清空临时临界点修正
                 tempBreakpointModifiers: undefined,
+                // 清空 special 能力限制组使用记录
+                specialLimitUsed: undefined,
                 sleepMarkedPlayers: newSleepMarked?.length ? newSleepMarked : undefined,
                 players: {
                     ...state.players,
@@ -399,6 +408,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         minionsPlayedPerBase: undefined,
                         usedDiscardPlayAbilities: undefined,
                         baseLimitedMinionQuota: undefined,
+                        extraMinionPowerMax: undefined,
                     },
                 },
             };
@@ -449,6 +459,40 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.DECK_REORDERED: {
+            const { playerId, deckUids } = event.payload;
+            const player = state.players[playerId];
+            // 从牌库和弃牌堆中查找卡牌，按 deckUids 顺序组建新牌库
+            // 弃牌堆中被引用的卡会移入牌库，未被引用的留在弃牌堆
+            const deckMap = new Map(player.deck.map(card => [card.uid, card]));
+            const discardMap = new Map(player.discard.map(card => [card.uid, card]));
+            const movedFromDiscard = new Set<string>();
+            const reorderedDeck: CardInstance[] = [];
+            for (const uid of deckUids) {
+                const fromDeck = deckMap.get(uid);
+                if (fromDeck) {
+                    reorderedDeck.push(fromDeck);
+                } else {
+                    const fromDiscard = discardMap.get(uid);
+                    if (fromDiscard) {
+                        reorderedDeck.push(fromDiscard);
+                        movedFromDiscard.add(uid);
+                    }
+                }
+            }
+            // 弃牌堆中未被移走的卡保留
+            const newDiscard = movedFromDiscard.size > 0
+                ? player.discard.filter(c => !movedFromDiscard.has(c.uid))
+                : player.discard;
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: { ...player, deck: reorderedDeck, discard: newDiscard },
+                },
+            };
+        }
+
         case SU_EVENTS.MINION_RETURNED: {
             const { minionUid, minionDefId, fromBaseIndex, toPlayerId } = event.payload;
             const newBases = state.bases.map((base, i) => {
@@ -473,7 +517,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.LIMIT_MODIFIED: {
-            const { playerId, limitType, delta, restrictToBase } = event.payload;
+            const { playerId, limitType, delta, restrictToBase, powerMax } = event.payload;
             const player = state.players[playerId];
             if (limitType === 'minion') {
                 // 基地限定额度：写入 baseLimitedMinionQuota
@@ -493,12 +537,19 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         },
                     };
                 }
-                // 全局额度
+                // 全局额度（带力量限制时记录 extraMinionPowerMax）
+                const updatedPlayer = { ...player, minionLimit: player.minionLimit + delta };
+                if (powerMax !== undefined) {
+                    // 取最严格的限制（多个来源时取最小值）
+                    updatedPlayer.extraMinionPowerMax = player.extraMinionPowerMax !== undefined
+                        ? Math.min(player.extraMinionPowerMax, powerMax)
+                        : powerMax;
+                }
                 return {
                     ...state,
                     players: {
                         ...state.players,
-                        [playerId]: { ...player, minionLimit: player.minionLimit + delta },
+                        [playerId]: updatedPlayer,
                     },
                 };
             }
@@ -585,6 +636,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                             basePower: minionDef?.power ?? 0,
                             powerModifier: 0,
                             tempPowerModifier: 0,
+                            talentUsed: false,
                             attachedActions: [],
                         };
                         // 从弃牌堆移除
@@ -981,11 +1033,39 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
-        // 关闭卡牌展示（清除 pendingReveal）
+        // 关闭卡牌展示（逐个确认或直接清除）
         case SU_EVENTS.REVEAL_DISMISSED: {
+            const reveal = state.pendingReveal;
+            if (!reveal) return state;
+
+            // 非 'all' 模式：直接清除
+            if (reveal.viewerPlayerId !== 'all') {
+                return { ...state, pendingReveal: undefined };
+            }
+
+            // 'all' 模式：记录确认者，全部确认后清除
+            const { confirmPlayerId } = (event as RevealDismissedEvent).payload;
+            const confirmed = [...(reveal.confirmedPlayerIds ?? [])];
+            if (confirmPlayerId && !confirmed.includes(confirmPlayerId)) {
+                confirmed.push(confirmPlayerId);
+            }
+
+            // 计算需要确认的玩家：所有玩家 - 被展示者
+            const targetIds = Array.isArray(reveal.targetPlayerId)
+                ? reveal.targetPlayerId
+                : [reveal.targetPlayerId];
+            const allPlayerIds = Object.keys(state.players);
+            const needConfirmIds = allPlayerIds.filter(pid => !targetIds.includes(pid));
+
+            // 全部确认 → 清除展示
+            if (needConfirmIds.every(pid => confirmed.includes(pid))) {
+                return { ...state, pendingReveal: undefined };
+            }
+
+            // 部分确认 → 更新 confirmedPlayerIds
             return {
                 ...state,
-                pendingReveal: undefined,
+                pendingReveal: { ...reveal, confirmedPlayerIds: confirmed },
             };
         }
 
@@ -1022,6 +1102,21 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         case SU_EVENTS.BASE_DECK_SHUFFLED: {
             const { newBaseDeckDefIds } = (event as BaseDeckShuffledEvent).payload;
             return { ...state, baseDeck: newBaseDeckDefIds };
+        }
+
+        // special 能力限制组使用记录（每基地每回合一次）
+        case SU_EVENTS.SPECIAL_LIMIT_USED: {
+            const { limitGroup, baseIndex } = (event as SpecialLimitUsedEvent).payload;
+            const prev = state.specialLimitUsed ?? {};
+            const prevGroup = prev[limitGroup] ?? [];
+            if (prevGroup.includes(baseIndex)) return state;
+            return {
+                ...state,
+                specialLimitUsed: {
+                    ...prev,
+                    [limitGroup]: [...prevGroup, baseIndex],
+                },
+            };
         }
 
         default:

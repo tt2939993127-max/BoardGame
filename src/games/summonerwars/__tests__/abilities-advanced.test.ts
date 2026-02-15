@@ -9,7 +9,7 @@ import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, EventCard, PlayerId } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
 import { BOARD_ROWS, BOARD_COLS } from '../domain/helpers';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -46,8 +46,10 @@ function findUnitPosition(state: SummonerWarsCore, predicate: (unit: BoardUnit) 
 
 /** 在指定位置放置测试单位 */
 function placeUnit(state: SummonerWarsCore, pos: CellCoord, overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -211,7 +213,7 @@ describe('亡灵弓箭手 - 灵魂转移 (soul_transfer)', () => {
       }
 
       // 弓箭手在 (4,2)
-      placeUnit(state, { row: 4, col: 2 }, {
+      const archer = placeUnit(state, { row: 4, col: 2 }, {
         cardId: 'test-archer',
         card: makeUndeadArcher('test-archer'),
         owner: '0',
@@ -236,7 +238,7 @@ describe('亡灵弓箭手 - 灵魂转移 (soul_transfer)', () => {
 
       const soulTransferEvents = events.filter(e => e.type === SW_EVENTS.SOUL_TRANSFER_REQUESTED);
       expect(soulTransferEvents.length).toBe(1);
-      expect((soulTransferEvents[0].payload as any).sourceUnitId).toBe('test-archer');
+      expect((soulTransferEvents[0].payload as any).sourceUnitId).toBe(archer.instanceId);
   });
 
   it('弓箭手未击杀时不触发灵魂转移请求', () => {
@@ -327,7 +329,7 @@ describe('亡灵弓箭手 - 灵魂转移 (soul_transfer)', () => {
       }
     }
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeUndeadArcher('test-archer'),
       owner: '0',
@@ -337,7 +339,7 @@ describe('亡灵弓箭手 - 灵魂转移 (soul_transfer)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'soul_transfer',
-      sourceUnitId: 'test-archer',
+      sourceUnitId: archer.instanceId,
       targetPosition: { row: 4, col: 4 },
     });
 
@@ -521,7 +523,7 @@ describe('召唤师 - 复活死灵 (revive_undead)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'revive_undead',
-      sourceUnitId: summoner.cardId,
+      sourceUnitId: summoner.instanceId,
       targetCardId: discardCard.id,
       targetPosition: targetPos,
     });
@@ -553,7 +555,7 @@ describe('伊路特-巴尔 - 火祀召唤 (fire_sacrifice_summon)', () => {
     state.board[4][3].unit = undefined;
 
     // 放置伊路特-巴尔
-    placeUnit(state, { row: 4, col: 2 }, {
+    const elutBar = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-elut-bar',
       card: {
         id: 'test-elut-bar', cardType: 'unit', name: '伊路特-巴尔',
@@ -565,7 +567,7 @@ describe('伊路特-巴尔 - 火祀召唤 (fire_sacrifice_summon)', () => {
     });
 
     // 放置友方牺牲品
-    placeUnit(state, { row: 4, col: 3 }, {
+    const victim = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-victim',
       card: makeEnemy('test-victim'),
       owner: '0',
@@ -576,8 +578,8 @@ describe('伊路特-巴尔 - 火祀召唤 (fire_sacrifice_summon)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'fire_sacrifice_summon',
-      sourceUnitId: 'test-elut-bar',
-      targetUnitId: 'test-victim',
+      sourceUnitId: elutBar.instanceId,
+      targetUnitId: victim.cardId,
     });
 
     // 牺牲品应被消灭（位置空或被伊路特-巴尔占据）
@@ -598,7 +600,7 @@ describe('德拉戈斯 - 吸取生命 (life_drain)', () => {
     state.board[4][3].unit = undefined;
 
     // 放置德拉戈斯
-    placeUnit(state, { row: 4, col: 2 }, {
+    const dragos = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-dragos',
       card: {
         id: 'test-dragos', cardType: 'unit', name: '德拉戈斯',
@@ -610,7 +612,7 @@ describe('德拉戈斯 - 吸取生命 (life_drain)', () => {
     });
 
     // 放置友方牺牲品（2格内）
-    placeUnit(state, { row: 4, col: 3 }, {
+    const sacrifice = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-sacrifice',
       card: makeEnemy('test-sacrifice'),
       owner: '0',
@@ -621,8 +623,8 @@ describe('德拉戈斯 - 吸取生命 (life_drain)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'life_drain',
-      sourceUnitId: 'test-dragos',
-      targetUnitId: 'test-sacrifice',
+      sourceUnitId: dragos.instanceId,
+      targetUnitId: sacrifice.cardId,
     });
 
     // 牺牲品应被消灭
@@ -650,7 +652,7 @@ describe('亡灵疫病体 - 感染 (infection)', () => {
 
     // 放置疫病体攻击者（用于 sourceUnitId）
     state.board[4][2].unit = undefined;
-    placeUnit(state, { row: 4, col: 2 }, {
+    const zombieAttacker = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-zombie-attacker',
       card: makePlagueZombie('test-zombie-attacker'),
       owner: '0',
@@ -660,7 +662,7 @@ describe('亡灵疫病体 - 感染 (infection)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'infection',
-      sourceUnitId: 'test-zombie-attacker',
+      sourceUnitId: zombieAttacker.instanceId,
       targetCardId: discardZombie.id,
       targetPosition: { row: 4, col: 3 },
     });

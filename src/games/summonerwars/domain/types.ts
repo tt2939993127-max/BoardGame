@@ -91,7 +91,7 @@ export interface EventCard {
   isActive?: boolean;    // 是否为主动事件
   charges?: number;      // 充能计数（殉葬火堆等主动事件使用）
   targetUnitId?: string; // 目标单位 ID（催眠引诱等需要追踪目标的主动事件）
-  entanglementTargets?: [string, string]; // 交缠颂歌：两个目标单位 ID
+  entanglementTargets?: [string, string]; // 交缠颂歌：两个目标单位的 instanceId
   deckSymbols: string[];
   spriteIndex?: number;  // 精灵图索引
   spriteAtlas?: 'hero' | 'cards' | 'portal';
@@ -121,6 +121,8 @@ export type Card = UnitCard | EventCard | StructureCard;
 
 /** 战场上的单位 */
 export interface BoardUnit {
+  /** 单位实例唯一 ID（格式：`${cardId}#${序号}`，如 `frontier_archer#1`） */
+  instanceId: string;
   cardId: string;
   card: UnitCard;
   owner: PlayerId;
@@ -210,8 +212,10 @@ export interface SummonerWarsCore {
   hostStarted: boolean;
   /** 自定义牌组数据（选角阶段使用，玩家选择自定义牌组时存储） */
   customDeckData?: Partial<Record<PlayerId, SerializedCustomDeck>>;
-  /** 技能使用次数追踪（key: `${unitCardId}:${abilityId}`，回合结束清空） */
+  /** 技能使用次数追踪（key: `${instanceId}:${abilityId}`，回合结束清空） */
   abilityUsageCount: Record<string, number>;
+  /** 单位本回合击杀计数（key: killerUnitInstanceId，回合切换清空） */
+  unitKillCountThisTurn?: Record<string, number>;
 }
 
 // ============================================================================
@@ -316,10 +320,12 @@ export interface BloodSummonStepCommand {
 export interface ActivateAbilityCommand {
   type: typeof SW_COMMANDS.ACTIVATE_ABILITY;
   abilityId: string;
+  /** 来源单位的 instanceId（BoardUnit.instanceId） */
   sourceUnitId: string;
   targetCardId?: string;    // 从弃牌堆选中的卡牌 ID
   targetPosition?: CellCoord; // 目标位置
-  targetUnitId?: string;    // 目标单位 ID
+  /** 目标单位的 instanceId（BoardUnit.instanceId） */
+  targetUnitId?: string;
 }
 
 /** 殉葬火堆治疗命令 */
@@ -374,7 +380,6 @@ export const SW_EVENTS = {
   UNIT_CHARGED: 'sw:unit_charged',
   // 建筑事件
   STRUCTURE_BUILT: 'sw:structure_built',
-  STRUCTURE_DAMAGED: 'sw:structure_damaged',
   STRUCTURE_DESTROYED: 'sw:structure_destroyed',
   STRUCTURE_HEALED: 'sw:structure_healed',
   // 资源事件
@@ -434,9 +439,11 @@ export const SW_EVENTS = {
  * 
  * 所有 ABILITY_TRIGGERED 事件必须包含 sourcePosition，
  * 否则 UI 层（useGameEvents）无法定位来源单位、无法触发交互。
+ * sourceUnitId 为 BoardUnit.instanceId。
  */
 export interface AbilityTriggeredPayload {
   abilityId: string;
+  /** 来源单位的 instanceId（BoardUnit.instanceId） */
   sourceUnitId: string;
   /** 来源单位位置 — 必填，UI 层依赖此字段定位单位 */
   sourcePosition: CellCoord;

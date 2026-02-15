@@ -94,7 +94,7 @@ abilityExecutorRegistry.register('healing', (ctx: SWAbilityContext) => {
   });
   events.push({
     type: SW_EVENTS.HEALING_MODE_SET,
-    payload: { position: sourcePosition, unitId: sourceUnit.cardId },
+    payload: { position: sourcePosition, unitId: sourceUnit.instanceId },
     timestamp,
   });
   return { events };

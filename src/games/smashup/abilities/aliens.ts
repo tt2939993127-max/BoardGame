@@ -10,13 +10,13 @@ import { SU_EVENTS } from '../domain/types';
 import type {
     MinionReturnedEvent, VpAwardedEvent, SmashUpEvent,
     MinionCardDef, OngoingDetachedEvent, BaseReplacedEvent,
-    CardToDeckBottomEvent, MinionPlayedEvent,
+    CardToDeckBottomEvent,
     SmashUpCore,
 } from '../domain/types';
 import {
     buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower,
     grantExtraMinion, moveMinion, revealHand, shuffleBaseDeck,
-    resolveOrPrompt,
+    resolveOrPrompt, buildMinionPlayedEvents,
 } from '../domain/abilityHelpers';
 import { getBaseDef, getCardDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -61,9 +61,14 @@ function alienSupremeOverlord(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [] };
+    const minionOptions = buildMinionTargetOptions(targets);
+    const options = [
+        { id: 'skip', label: '跳过（不返回随从）', value: { skip: true } },
+        ...minionOptions,
+    ];
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_supreme_overlord_${ctx.now}`, ctx.playerId,
-        '选择要返回手牌的随从', buildMinionTargetOptions(targets), 'alien_supreme_overlord',
+        '你可以将一个随从返回到其拥有者的手上', options, 'alien_supreme_overlord',
     )) };
 }
 
@@ -74,15 +79,19 @@ function alienCollector(ctx: AbilityContext): AbilityResult {
         m => getMinionPower(ctx.state, m, ctx.baseIndex) <= 3
     );
     if (targets.length === 0) return { events: [] };
-    const options = targets.map(t => {
+    const minionTargets = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
         const name = def?.name ?? t.defId;
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
+    const options = [
+        { id: 'skip', label: '跳过（不收回随从）', value: { skip: true } },
+        ...buildMinionTargetOptions(minionTargets),
+    ];
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_collector_${ctx.now}`, ctx.playerId,
-        '选择要收回的力量≤3的随从', buildMinionTargetOptions(options), 'alien_collector',
+        '你可以将这个基地的一个力量≤3的随从返回其拥有者的手上', options, 'alien_collector',
     )) };
 }
 
@@ -98,7 +107,8 @@ function alienScoutAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerRe
     if (ctx.baseIndex === undefined) return [];
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return [];
-    const scouts = base.minions.filter(m => m.defId === 'alien_scout' && m.controller === ctx.playerId);
+    // 规则：所有玩家的 alien_scout 都可以在计分后触发（不限当前回合玩家）
+    const scouts = base.minions.filter(m => m.defId === 'alien_scout');
     if (scouts.length === 0) return [];
     if (!ctx.matchState) {
         // 无 matchState 时回退到自动回手
@@ -109,11 +119,11 @@ function alienScoutAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerRe
         } as MinionReturnedEvent));
     }
     // 创建交互让玩家选择是否回手（多个 scout 时链式处理）
-    const scoutInfos = scouts.map(s => ({ uid: s.uid, defId: s.defId, owner: s.owner, baseIndex: ctx.baseIndex! }));
+    const scoutInfos = scouts.map(s => ({ uid: s.uid, defId: s.defId, owner: s.owner, controller: s.controller, baseIndex: ctx.baseIndex! }));
     const first = scoutInfos[0];
     const remaining = scoutInfos.slice(1);
     const interaction = createSimpleChoice(
-        `alien_scout_return_${ctx.now}`, ctx.playerId,
+        `alien_scout_return_${ctx.now}`, first.controller,
         '侦察兵：基地记分后，是否将此侦察兵返回手牌？',
         [
             { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: first.uid, minionDefId: first.defId, owner: first.owner, baseIndex: first.baseIndex } },
@@ -300,7 +310,10 @@ function buildCropCirclesReturnEvents(
 export function registerAlienInteractionHandlers(): void {
     // 至高霸主：选择目标后返回手牌（检查保护）
     registerInteractionHandler('alien_supreme_overlord', (state, playerId, value, _iData, _random, timestamp) => {
-        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number; defId: string };
+        const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number; defId?: string };
+        if (selected.skip) return { state, events: [] };
+        const { minionUid, baseIndex } = selected;
+        if (minionUid === undefined || baseIndex === undefined) return undefined;
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
@@ -318,7 +331,10 @@ export function registerAlienInteractionHandlers(): void {
 
     // 收集者：选择力量≤3随从返回手牌（检查保护）
     registerInteractionHandler('alien_collector', (state, playerId, value, _iData, _random, timestamp) => {
-        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number; defId: string };
+        const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number; defId?: string };
+        if (selected.skip) return { state, events: [] };
+        const { minionUid, baseIndex } = selected;
+        if (minionUid === undefined || baseIndex === undefined) return undefined;
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
@@ -407,7 +423,7 @@ export function registerAlienInteractionHandlers(): void {
             return {
                 id: `minion-${index}`,
                 label: `${name} (力量 ${power})`,
-                value: { minionUid: m.uid },
+                value: { minionUid: m.uid, minionDefId: m.defId },
             };
         });
 
@@ -416,7 +432,7 @@ export function registerAlienInteractionHandlers(): void {
         const promptOptions: Array<{
             id: string;
             label: string;
-            value: { minionUid: string } | { done: true };
+            value: { minionUid: string; minionDefId: string } | { done: true };
         }> = [
             ...options,
             { id: 'done', label: '完成选择', value: { done: true } },
@@ -473,7 +489,7 @@ export function registerAlienInteractionHandlers(): void {
                 return {
                     id: `minion-${index}`,
                     label: `${name} (力量 ${power})`,
-                    value: { minionUid: m.uid },
+                    value: { minionUid: m.uid, minionDefId: m.defId },
                 };
             });
 
@@ -487,7 +503,7 @@ export function registerAlienInteractionHandlers(): void {
         const promptOptions: Array<{
             id: string;
             label: string;
-            value: { minionUid: string } | { done: true };
+            value: { minionUid: string; minionDefId: string } | { done: true };
         }> = [
             ...remainingOptions,
             { id: 'done', label: '完成选择', value: { done: true } },
@@ -704,29 +720,24 @@ export function registerAlienInteractionHandlers(): void {
         const def = getCardDef(selectedCard.defId) as MinionCardDef | undefined;
         const power = def?.power ?? 0;
 
+        const playResult = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId,
+            cardUid: selectedCard.uid, defId: selectedCard.defId,
+            baseIndex: ctx.newBaseIndex, power, random: _random, now: timestamp,
+        });
         return {
-            state,
+            state: playResult.matchState ?? state,
             events: [
                 grantExtraMinion(playerId, 'alien_terraform', timestamp),
-                {
-                    type: SU_EVENTS.MINION_PLAYED,
-                    payload: {
-                        playerId,
-                        cardUid: selectedCard.uid,
-                        defId: selectedCard.defId,
-                        baseIndex: ctx.newBaseIndex,
-                        power,
-                    },
-                    timestamp,
-                } as MinionPlayedEvent,
+                ...playResult.events,
             ],
         };
     });
 
     // 侦察兵：基地记分后选择是否回手（链式处理多个侦察兵）
-    registerInteractionHandler('alien_scout_return', (state, playerId, value, iData, _random, timestamp) => {
+    registerInteractionHandler('alien_scout_return', (state, _playerId, value, iData, _random, timestamp) => {
         const selected = value as { returnIt: boolean; minionUid?: string; minionDefId?: string; owner?: string; baseIndex?: number };
-        const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string; owner: string; baseIndex: number }[] } | undefined;
+        const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string; owner: string; controller: string; baseIndex: number }[] } | undefined;
         const events: SmashUpEvent[] = [];
 
         if (selected.returnIt && selected.minionUid && selected.minionDefId && selected.owner !== undefined && selected.baseIndex !== undefined) {
@@ -742,7 +753,7 @@ export function registerAlienInteractionHandlers(): void {
             const next = remaining[0];
             const rest = remaining.slice(1);
             const interaction = createSimpleChoice(
-                `alien_scout_return_${timestamp}`, playerId,
+                `alien_scout_return_${timestamp}`, next.controller,
                 '侦察兵：基地记分后，是否将此侦察兵返回手牌？',
                 [
                     { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: next.uid, minionDefId: next.defId, owner: next.owner, baseIndex: next.baseIndex } },

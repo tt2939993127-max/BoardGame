@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
+import { UI_Z_INDEX } from '../../../core';
 import { getPortraitStyle, ASSETS } from './assets';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -127,8 +127,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
             <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
                 <div className="absolute inset-0 bg-black/40 z-10" />
                 <OptimizedImage
-                    src={getLocalizedAssetPath('dicethrone/images/Common/background', locale)}
-                    fallbackSrc="dicethrone/images/Common/background"
+                    src="dicethrone/images/Common/background"
+                    locale={locale}
                     className="w-full h-full object-cover opacity-20"
                     alt=""
                 />
@@ -215,8 +215,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                     onClick={() => setMagnifyImage(ASSETS.PLAYER_BOARD(previewCharId as CharacterId))}
                                 >
                                     <OptimizedImage
-                                        src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD(previewCharId as CharacterId), locale)}
-                                        fallbackSrc={ASSETS.PLAYER_BOARD(previewCharId as CharacterId)}
+                                        src={ASSETS.PLAYER_BOARD(previewCharId as CharacterId)}
+                                        locale={locale}
                                         className="h-full w-auto object-contain"
                                         alt="Player Board"
                                     />
@@ -228,8 +228,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
                                     onClick={() => setMagnifyImage(ASSETS.TIP_BOARD(previewCharId as CharacterId))}
                                 >
                                     <OptimizedImage
-                                        src={getLocalizedAssetPath(ASSETS.TIP_BOARD(previewCharId as CharacterId), locale)}
-                                        fallbackSrc={ASSETS.TIP_BOARD(previewCharId as CharacterId)}
+                                        src={ASSETS.TIP_BOARD(previewCharId as CharacterId)}
+                                        locale={locale}
                                         className="h-full w-auto object-contain"
                                         alt="Tip Board"
                                     />
@@ -357,8 +357,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
             <div className="fixed bottom-[-2000px] left-0 pointer-events-none opacity-0">
                 {availableCharacters.map(char => (
                     <React.Fragment key={char.id}>
-                        <img src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD(char.id), locale)} alt="" />
-                        <img src={getLocalizedAssetPath(ASSETS.TIP_BOARD(char.id), locale)} alt="" />
+                        <OptimizedImage src={ASSETS.PLAYER_BOARD(char.id)} locale={locale} alt="" placeholder={false} />
+                        <OptimizedImage src={ASSETS.TIP_BOARD(char.id)} locale={locale} alt="" placeholder={false} />
                     </React.Fragment>
                 ))}
             </div>
@@ -372,8 +372,8 @@ export const HeroSelectionOverlay: React.FC<HeroSelectionOverlayProps> = ({
             >
                 {magnifyImage && (
                     <OptimizedImage
-                        src={getLocalizedAssetPath(magnifyImage, locale)}
-                        fallbackSrc={magnifyImage}
+                        src={magnifyImage}
+                        locale={locale}
                         className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
                         alt="Preview"
                     />

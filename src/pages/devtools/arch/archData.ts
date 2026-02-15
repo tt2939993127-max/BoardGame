@@ -163,7 +163,7 @@ export const NODES: ArchNode[] = [
   { id: 'adapter', label: '🔌 模式适配器', desc: '同一套规则代码，自动跑在联机、本地、教学三种模式', col: 0, row: 5, colSpan: 3, color: C.core, layer: 'core',
     details: ['🎯 同一套规则代码 → 三种模式自动切换'],
     dataFlow: [
-      '联机模式: 玩家操作 → 服务器校验 → boardgame.io 同步给所有人',
+      '联机模式: 玩家操作 → GameTransportServer 校验+执行 → socket.io 同步给所有人',
       '本地模式: 玩家操作 → 跳过网络 → 本地直接执行（调试/单机）',
       '教学模式: 按脚本引导 → 限制可用操作 → 一步步教新手',
     ],
@@ -204,7 +204,7 @@ export const NODES: ArchNode[] = [
   { id: 'fx', label: '✨ 视觉特效', desc: '表现与逻辑分离 · FX引擎 · 视觉状态缓冲', col: 2, row: 7, colSpan: 2, color: C.fx, layer: 'ui', details: ['🎯 让游戏"有感觉" — 表现与逻辑分离架构', '核心原则: 逻辑层同步完成状态计算，表现层按动画节奏异步展示', '🔧 useVisualStateBuffer: 数值属性视觉冻结/双缓冲(HP在飞行动画到达时才变)', '🔧 useVisualSequenceGate: 动画期间延迟交互弹框', '🎬 FX引擎: Cue注册→FxBus调度→FxLayer渲染→FeedbackPack(视觉+音效+震动)', '🎨 技术栈: Canvas 2D粒子 · WebGL Shader · framer-motion · CSS transition', '🎲 例: 攻击→freeze HP→飞行动画→impact瞬间release→HP数字变化+震动+音效'] },
   { id: 'lib', label: '🛠 工具库', desc: '中英文切换、音效播放、常用工具函数', col: 4, row: 7, colSpan: 2, color: C.ui, layer: 'ui', details: ['🎯 常用工具 — 中英文切换 / 音效播放 / 通用函数', 'i18n(中英文切换) · 音效管理 · 常用工具函数', '🎲 例: 切换语言 → 所有界面文字自动变成英文'] },
   // ── 服务端 ──
-  { id: 'bgio', label: '🎲 boardgame.io', desc: 'Docker game-server容器 · 状态同步·回合管理·房间管理', col: 0, row: 8, colSpan: 2, color: C.server, layer: 'server', storyIndex: 4, details: ['🎯 保证所有玩家看到一致的游戏状态', '独立 Docker 容器(game-server)，web容器通过内部网络代理', '你的操作 → 服务器校验 → 广播给所有人', 'Immer状态管理: 不可变更新, 自动记录历史', '🎲 例: 你点击"攻击" → 服务器确认合法 → 对手画面同步显示你的攻击动画'] },
+  { id: 'transport', label: '🎲 游戏传输层', desc: 'GameTransportServer · 状态同步·管线执行·对局管理', col: 0, row: 8, colSpan: 2, color: C.server, layer: 'server', storyIndex: 4, details: ['🎯 保证所有玩家看到一致的游戏状态', '自研传输层: GameTransportServer(Koa+socket.io) 管理对局生命周期', '你的操作 → 服务器校验+管线执行 → 广播给所有人', '结构共享状态更新: 纯函数 reduce, 自动记录历史', '🎲 例: 你点击"攻击" → 服务器确认合法 → 对手画面同步显示你的攻击动画'] },
   { id: 'socketio', label: '💬 实时通信', desc: '大厅/聊天/匹配/重赛投票', col: 2, row: 8, colSpan: 2, color: C.server, layer: 'server', details: ['🎯 非游戏内的实时通信 — 大厅/聊天/邀请', '在线状态 · 好友邀请 · 大厅聊天 · 重赛投票', '🎲 例: 你在大厅看到好友在线 → 发送邀请 → 好友收到弹窗'] },
   { id: 'restapi', label: '🌐 NestJS API', desc: 'Docker web容器 · 认证·社交·管理后台（13个模块）', col: 4, row: 8, colSpan: 2, color: C.server, layer: 'server', details: ['🎯 NestJS 单体服务 — Docker web 容器直接监听 :80', '同域部署: 前端静态文件 + API + WebSocket 代理 → 无CORS', '13个模块: auth·admin·friend·message·invite·review·custom-deck·layout·ugc(搁置)·sponsor·feedback·user-settings·health', '🎲 例: 注册账号 → JWT登录 → 添加好友 → 发送邀请'] },
   { id: 'mongodb', label: '🗄 MongoDB', desc: '游戏状态·用户·自定义卡组（Docker容器）', col: 0, row: 9, colSpan: 2, color: C.server, layer: 'server', storyIndex: 5, details: ['🎯 所有需要长期保存的数据都在这里', '游戏状态(断线重连) · 用户数据(账号) · 自定义卡组', 'Docker 容器内部通信，不暴露端口到宿主机', '🎲 例: 对战到一半掉线 → 重新打开 → 对局还在, 从上次继续'] },
@@ -220,8 +220,8 @@ export const EDGES: ArchEdge[] = [
   // 主故事线（①→⑤ 连续路径）
   { from: 'game', to: 'pipeline', label: 'Command', color: C.engine, type: 'data', story: true },
   { from: 'pipeline', to: 'matchstate', label: '读写状态', color: C.core, type: 'data', story: true },
-  { from: 'matchstate', to: 'bgio', label: '状态同步', color: C.server, type: 'data', story: true },
-  { from: 'bgio', to: 'mongodb', label: '持久化', color: C.server, type: 'data', story: true },
+  { from: 'matchstate', to: 'transport', label: '状态同步', color: C.server, type: 'data', story: true },
+  { from: 'transport', to: 'mongodb', label: '持久化', color: C.server, type: 'data', story: true },
   // 游戏层→UI（提供 Board 组件）
   { from: 'game', to: 'pages', label: '提供 Board', color: C.game, type: 'dep' },
   { from: 'game', to: 'framework', label: '注入 Board', color: C.game, type: 'dep' },
@@ -245,13 +245,13 @@ export const EDGES: ArchEdge[] = [
   { from: 'testfw', to: 'matchstate', label: '快照对比', color: C.engine, type: 'data' },
   { from: 'game', to: 'testfw', label: '测试用例', color: C.engine, type: 'dep' },
   // 框架核心内部
-  { from: 'adapter', to: 'bgio', label: 'Immer 写入', color: C.server, type: 'data' },
+  { from: 'adapter', to: 'transport', label: 'executePipeline', color: C.server, type: 'data' },
   // 服务端
   { from: 'pages', to: 'socketio', label: '大厅通信', color: C.server, type: 'data' },
   { from: 'pages', to: 'restapi', label: 'API 调用', color: C.server, type: 'data' },
   { from: 'restapi', to: 'mongodb', label: 'CRUD', color: C.server, type: 'data' },
   { from: 'restapi', to: 'redis', label: '缓存', color: C.server, type: 'data' },
-  { from: 'bgio', to: 'redis', label: '会话', color: C.server, type: 'data' },
+  { from: 'transport', to: 'redis', label: '会话', color: C.server, type: 'data' },
   { from: 'assetloader', to: 'static', label: '加载资源', color: C.server, type: 'data' },
 ];
 
@@ -274,8 +274,8 @@ export const LAYER_BANDS: LayerBand[] = [
 const TRUNK_PAIRS: [string, string][] = [
   ['game', 'pages'], ['game', 'framework'],
   ['game', 'pipeline'], ['pipeline', 'systems'], ['pipeline', 'matchstate'],
-  ['pipeline', 'domaincore'], ['adapter', 'pipeline'], ['adapter', 'bgio'],
-  ['eventstream', 'fx'], ['matchstate', 'bgio'], ['bgio', 'mongodb'], ['restapi', 'mongodb'],
+  ['pipeline', 'domaincore'], ['adapter', 'pipeline'], ['adapter', 'transport'],
+  ['eventstream', 'fx'], ['matchstate', 'transport'], ['transport', 'mongodb'], ['restapi', 'mongodb'],
   // 测试框架连线
   ['testfw', 'pipeline'], ['testfw', 'matchstate'], ['game', 'testfw'],
 ];
@@ -346,7 +346,7 @@ export const OVERVIEW_LAYERS: OverviewLayer[] = [
     id: 'server', emoji: '🖧', label: '服务端',
     whatItDoes: '联机同步、用户账号、数据存储',
     whyItExists: '没有它 → 只能自己跟自己玩',
-    tags: ['boardgame.io', '实时通信', 'NestJS API', 'MongoDB', 'Redis', 'Cloudflare CDN'],
+    tags: ['GameTransportServer', '实时通信', 'NestJS API', 'MongoDB', 'Redis', 'Cloudflare CDN'],
     color: C.server,
   },
 ];
@@ -648,7 +648,7 @@ export const USER_STORY_STEPS: StoryStep[] = [
   {
     emoji: '🚀', label: '收尾与启用',
     desc: 'i18n双语补齐 + 教学系统配置 + 音频接入 + 图片预加载 + 全流程验证上线',
-    relatedIds: ['adapter', 'bgio', 'assetloader'],
+    relatedIds: ['adapter', 'transport', 'assetloader'],
     layer: 'server',
     example: 'tutorial.ts + audio.config.ts + criticalImageResolver → 大厅可见·完整可玩',
   },

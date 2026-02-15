@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, PlayerId } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 function createTestRandom(): RandomFn {
   return {
@@ -35,8 +35,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -116,7 +118,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
     const state = createPaladinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const jacob = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-jacob',
       card: makeJacob('test-jacob'),
       owner: '0',
@@ -132,7 +134,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'holy_arrow',
-      sourceUnitId: 'test-jacob',
+      sourceUnitId: jacob.instanceId,
       discardCardIds: ['discard-1', 'discard-2'],
     });
 
@@ -216,7 +218,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
     const state = createPaladinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const jacob2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-jacob',
       card: makeJacob('test-jacob'),
       owner: '0',
@@ -233,7 +235,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'holy_arrow',
-        sourceUnitId: 'test-jacob',
+        sourceUnitId: jacob2.instanceId,
         discardCardIds: ['discard-same'],
       },
       playerId: '0',
@@ -247,7 +249,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
     const state = createPaladinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const jacob3 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-jacob',
       card: makeJacob('test-jacob'),
       owner: '0',
@@ -261,7 +263,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'holy_arrow',
-        sourceUnitId: 'test-jacob',
+        sourceUnitId: jacob3.instanceId,
         discardCardIds: [],
       },
       playerId: '0',
@@ -280,7 +282,7 @@ describe('瓦伦蒂娜 - 指引 (guidance) 边界测试', () => {
     const state = createPaladinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const valentina = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-valentina',
       card: makeValentina('test-valentina'),
       owner: '0',
@@ -295,7 +297,7 @@ describe('瓦伦蒂娜 - 指引 (guidance) 边界测试', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'guidance',
-        sourceUnitId: 'test-valentina',
+        sourceUnitId: valentina.instanceId,
       },
       playerId: '0',
       timestamp: fixedTimestamp,
@@ -308,7 +310,7 @@ describe('瓦伦蒂娜 - 指引 (guidance) 边界测试', () => {
     const state = createPaladinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const valentina2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-valentina',
       card: makeValentina('test-valentina'),
       owner: '0',
@@ -322,7 +324,7 @@ describe('瓦伦蒂娜 - 指引 (guidance) 边界测试', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'guidance',
-        sourceUnitId: 'test-valentina',
+        sourceUnitId: valentina2.instanceId,
       },
       playerId: '0',
       timestamp: fixedTimestamp,

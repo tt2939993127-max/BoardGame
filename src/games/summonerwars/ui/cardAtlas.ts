@@ -5,7 +5,7 @@
 
 import type { CSSProperties } from 'react';
 import { getOptimizedImageUrls } from '../../../core/AssetLoader';
-import { registerCardAtlasSource } from '../../../components/common/media/CardPreview';
+import { registerCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
 import type { FactionId } from '../domain/types';
 import { resolveFactionId } from '../config/factions';
 import {

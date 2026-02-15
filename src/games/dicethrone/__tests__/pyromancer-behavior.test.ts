@@ -587,19 +587,18 @@ describe('烈焰术士 Custom Action 运行时行为断言', () => {
     // pyro-spend-cp-for-fm: CP>=1且FM未满时弹出选择（每1CP=1FM）
     // ========================================================================
     describe('pyro-spend-cp-for-fm (升温)', () => {
-        it('CP>=1且FM未满时生成CHOICE_REQUESTED，选项数=min(CP,FM空间)+1(跳过)', () => {
+        it('CP>=1且FM未满时生成CHOICE_REQUESTED，slider模式（确认+跳过）', () => {
             const state = createState({ attackerFM: 3, attackerCP: 5 });
             const handler = getCustomActionHandler('pyro-spend-cp-for-fm')!;
             const events = handler(buildCtx(state, 'pyro-spend-cp-for-fm'));
 
             const choiceEvents = eventsOfType(events, 'CHOICE_REQUESTED');
             expect(choiceEvents).toHaveLength(1);
-            // FM空间=5-3=2, CP=5 → maxSpend=2, 选项: 2CP, 1CP, 跳过
+            // slider 模式：确认（value=maxSpend=2）+ 跳过（value=0）
             const options = (choiceEvents[0] as any).payload.options;
-            expect(options).toHaveLength(3);
-            expect(options[0].value).toBe(2); // 花费2CP
-            expect(options[1].value).toBe(1); // 花费1CP
-            expect(options[2].value).toBe(0); // 跳过
+            expect(options).toHaveLength(2);
+            expect(options[0].value).toBe(2); // 确认（默认花费2CP）
+            expect(options[1].value).toBe(0); // 跳过
         });
 
         it('CP=1时仍生成选择（1CP=1FM）', () => {

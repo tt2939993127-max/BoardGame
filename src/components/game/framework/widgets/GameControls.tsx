@@ -5,12 +5,11 @@ import type { MatchState } from '../../../../engine/types';
 
 interface GameControlsProps {
     G: MatchState<unknown>;
-    ctx: any;
-    moves: any;
+    dispatch: (type: string, payload?: unknown) => void;
     playerID: string | null;
 }
 
-export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playerID }) => {
+export const GameControls: React.FC<GameControlsProps> = ({ G, dispatch, playerID }) => {
     const { t } = useTranslation('game');
     if (playerID == null) return null; // 观战者或未连接
 
@@ -24,9 +23,8 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
     // - “当前行动”的玩家（本回合行动者）需要批准 -> canReview（可审查）
 
     const coreCurrentPlayer = (G.core as { currentPlayer?: string | number } | undefined)?.currentPlayer;
-    const currentPlayer = coreCurrentPlayer ?? ctx.currentPlayer;
-    const normalizedCurrentPlayer = currentPlayer !== null && currentPlayer !== undefined
-        ? String(currentPlayer)
+    const normalizedCurrentPlayer = coreCurrentPlayer !== null && coreCurrentPlayer !== undefined
+        ? String(coreCurrentPlayer)
         : null;
 
     // 检查是否在本地对战（通常没有绑定特定的玩家编号意味着热座模式，
@@ -70,7 +68,7 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
                     {t('controls.undo.waiting')}
                 </span>
                 <button
-                    onClick={() => moves[UNDO_COMMANDS.CANCEL_UNDO]()}
+                    onClick={() => dispatch(UNDO_COMMANDS.CANCEL_UNDO)}
                     className="px-3 py-1 bg-transparent border border-white/20 hover:bg-white/10 text-xs text-white/70 rounded transition-colors"
                 >
                     {t('controls.undo.cancel')}
@@ -90,13 +88,13 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => moves[UNDO_COMMANDS.APPROVE_UNDO]()}
+                        onClick={() => dispatch(UNDO_COMMANDS.APPROVE_UNDO)}
                         className="px-4 py-2 bg-neon-blue/20 hover:bg-neon-blue hover:text-black border border-neon-blue text-neon-blue rounded text-xs font-bold tracking-widest transition-all"
                     >
                         {t('controls.undo.approve')}
                     </button>
                     <button
-                        onClick={() => moves[UNDO_COMMANDS.REJECT_UNDO]()}
+                        onClick={() => dispatch(UNDO_COMMANDS.REJECT_UNDO)}
                         className="px-4 py-2 bg-neon-pink/20 hover:bg-neon-pink hover:text-white border border-neon-pink text-neon-pink rounded text-xs font-bold tracking-widest transition-all"
                     >
                         {t('controls.undo.reject')}
@@ -111,7 +109,7 @@ export const GameControls: React.FC<GameControlsProps> = ({ G, ctx, moves, playe
     if (canRequest) {
         return (
             <button
-                onClick={() => moves[UNDO_COMMANDS.REQUEST_UNDO]()}
+                onClick={() => dispatch(UNDO_COMMANDS.REQUEST_UNDO)}
                 className="group relative px-6 py-2 overflow-hidden rounded border border-white/10 bg-neon-void hover:border-neon-blue/50 transition-all"
             >
                 <div className="absolute inset-0 bg-neon-blue/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>

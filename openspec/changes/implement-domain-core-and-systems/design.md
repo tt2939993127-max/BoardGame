@@ -1,5 +1,7 @@
 # Design: 领域内核 + 系统层（激进引擎化）
 
+> **状态：已完成**。旧框架（boardgame.io）已完全移除，自研引擎（DomainCore + Pipeline + Systems + Transport）已全面接管。本文档保留为历史记录。以下内容中的"适配层"等描述为迁移前的设计思路，实际已被自研传输层替代。
+
 ## 与现有 Specs 的关系
 
 | 现有 Spec | 关系 | 说明 |
@@ -16,7 +18,7 @@
 src/
 ├── engine/                      # 引擎层（本次新增）
 │   ├── types.ts                 # 核心类型定义（MatchState、Command、Event）
-│   ├── adapter.ts               # Boardgame.io 适配器工厂
+│   ├── adapter.ts               # 引擎入口工厂（createGameEngine）
 │   ├── pipeline.ts              # Command/Event 执行管线
 │   ├── primitives/              # 引擎原语工具库
 │   │   ├── expression.ts
@@ -41,7 +43,7 @@ src/
         │   ├── commands.ts      # Command 定义与验证
         │   ├── reducer.ts       # 确定性状态变更
         │   └── view.ts          # playerView（隐藏信息）
-        ├── game.ts              # Boardgame.io Game（适配层调用）
+        ├── game.ts              # 游戏引擎配置（createGameEngine 调用）
         └── Board.tsx            # UI（保持自由度）
 ```
 
@@ -65,13 +67,13 @@ src/
 - 每个游戏目录仍然拥有资源、i18n、UI，以及新增的“领域内核模块”。
 
 ### 第 2 层：会话/网络驱动器
-保留 Boardgame.io 作为会话驱动器：
+使用自研传输层（GameTransportServer + GameTransportClient）作为会话驱动器：
 
 - 网络同步、match 存储、turn/stage 脚手架、随机数工具等。
 
 但将其“降级为适配层”：
 
-- Boardgame.io 的 moves 不再承载规则本体，只负责输入翻译与调用引擎管线。
+- 传输层直接调用引擎管线，不经过中间适配。
 
 ### 第 3 层：领域内核（Domain Core）
 每个游戏提供运行时无关的规则模块（纯 TS）。
@@ -105,7 +107,7 @@ src/
 - Ability/Effect（由游戏层实现，复用 `src/engine/primitives/`）
 
 ## 统一状态形状：`G.sys` + `G.core`
-标准化所有游戏的 Boardgame.io `G`：
+标准化所有游戏的 `G`（MatchState）：
 
 - `G.sys`：系统/平台状态
 - `G.core`：游戏领域状态
@@ -123,12 +125,12 @@ src/
 - 让撤销、prompt、日志、隐藏信息等系统可以不依赖游戏私有字段。
 - 消除像 `__matchID` 这种“系统字段混入领域状态”的现象。
 
-## 适配层（Boardgame.io Adapter）
-提供一个工具，将 Domain Core + Systems 组装成 Boardgame.io `Game`。
+## 适配层（已由自研传输层替代）
+提供一个工具，将 Domain Core + Systems 组装为可运行的游戏引擎。
 
 适配层职责：
 
-- 将 move payload 翻译成 Command
+- 接收 dispatch 调用的 Command
 - 执行管线：
   - Systems.beforeCommand
   - Core.validate
@@ -139,7 +141,7 @@ src/
 
 适配层是“纪律执行点”：
 
-- 规则不得写在 moves
+- 规则不得写在 dispatch handler 中
 - 隐藏信息必须由统一机制过滤
 
 ## 确定性与回放
@@ -147,7 +149,7 @@ src/
 
 - Commands / Events 必须可序列化。
 - RNG 必须可控：
-  - 可继续使用 Boardgame.io random，但要把随机结果记录为显式 Events；
+- 可继续使用确定性 RNG，把随机结果记录为显式 Events；
   - 或者在 `G.sys` 保存 seed 并使用确定性 RNG。
 
 回放通过重放 Events（或 Commands + 导出的 Events）实现。
@@ -165,8 +167,7 @@ src/
 ### 领域内核目录结构
 
 ```typescript
-src/games/dicethrone/domain/
-├── types.ts          # DiceThroneCore, Command variants, Event variants
+src/games/dicethrone/domain/├── types.ts          # DiceThroneCore, Command variants, Event variants
 ├── commands.ts       # validate 逻辑（从 isMoveAllowed + 各 move 校验抽取）
 ├── reducer.ts        # reduce(state, event) 确定性状态变更
 ├── effects.ts        # 技能效果执行（结合 primitives，事件驱动）
@@ -211,7 +212,6 @@ src/games/dicethrone/domain/
 ### 回合阶段模型
 
 DiceThrone 的多阶段回合需要在 `G.sys.phase` 或 `G.core.turnPhase` 中维护：
-
 ```typescript
 upkeep → income → main1 → offensiveRoll → defensiveRoll → main2 → discard
 ```

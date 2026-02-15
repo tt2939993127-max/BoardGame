@@ -17,6 +17,7 @@ import type { DyingEntity } from './useGameEvents';
 import type { AnnihilateModeState } from './StatusBanners';
 import { AbilityReadyIndicator } from './AbilityReadyIndicator';
 import { BuffIcons, getBuffGlowStyle, BuffDetailsPanel } from './BuffIcons';
+import type { BuffInstance } from '../../../components/game/framework/widgets/BuffSystem';
 import { abilityRegistry } from '../domain/abilities';
 import { getEffectiveStructureLife, getEffectiveLife } from '../domain/abilityResolver';
 import { StrengthBoostIndicator } from './StrengthBoostIndicator';
@@ -102,6 +103,7 @@ interface BoardGridProps {
   onMagnifyUnit: (unit: import('../domain/types').BoardUnit) => void;
   onMagnifyStructure: (structure: import('../domain/types').BoardStructure) => void;
   onMagnifyEventCard?: (card: import('../domain/types').EventCard) => void;
+  onMagnifySpriteConfig?: (config: { atlasId: string; frameIndex: number }) => void;
   // 用于动画追踪
   newUnitIds?: Set<string>;
 }
@@ -292,7 +294,7 @@ const CardLayer: React.FC<{
         if (cell.unit) {
           return (
             <UnitCell
-              key={cellKey}
+              key={`unit-${cell.unit.instanceId}`}
               row={row} col={col}
               unit={cell.unit}
               pos={pos}
@@ -309,7 +311,7 @@ const CardLayer: React.FC<{
         if (cell.structure) {
           return (
             <StructureCell
-              key={cellKey}
+              key={`structure-${row}-${col}`}
               row={row} col={col}
               structure={cell.structure}
               pos={pos}
@@ -377,7 +379,7 @@ const UnitCell: React.FC<{
   currentGrid: GridConfig;
   props: BoardGridProps;
 }> = ({ row, col, unit, pos, viewCoord, core, myPlayerId, toViewCoord, currentGrid, props }) => {
-  const isNew = props.newUnitIds?.has(unit.cardId) ?? false;
+  const isNew = props.newUnitIds?.has(unit.instanceId) ?? false;
   const { t } = useTranslation('game-summonerwars');
   const spriteConfig = getUnitSpriteConfig(unit);
   const isMyUnit = unit.owner === myPlayerId;
@@ -391,6 +393,14 @@ const UnitCell: React.FC<{
   const hasAttached = (unit.attachedCards?.length ?? 0) > 0;
   // 卡牌目标高亮（除灭/心灵操控/攻击等模式下让卡牌本体发光）
   const cardHighlight = getCardTargetHighlight(row, col, props);
+
+  // Buff 图标点击：展示附加的牌
+  // Buff 图标点击：统一通过 spriteConfig 展示来源卡牌大图
+  const handleBuffClick = React.useCallback((buff: BuffInstance) => {
+    if (buff.spriteConfig) {
+      props.onMagnifySpriteConfig?.(buff.spriteConfig);
+    }
+  }, [props]);
 
   const isAttacker = props.attackAnimState
     && props.attackAnimState.attacker.row === row
@@ -457,16 +467,21 @@ const UnitCell: React.FC<{
       data-unit-life={life}
       data-unit-damage={unit.damage}
       style={{
-        left: `${pos.left}%`, top: `${pos.top}%`,
         width: `${pos.width}%`, height: `${pos.height}%`,
         zIndex: isAttacker ? BOARD_GRID_Z.attacker : undefined,
       }}
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
-      initial={isNew ? { opacity: 0, scale: 1.1 } : false}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={isNew ? { left: `${pos.left}%`, top: `${pos.top}%`, opacity: 0, scale: 1.1 } : false}
+      animate={isNew
+        ? { left: `${pos.left}%`, top: `${pos.top}%`, opacity: 1, scale: 1 }
+        : { left: `${pos.left}%`, top: `${pos.top}%` }
+      }
       transition={isNew ? {
         type: 'spring', stiffness: 80, damping: 15, mass: 1.2,
-      } : { duration: 0 }}
+      } : {
+        left: { type: 'spring', stiffness: 300, damping: 30 },
+        top: { type: 'spring', stiffness: 300, damping: 30 },
+      }}
     >
       <div
         className={`relative w-[85%] group transition-[background-color,box-shadow] duration-200 rounded-lg ${!isMyUnit ? 'rotate-180' : ''} ${
@@ -552,6 +567,7 @@ const UnitCell: React.FC<{
           activeEvents={core.players[unit.owner]?.activeEvents ?? []}
           myPlayerId={myPlayerId as PlayerId}
           core={core}
+          onBuffClick={handleBuffClick}
         />
         
         {/* Buff 详细信息悬停面板 - 保持正向可读 */}
@@ -622,7 +638,7 @@ const StructureCell: React.FC<{
   const cardHighlight = getCardTargetHighlight(row, col, props);
 
   return (
-    <div
+    <motion.div
       className="absolute flex items-center justify-center cursor-pointer pointer-events-auto"
       data-testid={`sw-structure-${row}-${col}`}
       data-tutorial-id={structure.card.isGate && structure.owner === myPlayerId ? 'sw-my-gate' : undefined}
@@ -632,8 +648,14 @@ const StructureCell: React.FC<{
       data-structure-damage={structure.damage}
       data-structure-gate={structure.card.isGate ? 'true' : 'false'}
       style={{
-        left: `${pos.left}%`, top: `${pos.top}%`,
         width: `${pos.width}%`, height: `${pos.height}%`,
+      }}
+      initial={isNew ? { left: `${pos.left}%`, top: `${pos.top}%`, opacity: 0 } : false}
+      animate={{ left: `${pos.left}%`, top: `${pos.top}%`, opacity: 1 }}
+      transition={{
+        left: { type: 'spring', stiffness: 300, damping: 30 },
+        top: { type: 'spring', stiffness: 300, damping: 30 },
+        opacity: { duration: 0 },
       }}
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
     >
@@ -685,7 +707,7 @@ const StructureCell: React.FC<{
           </svg>
         </button>
       </motion.div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -702,7 +724,7 @@ export const BoardGrid: React.FC<BoardGridProps> = (props) => {
   const newUnitsMemo = React.useMemo(() => {
     const current = new Set<string>();
     core.board.forEach(row => row.forEach(cell => {
-      if (cell.unit) current.add(cell.unit.cardId);
+      if (cell.unit) current.add(cell.unit.instanceId);
       if (cell.structure) current.add(cell.structure.cardId);
     }));
 

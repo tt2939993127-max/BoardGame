@@ -17,7 +17,7 @@
  */
 
 import type { AbilityDef } from './abilities';
-import { getUnitAt, isCellEmpty, getPlayerUnits } from './helpers';
+import { getUnitAt, isCellEmpty, getPlayerUnits, hasUnitKilledThisTurn } from './helpers';
 import { abilityText } from './abilityTextHelper';
 
 export const GOBLIN_ABILITIES: AbilityDef[] = [
@@ -67,7 +67,7 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
           return { valid: false, error: '只能与费用为0的友方单位交换' };
         }
         
-        if (vanishTarget.cardId === ctx.sourceUnit.cardId) {
+        if (vanishTarget.instanceId === ctx.sourceUnit.instanceId) {
           return { valid: false, error: '不能与自己交换' };
         }
         
@@ -81,7 +81,7 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
       buttonVariant: 'secondary',
       activationStep: 'selectUnit',
       quickCheck: ({ core, unit, playerId }) =>
-        getPlayerUnits(core, playerId).some(u => u.cardId !== unit.cardId && u.card.cost === 0),
+        getPlayerUnits(core, playerId).some(u => u.instanceId !== unit.instanceId && u.card.cost === 0),
     },
   },
 
@@ -168,10 +168,10 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
     sfxKey: 'fantasy.dark_sword_attack_withblood_03',
     trigger: 'onPhaseEnd',
     effects: [
-      // 攻击阶段结束时触发，需要检查本回合是否击杀
-      // 实际逻辑在 execute.ts 的 END_PHASE 中处理
+      // 仅在本回合未击杀时才应进入确认流程；前置条件由 canActivateAbility/customValidator 双重门控
       { type: 'custom', actionId: 'feed_beast_check' },
     ],
+    usesPerTurn: 1,
     requiresTargetSelection: true,
     targetSelection: {
       type: 'unit',
@@ -191,14 +191,21 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
     validation: {
       requiredPhase: 'attack',
       customValidator: (ctx) => {
+        if (hasUnitKilledThisTurn(ctx.core, ctx.sourceUnit.instanceId)) {
+          return { valid: false, error: '本回合已消灭单位，不能发动喂养巨食兽' };
+        }
+
         const fbChoice = ctx.payload.choice as string | undefined;
         if (fbChoice === 'self_destroy') {
           return { valid: true };
         }
+        if (fbChoice !== 'destroy_adjacent') {
+          return { valid: false, error: '必须选择吞噬相邻友方或自毁' };
+        }
         
         const targetPosition = ctx.payload.targetPosition as import('./types').CellCoord | undefined;
         if (!targetPosition) {
-          return { valid: false, error: '必须选择相邻友方单位或自毁' };
+          return { valid: false, error: '吞噬相邻友方时必须选择目标单位' };
         }
         
         const fbTarget = getUnitAt(ctx.core, targetPosition);
@@ -210,7 +217,7 @@ export const GOBLIN_ABILITIES: AbilityDef[] = [
           return { valid: false, error: '必须选择友方单位' };
         }
         
-        if (fbTarget.cardId === ctx.sourceUnit.cardId) {
+        if (fbTarget.instanceId === ctx.sourceUnit.instanceId) {
           return { valid: false, error: '不能选择自己' };
         }
         

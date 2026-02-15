@@ -19,13 +19,14 @@ import type {
     ExtraAttackTriggeredEvent,
 } from './types';
 import { STATUS_IDS, TOKEN_IDS } from './ids';
-import { canAdvancePhase, getNextPhase, getNextPlayerId, getPlayerDieFace } from './rules';
+import { canAdvancePhase, getNextPhase, getNextPlayerId, getPlayerDieFace, getResponderQueue } from './rules';
 import { resolveAttack, resolveOffensivePreDefenseEffects, resolvePostDamageEffects } from './attack';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { buildDrawEvents } from './deckEvents';
 import { reduce } from './reducer';
 import { getGameMode, applyEvents } from './utils';
+import type { ResponseWindowOpenedEvent } from './events';
 
 /**
  * 检查攻击方是否有晕眩（daze）
@@ -71,6 +72,43 @@ function checkDazeExtraAttack(
     } as ExtraAttackTriggeredEvent);
 
     return { dazeEvents, triggered: true };
+}
+
+/**
+ * 攻击结算后检查是否需要开响应窗口（如 card-dizzy：造成 ≥8 伤害后打出）
+ * 需要先 applyEvents 得到含 lastResolvedAttackDamage 的状态再检查
+ */
+function checkAfterAttackResponseWindow(
+    core: DiceThroneCore,
+    allEvents: GameEvent[],
+    commandType: string,
+    timestamp: number,
+    phase: TurnPhase
+): ResponseWindowOpenedEvent | null {
+    // 先 apply 所有事件得到最新状态（含 lastResolvedAttackDamage）
+    const stateAfterAttack = applyEvents(core, allEvents as DiceThroneEvent[], reduce);
+
+    // 找到攻击方 ID
+    const attackResolved = allEvents.find(e => e.type === 'ATTACK_RESOLVED') as
+        Extract<DiceThroneEvent, { type: 'ATTACK_RESOLVED' }> | undefined;
+    if (!attackResolved) return null;
+
+    const { attackerId } = attackResolved.payload;
+
+    // 检查进攻方是否有满足条件的卡牌（getResponderQueue 内部会调用 hasRespondableContent → isCardPlayableInResponseWindow）
+    const responderQueue = getResponderQueue(stateAfterAttack, 'afterAttackResolved', attackerId, undefined, undefined, phase);
+    if (responderQueue.length === 0) return null;
+
+    return {
+        type: 'RESPONSE_WINDOW_OPENED',
+        payload: {
+            windowId: `afterAttackResolved-${timestamp}`,
+            responderQueue,
+            windowType: 'afterAttackResolved',
+        },
+        sourceCommandType: commandType,
+        timestamp,
+    } as ResponseWindowOpenedEvent;
 }
 
 export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
@@ -195,12 +233,20 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
                     events.push(...postDamageEvents);
 
+                    // 检查晕眩（daze）额外攻击（强制效果，优先于响应窗口）
                     const { dazeEvents, triggered } = checkDazeExtraAttack(
                         core, events, command.type, timestamp
                     );
                     if (triggered) {
                         events.push(...dazeEvents);
                         return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
+                    // 攻击结算后响应窗口（如 card-dizzy：造成 ≥8 伤害后打出）
+                    const afterAttackWindowOffDR = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                    if (afterAttackWindowOffDR) {
+                        events.push(afterAttackWindowOffDR);
+                        return { events, halt: true };
                     }
 
                     return { events, overrideNextPhase: 'main2' };
@@ -261,13 +307,20 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return { events, halt: true };
                 }
 
-                // 检查晕眩（daze）额外攻击
+                // 检查晕眩（daze）额外攻击（强制效果，优先于响应窗口）
                 const { dazeEvents: dazeEventsOff, triggered: dazeTriggeredOff } = checkDazeExtraAttack(
                     core, events, command.type, timestamp
                 );
                 if (dazeTriggeredOff) {
                     events.push(...dazeEventsOff);
                     return { events, overrideNextPhase: 'offensiveRoll' };
+                }
+
+                // 攻击结算后响应窗口（如 card-dizzy：造成 ≥8 伤害后打出）
+                const afterAttackWindowOff = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                if (afterAttackWindowOff) {
+                    events.push(afterAttackWindowOff);
+                    return { events, halt: true };
                 }
 
                 // 无待处理内容，直接进入 main2
@@ -278,7 +331,6 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         }
 
         // ========== defensiveRoll 阶段退出 ==========
-        // 设计原则：不做"最后机会"响应窗口，玩家想打牌应在防御阶段主动打出
         if (from === 'defensiveRoll') {
             if (core.pendingAttack) {
                 // 如果伤害已通过 Token 响应结算，只执行 postDamage 效果
@@ -287,13 +339,20 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     const postDamageEvents = resolvePostDamageEffects(core, random, timestamp);
                     events.push(...postDamageEvents);
 
-                    // 检查晕眩（daze）额外攻击
+                    // 检查晕眩（daze）额外攻击（强制效果，优先于响应窗口）
                     const { dazeEvents: dazeEventsPost, triggered: dazeTriggeredPost } = checkDazeExtraAttack(
                         core, events, command.type, timestamp
                     );
                     if (dazeTriggeredPost) {
                         events.push(...dazeEventsPost);
                         return { events, overrideNextPhase: 'offensiveRoll' };
+                    }
+
+                    // 攻击结算后响应窗口（如 card-dizzy：造成 ≥8 伤害后打出）
+                    const afterAttackWindow1 = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                    if (afterAttackWindow1) {
+                        events.push(afterAttackWindow1);
+                        return { events, halt: true };
                     }
 
                     return { events, overrideNextPhase: 'main2' };
@@ -310,13 +369,20 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return { events, halt: true };
                 }
 
-                // 检查晕眩（daze）额外攻击
+                // 检查晕眩（daze）额外攻击（强制效果，优先于响应窗口）
                 const { dazeEvents: dazeEventsDef, triggered: dazeTriggeredDef } = checkDazeExtraAttack(
                     core, events, command.type, timestamp
                 );
                 if (dazeTriggeredDef) {
                     events.push(...dazeEventsDef);
                     return { events, overrideNextPhase: 'offensiveRoll' };
+                }
+
+                // 攻击结算后响应窗口（如 card-dizzy：造成 ≥8 伤害后打出）
+                const afterAttackWindow2 = checkAfterAttackResponseWindow(core, events, command.type, timestamp, from as TurnPhase);
+                if (afterAttackWindow2) {
+                    events.push(afterAttackWindow2);
+                    return { events, halt: true };
                 }
             }
             // 显式指定下一阶段为 main2（无论是否有 pendingAttack）

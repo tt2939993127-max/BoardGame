@@ -30,7 +30,7 @@
 - 需要同时维护框架层和游戏皮肤层
 
 ## Dependencies
-- 依赖现有 boardgame.io 类型系统
+- 依赖现有引擎类型系统
 - 依赖现有动效组件（FlyingEffect/Shake/PulseGlow）
 
 ## Success Criteria

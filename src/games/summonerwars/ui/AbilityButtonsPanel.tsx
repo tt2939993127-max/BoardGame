@@ -5,24 +5,17 @@
  * 不再逐技能 if 硬编码。新增技能只需在 AbilityDef 中配置 ui 字段。
  */
 
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SummonerWarsCore } from '../domain';
 import { SW_COMMANDS, SummonerWarsDomain } from '../domain';
 import type { PlayerId } from '../domain/types';
 import { abilityRegistry } from '../domain/abilities';
-import type { AbilityDef, AbilityUIContext } from '../domain/abilities';
+import type { AbilityUIContext } from '../domain/abilities';
 import { getUnitAbilities } from '../domain/helpers';
 import { GameButton } from './GameButton';
-
-interface AbilityMode {
-  abilityId: string;
-  step: string;
-  sourceUnitId: string;
-  context?: string;
-  selectedCardIds?: string[];
-  targetPosition?: unknown;
-}
+import type { AbilityModeState } from './useGameEvents';
+import type { WithdrawModeState } from './modeTypes';
 
 interface Props {
   core: SummonerWarsCore;
@@ -30,12 +23,12 @@ interface Props {
   isMyTurn: boolean;
   myPlayerId: string;
   myHand: Array<{ cardType: string; name: string; id: string }>;
-  abilityMode: AbilityMode | null;
+  abilityMode: AbilityModeState | null;
   bloodSummonMode: unknown;
   eventTargetMode: unknown;
   dispatch: (type: string, payload?: unknown) => void;
-  setAbilityMode: (mode: AbilityMode | null) => void;
-  setWithdrawMode: (mode: { sourceUnitId: string; step: string } | null) => void;
+  setAbilityMode: (mode: AbilityModeState | null) => void;
+  setWithdrawMode: (mode: WithdrawModeState | null) => void;
 }
 
 export const AbilityButtonsPanel: React.FC<Props> = ({
@@ -79,15 +72,15 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
     // 按钮点击处理
     const handleClick = () => {
       if (ui.activationType === 'directExecute') {
-        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, { abilityId, sourceUnitId: unit.cardId });
+        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, { abilityId, sourceUnitId: unit.instanceId });
       } else if (ui.activationType === 'withdrawMode') {
-        setWithdrawMode({ sourceUnitId: unit.cardId, step: 'selectCost' });
+        setWithdrawMode({ sourceUnitId: unit.instanceId, step: 'selectCost' });
       } else {
         // 默认：进入 abilityMode
         setAbilityMode({
           abilityId,
           step: ui.activationStep ?? 'selectUnit',
-          sourceUnitId: unit.cardId,
+          sourceUnitId: unit.instanceId,
           context: ui.activationContext,
           selectedCardIds: ui.activationStep === 'selectCards' ? [] : undefined,
         });
@@ -100,7 +93,7 @@ export const AbilityButtonsPanel: React.FC<Props> = ({
     if (ui.useValidateForDisabled) {
       const result = SummonerWarsDomain.validate(
         { core, sys: {} as never },
-        { type: SW_COMMANDS.ACTIVATE_ABILITY, payload: { abilityId, sourceUnitId: unit.cardId }, playerId: myPlayerId, timestamp: Date.now() },
+        { type: SW_COMMANDS.ACTIVATE_ABILITY, payload: { abilityId, sourceUnitId: unit.instanceId }, playerId: myPlayerId, timestamp: Date.now() },
       );
       disabled = !result.valid;
       title = result.valid ? undefined : result.error;

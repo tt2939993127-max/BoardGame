@@ -12,15 +12,22 @@ const buildMetadata = (connected: boolean): MatchMetadata => ({
     updatedAt: Date.now(),
 });
 
-const buildState = (pendingInteraction?: { id: string; playerId: string }) => {
+const buildState = (
+    pendingInteraction?: { id: string; playerId: string },
+    options?: { lockId?: string },
+) => {
+    const lockId = options?.lockId === undefined
+        ? pendingInteraction?.id
+        : options.lockId;
+
     const matchState = {
         core: {
             pendingInteraction,
         },
         sys: {
             responseWindow: {
-                current: pendingInteraction
-                    ? { pendingInteractionId: pendingInteraction.id }
+                current: lockId
+                    ? { pendingInteractionId: lockId }
                     : undefined,
             },
         },
@@ -29,6 +36,22 @@ const buildState = (pendingInteraction?: { id: string; playerId: string }) => {
     return {
         G: matchState,
         ctx: { gameover: undefined },
+    } as unknown as StoredMatchState;
+};
+
+const buildStateWithSysInteraction = (pendingInteraction?: { id: string; playerId: string }) => {
+    const matchState = {
+        core: {},
+        sys: {
+            interaction: {
+                current: pendingInteraction,
+                queue: [],
+            },
+        },
+    };
+
+    return {
+        G: matchState,
     } as unknown as StoredMatchState;
 };
 
@@ -61,5 +84,25 @@ describe('interactionAdjudication', () => {
         });
         expect(result.shouldCancel).toBe(false);
         expect(result.reason).toBe('no_pending_interaction');
+    });
+
+    it('新结构 sys.interaction.current 在无响应窗锁时也可取消', () => {
+        const result = shouldForceCancelInteraction({
+            state: buildStateWithSysInteraction({ id: 'i2', playerId: '0' }),
+            metadata: buildMetadata(false),
+            playerId: '0',
+        });
+        expect(result.shouldCancel).toBe(true);
+        expect(result.interactionId).toBe('i2');
+    });
+
+    it('响应窗锁不匹配时不取消', () => {
+        const result = shouldForceCancelInteraction({
+            state: buildState({ id: 'i3', playerId: '0' }, { lockId: 'other' }),
+            metadata: buildMetadata(false),
+            playerId: '0',
+        });
+        expect(result.shouldCancel).toBe(false);
+        expect(result.reason).toBe('interaction_lock_mismatch');
     });
 });

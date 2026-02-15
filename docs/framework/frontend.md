@@ -150,7 +150,7 @@ src/
 1) **manifest 先行**：在 `src/games/manifest.ts` 定义游戏元数据。
 2) **注册实现**：在 `src/games/registry.ts` 注册 `game` 与 `board`。
 3) **游戏模块结构**：
-   - `src/games/<gameId>/game.ts`：Boardgame.io Game 定义
+   - `src/games/<gameId>/game.ts`：引擎配置（createGameEngine）
    - `src/games/<gameId>/Board.tsx`：UI
    - `src/games/<gameId>/types.ts`：状态/类型
    - 如有英雄模块：`src/games/<gameId>/<hero>/`

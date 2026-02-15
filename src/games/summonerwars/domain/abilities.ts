@@ -76,9 +76,9 @@ export type AbilityEffect =
   // 伤害/治疗
   | { type: 'damage'; target: TargetRef; value: number | Expression }
   | { type: 'heal'; target: TargetRef; value: number | Expression }
-  // 属性修改
-  | { type: 'modifyStrength'; target: TargetRef; value: number | Expression }
-  | { type: 'modifyLife'; target: TargetRef; value: number | Expression }
+  // 属性修改（maxBonus：加成上限，如 power_up 最多+5；未指定则无上限）
+  | { type: 'modifyStrength'; target: TargetRef; value: number | Expression; maxBonus?: number }
+  | { type: 'modifyLife'; target: TargetRef; value: number | Expression; maxBonus?: number }
   // 充能/Token
   | { type: 'addCharge'; target: TargetRef; value: number }
   | { type: 'removeCharge'; target: TargetRef; value: number }
@@ -146,6 +146,18 @@ export interface AbilityUIContext {
   myHand: Array<{ cardType: string; name: string; id: string }>;
 }
 
+export type AbilityActivationStep =
+  | 'selectCard'
+  | 'selectPosition'
+  | 'selectUnit'
+  | 'selectCards'
+  | 'selectChoice'
+  | 'selectAttachTarget'
+  | 'selectNewPosition'
+  | 'selectPushDirection';
+
+export type AbilityActivationContext = 'beforeAttack' | 'activated';
+
 // ============================================================================
 // 技能定义
 // ============================================================================
@@ -210,9 +222,9 @@ export interface AbilityDef {
     /** 快速可用性检查（返回 false 则不显示按钮） */
     quickCheck?: (ctx: AbilityUIContext) => boolean;
     /** 激活模式的初始步骤（默认 'selectUnit'） */
-    activationStep?: string;
+    activationStep?: AbilityActivationStep;
     /** 激活模式的上下文标记 */
-    activationContext?: string;
+    activationContext?: AbilityActivationContext;
     /** 激活类型：'abilityMode'（默认）| 'directExecute' | 'withdrawMode' */
     activationType?: 'abilityMode' | 'directExecute' | 'withdrawMode';
     /** 是否使用 validate 结果控制 disabled 状态（而非隐藏） */
@@ -256,13 +268,20 @@ import { AbilityRegistry } from '../../../engine/primitives/ability';
  * 注：SW 的 AbilityDef 与引擎层 AbilityDef 的 condition/cost 类型不兼容，
  * 因此使用 `as any` 实例化。运行时行为完全一致（registry 内部只用 id/trigger/tags）。
  */
-export const abilityRegistry = new AbilityRegistry<AbilityDef>('sw-abilities') as AbilityRegistry<AbilityDef> & {
+type SWAbilityRegistry = {
   register(def: AbilityDef): void;
   registerAll(defs: AbilityDef[]): void;
   get(id: string): AbilityDef | undefined;
+  has(id: string): boolean;
   getAll(): AbilityDef[];
+  getByTag(tag: string): AbilityDef[];
   getByTrigger(trigger: AbilityTrigger): AbilityDef[];
+  getRegisteredIds(): Set<string>;
+  readonly size: number;
+  clear(): void;
 };
+
+export const abilityRegistry = new AbilityRegistry('sw-abilities') as unknown as SWAbilityRegistry;
 
 // ============================================================================
 // 亡灵法师阵营技能定义
@@ -407,7 +426,7 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
         for (let row = 0; row < ctx.core.board.length; row++) {
           for (let col = 0; col < (ctx.core.board[0]?.length ?? 0); col++) {
             const unit = ctx.core.board[row]?.[col]?.unit;
-            if (unit && unit.cardId === targetUnitId) {
+            if (unit && (unit.instanceId === targetUnitId || unit.cardId === targetUnitId)) {
               targetUnit = unit;
               targetPos = { row, col };
               break;
@@ -440,7 +459,7 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
         const pos = core.selectedUnit;
         if (!pos) return false;
         return getPlayerUnits(core, playerId).some(u => {
-          if (u.cardId === unit.cardId) return false;
+          if (u.instanceId === unit.instanceId) return false;
           const dist = Math.abs(u.position.row - pos.row) + Math.abs(u.position.col - pos.col);
           return dist <= 2;
         });
@@ -493,6 +512,7 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
           target: 'self',
           attr: 'charge',
         },
+        maxBonus: 5, // 规则：至多为+5
       },
     ],
   },
@@ -641,7 +661,7 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
         for (let row = 0; row < ctx.core.board.length; row++) {
           for (let col = 0; col < (ctx.core.board[0]?.length ?? 0); col++) {
             const unit = ctx.core.board[row]?.[col]?.unit;
-            if (unit && unit.cardId === targetUnitId) {
+            if (unit && (unit.instanceId === targetUnitId || unit.cardId === targetUnitId)) {
               targetUnit = unit;
               break;
             }
@@ -663,7 +683,7 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       buttonVariant: 'secondary',
       activationStep: 'selectUnit',
       quickCheck: ({ core, unit, playerId }) =>
-        getPlayerUnits(core, playerId).some(u => u.cardId !== unit.cardId),
+        getPlayerUnits(core, playerId).some(u => u.instanceId !== unit.instanceId),
     },
   },
 ];

@@ -10,6 +10,7 @@ import type { AbilityDef, ValidationContext } from './abilities';
 import { abilityRegistry } from './abilities';
 import { getUnitAbilities, getUnitAt, manhattanDistance, isValidCoord, isCellEmpty } from './helpers';
 import { CARD_IDS, getBaseCardId } from './ids';
+import { buildUsageKey } from './utils';
 
 /**
  * 验证技能是否可以激活
@@ -46,13 +47,13 @@ export function validateAbilityActivation(
     return { valid: true };
   }
   
-  // 查找源单位
+  // 查找源单位（sourceUnitId 为 instanceId）
   let sourceUnit: BoardUnit | undefined;
   let sourcePosition: CellCoord | undefined;
   for (let row = 0; row < core.board.length; row++) {
     for (let col = 0; col < (core.board[0]?.length ?? 0); col++) {
       const unit = core.board[row]?.[col]?.unit;
-      if (unit && unit.cardId === sourceUnitId) {
+      if (unit && unit.instanceId === sourceUnitId) {
         sourceUnit = unit;
         sourcePosition = { row, col };
         break;
@@ -108,7 +109,7 @@ export function validateAbilityActivation(
     
     // 使用次数检查
     if (ability.usesPerTurn !== undefined) {
-      const usageKey = `${sourceUnitId}:${abilityId}`;
+      const usageKey = buildUsageKey(sourceUnit.instanceId, abilityId);
       const usageCount = (core.abilityUsageCount ?? {})[usageKey] ?? 0;
       if (usageCount >= ability.usesPerTurn) {
         return {
@@ -143,7 +144,7 @@ export function canUseAbility(
   
   // 使用次数检查
   if (ability.usesPerTurn !== undefined) {
-    const usageKey = `${ctx.sourceUnit.cardId}:${ability.id}`;
+    const usageKey = buildUsageKey(ctx.sourceUnit.instanceId, ability.id);
     const usageCount = (ctx.core.abilityUsageCount ?? {})[usageKey] ?? 0;
     if (usageCount >= ability.usesPerTurn) {
       return { canUse: false, reason: '本回合已使用' };

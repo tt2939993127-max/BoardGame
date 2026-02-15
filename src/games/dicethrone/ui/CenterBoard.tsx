@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
-import { getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
+import { UI_Z_INDEX } from '../../../core';
 import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
@@ -59,8 +59,8 @@ export const CenterBoard = ({
                     data-tutorial-id="player-board"
                 >
                     <OptimizedImage
-                        src={getLocalizedAssetPath(playerBoardPath, locale)}
-                        fallbackSrc={playerBoardPath}
+                        src={playerBoardPath}
+                        locale={locale}
                         className="w-auto h-full object-contain"
                         alt={t('imageAlt.playerBoard')}
                     />
@@ -96,8 +96,8 @@ export const CenterBoard = ({
                     <div className={`relative h-full transition-[width,opacity,transform] duration-500 overflow-hidden rounded-[0.8vw] ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}>
                         <div className="relative h-full w-auto aspect-[1311/2048] group">
                             <OptimizedImage
-                                src={getLocalizedAssetPath(tipBoardPath, locale)}
-                                fallbackSrc={tipBoardPath}
+                                src={tipBoardPath}
+                                locale={locale}
                                 className="w-auto h-full object-contain"
                                 alt={t('imageAlt.tipBoard')}
                             />

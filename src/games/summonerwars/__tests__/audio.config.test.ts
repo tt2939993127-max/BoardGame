@@ -66,6 +66,11 @@ const ALL_MOVE_KEYS = [
     ...Object.values(FACTION_MOVE_KEYS).flat(),
 ];
 const BUILD_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
+const WALL_BUILD_KEYS = [
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none',
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_02_krst_none',
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_03_krst_none',
+];
 const GATE_BUILD_KEYS = [
     'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_01_krst',
     'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_02_krst',
@@ -132,6 +137,12 @@ const ABILITY_KEYS = {
     rapidFire: 'fantasy.elemental_bow_fireattack_01',
 } as const;
 
+const ICE_KEYS = [
+    'fantasy.elemental_sword_iceattack_v1',
+    'fantasy.elemental_sword_iceattack_v2',
+    'fantasy.elemental_sword_iceattack_v3',
+];
+
 const abilitySfxKeys = Array.from(
     new Set(
         abilityRegistry
@@ -168,7 +179,8 @@ describe('Summoner Wars 音效配置', () => {
         // UNIT_SUMMONED 音效由 FX 系统播放，不在 feedbackResolver 中返回
         expect(resolveKey({ type: SW_EVENTS.UNIT_SUMMONED } as AudioEvent)).toBeUndefined();
         expect(resolveKey({ type: SW_EVENTS.UNIT_MOVED } as AudioEvent)).toBe(MOVE_FALLBACK_KEY);
-        expect(resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT } as AudioEvent)).toBe(BUILD_KEY);
+        expect(resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT } as AudioEvent)).toBeDefined();
+        expect(WALL_BUILD_KEYS).toContain(resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT } as AudioEvent));
         expect(resolveKey({ type: SW_EVENTS.CARD_DRAWN } as AudioEvent)).toBe(CARD_DRAW_KEY);
         expect(resolveKey({ type: SW_EVENTS.CARD_DISCARDED } as AudioEvent)).toBe(CARD_DISCARD_KEY);
         expect(resolveKey({ type: SW_EVENTS.EVENT_PLAYED } as AudioEvent)).toBe(EVENT_PLAY_KEY);
@@ -177,9 +189,9 @@ describe('Summoner Wars 音效配置', () => {
     });
 
     it('应区分传送门与城墙的建造/摧毁音效', () => {
-        // 城墙建造 → 放置音
+        // 城墙建造 → 石缚召唤音（stonebound_summon 随机）
         const wallBuild = resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: false } } } as AudioEvent);
-        expect(wallBuild).toBe(BUILD_KEY);
+        expect(WALL_BUILD_KEYS).toContain(wallBuild);
 
         // 传送门建造 → 时空裂隙打开音
         const gateBuild = resolveKey({ type: SW_EVENTS.STRUCTURE_BUILT, payload: { card: { isGate: true } } } as AudioEvent);
@@ -255,6 +267,17 @@ describe('Summoner Wars 音效配置', () => {
         expect(vanishKey).toBe(ABILITY_KEYS.vanish);
         expect(structureShiftKey).toBe(ABILITY_KEYS.structureShift);
         expect(rapidFireKey).toBe(ABILITY_KEYS.rapidFire);
+    });
+
+    it('应解析冰霜战斧附加音效（UNIT_ATTACHED）', () => {
+        const ICE_KEYS = [
+            'fantasy.elemental_sword_iceattack_v1',
+            'fantasy.elemental_sword_iceattack_v2',
+            'fantasy.elemental_sword_iceattack_v3',
+        ];
+        const key = resolveKey({ type: SW_EVENTS.UNIT_ATTACHED } as AudioEvent);
+        expect(key).toBeDefined();
+        expect(ICE_KEYS).toContain(key);
     });
 
     it('应解析控制与请求音效', () => {
@@ -388,6 +411,7 @@ describe('Summoner Wars 音效配置', () => {
             ...MOVE_SWING_KEYS,
             ...DICE_ROLL_KEYS,
             ...Object.values(ABILITY_KEYS),
+            ...ICE_KEYS,
             ...abilitySfxKeys,
         ];
 

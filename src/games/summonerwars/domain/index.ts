@@ -79,6 +79,7 @@ export const SummonerWarsDomain: DomainCore<SummonerWarsCore> = {
       hostPlayerId: '0' as PlayerId,
       hostStarted: false,
       abilityUsageCount: {},
+      unitKillCountThisTurn: {},
     };
   },
 

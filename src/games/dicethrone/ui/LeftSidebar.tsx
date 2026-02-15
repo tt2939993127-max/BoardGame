@@ -28,6 +28,7 @@ export const LeftSidebar = ({
     isSelfShaking,
     selfDamageFlashActive,
     selfDamageFlashDamage,
+    overrideHp,
 }: {
     currentPhase: TurnPhase;
     viewPlayer: HeroState;

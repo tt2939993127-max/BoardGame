@@ -398,15 +398,27 @@ function handleUpgradeTithes({ targetId, timestamp }: CustomActionContext): Dice
 
 /**
  * 神圣祝福 (Blessing of Divinity) — 免疫致死伤害
- * 当受到致死伤害时，移除此标记，将 HP 设为 1 并回复 5 HP（总计 HP=6）
+ * 当受到致死伤害时，移除此标记，免除伤害并回复 5 HP（最终 HP = 1 + 5 = 6）
+ *
+ * 规则语义：
+ * 1. 只在伤害会致死（damageAmount >= currentHp）时触发
+ * 2. 免除全部伤害（PREVENT_DAMAGE）
+ * 3. 将 HP 扣至 1（通过 DAMAGE_DEALT 扣除 currentHp - 1）
+ * 4. 回复 5 HP（HEAL_APPLIED）→ 最终 HP = 6
  */
-function handleBlessingPrevent({ targetId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+function handleBlessingPrevent({ targetId, state, timestamp, action }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const player = state.players[targetId];
     if (!player) return events;
 
     const blessingCount = player.tokens[TOKEN_IDS.BLESSING_OF_DIVINITY] ?? 0;
     if (blessingCount <= 0) return events;
+
+    // 致死判定：只有伤害 >= 当前 HP 时才触发
+    const currentHp = player.resources[RESOURCE_IDS.HP] ?? 0;
+    const params = action.params as { damageAmount?: number } | undefined;
+    const damageAmount = params?.damageAmount ?? 0;
+    if (damageAmount < currentHp) return events;
 
     // 消耗 1 层神圣祝福
     events.push({
@@ -421,30 +433,50 @@ function handleBlessingPrevent({ targetId, state, timestamp }: CustomActionConte
         timestamp,
     } as DiceThroneEvent);
 
-    // 防止伤害（将当前待结算伤害全部免除）
+    // 免除全部伤害
     events.push({
         type: 'PREVENT_DAMAGE',
         payload: {
             targetId,
-            amount: 9999, // 免除所有伤害
+            amount: 9999,
             sourceAbilityId: 'paladin-blessing-prevent',
         },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: timestamp + 1,
     } as PreventDamageEvent);
 
-    // 回复 5 HP
-    const currentHp = player.resources[RESOURCE_IDS.HP] ?? 0;
+    // 回复 5 HP（从当前 HP 回复，因为伤害已被免除）
+    // 规则："将 HP 设为 1 并回复 5 HP" → 最终 HP = 6
+    // 实现：先扣到 1（通过 DAMAGE_DEALT + bypassShields），再治疗 5
+    // 但由于 PREVENT_DAMAGE 已免除伤害，HP 仍为 currentHp
+    // 所以需要额外扣除 currentHp - 1 使 HP = 1，再治疗 5
+    // bypassShields: 此扣血是 HP 重置，不应被护盾吸收
+    const hpToRemove = currentHp - 1;
+    if (hpToRemove > 0) {
+        events.push({
+            type: 'DAMAGE_DEALT',
+            payload: {
+                targetId,
+                amount: hpToRemove,
+                actualDamage: hpToRemove,
+                sourceAbilityId: 'paladin-blessing-prevent',
+                bypassShields: true,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 2,
+        } as DamageDealtEvent);
+    }
+
     events.push({
         type: 'HEAL_APPLIED',
         payload: {
             targetId,
             amount: 5,
-            newHp: currentHp + 5,
+            newHp: 6, // HP = 1 + 5 = 6
             sourceAbilityId: 'paladin-blessing-prevent',
         },
         sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 2,
+        timestamp: timestamp + 3,
     } as DiceThroneEvent);
 
     return events;

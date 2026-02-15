@@ -7,15 +7,14 @@
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { destroyMinion, addPowerCounter, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions } from '../domain/abilityHelpers';
-import type { SmashUpEvent, MinionCardDef, SmashUpCore, MinionDestroyedEvent } from '../domain/types';
-import { SU_EVENTS } from '../domain/types';
+import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { MatchState } from '../../../engine/types';
 import { getCardDef, getBaseDef } from '../data/cards';
-import { registerTrigger, registerInterceptor } from '../domain/ongoingEffects';
-import type { TriggerContext } from '../domain/ongoingEffects';
+import { registerTrigger } from '../domain/ongoingEffects';
+import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 
 /** 注册海盗派系所有能力*/
 export function registerPirateAbilities(): void {
@@ -39,8 +38,9 @@ export function registerPirateAbilities(): void {
     registerTrigger('pirate_king', 'beforeScoring', pirateKingBeforeScoring);
     // 副官：基地计分后移动到其他基地（而非弃牌堆）
     registerTrigger('pirate_first_mate', 'afterScoring', pirateFirstMateAfterScoring);
-    // 海盗（海盗）：被消灭时移动到其他基地而非进入弃牌堆?
-    registerInterceptor('pirate_buccaneer', buccaneerDestroyInterceptor);
+    // 海盗（海盗）：被消灭时移动到其他基地而非进入弃牌堆
+    registerTrigger('pirate_buccaneer', 'onMinionDestroyed', buccaneerOnDestroyed);
+    registerInteractionHandler('pirate_buccaneer_move', buccaneerMoveHandler);
 }
 
 /** 粗鲁少妇 onPlay：消灭本基地一个力量≤2的随从*/
@@ -57,9 +57,14 @@ function pirateSaucyWench(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
+    // "你可以"：添加跳过选项
+    const allOptions = [
+        { id: 'skip', label: '跳过（不消灭随从）', value: { skip: true } },
+        ...buildMinionTargetOptions(options),
+    ];
     const interaction = createSimpleChoice(
         `pirate_saucy_wench_${ctx.now}`, ctx.playerId,
-        '选择要消灭的力量≤2的随从', buildMinionTargetOptions(options), 'pirate_saucy_wench',
+        '你可以消灭本基地一个力量≤2的随从', allOptions, 'pirate_saucy_wench',
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -177,72 +182,196 @@ function buildFullSailChooseMinionInteraction(
 // onPlay 时机在 Me First! 窗口期间同样生效（commands.ts 允许 special 卡在响应窗口打出）
 
 // ============================================================================
-// 事件拦截器（替代效果）?
+// 事件拦截器（替代效果）→ 已迁移为 onMinionDestroyed trigger
 // ============================================================================
 
 /**
  * 海盗 (Buccaneer) 替代效果：被消灭时移动到其他基地
  *
- * MVP：自动选择第一个可用的其他基地。无其他基地时正常消灭?
+ * 通过 onMinionDestroyed trigger + pendingSaveMinionUids 机制实现：
+ * 创建玩家选择交互让玩家选目标基地，暂缓消灭事件等待交互解决
  */
-function buccaneerDestroyInterceptor(
-    state: SmashUpCore,
-    event: SmashUpEvent
-): SmashUpEvent | undefined {
-    if (event.type !== SU_EVENTS.MINION_DESTROYED) return undefined;
-    const { minionUid, minionDefId, fromBaseIndex } = (event as MinionDestroyedEvent).payload;
-    if (minionDefId !== 'pirate_buccaneer') return undefined;
+function buccaneerOnDestroyed(ctx: TriggerContext): SmashUpEvent[] | TriggerResult {
+    const { state, triggerMinionUid, triggerMinionDefId, baseIndex } = ctx;
+    if (!triggerMinionUid || triggerMinionDefId !== 'pirate_buccaneer' || baseIndex === undefined) return [];
 
-    // 找到第一个可用的其他基地
+    // 收集可用的其他基地
+    const candidates: { baseIndex: number; label: string }[] = [];
     for (let i = 0; i < state.bases.length; i++) {
-        if (i === fromBaseIndex) continue;
-        return moveMinion(minionUid, minionDefId, fromBaseIndex, i, 'pirate_buccaneer', event.timestamp);
+        if (i === baseIndex) continue;
+        const baseDef = getBaseDef(state.bases[i].defId);
+        candidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
     }
-    // 无其他基地可移，不收回拦截（正常消灭?
-    return undefined;
+    // 无其他基地可移→正常消灭
+    if (candidates.length === 0) return [];
+
+    // 只有一个基地时自动移动（无需交互）
+    if (candidates.length === 1) {
+        return [moveMinion(triggerMinionUid, triggerMinionDefId, baseIndex, candidates[0].baseIndex, 'pirate_buccaneer', ctx.now)];
+    }
+
+    // 多个基地→创建玩家选择交互
+    if (!ctx.matchState) {
+        // 无 matchState 降级：自动选第一个
+        return [moveMinion(triggerMinionUid, triggerMinionDefId, baseIndex, candidates[0].baseIndex, 'pirate_buccaneer', ctx.now)];
+    }
+
+    const minion = state.bases[baseIndex]?.minions.find(m => m.uid === triggerMinionUid);
+    const ownerId = minion?.controller ?? ctx.playerId;
+
+    const interaction = createSimpleChoice(
+        `buccaneer_move_${triggerMinionUid}_${ctx.now}`,
+        ownerId,
+        '海盗：选择移动到哪个基地',
+        candidates.map(c => ({
+            id: `base_${c.baseIndex}`,
+            label: c.label,
+            value: { minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, toBaseIndex: c.baseIndex },
+        })),
+        'pirate_buccaneer_move',
+    );
+    const updatedMS = queueInteraction(ctx.matchState, interaction);
+    return { events: [], matchState: updatedMS };
+}
+
+/** 海盗 (Buccaneer) 交互处理：玩家选择目标基地后执行移动 */
+function buccaneerMoveHandler(
+    state: MatchState<SmashUpCore>,
+    _playerId: string,
+    value: unknown,
+    _iData: Record<string, unknown> | undefined,
+    _random: unknown,
+    timestamp: number
+) {
+    const selected = value as {
+        minionUid: string;
+        minionDefId: string;
+        fromBaseIndex: number;
+        toBaseIndex: number;
+    };
+    return {
+        state,
+        events: [moveMinion(selected.minionUid, selected.minionDefId, selected.fromBaseIndex, selected.toBaseIndex, 'pirate_buccaneer', timestamp)],
+    };
 }
 
 // ============================================================================
 // ongoing 效果触发器?
 // ============================================================================
 
-/** 海盗船?beforeScoring：自动移动到即将计分的基地（MVP：自动执行，不收回询问） */
-function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] {
-    const events: SmashUpEvent[] = [];
+/** 海盗王 beforeScoring：可选移动到即将计分的基地
+ *
+ * 规则：所有玩家的 pirate_king 都可以在计分前移动（不限当前回合玩家）。
+ * 交互发送给各 king 的 controller，而非 ctx.playerId。
+ */
+function pirateKingBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerResult {
     const scoringBaseIndex = ctx.baseIndex;
-    if (scoringBaseIndex === undefined) return events;
+    if (scoringBaseIndex === undefined) return [];
 
-    // 遍历所有基地，找到不收回在计分基地上的 pirate_king 并移过去
+    // 收集不在计分基地上的所有 pirate_king（不限当前回合玩家）
+    const kings: { uid: string; defId: string; fromBaseIndex: number; controller: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         if (i === scoringBaseIndex) continue;
         for (const m of ctx.state.bases[i].minions) {
             if (m.defId === 'pirate_king') {
-                events.push(moveMinion(m.uid, m.defId, i, scoringBaseIndex, 'pirate_king', ctx.now));
+                kings.push({ uid: m.uid, defId: m.defId, fromBaseIndex: i, controller: m.controller });
             }
         }
     }
-    return events;
+    if (kings.length === 0) return [];
+
+    // 无 matchState 时回退自动移动
+    if (!ctx.matchState) {
+        return kings.map(k => moveMinion(k.uid, k.defId, k.fromBaseIndex, scoringBaseIndex, 'pirate_king', ctx.now));
+    }
+
+    // 链式处理每个海盗王：创建确认交互（发送给各 king 的 controller）
+    const first = kings[0];
+    const remaining = kings.slice(1);
+    const baseDef = getBaseDef(ctx.state.bases[scoringBaseIndex].defId);
+    const baseName = baseDef?.name ?? `基地 ${scoringBaseIndex + 1}`;
+    const interaction = createSimpleChoice(
+        `pirate_king_move_${ctx.now}`, first.controller,
+        `海盗王：是否移动到即将计分的「${baseName}」？`,
+        [
+            { id: 'yes', label: '移动到该基地', value: { move: true, uid: first.uid, defId: first.defId, fromBaseIndex: first.fromBaseIndex } },
+            { id: 'no', label: '留在原地', value: { move: false } },
+        ],
+        'pirate_king_move',
+    );
+    const ms = queueInteraction(ctx.matchState, {
+        ...interaction,
+        data: { ...interaction.data, continuationContext: { scoringBaseIndex, remaining } },
+    });
+    return { events: [], matchState: ms };
 }
 
-/** 海盗副官 afterScoring：移动到其他基地而非进入弃牌堆（MVP：自动选第一个其他基地） */
-function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] {
-    const events: SmashUpEvent[] = [];
+/**
+ * 海盗副官 afterScoring：你可以移动你的两个随从到其他基地而不是弃牌堆
+ * 描述：「特殊：在本基地计分后，你可以移动你的两个随从到其他基地而不是弃牌堆。」
+ * 注意：描述说"你的两个随从"，不仅仅是 first_mate 自身
+ *
+ * 规则：所有玩家的 pirate_first_mate 都可以在计分后触发（不限当前回合玩家）。
+ * 每个 first_mate 的 controller 独立处理自己的随从移动。
+ */
+function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerResult {
     const scoringBaseIndex = ctx.baseIndex;
-    if (scoringBaseIndex === undefined) return events;
+    if (scoringBaseIndex === undefined) return [];
 
     const base = ctx.state.bases[scoringBaseIndex];
-    if (!base) return events;
+    if (!base) return [];
 
-    for (const m of base.minions) {
-        if (m.defId !== 'pirate_first_mate') continue;
-        // 选择第一个可用的其他基地
-        for (let i = 0; i < ctx.state.bases.length; i++) {
-            if (i === scoringBaseIndex) continue;
-            events.push(moveMinion(m.uid, m.defId, scoringBaseIndex, i, 'pirate_first_mate', ctx.now));
-            break;
+    // 收集计分基地上所有 first_mate（不限当前回合玩家）
+    const firstMates = base.minions.filter(m => m.defId === 'pirate_first_mate');
+    if (firstMates.length === 0) return [];
+
+    // 无 matchState 时回退自动移动 first_mate 自身
+    if (!ctx.matchState) {
+        const events: SmashUpEvent[] = [];
+        for (const m of firstMates) {
+            for (let i = 0; i < ctx.state.bases.length; i++) {
+                if (i === scoringBaseIndex) continue;
+                events.push(moveMinion(m.uid, m.defId, scoringBaseIndex, i, 'pirate_first_mate', ctx.now));
+                break;
+            }
         }
+        return events;
     }
-    return events;
+
+    // 只有一个可用基地时自动选定目标
+    const otherBases = ctx.state.bases
+        .map((b, i) => ({ index: i, defId: b.defId }))
+        .filter(b => b.index !== scoringBaseIndex);
+    if (otherBases.length === 0) return [];
+
+    // 为每个 first_mate 的 controller 创建交互（链式处理多个 first_mate）
+    let ms = ctx.matchState;
+    for (const mate of firstMates) {
+        const controllerId = mate.controller;
+        // 收集计分基地上该 controller 的随从
+        const myMinions = base.minions.filter(m => m.controller === controllerId);
+        if (myMinions.length === 0) continue;
+
+        const options = myMinions.map(m => {
+            const def = getCardDef(m.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? m.defId;
+            const power = getMinionPower(ctx.state, m, scoringBaseIndex);
+            return { uid: m.uid, defId: m.defId, baseIndex: scoringBaseIndex, label: `${name} (力量 ${power})` };
+        });
+        const allOptions = [
+            { id: 'skip', label: '跳过（不移动随从）', value: { skip: true } },
+            ...buildMinionTargetOptions(options),
+        ];
+        const interaction = createSimpleChoice(
+            `pirate_first_mate_choose_first_${mate.uid}_${ctx.now}`, controllerId,
+            '大副：你可以移动至多两个随从到其他基地（选择第1个）', allOptions, 'pirate_first_mate_choose_first',
+        );
+        ms = queueInteraction(ms, {
+            ...interaction,
+            data: { ...interaction.data, continuationContext: { scoringBaseIndex, movedCount: 0 } },
+        });
+    }
+    return { events: [], matchState: ms };
 }
 
 /** 小艇 onPlay：移动至多两个己方随从到其他基地 */
@@ -383,9 +512,12 @@ function buildMoveToBaseInteraction(
 
 /** 注册海盗派系的交互解决处理函数 */
 export function registerPirateInteractionHandlers(): void {
-    // 粗鲁少妇：选择目标后消灭
+    // 粗鲁少妇：选择目标后消灭（支持跳过）
     registerInteractionHandler('pirate_saucy_wench', (state, _playerId, value, _iData, _random, timestamp) => {
-        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number };
+        if (selected.skip) return { state, events: [] };
+        const { minionUid, baseIndex } = selected;
+        if (minionUid === undefined || baseIndex === undefined) return undefined;
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
@@ -432,14 +564,22 @@ export function registerPirateInteractionHandlers(): void {
         if (remaining.length === 0) return { state, events };
         const next = createSimpleChoice(
             `pirate_cannon_second_${timestamp}`, playerId,
-            '选择第二个要消灭的力量≤2的随从（可选）', buildMinionTargetOptions(remaining), 'pirate_cannon_choose_second',
+            '选择第二个要消灭的力量≤2的随从（可选）',
+            [
+                { id: 'skip', label: '跳过（不消灭第二个）', value: { skip: true } },
+                ...buildMinionTargetOptions(remaining),
+            ],
+            'pirate_cannon_choose_second',
         );
         return { state: queueInteraction(state, next), events };
     });
 
-    // 加农炮第二步
+    // 加农炮第二步（支持跳过）
     registerInteractionHandler('pirate_cannon_choose_second', (state, _playerId, value, _iData, _random, timestamp) => {
-        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number };
+        if (selected.skip) return { state, events: [] };
+        const { minionUid, baseIndex } = selected;
+        if (minionUid === undefined || baseIndex === undefined) return undefined;
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
@@ -579,14 +719,22 @@ export function registerPirateInteractionHandlers(): void {
         if (remaining.length === 0) return { state, events };
         const next = createSimpleChoice(
             `pirate_dinghy_second_${timestamp}`, playerId,
-            '选择第二个要移动的随从（可选）', buildMinionTargetOptions(remaining), 'pirate_dinghy_choose_second',
+            '选择第二个要移动的随从（可选）',
+            [
+                { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } },
+                ...buildMinionTargetOptions(remaining),
+            ],
+            'pirate_dinghy_choose_second',
         );
         return { state: queueInteraction(state, next), events };
     });
 
-    // 小艇第二步：选择随从后，链式选择目标基地
+    // 小艇第二步：选择随从后，链式选择目标基地（支持跳过）
     registerInteractionHandler('pirate_dinghy_choose_second', (state, playerId, value, _iData, _random, timestamp) => {
-        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number };
+        if (selected.skip) return { state, events: [] };
+        const { minionUid, baseIndex } = selected;
+        if (minionUid === undefined || baseIndex === undefined) return undefined;
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const minion = base.minions.find(m => m.uid === minionUid);
@@ -667,5 +815,101 @@ export function registerPirateInteractionHandlers(): void {
             }
         }
         return { state, events };
+    });
+
+    // 海盗王：确认是否移动到计分基地（链式处理多个海盗王）
+    registerInteractionHandler('pirate_king_move', (state, _playerId, value, iData, _random, timestamp) => {
+        const selected = value as { move: boolean; uid?: string; defId?: string; fromBaseIndex?: number };
+        const ctx = iData?.continuationContext as { scoringBaseIndex: number; remaining: { uid: string; defId: string; fromBaseIndex: number; controller: string }[] } | undefined;
+        if (!ctx) return undefined;
+        const events: SmashUpEvent[] = [];
+
+        if (selected.move && selected.uid && selected.defId !== undefined && selected.fromBaseIndex !== undefined) {
+            events.push(moveMinion(selected.uid, selected.defId, selected.fromBaseIndex, ctx.scoringBaseIndex, 'pirate_king', timestamp));
+        }
+
+        // 处理剩余海盗王
+        const remaining = ctx.remaining ?? [];
+        if (remaining.length > 0) {
+            const next = remaining[0];
+            const rest = remaining.slice(1);
+            const baseDef = getBaseDef(state.core.bases[ctx.scoringBaseIndex]?.defId ?? '');
+            const baseName = baseDef?.name ?? `基地 ${ctx.scoringBaseIndex + 1}`;
+            const interaction = createSimpleChoice(
+                `pirate_king_move_${timestamp}`, next.controller,
+                `海盗王：是否移动到即将计分的「${baseName}」？`,
+                [
+                    { id: 'yes', label: '移动到该基地', value: { move: true, uid: next.uid, defId: next.defId, fromBaseIndex: next.fromBaseIndex } },
+                    { id: 'no', label: '留在原地', value: { move: false } },
+                ],
+                'pirate_king_move',
+            );
+            return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { scoringBaseIndex: ctx.scoringBaseIndex, remaining: rest } } }), events };
+        }
+
+        return { state, events };
+    });
+
+    // 大副第一步：选择第一个随从后，选择目标基地
+    registerInteractionHandler('pirate_first_mate_choose_first', (state, playerId, value, iData, _random, timestamp) => {
+        const selected = value as { skip?: boolean; minionUid?: string; baseIndex?: number };
+        if (selected.skip) return { state, events: [] };
+        const { minionUid, baseIndex } = selected;
+        if (minionUid === undefined || baseIndex === undefined) return undefined;
+        const base = state.core.bases[baseIndex];
+        if (!base) return undefined;
+        const minion = base.minions.find(m => m.uid === minionUid);
+        if (!minion) return undefined;
+        const ctx = iData?.continuationContext as { scoringBaseIndex: number; movedCount: number } | undefined;
+        if (!ctx) return undefined;
+        const next = buildMoveToBaseInteraction(
+            state.core, minionUid, minion.defId, baseIndex,
+            'pirate_first_mate', 'pirate_first_mate_choose_base',
+            playerId, timestamp,
+            { scoringBaseIndex: ctx.scoringBaseIndex, movedCount: ctx.movedCount },
+        );
+        return next ? { state: queueInteraction(state, next), events: [] } : undefined;
+    });
+
+    // 大副选基地后：移动，如果还没移动第二个则链式选第二个
+    registerInteractionHandler('pirate_first_mate_choose_base', (state, playerId, value, iData, _random, timestamp) => {
+        const { baseIndex: destBase } = value as { baseIndex: number };
+        const ctx = (iData as any)?.continuationContext as { minionUid: string; minionDefId: string; fromBaseIndex: number; scoringBaseIndex: number; movedCount: number };
+        if (!ctx) return undefined;
+        const events: SmashUpEvent[] = [moveMinion(ctx.minionUid, ctx.minionDefId, ctx.fromBaseIndex, destBase, 'pirate_first_mate', timestamp)];
+        const newMovedCount = ctx.movedCount + 1;
+
+        // 最多移动两个随从
+        if (newMovedCount >= 2) return { state, events };
+
+        // 收集计分基地上剩余己方随从（排除已移动的）
+        const scoringBase = state.core.bases[ctx.scoringBaseIndex];
+        if (!scoringBase) return { state, events };
+        const remaining = scoringBase.minions.filter(
+            m => m.controller === playerId && m.uid !== ctx.minionUid
+        );
+        if (remaining.length === 0) return { state, events };
+
+        const options = remaining.map(m => {
+            const def = getCardDef(m.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? m.defId;
+            const power = getMinionPower(state.core, m, ctx.scoringBaseIndex);
+            return { uid: m.uid, defId: m.defId, baseIndex: ctx.scoringBaseIndex, label: `${name} (力量 ${power})` };
+        });
+        const allOptions = [
+            { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } },
+            ...buildMinionTargetOptions(options),
+        ];
+        const interaction = createSimpleChoice(
+            `pirate_first_mate_choose_second_${timestamp}`, playerId,
+            '大副：选择第2个要移动的随从（可选）', allOptions, 'pirate_first_mate_choose_first',
+        );
+        return {
+            state: queueInteraction(state, {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { scoringBaseIndex: ctx.scoringBaseIndex, movedCount: newMovedCount } },
+            }),
+            events,
+        };
     });
 }

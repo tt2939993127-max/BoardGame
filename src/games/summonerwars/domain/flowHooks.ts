@@ -8,11 +8,46 @@ import type { FlowHooks, PhaseExitResult } from '../../../engine/systems/FlowSys
 import type { GameEvent, PlayerId } from '../../../engine/types';
 import type { SummonerWarsCore, GamePhase } from './types';
 import { SW_EVENTS, PHASE_ORDER } from './types';
-import { getSummoner, HAND_SIZE } from './helpers';
+import { getSummoner, HAND_SIZE, getUnitAbilities as getUnitAbilityIds } from './helpers';
 import { triggerAllUnitsAbilities, resolveAbilityEffects } from './abilityResolver';
 import { abilityRegistry } from './abilities';
 import { getUnitAbilities } from './helpers';
 import { getBaseCardId, CARD_IDS } from './ids';
+import { canActivateAbility } from './abilityHelpers';
+
+/**
+ * 需要玩家确认的阶段结束技能（"你可以"/"may" 语义）
+ * 这些技能在 onPhaseExit 中只产生通知事件，需要玩家确认后通过 ACTIVATE_ABILITY 执行
+ */
+const CONFIRMABLE_PHASE_END_ABILITIES = new Set(['ice_shards', 'feed_beast']);
+
+/**
+ * 检查当前玩家是否有可触发的、需要确认的阶段结束技能
+ */
+function hasConfirmablePhaseEndAbility(
+  core: SummonerWarsCore,
+  playerId: PlayerId,
+  phase: GamePhase,
+): boolean {
+  const abilityIds = PHASE_END_ABILITIES[phase] ?? [];
+  if (abilityIds.length === 0) return false;
+
+  for (let row = 0; row < core.board.length; row++) {
+    for (let col = 0; col < core.board[row].length; col++) {
+      const unit = core.board[row]?.[col]?.unit;
+      if (!unit || unit.owner !== playerId) continue;
+      const unitAbilityList = getUnitAbilityIds(unit, core);
+      for (const abilityId of abilityIds) {
+        if (!CONFIRMABLE_PHASE_END_ABILITIES.has(abilityId)) continue;
+        if (!unitAbilityList.includes(abilityId)) continue;
+        if (canActivateAbility(core, unit, abilityId, playerId)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
 
 export const PHASE_START_ABILITIES: Record<GamePhase, string[]> = {
   factionSelect: [],
@@ -51,6 +86,8 @@ function triggerPhaseAbilities(
       const unitAbilityIds = getUnitAbilities(unit, core);
       for (const abilityId of abilityIds) {
         if (!unitAbilityIds.includes(abilityId)) continue;
+        // 阶段结束技能需在触发前做门控（充能不足/条件不满足时不产生通知事件）
+        if (trigger === 'onPhaseEnd' && !canActivateAbility(core, unit, abilityId, playerId)) continue;
         const def = abilityRegistry.get(abilityId);
         if (!def || def.trigger !== trigger) continue;
         events.push(...resolveAbilityEffects(def, {
@@ -94,7 +131,7 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
    * 是否允许推进阶段
    */
   canAdvance: () => {
-    // 基本检查通过（游戏结束由 boardgame.io 层处理）
+    // 基本检查通过（游戏结束由引擎层处理）
     return { ok: true };
   },
 
@@ -156,6 +193,15 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
     const phaseEndAbilities = PHASE_END_ABILITIES[from as GamePhase] ?? [];
     if (phaseEndAbilities.length > 0) {
       events.push(...triggerPhaseAbilities(core, playerId, 'onPhaseEnd', phaseEndAbilities, timestamp));
+    }
+
+    // 有需要玩家确认的阶段结束技能时，halt 阶段推进
+    // 玩家确认/跳过后再次 ADVANCE_PHASE 时，flowHalted 已为 true，不再重复 halt
+    if (!state.sys?.flowHalted) {
+      const needsConfirmation = hasConfirmablePhaseEndAbility(core, playerId, from as GamePhase);
+      if (needsConfirmation) {
+        return { events, halt: true };
+      }
     }
 
     return { events };
@@ -223,6 +269,20 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
    */
   getActivePlayerId: ({ state }): PlayerId => {
     return state.core.currentPlayer;
+  },
+
+  /**
+   * 阶段结束技能确认/跳过后自动推进
+   * 当 flowHalted（阶段结束技能等待确认）且不再有需要确认的技能时，自动推进
+   */
+  onAutoContinueCheck: ({ state }) => {
+    if (!state.sys.flowHalted) return;
+    const core = state.core;
+    const phase = core.phase;
+    const playerId = core.currentPlayer;
+    // 仍有需要确认的技能 → 不自动推进
+    if (hasConfirmablePhaseEndAbility(core, playerId, phase)) return;
+    return { autoContinue: true, playerId };
   },
 };
 

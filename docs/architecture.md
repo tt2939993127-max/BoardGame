@@ -16,7 +16,7 @@ BordGame 是一个现代化桌游平台，核心解决"桌游教学"与"轻量�
 - 分步教学系统（步骤门控 + AI 自动行动 + 确定性随机）
 - 事件溯源引擎（Command/Event 分离 + 管线 + 确定性回放）
 
-**技术栈**：React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / boardgame.io / Canvas 2D 粒子引擎 / WebGL Shader / i18next / howler / socket.io / Node.js (Koa + NestJS) / MongoDB / Vitest + Playwright
+**技术栈**：React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒子引擎 / WebGL Shader / i18next / howler / socket.io / Node.js (Koa + NestJS) / MongoDB / Vitest + Playwright
 
 ---
 
@@ -33,7 +33,7 @@ BordGame 是一个现代化桌游平台，核心解决"桌游教学"与"轻量�
 | **Registry Pattern** | 原语层（条件/效果/目标/能力）均使用注册器，游戏注册处理器，引擎负责调度 |
 | **DomainCore 契约** | 每个游戏实现 4 个纯函数（setup/validate/execute/reduce）接入引擎 |
 
-> 不是传统 MVC/MVVM，也不是纯 ECS。最接近的参考：boardgame.io moves 模型 + Redux reducer 模式 + 游戏引擎系统插件化。
+> 不是传统 MVC/MVVM，也不是纯 ECS。最接近的参考：Redux reducer 模式 + 游戏引擎系统插件化 + 自研传输层。
 
 ---
 
@@ -50,14 +50,14 @@ BordGame 是一个现代化桌游平台，核心解决"桌游教学"与"轻量�
 │  游戏无关的运行时：管线调度 + 系统插件 + 原子工具 + 特效     │
 ├──────────────────────────────────────────────────────────┤
 │                  框架核心 (core/)                          │
-│  类型契约 · 资源管理 · 游戏注册 · adapter（boardgame.io）   │
+│  类型契约 · 资源管理 · 游戏注册 · adapter（引擎适配器）      │
 ├──────────────────────────────────────────────────────────┤
 │                    UI 层 (React)                           │
 │  pages/ · components/game/framework/ · contexts/ · hooks/ │
 │  骨架组件 · 全局状态 · 游戏↔UI 接口契约 · 特效渲染          │
 ├──────────────────────────────────────────────────────────┤
 │                    服务端                                  │
-│  server.ts (boardgame.io + socket.io + Koa)               │
+│  server.ts (GameTransportServer + socket.io + Koa)        │
 │  apps/api/ (NestJS REST API)                              │
 │  MongoDB · Cloudflare R2 CDN                              │
 └──────────────────────────────────────────────────────────┘
@@ -76,7 +76,7 @@ BordGame 是一个现代化桌游平台，核心解决"桌游教学"与"轻量�
 - 游戏层消费引擎层（使用管线、系统、原语）
 - 游戏层提供 Board.tsx 给 UI 层渲染
 - UI 层消费框架核心（类型契约、资源管理）
-- 框架核心通过 adapter 连接 boardgame.io 服务端
+- 框架核心通过 adapter 连接自研传输层服务端（GameTransportServer）
 - 引擎层不依赖 UI 层，不依赖服务端
 
 ---
@@ -94,7 +94,7 @@ interface MatchState<TCore> {
 }
 ```
 
-`SystemState` 包含：`undo`（快照栈+握手）、`interaction`（阻塞式交互队列，替代旧 PromptSystem）、`log`（审计日志）、`eventStream`（实时事件通道）、`actionLog`（玩家可见操作日志）、`rematch`（重赛投票）、`responseWindow`（多玩家响应队列）、`tutorial`（教程步骤+AI行动+随机策略）、`phase`（当前阶段，单一权威）、`turnNumber`。
+`SystemState` 包含：`undo`（快照栈+握手）、`interaction`（阻塞式交互队列，替代旧 PromptSystem）、`log`（审计日志）、`eventStream`（实时事件通道）、`actionLog`（玩家可见操作日志）、`rematch`（重赛投票）、`responseWindow`（多玩家响应队列）、`tutorial`（教程步骤+AI行动+随机策略）、`phase`（当前阶段，单一权威）、`turnNumber`、`gameover`（游戏结束结果，由管线自动检测写入）。
 
 ### 4.2 Command/Event 模型
 
@@ -128,12 +128,12 @@ Command（玩家意图）→ validate → execute → Event[]（权威后果）�
 
 ### 4.4 适配器 (Adapter)
 
-`createGameAdapter()` 将 DomainCore + Systems 组装为 boardgame.io Game，是**纪律执行点**。
+`createGameEngine()` 将 DomainCore + Systems 组装为 `GameEngineConfig`（供 `GameTransportServer` 使用），是**纪律执行点**。
 
-职责：moves→Command 翻译、random→RandomFn 封装、三种模式差异处理、旁观者拦截、教程确定性随机（TutorialRandomPolicy）、playerView 分层过滤、自动合并系统命令到 commandTypes。
+职责：Domain + Systems 组装、系统配置注入、commandTypes 自动合并系统命令、playerView 分层过滤。
 
 ```typescript
-export const DiceThrone = createGameAdapter({
+export const DiceThrone = createGameEngine({
     domain: DiceThroneDomain,
     systems: [...createBaseSystems(config), createFlowSystem(flowHooks)],
     commandTypes: ['ROLL_DICE', 'USE_CARD', 'ATTACK', ...],
@@ -235,6 +235,8 @@ interface FlowHooks<TCore> {
 ### 5.5 UndoSystem（撤销系统）
 
 基于快照撤销（`beforeCommand` 存储完整状态）、白名单机制（`snapshotCommandAllowlist`）、多人握手（请求→批准/拒绝/取消）、撤销时清空 EventStream（防特效重播）。
+
+**`_noSnapshot` 跳过快照（通用机制）**：当一个命令是前一个操作的"后续动作"（如移动后触发的技能），UI 层在 dispatch 时给 payload 加 `_noSnapshot: true`，UndoSystem 会跳过该命令的快照创建，使其与前一个命令共享同一个撤回点。撤回时两个操作作为一个原子单元一起回退。此机制适用于任何游戏，不依赖特定技能/命令类型。
 
 ### 5.6 ActionLogSystem 约束
 
@@ -402,11 +404,11 @@ src/games/<gameId>/
 项目有两个独立的服务端进程：
 
 **游戏服务（`server.ts`）**：
-- boardgame.io Server — 游戏状态同步（WebSocket）
+- GameTransportServer — 游戏状态同步（WebSocket / socket.io）
 - socket.io namespace — 大厅/重赛/聊天实时通道
 - HybridStorage — 状态持久化（MongoDB）
 - 清单驱动注册 — 只加载 `enabled=true` 的游戏
-- 对局归档 — `onEnd` 自动写入 MatchRecord
+- 对局归档 — `onGameOver` 回调自动写入 MatchRecord
 - 座位认领 — `claimSeat` + `joinGuard`
 - 离线交互裁决 — `offlineInteractionAdjudicator`
 
@@ -438,7 +440,7 @@ src/games/<gameId>/
 
 ### 9.3 存储层
 
-- **HybridStorage**（`src/server/storage/`）：boardgame.io 状态持久化到 MongoDB
+- **HybridStorage**（`src/server/storage/`）：游戏状态持久化到 MongoDB（MongoStorage + 内存缓存）
 - **MongoDB**：用户数据、对局记录、自定义卡组、好友关系
 - **Cloudflare R2**：图片/音频/国际化文件 CDN 分发
 
@@ -482,17 +484,18 @@ runner.runAll([
 
 ```
 用户点击 UI
-  → Board.tsx 调用 moves.ATTACK({ target: 'B' })
-    → boardgame.io 序列化 move
-      → Adapter createMoveHandler 构造 Command
+  → Board.tsx 调用 dispatch('ATTACK', { target: 'B' })
+    → GameTransportClient 发送 socket 'command' 事件
+      → GameTransportServer.executeCommandInternal 构造 Command
         → executePipeline(config, state, command, random, playerIds)
           → Systems.beforeCommand（Undo 快照、Flow 拦截等）
           → Domain.validate → Domain.execute → Event[]
           → Domain.reduce（逐事件更新 core）
           → Systems.afterEvents（多轮：Log/EventStream/ActionLog/Flow 自动推进）
+          → applyGameoverCheck（检测游戏结束，写入 sys.gameover）
         ← PipelineResult { success, state, events }
-      → G.core = result.state.core; G.sys = result.state.sys  // Immer 代理写入
-    → boardgame.io 广播状态
+      → 持久化状态到 MongoDB
+    → GameTransportServer 广播状态（经 playerView 过滤）
   → React 重渲染 Board.tsx
 ```
 
@@ -515,9 +518,9 @@ runner.runAll([
 | 入口 | `/play/:gameId/local` | MatchRoom | MatchRoom |
 | 领域校验 | `skipValidation=true`（跳过权限，保留规则） | 严格校验 | `skipValidation=true` |
 | 玩家身份 | hotseat（`core.currentPlayer`） | 按 `playerID` 限制 | hotseat + AI 行动（`aiActions`） |
-| 随机数 | boardgame.io 随机 | boardgame.io 随机 | `TutorialRandomPolicy` 覆盖 |
-| 旁观者 | 不适用 | 阻止 move（`isSpectator` 检测） | 不适用 |
-| playerId 解析 | `core.currentPlayer ?? ctx.currentPlayer` | 显式 `playerID` | 同 local + `__tutorialPlayerId` 覆盖 |
+| 随机数 | 确定性种子随机 | 确定性种子随机 | `TutorialRandomPolicy` 覆盖 |
+| 旁观者 | 不适用 | 阻止命令（`isSpectator` 检测） | 不适用 |
+| playerId 解析 | `core.currentPlayer` | 显式 `playerID` | 同 local + `__tutorialPlayerId` 覆盖 |
 
 ---
 
@@ -525,13 +528,13 @@ runner.runAll([
 
 ```
 / (repo root)
-├── server.ts                     # 游戏服务入口（boardgame.io + socket.io + Koa）
+├── server.ts                     # 游戏服务入口（GameTransportServer + socket.io + Koa）
 ├── apps/
 │   └── api/                      # NestJS REST API 服务
 │       └── src/modules/          #   13 个业务模块
 ├── src/
 │   ├── engine/                   # 引擎层
-│   │   ├── adapter.ts            #   boardgame.io 适配器工厂
+│   │   ├── adapter.ts            #   引擎适配器工厂（createGameEngine）
 │   │   ├── pipeline.ts           #   Command/Event 执行管线
 │   │   ├── types.ts              #   核心类型定义
 │   │   ├── notifications.ts      #   引擎通知分发
@@ -593,7 +596,7 @@ runner.runAll([
 
 ### 14.4 确定性保证
 
-- 所有随机数通过 `RandomFn` 接口注入（由 boardgame.io 提供确定性随机）
+- 所有随机数通过 `RandomFn` 接口注入（由 `createTrackedRandom` 提供确定性种子随机）
 - 教程模式通过 `TutorialRandomPolicy` 覆盖随机数（fixed/sequence 两种模式）
 - `reduce` 必须是纯函数，禁止读取外部状态
 - 时间戳由管线统一分配（基于日志最后条目递增），不使用 `Date.now()`

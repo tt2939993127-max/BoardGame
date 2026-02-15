@@ -7,9 +7,10 @@
  * 通过 EventStream 消费 CARD_PLAYED / ATTACK_RESOLVED 事件驱动。
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
 import { findHeroCard } from '../heroes';
+import { useEventStreamCursor } from '../../../engine/hooks';
 
 /** 已激活的修正卡信息 */
 export interface ActiveModifier {
@@ -31,26 +32,11 @@ export interface UseActiveModifiersConfig {
 export function useActiveModifiers(config: UseActiveModifiersConfig) {
     const { eventStreamEntries } = config;
     const [modifiers, setModifiers] = useState<ActiveModifier[]>([]);
-    const lastSeenIdRef = useRef<number>(-1);
-    const isFirstMountRef = useRef(true);
-
-    // 首次挂载跳过历史
-    useEffect(() => {
-        if (isFirstMountRef.current && eventStreamEntries.length > 0) {
-            lastSeenIdRef.current = eventStreamEntries[eventStreamEntries.length - 1].id;
-            isFirstMountRef.current = false;
-        }
-    }, [eventStreamEntries]);
+    const { consumeNew } = useEventStreamCursor({ entries: eventStreamEntries });
 
     useEffect(() => {
-        if (isFirstMountRef.current) return;
-        if (eventStreamEntries.length === 0) return;
-
-        const lastSeenId = lastSeenIdRef.current;
-        const newEntries = eventStreamEntries.filter(e => e.id > lastSeenId);
+        const { entries: newEntries } = consumeNew();
         if (newEntries.length === 0) return;
-
-        lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
 
         let shouldClear = false;
         const newModifiers: ActiveModifier[] = [];
@@ -83,7 +69,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
         } else if (newModifiers.length > 0) {
             setModifiers(prev => [...prev, ...newModifiers]);
         }
-    }, [eventStreamEntries]);
+    }, [eventStreamEntries, consumeNew]);
 
     return { activeModifiers: modifiers };
 }

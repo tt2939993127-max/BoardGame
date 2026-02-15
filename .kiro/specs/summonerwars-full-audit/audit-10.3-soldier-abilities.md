@@ -40,14 +40,31 @@
 |------|------|------|
 | 定义层 | ✅ | trigger=onMove, effects=[extraMove +0, canPassThrough=units, damageOnPassThrough=1] |
 | 注册层 | ✅ | helpers.ts getUnitMoveEnhancements 读取 damageOnPassThrough |
-| 执行层 | ✅ | execute MOVE_UNIT 中检测路径上的单位并发射 UNIT_DAMAGED |
+| 执行层 | ✅ 已修复 | execute MOVE_UNIT 中检测路径上的单位并发射 UNIT_DAMAGED。路径计算已重构为引擎层 BFS（见下方修复记录） |
 | 状态层 | ✅ | reduce UNIT_DAMAGED 正确处理 |
 | 验证层 | ✅ | canMoveToEnhanced 允许穿过单位 |
 | UI层 | ✅ | getValidMoveTargetsEnhanced 返回穿越路径 |
 | i18n层 | ✅ | zh-CN/en 均有 trample 条目 |
 | 测试层 | ⚠️ | 无独立 trample 测试文件（通过 entity-chain-integrity 间接覆盖） |
 
-⚠️ 低风险：trample 无独立行为测试，但 helpers.ts 中 damageOnPassThrough 逻辑已被 getUnitMoveEnhancements 测试覆盖。描述中"士兵"无敌我限定，实现中 damageOnPassThrough 对路径上所有单位生效（不区分敌我），语义正确。
+### 已发现并修复的 bug（D6+D2：能力组合输入域扩展）
+
+**问题**：`getPassedThroughUnitPositions`（helpers.ts）路径算法不完整：
+- distance=2 L 形移动：返回两条可能中间路径上的所有单位（应选择最优一条）
+- distance>2 非直线移动：直接 `return []`，践踏伤害完全失效
+
+**触发条件**：trample + speed_up 组合使移动距离从 2 扩展到 3，此时非直线移动触发 `return []` 死代码路径。
+
+**审计为何未发现**：审计分别验证了 speed_up（移动距离正确增加 ✅）和 trample（路径伤害逻辑存在 ✅），但未验证两者组合后 `getPassedThroughUnitPositions` 是否覆盖扩展后的距离×形状输入空间。每层单独看都"存在且语义正确"，但算法在特定输入组合下有死代码路径。
+
+**修复**：
+- 引擎层（`src/engine/primitives/grid.ts`）新增通用 BFS 寻路 API：`findAllShortestGridPaths`（带通行性回调）+ `selectBestGridPath`（路径评分选择）
+- 游戏层（helpers.ts）`getPassedThroughUnitPositions` 改为：直线路径走 `getStraightGridPath`，非直线路径走引擎层 BFS + 评分（优先选敌人最多、友军最少的路径）
+- `getMovePath` 同步更新，支持任意距离的状态感知路径选择
+
+**教训**：D1-D10 框架缺少"能力组合输入域扩展"检查——当能力 A 扩展了能力 B 的输入范围时，必须验证 B 的算法覆盖扩展后的完整输入域。已补充到 `docs/ai-rules/testing-audit.md` 教训附录。
+
+描述中"士兵"无敌我限定，实现中 damageOnPassThrough 对路径上所有单位生效（不区分敌我），语义正确。
 
 ---
 
@@ -140,4 +157,4 @@
 ✅ 全部通过。
 
 ## 总结
-极地矮人6个士兵能力全部通过。trample/frost_axe/living_gate 无独立行为测试但低风险（逻辑简单或被间接覆盖）。
+极地矮人6个士兵能力审计完成。trample 发现并修复了路径算法 bug（D6+D2：speed_up 扩展移动距离后非直线路径返回空数组，践踏伤害失效），已重构为引擎层 BFS 寻路。frost_axe/living_gate 无独立行为测试但低风险（逻辑简单或被间接覆盖）。

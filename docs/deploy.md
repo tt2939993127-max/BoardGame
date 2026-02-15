@@ -295,7 +295,7 @@ WEB_ORIGINS=https://your-domain.com
 - **入口层**：在 `web` 前放一个 L7 负载均衡（云厂商 SLB/CLB 或自建 Nginx/HAProxy），对外仍只暴露 80/443。
 - **无状态服务可扩展**：
   - `apps/api`（NestJS）理论上可多实例（前提：会话/JWT 无状态，WebSocket 需要 sticky 或 socket 统一落到同一实例，或改为共享适配器）。
-  - `game-server` 多实例需要谨慎：boardgame.io 的 match 状态与 WebSocket 连接需要一致性，通常需要 sticky session + 共享存储/协调（或拆分“大厅/匹配”层）。
+  - `game-server` 多实例需要谨慎：GameTransportServer 的 match 状态（内存缓存）与 WebSocket 连接需要一致性，通常需要 sticky session + 共享存储/协调（或拆分“大厅/匹配”层）。
 - **状态服务单点处理**：MongoDB/Redis 建议走托管或主从/集群，避免单机磁盘与内存成为瓶颈。
 
 ## 常见问题
@@ -334,4 +334,4 @@ WEB_ORIGINS=https://your-domain.com
   - 本地 `npm run dev:api` 使用 `tsx --tsconfig apps/api/tsconfig.json`，自动启用 `experimentalDecorators`；
     Docker 若未指定 tsconfig，会导致 NestJS 装饰器报错。
   - 本地 `npm run dev:game` 使用 `vite-node`，ESM 解析与 Docker 中 `tsx` 直接运行不同；
-    可能触发 `boardgame.io/server` 解析到不存在的 `index.jsx`.
+    可能触发 `某些 ESM 模块` 解析到不存在的 `index.jsx`.

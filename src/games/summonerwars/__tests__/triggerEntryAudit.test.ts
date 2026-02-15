@@ -34,6 +34,7 @@ const EVENT_STREAM_TRIGGERED_ABILITIES = [
   'telekinesis',
   'high_telekinesis',
   'mind_transmission',
+  'withdraw',
   // afterMove 自动效果（execute.ts 硬编码，无需玩家选择但有按钮入口）
   'inspire',
 ];

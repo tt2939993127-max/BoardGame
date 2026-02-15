@@ -8,14 +8,12 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS } from '../domain/types';
 import type {
-    CardsDrawnEvent,
     CardsDiscardedEvent,
     DeckReshuffledEvent,
     SmashUpEvent,
     MinionCardDef,
-    MinionPlayedEvent,
 } from '../domain/types';
-import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions, buildMinionPlayedEvents } from '../domain/abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerRestriction, registerTrigger } from '../domain/ongoingEffects';
@@ -110,9 +108,10 @@ function zombieGraveDigger(ctx: AbilityContext): AbilityResult {
         const name = def?.name ?? c.defId;
         return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
     });
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
     const interaction = createSimpleChoice(
         `zombie_grave_digger_${ctx.now}`, ctx.playerId,
-        '选择要从弃牌堆取回的随从', options, 'zombie_grave_digger',
+        '选择要从弃牌堆取回的随从（可跳过）', [...options, skipOption] as any[], 'zombie_grave_digger',
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -191,12 +190,12 @@ function zombieLendAHand(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
         const typeLabel = c.type === 'minion' ? '随从' : '行动';
-        return { id: `card-${i}`, label: `${name} (${typeLabel})`, value: { cardUid: c.uid } };
+        return { id: `card-${i}`, label: `${name} (${typeLabel})`, value: { cardUid: c.uid, defId: c.defId } };
     });
     const interaction = createSimpleChoice(
         `zombie_lend_a_hand_${ctx.now}`, ctx.playerId,
-        '借把手：选择要洗回牌库的卡牌', options, 'zombie_lend_a_hand',
-        undefined, { min: 1, max: player.discard.length },
+        '借把手：选择要洗回牌库的卡牌（可跳过）', options, 'zombie_lend_a_hand',
+        undefined, { min: 0, max: player.discard.length },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -370,8 +369,9 @@ function zombieOverrunSelfDestruct(ctx: TriggerContext): SmashUpEvent[] {
 
 /** 注册僵尸派系的交互解决处理函数 */
 export function registerZombieInteractionHandlers(): void {
-    // 掘墓者：选择弃牌堆随从后取回
+    // 掘墓者：选择弃牌堆随从后取回（可跳过）
     registerInteractionHandler('zombie_grave_digger', (state, playerId, value, _iData, _random, timestamp) => {
+        if (value && (value as any).skip) return { state, events: [] };
         const { cardUid } = value as { cardUid: string };
         return { state, events: [recoverCardsFromDiscard(playerId, [cardUid], 'zombie_grave_digger', timestamp)] };
     });
@@ -382,22 +382,24 @@ export function registerZombieInteractionHandlers(): void {
         return { state, events: [recoverCardsFromDiscard(playerId, [cardUid], 'zombie_grave_robbing', timestamp)] };
     });
 
-    // 借把手：多选弃牌堆卡牌后洗回牌库
+    // 借把手：多选弃牌堆卡牌后洗回牌库（可不选）
     registerInteractionHandler('zombie_lend_a_hand', (state, playerId, value, _iData, random, timestamp) => {
         const selections = (Array.isArray(value) ? value : [value]) as { cardUid: string }[];
-        const selectedUids = new Set(selections.map(s => s.cardUid));
+        const selectedUids = new Set(selections.map(s => s.cardUid).filter(Boolean));
+        if (selectedUids.size === 0) return { state, events: [] };
         const player = state.core.players[playerId];
         // 将选中的弃牌堆卡牌与现有牌库合并后洗牌
         const selectedCards = player.discard.filter(c => selectedUids.has(c.uid));
         const combined = [...player.deck, ...selectedCards];
         const shuffled = random.shuffle([...combined]);
+        // DECK_REORDERED：包含弃牌堆中选中的卡 UID，reducer 会自动从弃牌堆移除
         return {
             state,
             events: [{
-                type: SU_EVENTS.DECK_RESHUFFLED,
+                type: SU_EVENTS.DECK_REORDERED,
                 payload: { playerId, deckUids: shuffled.map(c => c.uid) },
                 timestamp,
-            } as DeckReshuffledEvent],
+            }],
         };
     });
 
@@ -426,17 +428,27 @@ export function registerZombieInteractionHandlers(): void {
         };
     });
 
-    // 进发商场：选择卡名后搜索同名卡放入弃牌堆
-    registerInteractionHandler('zombie_mall_crawl', (state, playerId, value, _iData, _random, timestamp) => {
+    // 进发商场：选择卡名后搜索同名卡放入弃牌堆，之后重洗牌库
+    // 事件顺序：先 DECK_RESHUFFLED（重建牌库，同名卡放在牌库顶部以便后续弃牌），
+    // 再 CARDS_DISCARDED（从牌库中将同名卡移入弃牌堆）。
+    registerInteractionHandler('zombie_mall_crawl', (state, playerId, value, _iData, random, timestamp) => {
         const { defId } = value as { defId: string };
         const player = state.core.players[playerId];
         const sameNameCards = player.deck.filter(c => c.defId === defId);
         if (sameNameCards.length === 0) return { state, events: [] };
         const uids = sameNameCards.map(c => c.uid);
+        // 剩余牌库洗牌，同名卡放在最前面（它们会被后续 CARDS_DISCARDED 移走）
+        const remainingDeck = player.deck.filter(c => c.defId !== defId);
+        const shuffledRemaining = random.shuffle([...remainingDeck]);
+        // deckUids = 同名卡 + 洗牌后的剩余牌库 + 当前弃牌堆（DECK_RESHUFFLED 会合并 deck+discard）
+        const deckUids = [...uids, ...shuffledRemaining.map(c => c.uid), ...player.discard.map(c => c.uid)];
         return {
             state,
             events: [
-                { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: uids.length, cardUids: uids }, timestamp } as CardsDrawnEvent,
+                // 1. 重建牌库：合并 deck+discard，按 deckUids 排序，discard 清空
+                //    同名卡在 deckUids 中所以会保留在新 deck 里，原 discard 的卡也合并进 deck
+                { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids }, timestamp } as DeckReshuffledEvent,
+                // 2. 弃牌：同名卡从 deck 移入 discard
                 { type: SU_EVENTS.CARDS_DISCARDED, payload: { playerId, cardUids: uids }, timestamp } as CardsDiscardedEvent,
             ],
         };
@@ -469,14 +481,11 @@ export function registerZombieInteractionHandlers(): void {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         const contCtx = iData?.continuationContext as { targetBaseIndex: number };
         if (!contCtx) return undefined;
-        return {
-            state,
-            events: [{
-                type: SU_EVENTS.MINION_PLAYED,
-                payload: { playerId, cardUid, defId, baseIndex: contCtx.targetBaseIndex, power },
-                timestamp,
-            } as MinionPlayedEvent],
-        };
+        const result = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid, defId,
+            baseIndex: contCtx.targetBaseIndex, power, random: _random, now: timestamp,
+        });
+        return { state: result.matchState ?? state, events: result.events };
     });
 
     // 僵尸领主：选随从+选基地合并为单步交互
@@ -485,17 +494,18 @@ export function registerZombieInteractionHandlers(): void {
         if (selected.done) return { state, events: [] }; // 完成
         const { cardUid, defId, power, baseIndex } = selected as { cardUid: string; defId: string; power: number; baseIndex: number };
         const contCtx = iData?.continuationContext as { emptyBases: { baseIndex: number; label: string }[]; usedCardUids: string[]; filledBases: number[] };
-        const events: SmashUpEvent[] = [{
-            type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid, defId, baseIndex, power, fromDiscard: true },
-            timestamp,
-        } as MinionPlayedEvent];
+        const result = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid, defId,
+            baseIndex, power, random: _random, now: timestamp, fromDiscard: true,
+        });
+        const events: SmashUpEvent[] = [...result.events];
+        const ms = result.matchState ?? state;
         // 更新已用列表
         const usedCardUids = [...contCtx.usedCardUids, cardUid];
         const filledBases = [...contCtx.filledBases, baseIndex];
         // 检查是否还有空基地和弃牌堆随从
         const remainingBases = contCtx.emptyBases.filter(b => !filledBases.includes(b.baseIndex));
-        if (remainingBases.length === 0) return { state, events };
+        if (remainingBases.length === 0) return { state: ms, events };
         const player = state.core.players[playerId];
         const remainingMinions = player.discard.filter(c => {
             if (c.type !== 'minion') return false;
@@ -503,10 +513,10 @@ export function registerZombieInteractionHandlers(): void {
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             return def != null && def.power <= 2;
         });
-        if (remainingMinions.length === 0) return { state, events };
+        if (remainingMinions.length === 0) return { state: ms, events };
         // 继续下一轮
         const next = zombieLordBuildInteraction(playerId, remainingMinions, contCtx.emptyBases, usedCardUids, filledBases, timestamp);
-        return { state: queueInteraction(state, next), events };
+        return { state: queueInteraction(ms, next), events };
     });
 
     // 它们不断来临：选弃牌堆随从后 → 链式选择基地
@@ -520,11 +530,15 @@ export function registerZombieInteractionHandlers(): void {
         }
         if (candidates.length === 1) {
             // 只有一个基地直接打出
+            const playResult = buildMinionPlayedEvents({
+                core: state.core, matchState: state, playerId, cardUid, defId,
+                baseIndex: candidates[0].baseIndex, power, random: _random, now: timestamp, fromDiscard: true,
+            });
             return {
-                state,
+                state: playResult.matchState ?? state,
                 events: [
                     grantExtraMinion(playerId, 'zombie_they_keep_coming', timestamp),
-                    { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid, defId, baseIndex: candidates[0].baseIndex, power, fromDiscard: true }, timestamp } as MinionPlayedEvent,
+                    ...playResult.events,
                 ],
             };
         }
@@ -543,10 +557,11 @@ export function registerZombieInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string; power: number };
         if (!ctx) return undefined;
-        return {
-            state,
-            events: [{ type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power, fromDiscard: true }, timestamp } as MinionPlayedEvent],
-        };
+        const result = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid: ctx.cardUid, defId: ctx.defId,
+            baseIndex, power: ctx.power, random: _random, now: timestamp, fromDiscard: true,
+        });
+        return { state: result.matchState ?? state, events: result.events };
     });
 
     // （已删除旧的"它们为你而来"交互处理器——现在通过 PLAY_MINION fromDiscard 命令直接打出）

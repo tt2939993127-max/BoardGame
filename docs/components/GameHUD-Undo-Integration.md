@@ -29,11 +29,11 @@ MatchRoom.tsx
 ```tsx
 import { UndoProvider } from '../../contexts/UndoContext';
 
-export const YourGameBoard: React.FC<Props> = ({ G, ctx, moves, playerID, ... }) => {
-    const isGameOver = ctx.gameover;
+export const YourGameBoard: React.FC<Props> = ({ G, moves, playerID, ... }) => {
+    const isGameOver = !!G.sys.gameover;
     
     return (
-        <UndoProvider value={{ G, ctx, moves, playerID, isGameOver: !!isGameOver }}>
+        <UndoProvider value={{ G, moves, playerID, isGameOver }}>
             {/* 你的游戏界面 */}
         </UndoProvider>
     );
@@ -100,11 +100,11 @@ GameHUD 会自动：
 // src/games/tictactoe/Board.tsx
 import { UndoProvider } from '../../contexts/UndoContext';
 
-export const TicTacToeBoard: React.FC<Props> = ({ G, ctx, moves, playerID, ... }) => {
-    const isGameOver = ctx.gameover;
+export const TicTacToeBoard: React.FC<Props> = ({ G, moves, playerID, ... }) => {
+    const isGameOver = !!G.sys.gameover;
     
     return (
-        <UndoProvider value={{ G, ctx, moves, playerID, isGameOver: !!isGameOver }}>
+        <UndoProvider value={{ G, moves, playerID, isGameOver }}>
             <div className="game-board">
                 {/* 游戏界面 */}
             </div>
@@ -124,8 +124,7 @@ interface UndoProviderProps {
     children: ReactNode;
     value: {
         G: MatchState<unknown>;      // 游戏状态
-        ctx: any;                     // boardgame.io context
-        moves: any;                   // boardgame.io moves
+        moves: any;                   // 命令分发对象
         playerID: string | null;      // 当前玩家 ID
         isGameOver: boolean;          // 游戏是否结束
     };

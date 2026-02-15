@@ -86,16 +86,10 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
     state,
     event
 ) => {
-    const { targetId, actualDamage, sourceAbilityId } = event.payload;
+    const { targetId, actualDamage, sourceAbilityId, bypassShields } = event.payload;
     const target = state.players[targetId];
-    const beforeHp = target?.resources?.[RESOURCE_IDS.HP] ?? 0;
 
     if (!target) {
-        console.log(
-            `[DiceThrone] event=damage_dealt targetId=${targetId} actualDamage=${actualDamage} ` +
-            `remainingDamage=${actualDamage} beforeHp=0 afterHp=0 ` +
-            `sourceAbilityId=${sourceAbilityId ?? 'none'} timestamp=${event.timestamp ?? 'none'}`
-        );
         return state;
     }
 
@@ -103,7 +97,8 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
     let newDamageShields = target.damageShields;
 
     // 消耗护盾抵消伤害（忽略 preventStatus 护盾）
-    if (target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
+    // bypassShields: HP 重置类效果（如神圣祝福）跳过护盾消耗
+    if (!bypassShields && target.damageShields && target.damageShields.length > 0 && remainingDamage > 0) {
         const statusShields = target.damageShields.filter(shield => shield.preventStatus);
         const damageShields = target.damageShields.filter(shield => !shield.preventStatus);
         if (damageShields.length > 0) {
@@ -119,13 +114,6 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
         const result = resourceSystem.modify(target.resources, RESOURCE_IDS.HP, -remainingDamage);
         newResources = result.pool;
     }
-
-    const afterHp = newResources?.[RESOURCE_IDS.HP] ?? 0;
-    console.log(
-        `[DiceThrone] event=damage_dealt targetId=${targetId} actualDamage=${actualDamage} ` +
-        `remainingDamage=${Math.max(0, actualDamage - (beforeHp - afterHp))} beforeHp=${beforeHp} afterHp=${afterHp} ` +
-        `sourceAbilityId=${sourceAbilityId ?? 'none'} timestamp=${event.timestamp ?? 'none'}`
-    );
 
     return {
         ...state,
@@ -327,12 +315,6 @@ export const handleTokenResponseRequested: EventHandler<Extract<DiceThroneEvent,
     state,
     event
 ) => {
-    console.log(
-        `[DiceThrone] event=token_response_requested attackerId=${event.payload.pendingDamage.sourcePlayerId} ` +
-        `targetId=${event.payload.pendingDamage.targetPlayerId} damage=${event.payload.pendingDamage.currentDamage} ` +
-        `responseType=${event.payload.pendingDamage.responseType} sourceAbilityId=${event.payload.pendingDamage.sourceAbilityId ?? 'none'} ` +
-        `pendingDamageId=${event.payload.pendingDamage.id} timestamp=${event.timestamp ?? 'none'}`
-    );
     return { ...state, pendingDamage: event.payload.pendingDamage };
 };
 
@@ -412,10 +394,5 @@ export const handleTokenResponseClosed: EventHandler<Extract<DiceThroneEvent, { 
         ? { ...state.pendingAttack, damageResolved: true, resolvedDamage: event.payload.finalDamage }
         : state.pendingAttack;
 
-    console.log(
-        `[DiceThrone] event=token_response_closed pendingDamageId=${event.payload.pendingDamageId} ` +
-        `finalDamage=${event.payload.finalDamage} fullyEvaded=${event.payload.fullyEvaded} ` +
-        `timestamp=${event.timestamp ?? 'none'}`
-    );
     return { ...state, pendingDamage: undefined, pendingAttack };
 };

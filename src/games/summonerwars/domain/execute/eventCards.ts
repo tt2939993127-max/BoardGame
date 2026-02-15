@@ -19,6 +19,7 @@ import {
   manhattanDistance,
   isValidCoord,
   isCellEmpty,
+  isForceMovePathClear,
   getPlayerUnits,
   calculatePushPullPosition,
   getUnitAbilities,
@@ -94,6 +95,7 @@ export function executePlayEvent(
                     position: damageTarget,
                     damage: 2,
                     cardId: damageUnit.cardId,
+                    instanceId: damageUnit.instanceId,
                     source: 'annihilate',
                     sourcePlayerId: playerId,
                   },
@@ -142,7 +144,7 @@ export function executePlayEvent(
                   type: SW_EVENTS.CONTROL_TRANSFERRED,
                   payload: {
                     targetPosition: targetPos,
-                    targetUnitId: targetUnit.cardId,
+                    targetUnitId: targetUnit.instanceId,
                     newOwner: playerId,
                     temporary: true, // 标记为临时控制（回合结束归还）
                     originalOwner: targetUnit.owner,
@@ -282,7 +284,7 @@ export function executePlayEvent(
             // 标记被催眠的目标（用于主动事件区的战力加成）
             events.push({
               type: SW_EVENTS.HYPNOTIC_LURE_MARKED,
-              payload: { playerId, cardId, targetUnitId: lureUnit.cardId },
+              payload: { playerId, cardId, targetUnitId: lureUnit.instanceId },
               timestamp,
             });
           }
@@ -301,7 +303,7 @@ export function executePlayEvent(
               type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
               payload: {
                 targetPosition: u.position,
-                targetUnitId: u.cardId,
+                targetUnitId: u.instanceId,
                 sourceAbilityId: 'goblin_frenzy',
               },
               timestamp,
@@ -411,19 +413,26 @@ export function executePlayEvent(
         // 冰川位移：召唤师3格内至多3个友方建筑推拉1-2格
         // targets = 选中的友方建筑位置列表
         // payload.shiftDirections = 每个建筑的推拉方向和目标位置
+        // 注意：友方建筑包括普通建筑和 mobile_structure 单位（寒冰魔像）
         const gsSummoner = getSummoner(core, playerId);
         const shiftDirections = payload.shiftDirections as { position: CellCoord; newPosition: CellCoord }[] | undefined;
         if (gsSummoner && shiftDirections && shiftDirections.length > 0) {
           for (const sd of shiftDirections) {
             const structure = getStructureAt(core, sd.position);
-            if (structure && structure.owner === playerId) {
+            const sdUnit = getUnitAt(core, sd.position);
+            const isAllyStructure = (structure && structure.owner === playerId)
+              || (sdUnit && sdUnit.owner === playerId
+                && getUnitAbilities(sdUnit, core).includes('mobile_structure'));
+            if (isAllyStructure) {
               const dist = manhattanDistance(gsSummoner.position, sd.position);
+              // 强制移动必须沿直线，路径上每一格都必须为空
               if (dist <= 3 && isValidCoord(sd.newPosition)
-                && isCellEmpty(core, sd.newPosition)
-                && manhattanDistance(sd.position, sd.newPosition) <= 2) {
+                && isInStraightLine(sd.position, sd.newPosition)
+                && manhattanDistance(sd.position, sd.newPosition) <= 2
+                && isForceMovePathClear(core, sd.position, sd.newPosition)) {
                 events.push({
                   type: SW_EVENTS.UNIT_PUSHED,
-                  payload: { targetPosition: sd.position, newPosition: sd.newPosition, isStructure: true },
+                  payload: { targetPosition: sd.position, newPosition: sd.newPosition, isStructure: !!(structure) },
                   timestamp,
                 });
               }
@@ -435,13 +444,25 @@ export function executePlayEvent(
 
       case CARD_IDS.FROST_ICE_REPAIR: {
         // 寒冰修补：每个友方建筑移除2点伤害
+        // 注意：友方建筑包括普通建筑和 mobile_structure 单位（寒冰魔像）
         for (let r = 0; r < BOARD_ROWS; r++) {
           for (let c = 0; c < BOARD_COLS; c++) {
-            const structure = getStructureAt(core, { row: r, col: c });
+            const pos = { row: r, col: c };
+            const structure = getStructureAt(core, pos);
             if (structure && structure.owner === playerId && structure.damage > 0) {
               events.push({
                 type: SW_EVENTS.STRUCTURE_HEALED,
-                payload: { position: { row: r, col: c }, amount: 2, reason: 'ice_repair' },
+                payload: { position: pos, amount: 2, reason: 'ice_repair' },
+                timestamp,
+              });
+            }
+            // mobile_structure 单位也视为建筑，用 UNIT_HEALED 治疗
+            const unit = getUnitAt(core, pos);
+            if (unit && unit.owner === playerId && unit.damage > 0
+              && getUnitAbilities(unit, core).includes('mobile_structure')) {
+              events.push({
+                type: SW_EVENTS.UNIT_HEALED,
+                payload: { position: pos, amount: 2, sourceAbilityId: 'ice_repair' },
                 timestamp,
               });
             }
@@ -458,7 +479,7 @@ export function executePlayEvent(
         if (targets && targets.length > 0) {
           const cpTarget = getUnitAt(core, targets[0]);
           const sourcePosition = summoner?.position ?? targets[0];
-          const sourceUnitId = summoner?.cardId ?? eventCard.id;
+          const sourceUnitId = summoner?.instanceId ?? eventCard.id;
           if (cpTarget && cpTarget.owner === playerId
             && cpTarget.card.unitClass !== 'summoner') {
             events.push({
@@ -469,7 +490,7 @@ export function executePlayEvent(
                 sourceUnitId,
                 sourcePosition,
                 targetPosition: targets[0],
-                targetUnitId: cpTarget.cardId,
+                targetUnitId: cpTarget.instanceId,
                 grantedAbility: 'power_up',
                 duration: 'end_of_turn',
               },
@@ -522,10 +543,10 @@ export function executePlayEvent(
           const entTarget2 = getUnitAt(core, targets[1]);
           if (entTarget1 && entTarget2) {
             const sourcePosition = summoner?.position ?? targets[0];
-            const sourceUnitId = summoner?.cardId ?? eventCard.id;
+            const sourceUnitId = summoner?.instanceId ?? eventCard.id;
             events.push(createAbilityTriggeredEvent('chant_of_entanglement', sourceUnitId, sourcePosition, timestamp, {
-              targetUnitId1: entTarget1.cardId,
-              targetUnitId2: entTarget2.cardId,
+              targetUnitId1: entTarget1.instanceId,
+              targetUnitId2: entTarget2.instanceId,
             }));
           }
         }
@@ -541,13 +562,13 @@ export function executePlayEvent(
             // 标记 activeEvent 的目标单位（复用 HYPNOTIC_LURE_MARKED 的 reduce 逻辑）
             events.push({
               type: SW_EVENTS.HYPNOTIC_LURE_MARKED,
-              payload: { playerId, cardId, targetUnitId: cwTarget.cardId },
+              payload: { playerId, cardId, targetUnitId: cwTarget.instanceId },
               timestamp,
             });
             const sourcePosition = summoner?.position ?? targets[0];
-            const sourceUnitId = summoner?.cardId ?? eventCard.id;
+            const sourceUnitId = summoner?.instanceId ?? eventCard.id;
             events.push(createAbilityTriggeredEvent('chant_of_weaving', sourceUnitId, sourcePosition, timestamp, {
-              targetUnitId: cwTarget.cardId,
+              targetUnitId: cwTarget.instanceId,
               targetPosition: targets[0],
             }));
           }

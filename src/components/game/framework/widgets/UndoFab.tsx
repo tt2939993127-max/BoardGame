@@ -8,8 +8,7 @@ import type { MatchState } from '../../../../engine/types';
 
 interface UndoFabProps {
     G: MatchState<unknown>;
-    ctx: any;
-    moves: any;
+    dispatch: (type: string, payload?: unknown) => void;
     playerID: string | null;
     isGameOver?: boolean;
 }
@@ -22,8 +21,7 @@ interface UndoFabProps {
  * ```tsx
  * <UndoFab
  *     G={G}
- *     ctx={ctx}
- *     moves={moves}
+ *     dispatch={dispatch}
  *     playerID={playerID}
  *     isGameOver={!!isGameOver}
  * />
@@ -31,8 +29,7 @@ interface UndoFabProps {
  */
 export const UndoFab: React.FC<UndoFabProps> = ({ 
     G, 
-    ctx, 
-    moves, 
+    dispatch, 
     playerID,
     isGameOver = false
 }) => {
@@ -46,9 +43,8 @@ export const UndoFab: React.FC<UndoFabProps> = ({
 
     // 获取当前玩家
     const coreCurrentPlayer = (G.core as { currentPlayer?: string | number } | undefined)?.currentPlayer;
-    const currentPlayer = coreCurrentPlayer ?? ctx.currentPlayer;
-    const normalizedCurrentPlayer = currentPlayer !== null && currentPlayer !== undefined
-        ? String(currentPlayer)
+    const normalizedCurrentPlayer = coreCurrentPlayer !== null && coreCurrentPlayer !== undefined
+        ? String(coreCurrentPlayer)
         : null;
 
     const isCurrentPlayer = normalizedCurrentPlayer !== null && playerID === normalizedCurrentPlayer;
@@ -90,7 +86,7 @@ export const UndoFab: React.FC<UndoFabProps> = ({
                                 </span>
                             </div>
                             <button
-                                onClick={() => moves[UNDO_COMMANDS.CANCEL_UNDO]()}
+                                onClick={() => dispatch(UNDO_COMMANDS.CANCEL_UNDO)}
                                 className="w-full px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white/80 text-sm font-medium transition-all"
                             >
                                 {t('controls.undo.cancel')}
@@ -114,13 +110,13 @@ export const UndoFab: React.FC<UndoFabProps> = ({
                             </div>
                             <div className="flex gap-2">
                                 <button
-                                    onClick={() => moves[UNDO_COMMANDS.APPROVE_UNDO]()}
+                                    onClick={() => dispatch(UNDO_COMMANDS.APPROVE_UNDO)}
                                     className="flex-1 px-4 py-2.5 rounded-lg bg-green-500/20 hover:bg-green-500 hover:text-white border border-green-500/50 hover:border-green-500 text-green-400 text-sm font-bold transition-all"
                                 >
                                     {t('controls.undo.approve')}
                                 </button>
                                 <button
-                                    onClick={() => moves[UNDO_COMMANDS.REJECT_UNDO]()}
+                                    onClick={() => dispatch(UNDO_COMMANDS.REJECT_UNDO)}
                                     className="flex-1 px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500 hover:text-white border border-red-500/50 hover:border-red-500 text-red-400 text-sm font-bold transition-all"
                                 >
                                     {t('controls.undo.reject')}
@@ -144,7 +140,7 @@ export const UndoFab: React.FC<UndoFabProps> = ({
                                 </div>
                             </div>
                             <button
-                                onClick={() => moves[UNDO_COMMANDS.REQUEST_UNDO]()}
+                                onClick={() => dispatch(UNDO_COMMANDS.REQUEST_UNDO)}
                                 className="w-full px-4 py-2.5 rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-black border border-amber-500/50 hover:border-amber-500 text-amber-400 font-bold text-sm transition-all group"
                             >
                                 <span className="flex items-center justify-center gap-2">

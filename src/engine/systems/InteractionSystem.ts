@@ -31,6 +31,12 @@ export interface PromptOption<T = unknown> {
     label: string;
     value: T;
     disabled?: boolean;
+    /**
+     * UI 渲染模式声明：
+     * - 'card': 以卡牌预览图展示（UI 层从 value 中的 defId 查找预览图）
+     * - 'button' | undefined: 普通按钮
+     */
+    displayMode?: 'card' | 'button';
 }
 
 /**
@@ -78,6 +84,37 @@ export interface SimpleChoiceData<T = unknown> {
      * - false：可选效果或"你可以"类效果，始终让玩家确认
      */
     autoResolveIfSingle?: boolean;
+}
+
+/**
+ * slider-choice 专用数据 — 从连续数值范围中选择一个值
+ *
+ * 适用场景：花费资源（CP/金币/能量）换取等量效果、分配数值等。
+ * UI 层渲染为滑动条 + 确认/跳过按钮。
+ */
+export interface SliderChoiceData {
+    /** 弹窗标题（i18n key） */
+    title: string;
+    /** 最小值（含） */
+    min: number;
+    /** 最大值（含） */
+    max: number;
+    /** 步长，默认 1 */
+    step?: number;
+    /** 默认值（未指定时取 max） */
+    defaultValue?: number;
+    /** 来源技能/卡牌 ID */
+    sourceId?: string;
+    /** 是否允许跳过（值为 0 / 不花费），默认 true */
+    allowSkip?: boolean;
+    /** 滑动条标签格式化 key（i18n），接收 {value} 插值 */
+    valueLabelKey?: string;
+    /** 确认按钮文案 key（i18n），接收 {value} 插值 */
+    confirmLabelKey?: string;
+    /** 跳过按钮文案 key（i18n） */
+    skipLabelKey?: string;
+    /** 附加元数据（透传给事件消费方，如 tokenId / customId） */
+    meta?: Record<string, unknown>;
 }
 
 /**
@@ -168,6 +205,22 @@ export function createSimpleChoice<T>(
 }
 
 /**
+ * 创建 slider-choice 交互 — 从连续数值范围中选择
+ */
+export function createSliderChoice(
+    id: string,
+    playerId: PlayerId,
+    data: SliderChoiceData,
+): InteractionDescriptor<SliderChoiceData> {
+    return {
+        id,
+        kind: 'slider-choice',
+        playerId,
+        data,
+    };
+}
+
+/**
  * 将交互加入队列（替代旧 queuePrompt）
  */
 export function queueInteraction<TCore>(
@@ -231,6 +284,17 @@ export function asSimpleChoice(
     return { ...data, id: interaction.id, playerId: interaction.playerId };
 }
 
+/**
+ * UI 辅助：从 InteractionDescriptor 提取 slider-choice 扁平数据
+ */
+export function asSliderChoice(
+    interaction?: InteractionDescriptor,
+): (SliderChoiceData & { id: string; playerId: PlayerId }) | undefined {
+    if (!interaction || interaction.kind !== 'slider-choice') return undefined;
+    const data = interaction.data as SliderChoiceData;
+    return { ...data, id: interaction.id, playerId: interaction.playerId };
+}
+
 // ============================================================================
 // 系统配置
 // ============================================================================
@@ -273,6 +337,12 @@ export function createInteractionSystem<TCore>(
             if (command.type === INTERACTION_COMMANDS.TIMEOUT) {
                 const ts = resolveCommandTimestamp(command);
                 return handleSimpleChoiceTimeout(state, ts);
+            }
+
+            // ---- 交互取消（离线裁决 / 系统兜底） ----
+            if (command.type === INTERACTION_COMMANDS.CANCEL) {
+                const ts = resolveCommandTimestamp(command);
+                return handleInteractionCancel(state, command.playerId, ts);
             }
 
             // ---- 阻塞逻辑 ----
@@ -429,4 +499,39 @@ function handleSimpleChoiceTimeout<TCore>(
     };
 
     return { state: newState, events: [event] };
+}
+
+function handleInteractionCancel<TCore>(
+    state: MatchState<TCore>,
+    playerId: PlayerId,
+    timestamp: number,
+): HookResult<TCore> {
+    const current = state.sys.interaction.current;
+
+    if (!current) {
+        return { halt: true, error: '没有待处理的交互' };
+    }
+    if (current.playerId !== playerId) {
+        return { halt: true, error: '不是你的交互' };
+    }
+
+    const sourceId = (() => {
+        if (!current.data || typeof current.data !== 'object') return undefined;
+        const maybeSource = (current.data as { sourceId?: unknown }).sourceId;
+        return typeof maybeSource === 'string' ? maybeSource : undefined;
+    })();
+
+    const newState = resolveInteraction(state);
+    const event: GameEvent = {
+        type: INTERACTION_EVENTS.CANCELLED,
+        payload: {
+            interactionId: current.id,
+            playerId,
+            sourceId,
+            interactionData: current.data,
+        },
+        timestamp,
+    };
+
+    return { halt: false, state: newState, events: [event] };
 }

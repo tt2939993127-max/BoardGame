@@ -1,5 +1,7 @@
 # MongoDB 16MB 限制修复说明
 
+> **历史文档**：本文档记录的修复发生在传输层迁移之前。旧框架已被自研传输层（GameTransportServer）完全替代，`_undo`/`_redo`/`plugins`/`deltalog` 等旧框架顶层字段已不存在。状态清理逻辑（`sanitizeStateForStorage`）仍然有效，直接操作 `StoredMatchState.G.sys`。
+
 ## 问题描述
 
 游戏运行时遇到 MongoDB 错误：
@@ -12,11 +14,11 @@ Size must be between 0 and 16793600(16MB)
 
 ## 根本原因
 
-1. **状态清理路径错误**：`MongoStorage.sanitizeStateForStorage` 访问的是 `state.sys`，但 boardgame.io 的 State 结构是 `{ G, ctx, ... }`，实际游戏状态在 `state.G.sys`，导致清理逻辑完全失效。
+1. **状态清理路径错误**：`MongoStorage.sanitizeStateForStorage` 访问的是 `state.sys`，但旧 State 结构是 `{ G, ctx, ... }`，实际游戏状态在 `state.G.sys`，导致清理逻辑完全失效。
 
 2. **日志无限增长**：
    - `sys.log.entries` 默认保留 200 条，每个日志条目包含完整事件对象
-   - `Match.log` (boardgame.io 的 deltalog) 没有任何限制，持续累积
+   - `Match.log`（deltalog） 没有任何限制，持续累积
    - Undo 快照虽然限制数量，但每个快照都深拷贝整个状态（包括日志）
 
 3. **大型事件对象**：
@@ -58,7 +60,7 @@ if (event.type === 'DECK_SHUFFLED') {
 }
 ```
 
-### 4. 清理 boardgame.io 顶层字段 ✅
+### 4. 清理旧框架顶层字段 ✅
 
 ```typescript
 // 清理 plugins.log.data
@@ -112,7 +114,7 @@ npx tsx scripts/db/cleanup-db.ts
 
 ```javascript
 // 连接到数据库
-use boardgame
+use bordgame
 
 // 查看大型文档
 db.matches.find({}, { matchID: 1 }).forEach(doc => {

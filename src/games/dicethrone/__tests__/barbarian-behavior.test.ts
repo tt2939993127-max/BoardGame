@@ -65,7 +65,7 @@ function createState(opts: {
 
 function buildCtx(
     state: DiceThroneCore, actionId: string,
-    opts?: { random?: () => number }
+    opts?: { random?: () => number; targetSelf?: boolean }
 ): CustomActionContext {
     const effectCtx = {
         attackerId: '0' as any, defenderId: '1' as any,
@@ -74,8 +74,10 @@ function buildCtx(
     const randomFn = opts?.random
         ? { d: (n: number) => Math.ceil(opts.random!() * n) } as any
         : undefined;
+    // targetSelf=true 模拟 action.target:'self' 的真实场景（targetId=attackerId）
+    const targetId = opts?.targetSelf ? '0' : '1';
     return {
-        ctx: effectCtx, targetId: '1' as any, attackerId: '0' as any,
+        ctx: effectCtx, targetId: targetId as any, attackerId: '0' as any,
         sourceAbilityId: actionId, state, timestamp: 1000, random: randomFn,
         action: { type: 'custom', customActionId: actionId },
     };
@@ -95,37 +97,47 @@ describe('野蛮人 Custom Action 运行时行为断言', () => {
     // barbarian-suppress-roll: 投3骰，造成点数总和伤害，>14施加脑震荡
     // ========================================================================
     describe('barbarian-suppress-roll (压制 I)', () => {
-        it('投3骰造成点数总和伤害', () => {
+        it('投3骰造成点数总和伤害（target:self 场景，伤害必须打到对手）', () => {
             const state = createState({});
             let callIdx = 0;
             const rolls = [3, 4, 5]; // 总和=12
             const handler = getCustomActionHandler('barbarian-suppress-roll')!;
+            // targetSelf=true 模拟真实的 action.target:'self' 场景
             const events = handler(buildCtx(state, 'barbarian-suppress-roll', {
                 random: () => rolls[callIdx++] / 6,
+                targetSelf: true,
             }));
 
             const dmg = eventsOfType(events, 'DAMAGE_DEALT');
             expect(dmg).toHaveLength(1);
             expect((dmg[0] as any).payload.amount).toBe(12);
+            // D10 关键断言：伤害目标必须是对手 '1'，不能是自己 '0'
+            expect((dmg[0] as any).payload.targetId).toBe('1');
 
             // 12 <= 14，不施加脑震荡
             const status = eventsOfType(events, 'STATUS_APPLIED');
             expect(status).toHaveLength(0);
         });
 
-        it('总和>14时施加脑震荡', () => {
+        it('总和>14时施加脑震荡（target:self 场景）', () => {
             const state = createState({});
             let callIdx = 0;
             const rolls = [5, 5, 6]; // 总和=16 > 14
             const handler = getCustomActionHandler('barbarian-suppress-roll')!;
             const events = handler(buildCtx(state, 'barbarian-suppress-roll', {
                 random: () => rolls[callIdx++] / 6,
+                targetSelf: true,
             }));
 
-            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(16);
+            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
+            expect(dmg).toHaveLength(1);
+            expect((dmg[0] as any).payload.amount).toBe(16);
+            expect((dmg[0] as any).payload.targetId).toBe('1');
             const status = eventsOfType(events, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.CONCUSSION);
+            // 脑震荡也必须施加给对手
+            expect((status[0] as any).payload.targetId).toBe('1');
         });
     });
 
@@ -133,29 +145,38 @@ describe('野蛮人 Custom Action 运行时行为断言', () => {
     // barbarian-suppress-2-roll: 投3骰，造成点数总和伤害，>9施加脑震荡
     // ========================================================================
     describe('barbarian-suppress-2-roll (压制 II)', () => {
-        it('总和>9时施加脑震荡', () => {
+        it('总和>9时施加脑震荡（target:self 场景）', () => {
             const state = createState({});
             let callIdx = 0;
             const rolls = [3, 4, 4]; // 总和=11 > 9
             const handler = getCustomActionHandler('barbarian-suppress-2-roll')!;
             const events = handler(buildCtx(state, 'barbarian-suppress-2-roll', {
                 random: () => rolls[callIdx++] / 6,
+                targetSelf: true,
             }));
 
-            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(11);
+            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
+            expect(dmg).toHaveLength(1);
+            expect((dmg[0] as any).payload.amount).toBe(11);
+            expect((dmg[0] as any).payload.targetId).toBe('1');
             expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(1);
+            expect((eventsOfType(events, 'STATUS_APPLIED')[0] as any).payload.targetId).toBe('1');
         });
 
-        it('总和<=9时不施加脑震荡', () => {
+        it('总和<=9时不施加脑震荡（target:self 场景）', () => {
             const state = createState({});
             let callIdx = 0;
             const rolls = [1, 2, 3]; // 总和=6 <= 9
             const handler = getCustomActionHandler('barbarian-suppress-2-roll')!;
             const events = handler(buildCtx(state, 'barbarian-suppress-2-roll', {
                 random: () => rolls[callIdx++] / 6,
+                targetSelf: true,
             }));
 
-            expect((eventsOfType(events, 'DAMAGE_DEALT')[0] as any).payload.amount).toBe(6);
+            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
+            expect(dmg).toHaveLength(1);
+            expect((dmg[0] as any).payload.amount).toBe(6);
+            expect((dmg[0] as any).payload.targetId).toBe('1');
             expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(0);
         });
     });
@@ -280,32 +301,39 @@ describe('野蛮人 Custom Action 运行时行为断言', () => {
     // more-please-roll-damage: 投5骰，剑面数伤害+脑震荡
     // ========================================================================
     describe('more-please-roll-damage (再来点儿)', () => {
-        it('5个剑面造成5点伤害并施加脑震荡', () => {
+        it('5个剑面造成5点伤害并施加脑震荡（target:self 场景）', () => {
             const state = createState({});
             const handler = getCustomActionHandler('more-please-roll-damage')!;
             const events = handler(buildCtx(state, 'more-please-roll-damage', {
                 random: () => 1 / 6, // d(6)→1 → sword，5次
+                targetSelf: true,
             }));
 
             const dmg = eventsOfType(events, 'DAMAGE_DEALT');
             expect(dmg).toHaveLength(1);
             expect((dmg[0] as any).payload.amount).toBe(5);
+            // D10 关键断言：伤害目标必须是对手 '1'
+            expect((dmg[0] as any).payload.targetId).toBe('1');
 
             const status = eventsOfType(events, 'STATUS_APPLIED');
             expect(status).toHaveLength(1);
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.CONCUSSION);
+            expect((status[0] as any).payload.targetId).toBe('1');
         });
 
-        it('0个剑面不造成伤害但仍施加脑震荡', () => {
+        it('0个剑面不造成伤害但仍施加脑震荡（target:self 场景）', () => {
             const state = createState({});
             const handler = getCustomActionHandler('more-please-roll-damage')!;
             const events = handler(buildCtx(state, 'more-please-roll-damage', {
                 random: () => 4 / 6, // d(6)→4 → heart，5次
+                targetSelf: true,
             }));
 
             expect(eventsOfType(events, 'DAMAGE_DEALT')).toHaveLength(0);
-            // 脑震荡始终施加
-            expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(1);
+            // 脑震荡始终施加给对手
+            const status = eventsOfType(events, 'STATUS_APPLIED');
+            expect(status).toHaveLength(1);
+            expect((status[0] as any).payload.targetId).toBe('1');
         });
     });
 });

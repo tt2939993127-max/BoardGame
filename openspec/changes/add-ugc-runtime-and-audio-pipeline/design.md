@@ -5,7 +5,7 @@
 
 ## Goals / Non-Goals
 ### Goals
-- UGC 联机/教程入口复用现有大厅/房间与教程路由，并按 packageId 动态注册到 boardgame.io。
+- UGC 联机/教程入口复用现有大厅/房间与教程路由，并按 packageId 动态注册到游戏引擎。
 - 提供通用 UGC Board（iframe + 宿主桥接/SDK）承载视图包。
 - 包来源统一从服务器拉取已发布 Package；本地预览仅限 Builder。
 - 资产上传接入 R2 管线，压缩后仅保留变体，不保留原始文件。

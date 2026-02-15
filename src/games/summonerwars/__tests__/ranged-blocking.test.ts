@@ -14,6 +14,7 @@ import {
   getValidAttackTargetsEnhanced,
   BOARD_ROWS, BOARD_COLS,
 } from '../domain/helpers';
+import { generateInstanceId } from '../domain/utils';
 
 // ============================================================================
 // 工具函数
@@ -71,8 +72,10 @@ function makeParapet(id: string): StructureCard {
 }
 
 function placeUnit(state: SummonerWarsCore, pos: CellCoord, unit: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }) {
+  const cardId = unit.cardId ?? unit.card.id;
   state.board[pos.row][pos.col].unit = {
-    cardId: unit.cardId ?? unit.card.id,
+    instanceId: unit.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: unit.card, owner: unit.owner, position: pos,
     damage: unit.damage ?? 0, boosts: unit.boosts ?? 0,
     hasMoved: unit.hasMoved ?? false, hasAttacked: unit.hasAttacked ?? false,

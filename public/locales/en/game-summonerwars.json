@@ -193,7 +193,6 @@
     "unitChargeTotal": "(total {{total}})",
     "sourceAbility": "(source: {{abilityName}})",
     "structureBuilt": "Structure built:",
-    "structureDamaged": "Structure took {{amount}} damage:",
     "structureHealed": "Structure healed {{amount}}:",
     "structureDestroyed": "Structure destroyed:",
     "magicChanged": "Player {{playerId}} magic {{delta}}",
@@ -331,6 +330,11 @@
     "holyArrowAtLeastOne": "Holy Arrow requires discarding at least one unit card",
     "healingNeedsDiscard": "Healing requires discarding a card"
   },
+  "eventCard": {
+    "noSummoner": "Your summoner is not on the board",
+    "noValidTarget": "No valid targets available",
+    "entanglementNeedTwoCommons": "Chant of Entanglement requires at least 2 friendly commons within 3 spaces of your summoner"
+  },
   "destroyEffect": {
     "destroyed": "{{name}} destroyed!"
   },
@@ -362,9 +366,11 @@
       "iceShards": "Ice Shards: Spend 1 charge to deal 1 damage to enemies adjacent to buildings?",
       "feedBeast": "Feed the Beast: Remove an adjacent ally, or self-destruct",
       "spiritBond": "Spirit Bond: Select target within 3 to transfer charge, or charge self",
+      "spiritBondChargeOnly": "Spirit Bond: No charges, can only charge self",
       "ancestralBond": "Ancestral Bond: Select friendly unit within 3 to transfer charge",
       "structureShift": "Structure Shift: Select friendly building within 3",
       "frostAxe": "Frost Axe: Charge self, or spend charges to attach to friendly soldier",
+      "frostAxeChargeOnly": "Frost Axe: No charges, can only charge self",
       "frostAxeSelectTarget": "Frost Axe: Select a friendly soldier within 3 spaces",
       "iceRamSelectTarget": "Ice Ram: Select a unit adjacent to a building",
       "iceRamSelectPush": "Ice Ram: Choose push/pull direction (or skip)",

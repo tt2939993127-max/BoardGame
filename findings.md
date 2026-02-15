@@ -29,7 +29,7 @@ WHEN: Update this file every 2 browser steps or 2 file reads (The 2-Action Rule)
 - openspec list --specs：当前没有 dicethrone 相关 spec，需新增能力 spec。
 
 ### Project Context
-- 已读取 openspec/project.md：技术栈 React 19 + Boardgame.io 0.50；约定中文 UI/注释、Vitest/Playwright 测试。
+- 已读取 openspec/project.md：技术栈 React 19 + 自研游戏引擎；约定中文 UI/注释、Vitest/Playwright 测试。
 
 ### Specs 参考
 - flow-system spec：阶段推进由 FlowHooks 驱动，ADVANCE_PHASE 校验/阻止由 canAdvance 控制。

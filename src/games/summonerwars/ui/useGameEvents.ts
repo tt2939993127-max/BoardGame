@@ -2,11 +2,11 @@
  * 召唤师战争 - 游戏事件流消费 Hook
  * 
  * 使用 EventStreamSystem 消费事件，驱动动画/特效/音效
- * 遵循 lastSeenEventId 模式，首次挂载跳过历史事件
+ * 使用引擎层 useEventStreamCursor 管理游标（自动处理首次挂载跳过 + Undo 重置）
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { EventStreamEntry, MatchState } from '../../../engine/types';
+import type { MatchState } from '../../../engine/types';
 import type { SummonerWarsCore, PlayerId, CellCoord, UnitCard, StructureCard } from '../domain/types';
 import { SW_EVENTS } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
@@ -15,13 +15,15 @@ import type { DiceFace } from '../config/dice';
 import { getDestroySpriteConfig } from './spriteHelpers';
 import type { FxBus } from '../../../engine/fx';
 import { SW_FX } from './fxSetup';
+import type { AbilityActivationContext, AbilityActivationStep } from '../domain/abilities';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { resolveDamageSoundKey, resolveDestroySoundKey } from '../audio.config';
 import type { UseVisualSequenceGateReturn } from '../../../components/game/framework/hooks/useVisualSequenceGate';
 import { useVisualStateBuffer } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import type { UseVisualStateBufferReturn } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import { isPlagueZombieCard } from '../domain/ids';
-import type { RapidFireModeState } from './modeTypes';
+import type { RapidFireModeState, WithdrawModeState } from './modeTypes';
+import { useEventStreamCursor } from '../../../engine/hooks';
 
 // ============================================================================
 // 类型定义
@@ -58,13 +60,13 @@ export interface DyingEntity {
 /** 技能模式状态 */
 export interface AbilityModeState {
   abilityId: string;
-  step: 'selectCard' | 'selectPosition' | 'selectUnit' | 'selectCards' | 'selectAttachTarget' | 'selectNewPosition' | 'selectPushDirection';
+  step: AbilityActivationStep;
   sourceUnitId: string;
   selectedCardId?: string;
   selectedCardIds?: string[];
   selectedUnitId?: string;
   targetPosition?: CellCoord;
-  context?: 'beforeAttack' | 'activated';
+  context?: AbilityActivationContext;
   /** 寒冰冲撞：建筑新位置 */
   structurePosition?: CellCoord;
 }
@@ -183,6 +185,9 @@ export function useGameEvents({
   // 连续射击确认模式
   const [rapidFireMode, setRapidFireMode] = useState<RapidFireModeState | null>(null);
 
+  // 撤退触发状态（afterAttack 自动触发，由 Board.tsx 桥接到 useEventCardModes.setWithdrawMode）
+  const [withdrawTrigger, setWithdrawTrigger] = useState<WithdrawModeState | null>(null);
+
   // 阶段切换时清理技能模式
   useEffect(() => {
     // 移动后技能（ancestral_bond, spirit_bond, structure_shift, frost_axe）只在移动阶段有效
@@ -227,45 +232,20 @@ export function useGameEvents({
   const EVENT_BATCH_WARN = 20;
   const EVENT_BATCH_STEP = 10;
 
-  // 追踪已处理的事件流 ID
-  const lastSeenEventId = useRef<number>(-1);
-  const isFirstMount = useRef(true);
+  // 通用游标（同步处理首次挂载跳过 + Undo 重置）
+  const entries = getEventStreamEntries(G);
+  const { consumeNew } = useEventStreamCursor({ entries });
 
   // 监听事件流
   useLayoutEffect(() => {
-    const entries = getEventStreamEntries(G);
-
     if (entries.length >= EVENT_STREAM_WARN && entries.length >= eventStreamLogRef.current + EVENT_STREAM_STEP) {
       eventStreamLogRef.current = entries.length;
       console.warn(`[SW-EVENT] event=stream_backlog size=${entries.length} max=${EVENT_STREAM_WARN}`);
     }
 
-    // 首次挂载：将指针推进到当前事件末尾，不回放历史特效
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      if (entries.length > 0) {
-        lastSeenEventId.current = entries[entries.length - 1].id;
-      }
-      console.log('[SW-EVENT-DEBUG] firstMount skip, lastSeenEventId=', lastSeenEventId.current, 'entries=', entries.length);
-      return;
-    }
+    const { entries: newEntries, didReset } = consumeNew();
 
-    const { newEntries, nextLastSeenId, shouldReset } = computeEventStreamDelta(
-      entries,
-      lastSeenEventId.current
-    );
-
-    console.log('[SW-EVENT-DEBUG] delta', {
-      entriesLen: entries.length,
-      lastSeenBefore: lastSeenEventId.current,
-      newEntriesLen: newEntries.length,
-      nextLastSeenId,
-      shouldReset,
-      entryIds: entries.map(e => e.id),
-      newEntryTypes: newEntries.map(e => e.event.type),
-    });
-
-    if (shouldReset) {
+    if (didReset) {
       pendingAttackRef.current = null;
       pendingDestroyRef.current = [];
       setDiceResult(null);
@@ -278,10 +258,9 @@ export function useGameEvents({
       setMindCaptureMode(null);
       setAfterAttackAbilityMode(null);
       setRapidFireMode(null);
+      setWithdrawTrigger(null);
       gateRef.current.reset();
     }
-
-    lastSeenEventId.current = nextLastSeenId;
 
     if (newEntries.length === 0) return;
     if (newEntries.length >= EVENT_BATCH_WARN && newEntries.length >= eventBatchLogRef.current + EVENT_BATCH_STEP) {
@@ -289,8 +268,20 @@ export function useGameEvents({
       console.warn(`[SW-EVENT] event=batch size=${newEntries.length}`);
     }
 
+    // 位移动画延迟：位移事件（推拉/移动）后的伤害特效需等移动动画完成
+    // spring(stiffness:300, damping:30) 约 250ms 到达稳态
+    const MOVE_ANIM_DELAY = 250;
+    let hasPendingMove = false;
+
     for (const entry of newEntries) {
       const event = entry.event;
+
+      // 追踪位移事件（推拉/移动），后续伤害特效需延迟
+      if (event.type === SW_EVENTS.UNIT_PUSHED
+        || event.type === SW_EVENTS.UNIT_PULLED
+        || event.type === SW_EVENTS.UNIT_MOVED) {
+        hasPendingMove = true;
+      }
 
       // 召唤事件 - 光柱特效（震动由 FeedbackPack on-impact 自动触发）
       if (event.type === SW_EVENTS.UNIT_SUMMONED) {
@@ -352,11 +343,20 @@ export function useGameEvents({
             damageBuffer.freeze(cellKey, coreDamage - p.damage);
           }
         } else {
+          // 非攻击伤害：如果前面有位移事件，延迟播放特效等移动动画完成
           const soundKey = resolveDamageSoundKey(p.damage);
-          fxBusRef.current.push(SW_FX.COMBAT_DAMAGE, {
+          const fxCtx = {
             cell: p.position,
-            intensity: p.damage >= 3 ? 'strong' : 'normal',
-          }, { damageAmount: p.damage, soundKey });
+            intensity: (p.damage >= 3 ? 'strong' : 'normal') as 'strong' | 'normal',
+          };
+          const fxParams = { damageAmount: p.damage, soundKey };
+          if (hasPendingMove) {
+            setTimeout(() => {
+              fxBusRef.current.push(SW_FX.COMBAT_DAMAGE, fxCtx, fxParams);
+            }, MOVE_ANIM_DELAY);
+          } else {
+            fxBusRef.current.push(SW_FX.COMBAT_DAMAGE, fxCtx, fxParams);
+          }
         }
       }
 
@@ -370,11 +370,17 @@ export function useGameEvents({
         handleDestroyEvent(event.payload as Record<string, unknown>, 'structure', entry.id);
       }
 
-      // 充能事件 - 旋涡动画反馈
+      // 充能事件 - 旋涡动画反馈（位移后可能触发充能，需等移动动画完成）
       if (event.type === SW_EVENTS.UNIT_CHARGED) {
         const p = event.payload as { position: CellCoord; delta: number; sourceAbilityId?: string };
         if (p.delta > 0) {
-          fxBusRef.current.push(SW_FX.CHARGE_VORTEX, { cell: p.position, intensity: 'normal' });
+          if (hasPendingMove) {
+            setTimeout(() => {
+              fxBusRef.current.push(SW_FX.CHARGE_VORTEX, { cell: p.position, intensity: 'normal' });
+            }, MOVE_ANIM_DELAY);
+          } else {
+            fxBusRef.current.push(SW_FX.CHARGE_VORTEX, { cell: p.position, intensity: 'normal' });
+          }
         }
       }
 
@@ -466,6 +472,20 @@ export function useGameEvents({
             gateRef.current.scheduleInteraction(() => {
               setRapidFireMode(captured);
             });
+          }
+        }
+        // 撤退：攻击后可选消耗充能/魔力推拉自身1-2格
+        if (p.abilityId === 'withdraw') {
+          const unit = core.board[p.sourcePosition.row]?.[p.sourcePosition.col]?.unit;
+          if (unit && unit.owner === myPlayerId) {
+            const hasCharge = (unit.boosts ?? 0) >= 1;
+            const hasMagic = core.players[myPlayerId as '0' | '1']?.magic >= 1;
+            if (hasCharge || hasMagic) {
+              const captured = { sourceUnitId: p.sourceUnitId };
+              gateRef.current.scheduleInteraction(() => {
+                setWithdrawTrigger({ sourceUnitId: captured.sourceUnitId, step: 'selectCost' });
+              });
+            }
           }
         }
         // 幻化：移动阶段开始时自动进入目标选择模式
@@ -577,7 +597,7 @@ export function useGameEvents({
     }
   // 依赖数组不包含回调函数，回调通过 ref 访问，避免因回调引用变化导致 effect 重复执行
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [G, core, myPlayerId]);
+  }, [G, core, myPlayerId, consumeNew]);
 
   /** 查找被摧毁的卡牌（弃牌堆/手牌兜底） */
   const resolveDestroyedCard = (owner: PlayerId, cardId?: string) => {
@@ -695,6 +715,8 @@ export function useGameEvents({
     setAfterAttackAbilityMode,
     rapidFireMode,
     setRapidFireMode,
+    withdrawTrigger,
+    setWithdrawTrigger,
     pendingAttackRef,
     handleCloseDiceResult,
     clearPendingAttack,

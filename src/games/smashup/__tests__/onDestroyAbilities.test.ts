@@ -52,20 +52,18 @@ const defaultRandom: RandomFn = {
 
 describe('onDestroy 基础设施', () => {
     it('消灭无 onDestroy 能力的随从不产生额外事件（单目标自动执行）', () => {
-        // 侏儒 onPlay：消灭力量 < 己方随从数的随从
-        // 基地上预先有1个己方随从(力量3) → 打出后 1+1=2 → 消灭力量<2的随从
-        // m0a 力量3 >= 2 不符合，只有 m1 力量1 < 2 → 单目标自动执行
+        // 用 bear_necessities 行动卡消灭一个无 onDestroy 的随从
+        // 基地上只有1个对手随从 → 单目标自动执行
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
-                    hand: [makeCard('c1', 'trickster_gnome', 'minion', '0')],
+                    hand: [makeCard('c1', 'bear_cavalry_bear_necessities', 'action', '0')],
                 }),
                 '1': makePlayer('1'),
             },
             bases: [{
                 defId: 'base_a',
                 minions: [
-                    makeMinion('m0a', 'test_ally', '0', 3),
                     makeMinion('m1', 'test_minion', '1', 1),
                 ],
                 ongoingActions: [],
@@ -73,13 +71,13 @@ describe('onDestroy 基础设施', () => {
         });
 
         const events = execute(makeMatchState(core), {
-            type: SU_COMMANDS.PLAY_MINION,
+            type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
-            payload: { cardUid: 'c1', baseIndex: 0 },
+            payload: { cardUid: 'c1' },
         }, defaultRandom);
 
         const types = events.map(e => e.type);
-        expect(types).toContain(SU_EVENTS.MINION_PLAYED);
+        expect(types).toContain(SU_EVENTS.ACTION_PLAYED);
         expect(types).toContain(SU_EVENTS.MINION_DESTROYED);
         // 被消灭的 test_minion 没有 onDestroy，不应有额外能力事件
         const destroyIdx = types.indexOf(SU_EVENTS.MINION_DESTROYED);

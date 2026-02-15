@@ -45,6 +45,17 @@ export function getStructureSpriteConfig(structure: BoardStructure): SpriteConfi
   return { atlasId, frameIndex: spriteIndex };
 }
 
+/** 获取单位卡牌精灵图配置（直接从 UnitCard，不需要 BoardUnit） */
+export function getUnitCardSpriteConfig(card: UnitCard): SpriteConfig {
+  const spriteIndex = card.spriteIndex ?? 0;
+  const spriteAtlas = card.spriteAtlas ?? 'cards';
+  if (spriteAtlas === 'portal') {
+    return { atlasId: 'sw:portal', frameIndex: spriteIndex };
+  }
+  const atlasId = resolveCardAtlasId(card, spriteAtlas as 'hero' | 'cards');
+  return { atlasId, frameIndex: spriteIndex };
+}
+
 /** 获取摧毁动画卡牌精灵图配置 */
 export function getDestroySpriteConfig(card: UnitCard | StructureCard): SpriteConfig {
   const spriteIndex = card.spriteIndex ?? (card.cardType === 'structure' ? 0 : 0);

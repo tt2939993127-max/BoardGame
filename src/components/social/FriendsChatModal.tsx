@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { FriendList } from './FriendList';
 import { ChatWindow } from './ChatWindow';
+import { SystemNotificationView } from './SystemNotificationView';
 import { X, ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
+
+/** 系统通知的固定会话 ID */
+export const SYSTEM_NOTIFICATION_ID = '__system_notification__';
 
 interface FriendsChatModalProps {
     isOpen: boolean;
@@ -80,7 +84,11 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData }: FriendsChatMod
                                 </button>
                                 <span className="font-bold text-parchment-base-text ml-2">{t('common:back')}</span>
                             </div>
-                            <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
+                            {selectedFriendId === SYSTEM_NOTIFICATION_ID ? (
+                                <SystemNotificationView />
+                            ) : (
+                                <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
+                            )}
                         </>
                     ) : (
                         <div className="hidden md:flex flex-col items-center justify-center h-full text-parchment-light-text opacity-50 space-y-4">

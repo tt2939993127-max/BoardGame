@@ -70,6 +70,10 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                         promptOptions,
                         payload.sourceAbilityId
                     );
+                    // 透传 slider 配置到 interaction data
+                    if (payload.slider) {
+                        (interaction.data as SimpleChoiceData & { slider?: unknown }).slider = payload.slider;
+                    }
                     
                     newState = queueInteraction(newState, interaction);
                 }

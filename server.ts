@@ -419,11 +419,12 @@ router.post('/games/:name/create', async (ctx) => {
     const playerIds = Array.from({ length: numPlayers }, (_, i) => String(i));
 
     // 初始化游戏状态
-    const initialState = await gameTransport.setupMatch(matchID, gameName, playerIds, seed, setupData);
-    if (!initialState) {
+    const setupResult = await gameTransport.setupMatch(matchID, gameName, playerIds, seed, setupData);
+    if (!setupResult) {
         ctx.throw(500, 'Failed to setup match');
         return;
     }
+    const { state: initialState, randomCursor } = setupResult;
 
     // 构建 metadata（每个座位包含 id 字段）
     const players: Record<string, { id: number; name?: string; credentials?: string; isConnected?: boolean }> = {};
@@ -445,7 +446,7 @@ router.post('/games/:name/create', async (ctx) => {
                 G: initialState,
                 _stateID: 0,
                 randomSeed: seed,
-                randomCursor: 0,
+                randomCursor,
             },
             metadata,
         });

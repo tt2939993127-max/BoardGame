@@ -31,7 +31,7 @@ function getActionableUnitHints(
             hints.push({
               type: 'actionable',
               position: u.position,
-              entityId: u.cardId,
+              entityId: u.instanceId,
               actions: ['move'],
             });
           }
@@ -48,7 +48,7 @@ function getActionableUnitHints(
             hints.push({
               type: 'actionable',
               position: u.position,
-              entityId: u.cardId,
+              entityId: u.instanceId,
               actions: ['attack'],
             });
           }
@@ -57,12 +57,12 @@ function getActionableUnitHints(
       // 有额外攻击的单位始终显示为可攻击（不受3次限制）
       for (const u of units) {
         if ((u.extraAttacks ?? 0) > 0 && !u.hasAttacked && getValidAttackTargetsEnhanced(core, u.position).length > 0) {
-          const alreadyHinted = hints.some(h => h.entityId === u.cardId);
+          const alreadyHinted = hints.some(h => h.entityId === u.instanceId);
           if (!alreadyHinted) {
             hints.push({
               type: 'actionable',
               position: u.position,
-              entityId: u.cardId,
+              entityId: u.instanceId,
               actions: ['attack'],
             });
           }
@@ -105,7 +105,7 @@ function getAbilityReadyHints(
       hints.push({
         type: 'ability',
         position: u.position,
-        entityId: u.cardId,
+        entityId: u.instanceId,
         actions: usableAbilities,
       });
     }

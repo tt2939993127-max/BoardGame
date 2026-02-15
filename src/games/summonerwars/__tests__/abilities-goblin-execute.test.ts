@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, PlayerId } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 function createTestRandom(): RandomFn {
   return {
@@ -34,8 +34,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -98,7 +100,7 @@ describe('部落抓附手 - 抓附 (grab) ACTIVATE_ABILITY', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const grabber = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-grabber',
       card: makeGrabber('test-grabber'),
       owner: '0',
@@ -109,7 +111,7 @@ describe('部落抓附手 - 抓附 (grab) ACTIVATE_ABILITY', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'grab',
-      sourceUnitId: 'test-grabber',
+      sourceUnitId: grabber.instanceId,
       targetPosition: { row: 4, col: 3 },
     });
 
@@ -128,7 +130,7 @@ describe('部落抓附手 - 抓附 (grab) ACTIVATE_ABILITY', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const grabber = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-grabber',
       card: makeGrabber('test-grabber'),
       owner: '0',
@@ -148,7 +150,7 @@ describe('部落抓附手 - 抓附 (grab) ACTIVATE_ABILITY', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'grab',
-        sourceUnitId: 'test-grabber',
+        sourceUnitId: grabber.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
@@ -163,14 +165,14 @@ describe('部落抓附手 - 抓附 (grab) ACTIVATE_ABILITY', () => {
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
     // 抓附手在 (4,2)
-    placeUnit(state, { row: 4, col: 2 }, {
+    const grabber = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-grabber',
       card: makeGrabber('test-grabber'),
       owner: '0',
     });
 
     // 友方单位在 (4,3)，与抓附手相邻
-    placeUnit(state, { row: 4, col: 3 }, {
+    const mover = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-mover',
       card: makeAlly('test-mover'),
       owner: '0',
@@ -188,7 +190,7 @@ describe('部落抓附手 - 抓附 (grab) ACTIVATE_ABILITY', () => {
     // 应有 GRAB_FOLLOW_REQUESTED 事件
     const grabEvents = events.filter(e => e.type === SW_EVENTS.GRAB_FOLLOW_REQUESTED);
     expect(grabEvents.length).toBe(1);
-    expect((grabEvents[0].payload as any).grabberUnitId).toBe('test-grabber');
-    expect((grabEvents[0].payload as any).movedUnitId).toBe('test-mover');
+    expect((grabEvents[0].payload as any).grabberUnitId).toBe(grabber.instanceId);
+    expect((grabEvents[0].payload as any).movedUnitId).toBe(mover.instanceId);
   });
 });

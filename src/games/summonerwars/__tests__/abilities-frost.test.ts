@@ -21,7 +21,7 @@ import type {
 import type { RandomFn, GameEvent } from '../../../engine/types';
 import { canMoveToEnhanced, getStructureAt, getUnitAt } from '../domain/helpers';
 import { calculateEffectiveStrength } from '../domain/abilityResolver';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -52,8 +52,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -140,6 +142,16 @@ function makeJarmund(id: string): UnitCard {
     faction: 'frost', strength: 3, life: 7, cost: 5,
     attackType: 'ranged', attackRange: 3,
     abilities: ['imposing', 'ice_shards'], deckSymbols: [],
+  };
+}
+
+/** 创建霜刃卫卡牌（冰霜战斧） */
+function makeFrostAxeBearer(id: string): UnitCard {
+  return {
+    id, cardType: 'unit', name: '霜刃卫', unitClass: 'champion',
+    faction: 'frost', strength: 2, life: 5, cost: 3,
+    attackType: 'melee', attackRange: 1,
+    abilities: ['frost_axe'], deckSymbols: [],
   };
 }
 
@@ -452,7 +464,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
     const state = createFrostState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner', card: makeFrostSummoner('test-summoner'), owner: '0',
     });
 
@@ -465,7 +477,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'structure_shift',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       targetPosition: { row: 4, col: 4 },
       newPosition: { row: 4, col: 5 },
     });
@@ -482,7 +494,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
     const state = createFrostState();
     clearArea(state, [1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 0 }, {
+    const summoner = placeUnit(state, { row: 4, col: 0 }, {
       cardId: 'test-summoner', card: makeFrostSummoner('test-summoner'), owner: '0',
     });
 
@@ -498,7 +510,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'structure_shift',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
@@ -512,7 +524,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
     const state = createFrostState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner', card: makeFrostSummoner('test-summoner'), owner: '0',
     });
 
@@ -528,7 +540,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'structure_shift',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
@@ -542,7 +554,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
     const state = createFrostState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner', card: makeFrostSummoner('test-summoner'), owner: '0',
     });
 
@@ -558,7 +570,7 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'structure_shift',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
@@ -566,6 +578,55 @@ describe('丝瓦拉 - 结构变换 (structure_shift)', () => {
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('友方建筑');
+  });
+});
+
+
+// ============================================================================
+// 冰霜战斧 (frost_axe) 测试
+// ============================================================================
+
+describe('霜刃卫 - 冰霜战斧 (frost_axe)', () => {
+  it('同 cardId 的不同实例可作为附加目标（按 instanceId 判定自身）', () => {
+    const state = createFrostState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    const source = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'shared-frost-card', card: makeFrostAxeBearer('shared-frost-source'), owner: '0', boosts: 2,
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'shared-frost-card', card: makeBearCavalry('shared-frost-target'), owner: '0',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const validateResult = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'frost_axe',
+        sourceUnitId: source.instanceId,
+        choice: 'attach',
+        targetPosition: { row: 4, col: 3 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(validateResult.valid).toBe(true);
+
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'frost_axe',
+      sourceUnitId: source.instanceId,
+      choice: 'attach',
+      targetPosition: { row: 4, col: 3 },
+    });
+
+    const attachEvents = events.filter(e => e.type === SW_EVENTS.UNIT_ATTACHED);
+    expect(attachEvents.length).toBe(1);
+    expect(newState.board[4][2].unit).toBeUndefined();
+    expect(newState.board[4][3].unit?.attachedUnits?.some(u => u.cardId === source.instanceId)).toBe(true);
   });
 });
 
@@ -603,7 +664,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ice_shards',
-      sourceUnitId: 'test-jarmund',
+      sourceUnitId: jarmund.instanceId,
     });
 
     // 充能应该被消耗
@@ -619,7 +680,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     const state = createFrostState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const jarmund = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-jarmund', card: makeJarmund('test-jarmund'), owner: '0',
       boosts: 0,
     });
@@ -630,7 +691,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     const fullState = { core: state, sys: {} as any };
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'ice_shards', sourceUnitId: 'test-jarmund' },
+      payload: { abilityId: 'ice_shards', sourceUnitId: jarmund.instanceId },
       playerId: '0',
       timestamp: fixedTimestamp,
     });
@@ -642,7 +703,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     const state = createFrostState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const jarmund = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-jarmund', card: makeJarmund('test-jarmund'), owner: '0',
       boosts: 1,
     });
@@ -661,7 +722,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ice_shards',
-      sourceUnitId: 'test-jarmund',
+      sourceUnitId: jarmund.instanceId,
     });
 
     // 友方单位不受伤
@@ -674,7 +735,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     const state = createFrostState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const jarmund = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-jarmund', card: makeJarmund('test-jarmund'), owner: '0',
       boosts: 1,
     });
@@ -694,7 +755,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ice_shards',
-      sourceUnitId: 'test-jarmund',
+      sourceUnitId: jarmund.instanceId,
     });
 
     const damageEvents = events.filter(e => e.type === SW_EVENTS.UNIT_DAMAGED);
@@ -706,7 +767,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     const state = createFrostState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const jarmund = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-jarmund', card: makeJarmund('test-jarmund'), owner: '0',
       boosts: 1,
     });
@@ -729,7 +790,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
 
     const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ice_shards',
-      sourceUnitId: 'test-jarmund',
+      sourceUnitId: jarmund.instanceId,
     });
 
     // 去重：只受1次伤害
@@ -895,5 +956,220 @@ describe('极地矮人事件卡', () => {
       // 不应在手牌中
       expect(newState.players['0'].hand.some(c => c.id === 'frost-ice-ram-0')).toBe(false);
     });
+  });
+});
+
+// ============================================================================
+// v2 审查补充测试：跨机制交叉场景
+// ============================================================================
+
+describe('冲锋 × 缓慢 交互 (CI-2)', () => {
+  it('冲锋路径不受缓慢影响（1-4格直线）', () => {
+    const state = createFrostState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    // 创建同时拥有 charge 和 slow 的测试单位
+    const chargeSlowUnit: UnitCard = {
+      id: 'charge-slow-unit', cardType: 'unit', name: '冲锋缓慢测试',
+      unitClass: 'common', faction: 'frost', strength: 3, life: 5, cost: 2,
+      attackType: 'melee', attackRange: 1,
+      abilities: ['charge', 'slow'], deckSymbols: [],
+    };
+
+    placeUnit(state, { row: 4, col: 1 }, {
+      cardId: 'cs-unit', card: chargeSlowUnit, owner: '0',
+    });
+
+    // 放置敌方单位作为冲锋目标（直线4格）
+    placeUnit(state, { row: 4, col: 5 }, {
+      cardId: 'enemy-target', card: makeEnemy('enemy-target'), owner: '1',
+    });
+
+    // 冲锋路径（直线4格）应该可以 — 冲锋独立于正常移动
+    expect(canMoveToEnhanced(state, { row: 4, col: 1 }, { row: 4, col: 4 })).toBe(true);
+    // 冲锋路径（直线3格）也可以
+    expect(canMoveToEnhanced(state, { row: 4, col: 1 }, { row: 4, col: 3 })).toBe(true);
+  });
+
+  it('正常移动受缓慢影响（非直线路径时体现）', () => {
+    const state = createFrostState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    const chargeSlowUnit: UnitCard = {
+      id: 'charge-slow-unit', cardType: 'unit', name: '冲锋缓慢测试',
+      unitClass: 'common', faction: 'frost', strength: 3, life: 5, cost: 2,
+      attackType: 'melee', attackRange: 1,
+      abilities: ['charge', 'slow'], deckSymbols: [],
+    };
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'cs-unit', card: chargeSlowUnit, owner: '0',
+    });
+
+    // 直线2格可以（冲锋路径允许）
+    expect(canMoveToEnhanced(state, { row: 4, col: 2 }, { row: 4, col: 4 })).toBe(true);
+    // 对角2格不行（非直线，走正常移动路径，被缓慢减到1格）
+    expect(canMoveToEnhanced(state, { row: 4, col: 2 }, { row: 3, col: 3 })).toBe(false);
+    // 正常移动1格可以
+    expect(canMoveToEnhanced(state, { row: 4, col: 2 }, { row: 4, col: 3 })).toBe(true);
+  });
+});
+
+describe('结构变换 × 活体结构 交互 (CI-3)', () => {
+  it('结构变换可以推拉友方活体结构单位（寒冰魔像）', () => {
+    const state = createFrostState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    // 丝瓦拉（结构变换）— 显式设置 instanceId 以匹配 sourceUnitId
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-summoner', instanceId: 'test-summoner',
+      card: makeFrostSummoner('test-summoner'), owner: '0',
+    });
+
+    // 寒冰魔像（活体结构）在3格内
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-golem', instanceId: 'test-golem',
+      card: makeIceGolem('test-golem'), owner: '0',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const { events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'structure_shift',
+      sourceUnitId: 'test-summoner',
+      targetPosition: { row: 4, col: 4 },
+      newPosition: { row: 4, col: 5 },
+    });
+
+    // 应该产生 UNIT_PUSHED 事件
+    const pushEvents = events.filter(e => e.type === SW_EVENTS.UNIT_PUSHED);
+    expect(pushEvents.length).toBe(1);
+    expect((pushEvents[0].payload as Record<string, unknown>).targetPosition).toEqual({ row: 4, col: 4 });
+    expect((pushEvents[0].payload as Record<string, unknown>).newPosition).toEqual({ row: 4, col: 5 });
+  });
+
+  it('结构变换不能推拉敌方活体结构单位', () => {
+    const state = createFrostState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-summoner', instanceId: 'test-summoner',
+      card: makeFrostSummoner('test-summoner'), owner: '0',
+    });
+
+    // 敌方寒冰魔像
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'enemy-golem', instanceId: 'enemy-golem',
+      card: makeIceGolem('enemy-golem'), owner: '1',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const { events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'structure_shift',
+      sourceUnitId: 'test-summoner',
+      targetPosition: { row: 4, col: 4 },
+      newPosition: { row: 4, col: 5 },
+    });
+
+    // 不应该产生 UNIT_PUSHED 事件（敌方建筑不可推拉）
+    const pushEvents = events.filter(e => e.type === SW_EVENTS.UNIT_PUSHED);
+    expect(pushEvents.length).toBe(0);
+  });
+});
+
+// ============================================================================
+// v2 审查补充测试：CI-1 践踏致死触发 onDeath
+// ============================================================================
+
+describe('践踏致死 × 献祭 交互 (CI-1)', () => {
+  it('践踏致死应触发 onDeath 能力（献祭对相邻敌方造成1伤害）', () => {
+    const state = createFrostState();
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    // 玩家0 的熊骑兵（践踏）在 (4,0)
+    const bearCard = makeBearCavalry('bear-1');
+    placeUnit(state, { row: 4, col: 0 }, {
+      cardId: 'bear-1', card: bearCard, owner: '0',
+    });
+
+    // 玩家1 的地狱火教徒（献祭：onDeath 对相邻敌方造成1伤害）在 (4,1)，生命1
+    const cultistCard: UnitCard = {
+      id: 'cultist-1', cardType: 'unit', name: '地狱火教徒',
+      unitClass: 'common', faction: 'necromancer',
+      strength: 1, life: 1, cost: 1,
+      attackType: 'melee', attackRange: 1,
+      abilities: ['sacrifice'], deckSymbols: [],
+    };
+    placeUnit(state, { row: 4, col: 1 }, {
+      cardId: 'cultist-1', card: cultistCard, owner: '1',
+    });
+
+    // 玩家1 的另一个单位在 (4,2)（献祭不应伤害友方）
+    placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'ally-1', card: makeEnemy('ally-1', { life: 5 }), owner: '1',
+    });
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    // 熊骑兵从 (4,0) 移动到 (4,2) — 穿过 (4,1) 的地狱火教徒
+    // 但 (4,2) 有单位，所以不能移动到那里。改为移动到空格。
+    // 重新布局：熊骑兵 (4,0)，教徒 (4,1)，目标空格 (4,2)，旁观者 (3,1)
+    clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+
+    placeUnit(state, { row: 4, col: 0 }, {
+      cardId: 'bear-1', card: bearCard, owner: '0',
+    });
+    placeUnit(state, { row: 4, col: 1 }, {
+      cardId: 'cultist-1', card: cultistCard, owner: '1',
+    });
+    // 旁观者在 (3,1)，与教徒相邻，是玩家0的单位（教徒的敌方）
+    const bystander: UnitCard = {
+      id: 'bystander', cardType: 'unit', name: '旁观者',
+      unitClass: 'common', faction: 'frost',
+      strength: 1, life: 5, cost: 1,
+      attackType: 'melee', attackRange: 1,
+      abilities: [], deckSymbols: [],
+    };
+    placeUnit(state, { row: 3, col: 1 }, {
+      cardId: 'bystander', card: bystander, owner: '0',
+    });
+
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.MOVE_UNIT, {
+      from: { row: 4, col: 0 },
+      to: { row: 4, col: 2 },
+    });
+
+    // 1. 应该有践踏伤害事件
+    const trampleDamage = events.filter(e =>
+      e.type === SW_EVENTS.UNIT_DAMAGED
+      && (e.payload as Record<string, unknown>).reason === 'trample'
+    );
+    expect(trampleDamage.length).toBe(1);
+
+    // 2. 教徒应该被消灭（生命1，受到1伤害）
+    const destroyed = events.filter(e =>
+      e.type === SW_EVENTS.UNIT_DESTROYED
+      && (e.payload as Record<string, unknown>).cardId === 'cultist-1'
+    );
+    expect(destroyed.length).toBe(1);
+
+    // 3. 献祭应该触发 — 对相邻敌方（旁观者在 (3,1)）造成1伤害
+    const sacrificeDamage = events.filter(e =>
+      e.type === SW_EVENTS.UNIT_DAMAGED
+      && (e.payload as Record<string, unknown>).reason !== 'trample'
+      && (e.payload as Record<string, unknown>).position !== undefined
+      && ((e.payload as Record<string, unknown>).position as CellCoord).row === 3
+      && ((e.payload as Record<string, unknown>).position as CellCoord).col === 1
+    );
+    expect(sacrificeDamage.length).toBeGreaterThanOrEqual(1);
+
+    // 4. 旁观者应该受到1伤害
+    const bystanderUnit = newState.board[3][1].unit;
+    expect(bystanderUnit).toBeDefined();
+    expect(bystanderUnit!.damage).toBe(1);
   });
 });

@@ -187,11 +187,9 @@ export class GameTestRunner<
 
             state = result.state;
 
-            if (domain.isGameOver) {
-                const gameOver = domain.isGameOver(state.core);
-                if (gameOver) {
-                    break;
-                }
+            // 管线已将 gameover 写入 sys.gameover
+            if (state.sys.gameover) {
+                break;
             }
         }
 

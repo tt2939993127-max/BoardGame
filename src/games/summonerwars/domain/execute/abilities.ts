@@ -7,7 +7,7 @@
 import type { GameEvent } from '../../../../engine/types';
 import type { SummonerWarsCore, PlayerId } from '../types';
 import { SW_EVENTS } from '../types';
-import { findBoardUnitByCardId, createAbilityTriggeredEvent } from './helpers';
+import { findBoardUnitByInstanceId, createAbilityTriggeredEvent } from './helpers';
 import { abilityExecutorRegistry } from '../executors';
 import { abilityRegistry } from '../abilities';
 import type { SWAbilityContext } from '../executors/types';
@@ -38,7 +38,7 @@ export function executeActivateAbility(
       ownerId: playerId,
       timestamp,
       core,
-      sourceUnit: { cardId: 'ice_ram', card: {} as never, owner: playerId, position: structurePos ?? { row: 0, col: 0 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false },
+      sourceUnit: { instanceId: 'ice_ram#0', cardId: 'ice_ram', card: {} as never, owner: playerId, position: structurePos ?? { row: 0, col: 0 }, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false },
       sourcePosition: structurePos ?? { row: 0, col: 0 },
       payload,
     };
@@ -47,8 +47,8 @@ export function executeActivateAbility(
     return;
   }
 
-  // 查找源单位
-  const found = findBoardUnitByCardId(core, sourceUnitId);
+  // 查找源单位（sourceUnitId 为 instanceId）
+  const found = findBoardUnitByInstanceId(core, sourceUnitId);
   if (!found) {
     console.warn('[SummonerWars] 技能源单位未找到:', sourceUnitId);
     return;

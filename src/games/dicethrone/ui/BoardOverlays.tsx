@@ -7,7 +7,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence } from 'framer-motion';
-import { getLocalizedAssetPath } from '../../../core';
 import { CardPreview } from '../../../components/common/media/CardPreview';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
@@ -28,6 +27,7 @@ import type { PendingDamage } from '../domain/types';
 import type { TokenDef } from '../domain/tokenTypes';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import { useHorizontalDragScroll } from '../../../hooks/ui/useHorizontalDragScroll';
 import { getSlotAbilityId, getUpgradeCardPreviewRef } from './AbilityOverlays';
 
 export interface BoardOverlaysProps {
@@ -59,7 +59,9 @@ export interface BoardOverlaysProps {
     choice: {
         hasChoice: boolean;
         title?: string;
-        options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string }>;
+        options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string; value?: number }>;
+        /** slider 模式配置（存在时渲染滑动条） */
+        slider?: { confirmLabelKey: string; hintKey?: string; skipLabelKey?: string };
     };
     canResolveChoice: boolean;
     onResolveChoice: (optionId: string) => void;
@@ -123,7 +125,7 @@ export interface BoardOverlaysProps {
     // 其他
     statusIconAtlas?: StatusAtlases | null;
     locale: string;
-    moves: Record<string, unknown>;
+    dispatch: (type: string, payload?: unknown) => void;
     currentPhase: TurnPhase;
 
     // 选角相关
@@ -172,6 +174,7 @@ const MagnifyUpgradeOverlay: React.FC<{
 
 export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     const { t } = useTranslation('game-dicethrone');
+    const { ref: multiCardScrollRef, dragProps: multiCardDragProps } = useHorizontalDragScroll();
 
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
@@ -179,7 +182,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
         group/modal
         ${isPlayerBoardPreview ? 'aspect-[2048/1673] h-auto w-auto max-h-[90vh] max-w-[90vw]' : ''}
         ${props.magnifiedCard ? 'aspect-[0.61] h-auto w-auto max-h-[90vh] max-w-[60vw]' : ''}
-        ${isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw] overflow-x-auto overflow-y-hidden' : ''}
+        ${isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
         ${!isPlayerBoardPreview && !props.magnifiedCard && !isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
     `;
 
@@ -196,7 +199,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         closeLabel={t('actions.closePreview')}
                     >
                         {isMultiCardPreview ? (
-                            <div className="flex flex-nowrap items-center justify-start gap-[2vw] p-[2vw] w-fit">
+                            <div ref={multiCardScrollRef} {...multiCardDragProps} className="flex flex-nowrap items-center justify-start gap-[2vw] p-[2vw] overflow-x-auto overflow-y-hidden" style={multiCardDragProps.style}>
                                 {props.magnifiedCards.map((card) => (
                                     <CardPreview
                                         key={card.id}
@@ -217,8 +220,8 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         ) : (
                             <div className="relative">
                                 <OptimizedImage
-                                    src={getLocalizedAssetPath(props.magnifiedImage ?? '', props.locale)}
-                                    fallbackSrc={props.magnifiedImage ?? ''}
+                                    src={props.magnifiedImage ?? ''}
+                                    locale={props.locale}
                                     className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
                                     alt="Preview"
                                 />
@@ -288,13 +291,13 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 {props.choice.hasChoice && (
                     <ChoiceModal
                         key="choice"
-                        choice={props.choice.hasChoice ? { title: props.choice.title ?? '', options: props.choice.options } : null}
+                        choice={props.choice.hasChoice ? { title: props.choice.title ?? '', options: props.choice.options, slider: props.choice.slider } : null}
                         canResolve={props.canResolveChoice}
                     onResolve={(optionId) => {
-                            const respondMove = props.moves[INTERACTION_COMMANDS.RESPOND];
-                            if (typeof respondMove === 'function') {
-                                (respondMove as (payload: { optionId: string }) => void)({ optionId });
-                            }
+                            props.dispatch(INTERACTION_COMMANDS.RESPOND, { optionId });
+                        }}
+                        onResolveWithValue={(optionId, mergedValue) => {
+                            props.dispatch(INTERACTION_COMMANDS.RESPOND, { optionId, mergedValue });
                         }}
                         locale={props.locale}
                         statusIconAtlas={props.statusIconAtlas}

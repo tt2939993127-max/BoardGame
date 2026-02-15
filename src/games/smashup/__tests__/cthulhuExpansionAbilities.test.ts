@@ -207,9 +207,9 @@ describe('印斯茅斯派系能力', () => {
             });
 
             const { events } = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
+            const reorderEvents = events.filter(e => e.type === SU_EVENTS.DECK_REORDERED);
             // P0 有1个随从在弃牌堆，P1 有2个
-            expect(reshuffleEvents.length).toBe(2);
+            expect(reorderEvents.length).toBe(2);
         });
 
         it('弃牌堆无随从的玩家不受影响', () => {
@@ -226,10 +226,10 @@ describe('印斯茅斯派系能力', () => {
             });
 
             const { events } = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
+            const reorderEvents = events.filter(e => e.type === SU_EVENTS.DECK_REORDERED);
             // 只有 P0 有随从
-            expect(reshuffleEvents.length).toBe(1);
-            expect((reshuffleEvents[0] as any).payload.playerId).toBe('0');
+            expect(reorderEvents.length).toBe(1);
+            expect((reorderEvents[0] as any).payload.playerId).toBe('0');
         });
 
         it('洗回后状态正确（reduce 验证）', () => {
@@ -252,20 +252,17 @@ describe('印斯茅斯派系能力', () => {
 
             const { events } = execPlayAction(state, '0', 'a1');
             const newState = applyEvents(state, events);
-            // P0: 牌库应包含 d1 + dis1（随从），弃牌堆应只剩 dis2（行动卡）+ a1（打出的行动卡）
-            // 注意：DECK_RESHUFFLED reducer 合并 deck+discard，所以弃牌堆清空
-            // 但 dis2 是行动卡，不在 deckUids 中，所以会丢失...
-            // 实际上 DECK_RESHUFFLED 的 reducer 会把 deck+discard 全部合并，按 deckUids 过滤
-            // 所以 dis2 如果不在 deckUids 中，会被丢弃
-            // 这是 DECK_RESHUFFLED 的设计：它假设 deckUids 包含了所有应该在牌库中的卡
-            // 而弃牌堆会被清空
-            // 所以 P0 弃牌堆清空，牌库包含 d1 + dis1
-            expect(newState.players['0'].discard.length).toBe(0);
+            // P0: 牌库应包含 d1 + dis1（随从洗回），弃牌堆应保留 dis2（行动卡）+ a1（打出的行动卡）
+            // DECK_REORDERED 只移动被引用的弃牌堆卡（dis1），不清空弃牌堆
             expect(newState.players['0'].deck.length).toBe(2);
             expect(newState.players['0'].deck.some(c => c.uid === 'dis1')).toBe(true);
             expect(newState.players['0'].deck.some(c => c.uid === 'd1')).toBe(true);
+            // dis2 留在弃牌堆，a1 也在弃牌堆（ACTION_PLAYED 放入）
+            expect(newState.players['0'].discard.length).toBe(2);
+            expect(newState.players['0'].discard.some(c => c.uid === 'dis2')).toBe(true);
+            expect(newState.players['0'].discard.some(c => c.uid === 'a1')).toBe(true);
 
-            // P1: 牌库应包含 dis3
+            // P1: 牌库应包含 dis3（随从洗回），弃牌堆清空
             expect(newState.players['1'].discard.length).toBe(0);
             expect(newState.players['1'].deck.length).toBe(1);
             expect(newState.players['1'].deck[0].uid).toBe('dis3');
@@ -326,11 +323,19 @@ describe('米斯卡塔尼克大学派系能力', () => {
 
             // 先打出卡 → 创建 interaction
             const { matchState } = execPlayAction(state, '0', 'a1');
-            // 通过 handler 选择基地 0
+            // 第一步：选择基地 0 → 链式创建行动卡多选 interaction
             const handler = getInteractionHandler('miskatonic_those_meddling_kids');
             expect(handler).toBeDefined();
-            const result = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
-            const detachEvents = result.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
+            const step1 = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
+            expect(step1.events.length).toBe(0); // 不直接产生消灭事件
+            // 第二步：选择消灭所有行动卡
+            const selectHandler = getInteractionHandler('miskatonic_those_meddling_kids_select');
+            expect(selectHandler).toBeDefined();
+            const step2 = selectHandler!(step1.state ?? matchState, '0', [
+                { cardUid: 'o1', defId: 'test_ongoing', ownerId: '1' },
+                { cardUid: 'o2', defId: 'test_ongoing2', ownerId: '0' },
+            ], undefined, defaultRandom, 1001);
+            const detachEvents = step2.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
             expect(detachEvents.length).toBe(2);
             const uids = detachEvents.map((e: any) => e.payload.cardUid);
             expect(uids).toContain('o1');
@@ -359,10 +364,19 @@ describe('米斯卡塔尼克大学派系能力', () => {
             });
 
             const { matchState } = execPlayAction(state, '0', 'a1');
+            // 第一步：选择基地 0 → 链式创建行动卡多选 interaction
             const handler = getInteractionHandler('miskatonic_those_meddling_kids');
             expect(handler).toBeDefined();
-            const result = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
-            const detachEvents = result.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
+            const step1 = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
+            expect(step1.events.length).toBe(0);
+            // 第二步：选择消灭所有行动卡
+            const selectHandler = getInteractionHandler('miskatonic_those_meddling_kids_select');
+            expect(selectHandler).toBeDefined();
+            const step2 = selectHandler!(step1.state ?? matchState, '0', [
+                { cardUid: 'o1', defId: 'test_ongoing', ownerId: '1' },
+                { cardUid: 'att1', defId: 'test_attached', ownerId: '1' },
+            ], undefined, defaultRandom, 1001);
+            const detachEvents = step2.events.filter((e: any) => e.type === SU_EVENTS.ONGOING_DETACHED);
             // 1 ongoing + 1 attached = 2
             expect(detachEvents.length).toBe(2);
             const uids = detachEvents.map((e: any) => e.payload.cardUid);
@@ -444,13 +458,19 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 }],
             });
 
-            // 先打出卡 → 创建 interaction
+            // 先打出卡 → 创建基地选择 interaction
             const { events: playEvents, matchState } = execPlayAction(state, '0', 'a1');
-            // 通过 handler 选择基地 0
+            // 第一步：选择基地 0 → 链式创建行动卡多选 interaction
             const handler = getInteractionHandler('miskatonic_those_meddling_kids');
             expect(handler).toBeDefined();
-            const result = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
-            const allEvents = [...playEvents, ...result.events];
+            const step1 = handler!(matchState, '0', { baseIndex: 0 }, undefined, defaultRandom, 1000);
+            // step1 应创建多选交互，不直接产生消灭事件
+            expect(step1.events.length).toBe(0);
+            const selectHandler = getInteractionHandler('miskatonic_those_meddling_kids_select');
+            expect(selectHandler).toBeDefined();
+            // 第二步：选择消灭 o1
+            const step2 = selectHandler!(step1.state ?? matchState, '0', [{ cardUid: 'o1', defId: 'test_ongoing', ownerId: '1' }], undefined, defaultRandom, 1001);
+            const allEvents = [...playEvents, ...step2.events];
             const newState = applyEvents(state, allEvents);
             // 基地上不应有持续行动卡
             expect(newState.bases[0].ongoingActions.length).toBe(0);
@@ -467,8 +487,7 @@ describe('米斯卡塔尼克大学派系能力', () => {
 
 describe('克苏鲁之仆派系能力', () => {
     describe('cthulhu_recruit_by_force（强制招募：弃牌堆力量≤3随从放牌库顶）', () => {
-        it('将弃牌堆中力量≤3的随从放到牌库顶', () => {
-            // 使用真实 defId：innsmouth_the_locals 力量2，cthulhu_servitor 力量2
+        it('有符合条件随从时创建多选 Interaction', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -484,19 +503,45 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const { events } = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            expect(reshuffleEvents.length).toBe(1);
-            const deckUids = (reshuffleEvents[0] as any).payload.deckUids;
-            // dis1 和 dis3 应在牌库中（力量≤3），dis2 不应在（力量5）
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            // 应创建 interaction 让玩家选择
+            const interaction = (matchState.sys as any)?.interaction;
+            const current = interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('cthulhu_recruit_by_force');
+        });
+
+        it('通过 interaction handler 选择后放牌库顶', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'cthulhu_recruit_by_force', 'action', '0')],
+                        deck: [makeCard('d1', 'test', 'action', '0')],
+                        discard: [
+                            makeCard('dis1', 'innsmouth_the_locals', 'minion', '0'),
+                            makeCard('dis3', 'cthulhu_servitor', 'minion', '0'),
+                        ],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            const handler = getInteractionHandler('cthulhu_recruit_by_force');
+            expect(handler).toBeDefined();
+            // 选择两张随从
+            const result = handler!(matchState, '0', [{ cardUid: 'dis1' }, { cardUid: 'dis3' }], undefined, defaultRandom, 1000);
+            const reorderEvents = result.events.filter((e: any) => e.type === SU_EVENTS.DECK_REORDERED);
+            expect(reorderEvents.length).toBe(1);
+            const deckUids = (reorderEvents[0] as any).payload.deckUids;
             expect(deckUids).toContain('dis1');
             expect(deckUids).toContain('dis3');
-            expect(deckUids).toContain('d1'); // 原牌库卡也在
+            expect(deckUids).toContain('d1');
             // dis1, dis3 应在 d1 前面（放牌库顶）
             expect(deckUids.indexOf('dis1')).toBeLessThan(deckUids.indexOf('d1'));
         });
 
-        it('弃牌堆无符合条件随从时不产生事件', () => {
+        it('弃牌堆无符合条件随从时不产生事件也不创建 Interaction', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -510,12 +555,15 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const { events } = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            expect(reshuffleEvents.length).toBe(0);
+            const { events, matchState } = execPlayAction(state, '0', 'a1');
+            const reorderEvents = events.filter(e => e.type === SU_EVENTS.DECK_REORDERED);
+            expect(reorderEvents.length).toBe(0);
+            // 无符合条件随从时不应创建 interaction
+            const interaction = (matchState.sys as any)?.interaction;
+            expect(interaction?.current).toBeUndefined();
         });
 
-        it('状态正确（reduce 验证）', () => {
+        it('状态正确（通过 handler 解决后 reduce 验证）', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -529,10 +577,16 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const { events } = execPlayAction(state, '0', 'a1');
-            const newState = applyEvents(state, events);
-            // DECK_RESHUFFLED 合并 deck+discard，弃牌堆清空
-            expect(newState.players['0'].discard.length).toBe(0);
+            const { events: playEvents, matchState } = execPlayAction(state, '0', 'a1');
+            const handler = getInteractionHandler('cthulhu_recruit_by_force');
+            expect(handler).toBeDefined();
+            const result = handler!(matchState, '0', [{ cardUid: 'dis1' }], undefined, defaultRandom, 1000);
+            const allEvents = [...playEvents, ...result.events];
+            const newState = applyEvents(state, allEvents);
+            // DECK_REORDERED 不清空弃牌堆，只移走被引用的卡
+            // dis1 从弃牌堆移入牌库顶；a1（打出的行动卡）留在弃牌堆
+            expect(newState.players['0'].discard.length).toBe(1);
+            expect(newState.players['0'].discard[0].uid).toBe('a1');
             // 牌库应包含 dis1（顶部）和 d1
             expect(newState.players['0'].deck.length).toBe(2);
             expect(newState.players['0'].deck[0].uid).toBe('dis1');
@@ -550,26 +604,37 @@ describe('克苏鲁之仆派系能力', () => {
                         discard: [
                             makeCard('dis1', 'test_action', 'action', '0'),
                             makeCard('dis2', 'test_action2', 'action', '0'),
-                            makeCard('dis3', 'test_minion', 'minion', '0'), // 随从不洗回
+                            makeCard('dis3', 'test_minion', 'minion', '0'), // 随从不在选项中
                         ],
                     }),
                     '1': makePlayer('1'),
                 },
             });
 
-            const { events } = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            expect(reshuffleEvents.length).toBe(1);
-            const deckUids = (reshuffleEvents[0] as any).payload.deckUids;
-            // d1, dis1, dis2 应在牌库中
+            const { matchState } = execPlayAction(state, '0', 'a1');
+            // 应创建多选交互
+            const current = (matchState.sys as any)?.interaction?.current;
+            expect(current).toBeDefined();
+            expect(current?.data?.sourceId).toBe('cthulhu_it_begins_again');
+            // 选项只包含行动卡（不含随从）
+            const options = current?.data?.options ?? [];
+            expect(options.length).toBe(2);
+
+            // 解析交互：选择全部行动卡
+            const handler = getInteractionHandler('cthulhu_it_begins_again');
+            expect(handler).toBeDefined();
+            const ms2 = makeMatchState(state);
+            const result = handler!(ms2, '0', [{ cardUid: 'dis1' }, { cardUid: 'dis2' }], undefined, defaultRandom, 0);
+            const reorderEvents = result.events.filter(e => e.type === SU_EVENTS.DECK_REORDERED);
+            expect(reorderEvents.length).toBe(1);
+            const deckUids = (reorderEvents[0] as any).payload.deckUids;
             expect(deckUids).toContain('d1');
             expect(deckUids).toContain('dis1');
             expect(deckUids).toContain('dis2');
-            // dis3（随从）不应在 deckUids 中
             expect(deckUids).not.toContain('dis3');
         });
 
-        it('弃牌堆无行动卡时不产生事件', () => {
+        it('弃牌堆无行动卡时不产生交互', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -580,9 +645,11 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const { events } = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            expect(reshuffleEvents.length).toBe(0);
+            const { events, matchState } = execPlayAction(state, '0', 'a1');
+            const reorderEvents = events.filter(e => e.type === SU_EVENTS.DECK_REORDERED);
+            expect(reorderEvents.length).toBe(0);
+            const current = (matchState.sys as any)?.interaction?.current;
+            expect(current).toBeUndefined();
         });
 
         it('状态正确（reduce 验证）', () => {
@@ -600,18 +667,26 @@ describe('克苏鲁之仆派系能力', () => {
                 },
             });
 
-            const { events } = execPlayAction(state, '0', 'a1');
-            const newState = applyEvents(state, events);
-            // DECK_RESHUFFLED 合并 deck+discard，弃牌堆清空
-            expect(newState.players['0'].discard.length).toBe(0);
-            // 牌库应包含 d1 + dis1（行动卡）+ dis2（随从，因为 reducer 合并了全部）
-            // 注意：DECK_RESHUFFLED reducer 合并 deck+discard 全部，按 deckUids 过滤
-            // deckUids 只包含 d1 和 dis1，所以 dis2 不在牌库中
-            // 但 reducer 把 discard 清空了... dis2 会丢失
-            // 这是当前 DECK_RESHUFFLED 的设计限制
+            // 通过 handler 直接验证 reduce
+            const handler = getInteractionHandler('cthulhu_it_begins_again');
+            expect(handler).toBeDefined();
+            const ms = makeMatchState(state);
+            const result = handler!(ms, '0', [{ cardUid: 'dis1' }], undefined, defaultRandom, 0);
+            // 先 apply ACTION_PLAYED 事件（模拟打出行动卡）
+            const playEvents: SmashUpEvent[] = [
+                { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId: '0', cardUid: 'a1', defId: 'cthulhu_it_begins_again' }, timestamp: 0 } as any,
+                ...result.events,
+            ];
+            const newState = applyEvents(state, playEvents);
+            // DECK_REORDERED 不清空弃牌堆，只移走被引用的卡
+            // 牌库：d1 + dis1（从弃牌堆移入）
             expect(newState.players['0'].deck.length).toBe(2);
             expect(newState.players['0'].deck.some(c => c.uid === 'd1')).toBe(true);
             expect(newState.players['0'].deck.some(c => c.uid === 'dis1')).toBe(true);
+            // 弃牌堆：a1（ACTION_PLAYED 放入）+ dis2（未被选中，保留）
+            expect(newState.players['0'].discard.length).toBe(2);
+            expect(newState.players['0'].discard.some(c => c.uid === 'a1')).toBe(true);
+            expect(newState.players['0'].discard.some(c => c.uid === 'dis2')).toBe(true);
         });
     });
 
@@ -659,9 +734,9 @@ describe('克苏鲁之仆派系能力', () => {
             });
 
             const { events } = execPlayAction(state, '0', 'a1');
-            const reshuffleEvents = events.filter(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            expect(reshuffleEvents.length).toBe(1);
-            const deckUids = (reshuffleEvents[0] as any).payload.deckUids;
+            const reorderEvents = events.filter(e => e.type === SU_EVENTS.DECK_REORDERED);
+            expect(reorderEvents.length).toBe(1);
+            const deckUids = (reorderEvents[0] as any).payload.deckUids;
             // d5 未翻到保持在前，d1 和 d3 放底部
             expect(deckUids[0]).toBe('d5');
             expect(deckUids).toContain('d1');
@@ -747,10 +822,82 @@ describe('克苏鲁之仆派系能力', () => {
             expect(newState.players['0'].hand.some(c => c.uid === 'd2')).toBe(true);
             expect(newState.players['0'].hand.some(c => c.uid === 'd3')).toBe(true);
             // d4 应在牌库中（未翻到），d1 放牌库底
-            // 注意：DECK_RESHUFFLED 合并 deck+discard，a1 也会被合并进牌库
-            // 牌库应包含 d4, d1, a1（a1 在 ACTION_PLAYED 时进了弃牌堆）
             expect(newState.players['0'].deck.some(c => c.uid === 'd4')).toBe(true);
             expect(newState.players['0'].deck.some(c => c.uid === 'd1')).toBe(true);
+            // a1 打出后应在弃牌堆中（DECK_REORDERED 不碰弃牌堆）
+            expect(newState.players['0'].discard.some(c => c.uid === 'a1')).toBe(true);
+        });
+
+        it('行动卡打出后不会因牌库重排从弃牌堆消失（回归测试）', () => {
+            // 场景：cthulhu_fhtagn 打出 → ACTION_PLAYED 将 a1 放入弃牌堆
+            // → 翻牌找行动卡 → 有 missed cards → DECK_REORDERED（仅重排牌库）
+            // 修复前用 DECK_RESHUFFLED 会清空弃牌堆导致 a1 消失
+            // 修复后用 DECK_REORDERED 不碰弃牌堆，a1 安全保留
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'cthulhu_fhtagn', 'action', '0')],
+                        deck: [
+                            makeCard('d1', 'test_m', 'minion', '0'),   // missed → 牌库底
+                            makeCard('d2', 'test_a', 'action', '0'),   // picked → 手牌
+                            makeCard('d3', 'test_m2', 'minion', '0'),  // missed → 牌库底
+                            makeCard('d4', 'test_a2', 'action', '0'),  // picked → 手牌
+                        ],
+                        discard: [makeCard('dis1', 'old_action', 'action', '0')], // 已有弃牌
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+
+            const { events } = execPlayAction(state, '0', 'a1');
+            const newState = applyEvents(state, events);
+
+            // a1 打出后应在弃牌堆中（DECK_REORDERED 不碰弃牌堆）
+            expect(newState.players['0'].discard.some(c => c.uid === 'a1')).toBe(true);
+            // dis1（原弃牌堆中的卡）也应保留在弃牌堆
+            expect(newState.players['0'].discard.some(c => c.uid === 'dis1')).toBe(true);
+            // d2, d4 应在手牌
+            expect(newState.players['0'].hand.some(c => c.uid === 'd2')).toBe(true);
+            expect(newState.players['0'].hand.some(c => c.uid === 'd4')).toBe(true);
+            // d1, d3 应在牌库底
+            expect(newState.players['0'].deck.some(c => c.uid === 'd1')).toBe(true);
+            expect(newState.players['0'].deck.some(c => c.uid === 'd3')).toBe(true);
+        });
+
+        it('innsmouth_the_locals 翻牌后弃牌堆卡不消失（回归测试）', () => {
+            // 同样的 bug 模式：本地人翻3张，有 missed → DECK_REORDERED
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'innsmouth_the_locals', 'minion', '0')],
+                        deck: [
+                            makeCard('d1', 'innsmouth_the_locals', 'minion', '0'), // 同名 → picked
+                            makeCard('d2', 'test_m', 'minion', '0'),               // 非同名 → missed
+                            makeCard('d3', 'test_m2', 'minion', '0'),              // 非同名 → missed
+                            makeCard('d4', 'test_m3', 'minion', '0'),              // 未翻到
+                        ],
+                        discard: [makeCard('dis1', 'old_card', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+            });
+
+            // 本地人是随从 onPlay，需要通过 PLAY_MINION 触发
+            const ms = makeMatchState(state);
+            const events = execute(ms, {
+                type: SU_COMMANDS.PLAY_MINION, playerId: '0',
+                payload: { cardUid: 'a1', baseIndex: 0 },
+            } as any, defaultRandom);
+            const newState = applyEvents(state, events);
+
+            const allCardUids = [
+                ...newState.players['0'].hand.map(c => c.uid),
+                ...newState.players['0'].deck.map(c => c.uid),
+                ...newState.players['0'].discard.map(c => c.uid),
+            ];
+            // dis1（原弃牌堆中的卡）不应消失
+            expect(allCardUids).toContain('dis1');
         });
     });
 });

@@ -1,8 +1,8 @@
 /**
  * 房间管理 REST API 封装
  *
- * 替代 boardgame.io 的 LobbyClient，直接调用服务端 REST 路由。
- * 路由结构保持不变：/games/:name/:matchID/...
+ * 直接调用服务端 REST 路由。
+ * 路由结构：/games/:name/:matchID/...
  */
 
 import { GAME_SERVER_URL } from '../config/server';
@@ -186,8 +186,6 @@ export async function claimSeat(
 
 /**
  * 重赛（创建新对局，保持相同游戏和人数）
- *
- * 替代 boardgame.io 的 LobbyClient.playAgain
  */
 export async function playAgain(
     gameName: string,

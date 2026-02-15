@@ -36,18 +36,17 @@ interface TutorialContextType {
     consumeAi: (stepId?: string) => void;
     /** 动画完成回调：通知教程系统动画已播放完毕，可以推进到下一步 */
     animationComplete: () => void;
-    bindMoves: (moves: Record<string, unknown>) => void;
+    bindDispatch: (dispatch: (type: string, payload?: unknown) => void) => void;
     syncTutorialState: (tutorial: TutorialState) => void;
 }
 
 const TutorialContext = createContext<TutorialContextType | undefined>(undefined);
 
-const buildTutorialController = (moves: Record<string, unknown>): TutorialController => {
+type DispatchFn = (type: string, payload?: unknown) => void;
+
+const buildTutorialController = (dispatch: DispatchFn): TutorialController => {
     const dispatchCommand = (commandType: string, payload?: unknown) => {
-        const move = moves[commandType] as ((value: unknown) => void) | undefined;
-        if (typeof move === 'function') {
-            move(payload ?? {});
-        }
+        dispatch(commandType, payload ?? {});
     };
 
     return {
@@ -85,8 +84,8 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const pendingStartRef = useRef<TutorialManifest | null>(null);
     const executedAiStepsRef = useRef<Set<string>>(new Set());
 
-    const bindMoves = useCallback((moves: Record<string, unknown>) => {
-        controllerRef.current = buildTutorialController(moves);
+    const bindDispatch = useCallback((dispatch: DispatchFn) => {
+        controllerRef.current = buildTutorialController(dispatch);
         setIsControllerReady(true);
         if (pendingStartRef.current) {
             controllerRef.current.start(pendingStartRef.current);
@@ -188,10 +187,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             closeTutorial,
             consumeAi,
             animationComplete,
-            bindMoves,
+            bindDispatch,
             syncTutorialState,
         };
-    }, [tutorial, bindMoves, closeTutorial, consumeAi, animationComplete, nextStep, startTutorial, syncTutorialState]);
+    }, [tutorial, bindDispatch, closeTutorial, consumeAi, animationComplete, nextStep, startTutorial, syncTutorialState]);
 
     return (
         <TutorialContext.Provider value={value}>
@@ -208,7 +207,7 @@ export const useTutorial = () => {
     return context;
 };
 
-export const useTutorialBridge = (tutorial: TutorialState, moves: Record<string, unknown>) => {
+export const useTutorialBridge = (tutorial: TutorialState, dispatch: (type: string, payload?: unknown) => void) => {
     const context = useContext(TutorialContext);
     const lastSyncSignatureRef = useRef<string | null>(null);
     useEffect(() => {
@@ -219,6 +218,6 @@ export const useTutorialBridge = (tutorial: TutorialState, moves: Record<string,
         context.syncTutorialState(tutorial);
     }, [context, tutorial]);
     useEffect(() => {
-        context?.bindMoves(moves);
-    }, [context, moves]);
+        context?.bindDispatch(dispatch);
+    }, [context, dispatch]);
 };

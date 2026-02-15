@@ -126,7 +126,7 @@ describe('卡牌展示系统', () => {
     });
 
     describe('Reducer: REVEAL_DISMISSED 清除 pendingReveal', () => {
-        it('REVEAL_DISMISSED 事件清除 pendingReveal', () => {
+        it('单人模式 REVEAL_DISMISSED 事件直接清除 pendingReveal', () => {
             const stateWithReveal: SmashUpCore = {
                 players: {
                     '0': { id: '0', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['aliens', 'dinosaurs'] as [string, string] },
@@ -149,12 +149,93 @@ describe('卡牌展示系统', () => {
 
             const event = {
                 type: SU_EVENTS.REVEAL_DISMISSED,
-                payload: {},
+                payload: { confirmPlayerId: '0' },
                 timestamp: 300,
             } as unknown as SmashUpEvent;
 
             const newState = reduce(stateWithReveal, event);
             expect(newState.pendingReveal).toBeUndefined();
+        });
+
+        it('all 模式需要所有非被展示者确认后才清除', () => {
+            const stateWithReveal: SmashUpCore = {
+                players: {
+                    '0': { id: '0', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['aliens', 'dinosaurs'] as [string, string] },
+                    '1': { id: '1', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['pirates', 'ninjas'] as [string, string] },
+                },
+                turnOrder: ['0', '1'],
+                currentPlayerIndex: 0,
+                bases: [],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 1,
+                pendingReveal: {
+                    type: 'hand',
+                    targetPlayerId: '1',
+                    viewerPlayerId: 'all',
+                    cards: [{ uid: 'c1', defId: 'pirate_first_mate' }],
+                    reason: 'elder_thing_power_of_madness',
+                    sourcePlayerId: '0',
+                },
+            };
+
+            // P0 确认（P1 是被展示者，只需 P0 确认即可）
+            const event = {
+                type: SU_EVENTS.REVEAL_DISMISSED,
+                payload: { confirmPlayerId: '0' },
+                timestamp: 300,
+            } as unknown as SmashUpEvent;
+
+            const newState = reduce(stateWithReveal, event);
+            // 2 人局中被展示者是 P1，只需 P0 确认 → 直接清除
+            expect(newState.pendingReveal).toBeUndefined();
+        });
+
+        it('all 模式 3 人局需要所有非被展示者逐个确认', () => {
+            const stateWithReveal: SmashUpCore = {
+                players: {
+                    '0': { id: '0', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['aliens', 'dinosaurs'] as [string, string] },
+                    '1': { id: '1', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['pirates', 'ninjas'] as [string, string] },
+                    '2': { id: '2', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['wizards', 'zombies'] as [string, string] },
+                },
+                turnOrder: ['0', '1', '2'],
+                currentPlayerIndex: 0,
+                bases: [],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 1,
+                pendingReveal: {
+                    type: 'hand',
+                    targetPlayerId: '1',
+                    viewerPlayerId: 'all',
+                    cards: [{ uid: 'c1', defId: 'pirate_first_mate' }],
+                    reason: 'elder_thing_power_of_madness',
+                    sourcePlayerId: '0',
+                },
+            };
+
+            // P0 先确认
+            const event1 = {
+                type: SU_EVENTS.REVEAL_DISMISSED,
+                payload: { confirmPlayerId: '0' },
+                timestamp: 300,
+            } as unknown as SmashUpEvent;
+
+            const state1 = reduce(stateWithReveal, event1);
+            // P1 是被展示者，还需要 P2 确认
+            expect(state1.pendingReveal).toBeDefined();
+            expect(state1.pendingReveal!.confirmedPlayerIds).toEqual(['0']);
+
+            // P2 确认
+            const event2 = {
+                type: SU_EVENTS.REVEAL_DISMISSED,
+                payload: { confirmPlayerId: '2' },
+                timestamp: 301,
+            } as unknown as SmashUpEvent;
+
+            const state2 = reduce(state1, event2);
+            // 全部确认 → 清除
+            expect(state2.pendingReveal).toBeUndefined();
         });
     });
 

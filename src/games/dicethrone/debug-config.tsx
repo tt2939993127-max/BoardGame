@@ -8,10 +8,10 @@ import React, { useMemo, useState } from 'react';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface DiceThroneDebugConfigProps {
     G: unknown;
-    moves: Record<string, (payload?: unknown) => void>;
+    dispatch: (type: string, payload?: unknown) => void;
 }
 
-export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G, moves }) => {
+export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G, dispatch }) => {
     // ========== 资源作弊 ==========
     const [cheatPlayer, setCheatPlayer] = useState<string>('0');
     const [cheatResource, setCheatResource] = useState<string>('cp');
@@ -64,21 +64,18 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
 
     // 应用骰子值
     const handleApplyDice = () => {
-        if (!moves.SYS_CHEAT_SET_DICE) return;
-
         const values = diceValues.map((v) => {
             const num = parseInt(v, 10);
             return isNaN(num) ? 1 : Math.max(1, Math.min(6, num));
         });
 
-        moves.SYS_CHEAT_SET_DICE({ diceValues: values });
+        dispatch('SYS_CHEAT_SET_DICE', { diceValues: values });
     };
 
     return (
         <div className="space-y-4">
             {/* 资源作弊 */}
-            {moves.SYS_CHEAT_ADD_RESOURCE && (
-                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+            <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
                     <h4 className="text-[10px] font-black text-yellow-600 uppercase tracking-widest mb-3">
                         资源修改
                     </h4>
@@ -110,7 +107,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                         <div className="flex gap-2">
                             <button
                                 onClick={() => {
-                                    moves.SYS_CHEAT_SET_RESOURCE({
+                                    dispatch('SYS_CHEAT_SET_RESOURCE', {
                                         playerId: cheatPlayer,
                                         resourceId: cheatResource,
                                         value: Number(cheatValue),
@@ -122,7 +119,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                             </button>
                             <button
                                 onClick={() => {
-                                    moves.SYS_CHEAT_ADD_RESOURCE({
+                                    dispatch('SYS_CHEAT_ADD_RESOURCE', {
                                         playerId: cheatPlayer,
                                         resourceId: cheatResource,
                                         delta: Number(cheatValue),
@@ -134,7 +131,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                             </button>
                             <button
                                 onClick={() => {
-                                    moves.SYS_CHEAT_ADD_RESOURCE({
+                                    dispatch('SYS_CHEAT_ADD_RESOURCE', {
                                         playerId: cheatPlayer,
                                         resourceId: cheatResource,
                                         delta: -Number(cheatValue),
@@ -147,10 +144,9 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                         </div>
                     </div>
                 </div>
-            )}
 
             {/* 骰子作弊 */}
-            {moves.SYS_CHEAT_SET_DICE && (
+            
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-200" data-testid="dt-debug-dice">
                     <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">
                         骰子调整
@@ -183,21 +179,40 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                                 onClick={() => setDiceValues(['1', '1', '1', '1', '1'])}
                                 className="flex-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-[10px] font-bold hover:bg-gray-300"
                             >
-                                全部设为 1
+                                全1
                             </button>
                             <button
                                 onClick={() => setDiceValues(['6', '6', '6', '6', '6'])}
                                 className="flex-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-[10px] font-bold hover:bg-gray-300"
                             >
-                                全部设为 6
+                                全6
+                            </button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => { setDiceValues(['1', '2', '3', '4', '5']); }}
+                                className="flex-1 px-2 py-1 bg-indigo-200 text-indigo-700 rounded text-[10px] font-bold hover:bg-indigo-300"
+                            >
+                                大顺 1-5
+                            </button>
+                            <button
+                                onClick={() => { setDiceValues(['2', '3', '4', '5', '6']); }}
+                                className="flex-1 px-2 py-1 bg-indigo-200 text-indigo-700 rounded text-[10px] font-bold hover:bg-indigo-300"
+                            >
+                                大顺 2-6
+                            </button>
+                            <button
+                                onClick={() => { setDiceValues(['1', '2', '3', '4', '4']); }}
+                                className="flex-1 px-2 py-1 bg-teal-200 text-teal-700 rounded text-[10px] font-bold hover:bg-teal-300"
+                            >
+                                小顺 1-4
                             </button>
                         </div>
                     </div>
                 </div>
-            )}
 
             {/* Token 作弊 */}
-            {moves.SYS_CHEAT_SET_TOKEN && (
+            
                 <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
                     <h4 className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-3">
                         Token 调整
@@ -229,7 +244,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                         </div>
                         <button
                             onClick={() => {
-                                moves.SYS_CHEAT_SET_TOKEN({
+                                dispatch('SYS_CHEAT_SET_TOKEN', {
                                     playerId: tokenPlayer,
                                     tokenId: tokenType,
                                     amount: Number(tokenValue),
@@ -241,10 +256,9 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                         </button>
                     </div>
                 </div>
-            )}
 
             {/* 发牌作弊 */}
-            {moves.SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX && (
+            
                 <div className="bg-green-50 p-3 rounded-lg border border-green-200">
                     <h4 className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-3">
                         发牌调试 (图集索引)
@@ -279,7 +293,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                         </div>
                         <button
                             onClick={() => {
-                                moves.SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX({
+                                dispatch('SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX', {
                                     playerId: dealPlayer,
                                     atlasIndex: Number(deckIndex),
                                 });
@@ -291,7 +305,6 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                         </button>
                     </div>
                 </div>
-            )}
 
             {/* 卡牌索引速查表 */}
             <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
@@ -312,7 +325,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                                         onClick={() => {
                                             if (atlasIdx != null) {
                                                 setDeckIndex(String(atlasIdx));
-                                                moves.SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX?.({
+                                                dispatch('SYS_CHEAT_DEAL_CARD_BY_ATLAS_INDEX', {
                                                     playerId: dealPlayer,
                                                     atlasIndex: atlasIdx,
                                                 });

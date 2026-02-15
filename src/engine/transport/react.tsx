@@ -1,8 +1,7 @@
 /**
  * React 封装层
  *
- * 提供 GameProvider（在线模式）和 LocalGameProvider（本地模式），
- * 替代 boardgame.io 的 Client() HOC。
+ * 提供 GameProvider（在线模式）和 LocalGameProvider（本地模式）。
  *
  * 使用方式：
  * ```tsx
@@ -108,16 +107,6 @@ export function useGameClient<
 export function useBoardProps<TCore = unknown>(): GameBoardProps<TCore> | null {
     const ctx = useContext(GameClientContext);
 
-    // 构建兼容的 moves 对象（必须在所有条件 return 之前调用）
-    const moves = useMemo(() => {
-        if (!ctx) return {} as Record<string, (payload?: unknown) => void>;
-        return new Proxy({} as Record<string, (payload?: unknown) => void>, {
-            get(_target, prop: string) {
-                return (payload?: unknown) => ctx.dispatch(prop, payload);
-            },
-        });
-    }, [ctx?.dispatch]);
-
     if (!ctx || !ctx.state) return null;
 
     const { state, dispatch, playerId, matchPlayers, isConnected, isMultiplayer, reset } = ctx;
@@ -125,7 +114,6 @@ export function useBoardProps<TCore = unknown>(): GameBoardProps<TCore> | null {
     return {
         G: state as MatchState<TCore>,
         dispatch: dispatch as GameBoardProps<TCore>['dispatch'],
-        moves,
         playerID: playerId,
         matchData: matchPlayers,
         isConnected,
@@ -236,6 +224,8 @@ export interface LocalGameProviderProps {
     seed: string;
     /** 子组件 */
     children: ReactNode;
+    /** 命令被拒绝时的回调（验证失败） */
+    onCommandRejected?: (commandType: string, error: string) => void;
 }
 
 export function LocalGameProvider({
@@ -243,6 +233,7 @@ export function LocalGameProvider({
     numPlayers,
     seed,
     children,
+    onCommandRejected,
 }: LocalGameProviderProps) {
     const playerIds = useMemo(
         () => Array.from({ length: numPlayers }, (_, i) => String(i)),
@@ -250,6 +241,8 @@ export function LocalGameProvider({
     );
 
     const randomRef = useRef<RandomFn>(createSeededRandom(seed));
+    const onCommandRejectedRef = useRef(onCommandRejected);
+    onCommandRejectedRef.current = onCommandRejected;
 
     const [state, setState] = useState<MatchState<unknown>>(() => {
         const random = randomRef.current;
@@ -303,6 +296,7 @@ export function LocalGameProvider({
 
             if (!result.success) {
                 console.warn('[LocalGame] 命令执行失败:', type, result.error);
+                onCommandRejectedRef.current?.(type, result.error ?? 'command_failed');
                 return prev;
             }
 
@@ -349,10 +343,10 @@ export function LocalGameProvider({
 // ============================================================================
 
 /**
- * 将 Provider 上下文转换为 boardgame.io 风格的 props 注入到 Board 组件
+ * 将 Provider 上下文转换为 props 注入到 Board 组件
  *
- * 过渡期使用：现有 Board 组件通过 props 接收 G/moves/ctx 等，
- * 新架构通过 Context 提供。BoardBridge 在中间做桥接。
+ * Board 组件通过 props 接收 G/dispatch 等，
+ * BoardBridge 从 Context 读取并注入。
  *
  * ```tsx
  * <GameProvider ...>

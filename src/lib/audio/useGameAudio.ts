@@ -66,13 +66,10 @@ function findLastLogEntryIndex(entries: unknown[], signature: string): number {
  * @param key 音效键名
  */
 export function playSound(key: SoundKey): void {
-    console.log('[playSound] 调用:', key);
-    
     // 节流：同一音效在 SFX_THROTTLE_MS 内只播放一次
     const now = Date.now();
     const lastPlayed = lastPlayedTime.get(key);
     if (lastPlayed !== undefined && now - lastPlayed < SFX_THROTTLE_MS) {
-        console.log('[playSound] 节流跳过:', key, '距上次', now - lastPlayed, 'ms');
         return;
     }
     lastPlayedTime.set(key, now);
@@ -81,7 +78,6 @@ export function playSound(key: SoundKey): void {
     const synthKeys = getSynthSoundKeys();
     const isSynthKey = synthKeys.includes(key);
     if (failedSounds.has(key)) {
-        console.log('[playSound] 已知失败，使用合成音:', key);
         if (isSynthKey) {
             playSynthSound(key);
         }
@@ -89,12 +85,10 @@ export function playSound(key: SoundKey): void {
     }
 
     const result = AudioManager.play(key);
-    console.log('[playSound] AudioManager.play 结果:', result);
     
     // 仅在音效确实加载失败时标记为永久失败并回退到合成音
     // （因并发加载限制被跳过的不算失败）
     if (result === null && isSynthKey && AudioManager.isFailed(key)) {
-        console.log('[playSound] 加载失败，标记并使用合成音:', key);
         failedSounds.add(key);
         playSynthSound(key);
     }

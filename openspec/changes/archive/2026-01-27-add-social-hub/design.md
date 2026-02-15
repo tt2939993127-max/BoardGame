@@ -7,7 +7,7 @@
 ### 现有基础设施
 
 - **认证服务**: NestJS + JWT，端口 18001
-- **游戏服务**: Boardgame.io，端口 18000
+- **游戏服务**: GameTransportServer (Koa + socket.io)，端口 18000
 - **WebSocket**: Socket.io 已用于大厅实时更新 (`lobbySocket.ts`)
 - **悬浮球**: `GameHUD.tsx` 已实现可拖拽悬浮球 UI
 - **部署形态**: 三进程（game-server:18000 / auth-server:18001 / web:80）
@@ -26,7 +26,7 @@
 
 ### Non-Goals
 
-- 不迁移 Boardgame.io 游戏服务（保持 `server.ts` 现状）
+- 不迁移游戏传输层服务（保持 `server.ts` 现状）
 - 不新增独立 Profile 页面（改为头像下拉 + 好友与聊天窗口 + 对战记录模态框）
 - 群聊功能（MVP 不包含）
 - 好友分组/标签
@@ -42,7 +42,7 @@
 **范围**:
 - NestJS Auth 模块承接原认证能力
 - 保持 `/auth` 路由与响应结构兼容现有前端
-- Boardgame.io 游戏服务保持独立运行
+- 游戏传输层服务保持独立运行
 
 **部署形态**:
 - 默认单体部署：NestJS API 与 Web 前端合并为同一进程与端口
@@ -280,7 +280,7 @@ interface IMessage {
 
 | 风险 | 缓解措施 |
 |------|----------|
-| 单体部署与 game-server 分离 | 明确边界：Web+API 合并进 NestJS，游戏仍走 Boardgame.io |
+| 单体部署与 game-server 分离 | 明确边界：Web+API 合并进 NestJS，游戏走独立 GameTransportServer |
 | WebSocket 连接数增加 | 单例 Socket，复用连接 |
 | 消息存储增长 | 分页加载，后续可加消息过期策略 |
 | 在线状态不准确 | 心跳 + 重连机制 |

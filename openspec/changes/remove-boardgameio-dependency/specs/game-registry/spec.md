@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: 服务端注册派生
-系统 SHALL 从自动生成的权威清单派生服务端可对局游戏列表。服务端注册使用自建 `GameEngine` 接口（包含 `domain`、`systems`、`systemsConfig`），不依赖 boardgame.io `Game` 类型。
+系统 SHALL 从自动生成的权威清单派生服务端可对局游戏列表。服务端注册使用自建 `GameEngine` 接口（包含 `domain`、`systems`、`systemsConfig`），不依赖外部框架。
 
 #### Scenario: 注册可对局游戏
 - **WHEN** 服务端启动并读取生成的游戏清单

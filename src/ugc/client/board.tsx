@@ -24,7 +24,7 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
     const { packageId, viewUrl, allowedOrigins, previewConfig } = options;
     const iframeSrc = viewUrl && viewUrl.trim() ? viewUrl.trim() : DEFAULT_RUNTIME_VIEW_URL;
 
-    const UgcRemoteHostBoard = ({ G, ctx, dispatch, playerID, matchData }: GameBoardProps<UGCGameState>) => {
+    const UgcRemoteHostBoard = ({ G, dispatch, playerID, matchData }: GameBoardProps<UGCGameState>) => {
         const iframeRef = useRef<HTMLIFrameElement | null>(null);
         const bridgeRef = useRef<UGCHostBridge | null>(null);
         const stateRef = useRef<UGCGameState | null>(null);
@@ -49,19 +49,16 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
 
         const currentPlayerId = useMemo<PlayerId>(() => {
             if (coreState.activePlayerId) return coreState.activePlayerId;
-            if (ctx.currentPlayer !== undefined && ctx.currentPlayer !== null) {
-                return String(ctx.currentPlayer);
-            }
             return playerIds[0] ?? '';
-        }, [coreState.activePlayerId, ctx.currentPlayer, playerIds]);
+        }, [coreState.activePlayerId, playerIds]);
 
         const buildState = useCallback((): UGCGameState => {
             const phase = typeof coreState.phase === 'string' ? coreState.phase : (G?.sys?.phase ?? '');
             const turnNumber = typeof coreState.turnNumber === 'number' ? coreState.turnNumber : (G?.sys?.turnNumber ?? 0);
-            const ctxGameOver = ctx.gameover && typeof ctx.gameover === 'object'
-                ? (ctx.gameover as { winner?: PlayerId; draw?: boolean })
+            const sysGameOver = G?.sys?.gameover
+                ? { winner: G.sys.gameover.winner, draw: G.sys.gameover.draw }
                 : undefined;
-            const gameOver = coreState.gameOver ?? ctxGameOver;
+            const gameOver = coreState.gameOver ?? sysGameOver;
             const baseState: UGCGameState = {
                 phase,
                 activePlayerId: coreState.activePlayerId ?? currentPlayerId,
@@ -74,7 +71,7 @@ export const createUgcRemoteHostBoard = (options: UgcRemoteHostBoardOptions) => 
                 return attachBuilderPreviewConfig(baseState, previewConfig);
             }
             return baseState;
-        }, [coreState, corePlayers, G?.sys?.phase, G?.sys?.turnNumber, ctx.gameover, currentPlayerId, previewConfig]);
+        }, [coreState, corePlayers, G?.sys?.phase, G?.sys?.turnNumber, G?.sys?.gameover, currentPlayerId, previewConfig]);
 
         useEffect(() => {
             buildStateRef.current = buildState;

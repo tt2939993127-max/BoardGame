@@ -47,7 +47,7 @@ type CardPattern =
   | { type: 'rocket'; cards: Card[] };
 ```
 
-### 2.2 游戏逻辑 (Boardgame.io Game)
+### 2.2 游戏逻辑 (DomainCore)
 
 ```typescript
 const DouDiZhu = {

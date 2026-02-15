@@ -26,12 +26,14 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
+    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });
@@ -185,7 +187,7 @@ describe('远古之物派系能力', () => {
     });
 
     describe('elder_thing_mi_go（米-格：对手抽疯狂卡或你抽牌）', () => {
-        it('对手抽疯狂卡（MVP：默认全部抽）', () => {
+        it('创建交互让对手选择是否抽疯狂卡', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -198,29 +200,55 @@ describe('远古之物派系能力', () => {
             });
 
             const events = execPlayMinion(state, '0', 'm1', 0);
-            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            // 不再直接产生疯狂卡事件，而是创建交互
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBeGreaterThanOrEqual(1);
+            const miGoInteraction = interactions.find(i => i.data?.sourceId === 'elder_thing_mi_go');
+            expect(miGoInteraction).toBeDefined();
+            expect(miGoInteraction.playerId).toBe('1'); // 对手选择
+        });
+
+        it('对手选择抽疯狂卡时产生疯狂卡事件', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('m1', 'elder_thing_mi_go', 'minion', '0')],
+                        deck: [makeCard('d1', 'test', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+            });
+            const ms = makeMatchState(state);
+            const handler = getInteractionHandler('elder_thing_mi_go');
+            expect(handler).toBeDefined();
+            const result = handler!(ms, '1', { choice: 'draw_madness' }, {
+                continuationContext: { casterPlayerId: '0', opponents: ['1'], opponentIdx: 0 },
+            }, defaultRandom, 0);
+            expect(result).toBeDefined();
+            const madnessEvents = result!.events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
             expect((madnessEvents[0] as any).payload.playerId).toBe('1');
         });
 
-        it('疯狂牌库空时你抽一张牌', () => {
+        it('对手拒绝时施法者抽一张牌', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
-                        hand: [makeCard('m1', 'elder_thing_mi_go', 'minion', '0')],
                         deck: [makeCard('d1', 'test', 'minion', '0')],
                     }),
                     '1': makePlayer('1'),
                 },
                 bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
-                madnessDeck: [],
             });
-
-            const events = execPlayMinion(state, '0', 'm1', 0);
-            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
-            const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-            expect(madnessEvents.length).toBe(0);
-            // 你应该抽一张牌
+            const ms = makeMatchState(state);
+            const handler = getInteractionHandler('elder_thing_mi_go');
+            expect(handler).toBeDefined();
+            const result = handler!(ms, '1', { choice: 'decline' }, {
+                continuationContext: { casterPlayerId: '0', opponents: ['1'], opponentIdx: 0 },
+            }, defaultRandom, 0);
+            expect(result).toBeDefined();
+            const drawEvents = result!.events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
             const selfDraw = drawEvents.filter(e => (e as any).payload.playerId === '0');
             expect(selfDraw.length).toBe(1);
         });

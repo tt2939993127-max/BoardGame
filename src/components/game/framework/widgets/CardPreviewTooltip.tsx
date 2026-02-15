@@ -10,6 +10,8 @@ interface CardPreviewTooltipProps {
     children: React.ReactNode;
     /** 当前语言 */
     locale?: string;
+    /** 预览最大尺寸（像素），默认 308 */
+    maxDim?: number;
 }
 
 /**
@@ -21,6 +23,7 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
     previewRef,
     children,
     locale,
+    maxDim: maxDimProp,
 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
@@ -51,7 +54,7 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
     // aspectRatio > 1 = 横向卡牌，aspectRatio < 1 = 竖向卡牌
     const aspectRatio = 'aspectRatio' in previewRef ? previewRef.aspectRatio : undefined;
     const previewSize = useMemo(() => {
-        const maxDim = 308; // 预览最大尺寸（像素）
+        const maxDim = maxDimProp ?? 308; // 预览最大尺寸（像素）
         const ar = aspectRatio ?? (192 / 308); // 默认竖向卡牌比例
         if (ar >= 1) {
             // 横向卡牌：宽度为最大值，高度按比例缩小
@@ -59,7 +62,7 @@ export const CardPreviewTooltip: React.FC<CardPreviewTooltipProps> = ({
         }
         // 竖向卡牌：高度为最大值，宽度按比例缩小
         return { width: Math.round(maxDim * ar), height: maxDim };
-    }, [aspectRatio]);
+    }, [aspectRatio, maxDimProp]);
 
     const previewPosition = useMemo(() => {
         if (!anchorRect || typeof window === 'undefined') return null;

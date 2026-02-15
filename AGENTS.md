@@ -30,8 +30,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/ai-rules/golden-rules.md` — **遇到 React 渲染错误/白屏/函数未定义/高频交互卡顿时必读**。含 React Hooks 示例、白屏排查流程、Vite SSR、高频交互/拖拽规范。
 - `docs/ai-rules/animation-effects.md` — **开发/修改任何动画、特效、粒子效果时必读**。含动效选型表、Canvas 粒子引擎、特效组件/架构/视觉质量规范。
 - `docs/ai-rules/asset-pipeline.md` — **新增/修改图片或音频资源引用时必读**。含压缩流程、路径规范、✅/❌ 示例。
-- `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、框架解耦/复用、EventStream、动画表现与逻辑分离规范（`useVisualStateBuffer`/`useVisualSequenceGate`）、领域建模前置审查。
-- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**通用实现缺陷检查维度（D1-D10 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
+- `docs/ai-rules/engine-systems.md` — **开发/修改引擎系统、框架层代码、游戏 move/command 时必读**。含系统清单、传输层架构（`GameBoardProps`/`GameTransportServer`）、游戏结束检测（`sys.gameover`）、框架解耦/复用、EventStream、动画表现与逻辑分离规范（`useVisualStateBuffer`/`useVisualSequenceGate`）、`createSimpleChoice` API 使用规范（两种调用约定、multi 参数位置、`PromptOption.displayMode` 渲染模式声明、选项 defId 要求）、领域建模前置审查。
+- `docs/ai-rules/testing-audit.md` — **审查实现完整性/新增功能补测试/修"没效果"类 bug 时必读**。含**通用实现缺陷检查维度（D1-D20 穷举框架）**、描述→实现全链路审查规范（唯一权威来源）、数据查询一致性审查、元数据语义一致性审计、引擎 API 调用契约审计（D3 子项）、交互模式语义匹配（D5 子项）、验证层有效性门控（D7 子项）、验证-执行前置条件对齐（D2 子项）、引擎批处理时序与 UI 交互对齐（D8 子项）、事件产生门控普适性检查（D8 子项）、Reducer 消耗路径审计（D11）、写入-消耗对称（D12）、多来源竞争（D13）、回合清理完整（D14）、UI 状态同步（D15）、条件优先级（D16）、隐式依赖（D17）、否定路径（D18）、组合场景（D19）、状态可观测性（D20）、效果语义一致性审查、审计反模式清单、测试策略与工具选型。**当用户说"审查"、"审核"、"检查实现"、"核对"、"对一下描述和代码"等词时，必须先阅读本文档。**
 - `docs/ai-rules/ui-ux.md` — **开发/修改 UI 组件、布局、样式、游戏界面时必读**。含审美准则、多端布局、游戏 UI 特化、设计系统引用。
 - `docs/ai-rules/global-systems.md` — **使用/修改全局 Context（Toast/Modal/音频/教学/认证）时必读**。含 Context 系统、实时服务层。
 - `docs/ai-rules/doc-index.md` — **不确定该读哪个文档时必读**。按场景查找需要阅读的文档。
@@ -43,6 +43,17 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 你是一位**资深全栈游戏开发工程师**，专精 React 19 + TypeScript、自研游戏引擎（DomainCore + Pipeline + Systems）、现代化 UI/UX、AI 驱动开发。
 项目是 AI 驱动的现代化桌游平台，核心解决"桌游教学"与"轻量级联机"，支持 UGC。包含用户系统（JWT）、游戏大厅、状态机驱动的游戏核心、分步教学系统、UGC 原型工具。
+
+### 游戏名称映射（强制）
+
+> 用户提到中文名时，必须对应到正确的 gameId 和英文名。**禁止混淆**。
+
+| gameId | 英文名 | 中文名 |
+|--------|--------|--------|
+| `smashup` | Smash Up | 大杀四方 |
+| `dicethrone` | Dice Throne | 王权骰铸 |
+| `summonerwars` | Summoner Wars | 召唤师战争 |
+| `tictactoe` | Tic Tac Toe | 井字棋 |
 
 ---
 
@@ -180,8 +191,15 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 | 用途 | 路径 |
 |------|------|
 | 框架核心类型 | `src/core/types.ts` |
+| 引擎类型（SystemState/GameOverResult） | `src/engine/types.ts` |
+| 引擎管线（executePipeline） | `src/engine/pipeline.ts` |
+| 引擎适配器（createGameEngine） | `src/engine/adapter.ts` |
 | 引擎系统 | `src/engine/systems/` |
 | 引擎原语模块 | `src/engine/primitives/` |
+| 传输层服务端 | `src/engine/transport/server.ts` |
+| 传输层客户端 | `src/engine/transport/client.ts` |
+| 传输层 React 集成 | `src/engine/transport/react.tsx` |
+| Board Props 契约 | `src/engine/transport/protocol.ts` |
 | 国际化入口 | `src/lib/i18n/` |
 | 音频管理器 | `src/lib/audio/AudioManager.ts` |
 | 游戏逻辑 | `src/games/<游戏名>/game.ts` |
@@ -235,6 +253,8 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - **ResponseWindowSystem 配置注入**：响应窗口的命令/事件白名单必须通过 `createResponseWindowSystem({ allowedCommands, responseAdvanceEvents })` 注入，禁止修改引擎文件。
   - **参考现有游戏时先检查模式时效性**：现有三个游戏仍有历史债务（DiceThrone 的 pendingInteraction），这些是反模式，新游戏禁止模仿。
 - **领域建模前置审查（强制）**：数据录入完成后、领域实现开始前，必须完成领域概念建模（术语→事件映射）、决策点识别（强制/可选/无）、引擎能力缺口分析。禁止跳过建模直接写实现。详见 `docs/ai-rules/engine-systems.md`「领域建模前置审查」节。
+- **游戏结束检测统一走 `sys.gameover`（强制）**：管线（`executePipeline`）在每次命令执行成功后自动调用 `domain.isGameOver()` 并将结果写入 `sys.gameover`。Board 组件必须读 `G.sys.gameover`，服务端读 `result.state.sys.gameover`。❌ 禁止读 `G.core.gameover`（core 上不存在该字段）、❌ 禁止读 `ctx.gameover`（已移除）。详见 `docs/ai-rules/engine-systems.md`「游戏结束检测」节。
+- **传输层架构（强制）**：项目使用自研传输层（`GameTransportServer` + `GameTransportClient` + `GameProvider`/`LocalGameProvider`）。Board 组件 Props 为 `GameBoardProps`，不再有 `ctx` prop。新代码使用 `dispatch` 分发命令。详见 `docs/ai-rules/engine-systems.md`「传输层架构」节。
 
 ### 领域层编码规范（强制）
 > **写任何游戏的 domain/ 代码时必须遵守**。目标：让第 100 个游戏的代码质量与第 1 个一样。
@@ -332,6 +352,9 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **描述→实现全链路审查（强制）**：以下场景必须执行——① 新增技能/Token/事件卡/被动/光环 ② 修复"没效果"类 bug ③ 审查已有机制 ④ 重构消费链路。**当用户说"审查"/"审核"/"检查实现"/"核对"等词时，必须先阅读 `docs/ai-rules/testing-audit.md`「描述→实现全链路审查规范」节，按规范流程执行并输出矩阵，禁止凭印象回答。** 该文档为审查规范的唯一权威来源。
 - **数据查询一致性审查（强制）**：新增"修改/增强/共享"类机制后，必须 grep 原始字段访问，确认所有消费点走统一查询入口。详见 `docs/ai-rules/testing-audit.md`「数据查询一致性审查」节。
 - **元数据语义一致性审查（强制）**：新增/修改 custom action handler 后，必须确认 `categories` 声明与实际输出一致。详见 `docs/ai-rules/testing-audit.md`「元数据语义一致性审计」节。
+- **Custom Action target 间接引用审查（强制）**：新增/修改 custom action handler 后，必须确认 handler 中 DAMAGE_DEALT/STATUS_APPLIED 的 targetId 来源正确——进攻伤害/debuff 用 `ctx.ctx.defenderId`，自我增益用 `ctx.targetId`。详见 `docs/ai-rules/testing-audit.md`「D10 子项：Custom Action target 间接引用审计」。
+- **验证层有效性门控（强制）**：有代价的技能（消耗充能/魔力等），验证层必须确保操作至少能产生一个有意义的效果，否则拒绝激活。`quickCheck` 必须与 `customValidator` 前置条件对齐。详见 `docs/ai-rules/testing-audit.md`「D7 子项：验证层有效性门控」。
+- **阶段结束技能时序对齐（强制）**：阶段结束时需要玩家确认的技能（描述含"你可以"/"may"），`onPhaseExit` 必须返回 `{ halt: true }` 阻止阶段推进，UI 跳过时必须 dispatch `ADVANCE_PHASE` 恢复流程。**事件产生门控必须普适生效**：`triggerPhaseAbilities` 等循环中的门控函数（如 `canActivateAbility`）禁止用 `abilityId === 'xxx'` 限定为特定技能，必须对所有同类技能生效。详见 `docs/ai-rules/testing-audit.md`「D8 子项：引擎批处理时序与 UI 交互对齐」。
 - **"可以/可选"效果必须有交互确认（强制）**：描述中"你可以"/"may"→ 必须有确认/跳过 UI，禁止自动执行。
 - **测试必须验证状态变更（强制）**：事件发射 ≠ 状态生效，必须断言 reduce 后的最终状态。详见 `docs/ai-rules/testing-audit.md`「审计反模式清单」。
 
@@ -348,4 +371,5 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **数据/逻辑/UI 分离**：UI 只负责展示与交互。
 - **游戏 UI 设计系统**：`design-system/game-ui/MASTER.md`（通用）+ `design-system/styles/`（风格）。
 - **新增 UI 元素必须配合现有风格（强制）**：即使只改一个文件，新增的按钮/面板/提示等 UI 元素必须复用同模块已有组件（如 `GameButton`）和现有样式变量，禁止手写不一致的原生样式。修 bug 和微调不受此约束。
+- **游戏内 UI 组件单一来源（强制）**：同一类 UI 功能只允许一个组件实现，所有场景必须复用。卡牌展示/选择统一用 `PromptOverlay`（SmashUp），禁止新建功能重叠的组件。详见 `docs/ai-rules/ui-ux.md` §1.1。
 - **大规模 UI 改动**（≥3 组件文件 / 新增页面 / 全局风格调整）须先读设计系统，详见 `docs/ai-rules/ui-ux.md` §0。

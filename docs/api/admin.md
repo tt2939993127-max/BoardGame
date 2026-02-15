@@ -484,3 +484,159 @@ Authorization: Bearer <admin_token>
 
 **错误响应**:
 - `404` - 对局不存在
+
+
+---
+
+## 系统通知
+
+### GET /notifications
+
+获取当前有效的系统通知（公开接口，无需登录）。
+
+只返回 `published=true` 且未过期的通知，按创建时间倒序。
+
+**请求示例**:
+```http
+GET /notifications
+```
+
+**响应示例**:
+```json
+{
+  "notifications": [
+    {
+      "_id": "507f1f77bcf86cd799439099",
+      "title": "维护公告",
+      "content": "今晚 22:00-23:00 进行系统维护",
+      "published": true,
+      "expiresAt": "2026-02-16T23:00:00.000Z",
+      "createdAt": "2026-02-15T10:00:00.000Z",
+      "updatedAt": "2026-02-15T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### GET /admin/notifications
+
+获取所有通知（含草稿和已过期），按创建时间倒序。需要管理员权限。
+
+**请求示例**:
+```http
+GET /admin/notifications
+Authorization: Bearer <admin_token>
+```
+
+**响应示例**:
+```json
+{
+  "notifications": [
+    {
+      "_id": "507f1f77bcf86cd799439099",
+      "title": "维护公告",
+      "content": "今晚 22:00-23:00 进行系统维护",
+      "published": true,
+      "expiresAt": "2026-02-16T23:00:00.000Z",
+      "createdAt": "2026-02-15T10:00:00.000Z",
+      "updatedAt": "2026-02-15T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### POST /admin/notifications
+
+创建通知。需要管理员权限。
+
+**请求体**:
+```json
+{
+  "title": "维护公告",
+  "content": "今晚 22:00-23:00 进行系统维护",
+  "expiresAt": "2026-02-16T23:00:00.000Z",
+  "published": true
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| title | string | 是 | 通知标题 |
+| content | string | 是 | 通知正文 |
+| expiresAt | string | 否 | 过期时间（ISO 8601），不填则永不过期 |
+| published | boolean | 否 | 是否立即发布，默认 true |
+
+**响应示例**:
+```json
+{
+  "notification": {
+    "_id": "507f1f77bcf86cd799439099",
+    "title": "维护公告",
+    "content": "今晚 22:00-23:00 进行系统维护",
+    "published": true,
+    "expiresAt": "2026-02-16T23:00:00.000Z",
+    "createdAt": "2026-02-15T10:00:00.000Z",
+    "updatedAt": "2026-02-15T10:00:00.000Z"
+  }
+}
+```
+
+---
+
+### PUT /admin/notifications/:id
+
+更新通知。需要管理员权限。
+
+**路径参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 通知 ID |
+
+**请求体**（所有字段可选）:
+```json
+{
+  "title": "更新后的标题",
+  "published": false
+}
+```
+
+**响应示例**:
+```json
+{
+  "notification": { ... }
+}
+```
+
+**错误响应**:
+- `404` - 通知不存在
+
+---
+
+### DELETE /admin/notifications/:id
+
+删除通知。需要管理员权限。
+
+**路径参数**:
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| id | string | 通知 ID |
+
+**请求示例**:
+```http
+DELETE /admin/notifications/507f1f77bcf86cd799439099
+Authorization: Bearer <admin_token>
+```
+
+**响应示例**:
+```json
+{
+  "deleted": true
+}
+```
+
+**错误响应**:
+- `404` - 通知不存在

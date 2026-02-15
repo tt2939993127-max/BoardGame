@@ -337,6 +337,21 @@ export function executePipeline<
         playerIds,
     };
 
+    // 辅助：检测游戏结束并写入 sys.gameover
+    const applyGameoverCheck = (s: MatchState<TCore>): MatchState<TCore> => {
+        if (!domain.isGameOver) return s;
+        const result = domain.isGameOver(s.core);
+        // 仅在状态变化时更新（避免无意义的对象创建）
+        if (result === s.sys.gameover) return s;
+        if (result && !s.sys.gameover) {
+            return { ...s, sys: { ...s.sys, gameover: result } };
+        }
+        if (!result && s.sys.gameover) {
+            return { ...s, sys: { ...s.sys, gameover: undefined } };
+        }
+        return { ...s, sys: { ...s.sys, gameover: result } };
+    };
+
     // 1. 执行 Systems.beforeCommand hooks
     for (const system of systems) {
         if (!system.beforeCommand) continue;
@@ -383,6 +398,9 @@ export function executePipeline<
                 domain, systems, ctx, allEvents, systemEventsToReduce, random,
                 maxRounds: MAX_AFTER_EVENTS_ROUNDS,
             });
+
+            // 检测游戏结束
+            currentState = applyGameoverCheck(currentState);
 
             return {
                 success: true,
@@ -446,6 +464,9 @@ export function executePipeline<
         domain, systems, ctx, allEvents, systemEventsToReduce, random,
         maxRounds: MAX_AFTER_EVENTS_ROUNDS,
     });
+
+    // 6. 检测游戏结束
+    currentState = applyGameoverCheck(currentState);
 
     return {
         success: true,

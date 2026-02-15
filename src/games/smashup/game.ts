@@ -93,5 +93,5 @@ export { systems as smashUpSystemsForTest };
 // ============================================================================
 // 卡牌预览注册（放文件末尾，避免 Vite SSR 函数提升陷阱）
 // ============================================================================
-registerCardPreviewGetter('smashup', getSmashUpCardPreviewRef);
+registerCardPreviewGetter('smashup', getSmashUpCardPreviewRef, { maxDim: 220 });
 registerCriticalImageResolver('smashup', smashUpCriticalImageResolver);

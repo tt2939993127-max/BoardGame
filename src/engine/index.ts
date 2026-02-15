@@ -28,8 +28,5 @@ export * from './systems';
 // Hooks
 export * from './hooks';
 
-// FX 系统
-export * from './fx';
-
 // 测试工具
 export { GameTestRunner, type TestCase, type TestResult, type StateExpectation } from './testing';

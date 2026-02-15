@@ -520,13 +520,12 @@ describe('米斯卡塔尼克大学 - miskatonic_thing_on_the_doorstep（门口�
         });
 
         const events = execPlayAction(state, '0', 'a1');
-        // 搜索到第一张非疯狂卡（d2）
-        const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents.length).toBe(1);
-        expect((drawEvents[0] as any).payload.cardUids).toEqual(['d2']);
-        // 抽1张疯狂卡
-        const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
-        expect(madnessEvents.length).toBe(1);
+        // 多候选（d2, d3）时应创建 Interaction 让玩家选择
+        const interactions = getLastInteractions();
+        expect(interactions.length).toBe(1);
+        expect(interactions[0].data.sourceId).toBe('miskatonic_thing_on_the_doorstep');
+        // 选项应包含2张非疯狂卡
+        expect(interactions[0].data.options.length).toBe(2);
     });
 
     it('牌库全是疯狂卡时只抽疯狂卡', () => {
@@ -577,7 +576,7 @@ describe('米斯卡塔尼克大学 - miskatonic_thing_on_the_doorstep（门口�
                     hand: [makeCard('a1', 'miskatonic_thing_on_the_doorstep', 'action', '0')],
                     deck: [
                         makeCard('d1', 'test_minion', 'minion', '0'),
-                        makeCard('d2', 'test_action', 'action', '0'),
+                        makeCard('d2', MADNESS_CARD_DEF_ID, 'action', '0'),
                     ],
                 }),
                 '1': makePlayer('1'),
@@ -586,13 +585,12 @@ describe('米斯卡塔尼克大学 - miskatonic_thing_on_the_doorstep（门口�
 
         const events = execPlayAction(state, '0', 'a1');
         const newState = applyEvents(state, events);
-        // 搜索到 d1（第一张非疯狂卡）放入手牌
+        // 单候选（d1）自动选择，放入手牌
         expect(newState.players['0'].hand.some(c => c.uid === 'd1')).toBe(true);
         // 手牌中有1张疯狂卡
         expect(newState.players['0'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(1);
-        // 牌库减少1张（d1 被取走）
+        // 牌库只剩疯狂卡 d2（d1 被取走后洗牌）
         expect(newState.players['0'].deck.length).toBe(1);
-        expect(newState.players['0'].deck[0].uid).toBe('d2');
         // 疯狂牌库减少1张
         expect(newState.madnessDeck!.length).toBe(MADNESS_DECK_SIZE - 1);
     });

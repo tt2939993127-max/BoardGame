@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, PlayerId, BoardStructure } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 import { resolveAbilityEffects } from '../domain/abilityResolver';
 import { abilityRegistry } from '../domain/abilities';
 
@@ -36,8 +36,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -204,7 +206,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const valentina1 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-valentina',
       card: makeValentina('test-valentina'),
       owner: '0',
@@ -217,7 +219,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'guidance',
-      sourceUnitId: 'test-valentina',
+      sourceUnitId: valentina1.instanceId,
     });
 
     const drawEvents = events.filter(e => e.type === SW_EVENTS.CARD_DRAWN);
@@ -232,7 +234,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const valentina2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-valentina',
       card: makeValentina('test-valentina'),
       owner: '0',
@@ -244,7 +246,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
 
     const { events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'guidance',
-      sourceUnitId: 'test-valentina',
+      sourceUnitId: valentina2.instanceId,
     });
 
     const drawEvents = events.filter(e => e.type === SW_EVENTS.CARD_DRAWN);
@@ -268,7 +270,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const brolf1 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-brolf',
       card: makeBrolf('test-brolf'),
       owner: '0',
@@ -279,7 +281,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'blood_rune',
-      sourceUnitId: 'test-brolf',
+      sourceUnitId: brolf1.instanceId,
       choice: 'damage',
     });
 
@@ -296,7 +298,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const brolf2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-brolf',
       card: makeBrolf('test-brolf'),
       owner: '0',
@@ -308,7 +310,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'blood_rune',
-      sourceUnitId: 'test-brolf',
+      sourceUnitId: brolf2.instanceId,
       choice: 'charge',
     });
 
@@ -330,7 +332,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const brolf3 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-brolf',
       card: makeBrolf('test-brolf'),
       owner: '0',
@@ -343,7 +345,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     const fullState = { core: state, sys: {} as any };
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'blood_rune', sourceUnitId: 'test-brolf', choice: 'charge' },
+      payload: { abilityId: 'blood_rune', sourceUnitId: brolf3.instanceId, choice: 'charge' },
       timestamp: fixedTimestamp,
       playerId: '0',
     });
@@ -397,7 +399,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     });
     clearArea(state, [2, 3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 3, col: 2 }, {
+    const jamud1 = placeUnit(state, { row: 3, col: 2 }, {
       cardId: 'test-jamud',
       card: makeJamud('test-jamud'),
       owner: '0',
@@ -424,7 +426,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ice_shards',
-      sourceUnitId: 'test-jamud',
+      sourceUnitId: jamud1.instanceId,
     });
 
     // 应消耗1充能
@@ -442,7 +444,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 3, col: 2 }, {
+    const jamud2 = placeUnit(state, { row: 3, col: 2 }, {
       cardId: 'test-jamud',
       card: makeJamud('test-jamud'),
       owner: '0',
@@ -455,7 +457,7 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     const fullState = { core: state, sys: {} as any };
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'ice_shards', sourceUnitId: 'test-jamud' },
+      payload: { abilityId: 'ice_shards', sourceUnitId: jamud2.instanceId },
       timestamp: fixedTimestamp,
       playerId: '0',
     });
@@ -494,6 +496,43 @@ describe('贾穆德 - 寒冰碎屑 (ice_shards)', () => {
     expect(customEvent).toBeDefined();
     expect((customEvent!.payload as any).sourcePosition).toBeDefined();
   });
+
+  it('boosts=0 时 onPhaseExit 不产生 ice_shards 事件（回归）', () => {
+    const state = createInitializedCore(['0', '1'], createTestRandom(), {
+      faction0: 'frost',
+      faction1: 'necromancer',
+    });
+    clearArea(state, [2, 3, 4, 5], [1, 2, 3, 4]);
+
+    placeUnit(state, { row: 3, col: 2 }, {
+      cardId: 'test-jamud',
+      card: makeJamud('test-jamud'),
+      owner: '0',
+      boosts: 0,
+    });
+
+    // 满足建筑相邻敌方条件，但充能不足
+    placeStructure(state, { row: 4, col: 3 }, '0');
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy'),
+      owner: '1',
+    });
+
+    state.phase = 'build';
+    state.currentPlayer = '0';
+
+    const matchState = { core: state, sys: {} } as any;
+    const result = summonerWarsFlowHooks.onPhaseExit!({
+      state: matchState, from: 'build', to: 'attack',
+      command: { type: 'END_PHASE', payload: {}, timestamp: fixedTimestamp },
+    });
+    const events = result.events ?? [];
+    const iceShardsEvent = events.find(e =>
+      e.type === SW_EVENTS.ABILITY_TRIGGERED && (e.payload as any).abilityId === 'ice_shards_damage'
+    );
+    expect(iceShardsEvent).toBeUndefined();
+  });
 });
 
 
@@ -509,7 +548,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const beast = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-beast',
       card: makeFeedBeast('test-beast'),
       owner: '0',
@@ -526,7 +565,8 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'feed_beast',
-      sourceUnitId: 'test-beast',
+      sourceUnitId: beast.instanceId,
+      choice: 'destroy_adjacent',
       targetPosition: { row: 4, col: 3 },
     });
 
@@ -546,7 +586,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     });
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const beast2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-beast',
       card: makeFeedBeast('test-beast'),
       owner: '0',
@@ -557,7 +597,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'feed_beast',
-      sourceUnitId: 'test-beast',
+      sourceUnitId: beast2.instanceId,
       choice: 'self_destroy',
     });
 
@@ -574,7 +614,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     });
     clearArea(state, [2, 3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const beast3 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-beast',
       card: makeFeedBeast('test-beast'),
       owner: '0',
@@ -592,7 +632,12 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     const fullState = { core: state, sys: {} as any };
     const result = SummonerWarsDomain.validate(fullState, {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
-      payload: { abilityId: 'feed_beast', sourceUnitId: 'test-beast', targetPosition: { row: 2, col: 2 } },
+      payload: {
+        abilityId: 'feed_beast',
+        sourceUnitId: beast3.instanceId,
+        choice: 'destroy_adjacent',
+        targetPosition: { row: 2, col: 2 },
+      },
       timestamp: fixedTimestamp,
       playerId: '0',
     });
@@ -629,5 +674,198 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     const customEvent = triggerEvents.find(e => (e.payload as any).abilityId === 'feed_beast_check');
     expect(customEvent).toBeDefined();
     expect((customEvent!.payload as any).sourcePosition).toBeDefined();
+  });
+});
+
+
+// ============================================================================
+// D8 集成测试：halt → confirm → auto-advance 完整流程
+// ============================================================================
+
+import { canActivateAbility } from '../domain/abilityHelpers';
+import { summonerWarsFlowHooks } from '../domain/flowHooks';
+import { buildUsageKey } from '../domain/utils';
+
+describe('D8 时序集成：阶段结束技能 halt → confirm → auto-advance', () => {
+  /**
+   * feed_beast 路径A：吃友方后 usesPerTurn 阻止重复激活 → 自动推进
+   * 
+   * 回归场景：巨食兽确认吃友方后仍在场上，若无 usesPerTurn 限制，
+   * canActivateAbility 返回 true → hasConfirmablePhaseEndAbility 返回 true
+   * → onAutoContinueCheck 不触发 → 游戏卡住
+   */
+  it('feed_beast 吃友方后 usesPerTurn 阻止重复激活，onAutoContinueCheck 自动推进', () => {
+    const state = createInitializedCore(['0', '1'], createTestRandom(), {
+      faction0: 'goblin',
+      faction1: 'necromancer',
+    });
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const beast = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-beast',
+      card: makeFeedBeast('test-beast'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-ally',
+      card: makeAlly('test-ally', { faction: 'goblin' }),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    // 步骤1：确认 feed_beast 可激活
+    expect(canActivateAbility(state, beast, 'feed_beast', '0')).toBe(true);
+
+    // 步骤2：执行 ACTIVATE_ABILITY（吃友方）
+    const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'feed_beast',
+      sourceUnitId: beast.instanceId,
+      choice: 'destroy_adjacent',
+      targetPosition: { row: 4, col: 3 },
+    });
+
+    // 步骤3：验证 usageCount 已递增
+    const usageKey = buildUsageKey(beast.instanceId, 'feed_beast');
+    expect(newState.abilityUsageCount[usageKey]).toBe(1);
+
+    // 步骤4：巨食兽仍在场上
+    expect(newState.board[4][2].unit).toBeDefined();
+
+    // 步骤5：canActivateAbility 应返回 false（usesPerTurn 限制）
+    expect(canActivateAbility(newState, newState.board[4][2].unit!, 'feed_beast', '0')).toBe(false);
+
+    // 步骤6：onAutoContinueCheck 应触发自动推进
+    const mockSys = { flowHalted: true, phase: 'attack' };
+    const checkResult = summonerWarsFlowHooks.onAutoContinueCheck!({
+      state: { core: newState, sys: mockSys as any },
+      events: [],
+      random: createTestRandom(),
+    });
+    expect(checkResult).toBeDefined();
+    expect(checkResult!.autoContinue).toBe(true);
+  });
+
+  it('feed_beast 本回合已击杀时不可触发，onAutoContinueCheck 自动推进', () => {
+    const state = createInitializedCore(['0', '1'], createTestRandom(), {
+      faction0: 'goblin',
+      faction1: 'necromancer',
+    });
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const beast = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-beast',
+      card: makeFeedBeast('test-beast'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+    state.unitKillCountThisTurn = {
+      [beast.instanceId]: 1,
+    };
+
+    expect(canActivateAbility(state, beast, 'feed_beast', '0')).toBe(false);
+
+    const mockSys = { flowHalted: true, phase: 'attack' };
+    const checkResult = summonerWarsFlowHooks.onAutoContinueCheck!({
+      state: { core: state, sys: mockSys as any },
+      events: [],
+      random: createTestRandom(),
+    });
+    expect(checkResult).toBeDefined();
+    expect(checkResult!.autoContinue).toBe(true);
+  });
+
+  /**
+   * feed_beast 路径B：自毁后单位不存在 → 自动推进
+   */
+  it('feed_beast 自毁后单位不存在，onAutoContinueCheck 自动推进', () => {
+    const state = createInitializedCore(['0', '1'], createTestRandom(), {
+      faction0: 'goblin',
+      faction1: 'necromancer',
+    });
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const beast = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-beast',
+      card: makeFeedBeast('test-beast'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    // 执行自毁
+    const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'feed_beast',
+      sourceUnitId: beast.instanceId,
+      choice: 'self_destroy',
+    });
+
+    // 巨食兽已不在场上
+    expect(newState.board[4][2].unit).toBeUndefined();
+
+    // onAutoContinueCheck 应触发自动推进
+    const mockSys = { flowHalted: true, phase: 'attack' };
+    const checkResult = summonerWarsFlowHooks.onAutoContinueCheck!({
+      state: { core: newState, sys: mockSys as any },
+      events: [],
+      random: createTestRandom(),
+    });
+    expect(checkResult).toBeDefined();
+    expect(checkResult!.autoContinue).toBe(true);
+  });
+
+  /**
+   * ice_shards：消耗充能后 customValidator 返回 false → 自动推进
+   */
+  it('ice_shards 消耗充能后不可再激活，onAutoContinueCheck 自动推进', () => {
+    const state = createInitializedCore(['0', '1'], createTestRandom(), {
+      faction0: 'frost',
+      faction1: 'necromancer',
+    });
+    clearArea(state, [2, 3, 4, 5], [1, 2, 3, 4]);
+
+    const jamud = placeUnit(state, { row: 3, col: 2 }, {
+      cardId: 'test-jamud',
+      card: makeJamud('test-jamud'),
+      owner: '0',
+      boosts: 1, // 只有1点充能
+    });
+
+    placeStructure(state, { row: 4, col: 3 }, '0');
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy'),
+      owner: '1',
+    });
+
+    state.phase = 'build';
+    state.currentPlayer = '0';
+
+    // 执行 ice_shards
+    const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'ice_shards',
+      sourceUnitId: jamud.instanceId,
+    });
+
+    // 充能已消耗
+    expect(newState.board[3][2].unit?.boosts).toBe(0);
+
+    // canActivateAbility 应返回 false
+    expect(canActivateAbility(newState, newState.board[3][2].unit!, 'ice_shards', '0')).toBe(false);
+
+    // onAutoContinueCheck 应触发自动推进
+    const mockSys = { flowHalted: true, phase: 'build' };
+    const checkResult = summonerWarsFlowHooks.onAutoContinueCheck!({
+      state: { core: newState, sys: mockSys as any },
+      events: [],
+      random: createTestRandom(),
+    });
+    expect(checkResult).toBeDefined();
+    expect(checkResult!.autoContinue).toBe(true);
   });
 });

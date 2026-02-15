@@ -25,10 +25,12 @@ import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomAc
 /**
  * 压制 (Suppress)：投掷3骰，造成点数总和的伤害；若总数>14，施加脑震荡
  */
-function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
+    // D10 修复：进攻技能伤害/debuff 目标必须用 ctx.defenderId（对手），不能用 targetId（受 action.target 控制）
+    const opponentId = ctx.defenderId;
 
     // 投掷3个骰子，累加点数总和
     let total = 0;
@@ -43,7 +45,7 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
                 value,
                 face,
                 playerId: attackerId,
-                targetPlayerId: targetId,
+                targetPlayerId: opponentId,
                 effectKey: 'bonusDie.effect.barbarianSuppress',
                 effectParams: { value, index: i },
             },
@@ -54,13 +56,13 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
 
     // 造成点数总和的伤害
     if (total > 0) {
-        const target = state.players[targetId];
+        const target = state.players[opponentId];
         const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
         const actualDamage = target ? Math.min(total, targetHp) : 0;
         ctx.damageDealt += actualDamage;
         events.push({
             type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: total, actualDamage, sourceAbilityId },
+            payload: { targetId: opponentId, amount: total, actualDamage, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as DamageDealtEvent);
@@ -68,21 +70,21 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
 
     // 若总数>14，施加脑震荡
     if (total > 14) {
-        const opponent = state.players[targetId];
+        const opponent = state.players[opponentId];
         const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
         const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
         const maxStacks = def?.stackLimit || 1;
         const newTotal = Math.min(currentStacks + 1, maxStacks);
         events.push({
             type: 'STATUS_APPLIED',
-            payload: { targetId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
+            payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as StatusAppliedEvent);
     }
 
     // 多骰展示
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
 
     return events;
 }
@@ -90,10 +92,12 @@ function handleBarbarianSuppressRoll({ ctx, targetId, attackerId, sourceAbilityI
 /**
  * 压制 II (Suppress II) 力量变体：投掷3骰，造成点数总和伤害；若总数>9，施加脑震荡
  */
-function handleBarbarianSuppress2Roll({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
+    // D10 修复：进攻技能伤害/debuff 目标必须用 ctx.defenderId（对手）
+    const opponentId = ctx.defenderId;
 
     let total = 0;
     for (let i = 0; i < 3; i++) {
@@ -107,7 +111,7 @@ function handleBarbarianSuppress2Roll({ ctx, targetId, attackerId, sourceAbility
                 value,
                 face,
                 playerId: attackerId,
-                targetPlayerId: targetId,
+                targetPlayerId: opponentId,
                 effectKey: 'bonusDie.effect.barbarianSuppress',
                 effectParams: { value, index: i },
             },
@@ -117,13 +121,13 @@ function handleBarbarianSuppress2Roll({ ctx, targetId, attackerId, sourceAbility
     }
 
     if (total > 0) {
-        const target = state.players[targetId];
+        const target = state.players[opponentId];
         const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
         const actualDamage = target ? Math.min(total, targetHp) : 0;
         ctx.damageDealt += actualDamage;
         events.push({
             type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: total, actualDamage, sourceAbilityId },
+            payload: { targetId: opponentId, amount: total, actualDamage, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as DamageDealtEvent);
@@ -131,20 +135,20 @@ function handleBarbarianSuppress2Roll({ ctx, targetId, attackerId, sourceAbility
 
     // 升级版阈值降低到 >9
     if (total > 9) {
-        const opponent = state.players[targetId];
+        const opponent = state.players[opponentId];
         const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
         const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
         const maxStacks = def?.stackLimit || 1;
         const newTotal = Math.min(currentStacks + 1, maxStacks);
         events.push({
             type: 'STATUS_APPLIED',
-            payload: { targetId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
+            payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as StatusAppliedEvent);
     }
 
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
     return events;
 }
 
@@ -316,11 +320,12 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
  * - 增加 1×剑骰面数 伤害到当前攻击
  * - 施加脑震荡
  */
-function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    // ctx.defenderId 在进攻上下文中就是对手
+function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dice: BonusDieInfo[] = [];
+    // D10 修复：进攻技能伤害/debuff 目标必须用 ctx.defenderId（对手），不能用 targetId（受 action.target: 'self' 控制）
+    const opponentId = ctx.defenderId;
 
     let swordCount = 0;
     for (let i = 0; i < 5; i++) {
@@ -336,7 +341,7 @@ function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId
                 value,
                 face,
                 playerId: attackerId,
-                targetPlayerId: targetId,
+                targetPlayerId: opponentId,
                 effectKey: 'bonusDie.effect.morePleaseRoll',
                 effectParams: { value, index: i },
             },
@@ -345,22 +350,21 @@ function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId
         } as BonusDieRolledEvent);
     }
 
-    // 直接造成剑骰面数量的伤害（修复：原 accumulatedBonusDamage 无法跨上下文传递）
+    // 直接造成剑骰面数量的伤害
     if (swordCount > 0) {
-        const target = state.players[targetId];
+        const target = state.players[opponentId];
         const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
         const actualDamage = target ? Math.min(swordCount, targetHp) : 0;
         ctx.damageDealt += actualDamage;
         events.push({
             type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: swordCount, actualDamage, sourceAbilityId },
+            payload: { targetId: opponentId, amount: swordCount, actualDamage, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp,
         } as DamageDealtEvent);
     }
 
     // 对对手施加脑震荡
-    const opponentId = ctx.defenderId;
     const opponent = state.players[opponentId];
     const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
     const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
@@ -375,7 +379,7 @@ function handleMorePleaseRollDamage({ ctx, targetId, attackerId, sourceAbilityId
     } as StatusAppliedEvent);
 
     // 多骰展示
-    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, targetId, dice, timestamp));
+    events.push(createDisplayOnlySettlement(sourceAbilityId, attackerId, opponentId, dice, timestamp));
 
     return events;
 }

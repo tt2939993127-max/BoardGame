@@ -26,12 +26,12 @@ apps/api/src/shared/         # 公用模块（DTO/工具/中间件）
 ├── filters/          # 异常过滤器
 ├── guards/           # 鉴权守卫
 └── i18n.ts           # 服务端 i18n
-server.ts                    # 游戏服务入口（Boardgame.io + Lobby Socket）
+server.ts                    # 游戏服务入口（GameTransportServer + Lobby Socket）
 src/server/
 ├── db.ts                    # MongoDB 连接封装
 ├── email.ts                 # 邮件发送封装（NestJS 复用）
 ├── i18n.ts                  # 服务端 i18n（读取 public/locales/*/server.json）
-├── storage/                 # Boardgame.io 存储适配器
+├── storage/                 # 游戏状态存储适配器
 │   └── MongoStorage.ts      # MongoDB 持久化 + TTL
 └── models/
     └── MatchRecord.ts       # 对局归档模型
@@ -65,10 +65,10 @@ src/server/
   - 模块：`apps/api/src/modules/*`
   - Socket.IO：`apps/api/src/gateways/social.gateway.ts`
 
-- **游戏服务（Boardgame.io Server）**
+- **游戏服务（GameTransportServer）**
   - 入口：`server.ts`
   - 服务端游戏注册：基于 `src/games/manifest.server.ts`（`GAME_SERVER_MANIFEST`）
-  - 比赛归档：`MatchRecord` + `archiveMatchResult`
+  - 比赛归档：`MatchRecord` + `archiveMatchResult`（通过 `onGameOver` 回调触发）
   - 持久化存储：`src/server/storage/MongoStorage.ts`（TTL + `USE_PERSISTENT_STORAGE`）
 
 - **大厅实时通信（Socket.IO）**

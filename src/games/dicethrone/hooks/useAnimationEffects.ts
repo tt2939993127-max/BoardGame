@@ -26,6 +26,7 @@ import {
 import { useVisualStateBuffer } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import type { UseVisualStateBufferReturn } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import { RESOURCE_IDS } from '../domain/resources';
+import { useEventStreamCursor } from '../../../engine/hooks';
 
 /** 单步描述：cue + params + HP 冻结信息 */
 interface AnimStep {
@@ -33,6 +34,8 @@ interface AnimStep {
     params: FxParams;
     bufferKey: string;
     frozenHp: number;
+    /** 伤害值（用于受击反馈强度计算），治疗步骤为 0 */
+    damage: number;
 }
 
 /**
@@ -57,8 +60,10 @@ export interface AnimationEffectsConfig {
         opponentBuff: React.RefObject<HTMLDivElement | null>;
         selfBuff: React.RefObject<HTMLDivElement | null>;
     };
-    /** 获取效果起始位置的函数 */
+    /** 获取效果起始位置的函数（基于 lastEffectSourceByPlayerId 查找） */
     getEffectStartPos: (targetId?: string) => { x: number; y: number };
+    /** 获取技能槽位置的函数（直接从 abilityId 查 DOM，找不到返回屏幕中心） */
+    getAbilityStartPos: (abilityId?: string) => { x: number; y: number };
     /** 当前语言 */
     locale?: string;
     /** 状态图标图集配置 */
@@ -79,8 +84,8 @@ export interface AnimationEffectsConfig {
 export function useAnimationEffects(config: AnimationEffectsConfig): {
     /** 视觉状态缓冲：HP 在飞行动画到达前保持冻结 */
     damageBuffer: UseVisualStateBufferReturn;
-    /** FX 事件 ID → buffer key 映射，供 onEffectImpact 释放 */
-    fxImpactMapRef: React.RefObject<Map<string, string>>;
+    /** FX 事件 ID → { bufferKey, damage } 映射，供 onEffectImpact 释放 + 触发受击反馈 */
+    fxImpactMapRef: React.RefObject<Map<string, { bufferKey: string; damage: number }>>;
     /** 推进动画队列：Board 层在 onEffectComplete 中调用，播放下一步 */
     advanceQueue: (completedFxId: string) => void;
 } {
@@ -91,32 +96,24 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         opponentId,
         refs,
         getEffectStartPos,
+        getAbilityStartPos,
         locale,
         statusIconAtlas,
         eventStreamEntries = [],
     } = config;
 
     // ========================================================================
-    // 事件流消费：模式 A（过滤式），单一游标
+    // 事件流消费：通用游标（自动处理首次挂载跳过 + Undo 重置）
     // ========================================================================
-    const lastSeenIdRef = useRef<number>(-1);
-    const isFirstMountRef = useRef(true);
+    const { consumeNew } = useEventStreamCursor({ entries: eventStreamEntries });
 
     // 视觉状态缓冲：HP 在飞行动画到达前保持冻结
     const damageBuffer = useVisualStateBuffer();
-    // FX 事件 ID → buffer key 映射（飞行动画到达时释放对应 key）
-    const fxImpactMapRef = useRef(new Map<string, string>());
+    // FX 事件 ID → { bufferKey, damage } 映射（飞行动画到达时释放对应 key + 触发受击反馈）
+    const fxImpactMapRef = useRef(new Map<string, { bufferKey: string; damage: number }>());
     // damageBuffer ref 镜像（供 effect 内同步访问）
     const damageBufferRef = useRef(damageBuffer);
     damageBufferRef.current = damageBuffer;
-
-    // 首次挂载：将指针推进到末尾，跳过历史事件（防止刷新重播）
-    useEffect(() => {
-        if (isFirstMountRef.current && eventStreamEntries.length > 0) {
-            lastSeenIdRef.current = eventStreamEntries[eventStreamEntries.length - 1].id;
-            isFirstMountRef.current = false;
-        }
-    }, [eventStreamEntries]);
 
     /**
      * 构建单个伤害事件的 FX 参数
@@ -148,14 +145,20 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             params: { damage, startPos, endPos, ...(soundKey && { soundKey }) },
             bufferKey,
             frozenHp,
+            damage,
         };
     }, [currentPlayerId, opponentId, opponent, player, getEffectStartPos, refs.opponentHp, refs.selfHp]);
 
     /**
      * 构建单个治疗事件的 FX 参数
+     * 
+     * 治疗起点：从触发治疗的技能槽位置飞出（sourceAbilityId），
+     * 找不到技能槽时 fallback 到屏幕中心（如手牌触发的治疗）。
+     * 不使用 getEffectStartPos（它查的是"对目标造成效果的来源"，
+     * 治疗自己时会错误地指向对手的技能）。
      */
     const buildHealStep = useCallback((healEvent: HealAppliedEvent): AnimStep | null => {
-        const { targetId, amount } = healEvent.payload;
+        const { targetId, amount, sourceAbilityId } = healEvent.payload;
         if (amount <= 0) return null;
 
         const targetPlayer = targetId === opponentId ? opponent : player;
@@ -168,7 +171,8 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const frozenHp = coreHp - amount;
 
         const isOpponent = targetId === opponentId;
-        const startPos = getEffectStartPos(isOpponent ? opponentId : currentPlayerId);
+        // 治疗起点：直接从 sourceAbilityId 查技能槽位置，找不到则屏幕中心
+        const startPos = getAbilityStartPos(sourceAbilityId);
         const endPos = getElementCenter(isOpponent ? refs.opponentHp.current : refs.selfHp.current);
 
         return {
@@ -176,8 +180,9 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             params: { amount, startPos, endPos },
             bufferKey,
             frozenHp,
+            damage: 0,
         };
-    }, [currentPlayerId, opponentId, opponent, player, getEffectStartPos, refs.opponentHp, refs.selfHp]);
+    }, [opponentId, opponent, player, getAbilityStartPos, refs.opponentHp, refs.selfHp]);
 
     /**
      * 统一消费事件流：伤害 + 治疗
@@ -202,7 +207,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         }
         const fxId = fxBus.push(next.cue, {}, next.params);
         if (fxId) {
-            fxImpactMapRef.current.set(fxId, next.bufferKey);
+            fxImpactMapRef.current.set(fxId, { bufferKey: next.bufferKey, damage: next.damage });
             activeFxIdRef.current = fxId;
         } else {
             // cue 未注册或被跳过，继续推进
@@ -221,14 +226,8 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     }, [pushNextStep]);
 
     useEffect(() => {
-        if (isFirstMountRef.current) return;
-        if (eventStreamEntries.length === 0) return;
-
-        const newEntries = eventStreamEntries.filter(e => e.id > lastSeenIdRef.current);
+        const { entries: newEntries } = consumeNew();
         if (newEntries.length === 0) return;
-
-        // 无条件推进游标，无论事件类型
-        lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
 
         // 收集本批次的伤害和治疗步骤（伤害优先、治疗在后）
         const damageSteps: AnimStep[] = [];
@@ -264,7 +263,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
 
         const fxId = fxBus.push(first.cue, {}, first.params);
         if (fxId) {
-            fxImpactMapRef.current.set(fxId, first.bufferKey);
+            fxImpactMapRef.current.set(fxId, { bufferKey: first.bufferKey, damage: first.damage });
             activeFxIdRef.current = fxId;
         } else {
             // 首步失败，尝试推进队列
@@ -272,6 +271,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         }
     }, [
         eventStreamEntries,
+        consumeNew,
         opponentId,
         opponent,
         currentPlayerId,

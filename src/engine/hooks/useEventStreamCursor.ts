@@ -1,0 +1,119 @@
+/**
+ * useEventStreamCursor
+ * 
+ * 通用 EventStream 消费游标管理 hook。
+ * 封装"首次挂载跳过历史 + Undo 恢复重置游标"的标准逻辑，
+ * 消费者只需关注新事件的处理。
+ * 
+ * 所有判断在 consumeNew() 内同步完成，不依赖 useEffect 时序，
+ * 因此消费者无论用 useEffect 还是 useLayoutEffect 都能正确工作。
+ * 
+ * 解决的问题：
+ * - UndoSystem 恢复快照后 eventStream.entries 被清空、nextId 回退，
+ *   若消费者的游标不重置，后续新事件 ID < 旧游标值会被全部跳过。
+ * - entries 中最大 ID < 游标值（快照恢复后 nextId 回退），
+ *   同样需要重置游标并通知消费者。
+ */
+
+import { useCallback, useRef } from 'react';
+import type { EventStreamEntry } from '../types';
+
+export interface UseEventStreamCursorConfig {
+    /** eventStream 的 entries 数组 */
+    entries: EventStreamEntry[];
+}
+
+export interface ConsumeResult {
+    /** 新事件列表（游标已自动推进） */
+    entries: EventStreamEntry[];
+    /** 是否发生了 Undo 回退（消费者可据此清理 UI 状态） */
+    didReset: boolean;
+}
+
+export interface UseEventStreamCursorReturn {
+    /**
+     * 获取自上次调用以来的新事件（自动推进游标）。
+     * 
+     * 内部同步处理：
+     * 1. 首次调用：跳过历史事件，返回 { entries: [], didReset: false }
+     * 2. Undo 回退检测：entries 清空或 ID 回退时重置游标，didReset=true
+     * 3. 正常消费：返回 id > lastSeenId 的新事件，推进游标
+     * 
+     * 在 useEffect / useLayoutEffect 中调用均可。
+     */
+    consumeNew: () => ConsumeResult;
+    /** 当前游标值（只读，调试用） */
+    getCursor: () => number;
+}
+
+/**
+ * 管理 EventStream 消费游标。
+ * 
+ * 使用方式（简单场景，不需要 reset 清理）：
+ * ```ts
+ * const { consumeNew } = useEventStreamCursor({ entries });
+ * useEffect(() => {
+ *   const { entries: newEntries } = consumeNew();
+ *   if (newEntries.length === 0) return;
+ *   // ... 处理 newEntries
+ * }, [entries, consumeNew]);
+ * ```
+ * 
+ * 使用方式（需要 reset 清理）：
+ * ```ts
+ * const { consumeNew } = useEventStreamCursor({ entries });
+ * useLayoutEffect(() => {
+ *   const { entries: newEntries, didReset } = consumeNew();
+ *   if (didReset) { clearPendingAttack(); setAbilityMode(null); }
+ *   if (newEntries.length === 0) return;
+ *   // ... 处理 newEntries
+ * }, [entries, consumeNew]);
+ * ```
+ */
+export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEventStreamCursorReturn {
+    const { entries } = config;
+
+    const lastSeenIdRef = useRef<number>(-1);
+    const isFirstCallRef = useRef(true);
+    const prevEntriesLenRef = useRef(0);
+
+    const consumeNew = useCallback((): ConsumeResult => {
+        const prevLen = prevEntriesLenRef.current;
+        const curLen = entries.length;
+        prevEntriesLenRef.current = curLen;
+
+        // ── 首次调用：跳过历史事件 ──
+        if (isFirstCallRef.current) {
+            isFirstCallRef.current = false;
+            if (curLen > 0) {
+                lastSeenIdRef.current = entries[curLen - 1].id;
+            }
+            return { entries: [], didReset: false };
+        }
+
+        // ── Undo 回退检测 ──
+        // 情况 1：entries 从有到无（快照恢复后 entries 被清空）
+        if (prevLen > 0 && curLen === 0) {
+            lastSeenIdRef.current = -1;
+            return { entries: [], didReset: true };
+        }
+        // 情况 2：entries 存在但最大 ID < 游标（nextId 回退，新事件 ID 比旧游标小）
+        if (curLen > 0 && entries[curLen - 1].id < lastSeenIdRef.current) {
+            lastSeenIdRef.current = entries[curLen - 1].id;
+            return { entries: [...entries], didReset: true };
+        }
+
+        if (curLen === 0) return { entries: [], didReset: false };
+
+        // ── 正常消费 ──
+        const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);
+        if (newEntries.length > 0) {
+            lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
+        }
+        return { entries: newEntries, didReset: false };
+    }, [entries]);
+
+    const getCursor = useCallback(() => lastSeenIdRef.current, []);
+
+    return { consumeNew, getCursor };
+}

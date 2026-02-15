@@ -9,12 +9,12 @@ import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
     grantExtraMinion, destroyMinion,
     buildMinionTargetOptions,
+    buildMinionPlayedEvents,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type {
     PowerCounterRemovedEvent, SmashUpEvent, CardsDrawnEvent,
-    DeckReshuffledEvent, MinionCardDef, OngoingDetachedEvent,
-    MinionPlayedEvent,
+    DeckReorderedEvent, MinionCardDef, OngoingDetachedEvent,
 } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
@@ -123,18 +123,25 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                 events.push(
                     { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: m.controller, count: 1, cardUids: [card.uid] }, timestamp: ctx.now } as CardsDrawnEvent,
                     grantExtraMinion(m.controller, 'killer_plant_sprout', ctx.now),
-                    { type: SU_EVENTS.MINION_PLAYED, payload: { playerId: m.controller, cardUid: card.uid, defId: card.defId, baseIndex: sproutBaseIndex, power }, timestamp: ctx.now } as MinionPlayedEvent,
-                    buildDeckReshuffle(player, m.controller, [card.uid], ctx.now),
                 );
+                const playResult = buildMinionPlayedEvents({
+                    core: ctx.state, matchState: matchState ?? ctx.matchState, playerId: m.controller,
+                    cardUid: card.uid, defId: card.defId, baseIndex: sproutBaseIndex,
+                    power, random: ctx.random, now: ctx.now,
+                });
+                events.push(...playResult.events);
+                if (playResult.matchState) matchState = playResult.matchState;
+                events.push(buildDeckReshuffle(player, m.controller, [card.uid], ctx.now));
             } else if (matchState) {
                 // 多候选：创建交互让玩家选择
                 const options = eligible.map((c, idx) => {
                     const def = getMinionDef(c.defId);
                     return { id: `minion-${idx}`, label: `${def?.name ?? c.defId} (力量 ${def?.power ?? '?'})`, value: { cardUid: c.uid, defId: c.defId } };
                 });
+                options.push({ id: 'skip', label: '跳过', value: { skip: true } } as any);
                 const interaction = createSimpleChoice(
                     `killer_plant_sprout_search_${m.uid}_${ctx.now}`, m.controller,
-                    '嫩芽：选择一个力量≤3的随从打出', options as any[], 'killer_plant_sprout_search',
+                    '嫩芽：选择一个力量≤3的随从打出（可跳过）', options as any[], 'killer_plant_sprout_search',
                 );
                 // 传递 sprout 所在基地索引，交互处理器需要用它来锁定目标基地
                 (interaction.data as any).continuationContext = { baseIndex: sproutBaseIndex };
@@ -147,9 +154,15 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                 events.push(
                     { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: m.controller, count: 1, cardUids: [card.uid] }, timestamp: ctx.now } as CardsDrawnEvent,
                     grantExtraMinion(m.controller, 'killer_plant_sprout', ctx.now),
-                    { type: SU_EVENTS.MINION_PLAYED, payload: { playerId: m.controller, cardUid: card.uid, defId: card.defId, baseIndex: sproutBaseIndex, power }, timestamp: ctx.now } as MinionPlayedEvent,
-                    buildDeckReshuffle(player, m.controller, [card.uid], ctx.now),
                 );
+                const playResult = buildMinionPlayedEvents({
+                    core: ctx.state, matchState: matchState ?? ctx.matchState, playerId: m.controller,
+                    cardUid: card.uid, defId: card.defId, baseIndex: sproutBaseIndex,
+                    power, random: ctx.random, now: ctx.now,
+                });
+                events.push(...playResult.events);
+                if (playResult.matchState) matchState = playResult.matchState;
+                events.push(buildDeckReshuffle(player, m.controller, [card.uid], ctx.now));
             }
         }
     }
@@ -196,13 +209,19 @@ function killerPlantVenusManTrap(ctx: AbilityContext): AbilityResult {
         const card = eligible[0];
         const def = getMinionDef(card.defId);
         const power = def?.power ?? 0;
+        const playResult = buildMinionPlayedEvents({
+            core: ctx.state, matchState: ctx.matchState, playerId: ctx.playerId,
+            cardUid: card.uid, defId: card.defId, baseIndex: ctx.baseIndex,
+            power, random: ctx.random, now: ctx.now,
+        });
         return {
             events: [
                 { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: ctx.playerId, count: 1, cardUids: [card.uid] }, timestamp: ctx.now } as CardsDrawnEvent,
                 grantExtraMinion(ctx.playerId, 'killer_plant_venus_man_trap', ctx.now),
-                { type: SU_EVENTS.MINION_PLAYED, payload: { playerId: ctx.playerId, cardUid: card.uid, defId: card.defId, baseIndex: ctx.baseIndex, power }, timestamp: ctx.now } as MinionPlayedEvent,
+                ...playResult.events,
                 buildDeckReshuffle(player, ctx.playerId, [card.uid], ctx.now),
             ],
+            matchState: playResult.matchState,
         };
     }
     // 多个候选，Prompt 选择
@@ -297,11 +316,11 @@ function buildDeckReshuffle(
     playerId: string,
     drawnUids: string[],
     now: number,
-): DeckReshuffledEvent {
+): DeckReorderedEvent {
     const drawnSet = new Set(drawnUids);
     const remaining = player.deck.filter(c => !drawnSet.has(c.uid)).map(c => c.uid);
     return {
-        type: SU_EVENTS.DECK_RESHUFFLED,
+        type: SU_EVENTS.DECK_REORDERED,
         payload: { playerId, deckUids: remaining },
         timestamp: now,
     };
@@ -321,15 +340,20 @@ export function registerKillerPlantInteractionHandlers(): void {
         const baseIndex = contCtx?.baseIndex ?? 0;
         const def = getMinionDef(defId);
         const power = def?.power ?? 0;
-        return { state, events: [
+        const playResult = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid, defId,
+            baseIndex, power, random: _random, now: timestamp,
+        });
+        return { state: playResult.matchState ?? state, events: [
             { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as CardsDrawnEvent,
             grantExtraMinion(playerId, 'killer_plant_venus_man_trap', timestamp),
-            { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid, defId, baseIndex, power }, timestamp } as MinionPlayedEvent,
+            ...playResult.events,
             buildDeckReshuffle(player, playerId, [cardUid], timestamp),
         ] };
     });
 
     registerInteractionHandler('killer_plant_sprout_search', (state, playerId, value, iData, _random, timestamp) => {
+        if (value && (value as any).skip) return { state, events: [] };
         const { cardUid, defId } = value as { cardUid: string; defId: string };
         const player = state.core.players[playerId];
         // 从 continuationContext 获取 sprout 所在基地索引
@@ -337,10 +361,14 @@ export function registerKillerPlantInteractionHandlers(): void {
         const baseIndex = contCtx?.baseIndex ?? 0;
         const def = getMinionDef(defId);
         const power = def?.power ?? 0;
-        return { state, events: [
+        const playResult = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid, defId,
+            baseIndex, power, random: _random, now: timestamp,
+        });
+        return { state: playResult.matchState ?? state, events: [
             { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as CardsDrawnEvent,
             grantExtraMinion(playerId, 'killer_plant_sprout', timestamp),
-            { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid, defId, baseIndex, power }, timestamp } as MinionPlayedEvent,
+            ...playResult.events,
             buildDeckReshuffle(player, playerId, [cardUid], timestamp),
         ] };
     });

@@ -28,6 +28,7 @@ import {
 } from '../../../engine/primitives';
 import { createDeckByFactionId } from '../config/factions';
 import { buildGameDeckFromCustom } from '../config/deckBuilder';
+import { buildUsageKey } from './utils';
 import { getBaseCardId, CARD_IDS } from './ids';
 
 // ============================================================================
@@ -46,12 +47,14 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     }
 
     case SW_EVENTS.UNIT_SUMMONED: {
-      const { playerId, cardId, position, card, fromDiscard } = payload as {
-        playerId: PlayerId; cardId: string; position: CellCoord; card: UnitCard; fromDiscard?: boolean;
+      const { playerId, cardId, position, card, fromDiscard, instanceId: payloadInstanceId } = payload as {
+        playerId: PlayerId; cardId: string; position: CellCoord; card: UnitCard; fromDiscard?: boolean; instanceId?: string;
       };
+      // 优先使用 payload 中的 instanceId（例如回放/兼容链路），否则基于当前棋盘分配下一个可用序号。
+      const instanceId = payloadInstanceId || allocateNextInstanceId(core, cardId);
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       newBoard[position.row][position.col].unit = {
-        cardId, card, owner: playerId, position, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
+        instanceId, cardId, card, owner: playerId, position, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
       };
       const player = core.players[playerId];
       if (fromDiscard) {
@@ -269,24 +272,35 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         },
         // 清空技能使用次数追踪
         abilityUsageCount: {},
+        // 清空单位本回合击杀计数
+        unitKillCountThisTurn: {},
       };
     }
 
     // ========== 技能系统事件 ==========
 
     case SW_EVENTS.UNIT_DESTROYED: {
-      const { position, owner: destroyedOwner, reason, killerPlayerId, skipMagicReward } = payload as {
-        position: CellCoord; cardId: string; cardName: string; owner: PlayerId; reason?: string; killerPlayerId?: PlayerId; skipMagicReward?: boolean;
+      const { position, owner: destroyedOwner, reason, killerPlayerId, killerUnitId, skipMagicReward } = payload as {
+        position: CellCoord;
+        cardId: string;
+        cardName: string;
+        owner: PlayerId;
+        reason?: string;
+        killerPlayerId?: PlayerId;
+        killerUnitId?: string;
+        skipMagicReward?: boolean;
       };
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       let cell = newBoard[position.row]?.[position.col];
       let foundUnit = cell?.unit;
 
       if (!foundUnit) {
+        // 优先用 instanceId 查找（唯一匹配），fallback 用 cardId
+        const instanceId = (payload as { instanceId?: string }).instanceId;
         for (let row = 0; row < newBoard.length; row++) {
           for (let col = 0; col < newBoard[row].length; col++) {
             const unit = newBoard[row]?.[col]?.unit;
-            if (unit && unit.cardId === (payload as { cardId: string }).cardId) {
+            if (unit && (instanceId ? unit.instanceId === instanceId : unit.cardId === (payload as { cardId: string }).cardId)) {
               foundUnit = unit;
               cell = newBoard[row][col];
               break;
@@ -306,6 +320,12 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         const rewardPlayerId = killerPlayerId && killerPlayerId !== actualOwner && !skipMagicReward
           ? killerPlayerId
           : undefined;
+        const nextKillCountThisTurn = (killerUnitId && killerUnitId !== foundUnit.instanceId)
+          ? {
+            ...(core.unitKillCountThisTurn ?? {}),
+            [killerUnitId]: ((core.unitKillCountThisTurn ?? {})[killerUnitId] ?? 0) + 1,
+          }
+          : core.unitKillCountThisTurn;
 
         // 不屈不挠检查：友方士兵被消灭时返回手牌（非自毁原因）
         const hasRelentless = ownerPlayer.activeEvents.some(ev => {
@@ -343,6 +363,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
               return {
                 ...core,
                 board: newBoard,
+                unitKillCountThisTurn: nextKillCountThisTurn,
                 players: {
                   ...core.players,
                   [actualOwner]: { ...ownerWithUpdatedEvents, hand: [...ownerWithUpdatedEvents.hand, destroyedCard], discard: [...ownerWithUpdatedEvents.discard, ...attachedUnitCards, ...attachedEventCards] },
@@ -360,6 +381,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
             return {
               ...core,
               board: newBoard,
+              unitKillCountThisTurn: nextKillCountThisTurn,
               players: {
                 ...core.players,
                 [actualOwner]: { ...ownerWithUpdatedEvents, discard: [...ownerWithUpdatedEvents.discard, destroyedCard, ...attachedUnitCards, ...attachedEventCards] },
@@ -383,6 +405,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
           return {
             ...core,
             board: newBoard,
+            unitKillCountThisTurn: nextKillCountThisTurn,
             players: {
               ...core.players,
               [actualOwner]: { ...ownerWithEvents, hand: [...ownerWithEvents.hand, destroyedCard], discard: [...ownerWithEvents.discard, ...attachedUnitCards, ...attachedEventCards] },
@@ -400,6 +423,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
         return {
           ...core,
           board: newBoard,
+          unitKillCountThisTurn: nextKillCountThisTurn,
           players: {
             ...core.players,
             [actualOwner]: { ...ownerWithEvents, discard: [...ownerWithEvents.discard, destroyedCard, ...attachedUnitCards, ...attachedEventCards] },
@@ -512,16 +536,17 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       // 记录技能使用次数（用于限制每回合使用次数）
       const abilityPayload = event.payload as {
         abilityId?: string; sourceUnitId?: string;
+        sourcePosition?: CellCoord;
         grantedAbility?: string; targetUnitId?: string;
         skipUsageCount?: boolean;
       };
 
       let updatedCore = core;
 
-      // 力量颂歌等：将 grantedAbility 写入目标单位的 tempAbilities
+      // 力量颂歌等：将 grantedAbility 写入目标单位的 tempAbilities（targetUnitId 为 instanceId）
       if (abilityPayload.grantedAbility && abilityPayload.targetUnitId) {
         const newBoard = updatedCore.board.map(row => row.map(cell => {
-          if (cell.unit && cell.unit.cardId === abilityPayload.targetUnitId) {
+          if (cell.unit && cell.unit.instanceId === abilityPayload.targetUnitId) {
             const existing = cell.unit.tempAbilities ?? [];
             if (!existing.includes(abilityPayload.grantedAbility!)) {
               return { ...cell, unit: { ...cell.unit, tempAbilities: [...existing, abilityPayload.grantedAbility!] } };
@@ -563,7 +588,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
       }
 
       if (abilityPayload.abilityId && abilityPayload.sourceUnitId && !abilityPayload.skipUsageCount) {
-        const usageKey = `${abilityPayload.sourceUnitId}:${abilityPayload.abilityId}`;
+        const usageKey = buildUsageKey(abilityPayload.sourceUnitId, abilityPayload.abilityId);
         return {
           ...updatedCore,
           abilityUsageCount: {
@@ -620,12 +645,12 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     }
 
     case SW_EVENTS.ABILITIES_COPIED: {
-      // 幻化：将目标技能复制到源单位的 tempAbilities
+      // 幻化：将目标技能复制到源单位的 tempAbilities（sourceUnitId 为 instanceId）
       const { sourceUnitId: copySourceId, copiedAbilities: copied } = payload as {
         sourceUnitId: string; copiedAbilities: string[];
       };
       const newBoard = core.board.map(row => row.map(cell => {
-        if (cell.unit && cell.unit.cardId === copySourceId) {
+        if (cell.unit && cell.unit.instanceId === copySourceId) {
           return { ...cell, unit: { ...cell.unit, tempAbilities: copied } };
         }
         return cell;
@@ -812,6 +837,42 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
 // 棋盘初始化（选角完成后）
 // ============================================================================
 
+const INSTANCE_ID_SUFFIX_RE = /#(\d+)$/;
+
+function collectUsedInstanceIds(core: SummonerWarsCore): Set<string> {
+  const usedIds = new Set<string>();
+  for (let row = 0; row < BOARD_ROWS; row += 1) {
+    for (let col = 0; col < BOARD_COLS; col += 1) {
+      const instanceId = core.board[row]?.[col]?.unit?.instanceId;
+      if (instanceId) {
+        usedIds.add(instanceId);
+      }
+    }
+  }
+  return usedIds;
+}
+
+function allocateNextInstanceId(core: SummonerWarsCore, cardId: string): string {
+  const usedIds = collectUsedInstanceIds(core);
+  let nextSeq = 1;
+
+  for (const id of usedIds) {
+    const matched = id.match(INSTANCE_ID_SUFFIX_RE);
+    if (!matched) continue;
+    const seq = Number(matched[1]);
+    if (Number.isFinite(seq) && seq >= nextSeq) {
+      nextSeq = seq + 1;
+    }
+  }
+
+  let candidate = `${cardId}#${nextSeq}`;
+  while (usedIds.has(candidate)) {
+    nextSeq += 1;
+    candidate = `${cardId}#${nextSeq}`;
+  }
+  return candidate;
+}
+
 function initializeBoardFromFactions(
   core: SummonerWarsCore,
   factions: Record<PlayerId, FactionId>,
@@ -821,6 +882,11 @@ function initializeBoardFromFactions(
     Array.from({ length: BOARD_COLS }, () => ({}))
   );
   const newPlayers = { ...core.players };
+  let nextSeq = 0;
+  const allocateInitInstanceId = (cardId: string): string => {
+    nextSeq += 1;
+    return `${cardId}#${nextSeq}`;
+  };
 
   for (const pid of ['0', '1'] as PlayerId[]) {
     const factionId = factions[pid];
@@ -847,6 +913,7 @@ function initializeBoardFromFactions(
     player.summonerId = summonerCard.id;
     const summonerPos = toArrayCoord(deckData.summonerPosition);
     newBoard[summonerPos.row][summonerPos.col].unit = {
+      instanceId: allocateInitInstanceId(summonerCard.id),
       cardId: summonerCard.id, card: summonerCard, owner: pid,
       position: summonerPos, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
     };
@@ -863,6 +930,7 @@ function initializeBoardFromFactions(
       const unitCard: UnitCard = { ...startUnit.unit, id: `${startUnit.unit.id}-${pid}` };
       const unitPos = toArrayCoord(startUnit.position);
       newBoard[unitPos.row][unitPos.col].unit = {
+        instanceId: allocateInitInstanceId(unitCard.id),
         cardId: unitCard.id, card: unitCard, owner: pid,
         position: unitPos, damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
       };

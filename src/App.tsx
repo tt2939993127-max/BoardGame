@@ -43,6 +43,7 @@ const UgcPackagesPage = React.lazy(() => import('./pages/admin/UgcPackages'));
 const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
 const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
+const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications'));
 
 
 import AdminGuard from './components/auth/AdminGuard';
@@ -94,6 +95,7 @@ const App = () => {
                             <Route path="sponsors" element={<SponsorsPage />} />
                             <Route path="feedback" element={<FeedbackPage />} />
                             <Route path="health" element={<SystemHealthPage />} />
+                            <Route path="notifications" element={<NotificationsPage />} />
                           </Route>
 
                           <Route path="*" element={<NotFound />} />

@@ -33,7 +33,7 @@ import { getBaseCardId, CARD_IDS } from '../ids';
 /**
  * 在棋盘上按 cardId 查找单位
  *
- * 替代 execute.ts 中 5 处嵌套 for row/col 循环。
+ * @deprecated 同类型多单位时只返回第一个，应使用 findBoardUnitByInstanceId
  */
 export function findBoardUnitByCardId(
   core: SummonerWarsCore,
@@ -43,6 +43,20 @@ export function findBoardUnitByCardId(
   const result = findOnGrid<BoardCell>(core.board, (cell) => {
     const unit = cell.unit;
     return !!unit && unit.cardId === cardId && (!ownerFilter || unit.owner === ownerFilter);
+  });
+  if (!result || !result.cell.unit) return undefined;
+  return { unit: result.cell.unit, position: result.position };
+}
+
+/**
+ * 在棋盘上按 instanceId 查找单位（唯一匹配）
+ */
+export function findBoardUnitByInstanceId(
+  core: SummonerWarsCore,
+  instanceId: string,
+): { unit: BoardUnit; position: CellCoord } | undefined {
+  const result = findOnGrid<BoardCell>(core.board, (cell) => {
+    return !!cell.unit && cell.unit.instanceId === instanceId;
   });
   if (!result || !result.cell.unit) return undefined;
   return { unit: result.cell.unit, position: result.position };
@@ -122,10 +136,12 @@ export function emitDestroyWithTriggers(
     payload: {
       position,
       cardId: victim.cardId,
+      instanceId: victim.instanceId,
       cardName: victim.card.name,
       owner: victim.owner,
       ...(opts.reason ? { reason: opts.reason } : {}),
       ...(killerPlayerId ? { killerPlayerId } : {}),
+      ...(opts.killer?.unit.instanceId ? { killerUnitId: opts.killer.unit.instanceId } : {}),
       ...(opts.skipMagicReward ? { skipMagicReward: true } : {}),
     },
     timestamp: opts.timestamp,
@@ -184,13 +200,15 @@ export function postProcessDeathChecks(
   events: GameEvent[],
   originalCore: SummonerWarsCore,
 ): GameEvent[] {
-  // 预收集已有 UNIT_DESTROYED 的 cardId，避免重复注入
-  const destroyedCardIds = new Set<string>();
+  // 预收集已有 UNIT_DESTROYED 的 instanceId（优先）和 cardId（兼容），避免重复注入
+  const destroyedUnitIds = new Set<string>();
   const destroyedStructureIds = new Set<string>();
   for (const e of events) {
     if (e.type === SW_EVENTS.UNIT_DESTROYED) {
-      const cardId = (e.payload as Record<string, unknown>).cardId as string;
-      if (cardId) destroyedCardIds.add(cardId);
+      const p = e.payload as Record<string, unknown>;
+      // 优先用 instanceId 去重，兼容旧事件用 cardId
+      const id = (p.instanceId as string) ?? (p.cardId as string);
+      if (id) destroyedUnitIds.add(id);
     }
     if (e.type === SW_EVENTS.STRUCTURE_DESTROYED) {
       const cardId = (e.payload as Record<string, unknown>).cardId as string;
@@ -217,18 +235,19 @@ export function postProcessDeathChecks(
       const unit = cell?.unit;
       const structure = cell?.structure;
 
-      if (unit && !destroyedCardIds.has(unit.cardId)) {
+      if (unit && !destroyedUnitIds.has(unit.instanceId)) {
         const newDamage = unit.damage + damage;
         if (newDamage >= getEffectiveLife(unit, workingState)) {
-          // 注入完整触发链
+          // 注入完整触发链（triggerOnDeath: 间接伤害致死也应触发 onDeath 能力，如献祭）
           const destroyEvents = emitDestroyWithTriggers(workingState, unit, position, {
             playerId: sourcePlayerId ?? workingState.currentPlayer,
             killerPlayerId: sourcePlayerId,
             skipMagicReward,
             timestamp: event.timestamp,
+            triggerOnDeath: true,
           });
           result.splice(idx + 1, 0, ...destroyEvents);
-          destroyedCardIds.add(unit.cardId);
+          destroyedUnitIds.add(unit.instanceId);
         }
       } else if (structure && !destroyedStructureIds.has(structure.cardId)) {
         const newDamage = structure.damage + damage;

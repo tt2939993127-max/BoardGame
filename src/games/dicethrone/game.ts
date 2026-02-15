@@ -4,7 +4,7 @@
  * 使用领域内核 + 引擎适配器
  */
 
-import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
+import type { ActionLogEntry, ActionLogSegment, BreakdownLine, Command, GameEvent, MatchState, PlayerId } from '../../engine/types';
 import {
     createActionLogSystem,
     createCheatSystem,
@@ -232,43 +232,67 @@ function formatDiceThroneActionEntry({
             const effectiveSourceId = sourceAbilityId ?? attackResolved?.payload.sourceAbilityId;
             const source = resolveAbilitySourceLabel(effectiveSourceId, core, actorId);
 
-            let segments: ReturnType<typeof i18nSeg>[];
+            // 构建 breakdown 明细行（所有伤害都用 breakdown，统一虚线下划线风格）
+            const breakdownLines: BreakdownLine[] = [];
+            if (modifiers && modifiers.length > 0) {
+                // 有修改器：推算基础伤害 + 各修改器
+                const modTotal = modifiers.reduce((sum, m) => sum + m.value, 0);
+                const baseDamage = dealt - modTotal;
+                breakdownLines.push({
+                    label: 'actionLog.damageSource.original', labelIsI18n: true, labelNs: DT_NS,
+                    value: baseDamage, color: 'neutral',
+                });
+                modifiers.forEach(mod => {
+                    const isI18n = !!mod.sourceName?.includes('.');
+                    breakdownLines.push({
+                        label: mod.sourceName || mod.sourceId || mod.type,
+                        labelIsI18n: isI18n,
+                        labelNs: isI18n ? DT_NS : undefined,
+                        value: mod.value,
+                        color: mod.value > 0 ? 'positive' : 'negative',
+                    });
+                });
+            } else if (source) {
+                // 无修改器但有来源：显示来源名 + 数值
+                breakdownLines.push({
+                    label: source.label, labelIsI18n: source.isI18n, labelNs: source.isI18n ? DT_NS : undefined,
+                    value: dealt, color: 'neutral',
+                });
+            }
+
+            const breakdownSeg: ActionLogSegment = {
+                type: 'breakdown',
+                displayText: String(dealt),
+                lines: breakdownLines,
+            };
+
+            // 统一用 before + breakdown + after 模式
+            let segments: ActionLogSegment[];
             if (isSelfDamage) {
-                if (source) {
-                    segments = [i18nSeg('actionLog.damageTaken', {
-                        amount: dealt, source: source.label,
-                    }, source.isI18n ? ['source'] : undefined)];
-                } else {
-                    segments = [i18nSeg('actionLog.damageTakenPlain', { amount: dealt })];
-                }
+                const afterKey = source ? 'actionLog.damageAfter.takenWithSource' : 'actionLog.damageAfter.taken';
+                const afterParams = source ? { source: source.label } : undefined;
+                const afterI18nKeys = source?.isI18n ? ['source'] : undefined;
+                segments = [
+                    i18nSeg('actionLog.damageBefore.taken'),
+                    breakdownSeg,
+                    i18nSeg(afterKey, afterParams, afterI18nKeys),
+                ];
             } else {
                 if (source) {
-                    segments = [i18nSeg('actionLog.damageDealt', {
-                        amount: dealt, targetPlayerId: targetId, source: source.label,
-                    }, source.isI18n ? ['source'] : undefined)];
+                    segments = [
+                        i18nSeg('actionLog.damageBefore.dealt', { targetPlayerId: targetId, source: source.label }, source.isI18n ? ['source'] : undefined),
+                        breakdownSeg,
+                        i18nSeg('actionLog.damageAfter.dealt', { targetPlayerId: targetId, source: source.label }, source.isI18n ? ['source'] : undefined),
+                    ];
                 } else {
-                    segments = [i18nSeg('actionLog.damageDealtPlain', {
-                        amount: dealt, targetPlayerId: targetId,
-                    })];
+                    segments = [
+                        i18nSeg('actionLog.damageBefore.dealtPlain', { targetPlayerId: targetId }),
+                        breakdownSeg,
+                        i18nSeg('actionLog.damageAfter.dealtPlain', { targetPlayerId: targetId }),
+                    ];
                 }
             }
-            
-            // 如果有修改器，显示详细的伤害计算过程
-            if (modifiers && modifiers.length > 0 && amount !== dealt) {
-                const modifierParts: string[] = [];
-                modifiers.forEach(mod => {
-                    const modValue = mod.value;
-                    const modLabel = mod.sourceName || mod.sourceId || mod.type;
-                    modifierParts.push(`${modLabel} ${modValue > 0 ? '+' : ''}${modValue}`);
-                });
-                segments.push(i18nSeg('actionLog.damageModifiers', {
-                    original: amount,
-                    modifiers: modifierParts.join(', '),
-                }));
-            } else if (amount !== undefined && actualDamage !== undefined && amount !== actualDamage) {
-                // 兼容旧逻辑：如果没有 modifiers 但伤害不同，显示原始伤害
-                segments.push(i18nSeg('actionLog.damageOriginal', { amount }));
-            }
+
             entries.push({
                 id: `DAMAGE_DEALT-${targetId}-${entryTimestamp}-${index}`,
                 timestamp: entryTimestamp,
@@ -281,13 +305,43 @@ function formatDiceThroneActionEntry({
 
         if (event.type === 'HEAL_APPLIED') {
             const healEvent = event as HealAppliedEvent;
-            const { targetId, amount } = healEvent.payload;
+            const { targetId, amount, sourceAbilityId: healSourceId } = healEvent.payload;
+
+            // 解析治疗来源
+            const healSource = resolveAbilitySourceLabel(healSourceId, core, command.playerId);
+
+            // 构建 breakdown 明细行
+            const healLines: BreakdownLine[] = [];
+            if (healSource) {
+                healLines.push({
+                    label: healSource.label,
+                    labelIsI18n: healSource.isI18n,
+                    labelNs: healSource.isI18n ? DT_NS : undefined,
+                    value: amount,
+                    color: 'positive',
+                });
+            }
+
+            const healBreakdown: ActionLogSegment = {
+                type: 'breakdown',
+                displayText: String(amount),
+                lines: healLines,
+            };
+
+            const afterKey = healSource ? 'actionLog.healAfter.withSource' : 'actionLog.healAfter.plain';
+            const afterParams = healSource ? { source: healSource.label } : undefined;
+            const afterI18nKeys = healSource?.isI18n ? ['source'] : undefined;
+
             entries.push({
                 id: `HEAL_APPLIED-${targetId}-${entryTimestamp}-${index}`,
                 timestamp: entryTimestamp,
                 actorId: command.playerId,
                 kind: 'HEAL_APPLIED',
-                segments: [i18nSeg('actionLog.healApplied', { targetPlayerId: targetId, amount })],
+                segments: [
+                    i18nSeg('actionLog.healBefore', { targetPlayerId: targetId }),
+                    healBreakdown,
+                    i18nSeg(afterKey, afterParams, afterI18nKeys),
+                ],
             });
             return;
         }

@@ -34,7 +34,7 @@ TBD - created by archiving change add-social-hub. Update Purpose after archive.
 
 #### Scenario: game-server 独立运行
 - **WHEN** API 服务合并为单体部署
-- **THEN** `server.ts` 的 Boardgame.io 服务独立运行
+- **THEN** `server.ts` 的游戏传输层服务独立运行
 - **AND** game-server 端口保持现状
 
 ### Requirement: Redis 缓存层
@@ -74,10 +74,10 @@ TBD - created by archiving change add-social-hub. Update Purpose after archive.
 - **AND** 返回 `items`、`page`、`limit`、`total`、`hasMore`
 
 ### Requirement: 双后端边界
-系统 SHALL 保持 Boardgame.io 游戏服务独立运行。
+系统 SHALL 保持游戏传输层服务独立运行。
 
 #### Scenario: 游戏服务保持不变
 - **WHEN** API 服务迁移至 NestJS
-- **THEN** `server.ts` 的 Boardgame.io 服务无需改动
+- **THEN** `server.ts` 的游戏传输层服务无需改动
 - **AND** 游戏服务端口与大厅广播逻辑保持现状
 

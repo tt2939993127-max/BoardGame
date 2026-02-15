@@ -133,6 +133,8 @@ interface ProtectionEntry {
     sourceDefId: string;
     protectionType: ProtectionType;
     checker: ProtectionChecker;
+    /** 消耗型保护：触发后需要消灭来源卡牌（如 trickster_hideout） */
+    consumable?: boolean;
 }
 
 interface RestrictionEntry {
@@ -166,9 +168,10 @@ const baseAbilitySuppressionRegistry: { sourceDefId: string; checker: BaseAbilit
 export function registerProtection(
     sourceDefId: string,
     protectionType: ProtectionType,
-    checker: ProtectionChecker
+    checker: ProtectionChecker,
+    options?: { consumable?: boolean }
 ): void {
-    protectionRegistry.push({ sourceDefId, protectionType, checker });
+    protectionRegistry.push({ sourceDefId, protectionType, checker, consumable: options?.consumable });
 }
 
 /** 注册限制拦截器 */
@@ -306,6 +309,48 @@ export function isMinionProtected(
         if (entry.checker(ctx)) return true;
     }
     return false;
+}
+
+/**
+ * 查找消耗型保护来源卡牌
+ *
+ * 当 isMinionProtected 返回 true 且保护来源是消耗型（如 trickster_hideout），
+ * 返回需要消灭的 ongoing 卡牌信息，供调用方发射 ONGOING_DETACHED 事件。
+ * 非消耗型保护返回 undefined。
+ */
+export function getConsumableProtectionSource(
+    state: SmashUpCore,
+    targetMinion: MinionOnBase,
+    targetBaseIndex: number,
+    sourcePlayerId: PlayerId,
+    protectionType: ProtectionType
+): { uid: string; defId: string; ownerId: string } | undefined {
+    if (protectionRegistry.length === 0) return undefined;
+
+    const ctx: ProtectionCheckContext = {
+        state,
+        targetMinion,
+        targetBaseIndex,
+        sourcePlayerId,
+        protectionType,
+    };
+
+    for (const entry of protectionRegistry) {
+        if (entry.protectionType !== protectionType) continue;
+        if (!entry.consumable) continue;
+        if (!isSourceActive(state, entry.sourceDefId)) continue;
+        if (!entry.checker(ctx)) continue;
+        // 找到消耗型保护来源，查找具体的 ongoing 卡牌实例
+        const base = state.bases[targetBaseIndex];
+        if (!base) continue;
+        // 先检查随从附着
+        const attached = targetMinion.attachedActions.find(a => a.defId === entry.sourceDefId);
+        if (attached) return { uid: attached.uid, defId: attached.defId, ownerId: attached.ownerId };
+        // 再检查基地 ongoing
+        const ongoing = base.ongoingActions.find(o => o.defId === entry.sourceDefId);
+        if (ongoing) return { uid: ongoing.uid, defId: ongoing.defId, ownerId: ongoing.ownerId };
+    }
+    return undefined;
 }
 
 /**

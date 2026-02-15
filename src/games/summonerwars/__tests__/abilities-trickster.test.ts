@@ -23,7 +23,7 @@ import {
   getEffectiveAttackRangeBase, getStormAssaultReduction,
 } from '../domain/helpers';
 import { calculateEffectiveStrength } from '../domain/abilityResolver';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -55,8 +55,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -293,7 +295,7 @@ describe('掷术师 - 缠斗 (rebound)', () => {
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
     // 友方掷术师在 (4,2)
-    placeUnit(state, { row: 4, col: 2 }, {
+    const telekinetic = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-telekinetic',
       card: makeTelekinetic('test-telekinetic'),
       owner: '0',
@@ -322,7 +324,7 @@ describe('掷术师 - 缠斗 (rebound)', () => {
     );
     expect(damageEvents.length).toBe(1);
     expect((damageEvents[0].payload as any).damage).toBe(1);
-    expect((damageEvents[0].payload as any).sourceUnitId).toBe('test-telekinetic');
+    expect((damageEvents[0].payload as any).sourceUnitId).toBe(telekinetic.instanceId);
   });
 
   it('敌方单位移动但未远离掷术师时不受伤害', () => {
@@ -659,14 +661,14 @@ describe('泰珂露 - 心灵捕获 (mind_capture)', () => {
       clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
       // 泰珂露在 (4,2)，strength=3
-      placeUnit(state, { row: 4, col: 2 }, {
+      const summoner = placeUnit(state, { row: 4, col: 2 }, {
         cardId: 'test-summoner',
         card: makeSummoner('test-summoner'),
         owner: '0',
       });
 
       // 敌方单位在 (4,4)，life=2，距离2格（远程直线）
-      placeUnit(state, { row: 4, col: 4 }, {
+      const enemy = placeUnit(state, { row: 4, col: 4 }, {
         cardId: 'test-enemy',
         card: makeEnemy('test-enemy', { life: 2 }),
         owner: '1',
@@ -685,8 +687,8 @@ describe('泰珂露 - 心灵捕获 (mind_capture)', () => {
       // 应有 MIND_CAPTURE_REQUESTED 事件
       const mcEvents = events.filter(e => e.type === SW_EVENTS.MIND_CAPTURE_REQUESTED);
       expect(mcEvents.length).toBe(1);
-      expect((mcEvents[0].payload as any).sourceUnitId).toBe('test-summoner');
-      expect((mcEvents[0].payload as any).targetUnitId).toBe('test-enemy');
+      expect((mcEvents[0].payload as any).sourceUnitId).toBe(summoner.instanceId);
+      expect((mcEvents[0].payload as any).targetUnitId).toBe(enemy.instanceId);
 
       // 不应有 UNIT_DAMAGED 事件（心灵捕获时暂停伤害）
       const damageEvents = events.filter(
@@ -1287,7 +1289,7 @@ describe('欺心巫族事件卡 - 催眠引诱 (hypnotic-lure)', () => {
     });
     state.players['0'].summonerId = 'test-summoner';
 
-    placeUnit(state, { row: 3, col: 2 }, {
+    const lureTarget = placeUnit(state, { row: 3, col: 2 }, {
       cardId: 'test-lure-target',
       card: makeEnemy('test-lure-target', { life: 5 }),
       owner: '1',
@@ -1316,7 +1318,7 @@ describe('欺心巫族事件卡 - 催眠引诱 (hypnotic-lure)', () => {
       e => e.id === 'trickster-hypnotic-lure'
     );
     expect(lureEvent).toBeDefined();
-    expect(lureEvent!.targetUnitId).toBe('test-lure-target');
+    expect(lureEvent!.targetUnitId).toBe(lureTarget.instanceId);
   });
 
   it('召唤师攻击被催眠目标时战力+1', () => {
@@ -1349,7 +1351,7 @@ describe('欺心巫族事件卡 - 催眠引诱 (hypnotic-lure)', () => {
       effect: '',
       isActive: true,
       deckSymbols: [],
-      targetUnitId: 'test-lured',
+      targetUnitId: luredUnit.instanceId,
     });
 
     // 计算战力：基础3 + 催眠引诱1 = 4

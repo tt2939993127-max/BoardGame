@@ -20,6 +20,10 @@ import {
   getAdjacentPositions as getAdjacentPositionsEngine,
   findOnGrid,
   collectOnGrid,
+  isInStraightGridLine,
+  getStraightGridPath,
+  findAllShortestGridPaths,
+  selectBestGridPath,
 } from '../../../engine/primitives/grid';
 import { getBaseCardId, CARD_IDS } from './ids';
 
@@ -73,25 +77,12 @@ export function getAdjacentCells(coord: CellCoord): CellCoord[] {
 
 /** 检查是否在直线上（用于远程攻击） */
 export function isInStraightLine(a: CellCoord, b: CellCoord): boolean {
-  return a.row === b.row || a.col === b.col;
+  return isInStraightGridLine(a, b);
 }
 
 /** 获取两点之间的直线路径（不含起点） */
 export function getStraightLinePath(from: CellCoord, to: CellCoord): CellCoord[] {
-  if (!isInStraightLine(from, to)) return [];
-  
-  const path: CellCoord[] = [];
-  const dr = Math.sign(to.row - from.row);
-  const dc = Math.sign(to.col - from.col);
-  
-  let current = { row: from.row + dr, col: from.col + dc };
-  while (current.row !== to.row || current.col !== to.col) {
-    path.push({ ...current });
-    current = { row: current.row + dr, col: current.col + dc };
-  }
-  path.push(to);
-  
-  return path;
+  return getStraightGridPath(from, to);
 }
 
 // ============================================================================
@@ -121,10 +112,46 @@ export function isCellEmpty(state: SummonerWarsCore, coord: CellCoord): boolean 
   return !cell?.unit && !cell?.structure;
 }
 
+/**
+ * 检查直线强制移动路径是否可通行
+ *
+ * 强制移动（Force）规则：沿单一方向（水平或垂直）滑动卡牌若干空格。
+ * 路径上每一格（含终点）都必须是空的且在界内。
+ * 起点和终点必须在同一行或同一列（直线）。
+ *
+ * @param state 游戏状态
+ * @param from  起点（被移动卡牌当前位置）
+ * @param to    终点（目标位置）
+ * @returns 路径是否可通行
+ */
+export function isForceMovePathClear(state: SummonerWarsCore, from: CellCoord, to: CellCoord): boolean {
+  if (!isInStraightLine(from, to)) return false;
+  const dr = Math.sign(to.row - from.row);
+  const dc = Math.sign(to.col - from.col);
+  let r = from.row + dr;
+  let c = from.col + dc;
+  while (r !== to.row + dr || c !== to.col + dc) {
+    if (!isCellEmpty(state, { row: r, col: c })) return false;
+    r += dr;
+    c += dc;
+  }
+  return true;
+}
+
 /** 获取玩家的所有单位 */
 export function getPlayerUnits(state: SummonerWarsCore, playerId: PlayerId): BoardUnit[] {
   return collectOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.owner === playerId)
     .map(r => r.cell.unit!);
+}
+
+/** 获取单位本回合已消灭单位数量 */
+export function getUnitKillCountThisTurn(state: SummonerWarsCore, unitInstanceId: string): number {
+  return (state.unitKillCountThisTurn ?? {})[unitInstanceId] ?? 0;
+}
+
+/** 单位本回合是否至少消灭过一个单位 */
+export function hasUnitKilledThisTurn(state: SummonerWarsCore, unitInstanceId: string): boolean {
+  return getUnitKillCountThisTurn(state, unitInstanceId) > 0;
 }
 
 /** 获取玩家的召唤师 */
@@ -132,13 +159,25 @@ export function getSummoner(state: SummonerWarsCore, playerId: PlayerId): BoardU
   return getPlayerUnits(state, playerId).find(u => u.card.unitClass === 'summoner');
 }
 
-/** 按 cardId 查找单位在棋盘上的位置 */
+/** 按 cardId 查找单位在棋盘上的位置（仅用于卡牌类型查找，同类型多单位时返回第一个） */
 export function findUnitPosition(state: SummonerWarsCore, cardId: string): CellCoord | null {
   const result = findOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.cardId === cardId);
   return result ? result.position : null;
 }
 
-/** 按 cardId 查找棋盘上的单位（私有，仅返回 BoardUnit，不含位置） */
+/** 按 instanceId 查找单位在棋盘上的位置 */
+export function findUnitPositionByInstanceId(state: SummonerWarsCore, instanceId: string): CellCoord | null {
+  const result = findOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.instanceId === instanceId);
+  return result ? result.position : null;
+}
+
+/** 按 instanceId 查找棋盘上的单位 */
+export function findUnitByInstanceId(state: SummonerWarsCore, instanceId: string): BoardUnit | undefined {
+  const result = findOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.instanceId === instanceId);
+  return result ? result.cell.unit! : undefined;
+}
+
+/** @deprecated 同类型多单位时只返回第一个，应使用 findUnitByInstanceId */
 function findUnitByCardId(state: SummonerWarsCore, cardId: string): BoardUnit | undefined {
   const result = findOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.cardId === cardId);
   return result ? result.cell.unit! : undefined;
@@ -196,29 +235,84 @@ export function canMoveTo(
   return true;
 }
 
-/** 获取移动路径（简化版，只处理1-2格移动） */
-export function getMovePath(from: CellCoord, to: CellCoord): CellCoord[] {
+/**
+ * 构建召唤师战争的格子可通行性判定（供引擎层 BFS 使用）
+ */
+function buildPassableCheck(
+  state: SummonerWarsCore,
+  canPassThrough: boolean,
+): (pos: CellCoord, isDestination: boolean) => boolean {
+  return (pos, isDestination) => {
+    const cell = getCell(state, pos);
+    if (!cell) return false;
+    if (isDestination) return isCellEmpty(state, pos);
+    // 中间格：建筑始终不可穿越，单位需要 canPassThrough
+    if (cell.structure) return false;
+    if (cell.unit && !canPassThrough) return false;
+    return true;
+  };
+}
+
+/**
+ * 构建召唤师战争的路径评分器（供引擎层路径选择使用）
+ * 敌方单位得分 +1，友方单位得分 +1（越少越好）
+ */
+function buildPathScorer(
+  state: SummonerWarsCore,
+  owner: string | undefined,
+): (pos: CellCoord) => { enemy: number; friendly: number } {
+  return (pos) => {
+    const u = getUnitAt(state, pos);
+    if (!u) return { enemy: 0, friendly: 0 };
+    if (owner && u.owner !== owner) return { enemy: 1, friendly: 0 };
+    return { enemy: 0, friendly: 1 };
+  };
+}
+
+/**
+ * 获取移动路径（支持任意距离，含践踏路径优化）
+ * 直线移动：返回中间格 + 终点
+ * 非直线移动：BFS 找最优路径（优先穿过敌人、避开友军）
+ */
+export function getMovePath(from: CellCoord, to: CellCoord, state?: SummonerWarsCore): CellCoord[] {
   const distance = manhattanDistance(from, to);
+  if (distance === 0) return [];
   if (distance === 1) return [to];
-  if (distance === 2) {
-    const dr = to.row - from.row;
-    const dc = to.col - from.col;
-    if (dr === 0 || dc === 0) {
-      const mid = {
-        row: from.row + Math.sign(dr),
-        col: from.col + Math.sign(dc),
-      };
-      return [mid, to];
-    }
-    const mid1 = { row: from.row, col: to.col };
-    return [mid1, to]; // 简化：默认先走横向
+
+  // 直线移动
+  if (from.row === to.row || from.col === to.col) {
+    return getStraightLinePath(from, to);
   }
-  return [];
+
+  // 非直线移动：如果有 state，用引擎层 BFS 找最优路径
+  if (state) {
+    const movingUnit = getUnitAt(state, from);
+    const enhancements = movingUnit ? getUnitMoveEnhancements(state, from) : null;
+    const maxSteps = enhancements ? MOVE_DISTANCE + enhancements.extraDistance : distance;
+    const canPass = enhancements?.canPassThrough ?? false;
+
+    const allPaths = findAllShortestGridPaths(
+      from, to, maxSteps, BOARD_ROWS, BOARD_COLS,
+      buildPassableCheck(state, canPass),
+    );
+    if (allPaths.length > 0) {
+      const best = selectBestGridPath(allPaths, buildPathScorer(state, movingUnit?.owner));
+      if (best) return best;
+    }
+  }
+
+  // 无 state 时的 fallback：默认先横后纵
+  const mid1 = { row: from.row, col: to.col };
+  return [mid1, to];
 }
 
 /**
  * 获取移动路径上被穿过的单位位置（用于践踏等穿越伤害）
  * 只返回中间格上的单位（不含终点），包括敌方和己方士兵（踩踏不区分敌我）
+ *
+ * 路径选择委托引擎层 BFS + 评分选择：
+ * 1. 优先选穿过敌方单位最多的路径（最大化践踏收益）
+ * 2. 敌方数量相同时，优先避开友方单位（最小化友伤）
  */
 export function getPassedThroughUnitPositions(
   state: SummonerWarsCore,
@@ -228,32 +322,31 @@ export function getPassedThroughUnitPositions(
   const distance = manhattanDistance(from, to);
   if (distance <= 1) return []; // 1格移动没有中间格
 
-  // 直线移动：中间格明确
+  // 直线移动：中间格明确，无路径选择
   if (from.row === to.row || from.col === to.col) {
     const path = getStraightLinePath(from, to);
-    // 不含终点的中间格
     const intermediates = path.slice(0, -1);
-    return intermediates.filter(pos => {
-      const u = getUnitAt(state, pos);
-      // 踩踏对所有被穿过的士兵造成伤害，不区分敌我
-      return u != null;
-    });
+    return intermediates.filter(pos => getUnitAt(state, pos) != null);
   }
 
-  // L 形移动（2格）：两条可能路径
-  if (distance === 2) {
-    const mid1 = { row: from.row, col: to.col };
-    const mid2 = { row: to.row, col: from.col };
-    const unit1 = isValidCoord(mid1) ? getUnitAt(state, mid1) : undefined;
-    const unit2 = isValidCoord(mid2) ? getUnitAt(state, mid2) : undefined;
-    // 踩踏不区分敌我，返回所有中间格上的单位
-    const result: CellCoord[] = [];
-    if (unit1) result.push(mid1);
-    if (unit2) result.push(mid2);
-    return result;
-  }
+  // 非直线移动：用引擎层 BFS 找所有最短路径，选最优的一条
+  const movingUnit = getUnitAt(state, from);
+  const enhancements = movingUnit ? getUnitMoveEnhancements(state, from) : null;
+  const maxSteps = enhancements ? MOVE_DISTANCE + enhancements.extraDistance : distance;
+  const canPass = enhancements?.canPassThrough ?? false;
 
-  return [];
+  const allPaths = findAllShortestGridPaths(
+    from, to, maxSteps, BOARD_ROWS, BOARD_COLS,
+    buildPassableCheck(state, canPass),
+  );
+  if (allPaths.length === 0) return [];
+
+  const bestPath = selectBestGridPath(allPaths, buildPathScorer(state, movingUnit?.owner));
+  if (!bestPath) return [];
+
+  // 返回最优路径中间格上有单位的位置
+  const intermediates = bestPath.slice(0, -1);
+  return intermediates.filter(pos => getUnitAt(state, pos) != null);
 }
 
 /** 获取单位可移动的所有位置 */
@@ -560,14 +653,14 @@ export function getUnitAbilities(unit: BoardUnit, state: SummonerWarsCore): stri
       if (!ev.entanglementTargets) continue;
       const [t1, t2] = ev.entanglementTargets;
       let partnerAbilities: string[] | undefined;
-      if (t1 === unit.cardId) {
-        // 本单位是目标1，获取目标2的基础技能（含 tempAbilities）
-        const partner = findUnitByCardId(state, t2);
-        if (partner) partnerAbilities = getUnitBaseAbilities(partner);
-      } else if (t2 === unit.cardId) {
-        // 本单位是目标2，获取目标1的基础技能（含 tempAbilities）
-        const partner = findUnitByCardId(state, t1);
-        if (partner) partnerAbilities = getUnitBaseAbilities(partner);
+      if (t1 === unit.instanceId) {
+        // 本单位是目标1，获取目标2的基础技能（仅 card.abilities，不含 tempAbilities）
+        const partner = findUnitByInstanceId(state, t2);
+        if (partner) partnerAbilities = [...(partner.card.abilities ?? [])];
+      } else if (t2 === unit.instanceId) {
+        // 本单位是目标2，获取目标1的基础技能（仅 card.abilities，不含 tempAbilities）
+        const partner = findUnitByInstanceId(state, t1);
+        if (partner) partnerAbilities = [...(partner.card.abilities ?? [])];
       }
       if (partnerAbilities) {
         for (const a of partnerAbilities) {
@@ -678,10 +771,11 @@ export function getUnitMoveEnhancements(
             damageOnPassThrough = Math.max(damageOnPassThrough, effect.damageOnPassThrough);
           }
         }
-        // 速度强化：每点充能+1移动，最多+5
+        // 速度强化：每点充能+1移动，上限由 params.maxBonus 控制
         if (effect.type === 'custom' && effect.actionId === 'speed_up_extra_move') {
           const boosts = unit.boosts ?? 0;
-          extraDistance += Math.min(boosts, 5);
+          const maxBonus = (effect.params?.maxBonus as number) ?? Infinity;
+          extraDistance += Math.min(boosts, maxBonus);
         }
       }
     }
@@ -690,7 +784,7 @@ export function getUnitMoveEnhancements(
   // 浮空术光环：检查2格内是否有葛拉克（aerial_strike）
   if (unit.card.unitClass === 'common') {
     const aerialUnit = findOnGrid<BoardCell>(state.board, (cell, pos) =>
-      !!cell.unit && cell.unit.owner === unit.owner && cell.unit.cardId !== unit.cardId
+      !!cell.unit && cell.unit.owner === unit.owner && cell.unit.instanceId !== unit.instanceId
       && getUnitAbilities(cell.unit, state).includes('aerial_strike')
       && manhattanDistance(unitPos, pos) <= 2
     );

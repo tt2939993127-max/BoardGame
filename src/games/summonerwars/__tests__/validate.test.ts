@@ -10,7 +10,7 @@ import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
 import type { SummonerWarsCore, PlayerId, CellCoord, UnitCard, EventCard, StructureCard, BoardUnit } from '../domain/types';
 import type { RandomFn } from '../../../engine/types';
 import { createInitialSystemState } from '../../../engine/pipeline';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 import { BOARD_ROWS, BOARD_COLS } from '../domain/helpers';
 
 // ============================================================================
@@ -49,8 +49,10 @@ function makeStructureCard(id: string, overrides?: Partial<StructureCard>): Stru
 }
 
 function placeUnit(core: SummonerWarsCore, pos: CellCoord, unit: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }): BoardUnit {
+  const cardId = unit.cardId ?? `unit-${pos.row}-${pos.col}`;
   const boardUnit: BoardUnit = {
-    cardId: unit.cardId ?? `unit-${pos.row}-${pos.col}`,
+    instanceId: unit.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: unit.card,
     owner: unit.owner,
     position: pos,
@@ -532,11 +534,11 @@ describe('ACTIVATE_ABILITY 通用验证', () => {
   it('非己方单位拒绝', () => {
     const core = createInitializedCore(['0', '1'], createTestRandom());
     clearArea(core, [4], [4]);
-    placeUnit(core, { row: 4, col: 4 }, {
+    const unit = placeUnit(core, { row: 4, col: 4 }, {
       cardId: 'enemy-unit', card: makeUnitCard('enemy-unit', { abilities: ['revive_undead'] }), owner: '1',
     });
     const r = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'revive_undead', sourceUnitId: 'enemy-unit',
+      abilityId: 'revive_undead', sourceUnitId: unit.instanceId,
     });
     expect(r.valid).toBe(false);
     expect(r.error).toContain('只能发动自己');
@@ -545,11 +547,11 @@ describe('ACTIVATE_ABILITY 通用验证', () => {
   it('单位无该技能拒绝', () => {
     const core = createInitializedCore(['0', '1'], createTestRandom());
     clearArea(core, [4], [4]);
-    placeUnit(core, { row: 4, col: 4 }, {
+    const unit = placeUnit(core, { row: 4, col: 4 }, {
       cardId: 'no-ability', card: makeUnitCard('no-ability', { abilities: [] }), owner: '0',
     });
     const r = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'revive_undead', sourceUnitId: 'no-ability',
+      abilityId: 'revive_undead', sourceUnitId: unit.instanceId,
     });
     expect(r.valid).toBe(false);
     expect(r.error).toContain('没有此技能');
@@ -558,11 +560,11 @@ describe('ACTIVATE_ABILITY 通用验证', () => {
   it('未知技能 ID 拒绝', () => {
     const core = createInitializedCore(['0', '1'], createTestRandom());
     clearArea(core, [4], [4]);
-    placeUnit(core, { row: 4, col: 4 }, {
+    const unit = placeUnit(core, { row: 4, col: 4 }, {
       cardId: 'has-unknown', card: makeUnitCard('has-unknown', { abilities: ['totally_unknown_skill'] }), owner: '0',
     });
     const r = validate(core, SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'totally_unknown_skill', sourceUnitId: 'has-unknown',
+      abilityId: 'totally_unknown_skill', sourceUnitId: unit.instanceId,
     });
     expect(r.valid).toBe(false);
     expect(r.error).toContain('未知的技能');

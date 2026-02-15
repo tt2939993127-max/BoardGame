@@ -73,71 +73,35 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 // ============================================================================
-// base_the_homeworld: 母星 - extraPlayMinionPowerMax
+// base_the_homeworld: 母星 - 全局 extraMinionPowerMax
+// 母星规则："每当有一个随从打出到这里后，它的拥有者可以额外打出一个力量为2或以下的随从"
+// 力量≤2 限制通过 LIMIT_MODIFIED 事件的 powerMax 字段全局生效（不限制目标基地）
 // ============================================================================
 
-describe('base_the_homeworld: 母星力量限制', () => {
-    it('首次打随从无限制（minionsPlayed=0）', () => {
+describe('base_the_homeworld: 母星力量限制（全局）', () => {
+    it('母星本身不再有基地级限制', () => {
+        // 移除了 restrictions，isOperationRestricted 不再拦截
         const state = makeState({
             bases: [makeBase('base_the_homeworld')],
             players: {
-                '0': makePlayer('0', { minionsPlayed: 0 }),
+                '0': makePlayer('0', { minionsPlayed: 1, minionLimit: 2 }),
                 '1': makePlayer('1'),
             },
         });
 
-        // power=5 的随从，首次打出不受限制
+        // 即使 power>2 也不被基地级限制拦截（限制在 validate 层全局检查）
         const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 5 });
         expect(restricted).toBe(false);
     });
 
-    it('额外打随从时 power>2 被拒', () => {
-        const state = makeState({
-            bases: [makeBase('base_the_homeworld')],
-            players: {
-                '0': makePlayer('0', { minionsPlayed: 1, minionLimit: 2 }),
-                '1': makePlayer('1'),
-            },
-        });
-
-        // power=3 的随从在额外出牌时被拒
-        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 3 });
-        expect(restricted).toBe(true);
-    });
-
-    it('额外打随从时 power=2 通过', () => {
-        const state = makeState({
-            bases: [makeBase('base_the_homeworld')],
-            players: {
-                '0': makePlayer('0', { minionsPlayed: 1, minionLimit: 2 }),
-                '1': makePlayer('1'),
-            },
-        });
-
-        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 2 });
-        expect(restricted).toBe(false);
-    });
-
-    it('额外打随从时 power=1 通过', () => {
-        const state = makeState({
-            bases: [makeBase('base_the_homeworld')],
-            players: {
-                '0': makePlayer('0', { minionsPlayed: 1, minionLimit: 2 }),
-                '1': makePlayer('1'),
-            },
-        });
-
-        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 1 });
-        expect(restricted).toBe(false);
-    });
-
-    it('validate 命令层面：额外出牌 power>2 随从到母星被拒', () => {
+    it('validate：extraMinionPowerMax 生效时 power>2 随从被拒（任意基地）', () => {
         // alien_invader 力量=3
         const state = makeState({
-            bases: [makeBase('base_the_homeworld')],
+            bases: [makeBase('base_the_homeworld'), makeBase('base_rhodes_plaza')],
             players: {
                 '0': makePlayer('0', {
                     minionsPlayed: 1, minionLimit: 2,
+                    extraMinionPowerMax: 2,
                     hand: [makeCard('h1', 'alien_invader', 'minion')],
                 }),
                 '1': makePlayer('1'),
@@ -145,15 +109,84 @@ describe('base_the_homeworld: 母星力量限制', () => {
         });
         const matchState: MatchState<SmashUpCore> = {
             core: state,
-            sys: { phase: 'playCards' } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+            sys: { phase: 'playCards' } as any,  
+        };
+
+        // 打到母星被拒
+        const r1 = validate(matchState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h1', baseIndex: 0 },
+        } as any);  
+        expect(r1.valid).toBe(false);
+        expect(r1.error).toContain('力量≤2');
+
+        // 打到其他基地也被拒（全局限制）
+        const r2 = validate(matchState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h1', baseIndex: 1 },
+        } as any);  
+        expect(r2.valid).toBe(false);
+    });
+
+    it('validate：extraMinionPowerMax 生效时 power≤2 随从通过', () => {
+        // dino_war_raptor 力量=2
+        const state = makeState({
+            bases: [makeBase('base_the_homeworld'), makeBase('base_rhodes_plaza')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayed: 1, minionLimit: 2,
+                    extraMinionPowerMax: 2,
+                    hand: [makeCard('h1', 'dino_war_raptor', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState: MatchState<SmashUpCore> = {
+            core: state,
+            sys: { phase: 'playCards' } as any,  
+        };
+
+        // 打到母星通过
+        const r1 = validate(matchState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h1', baseIndex: 0 },
+        } as any);  
+        expect(r1.valid).toBe(true);
+
+        // 打到其他基地也通过
+        const r2 = validate(matchState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h1', baseIndex: 1 },
+        } as any);  
+        expect(r2.valid).toBe(true);
+    });
+
+    it('validate：首次打随从不受 extraMinionPowerMax 限制', () => {
+        const state = makeState({
+            bases: [makeBase('base_the_homeworld')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayed: 0, minionLimit: 1,
+                    hand: [makeCard('h1', 'alien_invader', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState: MatchState<SmashUpCore> = {
+            core: state,
+            sys: { phase: 'playCards' } as any,  
         };
 
         const result = validate(matchState, {
             type: SU_COMMANDS.PLAY_MINION,
             playerId: '0',
             payload: { cardUid: 'h1', baseIndex: 0 },
-        } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-        expect(result.valid).toBe(false);
+        } as any);  
+        expect(result.valid).toBe(true);
     });
 });
 
@@ -304,14 +337,14 @@ describe('base_dread_lookout: 恐怖眺望台禁止行动卡', () => {
         });
         const matchState: MatchState<SmashUpCore> = {
             core: state,
-            sys: { phase: 'playCards' } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+            sys: { phase: 'playCards' } as any,  
         };
 
         const result = validate(matchState, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'h1', targetBaseIndex: 0 },
-        } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+        } as any);  
         expect(result.valid).toBe(false);
     });
 });

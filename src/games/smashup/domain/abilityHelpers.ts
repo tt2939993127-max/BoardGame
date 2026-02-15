@@ -5,13 +5,15 @@
  * 所有函数返回事件数组，由 reducer 统一归约。
  */
 
-import type { PlayerId } from '../../../engine/types';
+import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
 import type { PromptOption as EnginePromptOption, SimpleChoiceConfig } from '../../../engine/systems/InteractionSystem';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { AbilityContext, AbilityResult } from './abilityRegistry';
+import { resolveOnPlay } from './abilityRegistry';
 import type {
     SmashUpCore,
     MinionOnBase,
+    MinionPlayedEvent,
     LimitModifiedEvent,
     MinionDestroyedEvent,
     MinionMovedEvent,
@@ -27,10 +29,14 @@ import type {
     CardInstance,
     SmashUpEvent,
     CardsDrawnEvent,
-    DeckReshuffledEvent,
+    DeckReorderedEvent,
 } from './types';
 import { SU_EVENTS } from './types';
 import { getEffectivePower } from './ongoingModifiers';
+import { triggerAllBaseAbilities } from './baseAbilities';
+import { fireTriggers } from './ongoingEffects';
+import { reduce } from './reduce';
+import { getMinionDef } from '../data/cards';
 
 // ============================================================================
 // 力量计算便捷函数
@@ -283,18 +289,19 @@ export function revealAndPickFromDeck(params: {
         } as CardsDrawnEvent);
     }
 
-    // 3. 未命中的卡放牌库底/顶 → 重建牌库
+    // 3. 未命中的卡放牌库底/顶 → 重排牌库
     if (missed.length > 0) {
         const processedUids = new Set(allRevealed.map(c => c.uid));
         const remainingDeck = player.deck.filter(c => !processedUids.has(c.uid));
+        // 使用 DECK_REORDERED（仅重排牌库，不碰弃牌堆），避免 DECK_RESHUFFLED 清空弃牌堆
         const newDeckUids = missTarget === 'deck_bottom'
             ? [...remainingDeck.map(c => c.uid), ...missed.map(c => c.uid)]
             : [...missed.map(c => c.uid), ...remainingDeck.map(c => c.uid)];
         events.push({
-            type: SU_EVENTS.DECK_RESHUFFLED,
+            type: SU_EVENTS.DECK_REORDERED,
             payload: { playerId, deckUids: newDeckUids },
             timestamp: now,
-        } as DeckReshuffledEvent);
+        } as DeckReorderedEvent);
     }
 
     return { events, picked, missed };
@@ -324,6 +331,113 @@ export function peekDeckTop(
         1, reason, now,
     );
     return { card, revealEvent };
+}
+
+// ============================================================================
+// 随从打出完整事件链
+// ============================================================================
+
+/**
+ * 构建"打出随从"的完整事件链：MINION_PLAYED + onPlay 能力 + 基地能力 + ongoing 触发
+ *
+ * 所有非 PLAY_MINION 命令路径（交互 handler、能力执行器）打出随从时必须调用此函数，
+ * 禁止直接构造裸 MINION_PLAYED 事件。
+ *
+ * PLAY_MINION 命令因需附加 sourceCommandType/discardPlaySourceId 等命令特有字段，
+ * 自行构造 MINION_PLAYED 事件后调用 fireMinionPlayedTriggers 复用触发链。
+ */
+export function buildMinionPlayedEvents(params: {
+    core: SmashUpCore;
+    matchState: MatchState<SmashUpCore>;
+    playerId: PlayerId;
+    cardUid: string;
+    defId: string;
+    baseIndex: number;
+    power: number;
+    random: RandomFn;
+    now: number;
+    fromDiscard?: boolean;
+    fromDeck?: boolean;
+}): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
+    const { core, playerId, cardUid, defId, baseIndex, power, now, fromDiscard, fromDeck } = params;
+    const events: SmashUpEvent[] = [];
+
+    // 1. MINION_PLAYED 事件
+    const playedEvt: MinionPlayedEvent = {
+        type: SU_EVENTS.MINION_PLAYED,
+        payload: {
+            playerId, cardUid, defId, baseIndex, power,
+            ...(fromDiscard ? { fromDiscard: true } : {}),
+            ...(fromDeck ? { fromDeck: true } : {}),
+        },
+        timestamp: now,
+    };
+    events.push(playedEvt);
+
+    // 2. 触发链（onPlay + 基地 + ongoing）
+    const triggers = fireMinionPlayedTriggers({
+        ...params, playedEvt,
+    });
+    events.push(...triggers.events);
+
+    return triggers.matchState ? { events, matchState: triggers.matchState } : { events };
+}
+
+/**
+ * 打出随从后的触发链：onPlay 能力 + 基地能力 onMinionPlayed + ongoing 触发器 onMinionPlayed
+ *
+ * PLAY_MINION 命令和 buildMinionPlayedEvents 共用此函数。
+ * 调用方需自行构造 MINION_PLAYED 事件并传入 playedEvt。
+ */
+export function fireMinionPlayedTriggers(params: {
+    core: SmashUpCore;
+    matchState: MatchState<SmashUpCore>;
+    playerId: PlayerId;
+    cardUid: string;
+    defId: string;
+    baseIndex: number;
+    power: number;
+    random: RandomFn;
+    now: number;
+    playedEvt: MinionPlayedEvent;
+}): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
+    const { core, playerId, cardUid, defId, baseIndex, power, random, now, playedEvt } = params;
+    let matchState = params.matchState;
+    const events: SmashUpEvent[] = [];
+
+    // 1. onPlay 能力触发
+    const executor = resolveOnPlay(defId);
+    if (executor) {
+        const ctx: AbilityContext = {
+            state: core, matchState, playerId, cardUid, defId, baseIndex, random, now,
+        };
+        const result = executor(ctx);
+        events.push(...result.events);
+        if (result.matchState) matchState = result.matchState;
+    }
+
+    // 2. 基地能力触发 onMinionPlayed
+    const minionDef = getMinionDef(defId);
+    const baseResult = triggerAllBaseAbilities(
+        'onMinionPlayed', core, playerId, now,
+        { baseIndex, minionUid: cardUid, minionDefId: defId, minionPower: minionDef?.power ?? power },
+        matchState,
+    );
+    events.push(...baseResult.events);
+    if (baseResult.matchState) matchState = baseResult.matchState;
+
+    // 3. ongoing 触发器 onMinionPlayed
+    const coreAfterPlayed = reduce(core, playedEvt);
+    const ongoingResult = fireTriggers(coreAfterPlayed, 'onMinionPlayed', {
+        state: coreAfterPlayed, matchState,
+        playerId, baseIndex,
+        triggerMinionUid: cardUid, triggerMinionDefId: defId,
+        random, now,
+    });
+    events.push(...ongoingResult.events);
+    if (ongoingResult.matchState) matchState = ongoingResult.matchState;
+
+    return matchState !== params.matchState ? { events, matchState } : { events };
 }
 
 // ============================================================================
@@ -428,6 +542,47 @@ export function shuffleHandIntoDeck(
     return {
         type: SU_EVENTS.HAND_SHUFFLED_INTO_DECK,
         payload: { playerId, newDeckUids, reason },
+        timestamp: now,
+    };
+}
+
+// ============================================================================
+// Special 能力限制组（每基地每回合一次）
+// ============================================================================
+
+import type { MinionCardDef, ActionCardDef, SpecialLimitUsedEvent } from './types';
+import { getCardDef } from '../data/cards';
+
+/**
+ * 检查指定 defId 的 special 能力在指定基地是否已被限制组阻止
+ * @returns true = 已被使用，不能再用
+ */
+export function isSpecialLimitBlocked(state: SmashUpCore, defId: string, baseIndex: number): boolean {
+    const def = getCardDef(defId);
+    if (!def) return false;
+    const limitGroup = (def as MinionCardDef | ActionCardDef).specialLimitGroup;
+    if (!limitGroup) return false;
+    const used = state.specialLimitUsed?.[limitGroup];
+    return used?.includes(baseIndex) ?? false;
+}
+
+/**
+ * 生成 special 能力限制组使用记录事件
+ * 如果该 defId 没有 specialLimitGroup 则返回 undefined
+ */
+export function emitSpecialLimitUsed(
+    playerId: PlayerId,
+    defId: string,
+    baseIndex: number,
+    now: number,
+): SpecialLimitUsedEvent | undefined {
+    const def = getCardDef(defId);
+    if (!def) return undefined;
+    const limitGroup = (def as MinionCardDef | ActionCardDef).specialLimitGroup;
+    if (!limitGroup) return undefined;
+    return {
+        type: SU_EVENTS.SPECIAL_LIMIT_USED,
+        payload: { playerId, baseIndex, limitGroup, abilityDefId: defId },
         timestamp: now,
     };
 }
@@ -576,6 +731,7 @@ export function buildMinionTargetOptions(
         id: `minion-${i}`,
         label: c.label,
         value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
+        displayMode: 'card' as const,
     }));
 }
 

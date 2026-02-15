@@ -1,6 +1,6 @@
 ## Context
 - 单房间限制依赖 `ownerKey`（写入 `metadata.setupData.ownerKey`）。
-- boardgame.io 的重新进入需要 `playerID + credentials`，本地凭据丢失会导致回归失败。
+- 旧框架的重新进入需要 `playerID + credentials`，本地凭据丢失会导致回归失败。
 - 用户确认：`gameover` 仍算占用；游客房间不需长期保存；游戏服需验证 JWT。
 
 ## Goals / Non-Goals

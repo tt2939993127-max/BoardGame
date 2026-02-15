@@ -109,21 +109,22 @@
 攻击阶段结束时，如果巨食兽本回合未击杀任何单位，必须选择：消灭一个相邻友方单位，或消灭自身。
 
 ### 原子步骤拆解
-- 链A（吃友方）：攻击阶段结束 → 未击杀 → 选择相邻友方 → UNIT_DESTROYED(reason=feed_beast)
-- 链B（自毁）：攻击阶段结束 → 未击杀 → 选择自毁 → UNIT_DESTROYED(reason=feed_beast_self)
+- 链A（吃友方）：攻击阶段结束 → 校验本回合击杀数=0 → 选择相邻友方 → UNIT_DESTROYED(reason=feed_beast, killerUnitId=巨食兽)
+- 链B（自毁）：攻击阶段结束 → 校验本回合击杀数=0 → 选择自毁 → UNIT_DESTROYED(reason=feed_beast_self, killerUnitId=自身)
+- 击杀追踪链：UNIT_DESTROYED(killerUnitId) → reduce.unitKillCountThisTurn[killerUnitId]++ → 下次 canActivateAbility/feed_beast customValidator 拒绝激活
 
 ### 八层链路矩阵
 
 | 层级 | 状态 | 说明 |
 |------|------|------|
-| 定义层 | ✅ | trigger=onPhaseEnd, interactionChain 定义 choice+targetPosition 两步 |
+| 定义层 | ✅ | trigger=onPhaseEnd, interactionChain 定义 choice+targetPosition 两步，customValidator 强制“本回合未击杀” |
 | 注册层 | ✅ | executors/goblin.ts register('feed_beast') |
-| 执行层 | ✅ | self_destroy→自毁事件; else→验证目标友方+相邻→消灭目标 |
-| 状态层 | ✅ | reduce UNIT_DESTROYED 正确处理 |
-| 验证层 | ✅ | customValidator: 自毁直接通过; 吃友方检查目标存在+友方+非自身+相邻(距离=1) |
+| 执行层 | ✅ | self_destroy→自毁事件; else→验证目标友方+相邻→消灭目标；两路径均携带 killerUnitId |
+| 状态层 | ✅ | reduce UNIT_DESTROYED 正确处理，并按 killerUnitId 写入 unitKillCountThisTurn（回合切换清空） |
+| 验证层 | ✅ | customValidator: 先拒绝“本回合已击杀”；其后自毁直接通过；吃友方检查目标存在+友方+非自身+相邻(距离=1) |
 | UI层 | ✅ | activationStep=selectUnit, interactionChain 引导两步选择 |
 | i18n层 | ✅ | zh-CN/en 均有 feed_beast 条目 |
-| 测试层 | ✅ | 5个测试：吃友方、自毁、非相邻拒绝、敌方拒绝、非攻击阶段拒绝 |
+| 测试层 | ✅ | 覆盖吃友方、自毁、本回合已击杀拒绝、非相邻/敌方目标拒绝、自动推进等回归场景 |
 
 ✅ 全部通过。
 

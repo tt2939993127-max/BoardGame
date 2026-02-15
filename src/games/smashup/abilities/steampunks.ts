@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { recoverCardsFromDiscard, grantExtraAction, moveMinion } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraAction, moveMinion, resolveOrPrompt } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, SmashUpCore, CardsDrawnEvent, MinionReturnedEvent, OngoingDetachedEvent } from '../domain/types';
 import { registerProtection, registerRestriction, registerTrigger, registerInterceptor } from '../domain/ongoingEffects';
@@ -29,7 +29,8 @@ export function registerSteampunkAbilities(): void {
     // === ongoing 效果注册 ===
     // steam_queen: 己方 ongoing 行动卡不受对手影响?
     registerInterceptor('steampunk_steam_queen', steampunkSteamQueenInterceptor);
-    // ornate_dome: 禁止对手打行动卡到此基地
+    // ornate_dome: 打出时摧毁所有其他玩家的战术 + 禁止对手打行动卡到此基地
+    registerAbility('steampunk_ornate_dome', 'onPlay', steampunkOrnateDomeOnPlay);
     registerRestriction('steampunk_ornate_dome', 'play_action', steampunkOrnateDomeChecker);
     // difference_engine: 回合结束时控制者多??
     registerTrigger('steampunk_difference_engine', 'onTurnEnd', steampunkDifferenceEngineTrigger);
@@ -95,6 +96,52 @@ function steampunkOrnateDomeChecker(ctx: RestrictionCheckContext): boolean {
     if (!dome) return false;
     // 只限制非拥有者?
     return ctx.playerId !== dome.ownerId;
+}
+
+/**
+ * ornate_dome onPlay：摧毁所有其他玩家打到这里的战术
+ * 描述："打出到基地上。摧毁所有其他玩家打到这里的战术。"
+ */
+function steampunkOrnateDomeOnPlay(ctx: AbilityContext): AbilityResult {
+    const events: SmashUpEvent[] = [];
+    const base = ctx.state.bases[ctx.baseIndex];
+    if (!base) return { events };
+
+    // 摧毁基地上所有非己方的 ongoing 行动卡
+    for (const ongoing of base.ongoingActions) {
+        if (ongoing.ownerId === ctx.playerId) continue;
+        // 排除 ornate_dome 自身（刚打出的）
+        if (ongoing.defId === 'steampunk_ornate_dome') continue;
+        events.push({
+            type: SU_EVENTS.ONGOING_DETACHED,
+            payload: {
+                cardUid: ongoing.uid,
+                defId: ongoing.defId,
+                ownerId: ongoing.ownerId,
+                reason: 'steampunk_ornate_dome_destroy',
+            },
+            timestamp: ctx.now,
+        } as OngoingDetachedEvent);
+    }
+
+    // 摧毁基地上随从附着的非己方行动卡
+    for (const m of base.minions) {
+        for (const a of m.attachedActions) {
+            if (a.ownerId === ctx.playerId) continue;
+            events.push({
+                type: SU_EVENTS.ONGOING_DETACHED,
+                payload: {
+                    cardUid: a.uid,
+                    defId: a.defId,
+                    ownerId: a.ownerId,
+                    reason: 'steampunk_ornate_dome_destroy',
+                },
+                timestamp: ctx.now,
+            } as OngoingDetachedEvent);
+        }
+    }
+
+    return { events };
 }
 
 /**
@@ -214,11 +261,11 @@ function steampunkChangeOfVenue(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 亚哈船长 talent：移动到有己方行动卡的基地
- * MVP：自动选第一个有己方 ongoing 行动卡的其他基地
+ * 亚哈船长 talent：移动该随从到一个附属有你的战术的基地上。
+ * 多个候选基地时让玩家选择
  */
 function steampunkCaptainAhab(ctx: AbilityContext): AbilityResult {
-    // ?captain_ahab 当前所在基地
+    // 找 captain_ahab 当前所在基地
     let currentBaseIndex = -1;
     for (let i = 0; i < ctx.state.bases.length; i++) {
         if (ctx.state.bases[i].minions.some(m => m.uid === ctx.cardUid)) {
@@ -229,16 +276,25 @@ function steampunkCaptainAhab(ctx: AbilityContext): AbilityResult {
     if (currentBaseIndex === -1) return { events: [] };
 
     // 找有己方 ongoing 行动卡的其他基地
+    const candidates: { baseIndex: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         if (i === currentBaseIndex) continue;
         const base = ctx.state.bases[i];
         if (base.ongoingActions.some(o => o.ownerId === ctx.playerId)) {
-            return {
-                events: [moveMinion(ctx.cardUid, ctx.defId, currentBaseIndex, i, 'steampunk_captain_ahab', ctx.now)],
-            };
+            const baseDef = getBaseDef(base.defId);
+            candidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
         }
     }
-    return { events: [] };
+    if (candidates.length === 0) return { events: [] };
+
+    // 单候选自动执行，多候选让玩家选择
+    return resolveOrPrompt<{ baseIndex: number }>(ctx,
+        candidates.map(c => ({ id: `base-${c.baseIndex}`, label: c.label, value: { baseIndex: c.baseIndex } })),
+        { id: 'steampunk_captain_ahab', title: '选择要移动到的基地', sourceId: 'steampunk_captain_ahab', targetType: 'base' },
+        (value) => ({
+            events: [moveMinion(ctx.cardUid, ctx.defId, currentBaseIndex, value.baseIndex, 'steampunk_captain_ahab', ctx.now)],
+        }),
+    );
 }
 
 
@@ -306,6 +362,21 @@ function steampunkZeppelin(ctx: AbilityContext): AbilityResult {
 
 /** 注册蒸汽朋克派系的交互解决处理函数 */
 export function registerSteampunkInteractionHandlers(): void {
+    registerInteractionHandler('steampunk_captain_ahab', (state, _playerId, value, _iData, _random, timestamp) => {
+        // resolveOrPrompt 创建的交互，value 包含 baseIndex
+        const { baseIndex } = value as { baseIndex: number };
+        // 找到 captain_ahab 当前所在基地
+        let currentBaseIndex = -1;
+        let captainUid = '';
+        let captainDefId = '';
+        for (let i = 0; i < state.core.bases.length; i++) {
+            const ahab = state.core.bases[i].minions.find(m => m.defId === 'steampunk_captain_ahab');
+            if (ahab) { currentBaseIndex = i; captainUid = ahab.uid; captainDefId = ahab.defId; break; }
+        }
+        if (currentBaseIndex === -1) return { state, events: [] };
+        return { state, events: [moveMinion(captainUid, captainDefId, currentBaseIndex, baseIndex, 'steampunk_captain_ahab', timestamp)] };
+    });
+
     registerInteractionHandler('steampunk_scrap_diving', (state, playerId, value, _iData, _random, timestamp) => {
         const { cardUid } = value as { cardUid: string };
         return { state, events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_scrap_diving', timestamp)] };

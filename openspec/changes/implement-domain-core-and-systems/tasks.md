@@ -1,5 +1,7 @@
 # Tasks: 引入领域内核与系统层（激进引擎化）
 
+> **状态：已完成**。旧框架（boardgame.io）已完全移除，自研引擎（DomainCore + Pipeline + Systems + Transport）已全面接管。本文档保留为历史记录。
+
 ## 与现有 Specs 的关系
 
 | 现有 Spec | 关系 | 本次变更动作 |
@@ -40,9 +42,9 @@
 - [x] `LogSystem`：统一事件日志格式
 - [x] 隐藏信息的 redaction 机制
 
-### 5) Spec：Boardgame.io 适配层
-- [x] 适配层职责：moves 只做输入翻译，不写规则
-- [x] move → Command 映射
+### 5) Spec：适配层（已废弃，传输层已直接接管）
+- [x] 适配层职责：moves 只做输入翻译，不写规则（已由 dispatch 替代）
+- [x] move → Command 映射（已由 dispatch 直接分发替代）
 - [x] `G.sys` / `G.core` 存储与迁移
 
 ### 6) 迁移路线（分阶段）

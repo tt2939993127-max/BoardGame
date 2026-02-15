@@ -6,13 +6,14 @@
  * 卡牌尺寸比 CardSelectorOverlay 放大一倍
  */
 
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Card } from '../domain/types';
 import { CardSprite } from './CardSprite';
 import { GameButton } from './GameButton';
 import { resolveCardAtlasId } from './cardAtlas';
 import { UI_Z_INDEX } from '../../../core';
+import { useHorizontalDragScroll } from '../../../hooks/ui/useHorizontalDragScroll';
 
 /** 获取卡牌精灵图配置 */
 function getCardAtlasConfig(card: Card): { atlasId: string; frameIndex: number } {
@@ -40,21 +41,7 @@ export const DiscardPileOverlay: React.FC<DiscardPileOverlayProps> = ({
   onMagnify,
 }) => {
   const { t } = useTranslation('game-summonerwars');
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // 鼠标滚轮转换为水平滚动
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY !== 0) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY;
-      }
-    };
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
-  }, []);
+  const { ref: scrollRef, dragProps } = useHorizontalDragScroll();
 
   // 反转为从新到旧
   const reversed = [...cards].reverse();
@@ -100,8 +87,9 @@ export const DiscardPileOverlay: React.FC<DiscardPileOverlayProps> = ({
         {/* 卡牌列表 - 放大一倍（440px vs 原来的 220px） */}
         <div
           ref={scrollRef}
+          {...dragProps}
           className="flex gap-8 overflow-x-auto py-8 px-8 snap-x snap-mandatory scrollbar-hide w-full"
-          style={{ scrollBehavior: 'smooth', overflowY: 'hidden' }}
+          style={{ ...dragProps.style, scrollBehavior: 'smooth', overflowY: 'hidden' }}
         >
           {reversed.map((card, idx) => {
             const { atlasId, frameIndex } = getCardAtlasConfig(card);

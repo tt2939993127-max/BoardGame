@@ -4,12 +4,13 @@
  * 提供通用的技能可用性判断逻辑
  */
 
-import type { SummonerWarsCore, PlayerId, BoardUnit } from './types';
+import type { SummonerWarsCore, PlayerId, BoardUnit, CellCoord } from './types';
 import { SW_COMMANDS } from './types';
 import { SummonerWarsDomain } from './index';
 import { abilityRegistry } from './abilities';
+import { buildUsageKey } from './utils';
 import type { AbilityTrigger, ValidationContext } from './abilities';
-import { getUnitAbilities } from './helpers';
+import { getUnitAbilities, hasUnitKilledThisTurn } from './helpers';
 import { isUndeadCard } from './ids';
 
 /**
@@ -125,7 +126,7 @@ export function canActivateAbility(
   }
 
   if (abilityDef.usesPerTurn !== undefined) {
-    const usageKey = `${unit.cardId}:${abilityId}`;
+    const usageKey = buildUsageKey(unit.instanceId, abilityId);
     const usageCount = (core.abilityUsageCount ?? {})[usageKey] ?? 0;
     if (usageCount >= abilityDef.usesPerTurn) {
       return false;
@@ -136,6 +137,11 @@ export function canActivateAbility(
   if (abilityId === 'revive_undead') {
     const player = core.players[playerId];
     return player.discard.some(c => isUndeadCard(c));
+  }
+
+  // 喂养巨食兽：仅在本回合未消灭任何单位时可激活
+  if (abilityId === 'feed_beast' && hasUnitKilledThisTurn(core, unit.instanceId)) {
+    return false;
   }
 
   if (abilityDef.validation?.customValidator && !abilityDef.requiresTargetSelection) {

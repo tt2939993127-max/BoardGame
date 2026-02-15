@@ -33,6 +33,8 @@ export const formatActionLogSegments = (segments: ActionLogSegment[] = []): stri
                 }
                 return i18n.t(`${segment.ns}:${segment.key}`, resolvedParams);
             }
+            // breakdown segment：纯文本 fallback 只显示数值
+            if (segment.type === 'breakdown') return segment.displayText;
             // card segment：如果有 previewTextNs，翻译 previewText
             if (segment.previewTextNs && segment.previewText) {
                 return i18n.t(`${segment.previewTextNs}:${segment.previewText}`, { defaultValue: segment.previewText });

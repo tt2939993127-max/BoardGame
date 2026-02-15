@@ -219,6 +219,166 @@ const nextTick = async (): Promise<void> => {
 };
 
 describe('GameTransportServer（离座与重连）', () => {
+    it('setupMatch 应返回初始化后的随机游标', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const randomEngine: GameEngineConfig = {
+            ...createEngineConfig(),
+            domain: {
+                ...createEngineConfig().domain,
+                setup: (_playerIds, random) => ({
+                    currentPlayer: '0',
+                    initRoll: random.d(6),
+                }),
+            },
+        };
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [randomEngine],
+        });
+
+        const result = await server.setupMatch('match-seed', 'test-game', ['0', '1'], 'seed-1');
+
+        expect(result).toBeTruthy();
+        expect(result?.randomCursor).toBeGreaterThan(0);
+    });
+
+    it('离线裁决在 dt:card-interaction 下应走领域取消命令', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        let lastCommandType: string | undefined;
+
+        const initialState: StoredMatchState = {
+            G: {
+                core: { currentPlayer: '0' },
+                sys: {
+                    phase: 'main',
+                    turnNumber: 1,
+                    interaction: {
+                        current: {
+                            id: 'dt-interaction-1',
+                            kind: 'dt:card-interaction',
+                            playerId: '0',
+                            data: {
+                                id: 'interaction-1',
+                                playerId: '0',
+                                sourceCardId: 'card-1',
+                            },
+                        },
+                        queue: [],
+                    },
+                },
+            },
+            _stateID: 0,
+            randomSeed: 'seed',
+            randomCursor: 0,
+        };
+
+        await storage.createMatch('match-offline-dt', {
+            initialState,
+            metadata: createMetadata('offline-cred'),
+        });
+
+        const engineConfig: GameEngineConfig = {
+            ...createEngineConfig(),
+            domain: {
+                ...createEngineConfig().domain,
+                validate: (_state, command) => {
+                    lastCommandType = command.type;
+                    return { valid: true };
+                },
+                execute: () => [],
+            },
+        };
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [engineConfig],
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<unknown>;
+            runOfflineAdjudication: (match: unknown, playerID: string) => Promise<void>;
+        };
+
+        const match = await serverInternal.loadMatch('match-offline-dt');
+        expect(match).toBeTruthy();
+
+        await serverInternal.runOfflineAdjudication(match, '0');
+
+        expect(lastCommandType).toBe('CANCEL_INTERACTION');
+    });
+
+    it.each([
+        ['simple-choice', 'SYS_INTERACTION_CANCEL'],
+        ['dt:token-response', 'SKIP_TOKEN_RESPONSE'],
+        ['dt:bonus-dice', 'SKIP_BONUS_DICE_REROLL'],
+    ])('离线裁决应按 kind=%s 映射命令 %s', async (kind, expectedCommand) => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        let lastCommandType: string | undefined;
+
+        const initialState: StoredMatchState = {
+            G: {
+                core: { currentPlayer: '0' },
+                sys: {
+                    phase: 'main',
+                    turnNumber: 1,
+                    interaction: {
+                        current: {
+                            id: `interaction-${kind}`,
+                            kind,
+                            playerId: '0',
+                            data: {},
+                        },
+                        queue: [],
+                    },
+                },
+            },
+            _stateID: 0,
+            randomSeed: 'seed',
+            randomCursor: 0,
+        };
+
+        await storage.createMatch(`match-offline-${kind}`, {
+            initialState,
+            metadata: createMetadata('offline-cred'),
+        });
+
+        const engineConfig: GameEngineConfig = {
+            ...createEngineConfig(),
+            domain: {
+                ...createEngineConfig().domain,
+                validate: (_state, command) => {
+                    lastCommandType = command.type;
+                    return { valid: true };
+                },
+                execute: () => [],
+            },
+        };
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [engineConfig],
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<unknown>;
+            runOfflineAdjudication: (match: unknown, playerID: string) => Promise<void>;
+        };
+
+        const match = await serverInternal.loadMatch(`match-offline-${kind}`);
+        expect(match).toBeTruthy();
+
+        await serverInternal.runOfflineAdjudication(match, '0');
+
+        expect(lastCommandType).toBe(expectedCommand);
+    });
+
     it('sync 应使用存储层最新凭证，旧凭证在 metadata 更新后必须失效', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();

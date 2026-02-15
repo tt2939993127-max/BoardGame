@@ -1,7 +1,7 @@
 /**
  * 游戏状态同步服务端
  *
- * 替代 boardgame.io 的 Master + Transport，基于 socket.io 实现：
+ * 基于 socket.io 实现：
  * - 接收客户端命令 → 执行 pipeline → playerView 过滤 → 广播状态
  * - 管理玩家连接状态
  * - 内置离线交互裁决（断线 → graceMs → 自动 CANCEL_INTERACTION）
@@ -26,18 +26,31 @@ import {
 } from '../pipeline';
 import { INTERACTION_COMMANDS } from '../systems/InteractionSystem';
 
-// 离线裁决使用的命令类型
-const CANCEL_INTERACTION_CMD = INTERACTION_COMMANDS.CANCEL;
+// 离线裁决：按交互 kind 选择最小语义正确的兜底命令
+// - simple-choice: 走通用系统取消
+// - dt:*: 走 DiceThrone 领域命令，确保回滚/清理逻辑完整执行
+const OFFLINE_ADJUDICATION_COMMAND_BY_KIND: Record<string, string> = {
+    'simple-choice': INTERACTION_COMMANDS.CANCEL,
+    'dt:card-interaction': 'CANCEL_INTERACTION',
+    'dt:token-response': 'SKIP_TOKEN_RESPONSE',
+    'dt:bonus-dice': 'SKIP_BONUS_DICE_REROLL',
+};
+
+const resolveOfflineAdjudicationCommandType = (kind: unknown): string => {
+    if (typeof kind !== 'string') {
+        return INTERACTION_COMMANDS.CANCEL;
+    }
+    return OFFLINE_ADJUDICATION_COMMAND_BY_KIND[kind] ?? INTERACTION_COMMANDS.CANCEL;
+};
 
 // ============================================================================
-// 游戏引擎定义（替代 boardgame.io Game + AdapterConfig）
+// 游戏引擎定义
 // ============================================================================
 
 /**
  * 游戏引擎配置
  *
  * 每个游戏注册一个 GameEngineConfig，由 GameTransportServer 统一管理。
- * 替代 boardgame.io 的 Game 对象 + adapter 翻译层。
  */
 export interface GameEngineConfig<
     TCore = unknown,
@@ -246,19 +259,22 @@ export class GameTransportServer {
         playerIds: PlayerId[],
         seed: string,
         _setupData?: unknown,
-    ): Promise<MatchState<unknown> | null> {
+    ): Promise<{ state: MatchState<unknown>; randomCursor: number } | null> {
         const engineConfig = this.gameIndex.get(gameId);
         if (!engineConfig) return null;
 
-        const random = createSeededRandom(seed);
-        const core = engineConfig.domain.setup(playerIds, random);
+        const trackedRandom = createTrackedRandom(seed, 0);
+        const core = engineConfig.domain.setup(playerIds, trackedRandom.random);
         const sys = createInitialSystemState(
             playerIds,
             engineConfig.systems as EngineSystem[],
             matchID,
         );
         const state: MatchState<unknown> = { sys, core };
-        return state;
+        return {
+            state,
+            randomCursor: trackedRandom.getCursor(),
+        };
     }
 
     /** 执行命令（供服务端内部调用，如离线裁决） */
@@ -518,14 +534,12 @@ export class GameTransportServer {
         // 广播状态（每个玩家收到经 playerView 过滤的版本）
         this.broadcastState(match);
 
-        // 检查游戏结束
-        if (engineConfig.domain.isGameOver) {
-            const gameOver = engineConfig.domain.isGameOver(result.state.core);
-            if (gameOver) {
-                match.metadata.gameover = gameOver;
-                await this.storage.setMetadata(match.matchID, match.metadata);
-                this.onGameOver?.(match.matchID, engineConfig.gameId, gameOver);
-            }
+        // 检查游戏结束（管线已将结果写入 sys.gameover）
+        const gameOver = result.state.sys.gameover;
+        if (gameOver && !match.metadata.gameover) {
+            match.metadata.gameover = gameOver;
+            await this.storage.setMetadata(match.matchID, match.metadata);
+            this.onGameOver?.(match.matchID, engineConfig.gameId, gameOver);
         }
 
         return true;
@@ -604,17 +618,18 @@ export class GameTransportServer {
         if (match.connections.has(playerID)) return;
 
         // 检查是否有待处理的交互属于该玩家
-        const interaction = (match.state.sys as { interaction?: { current?: { playerId?: string } } })
+        const interaction = (match.state.sys as {
+            interaction?: {
+                current?: { kind?: string; playerId?: string };
+            };
+        })
             ?.interaction?.current;
         if (!interaction || interaction.playerId !== playerID) return;
 
-        // 自动取消交互
-        await this.executeCommandInternal(
-            match,
-            playerID,
-            CANCEL_INTERACTION_CMD,
-            {},
-        );
+        const commandType = resolveOfflineAdjudicationCommandType(interaction.kind);
+
+        // 离线裁决必须与玩家命令共用同一串行通道，避免并发写状态
+        await this.handleCommand(match.matchID, playerID, commandType, {});
     }
 
     // ========================================================================

@@ -1,7 +1,7 @@
 /**
  * 游戏状态同步客户端
  *
- * 替代 boardgame.io 的 SocketIO transport + Client，基于 socket.io 实现：
+ * 基于 socket.io 实现：
  * - 连接 /game namespace → 发送 sync → 接收状态
  * - 发送命令 → 接收状态更新
  * - 自动重连 + 凭证验证

@@ -188,6 +188,13 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
     }, [G]);
 }
 
+/** slider 配置（从领域层透传） */
+export interface SliderConfig {
+    confirmLabelKey: string;
+    hintKey?: string;
+    skipLabelKey?: string;
+}
+
 /**
  * 获取当前选择（兼容两种结构）
  */
@@ -195,26 +202,31 @@ export function useCurrentChoice(access: DiceThroneStateAccess): {
     hasChoice: boolean;
     playerId: PlayerId | undefined;
     title: string | undefined;
-    options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string }>;
+    options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string; value?: number }>;
     sourceAbilityId?: string;
+    /** slider 模式配置（存在时渲染滑动条） */
+    slider?: SliderConfig;
 } {
     return useMemo(() => {
         if (access.prompt) {
+            const promptData = access.prompt as typeof access.prompt & { slider?: SliderConfig };
             return {
                 hasChoice: true,
                 playerId: access.prompt.playerId,
                 title: access.prompt.title,
                 options: access.prompt.options.map(opt => {
-                    const rawValue = opt.value as { statusId?: string; tokenId?: string; customId?: string } | undefined;
+                    const rawValue = opt.value as { statusId?: string; tokenId?: string; customId?: string; value?: number } | undefined;
                     return {
                         id: opt.id,
                         label: opt.label,
                         statusId: rawValue?.statusId,
                         tokenId: rawValue?.tokenId,
                         customId: rawValue?.customId,
+                        value: rawValue?.value,
                     };
                 }),
                 sourceAbilityId: access.prompt.sourceId,
+                slider: promptData.slider,
             };
         }
         

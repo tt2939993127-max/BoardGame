@@ -5,7 +5,7 @@
 ## ADDED Requirements
 
 ### Requirement: GameBoard Props 契约
-系统 SHALL 定义 `GameBoardProps<G>` 作为所有游戏 Board 组件的标准 Props 契约，扩展 boardgame.io 的 `BoardProps<G>`。
+系统 SHALL 定义 `GameBoardProps<G>` 作为所有游戏 Board 组件的标准 Props 契约。
 
 #### Scenario: 新游戏 Board 类型校验
 - **GIVEN** 开发者创建新游戏 Board 组件

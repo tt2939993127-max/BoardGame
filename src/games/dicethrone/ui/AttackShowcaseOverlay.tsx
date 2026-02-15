@@ -132,11 +132,6 @@ export const AttackShowcaseOverlay: React.FC<AttackShowcaseOverlayProps> = ({
                         <Swords className="w-[1.8vw] h-[1.8vw] scale-x-[-1]" />
                     </div>
 
-                    {/* 对手名称 */}
-                    <div className="text-amber-400 text-[1.1vw] font-bold tracking-wide">
-                        {t('attackShowcase.attackerLabel', { name: opponentName })}
-                    </div>
-
                     {/* 技能展示区域 */}
                     <div
                         className="relative overflow-hidden rounded-[0.8vw] border-2 border-red-500/60 shadow-[0_0_2vw_rgba(239,68,68,0.5),0_0_4vw_rgba(239,68,68,0.2)]"
@@ -163,13 +158,6 @@ export const AttackShowcaseOverlay: React.FC<AttackShowcaseOverlayProps> = ({
                             </div>
                         )}
                     </div>
-
-                    {/* 等级标签 */}
-                    {data.abilityLevel > 1 && (
-                        <div className="px-[1vw] py-[0.2vw] rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[0.8vw] font-bold">
-                            Lv.{data.abilityLevel}
-                        </div>
-                    )}
 
                     {/* 继续按钮 */}
                     <GameButton

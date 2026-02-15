@@ -6,16 +6,15 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, peekDeckTop } from '../domain/abilityHelpers';
+import { grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, peekDeckTop, buildMinionPlayedEvents } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { DeckReshuffledEvent, SmashUpEvent, SmashUpCore } from '../domain/types';
+import type { SmashUpEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
-import { drawCards } from '../domain/utils';
+import { drawCards, isDiscardMicrobot, MICROBOT_DEF_IDS } from '../domain/utils';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
-import type { MatchState } from '../../../engine/types';
 
 /** 注册机器人派系所有能力*/
 export function registerRobotAbilities(): void {
@@ -74,30 +73,24 @@ function robotMicrobotReclaimer(ctx: AbilityContext): AbilityResult {
         events.push(grantExtraMinion(ctx.playerId, 'robot_microbot_reclaimer', ctx.now));
     }
 
-    // 将弃牌堆中的微型机（power=1 的机器人随从）洗回牌库?
-    const microbotDefIds = new Set([
-        'robot_microbot_guard', 'robot_microbot_fixer', 'robot_microbot_reclaimer',
-        'robot_microbot_archive', 'robot_microbot_alpha',
-    ]);
+    // 将弃牌堆中的微型机洗回牌库（"任意数量"：玩家选择）
+    // alpha 在场时所有己方随从卡都算微型机
     const microbotsInDiscard = player.discard.filter(
-        c => c.type === 'minion' && microbotDefIds.has(c.defId)
+        c => isDiscardMicrobot(ctx.state, c, ctx.playerId)
     );
-    if (microbotsInDiscard.length > 0) {
-        // 将微型机从弃牌堆移到牌库并洗牌
-        const newDeck = [...player.deck, ...microbotsInDiscard];
-        const shuffled = ctx.random.shuffle([...newDeck]);
-        const reshuffleEvt: DeckReshuffledEvent = {
-            type: SU_EVENTS.DECK_RESHUFFLED,
-            payload: {
-                playerId: ctx.playerId,
-                deckUids: shuffled.map(c => c.uid),
-            },
-            timestamp: ctx.now,
-        };
-        events.push(reshuffleEvt);
-    }
+    if (microbotsInDiscard.length === 0) return { events };
 
-    return { events };
+    const options = microbotsInDiscard.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `microbot-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId } };
+    });
+    const interaction = createSimpleChoice(
+        `robot_microbot_reclaimer_${ctx.now}`, ctx.playerId,
+        '选择要洗回牌库的微型机（任意数量）', options,
+        { sourceId: 'robot_microbot_reclaimer', multi: { min: 0, max: microbotsInDiscard.length } },
+    );
+    return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 盘旋机器人 onPlay：展示牌库顶，如果是随从"你可以"将其作为额外随从打出 */
@@ -195,6 +188,25 @@ function robotNukebotOnDestroy(ctx: AbilityContext): AbilityResult {
 
 /** 注册机器人派系的交互解决处理函数 */
 export function registerRobotInteractionHandlers(): void {
+    // 微型机回收者：玩家选择任意数量的微型机洗回牌库
+    registerInteractionHandler('robot_microbot_reclaimer', (state, playerId, value, _iData, random, timestamp) => {
+        const selectedCards = Array.isArray(value) ? value : (value ? [value] : []);
+        if (selectedCards.length === 0) return { state, events: [] };
+        const cardUids = selectedCards.map((v: any) => v.cardUid).filter(Boolean) as string[];
+        if (cardUids.length === 0) return { state, events: [] };
+        const player = state.core.players[playerId];
+        const selectedUidSet = new Set(cardUids);
+        const microbotsFromDiscard = player.discard.filter(c => selectedUidSet.has(c.uid));
+        const newDeck = [...player.deck, ...microbotsFromDiscard];
+        const shuffled = random.shuffle([...newDeck]);
+        // DECK_REORDERED：包含弃牌堆中选中的卡 UID，reducer 会自动从弃牌堆移除
+        return { state, events: [{
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId, deckUids: shuffled.map(c => c.uid) },
+            timestamp,
+        }] };
+    });
+
     // 微型机守护者：选择目标后消灭
     registerInteractionHandler('robot_microbot_guard', (state, _playerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
@@ -235,9 +247,13 @@ export function registerRobotInteractionHandlers(): void {
         if (!def || def.type !== 'minion' || def.power > 2) return undefined;
         // 单基地直接打出
         if (state.core.bases.length === 1) {
-            return { state, events: [
+            const playResult = buildMinionPlayedEvents({
+                core: state.core, matchState: state, playerId, cardUid, defId,
+                baseIndex: 0, power: def.power, random: _random, now: timestamp,
+            });
+            return { state: playResult.matchState ?? state, events: [
                 grantExtraMinion(playerId, 'robot_zapbot', timestamp),
-                { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid, defId, baseIndex: 0, power: def.power }, timestamp } as SmashUpEvent,
+                ...playResult.events,
             ] };
         }
         // 多基地→链式选基地
@@ -263,9 +279,13 @@ export function registerRobotInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const ctx = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
         if (!ctx) return undefined;
-        return { state, events: [
+        const playResult = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid: ctx.cardUid, defId: ctx.defId,
+            baseIndex, power: ctx.power, random: _random, now: timestamp,
+        });
+        return { state: playResult.matchState ?? state, events: [
             grantExtraMinion(playerId, 'robot_zapbot', timestamp),
-            { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power }, timestamp } as SmashUpEvent,
+            ...playResult.events,
         ] };
     });
 
@@ -279,9 +299,13 @@ export function registerRobotInteractionHandlers(): void {
         if (player.deck.length === 0 || player.deck[0].uid !== cardUid) return undefined;
         // 单基地直接打出
         if (state.core.bases.length === 1) {
-            return { state, events: [
+            const playResult = buildMinionPlayedEvents({
+                core: state.core, matchState: state, playerId, cardUid, defId,
+                baseIndex: 0, power, random: _random, now: timestamp, fromDeck: true,
+            });
+            return { state: playResult.matchState ?? state, events: [
                 grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-                { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid, defId, baseIndex: 0, power, fromDeck: true }, timestamp } as SmashUpEvent,
+                ...playResult.events,
             ] };
         }
         // 多基地→链式选基地
@@ -307,9 +331,13 @@ export function registerRobotInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const ctx = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
         if (!ctx) return undefined;
-        return { state, events: [
+        const playResult = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid: ctx.cardUid, defId: ctx.defId,
+            baseIndex, power: ctx.power, random: _random, now: timestamp, fromDeck: true,
+        });
+        return { state: playResult.matchState ?? state, events: [
             grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-            { type: SU_EVENTS.MINION_PLAYED, payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power, fromDeck: true }, timestamp } as SmashUpEvent,
+            ...playResult.events,
         ] };
     });
 }
@@ -328,12 +356,12 @@ function registerRobotOngoingEffects(): void {
     // 微型机档案馆：微型机被消灭后控制者抽1张牌
     registerTrigger('robot_microbot_archive', 'onMinionDestroyed', (trigCtx) => {
         if (!trigCtx.triggerMinionDefId) return [];
-        // 检查被消灭的是否是微型机（力量1的机器人随从）?
-        const microbotDefIds = new Set([
-            'robot_microbot_guard', 'robot_microbot_fixer', 'robot_microbot_reclaimer',
-            'robot_microbot_archive', 'robot_microbot_alpha',
-        ]);
-        if (!microbotDefIds.has(trigCtx.triggerMinionDefId)) return [];
+        // 检查被消灭的是否是微型机
+        // 需要找到被消灭随从的控制者来判断 alpha 是否在场
+        // trigCtx 中没有被消灭随从的完整信息，用 defId 判断原始微型机
+        // alpha 联动需要知道控制者，但 onMinionDestroyed 触发时随从已移除
+        // 保守实现：原始微型机 defId 始终触发
+        if (!MICROBOT_DEF_IDS.has(trigCtx.triggerMinionDefId)) return [];
 
         // 找到 microbot_archive 的拥有者?
         let archiveOwner: string | undefined;

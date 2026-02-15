@@ -335,7 +335,7 @@ describe('Sneak（潜行）被动免伤 — effects 层', () => {
 });
 
 describe('Blessing of Divinity（神圣祝福）致死保护', () => {
-    it('HP=3 受到 10 点伤害时触发：消耗 token + 防止伤害 + 回复 5 HP', () => {
+    it('HP=3 受到 10 点伤害时触发：消耗 token + 防止伤害 + HP设为1 + 回复 5 HP', () => {
         const handler = getCustomActionHandler('paladin-blessing-prevent')!;
         expect(handler).toBeDefined();
 
@@ -355,7 +355,7 @@ describe('Blessing of Divinity（神圣祝福）致死保护', () => {
             state: mockState,
             timestamp: 1000,
             ctx: {} as any,
-            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent' } as any,
+            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 10 } } as any,
         });
 
         // 消耗 token
@@ -367,10 +367,41 @@ describe('Blessing of Divinity（神圣祝福）致死保护', () => {
         const prevent = events.find((e: any) => e.type === 'PREVENT_DAMAGE');
         expect(prevent).toBeDefined();
 
-        // 回复 5 HP
+        // HP 扣至 1（DAMAGE_DEALT amount = 3 - 1 = 2）
+        const dmg = events.find((e: any) => e.type === 'DAMAGE_DEALT');
+        expect(dmg).toBeDefined();
+        expect((dmg as any).payload.amount).toBe(2);
+
+        // 回复 5 HP（最终 HP = 1 + 5 = 6）
         const heal = events.find((e: any) => e.type === 'HEAL_APPLIED');
         expect(heal).toBeDefined();
         expect((heal as any).payload.amount).toBe(5);
+        expect((heal as any).payload.newHp).toBe(6);
+    });
+
+    it('非致死伤害时不触发（HP=30 受到 5 点伤害）', () => {
+        const handler = getCustomActionHandler('paladin-blessing-prevent')!;
+
+        const mockState = {
+            players: {
+                '0': {
+                    tokens: { [TOKEN_IDS.BLESSING_OF_DIVINITY]: 1 },
+                    resources: { [RESOURCE_IDS.HP]: 30 },
+                },
+            },
+        } as any;
+
+        const events = handler({
+            targetId: '0',
+            attackerId: '1',
+            sourceAbilityId: 'test',
+            state: mockState,
+            timestamp: 1000,
+            ctx: {} as any,
+            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 5 } } as any,
+        });
+
+        expect(events).toHaveLength(0);
     });
 
     it('无 blessing token 时不触发', () => {
@@ -392,10 +423,41 @@ describe('Blessing of Divinity（神圣祝福）致死保护', () => {
             state: mockState,
             timestamp: 1000,
             ctx: {} as any,
-            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent' } as any,
+            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 10 } } as any,
         });
 
         expect(events).toHaveLength(0);
+    });
+
+    it('HP=1 受到致死伤害时：不产生 DAMAGE_DEALT（无需扣血），直接治疗到 6', () => {
+        const handler = getCustomActionHandler('paladin-blessing-prevent')!;
+
+        const mockState = {
+            players: {
+                '0': {
+                    tokens: { [TOKEN_IDS.BLESSING_OF_DIVINITY]: 1 },
+                    resources: { [RESOURCE_IDS.HP]: 1 },
+                },
+            },
+        } as any;
+
+        const events = handler({
+            targetId: '0',
+            attackerId: '1',
+            sourceAbilityId: 'test',
+            state: mockState,
+            timestamp: 1000,
+            ctx: {} as any,
+            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 5 } } as any,
+        });
+
+        // TOKEN_CONSUMED + PREVENT_DAMAGE + HEAL_APPLIED（无 DAMAGE_DEALT，因为 HP 已经是 1）
+        expect(events).toHaveLength(3);
+        expect(events[0].type).toBe('TOKEN_CONSUMED');
+        expect(events[1].type).toBe('PREVENT_DAMAGE');
+        expect(events[2].type).toBe('HEAL_APPLIED');
+        expect((events[2] as any).payload.amount).toBe(5);
+        expect((events[2] as any).payload.newHp).toBe(6);
     });
 });
 

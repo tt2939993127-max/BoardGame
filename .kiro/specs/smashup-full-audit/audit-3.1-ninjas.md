@@ -18,7 +18,7 @@
 
 | 优先级 | 交互链 | 问题 | 反模式 |
 |--------|--------|------|--------|
-| P0 | ninja_shinobi | "每个基地只能使用一次忍者的能力"限制完全未实现 | — |
+| P0 | ninja_shinobi | ✅ 已修复 — specialLimitGroup 数据驱动机制 | — |
 | P0 | ninja_acolyte | "如果你还未打出随从卡"条件完全未检查 | — |
 | P0 | ninja_poison | "消灭在它身上的任意数量的战术"即时效果未实现 | — |
 | P0 | ninja_infiltrate | "消灭一个已经被打出到这的战术"即时效果未实现 + 保护作用范围语义不一致 | — |
@@ -72,7 +72,7 @@
 |----|------|------|
 | 定义层 | ✅ | `data/factions/ninjas.ts` — `abilityTags: ['special']` |
 | 注册层 | ✅ | `abilities/ninjas.ts:33` — `registerAbility('ninja_shinobi', 'special', ninjaShinobi)` |
-| 执行层 | ❌ | ① "你可以"自动执行无确认/跳过 UI（反模式 #1）；② **"每个基地只能使用一次忍者的能力"完全未实现** — 无任何追踪机制 |
+| 执行层 | ✅ | specialLimitGroup 数据驱动限制已实现（isSpecialLimitBlocked + emitSpecialLimitUsed），三张忍者 special 卡共享 'ninja_special' 组 |
 | 状态层 | ✅ | `MINION_PLAYED` 事件被 reduce 处理 |
 | 验证层 | ❌ | "每基地一次"限制未在验证层体现 |
 | UI 层 | ❌ | 无确认/跳过 UI |

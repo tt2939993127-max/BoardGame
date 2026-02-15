@@ -4,7 +4,7 @@
 约束：
 - 不同桌游机制差异巨大（回合制/实时、卡牌/骰子/棋盘），领域概念无法统一
 - 引擎层禁止 import 游戏层（单向依赖）
-- 所有状态操作须为纯函数（boardgame.io 约束）
+- 所有状态操作须为纯函数（引擎层约束）
 
 ## Goals / Non-Goals
 - Goals:
@@ -30,8 +30,8 @@
 
 ### 3. 纯函数 API，无 class/singleton
 - **决策**: 所有 primitives 模块导出纯函数，不使用 class 或 singleton
-- **理由**: boardgame.io 要求状态操作为纯函数；纯函数更易测试和组合
-- **替代方案**: 保留 DiceSystem 单例模式 → 与 boardgame.io 纯函数理念冲突
+- **理由**: 引擎层要求状态操作为纯函数；纯函数更易测试和组合
+- **替代方案**: 保留 DiceSystem 单例模式 → 与引擎层纯函数理念冲突
 
 ### 4. expression 模块统一三套实现
 - **决策**: 提取公共 ExpressionNode 类型和 evaluate 函数，支持 add/mul/var/min/max/literal

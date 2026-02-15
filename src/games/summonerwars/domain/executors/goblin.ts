@@ -24,8 +24,8 @@ abilityExecutorRegistry.register('vanish', (ctx: SWAbilityContext) => {
     payload: {
       positionA: sourcePosition,
       positionB: vanishTargetPos,
-      unitIdA: sourceUnit.cardId,
-      unitIdB: vanishTarget.cardId,
+      unitIdA: sourceUnit.instanceId,
+      unitIdB: vanishTarget.instanceId,
     },
     timestamp,
   });
@@ -69,13 +69,13 @@ abilityExecutorRegistry.register('feed_beast', (ctx: SWAbilityContext) => {
     events.push({
       type: SW_EVENTS.UNIT_DESTROYED,
       payload: {
-        position: sourcePosition, cardId: sourceUnit.cardId,
+        position: sourcePosition, cardId: sourceUnit.cardId, instanceId: sourceUnit.instanceId,
         cardName: sourceUnit.card.name, owner: sourceUnit.owner,
         reason: 'feed_beast_self',
       },
       timestamp,
     });
-  } else {
+  } else if (fbChoice === 'destroy_adjacent') {
     const fbTargetPos = payload.targetPosition as CellCoord | undefined;
     if (!fbTargetPos) return { events };
     const fbTarget = getUnitAt(core, fbTargetPos);
@@ -83,12 +83,16 @@ abilityExecutorRegistry.register('feed_beast', (ctx: SWAbilityContext) => {
     events.push({
       type: SW_EVENTS.UNIT_DESTROYED,
       payload: {
-        position: fbTargetPos, cardId: fbTarget.cardId,
+        position: fbTargetPos, cardId: fbTarget.cardId, instanceId: fbTarget.instanceId,
         cardName: fbTarget.card.name, owner: fbTarget.owner,
+        killerPlayerId: playerId,
+        killerUnitId: sourceUnit.instanceId,
         reason: 'feed_beast',
       },
       timestamp,
     });
+  } else {
+    return { events };
   }
   return { events };
 }, { payloadContract: { required: ['choice'], optional: ['targetPosition'] } });
@@ -108,7 +112,7 @@ abilityExecutorRegistry.register('magic_addiction', (ctx: SWAbilityContext) => {
     events.push({
       type: SW_EVENTS.UNIT_DESTROYED,
       payload: {
-        position: sourcePosition, cardId: sourceUnit.cardId,
+        position: sourcePosition, cardId: sourceUnit.cardId, instanceId: sourceUnit.instanceId,
         cardName: sourceUnit.card.name, owner: sourceUnit.owner,
         reason: 'magic_addiction',
       },

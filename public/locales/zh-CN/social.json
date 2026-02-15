@@ -42,8 +42,13 @@
         "selectFriend": "选择好友开始聊天"
     },
     "menu": {
-        "friendsAndChat": "好友与聊天",
+        "friendsAndChat": "好友",
         "matchHistory": "对局记录"
+    },
+    "notification": {
+        "title": "系统通知",
+        "subtitle": "来自管理员的公告",
+        "empty": "暂无通知"
     },
     "matchHistory": {
         "title": "对局记录",

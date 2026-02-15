@@ -6,7 +6,7 @@
 #### Scenario: 发现领域内核
 - **GIVEN** 存在游戏目录 `src/games/<gameId>/`
 - **WHEN** 该游戏在约定位置提供领域内核模块（例如 `src/games/<gameId>/domain/`）
-- **THEN** 平台可以通过适配层构建可运行的游戏，而无需在 Boardgame.io moves 中编写规则主体
+- **THEN** 平台可以通过适配层构建可运行的游戏，而无需在 dispatch handler 中编写规则主体
 
 ### Requirement: Command 与 Event 必须可序列化
 系统 SHALL 将 Command 与 Event 定义为可序列化的纯数据结构。

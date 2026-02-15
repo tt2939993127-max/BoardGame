@@ -1,7 +1,12 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
-import { buildLocalizedImageSet, getLocalizedAssetPath, getLocalizedImageUrls, type CardPreviewRef } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedImageUrls, type CardPreviewRef } from '../../../core';
 import { OptimizedImage } from './OptimizedImage';
-import { type SpriteAtlasConfig, type SpriteAtlasSource, computeSpriteStyle } from '../../../engine/primitives/spriteAtlas';
+import { type SpriteAtlasConfig, computeSpriteStyle } from '../../../engine/primitives/spriteAtlas';
+import {
+    registerCardAtlasSource,
+    getCardAtlasSource,
+    type CardAtlasSource as RegistryCardAtlasSource,
+} from './cardAtlasRegistry';
 
 export type CardPreviewRenderer = (args: {
     previewRef: CardPreviewRef;
@@ -14,13 +19,10 @@ export type CardSvgRenderer = (props?: Record<string, string | number>) => React
 
 // 向后兼容类型别名（游戏层可能直接引用）
 export type CardAtlasConfig = SpriteAtlasConfig;
-export type CardAtlasSource = SpriteAtlasSource;
+export type CardAtlasSource = RegistryCardAtlasSource;
 
 const previewRendererRegistry = new Map<string, CardPreviewRenderer>();
 const svgRendererRegistry = new Map<string, CardSvgRenderer>();
-// CardPreview 专用注册表：存储 base path（不带扩展名），由 AtlasCard 用 buildLocalizedImageSet 构建实际 URL
-// 与引擎层 globalSpriteAtlasRegistry（存储运行时 webp URL）独立
-const cardAtlasRegistry = new Map<string, CardAtlasSource>();
 
 export function registerCardPreviewRenderer(id: string, renderer: CardPreviewRenderer): void {
     previewRendererRegistry.set(id, renderer);
@@ -30,15 +32,7 @@ export function registerCardSvgRenderer(id: string, renderer: CardSvgRenderer): 
     svgRendererRegistry.set(id, renderer);
 }
 
-/** 注册卡牌图集源（CardPreview 专用，存 base path） */
-export function registerCardAtlasSource(id: string, source: CardAtlasSource): void {
-    cardAtlasRegistry.set(id, source);
-}
-
-/** 获取卡牌图集源（CardPreview 专用） */
-export function getCardAtlasSource(id: string): CardAtlasSource | undefined {
-    return cardAtlasRegistry.get(id);
-}
+export { registerCardAtlasSource, getCardAtlasSource };
 
 export function getCardPreviewRenderer(id: string): CardPreviewRenderer | undefined {
     return previewRendererRegistry.get(id);
@@ -73,11 +67,10 @@ export function CardPreview({
     if (!previewRef) return null;
 
     if (previewRef.type === 'image') {
-        const src = getLocalizedAssetPath(previewRef.src, locale);
         return (
             <OptimizedImage
-                src={src}
-                fallbackSrc={previewRef.src}
+                src={previewRef.src}
+                locale={locale}
                 className={className}
                 style={style}
                 alt={alt}

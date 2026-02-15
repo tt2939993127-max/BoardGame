@@ -237,7 +237,7 @@ describe('圣骑士 神圣祝福 custom action', () => {
         expect(handler).toBeDefined();
     });
 
-    it('执行：消耗 token + 防止伤害 + 回复 HP', () => {
+    it('执行：致死伤害时消耗 token + 防止伤害 + HP设为1 + 回复 HP', () => {
         const handler = getCustomActionHandler('paladin-blessing-prevent')!;
         const mockState = {
             players: {
@@ -255,15 +255,42 @@ describe('圣骑士 神圣祝福 custom action', () => {
             state: mockState,
             timestamp: 1000,
             ctx: {} as any,
-            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent' } as any,
+            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 10 } } as any,
         });
 
-        expect(events.length).toBe(3);
+        expect(events.length).toBe(4); // TOKEN_CONSUMED + PREVENT_DAMAGE + DAMAGE_DEALT + HEAL_APPLIED
         expect(events[0].type).toBe('TOKEN_CONSUMED');
         expect((events[0] as any).payload.tokenId).toBe(TOKEN_IDS.BLESSING_OF_DIVINITY);
         expect(events[1].type).toBe('PREVENT_DAMAGE');
-        expect(events[2].type).toBe('HEAL_APPLIED');
-        expect((events[2] as any).payload.amount).toBe(5);
+        expect(events[2].type).toBe('DAMAGE_DEALT');
+        expect((events[2] as any).payload.amount).toBe(4); // HP 5 → 1
+        expect(events[3].type).toBe('HEAL_APPLIED');
+        expect((events[3] as any).payload.amount).toBe(5);
+        expect((events[3] as any).payload.newHp).toBe(6);
+    });
+
+    it('非致死伤害时不触发', () => {
+        const handler = getCustomActionHandler('paladin-blessing-prevent')!;
+        const mockState = {
+            players: {
+                '0': {
+                    tokens: { [TOKEN_IDS.BLESSING_OF_DIVINITY]: 1 },
+                    resources: { [RESOURCE_IDS.HP]: 50 },
+                },
+            },
+        } as any;
+
+        const events = handler({
+            targetId: '0',
+            attackerId: '1',
+            sourceAbilityId: 'test',
+            state: mockState,
+            timestamp: 1000,
+            ctx: {} as any,
+            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 5 } } as any,
+        });
+
+        expect(events.length).toBe(0);
     });
 
     it('无 blessing token 时不产生事件', () => {
@@ -284,7 +311,7 @@ describe('圣骑士 神圣祝福 custom action', () => {
             state: mockState,
             timestamp: 1000,
             ctx: {} as any,
-            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent' } as any,
+            action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 10 } } as any,
         });
 
         expect(events.length).toBe(0);

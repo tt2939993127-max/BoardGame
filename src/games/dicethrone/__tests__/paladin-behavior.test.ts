@@ -401,10 +401,13 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
     // 神圣祝福
     // ========================================================================
     describe('paladin-blessing-prevent (神圣祝福：免疫致死+回血)', () => {
-        it('有祝福时消耗1层，免除伤害并回复5HP', () => {
+        it('致死伤害时消耗1层，免除伤害+HP设为1+回复5HP', () => {
             const state = createState({ attackerBlessing: 1, attackerHP: 3 });
             const handler = getCustomActionHandler('paladin-blessing-prevent')!;
-            const events = handler(buildCtx(state, 'paladin-blessing-prevent'));
+            const ctx = buildCtx(state, 'paladin-blessing-prevent');
+            // 注入致死伤害参数（applyOnDamageReceivedTriggers 会自动注入）
+            ctx.action = { ...ctx.action, params: { damageAmount: 10 } } as any;
+            const events = handler(ctx);
 
             // 消耗token
             const consumed = eventsOfType(events, 'TOKEN_CONSUMED');
@@ -415,17 +418,62 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
             expect(prevent).toHaveLength(1);
             expect((prevent[0] as any).payload.amount).toBe(9999);
 
-            // 回复5HP
+            // HP 扣至 1（DAMAGE_DEALT amount = currentHp - 1 = 2）
+            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
+            expect(dmg).toHaveLength(1);
+            expect((dmg[0] as any).payload.amount).toBe(2);
+
+            // 回复5HP（最终 HP = 1 + 5 = 6）
             const heal = eventsOfType(events, 'HEAL_APPLIED');
             expect(heal).toHaveLength(1);
             expect((heal[0] as any).payload.amount).toBe(5);
+            expect((heal[0] as any).payload.newHp).toBe(6);
+        });
+
+        it('非致死伤害时不触发', () => {
+            const state = createState({ attackerBlessing: 1, attackerHP: 30 });
+            const handler = getCustomActionHandler('paladin-blessing-prevent')!;
+            const ctx = buildCtx(state, 'paladin-blessing-prevent');
+            ctx.action = { ...ctx.action, params: { damageAmount: 5 } } as any;
+            const events = handler(ctx);
+            expect(events).toHaveLength(0);
         });
 
         it('无祝福时不生成事件', () => {
             const state = createState({ attackerBlessing: 0 });
             const handler = getCustomActionHandler('paladin-blessing-prevent')!;
-            const events = handler(buildCtx(state, 'paladin-blessing-prevent'));
+            const ctx = buildCtx(state, 'paladin-blessing-prevent');
+            ctx.action = { ...ctx.action, params: { damageAmount: 100 } } as any;
+            const events = handler(ctx);
             expect(events).toHaveLength(0);
+        });
+
+        it('DAMAGE_DEALT 带 bypassShields 标记（不被护盾吸收）', () => {
+            const state = createState({ attackerBlessing: 1, attackerHP: 10 });
+            const handler = getCustomActionHandler('paladin-blessing-prevent')!;
+            const ctx = buildCtx(state, 'paladin-blessing-prevent');
+            ctx.action = { ...ctx.action, params: { damageAmount: 20 } } as any;
+            const events = handler(ctx);
+
+            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
+            expect(dmg).toHaveLength(1);
+            expect((dmg[0] as any).payload.bypassShields).toBe(true);
+            expect((dmg[0] as any).payload.amount).toBe(9); // HP 10 → 1
+        });
+
+        it('HP=1 时致死伤害触发但不产生 DAMAGE_DEALT（无需扣血）', () => {
+            const state = createState({ attackerBlessing: 1, attackerHP: 1 });
+            const handler = getCustomActionHandler('paladin-blessing-prevent')!;
+            const ctx = buildCtx(state, 'paladin-blessing-prevent');
+            ctx.action = { ...ctx.action, params: { damageAmount: 5 } } as any;
+            const events = handler(ctx);
+
+            // 消耗 + 免除 + 治疗，但无 DAMAGE_DEALT（hpToRemove = 0）
+            expect(eventsOfType(events, 'TOKEN_CONSUMED')).toHaveLength(1);
+            expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(1);
+            expect(eventsOfType(events, 'DAMAGE_DEALT')).toHaveLength(0);
+            expect(eventsOfType(events, 'HEAL_APPLIED')).toHaveLength(1);
+            expect((eventsOfType(events, 'HEAL_APPLIED')[0] as any).payload.newHp).toBe(6);
         });
     });
 });

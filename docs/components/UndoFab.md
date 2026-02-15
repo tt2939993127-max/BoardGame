@@ -25,13 +25,12 @@ import { UndoFab } from '../../components/game/UndoFab';
 
 ```tsx
 export const YourGameBoard: React.FC<Props> = ({ 
-    ctx, 
     G, 
     moves, 
     playerID, 
     isMultiplayer 
 }) => {
-    const isGameOver = ctx.gameover;
+    const isGameOver = !!G.sys.gameover;
     const isSpectator = /* 你的观战者判断逻辑 */;
 
     return (
@@ -42,10 +41,9 @@ export const YourGameBoard: React.FC<Props> = ({
             {!isSpectator && (
                 <UndoFab
                     G={G}
-                    ctx={ctx}
                     moves={moves}
                     playerID={playerID}
-                    isGameOver={!!isGameOver}
+                    isGameOver={isGameOver}
                 />
             )}
         </div>
@@ -60,10 +58,9 @@ export const YourGameBoard: React.FC<Props> = ({
 ```tsx
 <UndoFab
     G={G}
-    ctx={ctx}
     moves={moves}
     playerID={playerID}
-    isGameOver={!!isGameOver}
+    isGameOver={!!G.sys.gameover}
     className="fixed top-8 left-8 flex flex-col items-start gap-2 font-sans"
 />
 ```
@@ -73,8 +70,7 @@ export const YourGameBoard: React.FC<Props> = ({
 | 属性 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `G` | `MatchState<unknown>` | ✅ | - | 游戏状态对象 |
-| `ctx` | `any` | ✅ | - | boardgame.io 上下文对象 |
-| `moves` | `any` | ✅ | - | boardgame.io moves 对象 |
+| `moves` | `any` | ✅ | - | 命令分发对象 |
 | `playerID` | `string \| null` | ✅ | - | 当前玩家 ID |
 | `isGameOver` | `boolean` | ❌ | `false` | 游戏是否结束 |
 | `className` | `string` | ❌ | `"fixed bottom-8 left-8 ..."` | 自定义样式类名（位置/布局为主） |
@@ -164,6 +160,23 @@ export const yourGameConfig = createDomainAdapter({
 });
 ```
 
+### 跳过快照（`_noSnapshot`）
+
+当某个命令是前一个操作的后续动作（如"移动后触发的技能"），撤回时应作为一个整体回退。UI 层在 dispatch 时给 payload 加 `_noSnapshot: true` 即可跳过该命令的快照创建：
+
+```typescript
+// 示例：afterMove 技能与移动共享撤回点
+dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
+  abilityId: 'frost_axe',
+  sourceUnitId: unit.instanceId,
+  choice: 'attach',
+  targetPosition: pos,
+  _noSnapshot: true, // 不创建独立快照，撤回时连同移动一起回退
+});
+```
+
+适用场景：任何"操作 A 触发操作 B，撤回时 A+B 应原子回退"的情况。
+
 ### 包依赖
 
 - `react`
@@ -190,10 +203,9 @@ export const TicTacToeBoard: React.FC<Props> = ({ /* ... */ }) => {
             {!isSpectator && (
                 <UndoFab
                     G={G}
-                    ctx={ctx}
                     moves={moves}
                     playerID={playerID}
-                    isGameOver={!!isGameOver}
+                    isGameOver={!!G.sys.gameover}
                 />
             )}
         </div>

@@ -17,6 +17,7 @@ import { CustomDeckModule } from './modules/custom-deck/custom-deck.module';
 import { SponsorModule } from './modules/sponsor/sponsor.module';
 
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
     imports: [
@@ -59,6 +60,7 @@ import { FeedbackModule } from './modules/feedback/feedback.module';
         InviteModule,
         ReviewModule,
         FeedbackModule,
+        NotificationModule,
         HealthModule,
         UgcModule,
         LayoutModule,

@@ -18,8 +18,35 @@
  */
 
 import type { AbilityDef } from './abilities';
-import { getStructureAt, getUnitAt, getUnitAbilities } from './helpers';
+import { getStructureAt, getUnitAt, getUnitAbilities, BOARD_ROWS, BOARD_COLS, isValidCoord } from './helpers';
 import { abilityText } from './abilityTextHelper';
+import type { SummonerWarsCore, PlayerId, CellCoord } from './types';
+
+/** 检查棋盘上是否存在友方建筑且其相邻有敌方单位 */
+function hasEnemyAdjacentToAllyStructure(core: SummonerWarsCore, playerId: PlayerId): boolean {
+  const adjDirs: CellCoord[] = [
+    { row: -1, col: 0 }, { row: 1, col: 0 },
+    { row: 0, col: -1 }, { row: 0, col: 1 },
+  ];
+  for (let r = 0; r < BOARD_ROWS; r++) {
+    for (let c = 0; c < BOARD_COLS; c++) {
+      const structure = getStructureAt(core, { row: r, col: c });
+      const structureUnit = getUnitAt(core, { row: r, col: c });
+      const isAlly = (structure && structure.owner === playerId)
+        || (structureUnit && structureUnit.owner === playerId
+          && getUnitAbilities(structureUnit, core).includes('mobile_structure'));
+      if (!isAlly) continue;
+      for (const d of adjDirs) {
+        const adjPos = { row: r + d.row, col: c + d.col };
+        if (!isValidCoord(adjPos)) continue;
+        const adjUnit = getUnitAt(core, adjPos);
+        if (adjUnit && adjUnit.owner !== playerId) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export const FROST_ABILITIES: AbilityDef[] = [
   // ============================================================================
   // 召唤师 - 丝瓦拉
@@ -132,6 +159,10 @@ export const FROST_ABILITIES: AbilityDef[] = [
         if ((ctx.sourceUnit.boosts ?? 0) < 1) {
           return { valid: false, error: '没有充能可消耗' };
         }
+        // 检查是否存在友方建筑旁有敌方单位
+        if (!hasEnemyAdjacentToAllyStructure(ctx.core, ctx.playerId)) {
+          return { valid: false, error: '没有友方建筑相邻的敌方单位' };
+        }
         return { valid: true };
       },
     },
@@ -141,7 +172,8 @@ export const FROST_ABILITIES: AbilityDef[] = [
       buttonLabel: 'abilityButtons.iceShards',
       buttonVariant: 'secondary',
       activationType: 'directExecute',
-      quickCheck: ({ unit }) => (unit.boosts ?? 0) >= 1,
+      quickCheck: ({ unit, core, playerId }) =>
+        (unit.boosts ?? 0) >= 1 && hasEnemyAdjacentToAllyStructure(core, playerId),
     },
   },
 
@@ -254,7 +286,7 @@ export const FROST_ABILITIES: AbilityDef[] = [
             return { valid: false, error: '只能附加到士兵' };
           }
           
-          if (fxTarget.cardId === ctx.sourceUnit.cardId) {
+          if (fxTarget.instanceId === ctx.sourceUnit.instanceId) {
             return { valid: false, error: '不能附加到自身' };
           }
           

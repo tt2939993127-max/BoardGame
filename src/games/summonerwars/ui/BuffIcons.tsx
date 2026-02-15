@@ -8,7 +8,7 @@
 import React from 'react';
 import type { BoardUnit, EventCard, PlayerId, SummonerWarsCore } from '../domain/types';
 import { summonerWarsBuffRegistry } from './buffSystem';
-import { BuffIcons as GenericBuffIcons, BuffDetailsPanel as GenericBuffDetailsPanel, generateBuffGlowStyles } from '../../../components/game/framework/widgets/BuffSystem';
+import { BuffIcons as GenericBuffIcons, BuffDetailsPanel as GenericBuffDetailsPanel, generateBuffGlowStyles, type BuffInstance } from '../../../components/game/framework/widgets/BuffSystem';
 
 // 从独立文件导入图标组件，避免循环依赖
 export { HealingIcon, SparkleIcon, SwordIcon, TargetIcon, FlameIcon } from './BuffIconComponents';
@@ -23,6 +23,8 @@ interface BuffIconsProps {
   activeEvents: EventCard[];
   myPlayerId: PlayerId;
   core?: SummonerWarsCore;
+  /** 点击 buff 图标的回调 */
+  onBuffClick?: (buff: BuffInstance) => void;
 }
 
 export const BuffIcons: React.FC<BuffIconsProps> = ({
@@ -30,6 +32,7 @@ export const BuffIcons: React.FC<BuffIconsProps> = ({
   isMyUnit,
   activeEvents,
   core,
+  onBuffClick,
 }) => {
   return (
     <GenericBuffIcons
@@ -37,6 +40,7 @@ export const BuffIcons: React.FC<BuffIconsProps> = ({
       gameState={{ activeEvents, core }}
       registry={summonerWarsBuffRegistry}
       position={isMyUnit ? 'bottom-left' : 'top-right'}
+      onBuffClick={onBuffClick}
     />
   );
 };

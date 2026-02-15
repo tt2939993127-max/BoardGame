@@ -19,6 +19,7 @@ import type {
     MinionMovedEvent,
     MinionReturnedEvent,
     OngoingAttachedEvent,
+    OngoingDetachedEvent,
     TalentUsedEvent,
     CardInstance,
     BaseInPlay,
@@ -35,10 +36,10 @@ import { buildDeck, drawCards } from './utils';
 import { autoMulligan } from '../../../engine/primitives/mulligan';
 import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
-import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
-import { fireTriggers, isMinionProtected } from './ongoingEffects';
-import { reduce } from './reduce';
+import { triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
+import { fireTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
 import { canPlayFromDiscard } from './discardPlayability';
+import { fireMinionPlayedTriggers } from './abilityHelpers';
 
 // ============================================================================
 // execute：命令 → 事件
@@ -125,57 +126,16 @@ function executeCommand(
             };
             events.push(playedEvt);
 
-            // onPlay 能力触发（通过注册表）
-            const executor = resolveOnPlay(card.defId);
-            if (executor) {
-                const ctx: AbilityContext = {
-                    state: core,
-                    matchState: state,
-                    playerId: command.playerId,
-                    cardUid: card.uid,
-                    defId: card.defId,
-                    baseIndex,
-                    random,
-                    now,
-                };
-                const result = executor(ctx);
-                events.push(...result.events);
-                if (result.matchState) {
-                    updatedState = result.matchState;
-                }
-            }
-
-            // 基地能力触发：onMinionPlayed（如鬼屋：弃一张牌）
-            const currentMS = updatedState ?? state;
-            const baseAbilityResult = triggerAllBaseAbilities(
-                'onMinionPlayed', core, command.playerId, now,
-                {
-                    baseIndex,
-                    minionUid: card.uid,
-                    minionDefId: card.defId,
-                    minionPower: minionDef?.power ?? 0,
-                },
-                currentMS,
-            );
-            events.push(...baseAbilityResult.events);
-            if (baseAbilityResult.matchState) {
-                updatedState = baseAbilityResult.matchState;
-            }
-
-            // ongoing 触发：onMinionPlayed（如火焰陷阱消灭入场随从）
-            const coreAfterPlayed = reduce(core, playedEvt);
-            const ongoingTriggerEvents = fireTriggers(coreAfterPlayed, 'onMinionPlayed', {
-                state: coreAfterPlayed,
-                matchState: updatedState ?? state,
+            // 触发链：onPlay + 基地能力 + ongoing（复用 fireMinionPlayedTriggers）
+            const triggers = fireMinionPlayedTriggers({
+                core, matchState: state,
                 playerId: command.playerId,
-                baseIndex,
-                triggerMinionUid: card.uid,
-                triggerMinionDefId: card.defId,
-                random,
-                now,
+                cardUid: card.uid, defId: card.defId,
+                baseIndex, power: minionDef?.power ?? 0,
+                random, now, playedEvt,
             });
-            events.push(...ongoingTriggerEvents.events);
-            if (ongoingTriggerEvents.matchState) updatedState = ongoingTriggerEvents.matchState;
+            events.push(...triggers.events);
+            if (triggers.matchState) updatedState = triggers.matchState;
 
             return updatedState ? { events, updatedState } : { events };
         }
@@ -445,7 +405,7 @@ function executeCommand(
         case SU_COMMANDS.DISMISS_REVEAL: {
             return { events: [{
                 type: SU_EVENTS.REVEAL_DISMISSED,
-                payload: {},
+                payload: { confirmPlayerId: command.playerId },
                 sourceCommandType: command.type,
                 timestamp: now,
             }] };
@@ -466,16 +426,34 @@ export function filterProtectedDestroyEvents(
     core: SmashUpCore,
     sourcePlayerId: PlayerId
 ): SmashUpEvent[] {
-    return events.filter(e => {
-        if (e.type !== SU_EVENTS.MINION_DESTROYED) return true;
+    const result: SmashUpEvent[] = [];
+    for (const e of events) {
+        if (e.type !== SU_EVENTS.MINION_DESTROYED) {
+            result.push(e);
+            continue;
+        }
         const de = e as MinionDestroyedEvent;
         const { minionUid, fromBaseIndex } = de.payload;
         const base = core.bases[fromBaseIndex];
         const minion = base?.minions.find(m => m.uid === minionUid);
-        if (!minion) return true; // 找不到随从，不过滤
-        // 检查是否受保护
-        return !isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'destroy');
-    });
+        if (!minion) { result.push(e); continue; }
+        // 检查 destroy 保护和 action 保护
+        if (isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'destroy')) continue;
+        if (isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'action')) {
+            // 消耗型保护：发射自毁事件
+            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, sourcePlayerId, 'action');
+            if (source) {
+                result.push({
+                    type: SU_EVENTS.ONGOING_DETACHED,
+                    payload: { cardUid: source.uid, defId: source.defId, ownerId: source.ownerId, reason: `${source.defId}_self_destruct` },
+                    timestamp: e.timestamp,
+                } as OngoingDetachedEvent);
+            }
+            continue;
+        }
+        result.push(e);
+    }
+    return result;
 }
 
 /** 后处理结果：事件 + 可选的 matchState（触发器可能创建了交互） */
@@ -611,15 +589,33 @@ export function filterProtectedMoveEvents(
     core: SmashUpCore,
     sourcePlayerId: PlayerId
 ): SmashUpEvent[] {
-    return events.filter(e => {
-        if (e.type !== SU_EVENTS.MINION_MOVED) return true;
+    const result: SmashUpEvent[] = [];
+    for (const e of events) {
+        if (e.type !== SU_EVENTS.MINION_MOVED) {
+            result.push(e);
+            continue;
+        }
         const me = e as MinionMovedEvent;
         const { minionUid, fromBaseIndex } = me.payload;
         const base = core.bases[fromBaseIndex];
         const minion = base?.minions.find(m => m.uid === minionUid);
-        if (!minion) return true;
-        return !isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'move');
-    });
+        if (!minion) { result.push(e); continue; }
+        if (isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'move')) continue;
+        if (isMinionProtected(core, minion, fromBaseIndex, sourcePlayerId, 'action')) {
+            // 消耗型保护：发射自毁事件
+            const source = getConsumableProtectionSource(core, minion, fromBaseIndex, sourcePlayerId, 'action');
+            if (source) {
+                result.push({
+                    type: SU_EVENTS.ONGOING_DETACHED,
+                    payload: { cardUid: source.uid, defId: source.defId, ownerId: source.ownerId, reason: `${source.defId}_self_destruct` },
+                    timestamp: e.timestamp,
+                } as OngoingDetachedEvent);
+            }
+            continue;
+        }
+        result.push(e);
+    }
+    return result;
 }
 
 /** 后处理：触发 onMinionMoved 拦截器 */

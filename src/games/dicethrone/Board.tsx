@@ -17,7 +17,6 @@ import { usePulseGlow } from '../../components/common/animations/PulseGlow';
 import { useImpactFeedback } from '../../components/common/animations';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { diceThroneFxRegistry } from './ui/fxSetup';
-import { getLocalizedAssetPath } from '../../core';
 import { useToast } from '../../contexts/ToastContext';
 import { UndoProvider } from '../../contexts/UndoContext';
 import { useTutorial, useTutorialBridge } from '../../contexts/TutorialContext';
@@ -63,7 +62,7 @@ import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
 // --- Main Layout ---
-export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves, dispatch, playerID, reset, matchData, isMultiplayer }) => {
+export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispatch, playerID, reset, matchData, isMultiplayer }) => {
     const G = rawG.core;
     const access = useDiceThroneState(rawG);
     const choice = useCurrentChoice(access);
@@ -78,13 +77,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
         { logPrefix: 'Spectate[DiceThrone]' }
     ) as DiceThroneMoveMap;
     const { t, i18n } = useTranslation('game-dicethrone');
-    useTutorialBridge(rawG.sys.tutorial, moves as Record<string, unknown>);
+    useTutorialBridge(rawG.sys.tutorial, dispatch);
     const { isActive: isTutorialActive, currentStep: tutorialStep, nextStep: nextTutorialStep, startTutorial } = useTutorial();
     const toast = useToast();
     const locale = i18n.resolvedLanguage ?? i18n.language;
     const tutorialStartRequestedRef = React.useRef(false);
 
-    const isGameOver = (rawG.core as Record<string, unknown>).gameover as import('../../engine/types').GameOverResult | undefined;
+    const isGameOver = rawG.sys.gameover;
     const rootPid = playerID || '0';
     const player = G.players[rootPid] || G.players['0'];
     const otherPid = Object.keys(G.players).find(id => id !== rootPid) || '1';
@@ -107,15 +106,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
         if (tutorialStartRequestedRef.current) return;
         tutorialStartRequestedRef.current = true;
 
-        const startMove = (moves as Record<string, unknown>)[TUTORIAL_COMMANDS.START] as
-            | ((payload: { manifest: typeof DiceThroneTutorial }) => void)
-            | undefined;
-        if (startMove) {
-            startMove({ manifest: DiceThroneTutorial });
-            return;
-        }
+        dispatch(TUTORIAL_COMMANDS.START, { manifest: DiceThroneTutorial });
         startTutorial(DiceThroneTutorial);
-    }, [gameMode?.mode, rawG.sys.tutorial?.active, startTutorial, moves]);
+    }, [gameMode?.mode, rawG.sys.tutorial?.active, startTutorial, dispatch]);
 
     // 注册 reset 回调（当双方都投票后由 socket 触发）
     React.useEffect(() => {
@@ -245,11 +238,9 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
             // 音效由 FeedbackPack 自动触发，这里只是注入播放函数
             playSoundFn(key);
         },
-        triggerShake: (intensity, type) => {
-            // 震动由 FeedbackPack 自动触发
-            if (type === 'hit') {
-                opponentImpact.trigger(intensity === 'strong' ? 8 : 3);
-            }
+        triggerShake: (_intensity, _type) => {
+            // 受击反馈现在由 onEffectImpact 根据目标 playerId 精确触发，
+            // 不再在全局 triggerShake 中触发（无法区分目标）
         },
     });
     const opponentImpact = useImpactFeedback();
@@ -676,6 +667,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
             selfBuff: selfBuffRef,
         },
         getEffectStartPos,
+        getAbilityStartPos,
         locale,
         statusIconAtlas,
         eventStreamEntries: rawG.sys.eventStream?.entries ?? [],
@@ -698,7 +690,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
                 containerClassName="bg-[#0F0F23] text-white"
                 textClassName="text-[1.5vw] font-bold"
             >
-                <UndoProvider value={{ G: rawG, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
+                <UndoProvider value={{ G: rawG, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
                     <div className="relative w-full h-dvh bg-[#0a0a0c] overflow-hidden font-sans select-none">
                         <DiceThroneCharacterSelection
                             isOpen={true}
@@ -720,12 +712,12 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
 
     // --- 游戏进行阶段：渲染完整棋盘 UI ---
     return (
-        <UndoProvider value={{ G: rawG, moves, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
+        <UndoProvider value={{ G: rawG, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: !isMultiplayer }}>
             <div className="relative w-full h-dvh bg-black overflow-hidden font-sans select-none text-slate-200">
                 {!isSpectator && (
-                    <GameDebugPanel G={rawG} moves={moves} playerID={playerID}>
+                    <GameDebugPanel G={rawG} dispatch={dispatch} playerID={playerID}>
                         {/* DiceThrone 专属作弊工具 */}
-                        <DiceThroneDebugConfig G={rawG} moves={moves} />
+                        <DiceThroneDebugConfig G={rawG} dispatch={dispatch} />
 
                         {/* 测试工具 */}
                         <div className="pt-4 border-t border-gray-200 mt-4 space-y-3">
@@ -746,8 +738,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
                 <div className="absolute inset-0 z-0">
                     <div className="absolute inset-0 bg-black/40 z-10 pointer-events-none" />
                     <OptimizedImage
-                        src={getLocalizedAssetPath('dicethrone/images/Common/background', locale)}
-                        fallbackSrc="dicethrone/images/Common/background"
+                        src="dicethrone/images/Common/background"
+                        locale={locale}
                         className="w-full h-full object-cover"
                         alt={t('imageAlt.background')}
                     />
@@ -782,10 +774,19 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
                     bus={fxBus}
                     getCellPosition={() => ({ left: 0, top: 0, width: 0, height: 0 })}
                     onEffectImpact={(id) => {
-                        // 飞行动画到达目标：释放对应 HP 冻结
-                        const bufferKey = fxImpactMapRef.current.get(id);
-                        if (bufferKey) {
-                            damageBuffer.release([bufferKey]);
+                        // 飞行动画到达目标：释放对应 HP 冻结 + 触发受击反馈
+                        const info = fxImpactMapRef.current.get(id);
+                        if (info) {
+                            damageBuffer.release([info.bufferKey]);
+                            // 根据 bufferKey 判断目标，触发对应面板的受击反馈
+                            if (info.damage > 0) {
+                                const isOpponentHit = info.bufferKey === `hp-${otherPid}`;
+                                if (isOpponentHit) {
+                                    opponentImpact.trigger(info.damage);
+                                } else {
+                                    selfImpact.trigger(info.damage);
+                                }
+                            }
                             fxImpactMapRef.current.delete(id);
                         }
                     }}
@@ -986,10 +987,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
                     choice={choice}
                     canResolveChoice={canResolveChoice}
                     onResolveChoice={(optionId) => {
-                        const respondMove = (moves as Record<string, unknown>)[INTERACTION_COMMANDS.RESPOND];
-                        if (typeof respondMove === 'function') {
-                            (respondMove as (payload: { optionId: string }) => void)({ optionId });
-                        }
+                        dispatch(INTERACTION_COMMANDS.RESPOND, { optionId });
                     }}
 
                     // 卡牌特写
@@ -1046,7 +1044,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, moves
                     // 其他
                     statusIconAtlas={statusIconAtlas}
                     locale={locale}
-                    moves={moves as Record<string, unknown>}
+                    dispatch={dispatch}
                     currentPhase={currentPhase}
 
                     // 选角相关

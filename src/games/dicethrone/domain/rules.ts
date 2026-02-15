@@ -293,9 +293,7 @@ export const getAvailableAbilityIds = (
         statusEffects: player.statusEffects,
     };
 
-    // 临时日志：排查 straight 不可选问题
-    console.log('[getAvailableAbilityIds] phase=%s, playerId=%s, rollDiceCount=%d, diceValues=%s, faceCounts=%s',
-        phase, playerId, state.rollDiceCount, JSON.stringify(diceValues), JSON.stringify(faceCounts));
+
 
     // 根据阶段过滤技能类型
     const expectedType = phase === 'defensiveRoll'
@@ -313,8 +311,6 @@ export const getAvailableAbilityIds = (
         if (def.variants?.length) {
             for (const variant of def.variants) {
                 const result = combatAbilityManager.checkTrigger(variant.trigger, context);
-                console.log('[getAvailableAbilityIds] variant id=%s, trigger=%s, result=%s',
-                    variant.id, JSON.stringify(variant.trigger), result);
                 if (result) {
                     available.push(variant.id);
                 }
@@ -324,15 +320,12 @@ export const getAvailableAbilityIds = (
 
         if (def.trigger) {
             const result = combatAbilityManager.checkTrigger(def.trigger, context);
-            console.log('[getAvailableAbilityIds] ability id=%s, trigger=%s, result=%s',
-                def.id, JSON.stringify(def.trigger), result);
             if (result) {
                 available.push(def.id);
             }
         }
     }
 
-    console.log('[getAvailableAbilityIds] available=%s', JSON.stringify(available));
     return available;
 };
 
@@ -782,6 +775,18 @@ export const isCardPlayableInResponseWindow = (
             // 当前未定义“效果覆盖”判定规则，避免误放响应，暂时禁止此窗口出牌
             return false;
             
+        case 'afterAttackResolved':
+            // 攻击结算后的响应窗口（防御结束后）
+            // 目的：允许进攻方在造成足够伤害后打出条件卡（如 card-dizzy：造成 8 伤害后施加脑震荡）
+            // 限制：只允许 roll 卡且必须有 requireMinDamageDealt 条件
+            if (card.timing !== 'roll') {
+                return false;
+            }
+            if (!cond?.requireMinDamageDealt) {
+                return false;
+            }
+            break;
+
         case 'thenBreakpoint':
             // "然后" 断点响应窗口
             // 规则 §8.5：在技能效果的 "then" 连接词处，允许 instant/roll 卡和消耗性状态效果

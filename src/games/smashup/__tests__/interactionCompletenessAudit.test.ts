@@ -67,6 +67,8 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'pirate_saucy_wench', name: '泼辣女海盗', interactionSourceIds: ['pirate_saucy_wench'] },
   { id: 'pirate_broadside', name: '舷炮齐射', interactionSourceIds: ['pirate_broadside'] },
   { id: 'pirate_cannon', name: '大炮', interactionSourceIds: ['pirate_cannon_choose_first'] },
+  { id: 'pirate_king', name: '海盗王（beforeScoring trigger）', interactionSourceIds: ['pirate_king_move'] },
+  { id: 'pirate_first_mate', name: '大副（afterScoring trigger）', interactionSourceIds: ['pirate_first_mate_choose_first'] },
   { id: 'pirate_full_sail', name: '全速前进', interactionSourceIds: ['pirate_full_sail_choose_minion'] },
   { id: 'pirate_dinghy', name: '小艇', interactionSourceIds: ['pirate_dinghy_choose_first'] },
   { id: 'pirate_shanghai', name: '拉壮丁', interactionSourceIds: ['pirate_shanghai_choose_minion'] },
@@ -80,6 +82,7 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'ninja_disguise', name: '伪装', interactionSourceIds: ['ninja_disguise_choose_base', 'ninja_disguise_choose_minions'] },
   { id: 'ninja_hidden_ninja', name: '隐忍', interactionSourceIds: ['ninja_hidden_ninja'] },
   { id: 'ninja_way_of_deception', name: '欺诈之道', interactionSourceIds: ['ninja_way_of_deception_choose_minion'] },
+  { id: 'ninja_infiltrate', name: '渗透', interactionSourceIds: ['ninja_infiltrate_destroy'] },
 
   // ── 恐龙 ──
   { id: 'dino_laser_triceratops', name: '激光三角龙', interactionSourceIds: ['dino_laser_triceratops'] },
@@ -90,6 +93,7 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
 
   // ── 机器人 ──
   { id: 'robot_microbot_guard', name: '微型机守护者', interactionSourceIds: ['robot_microbot_guard'] },
+  { id: 'robot_microbot_reclaimer', name: '微型机回收者', interactionSourceIds: ['robot_microbot_reclaimer'] },
   { id: 'robot_tech_center', name: '技术中心', interactionSourceIds: ['robot_tech_center'] },
   { id: 'robot_zapbot', name: '高速机器人', interactionSourceIds: ['robot_zapbot'] },
   { id: 'robot_hoverbot', name: '盘旋机器人', interactionSourceIds: ['robot_hoverbot'] },
@@ -134,12 +138,15 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'bear_cavalry_youre_screwed', name: '你完了', interactionSourceIds: ['bear_cavalry_youre_screwed_choose_base'] },
   { id: 'bear_cavalry_bear_rides_you', name: '熊骑你', interactionSourceIds: ['bear_cavalry_bear_rides_you_choose_minion'] },
   { id: 'bear_cavalry_borscht', name: '罗宋汤', interactionSourceIds: ['bear_cavalry_borscht_choose_from'] },
+  { id: 'bear_cavalry_commission', name: '委任', interactionSourceIds: ['bear_cavalry_commission_choose_minion'] },
+  { id: 'bear_cavalry_bear_hug', name: '黑熊擒抱', interactionSourceIds: ['bear_cavalry_bear_hug'] },
 
   // ── 蒸汽朋克 ──
   { id: 'steampunk_scrap_diving', name: '废品潜水', interactionSourceIds: ['steampunk_scrap_diving'] },
   { id: 'steampunk_mechanic', name: '机械师', interactionSourceIds: ['steampunk_mechanic'] },
   { id: 'steampunk_change_of_venue', name: '换场', interactionSourceIds: ['steampunk_change_of_venue'] },
   { id: 'steampunk_zeppelin', name: '飞艇', interactionSourceIds: ['steampunk_zeppelin'] },
+  { id: 'steampunk_captain_ahab', name: '亚哈船长', interactionSourceIds: ['steampunk_captain_ahab'] },
 
   // ── 杀手植物 ──
   { id: 'killer_plant_venus_man_trap', name: '捕蝇草', interactionSourceIds: ['killer_plant_venus_man_trap_search'] },
@@ -147,27 +154,37 @@ const INTERACTION_SOURCES: AuditableInteractionSource[] = [
   { id: 'killer_plant_budding', name: '萌芽', interactionSourceIds: ['killer_plant_budding_choose'] },
 
   // ── 印斯茅斯 ──
+  { id: 'innsmouth_recruitment', name: '招募', interactionSourceIds: ['innsmouth_recruitment'] },
   { id: 'innsmouth_mysteries_of_the_deep', name: '深海之谜', interactionSourceIds: ['innsmouth_mysteries_of_the_deep'] },
+  { id: 'innsmouth_return_to_the_sea', name: '重返深海', interactionSourceIds: ['innsmouth_return_to_the_sea'] },
+  { id: 'innsmouth_spreading_the_word', name: '散播谣言', interactionSourceIds: ['innsmouth_spreading_the_word'] },
 
   // ── 米斯卡托尼克 ──
   { id: 'miskatonic_it_might_just_work', name: '也许行得通', interactionSourceIds: ['miskatonic_it_might_just_work'] },
   { id: 'miskatonic_book_of_iter', name: '旅行之书', interactionSourceIds: ['miskatonic_book_of_iter_choose_opponent'] },
   { id: 'miskatonic_mandatory_reading', name: '强制阅读', interactionSourceIds: ['miskatonic_mandatory_reading'] },
-  { id: 'miskatonic_those_meddling_kids', name: '多管闲事的小鬼', interactionSourceIds: ['miskatonic_those_meddling_kids'] },
+  { id: 'miskatonic_those_meddling_kids', name: '多管闲事的小鬼', interactionSourceIds: ['miskatonic_those_meddling_kids', 'miskatonic_those_meddling_kids_select'] },
+  { id: 'miskatonic_thing_on_the_doorstep', name: '门口之物', interactionSourceIds: ['miskatonic_thing_on_the_doorstep'] },
   { id: 'miskatonic_field_trip', name: '实地考察', interactionSourceIds: ['miskatonic_field_trip'] },
+  { id: 'miskatonic_psychologist', name: '心理学家', interactionSourceIds: ['miskatonic_psychologist'] },
+  { id: 'miskatonic_researcher', name: '研究员', interactionSourceIds: ['miskatonic_researcher'] },
 
   // ── 克苏鲁 ──
+  { id: 'cthulhu_it_begins_again', name: '重新开始', interactionSourceIds: ['cthulhu_it_begins_again'] },
   { id: 'cthulhu_corruption', name: '腐化', interactionSourceIds: ['cthulhu_corruption'] },
   { id: 'cthulhu_servitor', name: '仆从', interactionSourceIds: ['cthulhu_servitor'] },
   { id: 'cthulhu_star_spawn', name: '星之眷族', interactionSourceIds: ['cthulhu_star_spawn'] },
   { id: 'cthulhu_madness_unleashed', name: '疯狂释放', interactionSourceIds: ['cthulhu_madness_unleashed'] },
+  { id: 'cthulhu_recruit_by_force', name: '强制招募', interactionSourceIds: ['cthulhu_recruit_by_force'] },
   { id: 'special_madness', name: '疯狂', interactionSourceIds: ['special_madness'] },
+  { id: 'cthulhu_chosen', name: '天选之人', interactionSourceIds: ['cthulhu_chosen'] },
 
   // ── 远古之物 ──
   { id: 'elder_thing_begin_the_summoning', name: '开始召唤', interactionSourceIds: ['elder_thing_begin_the_summoning'] },
   { id: 'elder_thing_elder_thing_choice', name: '远古之物选择', interactionSourceIds: ['elder_thing_elder_thing_choice'] },
   { id: 'elder_thing_shoggoth', name: '修格斯', interactionSourceIds: ['elder_thing_shoggoth_opponent'] },
   { id: 'elder_thing_unfathomable_goals', name: '深不可测的目的', interactionSourceIds: ['elder_thing_unfathomable_goals'] },
+  { id: 'elder_thing_mi_go', name: '米-格', interactionSourceIds: ['elder_thing_mi_go'] },
 
   // ── 基地能力 ──
   { id: 'base_cave_of_shinies', name: '闪光洞穴', interactionSourceIds: [] },
@@ -204,6 +221,11 @@ const HANDLER_CHAINS: HandlerChainLink[] = [
   { sourceId: 'zombie_outbreak_choose_base', producesSourceIds: ['zombie_outbreak_choose_minion'] },
   // 海盗大炮：选第一个 → 选第二个
   { sourceId: 'pirate_cannon_choose_first', producesSourceIds: ['pirate_cannon_choose_second'] },
+  // 海盗王：确认移动 → 自链（处理多个海盗王）
+  { sourceId: 'pirate_king_move', producesSourceIds: ['pirate_king_move'] },
+  // 大副：选随从 → 选基地 → 选第二个随从（循环）
+  { sourceId: 'pirate_first_mate_choose_first', producesSourceIds: ['pirate_first_mate_choose_base'] },
+  { sourceId: 'pirate_first_mate_choose_base', producesSourceIds: ['pirate_first_mate_choose_first'] },
   // 海盗全速前进：选随从 → 选基地（循环直到完成）
   { sourceId: 'pirate_full_sail_choose_minion', producesSourceIds: ['pirate_full_sail_choose_base'] },
   { sourceId: 'pirate_full_sail_choose_base', producesSourceIds: ['pirate_full_sail_choose_minion'] },
@@ -256,6 +278,10 @@ const HANDLER_CHAINS: HandlerChainLink[] = [
   { sourceId: 'bear_cavalry_bear_rides_you_choose_minion', producesSourceIds: ['bear_cavalry_bear_rides_you_choose_base'] },
   // 罗宋汤：选来源 → 选目的地
   { sourceId: 'bear_cavalry_borscht_choose_from', producesSourceIds: ['bear_cavalry_borscht_choose_dest'] },
+  // 委任：选随从 → 选基地 → 选对手随从 → 选目的地
+  { sourceId: 'bear_cavalry_commission_choose_minion', producesSourceIds: ['bear_cavalry_commission_choose_base', 'bear_cavalry_commission_move_minion'] },
+  { sourceId: 'bear_cavalry_commission_choose_base', producesSourceIds: ['bear_cavalry_commission_move_minion'] },
+  { sourceId: 'bear_cavalry_commission_move_minion', producesSourceIds: ['bear_cavalry_commission_move_dest'] },
   // 多基地计分继续（同一个 handler 循环使用）
   { sourceId: 'multi_base_scoring', producesSourceIds: ['multi_base_scoring'] },
   // 传送：选随从 → 排序循环
@@ -282,6 +308,7 @@ const ORPHAN_WHITELIST = new Set([
   'base_the_mothership', // 扩展包基地 handler
   'base_tortuga', // 扩展包基地 handler
   'base_nine_lives_intercept', // 由 onMinionDestroyed trigger 内部创建交互，非标准能力源
+  'pirate_buccaneer_move', // 由 onMinionDestroyed trigger 内部创建交互，非标准能力源
 ]);
 
 // ============================================================================

@@ -297,9 +297,8 @@ export class AbilityExecutorRegistry<
     const tag = typeof tagOrOptions === 'string' ? tagOrOptions : tagOrOptions?.tag;
     const contract = typeof tagOrOptions === 'object' ? tagOrOptions?.payloadContract : undefined;
     const key = this.makeKey(abilityId, tag);
-    if (this.entries.has(key)) {
-      console.warn(`[${this.label}] "${key}" 已存在，将被覆盖`);
-    }
+    // HMR 会重新执行模块导致重复注册，静默覆盖即可
+    // 真正的 ID 冲突应在测试阶段通过注册表完整性审计发现
     this.entries.set(key, executor);
     if (contract) {
       this.contracts.set(key, contract);

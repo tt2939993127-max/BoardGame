@@ -20,14 +20,14 @@ const STORAGE_KEY = 'debug_panel_position';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface DebugPanelProps {
     G: any;
-    moves: any;
+    dispatch: (type: string, payload?: unknown) => void;
     events?: any;
     playerID?: string | null;
     autoSwitch?: boolean;
     children?: React.ReactNode; // 支持自定义调试项
 }
 
-export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, moves, events, playerID, autoSwitch = true, children }) => {
+export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, dispatch, events, playerID, autoSwitch = true, children }) => {
     const { t } = useTranslation(['game', 'lobby']);
     const navigate = useNavigate();
     const { gameId, matchId: currentMatchId } = useParams<{ gameId: string; matchId: string }>();
@@ -145,22 +145,17 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, moves, events, pl
     }, [G]);
     
     const handleApplyState = useCallback(() => {
-        if (!moves.SYS_CHEAT_SET_STATE) {
-            setApplyError(t('debug.state.errorUnsupported'));
-            setTimeout(() => setApplyError(null), 3000);
-            return;
-        }
         try {
             const newState = JSON.parse(stateInput);
-            moves.SYS_CHEAT_SET_STATE({ state: newState });
+            dispatch('SYS_CHEAT_SET_STATE', { state: newState });
             setStateInput('');
             setShowStateInput(false);
             setApplyError(null);
-        } catch (err) {
+        } catch (_err) {
             setApplyError(t('debug.state.errorInvalidJson'));
             setTimeout(() => setApplyError(null), 3000);
         }
-    }, [stateInput, moves, t]);
+    }, [stateInput, dispatch, t]);
 
     // 监听当前玩家变化，实现自动切换视角
     // 从领域内核读取当前玩家字段（G.core.currentPlayer）
@@ -188,20 +183,17 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, moves, events, pl
     };
 
     const executeMove = (moveName: string) => {
-        const rawArg = moveArgs[moveName];
+        const rawArg = moveArgs['__commandArgs'];
         if (!rawArg) {
-            moves[moveName]();
+            dispatch(moveName);
             return;
         }
 
-        // 尝试将参数解析为 JSON（用于数字、对象、数组），否则按字符串传递
         try {
-            // 解析参数：如果输入是 JSON 格式则解析，否则作为字符串
             const arg = JSON.parse(rawArg);
-            moves[moveName](arg);
+            dispatch(moveName, arg);
         } catch (_) {
-            // 如果不是有效的 JSON，则回退到字符串
-            moves[moveName](rawArg);
+            dispatch(moveName, rawArg);
         }
     };
 
@@ -303,29 +295,34 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, moves, events, pl
                                         <span className="w-full h-px bg-gray-200"></span>
                                     </h4>
                                     <div className="flex flex-col gap-3">
-                                        {Object.keys(moves).filter(name => !name.startsWith('SYS_')).map((moveName) => (
-                                            <div key={moveName} className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm group hover:border-blue-300 transition-colors">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <span className="font-bold text-gray-900 text-xs">{t(`debug.moves.${moveName}`, moveName)}</span>
-                                                    <button
-                                                        onClick={() => executeMove(moveName)}
-                                                        className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 active:translate-y-0.5 transition-all shadow-sm shadow-blue-200"
-                                                    >
-                                                        {t('debug.actions.execute')}
-                                                    </button>
-                                                </div>
-                                                <input
-                                                    type="text"
-                                                    placeholder={t('debug.placeholders.moveArgs')}
-                                                    value={moveArgs[moveName] || ''}
-                                                    onChange={(e) => handleArgChange(moveName, e.target.value)}
-                                                    className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded bg-gray-50 text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-400"
-                                                />
+                                        <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-bold text-gray-900 text-xs">{t('debug.sections.moves')}</span>
                                             </div>
-                                        ))}
-                                        {Object.keys(moves).length === 0 && (
-                                            <p className="text-gray-600 italic text-xs text-center py-2">{t('debug.actions.empty')}</p>
-                                        )}
+                                            <input
+                                                type="text"
+                                                placeholder={t('debug.placeholders.commandName', 'Command name')}
+                                                value={moveArgs['__commandName'] || ''}
+                                                onChange={(e) => handleArgChange('__commandName', e.target.value)}
+                                                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded bg-gray-50 text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-400 mb-2"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder={t('debug.placeholders.moveArgs')}
+                                                value={moveArgs['__commandArgs'] || ''}
+                                                onChange={(e) => handleArgChange('__commandArgs', e.target.value)}
+                                                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded bg-gray-50 text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-gray-400 mb-2"
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    const name = moveArgs['__commandName'];
+                                                    if (name) executeMove(name);
+                                                }}
+                                                className="w-full px-3 py-1 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 active:translate-y-0.5 transition-all shadow-sm shadow-blue-200"
+                                            >
+                                                {t('debug.actions.execute')}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 

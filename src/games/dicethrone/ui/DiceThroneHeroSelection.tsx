@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { buildLocalizedImageSet, getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
+import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { getPortraitStyle, ASSETS } from './assets';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -199,8 +199,8 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                     onClick={() => setMagnifyImage(ASSETS.PLAYER_BOARD(previewCharId as CharacterId))}
                                 >
                                     <OptimizedImage
-                                        src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD(previewCharId as CharacterId), locale)}
-                                        fallbackSrc={ASSETS.PLAYER_BOARD(previewCharId as CharacterId)}
+                                        src={ASSETS.PLAYER_BOARD(previewCharId as CharacterId)}
+                                        locale={locale}
                                         className="h-full w-auto object-contain"
                                         alt="Player Board"
                                     />
@@ -211,8 +211,8 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                     onClick={() => setMagnifyImage(ASSETS.TIP_BOARD(previewCharId as CharacterId))}
                                 >
                                     <OptimizedImage
-                                        src={getLocalizedAssetPath(ASSETS.TIP_BOARD(previewCharId as CharacterId), locale)}
-                                        fallbackSrc={ASSETS.TIP_BOARD(previewCharId as CharacterId)}
+                                        src={ASSETS.TIP_BOARD(previewCharId as CharacterId)}
+                                        locale={locale}
                                         className="h-full w-auto object-contain"
                                         alt="Tip Board"
                                     />
@@ -330,8 +330,8 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             >
                 {availableCharacters.map(char => (
                     <React.Fragment key={char.id}>
-                        <img src={getLocalizedAssetPath(ASSETS.PLAYER_BOARD(char.id), locale)} alt="" />
-                        <img src={getLocalizedAssetPath(ASSETS.TIP_BOARD(char.id), locale)} alt="" />
+                        <OptimizedImage src={ASSETS.PLAYER_BOARD(char.id)} locale={locale} alt="" placeholder={false} />
+                        <OptimizedImage src={ASSETS.TIP_BOARD(char.id)} locale={locale} alt="" placeholder={false} />
                     </React.Fragment>
                 ))}
             </div>
@@ -345,8 +345,8 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             >
                 {magnifyImage && (
                     <OptimizedImage
-                        src={getLocalizedAssetPath(magnifyImage, locale)}
-                        fallbackSrc={magnifyImage}
+                        src={magnifyImage}
+                        locale={locale}
                         className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
                         alt="Preview"
                     />

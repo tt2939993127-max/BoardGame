@@ -23,7 +23,7 @@ type Props = {
     isDiscardMode?: boolean;
     discardSelection?: Set<string>;
     disableInteraction?: boolean;
-    /** 教学模式下被禁用的卡牌 uid 集合（置灰 + 摇头） */
+    /** 被禁用的卡牌 uid 集合（置灰 + 摇头） */
     disabledCardUids?: Set<string>;
 };
 
@@ -36,15 +36,15 @@ type HandCardProps = {
     isDiscardSelected: boolean;
     isDiscardMode: boolean;
     disableInteraction: boolean;
-    /** 教学模式下此卡被单独禁用（置灰 + 摇头） */
-    isTutorialDisabled: boolean;
+    /** 此卡被单独禁用（置灰 + 摇头） */
+    isDisabled: boolean;
     onSelect: () => void;
     onViewDetail?: () => void;
 };
 
 
 const HandCard: React.FC<HandCardProps> = ({
-    card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, isTutorialDisabled, onSelect, onViewDetail
+    card, index, total, isSelected, isDiscardSelected, isDiscardMode, disableInteraction, isDisabled, onSelect, onViewDetail
 }) => {
     const { t, i18n } = useTranslation('game-smashup');
     const [isHovered, setIsHovered] = useState(false);
@@ -97,7 +97,7 @@ const HandCard: React.FC<HandCardProps> = ({
             onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
             onClick={() => {
-                if (disableInteraction || isTutorialDisabled) {
+                if (disableInteraction || isDisabled) {
                     // 不可操作时摇头抖动
                     setIsShaking(true);
                     setTimeout(() => setIsShaking(false), 400);
@@ -109,10 +109,10 @@ const HandCard: React.FC<HandCardProps> = ({
             {/* Card Container */}
             <div className={`
                 w-full h-full relative rounded-md shadow-md transition-all duration-200
-                ${isTutorialDisabled ? 'opacity-40 grayscale cursor-not-allowed' : ''}
+                ${isDisabled ? 'opacity-40 grayscale cursor-not-allowed' : ''}
                 ${isSelected ? 'ring-4 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)]' : 'shadow-black/30'}
                 ${isDiscardSelected ? 'ring-4 ring-red-500 shadow-red-500/50 grayscale' : ''}
-                ${!isSelected && !isDiscardSelected && !isTutorialDisabled ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white hover:shadow-xl') : ''}
+                ${!isSelected && !isDiscardSelected && !isDisabled ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white hover:shadow-xl') : ''}
             `}>
 
                 {/* Detail View Button (Magnifying Glass) - Appears on hover */}
@@ -211,7 +211,7 @@ export const HandArea: React.FC<Props> = ({
                             isDiscardSelected={!!discardSelection?.has(card.uid)}
                             isDiscardMode={isDiscardMode}
                             disableInteraction={disableInteraction}
-                            isTutorialDisabled={!!disabledCardUids?.has(card.uid)}
+                            isDisabled={!!disabledCardUids?.has(card.uid)}
                             onSelect={() => onCardSelect(card)}
                             onViewDetail={() => onCardView?.(card)}
                         />

@@ -13,6 +13,7 @@ import { summonerWarsFlowHooks } from '../domain/flowHooks';
 import type { SummonerWarsCore, PlayerId, UnitCard, EventCard, BoardUnit, BoardCell, PlayerState, GamePhase } from '../domain/types';
 import { SW_EVENTS, PHASE_ORDER } from '../domain/types';
 import type { MatchState, GameEvent } from '../../../engine/types';
+import { generateInstanceId } from '../domain/utils';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import { createInitializedCore } from './test-helpers';
 import type { RandomFn } from '../../../engine/types';
@@ -104,8 +105,10 @@ function wrapState(core: SummonerWarsCore): MatchState<SummonerWarsCore> {
 /** 放置单位到棋盘 */
 function placeUnit(core: SummonerWarsCore, row: number, col: number, unit: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }): void {
   const { card, owner, cardId, ...rest } = unit;
+  const resolvedCardId = cardId ?? card.id;
   core.board[row][col].unit = {
-    cardId: cardId ?? card.id,
+    instanceId: unit.instanceId ?? generateInstanceId(resolvedCardId),
+    cardId: resolvedCardId,
     card,
     owner,
     position: { row, col },

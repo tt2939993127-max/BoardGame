@@ -25,7 +25,7 @@ import type {
 } from '../domain/types';
 import type { RandomFn, GameEvent, MatchState } from '../../../engine/types';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 import {
   BOARD_ROWS, BOARD_COLS, MAGIC_MAX, MAGIC_MIN,
   clampMagic, canMoveToEnhanced, canAttackEnhanced,
@@ -76,8 +76,10 @@ function placeUnit(
   core: SummonerWarsCore, pos: CellCoord,
   unit: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId },
 ): BoardUnit {
+  const cardId = unit.cardId ?? unit.card.id;
   const boardUnit: BoardUnit = {
-    cardId: unit.cardId ?? unit.card.id,
+    instanceId: unit.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: unit.card, owner: unit.owner, position: pos,
     damage: unit.damage ?? 0, boosts: unit.boosts ?? 0,
     hasMoved: unit.hasMoved ?? false, hasAttacked: unit.hasAttacked ?? false,

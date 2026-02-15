@@ -1,6 +1,50 @@
 import type { PlayerId, RandomFn } from '../../../engine/types';
-import type { CardInstance, PlayerState } from './types';
+import type { CardInstance, PlayerState, SmashUpCore, MinionOnBase } from './types';
 import { getFactionCards } from '../data/cards';
+
+// ============================================================================
+// 微型机判断
+// ============================================================================
+
+/** 微型机 defId 集合（原始定义） */
+export const MICROBOT_DEF_IDS = new Set([
+    'robot_microbot_guard', 'robot_microbot_fixer', 'robot_microbot_reclaimer',
+    'robot_microbot_archive', 'robot_microbot_alpha',
+]);
+
+/**
+ * 判断一个随从是否算作微型机
+ *
+ * 规则：robot_microbot_alpha 的持续效果"你的所有随从均视为微型机"
+ * - alpha 在场时，同控制者的所有随从都算微型机
+ * - alpha 不在场时，只有原始微型机 defId 才算
+ */
+export function isMicrobot(state: SmashUpCore, minion: MinionOnBase): boolean {
+    if (MICROBOT_DEF_IDS.has(minion.defId)) return true;
+    // 检查同控制者的 alpha 是否在场
+    for (const base of state.bases) {
+        if (base.minions.some(m => m.defId === 'robot_microbot_alpha' && m.controller === minion.controller)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * 判断一个弃牌堆中的卡是否算作微型机（用于回收等场景）
+ * alpha 在场时所有己方随从卡都算微型机
+ */
+export function isDiscardMicrobot(state: SmashUpCore, card: CardInstance, playerId: PlayerId): boolean {
+    if (card.type !== 'minion') return false;
+    if (MICROBOT_DEF_IDS.has(card.defId)) return true;
+    // 检查该玩家的 alpha 是否在场
+    for (const base of state.bases) {
+        if (base.minions.some(m => m.defId === 'robot_microbot_alpha' && m.controller === playerId)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /** 将派系卡牌定义展开为卡牌实例列表 */
 export function buildDeck(

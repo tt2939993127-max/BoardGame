@@ -38,7 +38,7 @@ export interface AdapterConfig<
     /** 玩家数量范围 */
     minPlayers?: number;
     maxPlayers?: number;
-    /** 显式命令类型列表（用于生成可枚举 moves） */
+    /** 显式命令类型列表（用于命令校验与调试面板展示） */
     commandTypes?: string[];
     /** 是否禁用撤销 */
     disableUndo?: boolean;
@@ -79,7 +79,7 @@ export function createReplayAdapter<
 }
 
 // ============================================================================
-// 创建引擎配置（替代 boardgame.io Game 对象）
+// 创建引擎配置
 // ============================================================================
 
 /**

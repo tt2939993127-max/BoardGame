@@ -10,7 +10,7 @@ import { SummonerWarsDomain, SW_EVENTS } from '../domain';
 import { SW_SELECTION_EVENTS } from '../domain/types';
 import type { SummonerWarsCore, PlayerId, CellCoord, UnitCard, EventCard, StructureCard, BoardUnit } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 import { BOARD_ROWS, BOARD_COLS } from '../domain/helpers';
 
 // ============================================================================
@@ -38,8 +38,10 @@ function makeEventCard(id: string, overrides?: Partial<EventCard>): EventCard {
 }
 
 function placeUnit(core: SummonerWarsCore, pos: CellCoord, owner: PlayerId, card: UnitCard, extra?: Partial<BoardUnit>): BoardUnit {
+  const cardId = card.id;
   const u: BoardUnit = {
-    cardId: card.id, card, owner, position: pos, damage: 0, boosts: 0,
+    instanceId: generateInstanceId(cardId),
+    cardId, card, owner, position: pos, damage: 0, boosts: 0,
     hasMoved: false, hasAttacked: false, ...extra,
   };
   core.board[pos.row][pos.col].unit = u;
@@ -313,6 +315,51 @@ describe('UNIT_DESTROYED', () => {
 
     expect(result.players['0'].magic).toBe(prevMagic0 + 1);
   });
+
+  it('记录 killerUnitId 的本回合击杀计数', () => {
+    const core = createInitializedCore(['0', '1'], createTestRandom());
+    const pos: CellCoord = { row: 4, col: 4 };
+    clearCell(core, pos);
+    placeUnit(core, pos, '1', makeUnitCard('destroyed-unit'));
+    core.unitKillCountThisTurn = { 'other-killer': 2 };
+
+    const result = reduce(core, {
+      type: SW_EVENTS.UNIT_DESTROYED,
+      payload: {
+        position: pos,
+        cardId: 'destroyed-unit',
+        cardName: '测试',
+        owner: '1',
+        killerUnitId: 'killer-unit-1',
+      },
+      timestamp: 0,
+    });
+
+    expect(result.unitKillCountThisTurn?.['other-killer']).toBe(2);
+    expect(result.unitKillCountThisTurn?.['killer-unit-1']).toBe(1);
+  });
+
+  it('自毁（killerUnitId 与 victim 相同）不计入击杀数', () => {
+    const core = createInitializedCore(['0', '1'], createTestRandom());
+    const pos: CellCoord = { row: 4, col: 4 };
+    clearCell(core, pos);
+    const selfUnit = placeUnit(core, pos, '0', makeUnitCard('self-destroy-unit'));
+
+    const result = reduce(core, {
+      type: SW_EVENTS.UNIT_DESTROYED,
+      payload: {
+        position: pos,
+        cardId: 'self-destroy-unit',
+        cardName: '测试',
+        owner: '0',
+        killerUnitId: selfUnit.instanceId,
+        reason: 'feed_beast_self',
+      },
+      timestamp: 0,
+    });
+
+    expect(result.unitKillCountThisTurn?.[selfUnit.instanceId]).toBeUndefined();
+  });
 });
 
 describe('STRUCTURE_DESTROYED', () => {
@@ -521,6 +568,8 @@ describe('TURN_CHANGED', () => {
     core.players['0'].moveCount = 3;
     core.players['0'].attackCount = 2;
     core.players['0'].hasAttackedEnemy = true;
+    core.abilityUsageCount = { 'unit-a:feed_beast': 1 };
+    core.unitKillCountThisTurn = { 'unit-a': 2 };
     // 标记一个单位为已移动/已攻击
     const pos: CellCoord = { row: 4, col: 4 };
     clearCell(core, pos);
@@ -540,6 +589,8 @@ describe('TURN_CHANGED', () => {
     // 所有单位重置
     expect(result.board[pos.row][pos.col].unit!.hasMoved).toBe(false);
     expect(result.board[pos.row][pos.col].unit!.hasAttacked).toBe(false);
+    expect(result.abilityUsageCount).toEqual({});
+    expect(result.unitKillCountThisTurn).toEqual({});
   });
 });
 

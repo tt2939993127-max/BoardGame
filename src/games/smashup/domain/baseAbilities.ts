@@ -554,10 +554,10 @@ export function registerBaseAbilities(): void {
             return {
                 id: `minion-${i}`,
                 label: `${def?.name ?? m.defId} (力量${getEffectivePower(ctx.state, m, ctx.baseIndex)})`,
-                value: { minionUid: m.uid, baseIndex: ctx.baseIndex },
+                value: { minionUid: m.uid, minionDefId: m.defId, baseIndex: ctx.baseIndex },
             };
         });
-        const options: PromptOption<{ skip: true } | { minionUid: string; baseIndex: number }>[] = [
+        const options: PromptOption<{ skip: true } | { minionUid: string; minionDefId: string; baseIndex: number }>[] = [
             { id: 'skip', label: '不收回消灭', value: { skip: true } },
             ...minionOptions,
         ];
@@ -572,8 +572,8 @@ export function registerBaseAbilities(): void {
     // === 基础版需要 Prompt 的基地 ===
 
     // base_the_homeworld: 母星
-    // "在一个玩家打出一个随从到这后，这个玩家可以额外打出一个力量≤2的随从到这里"
-    // 力量≤2 限制通过 BaseCardDef.restrictions 的 extraPlayMinionPowerMax 数据驱动实现
+    // "每当有一个随从打出到这里后，它的拥有者可以额外打出一个力量为2或以下的随从"
+    // 力量≤2 限制通过 LIMIT_MODIFIED 事件的 powerMax 字段全局生效
     registerBaseAbility('base_the_homeworld', 'onMinionPlayed', (ctx) => {
         return {
             events: [{
@@ -583,6 +583,7 @@ export function registerBaseAbilities(): void {
                     limitType: 'minion',
                     delta: 1,
                     reason: '母星：额外打出力量≤2的随从',
+                    powerMax: 2,
                 },
                 timestamp: ctx.now,
             } as LimitModifiedEvent],
@@ -629,20 +630,29 @@ export function registerBaseAbilities(): void {
     });
 
     // base_ninja_dojo: 忍者道场
-    // "在这个基地计分后，冠军可以消灭这里的一个随从"
+    // "在这个基地计分后，冠军可以消灭任意一个随从"（全局范围）
     registerBaseAbility('base_ninja_dojo', 'afterScoring', (ctx) => {
         if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
         const winnerId = ctx.rankings[0].playerId;
-        const base = ctx.state.bases[ctx.baseIndex];
-        if (!base || base.minions.length === 0) return { events: [] };
-        const minionOptions = base.minions.map((m, i) => {
-            const def = getCardDef(m.defId);
-            return {
-                id: `minion-${i}`,
-                label: `${def?.name ?? m.defId} (${m.controller}, 力量${getEffectivePower(ctx.state, m, ctx.baseIndex)})`,
-                value: { minionUid: m.uid, baseIndex: ctx.baseIndex, minionDefId: m.defId, ownerId: m.owner },
-            };
-        });
+        // 收集所有基地上的所有随从（全局范围）
+        const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; controller: string; label: string }[] = [];
+        for (let i = 0; i < ctx.state.bases.length; i++) {
+            const b = ctx.state.bases[i];
+            const bDef = getBaseDef(b.defId);
+            for (const m of b.minions) {
+                const def = getCardDef(m.defId);
+                allMinions.push({
+                    uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, controller: m.controller,
+                    label: `${def?.name ?? m.defId} (${bDef?.name ?? '基地'}, 力量${getEffectivePower(ctx.state, m, i)})`,
+                });
+            }
+        }
+        if (allMinions.length === 0) return { events: [] };
+        const minionOptions = allMinions.map((m, i) => ({
+            id: `minion-${i}`,
+            label: m.label,
+            value: { minionUid: m.uid, baseIndex: m.baseIndex, minionDefId: m.defId, ownerId: m.owner },
+        }));
         const options: PromptOption<{ skip: true } | { minionUid: string; baseIndex: number; minionDefId: string; ownerId: string }>[] = [
             { id: 'skip', label: '不消灭', value: { skip: true } },
             ...minionOptions,

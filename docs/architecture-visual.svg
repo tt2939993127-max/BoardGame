@@ -79,14 +79,14 @@
 <line x1="600" y1="323" x2="600" y2="336" stroke="#94a3b8" stroke-width="1.5" class="dep-arrow" marker-end="url(#aW)"/>
 
 <g class="layer L4 card"><rect x="120" y="339" width="960" height="52" rx="10" fill="url(#gCore)"/>
-  <text x="600" y="364" text-anchor="middle" class="lbl">框架核心 — 类型契约 + boardgame.io</text>
-  <text x="600" y="381" text-anchor="middle" class="sub">MatchState&lt;TCore&gt; · 资源加载 · 游戏注册表 · boardgame.io 状态同步</text>
+  <text x="600" y="364" text-anchor="middle" class="lbl">框架核心 — 类型契约 + 传输层</text>
+  <text x="600" y="381" text-anchor="middle" class="sub">MatchState&lt;TCore&gt; · 资源加载 · 游戏注册表 · 传输层状态同步</text>
 </g>
 <line x1="600" y1="391" x2="600" y2="404" stroke="#94a3b8" stroke-width="1.5" class="dep-arrow" marker-end="url(#aW)"/>
 
 <g class="layer L5 card"><rect x="120" y="407" width="960" height="52" rx="10" fill="url(#gSrv)"/>
   <text x="600" y="432" text-anchor="middle" class="lbl">服务端 — 网络 + 持久化</text>
-  <text x="600" y="449" text-anchor="middle" class="sub">boardgame.io Server · socket.io 实时通信 · MongoDB 存储 · NestJS API</text>
+  <text x="600" y="449" text-anchor="middle" class="sub">GameTransportServer · socket.io 实时通信 · MongoDB 存储 · NestJS API</text>
 </g>
 
 <text x="1095" y="320" text-anchor="middle" class="note" transform="rotate(-90,1095,320)">依赖方向 ▼（严格单向）</text>
@@ -245,7 +245,7 @@
   <rect x="160" y="1185" width="280" height="50" rx="10" fill="url(#gOut)"/>
   <text x="190" y="1207" font-size="18" fill="#fff">⑧</text>
   <text x="220" y="1207" font-size="14" font-weight="600" fill="#fff">返回 PipelineResult</text>
-  <text x="220" y="1225" font-size="10" fill="rgba(255,255,255,.8)">{ success, state, events } → boardgame.io 广播</text>
+  <text x="220" y="1225" font-size="10" fill="rgba(255,255,255,.8)">{ success, state, events } → 传输层广播</text>
 </g>
 
 <!-- ================================================================ -->
@@ -447,7 +447,7 @@
 <!-- ================================================================ -->
 <text x="60" y="2210" class="sec">五、游戏如何接入引擎</text>
 <line x1="60" y1="2218" x2="290" y2="2218" stroke="#e2e8f0" stroke-width="2"/>
-<text x="60" y="2238" class="note">每个游戏实现 DomainCore 接口的 5 个函数 → createGameAdapter() 组装为 boardgame.io Game</text>
+<text x="60" y="2238" class="note">每个游戏实现 DomainCore 接口的 5 个函数 → createGameEngine() 组装为可运行的游戏引擎</text>
 
 <g class="card">
   <rect x="60" y="2260" width="500" height="220" rx="12" fill="#fff" stroke="#10b981" stroke-width="2"/>
@@ -515,13 +515,13 @@
   <text x="210" y="2617" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">① 玩家点击 UI 按钮</text>
   <text x="210" y="2643" text-anchor="middle" class="note">▼</text>
   <rect x="85" y="2650" width="250" height="34" rx="7" fill="#10b981"/>
-  <text x="210" y="2672" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">② Board.tsx → moves.XXX(payload)</text>
+  <text x="210" y="2672" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">② Board.tsx → dispatch(CMD, payload)</text>
   <text x="210" y="2698" text-anchor="middle" class="note">▼</text>
   <rect x="85" y="2705" width="250" height="34" rx="7" fill="#8b5cf6"/>
-  <text x="210" y="2727" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">③ boardgame.io 序列化传输</text>
+  <text x="210" y="2727" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">③ socket.io 序列化传输</text>
   <text x="210" y="2753" text-anchor="middle" class="note">▼</text>
   <rect x="85" y="2760" width="250" height="34" rx="7" fill="#f59e0b"/>
-  <text x="210" y="2782" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">④ Adapter → Command 对象</text>
+  <text x="210" y="2782" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">④ TransportServer → Command 对象</text>
   <text x="210" y="2808" text-anchor="middle" class="note">▼</text>
   <rect x="85" y="2815" width="250" height="34" rx="7" fill="#ef4444"/>
   <text x="210" y="2837" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">⑤ executePipeline() — 见上方详解</text>
@@ -545,10 +545,10 @@
   <!-- 右列 -->
   <line x1="680" y1="2832" x2="720" y2="2832" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#aG)"/>
   <rect x="725" y="2595" width="390" height="34" rx="7" fill="#22c55e"/>
-  <text x="920" y="2617" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">⑥ Object.assign(G, state) — Immer 写入</text>
+  <text x="920" y="2617" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">⑥ state = result.state — 不可变更新</text>
   <text x="920" y="2643" text-anchor="middle" class="note">▼</text>
   <rect x="725" y="2650" width="390" height="34" rx="7" fill="#0ea5e9"/>
-  <text x="920" y="2672" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">⑦ boardgame.io 广播 → WebSocket → 所有客户端</text>
+  <text x="920" y="2672" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">⑦ TransportServer 广播 → WebSocket → 所有客户端</text>
   <text x="920" y="2698" text-anchor="middle" class="note">▼</text>
   <rect x="725" y="2705" width="390" height="34" rx="7" fill="#3b82f6"/>
   <text x="920" y="2727" text-anchor="middle" font-size="12" font-weight="500" fill="#fff">⑧ React 重渲染 Board.tsx</text>

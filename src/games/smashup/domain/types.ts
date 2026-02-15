@@ -58,6 +58,11 @@ export interface MinionCardDef {
     /** 牌组中的数量 */
     count: number;
     previewRef?: CardPreviewRef;
+    /**
+     * special 能力限制组：同组的 special 能力共享"每基地每回合一次"限制。
+     * 例如忍者派系所有 special 随从共享 'ninja_special' 组。
+     */
+    specialLimitGroup?: string;
 }
 
 /** 行动卡定义 */
@@ -76,6 +81,11 @@ export interface ActionCardDef {
     ongoingTarget?: 'base' | 'minion';
     /** 特殊行动卡是否需要选择目标基地（Me First! 窗口中高亮可选基地） */
     specialNeedsBase?: boolean;
+    /**
+     * special 能力限制组：同组的 special 能力共享"每基地每回合一次"限制。
+     * 仅对 subtype='special' 的行动卡有效。
+     */
+    specialLimitGroup?: string;
 }
 
 /** 卡牌定义联合类型 */
@@ -200,6 +210,8 @@ export interface PlayerState {
     usedDiscardPlayAbilities?: string[];
     /** 基地限定额外随从额度（baseIndex → 额外额度），只能打到指定基地 */
     baseLimitedMinionQuota?: Record<number, number>;
+    /** 额外出牌的力量上限（如家园给的额外出牌只能打力量≤2的随从），回合结束清零 */
+    extraMinionPowerMax?: number;
     /** 选择的派系 */
     factions: [FactionId, FactionId];
 }
@@ -258,6 +270,12 @@ export interface SmashUpCore {
     /** 临时临界点修正（回合结束自动清零，baseIndex → delta） */
     tempBreakpointModifiers?: Record<number, number>;
     /**
+     * 本回合各限制组在各基地的 special 能力使用记录
+     * key = limitGroup（如 'ninja_special'），value = 已使用的 baseIndex 列表
+     * 用于"每个基地每回合只能使用一次 X 能力"类规则
+     */
+    specialLimitUsed?: Record<string, number[]>;
+    /**
      * 待展示的卡牌信息（外星人/密大查看手牌/牌库顶能力，UI 层读取后展示，玩家确认后清除）
      *
      * 规则依赖：DISMISS_REVEAL 命令验证依赖此字段判断查看者身份，故保留在 core 中。
@@ -272,6 +290,8 @@ export interface SmashUpCore {
         /** 触发展示的玩家（viewerPlayerId='all' 时由此玩家关闭展示） */
         sourcePlayerId?: string;
         reason: string;
+        /** viewerPlayerId='all' 时，已确认的玩家 ID 列表（排除被展示者） */
+        confirmedPlayerIds?: string[];
     };
 }
 
@@ -386,6 +406,8 @@ export const SU_EVENTS = {
     TURN_ENDED: 'su:turn_ended',
     BASE_REPLACED: 'su:base_replaced',
     DECK_RESHUFFLED: 'su:deck_reshuffled',
+    /** 玩家牌库重排（仅重排牌库，不碰弃牌堆） */
+    DECK_REORDERED: 'su:deck_reordered',
     MINION_RETURNED: 'su:minion_returned',
     LIMIT_MODIFIED: 'su:limit_modified',
     // === 新增 ===
@@ -421,6 +443,8 @@ export const SU_EVENTS = {
     BREAKPOINT_MODIFIED: 'su:breakpoint_modified',
     /** 基地牌库洗混 */
     BASE_DECK_SHUFFLED: 'su:base_deck_shuffled',
+    /** special 能力限制组使用记录（每基地每回合一次） */
+    SPECIAL_LIMIT_USED: 'su:special_limit_used',
 } as const;
 
 export interface MinionPlayedEvent extends GameEvent<typeof SU_EVENTS.MINION_PLAYED> {
@@ -510,6 +534,15 @@ export interface DeckReshuffledEvent extends GameEvent<typeof SU_EVENTS.DECK_RES
     };
 }
 
+/** 玩家牌库重排事件（仅重排牌库中的卡，不碰弃牌堆） */
+export interface DeckReorderedEvent extends GameEvent<typeof SU_EVENTS.DECK_REORDERED> {
+    payload: {
+        playerId: PlayerId;
+        /** 重排后的牌库 UID 顺序 */
+        deckUids: string[];
+    };
+}
+
 /** 随从被收回手牌 */
 export interface MinionReturnedEvent extends GameEvent<typeof SU_EVENTS.MINION_RETURNED> {
     payload: {
@@ -532,6 +565,8 @@ export interface LimitModifiedEvent extends GameEvent<typeof SU_EVENTS.LIMIT_MOD
         reason: string;
         /** 限定额度只能用于指定基地（不设则为全局额度） */
         restrictToBase?: number;
+        /** 额外出牌的力量上限（如家园：力量≤2），不设则无限制 */
+        powerMax?: number;
     };
 }
 
@@ -546,6 +581,7 @@ export type SmashUpEvent =
     | TurnEndedEvent
     | BaseReplacedEvent
     | DeckReshuffledEvent
+    | DeckReorderedEvent
     | MinionReturnedEvent
     | LimitModifiedEvent
     | FactionSelectedEvent
@@ -567,9 +603,11 @@ export type SmashUpEvent =
     | BaseDeckReorderedEvent
     | RevealHandEvent
     | RevealDeckTopEvent
+    | RevealDismissedEvent
     | TempPowerAddedEvent
     | BreakpointModifiedEvent
-    | BaseDeckShuffledEvent;
+    | BaseDeckShuffledEvent
+    | SpecialLimitUsedEvent;
 
 // ============================================================================
 // 新增事件接口
@@ -788,6 +826,14 @@ export interface RevealDeckTopEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DE
     };
 }
 
+/** 关闭卡牌展示事件（单人模式直接关闭，all 模式记录确认者） */
+export interface RevealDismissedEvent extends GameEvent<typeof SU_EVENTS.REVEAL_DISMISSED> {
+    payload: {
+        /** 确认的玩家 ID（viewerPlayerId='all' 时使用） */
+        confirmPlayerId?: string;
+    };
+}
+
 /** 临时力量修正事件（回合结束自动清零） */
 export interface TempPowerAddedEvent extends GameEvent<typeof SU_EVENTS.TEMP_POWER_ADDED> {
     payload: {
@@ -813,5 +859,17 @@ export interface BaseDeckShuffledEvent extends GameEvent<typeof SU_EVENTS.BASE_D
         /** 洗混后的基地牌库 defId 列表（确定性） */
         newBaseDeckDefIds: string[];
         reason: string;
+    };
+}
+
+/** special 能力限制组使用记录事件 */
+export interface SpecialLimitUsedEvent extends GameEvent<typeof SU_EVENTS.SPECIAL_LIMIT_USED> {
+    payload: {
+        playerId: PlayerId;
+        baseIndex: number;
+        /** 限制组标识（如 'ninja_special'） */
+        limitGroup: string;
+        /** 触发的能力 defId */
+        abilityDefId: string;
     };
 }

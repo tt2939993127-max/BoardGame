@@ -1,7 +1,7 @@
 /**
  * 对局 WebSocket 服务
  * 
- * 处理重赛投票等对局内实时事件（独立于 boardgame.io 的游戏状态同步）
+ * 处理重赛投票等对局内实时事件（独立于游戏状态同步通道）
  */
 
 import { io, Socket } from 'socket.io-client';

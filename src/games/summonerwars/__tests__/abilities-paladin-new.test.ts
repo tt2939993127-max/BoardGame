@@ -15,7 +15,7 @@ import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, EventCard, PlayerId } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
 import { calculateEffectiveStrength } from '../domain/abilityResolver';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -61,8 +61,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -521,7 +523,7 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const priest = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-priest',
       card: makeTemplePriest('test-priest'),
       owner: '0',
@@ -544,7 +546,7 @@ describe('圣殿牧师 - 治疗 (healing)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'healing',
-      sourceUnitId: 'test-priest',
+      sourceUnitId: priest.instanceId,
       targetCardId: 'discard-card',
       targetPosition: { row: 4, col: 3 },
     });

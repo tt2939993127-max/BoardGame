@@ -480,7 +480,7 @@ interface SandboxAPI {
   get(path: string): any;
   set(path: string, value: any): void;
   
-  // Boardgame.io 事件（通用）
+  // 引擎事件（通用）
   events: {
     endTurn(): void;
     endPhase(): void;
@@ -569,8 +569,8 @@ ${dataModelCode}
 实现出牌阶段：玩家可以打出杀对目标造成伤害，目标可以用闪抵消
 
 ## 输出格式
-请输出 Boardgame.io 格式的 Game 定义：
-export default { setup, moves, phases, endIf, ... };
+请输出 DomainCore 格式的 Game 定义：
+export default { setup, validate, execute, reduce, isGameOver, ... };
 ```
 
 ## UI 结构

@@ -470,10 +470,10 @@ describe('印斯茅斯派系能力', () => {
             expect(drawEvt!.payload.count).toBe(2);
 
             // 非同名卡（dk2）应放到牌库底
-            const reshuffleEvt = events.find(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            expect(reshuffleEvt).toBeDefined();
+            const reorderEvt = events.find(e => e.type === SU_EVENTS.DECK_REORDERED);
+            expect(reorderEvt).toBeDefined();
             // 新牌库 = 剩余牌库（dk4）+ 放底的（dk2）
-            expect(reshuffleEvt!.payload.deckUids).toEqual(['dk4', 'dk2']);
+            expect(reorderEvt!.payload.deckUids).toEqual(['dk4', 'dk2']);
         });
 
         it('牌库顶3张无同名卡时全部放牌库底', () => {
@@ -502,10 +502,10 @@ describe('印斯茅斯派系能力', () => {
             // 无同名卡，不应有抽牌事件
             expect(events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
             // 3张全部放牌库底
-            const reshuffleEvt = events.find(e => e.type === SU_EVENTS.DECK_RESHUFFLED);
-            expect(reshuffleEvt).toBeDefined();
+            const reorderEvt = events.find(e => e.type === SU_EVENTS.DECK_REORDERED);
+            expect(reorderEvt).toBeDefined();
             // 新牌库 = 剩余（dk4）+ 放底的（dk1, dk2, dk3）
-            expect(reshuffleEvt!.payload.deckUids).toEqual(['dk4', 'dk1', 'dk2', 'dk3']);
+            expect(reorderEvt!.payload.deckUids).toEqual(['dk4', 'dk1', 'dk2', 'dk3']);
         });
 
         it('牌库为空时不产生事件', () => {
@@ -527,7 +527,7 @@ describe('印斯茅斯派系能力', () => {
                 defaultRandom
             );
             expect(events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
-            expect(events.find(e => e.type === SU_EVENTS.DECK_RESHUFFLED)).toBeUndefined();
+            expect(events.find(e => e.type === SU_EVENTS.DECK_REORDERED)).toBeUndefined();
         });
 
         it('牌库不足3张时只检查可用的牌', () => {

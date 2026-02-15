@@ -24,6 +24,21 @@ export type InteractionAdjudicationContext = {
 
 type InteractionCoreState = {
     pendingInteraction?: { id: string; playerId: string };
+    gameover?: unknown;
+};
+
+type InteractionRuntimeState = {
+    core?: InteractionCoreState;
+    sys?: {
+        interaction?: {
+            current?: { id: string; playerId: string };
+        };
+        responseWindow?: {
+            current?: {
+                pendingInteractionId?: string;
+            };
+        };
+    };
 };
 
 export const shouldForceCancelInteraction = ({
@@ -34,10 +49,11 @@ export const shouldForceCancelInteraction = ({
     if (!state?.G) {
         return { shouldCancel: false, reason: 'missing_state' };
     }
-    // 从 MatchState.core 中读取 gameover（各游戏的 isGameOver 结果存储在 metadata 中，
-    // 但 core 上也可能有 gameover 字段；同时检查 metadata.gameover）
-    const matchState = state.G as MatchState<{ gameover?: unknown }>;
-    if (matchState.core?.gameover || metadata?.gameover) {
+
+    const runtimeState = state.G as MatchState<InteractionCoreState> & InteractionRuntimeState;
+
+    // 从 sys.gameover 或 metadata.gameover 检查游戏是否结束
+    if (runtimeState.sys?.gameover || metadata?.gameover) {
         return { shouldCancel: false, reason: 'game_over' };
     }
     if (!metadata?.players) {
@@ -53,8 +69,8 @@ export const shouldForceCancelInteraction = ({
         return { shouldCancel: false, reason: 'player_connected' };
     }
 
-    const matchState = state.G as MatchState<InteractionCoreState>;
-    const pendingInteraction = matchState.core.pendingInteraction;
+    const pendingInteraction = runtimeState.sys?.interaction?.current
+        ?? runtimeState.core?.pendingInteraction;
     if (!pendingInteraction) {
         return { shouldCancel: false, reason: 'no_pending_interaction' };
     }
@@ -62,12 +78,15 @@ export const shouldForceCancelInteraction = ({
         return { shouldCancel: false, reason: 'interaction_owner_mismatch' };
     }
 
-    const pendingInteractionId = matchState.sys?.responseWindow?.current?.pendingInteractionId;
-    if (!pendingInteractionId) {
-        return { shouldCancel: false, reason: 'no_pending_interaction_lock' };
-    }
-    if (pendingInteractionId !== pendingInteraction.id) {
-        return { shouldCancel: false, reason: 'interaction_lock_mismatch' };
+    const responseWindowCurrent = runtimeState.sys?.responseWindow?.current;
+    if (responseWindowCurrent) {
+        const pendingInteractionId = responseWindowCurrent.pendingInteractionId;
+        if (!pendingInteractionId) {
+            return { shouldCancel: false, reason: 'no_pending_interaction_lock' };
+        }
+        if (pendingInteractionId !== pendingInteraction.id) {
+            return { shouldCancel: false, reason: 'interaction_lock_mismatch' };
+        }
     }
 
     return {

@@ -5,7 +5,7 @@ import { join } from 'path';
 import type { IncomingMessage } from 'http';
 import type { Socket } from 'net';
 import express from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
@@ -46,6 +46,12 @@ async function bootstrap() {
         changeOrigin: true,
         ws: true,
         pathFilter: ['/games/**', '/default/**', '/lobby-socket/**', '/socket.io/**'],
+        // fixRequestBody: NestJS 的 body parser 会在代理之前消费 request stream，
+        // 导致 POST/PUT 请求转发时 body 为空，game-server 挂起等待数据。
+        // fixRequestBody 将已解析的 req.body 重新写入 proxy request。
+        on: {
+            proxyReq: fixRequestBody,
+        },
     });
 
     // 全局挂载，代理内部通过 pathFilter 决定是否转发
@@ -59,7 +65,7 @@ async function bootstrap() {
     if (existsSync(distPath)) {
         expressApp.use(express.static(distPath));
 
-        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings|sponsors)(\/|$)/;
+        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings|sponsors|notifications)(\/|$)/;
         expressApp.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
             if (spaExclude.test(req.path)) return next();
             return res.sendFile(join(distPath, 'index.html'));

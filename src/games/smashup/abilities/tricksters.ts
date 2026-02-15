@@ -30,13 +30,17 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
     });
-    // 强制效果：消灭一个力量低于己方随从数量的随从，单候选自动执行
-    return resolveOrPrompt(ctx, buildMinionTargetOptions(options), {
+    // "你可以"效果：添加跳过选项
+    const minionOptions = buildMinionTargetOptions(options);
+    minionOptions.push({ id: 'skip', label: '跳过', value: { minionUid: '', baseIndex: -1, defId: '' } as any });
+    return resolveOrPrompt(ctx, minionOptions, {
         id: 'trickster_gnome',
-        title: '选择要消灭的随从（力量低于己方随从数量）',
+        title: '选择要消灭的随从（力量低于己方随从数量），或跳过',
         sourceId: 'trickster_gnome',
         targetType: 'minion',
+        autoResolveIfSingle: false,
     }, (value) => {
+        if (!value.minionUid) return { events: [] };
         const target = targets.find(t => t.uid === value.minionUid);
         if (!target) return { events: [] };
         return { events: [destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, 'trickster_gnome', ctx.now)] };
@@ -73,24 +77,20 @@ function tricksterTakeTheShinies(ctx: AbilityContext): AbilityResult {
 
 /** 幻想破碎 onPlay：消灭一个已打出到随从或基地上的行动?*/
 function tricksterDisenchant(ctx: AbilityContext): AbilityResult {
-    // 收集所有对手的持续行动?
+    // 收集所有已打出的持续行动卡（描述无"对手"限定，包含自己的）
     const targets: { uid: string; defId: string; ownerId: string; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const base = ctx.state.bases[i];
         for (const ongoing of base.ongoingActions) {
-            if (ongoing.ownerId !== ctx.playerId) {
-                const def = getCardDef(ongoing.defId);
-                const name = def?.name ?? ongoing.defId;
-                targets.push({ uid: ongoing.uid, defId: ongoing.defId, ownerId: ongoing.ownerId, label: `${name} (基地行动)` });
-            }
+            const def = getCardDef(ongoing.defId);
+            const name = def?.name ?? ongoing.defId;
+            targets.push({ uid: ongoing.uid, defId: ongoing.defId, ownerId: ongoing.ownerId, label: `${name} (基地行动)` });
         }
         for (const m of base.minions) {
             for (const attached of m.attachedActions) {
-                if (attached.ownerId !== ctx.playerId) {
-                    const def = getCardDef(attached.defId);
-                    const name = def?.name ?? attached.defId;
-                    targets.push({ uid: attached.uid, defId: attached.defId, ownerId: attached.ownerId, label: `${name} (附着行动)` });
-                }
+                const def = getCardDef(attached.defId);
+                const name = def?.name ?? attached.defId;
+                targets.push({ uid: attached.uid, defId: attached.defId, ownerId: attached.ownerId, label: `${name} (附着行动)` });
             }
         }
     }
@@ -125,9 +125,11 @@ export function registerTricksterAbilities(): void {
 
 /** 注册诡术师派系的交互解决处理函数 */
 export function registerTricksterInteractionHandlers(): void {
-    // 侏儒：选择目标后消灭
+    // 侏儒：选择目标后消灭（支持跳过）
     registerInteractionHandler('trickster_gnome', (state, _playerId, value, _iData, _random, timestamp) => {
+        if (value && (value as any).skip) return { state, events: [] };
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
+        if (!minionUid) return { state, events: [] };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
         const target = base.minions.find(m => m.uid === minionUid);
@@ -339,7 +341,7 @@ function registerTricksterOngoingEffects(): void {
         return [];
     });
 
-    // 藏身处：保护同基地己方随从不受对手行动卡影响
+    // 藏身处：保护同基地己方随从不受对手行动卡影响（消耗型：触发后自毁）
     registerProtection('trickster_hideout', 'action', (ctx) => {
         // 检查目标随从是否附着了?hideout，或同基地有 hideout ongoing
         if (ctx.targetMinion.attachedActions.some(a => a.defId === 'trickster_hideout')) {
@@ -351,7 +353,7 @@ function registerTricksterOngoingEffects(): void {
             return ctx.targetMinion.controller !== ctx.sourcePlayerId;
         }
         return false;
-    });
+    }, { consumable: true });
 
     // 火焰陷阱：其他玩家打出随从到此基地时消灭该随从
     registerTrigger('trickster_flame_trap', 'onMinionPlayed', (trigCtx) => {
@@ -391,14 +393,12 @@ function registerTricksterOngoingEffects(): void {
         return [];
     });
 
-    // 封路：指定派系不能打出随从到此基地
+    // 封路：指定派系不能打出随从到此基地（描述无"对手"限定，对所有玩家生效）
     registerRestriction('trickster_block_the_path', 'play_minion', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return false;
         const blockAction = base.ongoingActions.find(o => o.defId === 'trickster_block_the_path');
         if (!blockAction) return false;
-        // 只限制对手
-        if (blockAction.ownerId === ctx.playerId) return false;
         // 检查被限制的派系
         const blockedFaction = blockAction.metadata?.blockedFaction as string | undefined;
         if (!blockedFaction) return false;

@@ -1,7 +1,7 @@
 # 桌游教学与多人联机平台
 
 
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org/) [![Boardgame.io](https://img.shields.io/badge/Boardgame.io-0.50-FF6B6B)](https://boardgame.io/) [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.1-06B6D4?logo=tailwindcss)](https://tailwindcss.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org/) [![Custom Engine](https://img.shields.io/badge/Game_Engine-自研-FF6B6B)](src/engine/) [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.1-06B6D4?logo=tailwindcss)](https://tailwindcss.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 
@@ -34,7 +34,7 @@ AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 
 ## ✨ 特性
 
-- **多人实时对战** — 基于 boardgame.io + Socket.IO，功能有房间创建/加入/观战/重赛/日志/撤回
+- **多人实时对战** — 基于自研游戏引擎 + Socket.IO，功能有房间创建/加入/观战/重赛/日志/撤回
 - **丰富的游戏库** — 召唤之战 (Summoner Wars)、王权骰铸 (Dice Throne)、Smash Up、井字棋等
 - **本地同屏模式** — 同一设备上和朋友面对面对战
 - **交互式教程** — 内置 Tutorial 引擎，支持 AI 自动演示和分步引导
@@ -55,7 +55,7 @@ AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 
 **前端**：React 19 · TypeScript · Vite · Tailwind CSS · Framer Motion · Three.js · React Router · TanStack Query · i18next
 
-**后端**：boardgame.io (Koa) · NestJS · MongoDB · Redis · Socket.IO
+**后端**：自研游戏引擎 (Koa + Socket.IO) · NestJS · MongoDB · Redis
 
 **基础设施**：Docker · Docker Compose · GitHub Actions CI/CD · Cloudflare Pages / R2
 
@@ -71,7 +71,7 @@ AI 驱动的现代化桌游平台，专注于**桌游教学**与**联机对战**
 │   ├── ugc/             # 简易原型构建工具与运行时
 │   └── server/          # 服务端共享模块（DB / 存储 / 模型）
 ├── apps/api/            # NestJS API 服务（认证 / 管理 / 社交）
-├── server.ts            # boardgame.io 游戏服务器入口
+├── server.ts            # 游戏服务器入口（Koa + GameTransportServer）
 ├── docker/              # Dockerfile 与 Nginx 配置
 ├── scripts/             # 构建 / 部署 / 资源处理脚本
 ├── docs/                # 项目文档

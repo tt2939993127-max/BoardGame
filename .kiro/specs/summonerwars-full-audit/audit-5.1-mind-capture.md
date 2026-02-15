@@ -77,7 +77,7 @@
 
 **描述**：`mind_capture_resolve` 的 validation 中没有 `requiredPhase: 'attack'`，理论上可以在任何阶段被调用。
 
-**影响**：实际无影响 — UI 仅在攻击阶段的 mindCaptureMode 中触发此命令，且 boardgame.io 的 move 验证会阻止非法调用。
+**影响**：实际无影响 — UI 仅在攻击阶段的 mindCaptureMode 中触发此命令，且引擎管线的 validate 会阻止非法调用。
 
 **严重度**：low — 防御性编程建议。
 

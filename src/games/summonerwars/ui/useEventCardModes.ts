@@ -6,16 +6,19 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SummonerWarsCore, CellCoord, EventCard, GamePhase } from '../domain/types';
 import { SW_COMMANDS } from '../domain/types';
 import {
   getPlayerUnits, isCellEmpty, getAdjacentCells,
   manhattanDistance, isInStraightLine,
-  getStructureAt, isValidCoord, getSummoner, findUnitPosition,
-  hasStableAbility,
+  getStructureAt, isValidCoord, getSummoner, findUnitPositionByInstanceId,
+  hasStableAbility, getUnitAt, getUnitAbilities,
 } from '../domain/helpers';
 import { BOARD_ROWS, BOARD_COLS } from '../config/board';
 import { getBaseCardId, CARD_IDS } from '../domain/ids';
+import { useToast } from '../../../contexts/ToastContext';
+import { playDeniedSound } from '../../../lib/audio/useGameAudio';
 import type { SoulTransferModeState, MindCaptureModeState, AfterAttackAbilityModeState } from './useGameEvents';
 import type { BloodSummonModeState, AnnihilateModeState, FuneralPyreModeState } from './StatusBanners';
 import type {
@@ -51,6 +54,8 @@ export function useEventCardModes({
   soulTransferMode, mindCaptureMode,
   afterAttackAbilityMode, setAfterAttackAbilityMode,
 }: UseEventCardModesParams) {
+  const { t } = useTranslation('game-summonerwars');
+  const showToast = useToast();
 
   // ---------- 状态 ----------
   const [eventTargetMode, setEventTargetMode] = useState<EventTargetModeState | null>(null);
@@ -78,12 +83,13 @@ export function useEventCardModes({
     setSneakMode(null);
     setGlacialShiftMode(null);
     setWithdrawMode(null);
+    setTelekinesisTargetMode(null);
     setSelectedHandCardId(null);
   }, [setSelectedHandCardId]);
 
   const hasActiveEventMode = !!(eventTargetMode || bloodSummonMode || annihilateMode
     || mindControlMode || stunMode || hypnoticLureMode || chantEntanglementMode
-    || sneakMode || glacialShiftMode);
+    || sneakMode || glacialShiftMode || withdrawMode || telekinesisTargetMode);
 
   // 阶段切换时自动取消所有多步骤事件卡模式
   // eslint-disable-next-line react-hooks/set-state-in-effect -- phase change batch reset internal state
@@ -152,12 +158,13 @@ export function useEventCardModes({
     if (glacialShiftMode.step === 'selectDestination' && glacialShiftMode.currentBuilding) {
       const result: CellCoord[] = [];
       const { row, col } = glacialShiftMode.currentBuilding;
-      for (let r = row - 2; r <= row + 2; r++) {
-        for (let c = col - 2; c <= col + 2; c++) {
-          const pos = { row: r, col: c };
-          if (!isValidCoord(pos)) continue;
-          const dist = manhattanDistance(glacialShiftMode.currentBuilding, pos);
-          if (dist >= 1 && dist <= 2 && isCellEmpty(core, pos)) result.push(pos);
+      // 强制移动只能沿直线（上下左右），逐格检查路径可通行
+      const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }];
+      for (const { dr, dc } of dirs) {
+        for (let step = 1; step <= 2; step++) {
+          const pos = { row: row + dr * step, col: col + dc * step };
+          if (!isValidCoord(pos) || !isCellEmpty(core, pos)) break;
+          result.push(pos);
         }
       }
       return result;
@@ -189,15 +196,16 @@ export function useEventCardModes({
 
   const withdrawHighlights = useMemo(() => {
     if (!withdrawMode || withdrawMode.step !== 'selectPosition') return [];
-    const sourcePos = findUnitPosition(core, withdrawMode.sourceUnitId);
+    const sourcePos = findUnitPositionByInstanceId(core, withdrawMode.sourceUnitId);
     if (!sourcePos) return [];
     const result: CellCoord[] = [];
-    for (let r = sourcePos.row - 2; r <= sourcePos.row + 2; r++) {
-      for (let c = sourcePos.col - 2; c <= sourcePos.col + 2; c++) {
-        const pos = { row: r, col: c };
-        if (!isValidCoord(pos)) continue;
-        const dist = manhattanDistance(sourcePos, pos);
-        if (dist >= 1 && dist <= 2 && isCellEmpty(core, pos)) result.push(pos);
+    // 强制移动只能沿直线（上下左右），逐格检查路径可通行
+    const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }];
+    for (const { dr, dc } of dirs) {
+      for (let step = 1; step <= 2; step++) {
+        const pos = { row: sourcePos.row + dr * step, col: sourcePos.col + dc * step };
+        if (!isValidCoord(pos) || !isCellEmpty(core, pos)) break; // 被阻挡则该方向后续格也不可达
+        result.push(pos);
       }
     }
     return result;
@@ -271,6 +279,7 @@ export function useEventCardModes({
             abilityId: 'mind_transmission',
             sourceUnitId: afterAttackAbilityMode.sourceUnitId,
             targetPosition: { row: gameRow, col: gameCol },
+            _noSnapshot: true,
           });
           setAfterAttackAbilityMode(null);
         } else {
@@ -402,6 +411,7 @@ export function useEventCardModes({
           sourceUnitId: withdrawMode.sourceUnitId,
           costType: withdrawMode.costType,
           targetPosition: { row: gameRow, col: gameCol },
+          _noSnapshot: true,
         });
         setWithdrawMode(null);
       }
@@ -519,44 +529,48 @@ export function useEventCardModes({
     const eventCard = card as EventCard;
     const baseId = getBaseCardId(eventCard.id);
 
+    // 每个 case 成功进入模式时设 activated=true；条件不满足时可设 failReason 覆盖通用提示
+    let activated = false;
+    let failReason: string | undefined;
+
     switch (baseId) {
       case CARD_IDS.NECRO_HELLFIRE_BLADE: {
         const friendlyCommons = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.unitClass === 'common');
-        if (friendlyCommons.length === 0) return;
+        if (friendlyCommons.length === 0) break;
         setEventTargetMode({ cardId, card: eventCard, validTargets: friendlyCommons.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.NECRO_BLOOD_SUMMON: {
         const friendlyUnits = getPlayerUnits(core, myPlayerId as '0' | '1');
-        if (friendlyUnits.length === 0) return;
+        if (friendlyUnits.length === 0) break;
         setBloodSummonMode({ step: 'selectTarget', cardId });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.NECRO_ANNIHILATE: {
         const friendlyUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.unitClass !== 'summoner');
-        if (friendlyUnits.length === 0) return;
+        if (friendlyUnits.length === 0) break;
         setAnnihilateMode({ step: 'selectTargets', cardId, selectedTargets: [], currentTargetIndex: 0, damageTargets: [] });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.TRICKSTER_MIND_CONTROL: {
         const summoner = getSummoner(core, myPlayerId as '0' | '1');
-        if (!summoner) return;
+        if (!summoner) { failReason = t('eventCard.noSummoner'); break; }
         const opponentId = myPlayerId === '0' ? '1' : '0';
         const enemyUnits = getPlayerUnits(core, opponentId as '0' | '1')
           .filter(u => u.card.unitClass !== 'summoner' && manhattanDistance(summoner.position, u.position) <= 2);
-        if (enemyUnits.length === 0) return;
+        if (enemyUnits.length === 0) break;
         setMindControlMode({ cardId, validTargets: enemyUnits.map(u => u.position), selectedTargets: [] });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.TRICKSTER_STUN: {
         const stunSummoner = getSummoner(core, myPlayerId as '0' | '1');
-        if (!stunSummoner) return;
+        if (!stunSummoner) { failReason = t('eventCard.noSummoner'); break; }
         const stunOpponentId = myPlayerId === '0' ? '1' : '0';
         const stunTargets = getPlayerUnits(core, stunOpponentId as '0' | '1')
           .filter(u => {
@@ -564,86 +578,103 @@ export function useEventCardModes({
             const dist = manhattanDistance(stunSummoner.position, u.position);
             return dist <= 3 && dist > 0 && isInStraightLine(stunSummoner.position, u.position);
           });
-        if (stunTargets.length === 0) return;
+        if (stunTargets.length === 0) break;
         setStunMode({ step: 'selectTarget', cardId, validTargets: stunTargets.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.TRICKSTER_HYPNOTIC_LURE: {
         const lureOpponentId = myPlayerId === '0' ? '1' : '0';
         const lureTargets = getPlayerUnits(core, lureOpponentId as '0' | '1')
           .filter(u => u.card.unitClass !== 'summoner');
-        if (lureTargets.length === 0) return;
+        if (lureTargets.length === 0) break;
         setHypnoticLureMode({ cardId, validTargets: lureTargets.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.BARBARIC_CHANT_OF_POWER: {
         const cpSummoner = getSummoner(core, myPlayerId as '0' | '1');
-        if (!cpSummoner) return;
+        if (!cpSummoner) { failReason = t('eventCard.noSummoner'); break; }
         const cpTargets = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.unitClass !== 'summoner' && manhattanDistance(cpSummoner.position, u.position) <= 3);
-        if (cpTargets.length === 0) return;
+        if (cpTargets.length === 0) break;
         setEventTargetMode({ cardId, card: eventCard, validTargets: cpTargets.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.BARBARIC_CHANT_OF_GROWTH: {
         const cgTargets = getPlayerUnits(core, myPlayerId as '0' | '1');
-        if (cgTargets.length === 0) return;
+        if (cgTargets.length === 0) break;
         setEventTargetMode({ cardId, card: eventCard, validTargets: cgTargets.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.BARBARIC_CHANT_OF_WEAVING: {
         const cwTargets = getPlayerUnits(core, myPlayerId as '0' | '1');
-        if (cwTargets.length === 0) return;
+        if (cwTargets.length === 0) break;
         setEventTargetMode({ cardId, card: eventCard, validTargets: cwTargets.map(u => u.position) });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.FROST_GLACIAL_SHIFT: {
         const gsSummoner = getSummoner(core, myPlayerId as '0' | '1');
-        if (!gsSummoner) return;
+        if (!gsSummoner) { failReason = t('eventCard.noSummoner'); break; }
         const gsBuildings: CellCoord[] = [];
         for (let r = 0; r < BOARD_ROWS; r++) {
           for (let c = 0; c < BOARD_COLS; c++) {
-            const structure = getStructureAt(core, { row: r, col: c });
-            if (structure && structure.owner === (myPlayerId as '0' | '1')
-              && manhattanDistance(gsSummoner.position, { row: r, col: c }) <= 3) {
-              gsBuildings.push({ row: r, col: c });
+            const pos = { row: r, col: c };
+            const structure = getStructureAt(core, pos);
+            const unit = getUnitAt(core, pos);
+            const isAllyStructure = (structure && structure.owner === (myPlayerId as '0' | '1'))
+              || (unit && unit.owner === (myPlayerId as '0' | '1')
+                && getUnitAbilities(unit, core).includes('mobile_structure'));
+            if (isAllyStructure
+              && manhattanDistance(gsSummoner.position, pos) <= 3) {
+              gsBuildings.push(pos);
             }
           }
         }
-        if (gsBuildings.length === 0) return;
+        if (gsBuildings.length === 0) break;
         setGlacialShiftMode({ cardId, step: 'selectBuilding', validBuildings: gsBuildings, recorded: [] });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.GOBLIN_SNEAK: {
         const sneakUnits = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.cost === 0 && u.card.unitClass !== 'summoner');
-        if (sneakUnits.length === 0) return;
+        if (sneakUnits.length === 0) break;
         setSneakMode({ cardId, step: 'selectUnit', validUnits: sneakUnits.map(u => u.position), recorded: [] });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       case CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT: {
         const summoner = getSummoner(core, myPlayerId as '0' | '1');
-        if (!summoner) return;
+        if (!summoner) { failReason = t('eventCard.noSummoner'); break; }
         const friendlyCommons = getPlayerUnits(core, myPlayerId as '0' | '1')
           .filter(u => u.card.unitClass === 'common' && manhattanDistance(summoner.position, u.position) <= 3);
-        if (friendlyCommons.length < 2) return;
+        if (friendlyCommons.length < 2) {
+          failReason = t('eventCard.entanglementNeedTwoCommons');
+          break;
+        }
         setChantEntanglementMode({ cardId, validTargets: friendlyCommons.map(u => u.position), selectedTargets: [] });
-        setSelectedHandCardId(cardId);
-        return;
+        activated = true;
+        break;
       }
       default: {
+        // 无需多步骤交互的事件卡，直接 dispatch
         dispatch(SW_COMMANDS.PLAY_EVENT, { cardId });
-        return;
+        return; // 直接返回，不走统一的 activated 逻辑
       }
     }
-  }, [core, myHand, myPlayerId, dispatch, setSelectedHandCardId]);
+
+    if (activated) {
+      setSelectedHandCardId(cardId);
+    } else {
+      // 统一失败反馈：拒绝音 + toast
+      playDeniedSound();
+      showToast.warning(failReason ?? t('eventCard.noValidTarget'));
+    }
+  }, [core, myHand, myPlayerId, dispatch, setSelectedHandCardId, showToast, t]);
 
   // ---------- 确认回调 ----------
 
@@ -706,6 +737,7 @@ export function useEventCardModes({
       sourceUnitId: telekinesisTargetMode.sourceUnitId,
       targetPosition: telekinesisTargetMode.targetPosition,
       direction,
+      _noSnapshot: true,
     });
     setTelekinesisTargetMode(null);
   }, [dispatch, telekinesisTargetMode]);

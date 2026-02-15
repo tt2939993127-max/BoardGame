@@ -2,7 +2,7 @@
  * useSpectatorMoves Hook
  * 
  * 引擎层通用 Hook，统一包装 moves，自动拦截观察者操作。
- * 任何使用 boardgame.io 的游戏都可以使用此 Hook 来处理观察者模式。
+ * 任何游戏都可以使用此 Hook 来处理观察者模式。
  * 
  * @example
  * ```typescript

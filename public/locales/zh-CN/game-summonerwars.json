@@ -193,7 +193,6 @@
     "unitChargeTotal": "（当前 {{total}}）",
     "sourceAbility": "（来源技能：{{abilityName}}）",
     "structureBuilt": "建造建筑：",
-    "structureDamaged": "建筑受到 {{amount}} 点伤害：",
     "structureHealed": "建筑回复 {{amount}} 点生命：",
     "structureDestroyed": "建筑被摧毁：",
     "magicChanged": "玩家{{playerId}} 魔力 {{delta}}",
@@ -331,6 +330,11 @@
     "holyArrowAtLeastOne": "圣光箭至少弃除一张单位卡",
     "healingNeedsDiscard": "治疗需要弃除一张手牌"
   },
+  "eventCard": {
+    "noSummoner": "召唤师不在场上",
+    "noValidTarget": "没有符合条件的目标",
+    "entanglementNeedTwoCommons": "交缠颂歌需要召唤师3格内至少2个友方士兵"
+  },
   "interaction": {
     "cannotAttackThere": "无法攻击该目标",
     "outOfRange": "目标超出攻击范围",
@@ -370,9 +374,11 @@
       "iceShards": "寒冰碎屑：消耗1充能，对建筑相邻敌方造成1伤？",
       "feedBeast": "喂养巨食兽：选择相邻友方单位移除，或自毁",
       "spiritBond": "祖灵交流：选择3格内目标转移充能，或充能自身",
+      "spiritBondChargeOnly": "祖灵交流：充能不足，只能充能自身",
       "ancestralBond": "祖灵羁绊：选择3格内友方单位转移充能",
       "structureShift": "结构变换：选择3格内友方建筑",
       "frostAxe": "冰霜战斧：充能自身，或消耗充能附加友方士兵",
+      "frostAxeChargeOnly": "冰霜战斧：充能不足，只能充能自身",
       "frostAxeSelectTarget": "冰霜战斧：选择3格内友方士兵",
       "iceRamSelectTarget": "寒冰冲撞：选择建筑相邻的一个单位",
       "iceRamSelectPush": "寒冰冲撞：选择推拉方向（或跳过）",

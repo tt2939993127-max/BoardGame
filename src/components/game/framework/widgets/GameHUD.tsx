@@ -33,7 +33,7 @@ import { FriendsChatModal } from '../../../social/FriendsChatModal';
 import { useSocial } from '../../../../contexts/SocialContext';
 import { buildActionLogRows } from '../../utils/actionLogFormat';
 import { ActionLogSegments } from './ActionLogSegments';
-import { getCardPreviewGetter } from '../../registry/cardPreviewRegistry';
+import { getCardPreviewGetter, getCardPreviewMaxDim } from '../../registry/cardPreviewRegistry';
 
 interface GameHUDProps {
     mode: 'local' | 'online' | 'tutorial';
@@ -108,6 +108,10 @@ export const GameHUD = ({
     // 从注册表获取游戏特定的卡牌预览函数
     const getCardPreviewRef = useMemo(() => {
         return _gameId ? getCardPreviewGetter(_gameId) : undefined;
+    }, [_gameId]);
+
+    const cardPreviewMaxDim = useMemo(() => {
+        return _gameId ? getCardPreviewMaxDim(_gameId) : undefined;
     }, [_gameId]);
 
     const locale = i18n.language;
@@ -364,6 +368,7 @@ export const GameHUD = ({
                                         segments={row.segments}
                                         locale={locale}
                                         getCardPreviewRef={getCardPreviewRef}
+                                        cardPreviewMaxDim={cardPreviewMaxDim}
                                     />
                                 </div>
                             </div>
@@ -682,10 +687,10 @@ export const GameHUD = ({
                         </div>
                         <p className="text-xs text-white/80">{t('controls.undo.reviewHint')}</p>
                         <div className="flex gap-2">
-                            <button onClick={() => undoState.moves[UNDO_COMMANDS.APPROVE_UNDO]()} className="flex-1 bg-green-500/20 hover:bg-green-500/40 text-green-400 border border-green-500/50 rounded px-3 py-2 text-xs font-bold transition-colors">
+                            <button onClick={() => undoState.dispatch(UNDO_COMMANDS.APPROVE_UNDO)} className="flex-1 bg-green-500/20 hover:bg-green-500/40 text-green-400 border border-green-500/50 rounded px-3 py-2 text-xs font-bold transition-colors">
                                 {t('controls.undo.approve')}
                             </button>
-                            <button onClick={() => undoState.moves[UNDO_COMMANDS.REJECT_UNDO]()} className="flex-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/50 rounded px-3 py-2 text-xs font-bold transition-colors">
+                            <button onClick={() => undoState.dispatch(UNDO_COMMANDS.REJECT_UNDO)} className="flex-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/50 rounded px-3 py-2 text-xs font-bold transition-colors">
                                 {t('controls.undo.reject')}
                             </button>
                         </div>
@@ -706,8 +711,8 @@ export const GameHUD = ({
                         </p>
                         <button
                             onClick={() => {
-                                if (isWaiting) undoState.moves[UNDO_COMMANDS.CANCEL_UNDO]();
-                                else undoState.moves[UNDO_COMMANDS.REQUEST_UNDO]();
+                                if (isWaiting) undoState.dispatch(UNDO_COMMANDS.CANCEL_UNDO);
+                                else undoState.dispatch(UNDO_COMMANDS.REQUEST_UNDO);
                             }}
                             className={`w-full py-2 rounded font-bold text-xs transition-colors ${isWaiting
                                 ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50 hover:bg-amber-500/40'

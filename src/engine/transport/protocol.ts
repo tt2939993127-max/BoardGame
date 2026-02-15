@@ -5,7 +5,7 @@
  */
 
 // ============================================================================
-// 玩家信息（替代 boardgame.io matchData）
+// 玩家信息
 // ============================================================================
 
 /**
@@ -57,13 +57,13 @@ export interface ServerToClientEvents {
 }
 
 // ============================================================================
-// Board Props 契约（替代 boardgame.io BoardProps）
+// Board Props 契约
 // ============================================================================
 
 /**
  * 游戏 Board 组件的标准 Props
  *
- * 替代 boardgame.io 的 BoardProps，提供类型安全的命令分发。
+ * 提供类型安全的命令分发。
  * TCore: 游戏核心状态类型
  * TCommandMap: 命令名→payload 映射类型（可选，默认 Record<string, unknown>）
  */
@@ -79,14 +79,6 @@ export interface GameBoardProps<
         type: K,
         payload: TCommandMap[K],
     ) => void;
-
-    /**
-     * 兼容层：moves 对象（过渡期保留，最终移除）
-     *
-     * 与 dispatch 等价，但以 Record<string, Function> 形式提供，
-     * 方便逐步迁移。新代码应使用 dispatch。
-     */
-    moves: Record<string, (payload?: unknown) => void>;
 
     /** 当前玩家 ID（在线模式为实际 playerID，本地模式为 null） */
     playerID: string | null;

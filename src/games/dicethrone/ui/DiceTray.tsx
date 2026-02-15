@@ -257,27 +257,6 @@ export const DiceActions = ({
         onConfirm();
     };
 
-    // 添加调试日志：追踪 confirm 按钮禁用原因
-    React.useEffect(() => {
-        if (currentPhase === 'defensiveRoll' || currentPhase === 'offensiveRoll') {
-            const disabledReasons = [];
-            if (rollConfirmed) disabledReasons.push('rollConfirmed');
-            if (rollCount === 0) disabledReasons.push('rollCount===0');
-            if (!canInteract) disabledReasons.push('!canInteract');
-            if (isRolling) disabledReasons.push('isRolling');
-            if (disabledReasons.length > 0) {
-                console.warn('[DiceActions] Confirm button disabled:', {
-                    reasons: disabledReasons,
-                    rollConfirmed,
-                    rollCount,
-                    canInteract,
-                    isRolling,
-                    currentPhase,
-                });
-            }
-        }
-    }, [rollConfirmed, rollCount, canInteract, isRolling, currentPhase]);
-
     const renderRollDots = () => {
         const dots = [];
         for (let i = 0; i < rollLimit; i++) {

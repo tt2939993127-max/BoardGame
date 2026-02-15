@@ -83,7 +83,7 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         name: cardText('card-dizzy', 'name'),
         type: 'action',
         cpCost: 0,
-        timing: 'instant',
+        timing: 'roll',
         description: cardText('card-dizzy', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.BARBARIAN, index: 3 },
         playCondition: {

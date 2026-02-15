@@ -16,6 +16,7 @@ import type { GameBoardProps } from '../../engine/transport/protocol';
 import type { MatchState } from '../../engine/types';
 import type { SummonerWarsCore } from './domain';
 import { SW_COMMANDS } from './domain';
+import { FLOW_COMMANDS } from '../../engine';
 import { isUndeadCard, isPlagueZombieCard, isFortressUnit } from './domain/ids';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { SummonerWarsDebugConfig } from './debug-config';
@@ -44,7 +45,7 @@ import { useScreenShake } from './ui/BoardEffects';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { useVisualSequenceGate } from '../../components/game/framework/hooks/useVisualSequenceGate';
 import { summonerWarsFxRegistry, SW_FX } from './ui/fxSetup';
-import type { Card, BoardUnit, BoardStructure, CellCoord, UnitCard, EventCard, PlayerId } from './domain/types';
+import type { Card, BoardUnit, BoardStructure, CellCoord, EventCard, PlayerId } from './domain/types';
 import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
 import { DiscardPileOverlay } from './ui/DiscardPileOverlay';
 import { FactionSelection } from './ui/FactionSelectionAdapter';
@@ -72,9 +73,9 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
 };
 
 export const SummonerWarsBoard: React.FC<Props> = ({
-  G, moves, dispatch, playerID, reset, matchData, isMultiplayer,
+  G, dispatch, playerID, reset, matchData, isMultiplayer,
 }) => {
-  const isGameOver = (G.core as Record<string, unknown>).gameover as import('../../engine/types').GameOverResult | undefined;
+  const isGameOver = G.sys.gameover;
   const gameMode = useGameMode();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
@@ -107,7 +108,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   }, [dispatch]);
 
   // 教学系统集成
-  useTutorialBridge(G.sys.tutorial, moves as Record<string, unknown>);
+  useTutorialBridge(G.sys.tutorial, dispatch);
   const {
     isActive: isTutorialActive,
     currentStep: tutorialStep,
@@ -268,6 +269,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     mindCaptureMode, setMindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode, setRapidFireMode,
+    withdrawTrigger, setWithdrawTrigger,
     pendingAttackRef, handleCloseDiceResult: rawCloseDiceResult,
     clearPendingAttack, flushPendingDestroys,
     releaseDamageSnapshot,
@@ -292,6 +294,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode,
   });
+
+  // 桥接：useGameEvents 检测到 afterAttack 触发 withdraw → 设置 useEventCardModes 的 withdrawMode
+  const setWithdrawMode = interaction.setWithdrawMode;
+  useEffect(() => {
+    if (withdrawTrigger) {
+      setWithdrawMode(withdrawTrigger);
+      setWithdrawTrigger(null);
+    }
+  }, [withdrawTrigger, setWithdrawMode, setWithdrawTrigger]);
 
   // 关闭骰子结果 → 播放攻击动画
   const handleCloseDiceResult = useCallback(() => {
@@ -405,9 +416,16 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const handleMagnifyEventCard = useCallback((card: EventCard) => {
     setMagnifiedCard(getEventSpriteConfig(card));
   }, []);
+  const handleMagnifySpriteConfig = useCallback((config: { atlasId: string; frameIndex: number }) => {
+    setMagnifiedCard(config);
+  }, []);
 
   // StatusBanners 回调
   const handleCancelAbility = useCallback(() => {
+    // 喂养巨食兽是必选：不可跳过
+    if (abilityMode?.abilityId === 'feed_beast') {
+      return;
+    }
     // 寒冰冲撞推拉步骤跳过：仍然发送命令（造成伤害但不推拉）
     if (abilityMode?.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection'
       && abilityMode.targetPosition && abilityMode.structurePosition) {
@@ -416,9 +434,16 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         sourceUnitId: 'ice_ram',
         targetPosition: abilityMode.targetPosition,
         structurePosition: abilityMode.structurePosition,
+        _noSnapshot: true,
       });
     }
+    // ice_shards 跳过时需要 dispatch ADVANCE_PHASE
+    // 让 FlowSystem 继续推进阶段（此时 flowHalted=true，onPhaseExit 不会再次 halt）
+    const isPhaseEndAbility = abilityMode?.abilityId === 'ice_shards';
     setAbilityMode(null);
+    if (isPhaseEndAbility) {
+      dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
+    }
   }, [setAbilityMode, abilityMode, dispatch]);
   const handleCancelBeforeAttack = useCallback(() => interaction.handleCancelBeforeAttack(), [interaction]);
   const handleCancelBloodSummon = useCallback(() => {
@@ -470,6 +495,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       abilityId: 'soul_transfer',
       sourceUnitId: soulTransferMode.sourceUnitId,
       targetPosition: soulTransferMode.victimPosition,
+      _noSnapshot: true,
     });
     setSoulTransferMode(null);
   }, [soulTransferMode, dispatch, setSoulTransferMode]);
@@ -530,7 +556,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 连续射击确认/取消
   const handleConfirmRapidFire = useCallback(() => {
     if (!rapidFireMode) return;
-    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, { abilityId: 'rapid_fire', sourceUnitId: rapidFireMode.sourceUnitId });
+    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, { abilityId: 'rapid_fire', sourceUnitId: rapidFireMode.sourceUnitId, _noSnapshot: true });
     setRapidFireMode(null);
   }, [dispatch, rapidFireMode, setRapidFireMode]);
   const handleCancelRapidFire = useCallback(() => setRapidFireMode(null), [setRapidFireMode]);
@@ -541,6 +567,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       abilityId: 'blood_rune',
       sourceUnitId: abilityMode.sourceUnitId,
       choice,
+      _noSnapshot: true,
     });
     setAbilityMode(null);
   }, [abilityMode, dispatch, setAbilityMode]);
@@ -550,6 +577,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'ice_shards',
       sourceUnitId: abilityMode.sourceUnitId,
+      _noSnapshot: true,
     });
     setAbilityMode(null);
   }, [abilityMode, dispatch, setAbilityMode]);
@@ -560,6 +588,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       abilityId: 'feed_beast',
       sourceUnitId: abilityMode.sourceUnitId,
       choice: 'self_destroy',
+      _noSnapshot: true,
     });
     setAbilityMode(null);
   }, [abilityMode, dispatch, setAbilityMode]);
@@ -574,20 +603,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       abilityId: abilityMode.abilityId,
       sourceUnitId: abilityMode.sourceUnitId,
       choice: 'self',
+      _noSnapshot: true,
     });
     setAbilityMode(null);
   }, [abilityMode, dispatch, setAbilityMode]);
-  // 冰霜战斧：进入附加目标选择
-  const handleFrostAxeAttach = useCallback(() => {
-    if (!abilityMode || abilityMode.abilityId !== 'frost_axe') return;
-    setAbilityMode({ ...abilityMode, step: 'selectAttachTarget' });
-  }, [abilityMode, setAbilityMode]);
-
   const handleSaveLayout = useCallback(async (config: BoardLayoutConfig) => saveSummonerWarsLayout(config), []);
 
   const debugPanel = !isSpectator ? (
-    <GameDebugPanel G={G} moves={moves} playerID={playerID} autoSwitch={!isMultiplayer}>
-      <SummonerWarsDebugConfig G={G} moves={moves} />
+    <GameDebugPanel G={G} dispatch={dispatch} playerID={playerID} autoSwitch={!isMultiplayer}>
+      <SummonerWarsDebugConfig G={G} dispatch={dispatch} />
       <button
         onClick={() => { if (isEditingLayout) { void handleExitLayoutEditor(); return; } setIsEditingLayout(true); }}
         className="px-2 py-1 text-xs bg-cyan-600 text-white rounded hover:bg-cyan-500"
@@ -598,7 +622,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   ) : null;
 
   return (
-    <UndoProvider value={{ G, moves, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
+    <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
       {/* 阵营选择阶段 */}
       {isInFactionSelection ? (
         <TutorialSelectionGate
@@ -699,6 +723,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         onMagnifyUnit={handleMagnifyBoardUnit}
                         onMagnifyStructure={handleMagnifyBoardStructure}
                         onMagnifyEventCard={handleMagnifyEventCard}
+                        onMagnifySpriteConfig={handleMagnifySpriteConfig}
                       />
                       {/* 摧毁效果层 */}
                       <DestroyEffectsLayer
@@ -835,7 +860,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   <StatusBanners
                     currentPhase={currentPhase}
                     isMyTurn={isMyTurn}
-                    core={G}
+                    core={core}
                     abilityMode={abilityMode}
                     pendingBeforeAttack={interaction.pendingBeforeAttack}
                     bloodSummonMode={interaction.bloodSummonMode}
@@ -887,7 +912,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onConfirmTelekinesis={handleConfirmTelekinesis}
                     onCancelTelekinesis={handleCancelTelekinesis}
                     onAfterMoveSelfCharge={handleAfterMoveSelfCharge}
-                    onFrostAxeAttach={handleFrostAxeAttach}
                   />
                 </div>
 
@@ -936,12 +960,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                       dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
                         abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
                         targetCardId: card.id, targetPosition: abilityMode.targetPosition,
+                        _noSnapshot: true,
                       });
                       setAbilityMode(null);
                     } else if (abilityMode.abilityId === 'fortress_power') {
                       dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
                         abilityId: 'fortress_power', sourceUnitId: abilityMode.sourceUnitId,
                         targetCardId: card.id,
+                        _noSnapshot: true,
                       });
                       setAbilityMode(null);
                     } else {

@@ -459,20 +459,6 @@ export function formatSummonerWarsActionEntry({
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
             }
-            case SW_EVENTS.STRUCTURE_DAMAGED: {
-                const payload = event.payload as { position?: { row: number; col: number }; damage: number; cardId?: string };
-                const cardId = resolveStructureCardId(payload.position, payload.cardId);
-                const segments: ActionLogSegment[] = [
-                    ...withCardSegments('actionLog.structureDamaged', cardId, { amount: payload.damage }),
-                    textSegment(' ('),
-                    payload.position
-                        ? i18nSeg('actionLog.position', { row: payload.position.row + 1, col: payload.position.col + 1 })
-                        : i18nSeg('actionLog.positionUnknown'),
-                    textSegment(')'),
-                ];
-                pushEntry(event.type, segments, actorId, entryTimestamp, index);
-                break;
-            }
             case SW_EVENTS.STRUCTURE_HEALED: {
                 const payload = event.payload as { position?: { row: number; col: number }; amount: number; cardId?: string };
                 const cardId = resolveStructureCardId(payload.position, payload.cardId);

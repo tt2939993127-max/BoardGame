@@ -16,7 +16,7 @@ import {
   getValidMoveTargetsEnhanced, getValidAttackTargetsEnhanced,
   getPlayerUnits, hasAvailableActions, isCellEmpty, isImmobile,
   getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
-  manhattanDistance, getStructureAt, findUnitPosition, getSummoner,
+  manhattanDistance, getStructureAt, findUnitPositionByInstanceId, getSummoner,
   getUnitAbilities, hasStableAbility,
 } from '../domain/helpers';
 import { isUndeadCard, getBaseCardId, CARD_IDS } from '../domain/ids';
@@ -104,7 +104,7 @@ export function useCellInteraction({
 
   const validSummonPositions = useMemo(() => {
     if (!isMyTurn || !selectedHandCard || selectedHandCard.cardType !== 'unit') return [];
-    const player = core.players[myPlayerId];
+    const player = core.players[myPlayerId as '0' | '1'];
     // 重燃希望：允许在任意阶段召唤
     const hasRekindleHope = player.activeEvents.some(ev =>
       getBaseCardId(ev.id) === CARD_IDS.PALADIN_REKINDLE_HOPE
@@ -134,7 +134,7 @@ export function useCellInteraction({
       getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_WEAVING && ev.targetUnitId
     );
     if (cwEvent) {
-      const targetPos = findUnitPosition(core, cwEvent.targetUnitId!);
+      const targetPos = findUnitPositionByInstanceId(core, cwEvent.targetUnitId!);
       if (targetPos) {
         for (const adj of getAdjacentCells(targetPos)) addIfEmpty(adj);
       }
@@ -164,7 +164,7 @@ export function useCellInteraction({
     }
     if (abilityMode.step !== 'selectPosition') return [];
     if (abilityMode.abilityId === 'revive_undead') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const adj: CellCoord[] = [
         { row: sourcePos.row - 1, col: sourcePos.col },
@@ -182,37 +182,25 @@ export function useCellInteraction({
 
   // 技能可选单位（火祀召唤、吸取生命、幻化、结构变换等）
   const validAbilityUnits = useMemo(() => {
-    // frost_axe selectAttachTarget: 3格内友方士兵（非自身）
-    if (abilityMode?.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
-      if (!sourcePos) return [];
-      return getPlayerUnits(core, myPlayerId as '0' | '1')
-        .filter(u => {
-          if (u.cardId === abilityMode.sourceUnitId) return false;
-          if (u.card.unitClass !== 'common') return false;
-          return manhattanDistance(sourcePos, u.position) <= 3;
-        })
-        .map(u => u.position);
-    }
     if (!abilityMode || abilityMode.step !== 'selectUnit') return [];
     if (abilityMode.abilityId === 'fire_sacrifice_summon') {
       return getPlayerUnits(core, myPlayerId as '0' | '1')
-        .filter(u => u.cardId !== abilityMode.sourceUnitId)
+        .filter(u => u.instanceId !== abilityMode.sourceUnitId)
         .map(u => u.position);
     }
     if (abilityMode.abilityId === 'life_drain') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       return getPlayerUnits(core, myPlayerId as '0' | '1')
         .filter(u => {
-          if (u.cardId === abilityMode.sourceUnitId) return false;
+          if (u.instanceId === abilityMode.sourceUnitId) return false;
           return manhattanDistance(sourcePos, u.position) <= 2;
         })
         .map(u => u.position);
     }
     // 幻化：3格内的士兵（任意阵营）
     if (abilityMode.abilityId === 'illusion') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const targets: CellCoord[] = [];
       for (let row = 0; row < BOARD_ROWS; row++) {
@@ -230,12 +218,12 @@ export function useCellInteraction({
     }
     // 喂养巨食兽：相邻友方单位（非自身）
     if (abilityMode.abilityId === 'feed_beast') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const adj = getAdjacentCells(sourcePos);
       return adj.filter(p => {
         const unit = core.board[p.row]?.[p.col]?.unit;
-        return unit && unit.owner === (myPlayerId as '0' | '1') && unit.cardId !== abilityMode.sourceUnitId;
+        return unit && unit.owner === (myPlayerId as '0' | '1') && unit.instanceId !== abilityMode.sourceUnitId;
       });
     }
     // 寒冰冲撞：建筑新位置相邻的所有单位（任意阵营）
@@ -246,7 +234,7 @@ export function useCellInteraction({
     }
     // 结构变换：3格内友方建筑（含活体结构单位如寒冰魔像）
     if (abilityMode.abilityId === 'structure_shift') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const targets: CellCoord[] = [];
       for (let row = 0; row < BOARD_ROWS; row++) {
@@ -268,23 +256,42 @@ export function useCellInteraction({
     // 神出鬼没：全场0费友方单位（非自身）
     if (abilityMode.abilityId === 'vanish') {
       return getPlayerUnits(core, myPlayerId as '0' | '1')
-        .filter(u => u.cardId !== abilityMode.sourceUnitId && u.card.cost === 0)
+        .filter(u => u.instanceId !== abilityMode.sourceUnitId && u.card.cost === 0)
+        .map(u => u.position);
+    }
+    // 冰霜战斧：3格内友方士兵（非自身），充能不足时不高亮（禁止点击释放）
+    if (abilityMode.abilityId === 'frost_axe') {
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
+      if (!sourcePos) return [];
+      const sourceUnit = core.board[sourcePos.row]?.[sourcePos.col]?.unit;
+      if (!sourceUnit || (sourceUnit.boosts ?? 0) < 1) return [];
+      return getPlayerUnits(core, myPlayerId as '0' | '1')
+        .filter(u => {
+          if (u.instanceId === abilityMode.sourceUnitId) return false;
+          if (u.card.unitClass !== 'common') return false;
+          return manhattanDistance(sourcePos, u.position) <= 3;
+        })
         .map(u => u.position);
     }
     // 祖灵羁绊 / 祖灵交流(transfer)：3格内友方单位（非自身）
     if (abilityMode.abilityId === 'ancestral_bond' || abilityMode.abilityId === 'spirit_bond') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
+      // spirit_bond 转移需要充能，充能不足时不高亮目标
+      if (abilityMode.abilityId === 'spirit_bond') {
+        const sourceUnit = core.board[sourcePos.row]?.[sourcePos.col]?.unit;
+        if (!sourceUnit || (sourceUnit.boosts ?? 0) < 1) return [];
+      }
       return getPlayerUnits(core, myPlayerId as '0' | '1')
         .filter(u => {
-          if (u.cardId === abilityMode.sourceUnitId) return false;
+          if (u.instanceId === abilityMode.sourceUnitId) return false;
           return manhattanDistance(sourcePos, u.position) <= 3;
         })
         .map(u => u.position);
     }
     // 高阶念力（代替攻击）：3格内非召唤师单位（排除稳固）
     if (abilityMode.abilityId === 'high_telekinesis_instead') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const targets: CellCoord[] = [];
       for (let row = 0; row < BOARD_ROWS; row++) {
@@ -302,7 +309,7 @@ export function useCellInteraction({
     }
     // 念力（代替攻击）：2格内非召唤师单位（排除稳固）
     if (abilityMode.abilityId === 'telekinesis_instead') {
-      const sourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
       if (!sourcePos) return [];
       const targets: CellCoord[] = [];
       for (let row = 0; row < BOARD_ROWS; row++) {
@@ -334,7 +341,7 @@ export function useCellInteraction({
     const selectedUnit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
     const hasHealingBeforeAttack = pendingBeforeAttack
       && selectedUnit
-      && pendingBeforeAttack.sourceUnitId === selectedUnit.cardId
+      && pendingBeforeAttack.sourceUnitId === selectedUnit.instanceId
       && pendingBeforeAttack.abilityId === 'healing';
     if (!selectedUnit || (!selectedUnit.healingMode && !hasHealingBeforeAttack)) {
       return baseTargets;
@@ -387,7 +394,7 @@ export function useCellInteraction({
     if (!pendingBeforeAttack || !core.selectedUnit) return null;
     const unit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
     if (!unit) return null;
-    if (unit.cardId !== pendingBeforeAttack.sourceUnitId) return null;
+    if (unit.instanceId !== pendingBeforeAttack.sourceUnitId) return null;
     return pendingBeforeAttack;
   }, [core, pendingBeforeAttack]);
 
@@ -402,7 +409,7 @@ export function useCellInteraction({
       return;
     }
     const unit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
-    if (!unit || unit.cardId !== pendingBeforeAttack.sourceUnitId) {
+    if (!unit || unit.instanceId !== pendingBeforeAttack.sourceUnitId) {
       setPendingBeforeAttack(null);
     }
   }, [currentPhase, core, pendingBeforeAttack]);
@@ -418,21 +425,6 @@ export function useCellInteraction({
 
     // 事件卡/多步骤模式优先处理
     if (eventCardModes.handleEventModeClick(gameRow, gameCol)) return;
-
-    // frost_axe 附加目标选择
-    if (abilityMode && abilityMode.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget') {
-      const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
-      if (isValid) {
-        dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-          abilityId: 'frost_axe',
-          sourceUnitId: abilityMode.sourceUnitId,
-          choice: 'attach',
-          targetPosition: { row: gameRow, col: gameCol },
-        });
-        setAbilityMode(null);
-      }
-      return;
-    }
 
     // 技能单位选择模式（火祀召唤、吸取生命、幻化、结构变换等）
     if (abilityMode && abilityMode.step === 'selectUnit') {
@@ -462,19 +454,21 @@ export function useCellInteraction({
             setPendingBeforeAttack({
               abilityId: abilityMode.abilityId as PendingBeforeAttack['abilityId'],
               sourceUnitId: abilityMode.sourceUnitId,
-              targetUnitId: targetUnit.cardId,
+              targetUnitId: targetUnit.instanceId,
             });
           } else if (abilityMode.abilityId === 'illusion') {
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'illusion',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
+              _noSnapshot: true,
             });
           } else if (abilityMode.abilityId === 'ancestral_bond') {
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'ancestral_bond',
               sourceUnitId: abilityMode.sourceUnitId,
               targetPosition: { row: gameRow, col: gameCol },
+              _noSnapshot: true,
             });
           } else if (abilityMode.abilityId === 'spirit_bond') {
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
@@ -482,12 +476,23 @@ export function useCellInteraction({
               sourceUnitId: abilityMode.sourceUnitId,
               choice: 'transfer',
               targetPosition: { row: gameRow, col: gameCol },
+              _noSnapshot: true,
+            });
+          } else if (abilityMode.abilityId === 'frost_axe') {
+            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
+              abilityId: 'frost_axe',
+              sourceUnitId: abilityMode.sourceUnitId,
+              choice: 'attach',
+              targetPosition: { row: gameRow, col: gameCol },
+              _noSnapshot: true,
             });
           } else if (abilityMode.abilityId === 'feed_beast') {
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'feed_beast',
               sourceUnitId: abilityMode.sourceUnitId,
+              choice: 'destroy_adjacent',
               targetPosition: { row: gameRow, col: gameCol },
+              _noSnapshot: true,
             });
           } else if (abilityMode.abilityId === 'vanish') {
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
@@ -497,9 +502,9 @@ export function useCellInteraction({
             });
           } else if (abilityMode.abilityId === 'high_telekinesis_instead') {
             // 高阶念力（代替攻击）：选择目标后进入推拉方向选择
-            const htSourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+            const htSourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
             setAbilityMode(null);
-            setTelekinesisTargetMode({
+            eventCardModes.setTelekinesisTargetMode({
               abilityId: 'high_telekinesis_instead',
               sourceUnitId: abilityMode.sourceUnitId,
               sourcePosition: htSourcePos ?? { row: 0, col: 0 },
@@ -508,9 +513,9 @@ export function useCellInteraction({
             return;
           } else if (abilityMode.abilityId === 'telekinesis_instead') {
             // 念力（代替攻击）：选择目标后进入推拉方向选择
-            const tkSourcePos = findUnitPosition(core, abilityMode.sourceUnitId);
+            const tkSourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
             setAbilityMode(null);
-            setTelekinesisTargetMode({
+            eventCardModes.setTelekinesisTargetMode({
               abilityId: 'telekinesis_instead',
               sourceUnitId: abilityMode.sourceUnitId,
               sourcePosition: tkSourcePos ?? { row: 0, col: 0 },
@@ -521,7 +526,7 @@ export function useCellInteraction({
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: abilityMode.abilityId,
               sourceUnitId: abilityMode.sourceUnitId,
-              targetUnitId: targetUnit.cardId,
+              targetUnitId: targetUnit.instanceId,
             });
           }
           setAbilityMode(null);
@@ -539,6 +544,7 @@ export function useCellInteraction({
           sourceUnitId: abilityMode.sourceUnitId,
           targetPosition: abilityMode.targetPosition,
           newPosition: { row: gameRow, col: gameCol },
+          _noSnapshot: true,
         });
         setAbilityMode(null);
       }
@@ -554,6 +560,7 @@ export function useCellInteraction({
           targetPosition: abilityMode.targetPosition,
           structurePosition: abilityMode.structurePosition,
           pushNewPosition: { row: gameRow, col: gameCol },
+          _noSnapshot: true,
         });
         setAbilityMode(null);
       }
@@ -585,7 +592,7 @@ export function useCellInteraction({
             isUndeadCard(c)
           );
           if (hasUndeadInDiscard) {
-            setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: clickedUnit.cardId });
+            setAbilityMode({ abilityId: 'revive_undead', step: 'selectCard', sourceUnitId: clickedUnit.instanceId });
             return;
           }
         }
@@ -690,6 +697,7 @@ export function useCellInteraction({
     validMovePositions, validAttackPositions, myPlayerId, fromViewCoord,
     abilityMode, validAbilityPositions, validAbilityUnits,
     eventCardModes.handleEventModeClick,
+    eventCardModes.setTelekinesisTargetMode,
     activeBeforeAttack]);
 
   // ---------- 手牌交互 ----------
@@ -712,7 +720,7 @@ export function useCellInteraction({
           showToast.warning(t('handArea.holyArrowUnitOnly'));
           return;
         }
-        const sourceUnit = core.board.flat().map(c => c.unit).find(u => u?.cardId === abilityMode.sourceUnitId);
+        const sourceUnit = core.board.flat().map(c => c.unit).find(u => u?.instanceId === abilityMode.sourceUnitId);
         if (sourceUnit && card.name === sourceUnit.card.name) {
           showToast.warning(t('handArea.noSameNameDiscard'));
           return;
@@ -813,6 +821,7 @@ export function useCellInteraction({
       choice,
       targetPosition: mindCaptureMode.targetPosition,
       hits: mindCaptureMode.hits,
+      _noSnapshot: true,
     });
     setMindCaptureMode(null);
   }, [dispatch, mindCaptureMode, setMindCaptureMode]);

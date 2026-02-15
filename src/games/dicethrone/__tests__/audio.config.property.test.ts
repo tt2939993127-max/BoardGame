@@ -217,33 +217,37 @@ describe.skipIf(!registryExists)('DiceThrone 音效配置属性测试', () => {
     });
 
     describe('属性 3：配置完整性', () => {
-        it('所有使用到的 registry key 都必须存在并有资源文件', () => {
-            const keys = new Set<string>();
-                        DICETHRONE_AUDIO_CONFIG.bgm?.forEach(def => keys.add(def.key));
-            DICE_ROLL_KEYS.forEach(key => keys.add(key));
-            keys.add(CP_GAIN_KEY);
-            keys.add(CP_SPEND_KEY);
-            keys.add(CARD_PLAY_KEY);
-            keys.add(DAMAGE_LIGHT_KEY);
-            keys.add(DAMAGE_HEAVY_KEY);
-            keys.add(DAMAGE_SELF_KEY);
-            keys.add(VICTORY_KEY);
-            keys.add(DEFEAT_KEY);
-            for (const ability of MONK_ABILITIES) {
-                if (ability.sfxKey) {
-                    keys.add(ability.sfxKey);
-                }
-            }
-            for (const token of ALL_TOKEN_DEFINITIONS) {
-                if (token.sfxKey) {
-                    keys.add(token.sfxKey);
-                }
-            }
+        // 收集所有使用到的 registry key
+        const allUsedKeys = new Set<string>();
+        DICETHRONE_AUDIO_CONFIG.bgm?.forEach(def => allUsedKeys.add(def.key));
+        DICE_ROLL_KEYS.forEach(key => allUsedKeys.add(key));
+        allUsedKeys.add(CP_GAIN_KEY);
+        allUsedKeys.add(CP_SPEND_KEY);
+        allUsedKeys.add(CARD_PLAY_KEY);
+        allUsedKeys.add(DAMAGE_LIGHT_KEY);
+        allUsedKeys.add(DAMAGE_HEAVY_KEY);
+        allUsedKeys.add(DAMAGE_SELF_KEY);
+        allUsedKeys.add(VICTORY_KEY);
+        allUsedKeys.add(DEFEAT_KEY);
+        for (const ability of MONK_ABILITIES) {
+            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
+        }
+        for (const token of ALL_TOKEN_DEFINITIONS) {
+            if (token.sfxKey) allUsedKeys.add(token.sfxKey);
+        }
 
-            for (const key of keys) {
-                const entry = registryMap.get(key);
-                expect(entry).toBeDefined();
-                if (!entry) continue;
+        it('所有使用到的 registry key 都必须在 registry 中注册', () => {
+            for (const key of allUsedKeys) {
+                expect(registryMap.has(key)).toBe(true);
+            }
+        });
+
+        // 音频资源文件被 .gitignore 排除，CI 环境不存在，仅本地开发时检查
+        const sampleAudioFile = resolveRegistryFilePath([...allUsedKeys][0] ?? '');
+        const audioAssetsExist = sampleAudioFile !== '' && fs.existsSync(sampleAudioFile);
+
+        it.skipIf(!audioAssetsExist)('所有 registry key 对应的资源文件必须存在（仅本地）', () => {
+            for (const key of allUsedKeys) {
                 const filePath = resolveRegistryFilePath(key);
                 const exists = fs.existsSync(filePath);
                 if (!exists) {

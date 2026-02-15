@@ -32,7 +32,7 @@ abilityExecutorRegistry.register('mind_capture_resolve', (ctx: SWAbilityContext)
         type: SW_EVENTS.CONTROL_TRANSFERRED,
         payload: {
           targetPosition: captureTargetPos,
-          targetUnitId: captureTarget.cardId,
+          targetUnitId: captureTarget.instanceId,
           newOwner: playerId,
           duration: 'permanent',
           sourceAbilityId: 'mind_capture',
@@ -77,7 +77,7 @@ abilityExecutorRegistry.register('illusion', (ctx: SWAbilityContext) => {
       payload: {
         sourceUnitId,
         sourcePosition,
-        targetUnitId: illusionTarget.cardId,
+        targetUnitId: illusionTarget.instanceId,
         targetPosition: illusionTargetPos,
         copiedAbilities,
       },
@@ -152,7 +152,7 @@ abilityExecutorRegistry.register('mind_transmission', (ctx: SWAbilityContext) =>
     type: SW_EVENTS.EXTRA_ATTACK_GRANTED,
     payload: {
       targetPosition: extraAttackTargetPos,
-      targetUnitId: extraAttackTarget.cardId,
+      targetUnitId: extraAttackTarget.instanceId,
       sourceAbilityId: 'mind_transmission',
     },
     timestamp,

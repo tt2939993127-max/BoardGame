@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { getSummonerWarsUIHints } from '../domain/uiHints';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 import type { SummonerWarsCore, PlayerId, UnitCard, BoardUnit } from '../domain/types';
 import type { RandomFn } from '../../../engine/types';
 
@@ -39,8 +39,10 @@ function placeUnit(
   pos: { row: number; col: number },
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner as PlayerId,
     position: pos,
@@ -63,7 +65,7 @@ describe('弓箭手青色波纹测试', () => {
     state.phase = 'move';
     state.currentPlayer = '0' as PlayerId;
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const archer = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-archer',
       card: makeArcher('test-archer'),
       owner: '0' as PlayerId,
@@ -78,7 +80,7 @@ describe('弓箭手青色波纹测试', () => {
 
     console.log('Ability hints:', JSON.stringify(hints, null, 2));
     
-    const archerHint = hints.find(h => h.entityId === 'test-archer');
+    const archerHint = hints.find(h => h.entityId === archer.instanceId);
     expect(archerHint).toBeDefined();
     expect(archerHint?.type).toBe('ability');
     expect(archerHint?.actions).toContain('prepare');
@@ -93,7 +95,7 @@ describe('弓箭手青色波纹测试', () => {
     state.phase = 'move';
     state.currentPlayer = '0' as PlayerId;
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const archer = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-archer-moved',
       card: makeArcher('test-archer-moved'),
       owner: '0' as PlayerId,
@@ -108,7 +110,7 @@ describe('弓箭手青色波纹测试', () => {
 
     console.log('Hints for moved archer:', JSON.stringify(hints, null, 2));
     
-    const archerHint = hints.find(h => h.entityId === 'test-archer-moved');
+    const archerHint = hints.find(h => h.entityId === archer.instanceId);
     expect(archerHint).toBeUndefined();
   });
 });

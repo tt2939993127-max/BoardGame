@@ -196,7 +196,6 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
     if (shake && shakeTiming === 'on-impact') {
       // 震动强度：优先使用事件上下文中的 intensity（支持动态覆盖）
       const dynamicIntensity = event?.ctx.intensity ?? shake.intensity;
-      console.log('[FxBus] 触发震动:', { intensity: dynamicIntensity, type: shake.type });
       triggerShakeRef.current?.(dynamicIntensity, shake.type);
     }
   }, [registry]);

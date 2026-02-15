@@ -110,17 +110,23 @@ describe('formatDiceThroneActionEntry', () => {
 
         expect(entries).toHaveLength(1);
         expect(entries[0].actorId).toBe('0');
-        const keys = getI18nKeys(entries[0].segments);
-        // sourceAbilityId='test-ability' 在技能表中找不到，fallback 用原始 ID 作为文本
-        expect(keys).toContain('actionLog.damageDealt');
-        expect(keys).toContain('actionLog.damageOriginal');
+        // 统一 breakdown 模式：before + breakdown数字 + after
+        const segs = entries[0].segments;
+        const i18nKeys = getI18nKeys(segs);
+        expect(i18nKeys).toContain('actionLog.damageBefore.dealt');
+        expect(i18nKeys).toContain('actionLog.damageAfter.dealt');
 
-        const dealSeg = findI18nSegment(entries[0].segments, 'actionLog.damageDealt');
-        expect(dealSeg?.params?.amount).toBe(4);
-        expect(dealSeg?.params?.targetPlayerId).toBe('1');
-        expect(dealSeg?.params?.source).toBe('test-ability');
-        const origSeg = findI18nSegment(entries[0].segments, 'actionLog.damageOriginal');
-        expect(origSeg?.params?.amount).toBe(5);
+        // breakdown segment 应包含来源信息
+        const breakdownSeg = segs.find(s => s.type === 'breakdown');
+        expect(breakdownSeg).toBeTruthy();
+        if (breakdownSeg?.type === 'breakdown') {
+            expect(breakdownSeg.displayText).toBe('4');
+            // 无 modifiers 但有 source：显示来源名 + 数值
+            expect(breakdownSeg.lines.length).toBeGreaterThanOrEqual(1);
+            expect(breakdownSeg.lines[0].value).toBe(4);
+            // source fallback 为 'test-ability'（技能表中找不到）
+            expect(breakdownSeg.lines[0].label).toBe('test-ability');
+        }
     });
 
     it('伤害修改器应记录在 ActionLog 中（太极减伤）', () => {
@@ -162,17 +168,22 @@ describe('formatDiceThroneActionEntry', () => {
         }));
 
         expect(entries).toHaveLength(1);
-        const keys = getI18nKeys(entries[0].segments);
-        expect(keys).toContain('actionLog.damageDealt');
-        expect(keys).toContain('actionLog.damageModifiers');
+        const segs = entries[0].segments;
+        // 有 modifiers 时使用 breakdown segment：before + breakdown + after
+        const i18nKeys = getI18nKeys(segs);
+        expect(i18nKeys).toContain('actionLog.damageBefore.dealt');
+        expect(i18nKeys).toContain('actionLog.damageAfter.dealt');
 
-        const dealSeg = findI18nSegment(entries[0].segments, 'actionLog.damageDealt');
-        expect(dealSeg?.params?.amount).toBe(5);
-        expect(dealSeg?.params?.targetPlayerId).toBe('1');
-        
-        const modSeg = findI18nSegment(entries[0].segments, 'actionLog.damageModifiers');
-        expect(modSeg?.params?.original).toBe(8);
-        expect(modSeg?.params?.modifiers).toContain('tokens.taiji.name -3');
+        // 验证 breakdown segment
+        const breakdownSeg = segs.find(s => s.type === 'breakdown');
+        expect(breakdownSeg).toBeTruthy();
+        if (breakdownSeg?.type === 'breakdown') {
+            expect(breakdownSeg.displayText).toBe('5');
+            expect(breakdownSeg.lines).toHaveLength(2); // 原始伤害 + 太极减伤
+            expect(breakdownSeg.lines[0].value).toBe(8); // 原始伤害
+            expect(breakdownSeg.lines[1].value).toBe(-3); // 太极减伤
+            expect(breakdownSeg.lines[1].label).toBe('tokens.taiji.name');
+        }
     });
 
     it('HEAL_APPLIED/STATUS_APPLIED/TOKEN_USED 生成正确的 i18n segment', () => {
@@ -214,12 +225,18 @@ describe('formatDiceThroneActionEntry', () => {
         // SELECT_ABILITY + 4 个事件 = 5 个 entry
         expect(entries).toHaveLength(5);
 
-        // 验证 HEAL_APPLIED
+        // 验证 HEAL_APPLIED（现在用 breakdown segment）
         const healEntry = entries.find(e => e.kind === 'HEAL_APPLIED');
         expect(healEntry).toBeTruthy();
-        const healSeg = findI18nSegment(healEntry!.segments, 'actionLog.healApplied');
-        expect(healSeg?.params?.targetPlayerId).toBe('0');
-        expect(healSeg?.params?.amount).toBe(3);
+        const healBeforeSeg = findI18nSegment(healEntry!.segments, 'actionLog.healBefore');
+        expect(healBeforeSeg?.params?.targetPlayerId).toBe('0');
+        // breakdown segment 应包含治疗来源
+        const healBreakdown = healEntry!.segments.find(s => s.type === 'breakdown');
+        expect(healBreakdown).toBeTruthy();
+        if (healBreakdown?.type === 'breakdown') {
+            expect(healBreakdown.displayText).toBe('3');
+            expect(healBreakdown.lines.length).toBeGreaterThanOrEqual(1);
+        }
 
         // 验证 STATUS_APPLIED
         const statusEntry = entries.find(e => e.kind === 'STATUS_APPLIED');

@@ -7,6 +7,11 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
         const response = ctx.getResponse();
         const request = ctx.getRequest();
 
+        // 临时日志：排查 500 错误的根因
+        if (!(exception instanceof HttpException)) {
+            console.error('[GlobalHttpExceptionFilter] Unhandled exception:', exception);
+        }
+
         let status = HttpStatus.INTERNAL_SERVER_ERROR;
         let message = '服务器异常';
 

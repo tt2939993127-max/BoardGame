@@ -162,6 +162,8 @@ describe('幽灵 ongoing 能力', () => {
             const oppMinion = makeMinion({ defId: 'opp_m', uid: 'om-1', controller: '1', owner: '1', basePower: 5 });
             const base = makeBase({ minions: [oppMinion] });
             const state = makeState([base]);
+            // 前置条件：ghost_make_contact 必须是唯一手牌
+            state.players['0'].hand = [makeCard('mc-1', 'ghost_make_contact', 'action', '0', SMASHUP_FACTION_IDS.GHOSTS)];
             const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
             const executor = resolveAbility('ghost_make_contact', 'onPlay')!;
@@ -587,21 +589,24 @@ describe('米斯卡塔尼克 新增能力', () => {
             expect(executor).toBeDefined();
         });
 
-        test('抽1张疯狂卡', () => {
+        test('创建确认交互（"你可以"抽疯狂卡）', () => {
             const base = makeBase();
             const state = makeState([base], {
                 madnessDeck: [MADNESS_CARD_DEF_ID, MADNESS_CARD_DEF_ID],
             });
+            const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
             const executor = resolveAbility('miskatonic_researcher', 'onPlay')!;
             const result = executor({
-                state, playerId: '0', cardUid: 'res-1', defId: 'miskatonic_researcher',
+                state, matchState: ms, playerId: '0', cardUid: 'res-1', defId: 'miskatonic_researcher',
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
-            expect(result.events.length).toBeGreaterThanOrEqual(1);
-            // 研究员 onPlay：抽1张疯狂卡
-            expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_DRAWN);
+            // 应创建确认交互而非直接抽牌
+            expect(result.matchState).toBeDefined();
+            const interaction = (result.matchState as any)?.sys?.interaction;
+            expect(interaction?.current).toBeDefined();
+            expect(interaction?.current?.data?.sourceId).toBe('miskatonic_researcher');
         });
     });
 

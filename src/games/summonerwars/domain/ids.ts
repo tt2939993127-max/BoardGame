@@ -70,7 +70,9 @@ export const CARD_IDS = {
  * 例：`necro-hellfire-blade-0-2` → `necro-hellfire-blade`
  */
 export function getBaseCardId(id: string): string {
-  return id.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
+  // 先剥离 instanceId 后缀（如 frost-archer#3 → frost-archer）
+  const withoutInstance = id.replace(/#\d+$/, '');
+  return withoutInstance.replace(/-\d+-\d+$/, '').replace(/-\d+$/, '');
 }
 
 /**

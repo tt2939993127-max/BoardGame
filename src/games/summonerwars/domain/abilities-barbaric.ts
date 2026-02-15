@@ -19,7 +19,7 @@
  */
 
 import type { AbilityDef } from './abilities';
-import { getUnitAt, manhattanDistance, isCellEmpty } from './helpers';
+import { getUnitAt, manhattanDistance, isForceMovePathClear, isInStraightLine } from './helpers';
 import type { CellCoord } from './types';
 import { abilityText } from './abilityTextHelper';
 
@@ -59,7 +59,7 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
           return { valid: false, error: '必须选择友方单位' };
         }
         
-        if (abTarget.cardId === ctx.sourceUnit.cardId) {
+        if (abTarget.instanceId === ctx.sourceUnit.instanceId) {
           return { valid: false, error: '不能选择自己' };
         }
         
@@ -95,6 +95,7 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
         type: 'modifyStrength',
         target: 'self',
         value: { type: 'attribute', target: 'self', attr: 'charge' },
+        maxBonus: 5, // 规则：最多+5
       },
     ],
   },
@@ -226,15 +227,21 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
           return { valid: false, error: '必须移动1-2格' };
         }
         
-        if (!isCellEmpty(ctx.core, targetPosition)) {
-          return { valid: false, error: '目标位置必须为空' };
+        // 强制移动必须沿直线
+        if (!isInStraightLine(ctx.sourcePosition, targetPosition)) {
+          return { valid: false, error: '强制移动必须沿直线方向' };
+        }
+        
+        // 路径上每一格（含终点）都必须为空
+        if (!isForceMovePathClear(ctx.core, ctx.sourcePosition, targetPosition)) {
+          return { valid: false, error: '移动路径被阻挡' };
         }
         
         return { valid: true };
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false,
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.withdraw',
       buttonVariant: 'secondary',
@@ -274,6 +281,7 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
         type: 'modifyLife',
         target: 'self',
         value: { type: 'attribute', target: 'self', attr: 'charge' },
+        maxBonus: 5, // 规则：最多+5
       },
     ],
   },
@@ -289,7 +297,7 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     sfxKey: 'magic.rock.35.earth_magic_whoosh_02',
     trigger: 'onMove',
     effects: [
-      { type: 'custom', actionId: 'speed_up_extra_move' },
+      { type: 'custom', actionId: 'speed_up_extra_move', params: { maxBonus: 5 } },
     ],
   },
 
@@ -359,7 +367,7 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
             return { valid: false, error: '必须选择友方单位' };
           }
           
-          if (sbTarget.cardId === ctx.sourceUnit.cardId) {
+          if (sbTarget.instanceId === ctx.sourceUnit.instanceId) {
             return { valid: false, error: '不能选择自己' };
           }
           

@@ -8,9 +8,10 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { addPowerCounter, grantExtraMinion, drawMadnessCards, getMinionPower, revealAndPickFromDeck } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { SmashUpEvent, DeckReshuffledEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
+import type { SmashUpEvent, DeckReorderedEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
 import { registerProtection } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext } from '../domain/ongoingEffects';
+import { getCardDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
@@ -62,8 +63,8 @@ function innsmouthNewAcolytes(ctx: AbilityContext): AbilityResult {
         // 合并牌库 + 弃牌堆随从，洗牌
         const newDeckCards = [...player.deck, ...minionsInDiscard];
         const shuffled = ctx.random.shuffle([...newDeckCards]);
-        const evt: DeckReshuffledEvent = {
-            type: SU_EVENTS.DECK_RESHUFFLED,
+        const evt: DeckReorderedEvent = {
+            type: SU_EVENTS.DECK_REORDERED,
             payload: {
                 playerId: pid,
                 deckUids: shuffled.map(c => c.uid),
@@ -77,18 +78,24 @@ function innsmouthNewAcolytes(ctx: AbilityContext): AbilityResult {
 
 /** 招募 onPlay：抽最?张疯狂卡，每张成功抽牌?= 额外打出1个随从（MVP：尽量抽牌?张） */
 function innsmouthRecruitment(ctx: AbilityContext): AbilityResult {
-    const events: SmashUpEvent[] = [];
-    // 尝试?张疯狂卡
-    const madnessEvt = drawMadnessCards(ctx.playerId, 3, ctx.state, 'innsmouth_recruitment', ctx.now);
-    if (madnessEvt) {
-        events.push(madnessEvt);
-        // 每张成功抽取的疯狂卡 = 1个额外随从
-        const actualDrawn = madnessEvt.payload.cardUids.length;
-        for (let i = 0; i < actualDrawn; i++) {
-            events.push(grantExtraMinion(ctx.playerId, 'innsmouth_recruitment', ctx.now));
-        }
+    // "至多三张疯狂卡"：玩家选择抽取 0-3 张
+    const available = ctx.state.madnessDeck?.length ?? 0;
+    if (available === 0) return { events: [] };
+    const maxDraw = Math.min(3, available);
+    const options = [];
+    for (let i = 0; i <= maxDraw; i++) {
+        options.push({
+            id: `draw-${i}`,
+            label: i === 0 ? '不抽取' : `抽取 ${i} 张疯狂卡（获得 ${i} 个额外随从额度）`,
+            value: { count: i },
+        });
     }
-    return { events };
+    const interaction = createSimpleChoice(
+        `innsmouth_recruitment_${ctx.now}`, ctx.playerId,
+        '选择抽取疯狂卡的数量（至多3张，每张获得1个额外随从额度）', options,
+        'innsmouth_recruitment',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // innsmouth_in_plain_sight (ongoing) - 通过 ongoing 效果系统实现（注册在 registerInnsmouthAbilities 中）
@@ -121,30 +128,28 @@ function innsmouthReturnToTheSea(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
 
-    const events: SmashUpEvent[] = [];
-    // 找同基地上自己的?defId 随从
-    const myMinions = base.minions.filter(
-        m => m.controller === ctx.playerId && m.uid !== ctx.cardUid
-    );
-    // 找与触发随从?defId 的随从
+    // 找触发随从（自身）
     const triggerMinion = base.minions.find(m => m.uid === ctx.cardUid);
     if (!triggerMinion) return { events: [] };
 
-    const sameDefMinions = myMinions.filter(m => m.defId === triggerMinion.defId);
-    for (const m of sameDefMinions) {
-        events.push({
-            type: SU_EVENTS.MINION_RETURNED,
-            payload: {
-                minionUid: m.uid,
-                minionDefId: m.defId,
-                fromBaseIndex: ctx.baseIndex,
-                toPlayerId: m.owner,
-                reason: 'innsmouth_return_to_the_sea',
-            },
-            timestamp: ctx.now,
-        } as MinionReturnedEvent);
-    }
-    return { events };
+    // 找同基地上自己的同 defId 随从（包含触发随从自身）
+    const sameDefMinions = base.minions.filter(
+        m => m.controller === ctx.playerId && m.defId === triggerMinion.defId
+    );
+    if (sameDefMinions.length === 0) return { events: [] };
+
+    // "任意数量"→创建多选交互让玩家选择返回哪些
+    const options = sameDefMinions.map((m, i) => {
+        const def = getCardDef(m.defId);
+        const name = def?.name ?? m.defId;
+        return { id: `minion-${i}`, label: name, value: { minionUid: m.uid, minionDefId: m.defId, owner: m.owner } };
+    });
+    const interaction = createSimpleChoice(
+        `innsmouth_return_to_the_sea_${ctx.now}`, ctx.playerId,
+        '选择要返回手牌的同名随从', options as any[], 'innsmouth_return_to_the_sea',
+        undefined, { min: 0, max: sameDefMinions.length },
+    );
+    return { events: [], matchState: ctx.matchState ? queueInteraction(ctx.matchState, interaction) : undefined };
 }
 
 /**
@@ -238,11 +243,11 @@ function innsmouthSacredCircle(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 散播谣言 onPlay：额外打出至?个与场中一个随从同名的随从
- * MVP：检查手牌是否有匹配随从，授予最?个额外随从额度?
+ * 散播谣言 onPlay：额外打出至多两个与场中一个随从同名的随从。
+ * "一个随从" → 玩家先选择场上一个随从名，然后可打出至多2个同名随从
  */
 function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
-    // 收集所有在场随从的 defId
+    // 收集所有在场随从的 defId（去重）
     const inPlayDefIds = new Set<string>();
     for (const base of ctx.state.bases) {
         for (const m of base.minions) {
@@ -251,17 +256,41 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
     }
     if (inPlayDefIds.size === 0) return { events: [] };
 
-    // 检查手牌中匹配的随从数?
+    // 检查手牌中有哪些 defId 匹配在场随从
     const player = ctx.state.players[ctx.playerId];
-    const matchCount = player.hand.filter(c => c.type === 'minion' && inPlayDefIds.has(c.defId)).length;
-    if (matchCount === 0) return { events: [] };
-
-    const grantCount = Math.min(2, matchCount);
-    const events: SmashUpEvent[] = [];
-    for (let i = 0; i < grantCount; i++) {
-        events.push(grantExtraMinion(ctx.playerId, 'innsmouth_spreading_the_word', ctx.now));
+    const matchingDefIds = new Set<string>();
+    for (const c of player.hand) {
+        if (c.type === 'minion' && inPlayDefIds.has(c.defId)) {
+            matchingDefIds.add(c.defId);
+        }
     }
-    return { events };
+    if (matchingDefIds.size === 0) return { events: [] };
+
+    // 只有一个匹配名称时自动选择，多个时让玩家选
+    const defIdArray = Array.from(matchingDefIds);
+    if (defIdArray.length === 1) {
+        const chosenDefId = defIdArray[0];
+        const matchCount = player.hand.filter(c => c.type === 'minion' && c.defId === chosenDefId).length;
+        const grantCount = Math.min(2, matchCount);
+        const events: SmashUpEvent[] = [];
+        for (let i = 0; i < grantCount; i++) {
+            events.push(grantExtraMinion(ctx.playerId, 'innsmouth_spreading_the_word', ctx.now));
+        }
+        return { events };
+    }
+
+    // 多个匹配名称：让玩家选择一个
+    const options = defIdArray.map((defId, i) => {
+        const def = getCardDef(defId);
+        const name = def?.name ?? defId;
+        const count = player.hand.filter(c => c.type === 'minion' && c.defId === defId).length;
+        return { id: `name-${i}`, label: `${name}（手牌中有 ${count} 张）`, value: { defId } };
+    });
+    const interaction = createSimpleChoice(
+        `innsmouth_spreading_the_word_${ctx.now}`, ctx.playerId,
+        '选择一个随从名（额外打出至多2个同名随从）', options as any[], 'innsmouth_spreading_the_word',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // ============================================================================
@@ -270,6 +299,35 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
 
 /** 注册印斯茅斯派系的交互解决处理函数 */
 export function registerInnsmouthInteractionHandlers(): void {
+    // 散播谣言：玩家选择一个随从名后，授予额外随从额度
+    registerInteractionHandler('innsmouth_spreading_the_word', (state, playerId, value, _iData, _random, timestamp) => {
+        const { defId } = value as { defId: string };
+        const player = state.core.players[playerId];
+        const matchCount = player.hand.filter(c => c.type === 'minion' && c.defId === defId).length;
+        const grantCount = Math.min(2, matchCount);
+        const events: SmashUpEvent[] = [];
+        for (let i = 0; i < grantCount; i++) {
+            events.push(grantExtraMinion(playerId, 'innsmouth_spreading_the_word', timestamp));
+        }
+        return { state, events };
+    });
+
+    // 招募：玩家选择抽取 0-3 张疯狂卡
+    registerInteractionHandler('innsmouth_recruitment', (state, playerId, value, _iData, _random, timestamp) => {
+        const { count } = value as { count: number };
+        if (!count || count <= 0) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+        const madnessEvt = drawMadnessCards(playerId, count, state.core, 'innsmouth_recruitment', timestamp);
+        if (madnessEvt) {
+            events.push(madnessEvt);
+            const actualDrawn = madnessEvt.payload.cardUids.length;
+            for (let i = 0; i < actualDrawn; i++) {
+                events.push(grantExtraMinion(playerId, 'innsmouth_recruitment', timestamp));
+            }
+        }
+        return { state, events };
+    });
+
     registerInteractionHandler('innsmouth_mysteries_of_the_deep', (state, playerId, value, _iData, _random, timestamp) => {
         const { accept } = value as { accept: boolean };
         if (!accept) return { state, events: [] };
@@ -285,6 +343,27 @@ export function registerInnsmouthInteractionHandlers(): void {
         }
         const madnessEvt = drawMadnessCards(playerId, 2, state.core, 'innsmouth_mysteries_of_the_deep', timestamp);
         if (madnessEvt) events.push(madnessEvt);
+        return { state, events };
+    });
+
+    // 重返深海：玩家选择返回手牌的同名随从
+    registerInteractionHandler('innsmouth_return_to_the_sea', (state, playerId, value, _iData, _random, timestamp) => {
+        const selected = value as Array<{ minionUid: string; minionDefId: string; owner: string }>;
+        if (!Array.isArray(selected) || selected.length === 0) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+        for (const item of selected) {
+            events.push({
+                type: SU_EVENTS.MINION_RETURNED,
+                payload: {
+                    minionUid: item.minionUid,
+                    minionDefId: item.minionDefId,
+                    fromBaseIndex: -1, // 计分后基地已处理，baseIndex 不再关键
+                    toPlayerId: item.owner,
+                    reason: 'innsmouth_return_to_the_sea',
+                },
+                timestamp,
+            } as MinionReturnedEvent);
+        }
         return { state, events };
     });
 }

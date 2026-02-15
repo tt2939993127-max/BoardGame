@@ -16,7 +16,7 @@ import {
     revealDeckTop,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { CardsDrawnEvent, SmashUpEvent, DeckReshuffledEvent, MinionCardDef, CardToDeckTopEvent } from '../domain/types';
+import type { CardsDrawnEvent, SmashUpEvent, DeckReorderedEvent, MinionCardDef, CardToDeckTopEvent } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerTrigger } from '../domain/ongoingEffects';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -436,8 +436,8 @@ export function registerWizardInteractionHandlers(): void {
         // 洗混牌库（移除已抽取的卡后重新洗混）
         const remainingDeck = player.deck.filter(c => c.uid !== cardUid);
         const shuffled = random.shuffle([...remainingDeck]);
-        const reshuffleEvt: DeckReshuffledEvent = {
-            type: SU_EVENTS.DECK_RESHUFFLED,
+        const reshuffleEvt: DeckReorderedEvent = {
+            type: SU_EVENTS.DECK_REORDERED,
             payload: { playerId, deckUids: shuffled.map(c => c.uid) },
             timestamp,
         };

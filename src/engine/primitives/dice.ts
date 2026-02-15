@@ -6,7 +6,7 @@
  *
  * 设计原则：
  * - 纯函数，不可变
- * - randomFn 由调用者注入（支持 boardgame.io 确定性随机和测试 mock）
+ * - randomFn 由调用者注入（支持确定性随机和测试 mock）
  * - 不使用 class/singleton
  */
 
@@ -14,7 +14,7 @@
 // 类型定义
 // ============================================================================
 
-/** 随机函数接口（兼容 boardgame.io RandomAPI） */
+/** 随机函数接口 */
 export interface RandomFn {
   /** 返回 1~sides 的整数 */
   d: (sides: number) => number;

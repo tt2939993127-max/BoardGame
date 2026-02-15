@@ -32,7 +32,7 @@ import {
   manhattanDistance,
   getSummoner,
   getUnitAbilities,
-  findUnitPosition,
+  findUnitPositionByInstanceId,
 } from './helpers';
 import { getPhaseDisplayName } from './execute';
 import { validateAbilityActivation } from './abilityValidation';
@@ -129,7 +129,7 @@ export function validateCommand(
         getBaseCardId(ev.id) === CARD_IDS.BARBARIC_CHANT_OF_WEAVING && ev.targetUnitId
       );
       if (chantOfWeaving) {
-        const targetPos = findUnitPosition(core, chantOfWeaving.targetUnitId!);
+        const targetPos = findUnitPositionByInstanceId(core, chantOfWeaving.targetUnitId!);
         if (targetPos) {
           const dirs = [
             { row: -1, col: 0 }, { row: 1, col: 0 },
@@ -212,10 +212,11 @@ export function validateCommand(
               if (!beforeAttack.targetUnitId) return { valid: false, error: '必须选择要消灭的友方单位' };
               let targetUnit: BoardUnit | undefined;
               let targetPos: CellCoord | undefined;
+              // 优先用 instanceId 匹配，兼容旧的 cardId
               for (let row = 0; row < BOARD_ROWS; row++) {
                 for (let col = 0; col < BOARD_COLS; col++) {
                   const unit = core.board[row]?.[col]?.unit;
-                  if (unit && unit.cardId === beforeAttack.targetUnitId) {
+                  if (unit && (unit.instanceId === beforeAttack.targetUnitId || unit.cardId === beforeAttack.targetUnitId)) {
                     targetUnit = unit;
                     targetPos = { row, col };
                     break;

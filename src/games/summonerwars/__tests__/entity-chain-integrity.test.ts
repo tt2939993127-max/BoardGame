@@ -22,7 +22,7 @@ import {
     createEffectContractSuite,
     type RefChain,
 } from '../../../engine/testing/entityIntegritySuite';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 import { calculateEffectiveStrength, getEffectiveStructureLife, triggerAbilities, triggerAllUnitsAbilities } from '../domain/abilityResolver';
 import {
     isImmobileBase,
@@ -446,8 +446,10 @@ function mkStructure(id: string, overrides?: Partial<StructureCard>): StructureC
 }
 
 function putUnit(core: SummonerWarsCore, pos: CellCoord, card: UnitCard, owner: PlayerId, extra?: Partial<BoardUnit>): BoardUnit {
+    const cardId = `${card.id}-${pos.row}-${pos.col}`;
     const u: BoardUnit = {
-        cardId: `${card.id}-${pos.row}-${pos.col}`,
+        instanceId: extra?.instanceId ?? generateInstanceId(cardId),
+        cardId,
         card, owner, position: pos,
         damage: 0, boosts: 0, hasMoved: false, hasAttacked: false,
         ...extra,
@@ -702,7 +704,7 @@ describe('完整流程验证 (Section 9)', () => {
 
         const events = exec(SW_COMMANDS.ACTIVATE_ABILITY, {
             abilityId: 'prepare',
-            sourceUnitId: unit.cardId,
+            sourceUnitId: unit.instanceId,
             position: { row: 4, col: 3 },
         });
 
@@ -756,7 +758,7 @@ describe('完整流程验证 (Section 9)', () => {
         const events = exec(SW_COMMANDS.DECLARE_ATTACK, {
             attacker: { row: 4, col: 3 },
             target: { row: 4, col: 4 },
-            beforeAttack: { abilityId: 'life_drain', targetUnitId: victimUnit.cardId },
+            beforeAttack: { abilityId: 'life_drain', targetUnitId: victimUnit.instanceId },
         });
 
         const strengthMod = events.find(e =>
@@ -997,11 +999,15 @@ describe('完整流程验证 (Section 9)', () => {
     //     通过 flowHooks.onPhaseExit 测试
     // ================================================================
 
-    it('[onPhaseEnd/ice_shards] 建造阶段结束时冰晶碎片触发', () => {
+    it('[onPhaseEnd/ice_shards] 建造阶段结束时冰晶碎片触发（需有充能+建筑相邻敌方）', () => {
         core.phase = 'build';
         core.currentPlayer = '0' as PlayerId;
         const iceUnit = mkUnit('frost-shards', { abilities: ['ice_shards'], faction: 'frost' });
-        putUnit(core, { row: 4, col: 3 }, iceUnit, '0');
+        putUnit(core, { row: 4, col: 3 }, iceUnit, '0', { boosts: 1 });
+        // 放置友方建筑和相邻敌方单位（满足 customValidator 条件）
+        putStructure(core, { row: 3, col: 3 }, '0' as PlayerId);
+        const enemyCard = mkUnit('enemy-adj', { faction: 'necromancer' });
+        putUnit(core, { row: 3, col: 4 }, enemyCard, '1' as PlayerId);
 
         const state = { core } as MatchState<SummonerWarsCore>;
         const result = summonerWarsFlowHooks.onPhaseExit!({
@@ -1152,7 +1158,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
         // 第一次激活
         const events1 = exec(SW_COMMANDS.ACTIVATE_ABILITY, {
             abilityId: 'prepare',
-            sourceUnitId: unit.cardId,
+            sourceUnitId: unit.instanceId,
             position: { row: 4, col: 3 },
         });
         const charge1 = events1.filter(e =>
@@ -1162,7 +1168,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
         expect(charge1).toHaveLength(1);
 
         // 模拟 reduce 更新 abilityUsageCount
-        const usageKey = `${unit.cardId}:prepare`;
+        const usageKey = `${unit.instanceId}:prepare`;
         core.abilityUsageCount = { ...core.abilityUsageCount, [usageKey]: 1 };
 
         // 第二次激活 — 执行器仍会执行（validate 层拦截），但 triggerAbilities 会跳过
@@ -1204,7 +1210,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
         )).toBe(true);
 
         // 模拟 reduce 更新 abilityUsageCount
-        const usageKey = `${unit.cardId}:imposing`;
+        const usageKey = `${unit.instanceId}:imposing`;
         core.abilityUsageCount = { ...core.abilityUsageCount, [usageKey]: 1 };
 
         // 第二次攻击 — imposing 不应再触发

@@ -39,14 +39,14 @@
 ```typescript
 // src/core/ui/types.ts
 
-import type { BoardProps } from 'boardgame.io/react';
+import type { GameBoardProps } from '@/engine/transport/protocol';
 
 /**
  * 游戏 Board 的标准 Props 契约
  * 所有游戏 Board 组件必须接收此类型的 Props
  */
-export interface GameBoardProps<G = unknown> extends BoardProps<G> {
-  // boardgame.io 原生 Props 已包含: G, ctx, moves, playerID, isActive, ...
+export interface GameBoardProps<G = unknown> {
+  // 引擎 Props 已包含: G, dispatch, playerID, isConnected, ...
 }
 
 /**

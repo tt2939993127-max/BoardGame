@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { GAME_IMPLEMENTATIONS } from '../games/registry';
@@ -11,6 +11,8 @@ import { CriticalImageGate } from '../components/game/framework';
 import { LocalGameProvider, BoardBridge } from '../engine/transport/react';
 import type { GameBoardProps } from '../engine/transport/protocol';
 import type { ComponentType } from 'react';
+import { useToast } from '../contexts/ToastContext';
+import { playDeniedSound } from '../lib/audio/useGameAudio';
 
 export const LocalMatchRoom = () => {
     usePerformanceMonitor();
@@ -18,6 +20,7 @@ export const LocalMatchRoom = () => {
     const [searchParams] = useSearchParams();
     const { t, i18n } = useTranslation('lobby');
     const [isGameNamespaceReady, setIsGameNamespaceReady] = useState(false);
+    const toast = useToast();
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
 
@@ -57,6 +60,12 @@ export const LocalMatchRoom = () => {
         return Wrapped;
     }, [gameId, i18n.language, t]);
 
+    // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
+    const handleCommandRejected = useCallback((_type: string, error: string) => {
+        playDeniedSound();
+        toast.warning(error);
+    }, [toast]);
+
     if (!gameConfig) {
         return <div className="text-white">{t('matchRoom.noGame')}</div>;
     }
@@ -73,7 +82,7 @@ export const LocalMatchRoom = () => {
             <div className="w-full h-full">
                 <GameModeProvider mode="local">
                     {engineConfig && WrappedBoard ? (
-                        <LocalGameProvider config={engineConfig} numPlayers={2} seed={gameSeed}>
+                        <LocalGameProvider config={engineConfig} numPlayers={2} seed={gameSeed} onCommandRejected={handleCommandRejected}>
                             <BoardBridge
                                 board={WrappedBoard}
                                 loading={<LoadingScreen title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}

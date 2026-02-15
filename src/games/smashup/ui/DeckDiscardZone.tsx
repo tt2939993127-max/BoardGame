@@ -1,31 +1,62 @@
-
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Library, Trash2, X } from 'lucide-react';
+import { Library, Trash2 } from 'lucide-react';
 import type { CardInstance } from '../domain/types';
 import { getCardDef, resolveCardName } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import { useDelayedBackdropBlur } from '../../../hooks/ui/useDelayedBackdropBlur';
+import { PromptOverlay } from './PromptOverlay';
 import { SMASHUP_CARD_BACK } from '../domain/ids';
 import { UI_Z_INDEX } from '../../../core';
 
 type Props = {
     deckCount: number;
     discard: CardInstance[];
-    myPlayerId: string;
     isMyTurn: boolean;
     /** 弃牌堆中有可从弃牌堆打出的卡牌时为 true（仅用于视觉提示） */
     hasPlayableFromDiscard?: boolean;
-    onCardView?: (card: CardInstance) => void;
+    /** 弃牌堆出牌选择面板正在显示时为 true，禁止打开纯查看面板（避免两个底部面板重叠） */
+    suppressViewer?: boolean;
+    /** 点击弃牌堆时打开弃牌堆出牌面板（被动弃牌堆出牌场景） */
+    onOpenDiscardPlay?: () => void;
+    dispatch: (type: string, payload?: unknown) => void;
+    playerID: string | null;
 };
 
-export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, onCardView }) => {
+export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, suppressViewer, onOpenDiscardPlay, dispatch, playerID }) => {
     const { t } = useTranslation('game-smashup');
     const [showDiscard, setShowDiscard] = useState(false);
+
+    // 弃牌堆出牌选择面板激活时，自动关闭纯查看面板
+    useEffect(() => {
+        if (suppressViewer) setShowDiscard(false);
+    }, [suppressViewer]);
     const topCard = discard.length > 0 ? discard[discard.length - 1] : null;
     const topDef = topCard ? getCardDef(topCard.defId) : null;
     const topName = resolveCardName(topDef ?? undefined, t) || topCard?.defId;
+
+    // 弃牌堆卡牌列表（供 PromptOverlay displayCards 使用）
+    const handleCloseDiscard = useCallback(() => setShowDiscard(false), []);
+    const displayCardsData = useMemo(() => {
+        if (!showDiscard || discard.length === 0) return undefined;
+        return {
+            title: `${t('ui.discard_pile', { defaultValue: '弃牌堆' })} (${discard.length})`,
+            cards: discard.map(c => ({ uid: c.uid, defId: c.defId })),
+            onClose: handleCloseDiscard,
+        };
+    }, [showDiscard, discard, t, handleCloseDiscard]);
+
+    // 点击面板外部关闭弃牌堆查看
+    useEffect(() => {
+        if (!showDiscard) return;
+        const handler = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            // 点击在弃牌堆查看面板内部、弃牌堆按钮、或放大镜遮罩上，不关闭
+            if (target.closest('[data-discard-view-panel]') || target.closest('[data-discard-toggle]') || target.closest('[data-interaction-allow]')) return;
+            setShowDiscard(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showDiscard]);
 
     return (
         <div
@@ -33,6 +64,7 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
             className="absolute bottom-4 left-[2vw] right-[2vw] flex justify-between items-end pointer-events-none"
             style={{ zIndex: UI_Z_INDEX.hud }}
         >
+
             {/* 牌库 - 左侧 */}
             <div className="flex flex-col items-center pointer-events-auto group">
                 <div className="relative w-[7.5vw] aspect-[0.714]">
@@ -54,10 +86,18 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
             {/* 弃牌堆 - 右侧 */}
             <div
                 className="flex flex-col items-center pointer-events-auto group cursor-pointer relative"
-                onClick={() => setShowDiscard(true)}
+                data-discard-toggle
+                onClick={() => {
+                    // 有可打出卡牌时，优先 toggle 弃牌堆出牌面板（即使 suppressViewer 为 true 也允许关闭）
+                    if (onOpenDiscardPlay) {
+                        onOpenDiscardPlay();
+                        return;
+                    }
+                    if (suppressViewer) return;
+                    setShowDiscard(prev => !prev);
+                }}
             >
                 <div className="relative w-[7.5vw] aspect-[0.714]">
-                    {/* 可从弃牌堆打出时的脉冲光晕 */}
                     {hasPlayableFromDiscard && (
                         <div className="absolute -inset-2 rounded-lg z-0">
                             <div className="absolute inset-0 rounded-lg bg-amber-400/40 animate-ping" />
@@ -82,96 +122,20 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
                         </div>
                     )}
                 </div>
-                <div className={`mt-2 h-5 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-amber-500/80 text-white animate-pulse' : 'bg-black/60 text-white group-hover:text-red-400'}`}>
+                <div className={`mt-2 h-5 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-amber-500/80 text-white animate-pulse' : showDiscard ? 'bg-red-600/80 text-white' : 'bg-black/60 text-white group-hover:text-red-400'}`}>
                     <Trash2 size={10} /> {t('ui.discard')} ({discard.length})
                     {hasPlayableFromDiscard && <span className="text-[9px] ml-1">⚡</span>}
                     {(!isMyTurn && !hasPlayableFromDiscard) && <span className="text-yellow-400 text-[9px]">({t('ui.viewing')})</span>}
                 </div>
             </div>
 
-            {/* 弃牌堆列表覆盖层（纯查看） */}
-            <AnimatePresence>
-                {showDiscard && (
-                    <DiscardListOverlay
-                        cards={discard}
-                        onClose={() => setShowDiscard(false)}
-                        onCardView={onCardView}
-                    />
-                )}
-            </AnimatePresence>
+            {/* 弃牌堆查看：复用 PromptOverlay 通用卡牌展示模式 */}
+            <PromptOverlay
+                interaction={undefined}
+                dispatch={dispatch}
+                playerID={playerID}
+                displayCards={displayCardsData}
+            />
         </div>
-    );
-};
-
-/** 弃牌堆列表覆盖层（纯查看，不含出牌逻辑） */
-const DiscardListOverlay: React.FC<{
-    cards: CardInstance[];
-    onClose: () => void;
-    onCardView?: (card: CardInstance) => void;
-}> = ({ cards, onClose, onCardView }) => {
-    const { t } = useTranslation('game-smashup');
-    const blurActive = useDelayedBackdropBlur(true);
-
-    return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className={`fixed inset-0 bg-black/60 flex items-center justify-center p-10 cursor-pointer pointer-events-auto ${blurActive ? 'backdrop-blur-md' : ''}`}
-            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
-            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-        >
-            <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="bg-[#3e2723] w-full max-w-5xl h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden border-4 border-[#5d4037] relative cursor-auto"
-                onClick={e => e.stopPropagation()}
-                style={{ backgroundImage: 'url(https://www.transparenttextures.com/patterns/wood-pattern.png)' }}
-            >
-                {/* 标题栏 */}
-                <div className="p-6 bg-black/20 flex justify-between items-center border-b border-[#5d4037]">
-                    <h2 className="text-2xl font-black text-[#d7ccc8] uppercase tracking-widest flex items-center gap-3">
-                        <Trash2 /> {t('ui.discard_pile')} ({cards.length})
-                    </h2>
-                    <button
-                        onClick={onClose}
-                        className="text-[#d7ccc8] hover:text-white p-2 hover:bg-white/10 rounded-full transition-colors z-50 pointer-events-auto cursor-pointer"
-                    >
-                        <X size={32} />
-                    </button>
-                </div>
-
-                {/* 卡牌网格 */}
-                <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-[#5d4037] scrollbar-track-transparent">
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                        {cards.map((card) => {
-                            const def = getCardDef(card.defId);
-                            const resolvedName = resolveCardName(def, t) || card.defId;
-                            return (
-                                <div
-                                    key={card.uid}
-                                    className="relative aspect-[0.714] rounded shadow-lg transition-transform group hover:scale-105 cursor-zoom-in"
-                                    onClick={() => onCardView?.(card)}
-                                >
-                                    <div className="w-full h-full rounded overflow-hidden relative bg-slate-200">
-                                        <CardPreview previewRef={def?.previewRef} className="w-full h-full object-cover" title={resolvedName} />
-                                        {!def?.previewRef && (
-                                            <div className="p-2 text-center text-xs font-bold">{resolvedName}</div>
-                                        )}
-                                    </div>
-                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
-                                </div>
-                            );
-                        })}
-                        {cards.length === 0 && (
-                            <div className="col-span-full h-40 flex items-center justify-center text-[#d7ccc8]/50 text-xl font-bold italic">
-                                {t('ui.empty_pile')}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </motion.div>
-        </motion.div>
     );
 };

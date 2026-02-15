@@ -233,7 +233,20 @@
     "damageTakenPlain": "Took {{amount}} damage",
     "damageDealt": "Dealt {{amount}} damage to Player {{targetPlayerId}} with [{{source}}]",
     "damageDealtPlain": "Dealt {{amount}} damage to Player {{targetPlayerId}}",
+    "damageBefore": {
+      "taken": "Took ",
+      "takenWithSource": "Took ",
+      "dealt": "Dealt ",
+      "dealtPlain": "Dealt "
+    },
+    "damageAfter": {
+      "taken": " damage",
+      "takenWithSource": " damage ({{source}})",
+      "dealt": " damage to Player {{targetPlayerId}} with [{{source}}]",
+      "dealtPlain": " damage to Player {{targetPlayerId}}"
+    },
     "damageSource": {
+      "original": "Original Damage",
       "upkeepBurn": "Burn",
       "upkeepPoison": "Poison",
       "retribution": "Retribution Reflect",
@@ -243,6 +256,14 @@
     "damageOriginal": "(Original {{amount}})",
     "damageModifiers": "(Original {{original}}, {{modifiers}})",
     "healApplied": "Heal Player {{targetPlayerId}} for {{amount}}",
+    "healBefore": "Heal Player {{targetPlayerId}} for ",
+    "healAfter": {
+      "plain": "",
+      "withSource": " ({{source}})"
+    },
+    "healSource": {
+      "label": "Heal Source"
+    },
     "statusApplied": "Applied status {{statusLabel}} to Player {{targetPlayerId}}",
     "statusAppliedDelta": "(+{{stacks}}, now {{total}})",
     "statusRemoved": "Removed status {{statusLabel}} from Player {{targetPlayerId}}",
@@ -456,6 +477,8 @@
     "upgradeCardTargetMismatch": "Upgrade card does not match target ability",
     "unknownCardTiming": "This card cannot be used at current timing",
     "cannotPlayCard": "Cannot play this card",
+    "playerNotFound": "Player not found",
+    "notUpgradeCard": "This card is not an upgrade card",
     "player_mismatch": "Not your turn",
     "player_not_found": "Player not found",
     "card_not_in_hand": "Card is not in hand",
@@ -473,9 +496,21 @@
     "requireDiceExists": "Must have dice results to play this card",
     "requireOpponentDiceExists": "Opponent must have dice results to play this card",
     "requireIsRoller": "This card can only be played by the current roller",
+    "requireIsNotRoller": "This card can only be played by the non-roller (responding to opponent's dice)",
+    "requireRollConfirmed": "Must confirm dice results before playing this card",
+    "requireNotRollConfirmed": "Dice results already confirmed, cannot play this card",
+    "requireMinDamageDealt": "Not enough damage dealt this attack to play this card",
     "tutorial_manifest_invalid": "Tutorial configuration is invalid",
     "tutorial_command_blocked": "This action is blocked in the tutorial",
-    "tutorial_step_locked": "The current step cannot be skipped"
+    "tutorial_step_locked": "The current step cannot be skipped",
+    "defense_ability_not_selected": "Must select a defense ability before rolling",
+    "invalid_character": "Invalid character selection",
+    "character_not_selected": "Please select a character first",
+    "roll_not_confirmed": "Please confirm the roll result first",
+    "no_pending_attack": "No pending attack to defend against",
+    "deck_empty": "Deck and discard pile are both empty",
+    "no_card_to_undo": "No sold card to undo",
+    "card_not_in_discard": "Card not found in discard pile"
   },
   "actions": {
     "resolveAttack": "Resolve Attack",
@@ -513,6 +548,7 @@
   "choices": {
     "title": "Ability Resolution Choice",
     "option": "Option {{index}}",
+    "sliderLabel": "Select amount to spend",
     "evasiveOrPurify": "Choose a status effect to gain",
     "evasiveOrPurifyToken": "Choose a token to gain",
     "lotusPalmUnblockable": {
@@ -522,11 +558,9 @@
     },
     "pyroSpendCpForFM": {
       "title": "Spend CP for Fire Mastery (1 CP = 1 FM)",
-      "pay_1": "Spend 1 CP: Gain 1 Fire Mastery",
-      "pay_2": "Spend 2 CP: Gain 2 Fire Mastery",
-      "pay_3": "Spend 3 CP: Gain 3 Fire Mastery",
-      "pay_4": "Spend 4 CP: Gain 4 Fire Mastery",
-      "pay_5": "Spend 5 CP: Gain 5 Fire Mastery",
+      "confirm": "Confirm",
+      "confirmSpend": "Spend {{count}} CP",
+      "sliderHint": "Spend {{value}} CP → Gain {{value}} Fire Mastery",
       "skip": "Skip"
     }
   },

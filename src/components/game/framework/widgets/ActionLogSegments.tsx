@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ActionLogSegment } from '../../../../engine/types';
 import { CardPreviewTooltip } from './CardPreviewTooltip';
+import { BreakdownTooltip } from '../../../common/overlays/BreakdownTooltip';
 import type { CardPreviewRef } from '../../../../core';
 
 interface ActionLogSegmentsProps {
@@ -9,6 +10,8 @@ interface ActionLogSegmentsProps {
     locale?: string;
     /** 获取卡牌的 previewRef（由游戏层提供） */
     getCardPreviewRef?: (cardId: string) => CardPreviewRef | null;
+    /** 卡牌预览最大尺寸（像素） */
+    cardPreviewMaxDim?: number;
 }
 
 /**
@@ -41,7 +44,8 @@ const CardSegmentRenderer: React.FC<{
     segment: Extract<ActionLogSegment, { type: 'card' }>;
     locale?: string;
     getCardPreviewRef?: (cardId: string) => CardPreviewRef | null;
-}> = ({ segment, locale, getCardPreviewRef }) => {
+    maxDim?: number;
+}> = ({ segment, locale, getCardPreviewRef, maxDim }) => {
     const ns = segment.previewTextNs || '';
     const { t } = useTranslation(ns || undefined);
     const rawText = segment.previewText || segment.cardId;
@@ -53,7 +57,7 @@ const CardSegmentRenderer: React.FC<{
     }
 
     return (
-        <CardPreviewTooltip previewRef={previewRef} locale={locale}>
+        <CardPreviewTooltip previewRef={previewRef} locale={locale} maxDim={maxDim}>
             {displayText}
         </CardPreviewTooltip>
     );
@@ -70,6 +74,7 @@ export const ActionLogSegments: React.FC<ActionLogSegmentsProps> = ({
     segments,
     locale,
     getCardPreviewRef,
+    cardPreviewMaxDim,
 }) => {
     if (!Array.isArray(segments) || segments.length === 0) {
         return null;
@@ -101,6 +106,17 @@ export const ActionLogSegments: React.FC<ActionLogSegmentsProps> = ({
                             segment={segment}
                             locale={locale}
                             getCardPreviewRef={getCardPreviewRef}
+                            maxDim={cardPreviewMaxDim}
+                        />
+                    );
+                }
+
+                if (segment.type === 'breakdown') {
+                    return (
+                        <BreakdownTooltip
+                            key={index}
+                            displayText={segment.displayText}
+                            lines={segment.lines}
                         />
                     );
                 }

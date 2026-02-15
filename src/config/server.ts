@@ -59,6 +59,15 @@ export const SPONSOR_API_URL = normalizeUrl(
     (metaEnv.VITE_SPONSOR_API_URL as string | undefined) || FALLBACK_SPONSOR_API_URL
 );
 
+// 通知 API 地址
+const FALLBACK_NOTIFICATION_API_URL = isDev
+    ? '/notifications'
+    : (BACKEND_URL ? `${BACKEND_URL}/notifications` : '/notifications');
+
+export const NOTIFICATION_API_URL = normalizeUrl(
+    (metaEnv.VITE_NOTIFICATION_API_URL as string | undefined) || FALLBACK_NOTIFICATION_API_URL
+);
+
 // UGC API 地址
 const FALLBACK_UGC_API_URL = isDev
     ? '/ugc'

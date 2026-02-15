@@ -47,6 +47,20 @@ const i18nSeg = (
 
 const textSegment = (text: string): ActionLogSegment => ({ type: 'text', text });
 
+/** 构建原因后缀 segment 列表：优先用卡牌预览，fallback 为纯文本 */
+const buildReasonSegments = (
+    reason: string,
+    buildCardSeg: (cardId?: string) => ActionLogSegment | null,
+): ActionLogSegment[] => {
+    const cardSeg = buildCardSeg(reason);
+    if (cardSeg && cardSeg.type === 'card') {
+        // 卡牌预览：（原因：[卡牌名]）
+        return [i18nSeg('actionLog.reasonPrefix'), cardSeg, textSegment('）')];
+    }
+    // fallback：纯文本
+    return [i18nSeg('actionLog.reasonSuffix', { reason })];
+};
+
 // ============================================================================
 // ActionLog 格式化
 // ============================================================================
@@ -285,7 +299,7 @@ export function formatSmashUpActionEntry({
                 const payload = event.payload as { defId: string; reason?: string };
                 const segments = withCardSegments('actionLog.ongoingDetached', payload.defId);
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;
@@ -322,7 +336,7 @@ export function formatSmashUpActionEntry({
                     amount: payload.amount,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
                 break;
@@ -387,7 +401,7 @@ export function formatSmashUpActionEntry({
                     delta: payload.delta > 0 ? `+${payload.delta}` : `${payload.delta}`,
                 }, ['limitType'])];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
                 break;
@@ -398,7 +412,7 @@ export function formatSmashUpActionEntry({
                     playerId: payload.ownerId,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.ownerId, entryTimestamp, index);
                 break;
@@ -409,7 +423,7 @@ export function formatSmashUpActionEntry({
                     playerId: payload.ownerId,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.ownerId, entryTimestamp, index);
                 break;
@@ -421,7 +435,7 @@ export function formatSmashUpActionEntry({
                     toPlayerId: payload.toPlayerId,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.toPlayerId, entryTimestamp, index);
                 break;
@@ -433,7 +447,7 @@ export function formatSmashUpActionEntry({
                     count: payload.cardUids?.length ?? 0,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
                 break;
@@ -444,7 +458,7 @@ export function formatSmashUpActionEntry({
                     playerId: payload.playerId,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
                 break;
@@ -456,7 +470,7 @@ export function formatSmashUpActionEntry({
                     count: payload.count,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
                 break;
@@ -467,7 +481,7 @@ export function formatSmashUpActionEntry({
                     playerId: payload.playerId,
                 })];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, payload.playerId, entryTimestamp, index);
                 break;
@@ -476,7 +490,7 @@ export function formatSmashUpActionEntry({
                 const payload = event.payload as { reason?: string };
                 const segments: ActionLogSegment[] = [i18nSeg('actionLog.baseDeckReordered')];
                 if (payload.reason) {
-                    segments.push(i18nSeg('actionLog.reasonSuffix', { reason: payload.reason }));
+                    segments.push(...buildReasonSegments(payload.reason, buildCardSegment));
                 }
                 pushEntry(event.type, segments, actorId, entryTimestamp, index);
                 break;

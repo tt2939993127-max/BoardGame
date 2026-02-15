@@ -111,27 +111,17 @@ export class MongoStorage implements MatchStorage {
         const ownerType = setupData.ownerType;
         const isGuestOwner = setupData.ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false);
 
-        // 全局单房间限制：同一 ownerKey 只能有一个活跃房间（gameover 的房间不计入）
+        // 全局单房间限制：同一 ownerKey 创建新房间时自动清理旧房间
         if (ownerKey) {
-            if (isGuestOwner) {
-                const existingMatches = await Match.find({
-                    'metadata.setupData.ownerKey': ownerKey,
-                }).select('matchID').lean();
+            const existingMatches = await Match.find({
+                'metadata.setupData.ownerKey': ownerKey,
+                ...(isGuestOwner ? {} : { 'metadata.gameover': null }),
+            }).select('matchID').lean();
 
-                if (existingMatches.length > 0) {
-                    const matchIds = existingMatches.map(doc => doc.matchID);
-                    await Match.deleteMany({ matchID: { $in: matchIds } });
-                    console.log(`[MongoStorage] 游客覆盖房间 ownerKey=${ownerKey} count=${matchIds.length}`);
-                }
-            } else {
-                const existing = await Match.findOne({
-                    'metadata.setupData.ownerKey': ownerKey,
-                    'metadata.gameover': null,
-                }).select('matchID gameName').sort({ updatedAt: -1 }).lean();
-
-                if (existing) {
-                    throw new Error(`[Lobby] ACTIVE_MATCH_EXISTS:${existing.gameName}:${existing.matchID}`);
-                }
+            if (existingMatches.length > 0) {
+                const matchIds = existingMatches.map(doc => doc.matchID);
+                await Match.deleteMany({ matchID: { $in: matchIds } });
+                console.log(`[MongoStorage] 覆盖旧房间 ownerKey=${ownerKey} ownerType=${ownerType ?? 'unknown'} count=${matchIds.length}`);
             }
         }
         

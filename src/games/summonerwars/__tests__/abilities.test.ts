@@ -524,7 +524,7 @@ describe('效果解析', () => {
     expect(events[0].type).toBe(SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED);
     const summonPayload = events[0].payload as { position: CellCoord; sourceUnitId?: string };
     expect(summonPayload.position).toEqual(victimPos);
-    expect(summonPayload.sourceUnitId).toBe(summoner.cardId);
+    expect(summonPayload.sourceUnitId).toBe(summoner.instanceId);
   });
 });
 

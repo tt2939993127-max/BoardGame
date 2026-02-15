@@ -14,11 +14,11 @@ import { CardMagnifyOverlay } from './CardMagnifyOverlay';
 
 interface Props {
     core: SmashUpCore;
-    moves: Record<string, (payload?: Record<string, unknown>) => void>;
+    dispatch: (type: string, payload?: unknown) => void;
     playerID: PlayerId | null;
 }
 
-export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => {
+export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) => {
     const { t, i18n } = useTranslation('game-smashup');
     const selectionState = core.factionSelection;
     const [focusedFactionId, setFocusedFactionId] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
         if (takenFactions.has(factionId)) return;
         if (mySelections.length >= 2) return;
 
-        moves[SU_COMMANDS.SELECT_FACTION]?.({ factionId });
+        dispatch(SU_COMMANDS.SELECT_FACTION, { factionId });
         setFocusedFactionId(null);
     };
 
@@ -326,7 +326,7 @@ export const FactionSelection: React.FC<Props> = ({ core, moves, playerID }) => 
 
                                                     {/* 卡牌数量徽章 */}
                                                     {card.count > 1 && (
-                                                        <div className="absolute top-1.5 left-1.5 z-30 min-w-[22px] h-[22px] px-1 bg-amber-500 border-2 border-white rounded-full flex items-center justify-center shadow-md">
+                                                        <div className="absolute top-1.5 right-1.5 z-30 min-w-[22px] h-[22px] px-1 bg-amber-500 border-2 border-white rounded-full flex items-center justify-center shadow-md">
                                                             <span className="text-white font-black text-[10px] leading-none">×{card.count}</span>
                                                         </div>
                                                     )}

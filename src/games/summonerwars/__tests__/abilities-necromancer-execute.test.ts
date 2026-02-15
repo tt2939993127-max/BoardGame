@@ -15,7 +15,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, PlayerId } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, generateInstanceId } from './test-helpers';
 
 // ============================================================================
 // 辅助函数
@@ -44,8 +44,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -165,7 +167,7 @@ describe('古尔-达斯 - 复活死灵 (revive_undead) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeSummoner('test-summoner'),
       owner: '0',
@@ -180,7 +182,7 @@ describe('古尔-达斯 - 复活死灵 (revive_undead) execute 流程', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'revive_undead',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       targetCardId: 'undead-warrior-discard',
       targetPosition: { row: 4, col: 3 },
     });
@@ -211,7 +213,7 @@ describe('古尔-达斯 - 复活死灵 (revive_undead) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeSummoner('test-summoner'),
       owner: '0',
@@ -225,7 +227,7 @@ describe('古尔-达斯 - 复活死灵 (revive_undead) execute 流程', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'revive_undead',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner2.instanceId,
         targetCardId: 'nonexistent',
         targetPosition: { row: 4, col: 3 },
       },
@@ -246,13 +248,13 @@ describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const fireSacrifice = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-fire-sacrifice',
       card: makeFireSacrifice('test-fire-sacrifice'),
       owner: '0',
     });
 
-    placeUnit(state, { row: 4, col: 4 }, {
+    const victim = placeUnit(state, { row: 4, col: 4 }, {
       cardId: 'test-victim',
       card: makeCultist('test-victim'),
       owner: '0',
@@ -263,8 +265,8 @@ describe('火祭召唤 (fire_sacrifice_summon) execute 流程', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'fire_sacrifice_summon',
-      sourceUnitId: 'test-fire-sacrifice',
-      targetUnitId: 'test-victim',
+      sourceUnitId: fireSacrifice.instanceId,
+      targetUnitId: victim.instanceId,
     });
 
     // 应有消灭事件
@@ -297,13 +299,13 @@ describe('吸取生命 (life_drain) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const drainer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-drainer',
       card: makeLifeDrainer('test-drainer'),
       owner: '0',
     });
 
-    placeUnit(state, { row: 4, col: 3 }, {
+    const victim2 = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-victim',
       card: makeCultist('test-victim'),
       owner: '0',
@@ -314,8 +316,8 @@ describe('吸取生命 (life_drain) execute 流程', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'life_drain',
-      sourceUnitId: 'test-drainer',
-      targetUnitId: 'test-victim',
+      sourceUnitId: drainer.instanceId,
+      targetUnitId: victim2.instanceId,
     });
 
     // 应有消灭事件
@@ -334,7 +336,7 @@ describe('吸取生命 (life_drain) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const drainer2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-drainer',
       card: makeLifeDrainer('test-drainer'),
       owner: '0',
@@ -387,14 +389,14 @@ describe('吸取生命 (life_drain) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [1, 2, 3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const drainer3 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-drainer',
       card: makeLifeDrainer('test-drainer'),
       owner: '0',
     });
 
     // 距离3格（4→1），超过2格限制
-    placeUnit(state, { row: 1, col: 2 }, {
+    const farVictim = placeUnit(state, { row: 1, col: 2 }, {
       cardId: 'test-far-victim',
       card: makeCultist('test-far-victim'),
       owner: '0',
@@ -408,8 +410,8 @@ describe('吸取生命 (life_drain) execute 流程', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'life_drain',
-        sourceUnitId: 'test-drainer',
-        targetUnitId: 'test-far-victim',
+        sourceUnitId: drainer3.instanceId,
+        targetUnitId: farVictim.instanceId,
       },
       playerId: '0',
       timestamp: fixedTimestamp,
@@ -428,7 +430,7 @@ describe('感染 (infection) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const plague = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-plague',
       card: makePlagueZombie('test-plague'),
       owner: '0',
@@ -443,7 +445,7 @@ describe('感染 (infection) execute 流程', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'infection',
-      sourceUnitId: 'test-plague',
+      sourceUnitId: plague.instanceId,
       targetCardId: 'plague-zombie-discard',
       targetPosition: { row: 4, col: 3 },
     });
@@ -461,7 +463,7 @@ describe('感染 (infection) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const plague2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-plague',
       card: makePlagueZombie('test-plague'),
       owner: '0',
@@ -475,7 +477,7 @@ describe('感染 (infection) execute 流程', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'infection',
-        sourceUnitId: 'test-plague',
+        sourceUnitId: plague2.instanceId,
         targetCardId: 'nonexistent',
         targetPosition: { row: 4, col: 3 },
       },
@@ -495,7 +497,7 @@ describe('灵魂转移 (soul_transfer) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeSoulArcher('test-archer'),
       owner: '0',
@@ -506,7 +508,7 @@ describe('灵魂转移 (soul_transfer) execute 流程', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'soul_transfer',
-      sourceUnitId: 'test-archer',
+      sourceUnitId: archer.instanceId,
       targetPosition: { row: 4, col: 4 },
     });
 
@@ -525,7 +527,7 @@ describe('灵魂转移 (soul_transfer) execute 流程', () => {
     const state = createNecroState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer2 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeSoulArcher('test-archer'),
       owner: '0',
@@ -545,7 +547,7 @@ describe('灵魂转移 (soul_transfer) execute 流程', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'soul_transfer',
-        sourceUnitId: 'test-archer',
+        sourceUnitId: archer2.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',

@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Mail, History, Image } from 'lucide-react';
+import { LogOut, Mail, History, Image, MessageSquare } from 'lucide-react';
 import { MatchHistoryModal } from './MatchHistoryModal';
+import { FriendsChatModal } from './FriendsChatModal';
 import { AvatarUpdateModal } from '../auth/AvatarUpdateModal';
 
 interface UserMenuProps {
@@ -34,6 +35,17 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [isOpen]);
+
+    const handleOpenFriends = () => {
+        setIsOpen(false);
+        openModal({
+            closeOnBackdrop: true,
+            closeOnEsc: true,
+            render: ({ close }) => (
+                <FriendsChatModal isOpen onClose={close} />
+            ),
+        });
+    };
 
     const handleOpenHistory = () => {
         setIsOpen(false);
@@ -100,6 +112,15 @@ export const UserMenu = ({ onLogout, onBindEmail }: UserMenuProps) => {
                     >
                         <History size={16} />
                         {t('social:menu.matchHistory')}
+                    </button>
+
+                    {/* 好友与聊天 */}
+                    <button
+                        onClick={handleOpenFriends}
+                        className="w-full px-4 py-2.5 text-left cursor-pointer text-parchment-base-text font-bold text-xs hover:bg-parchment-base-bg rounded flex items-center gap-3 transition-colors"
+                    >
+                        <MessageSquare size={16} />
+                        {t('social:menu.friendsAndChat')}
                     </button>
 
                     <div className="h-px bg-parchment-card-border/30 my-1 mx-2 opacity-50" />

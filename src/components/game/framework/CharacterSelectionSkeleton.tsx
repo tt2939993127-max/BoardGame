@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../common/overlays/MagnifyOverlay';
-import { getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
+import { UI_Z_INDEX } from '../../../core';
 import clsx from 'clsx';
 import type { PlayerId } from '../../../engine/types';
 import type {
@@ -131,8 +131,8 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                 <div className="absolute inset-0 bg-black/40 z-10" />
                 {styleConfig.backgroundAsset && (
                     <OptimizedImage
-                        src={getLocalizedAssetPath(styleConfig.backgroundAsset, locale)}
-                        fallbackSrc={styleConfig.backgroundAsset}
+                        src={styleConfig.backgroundAsset}
+                        locale={locale}
                         className="w-full h-full object-cover opacity-20"
                         alt=""
                     />
@@ -223,8 +223,8 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                                     onClick={() => setMagnifyImage(previewAssets.playerBoard)}
                                                 >
                                                     <OptimizedImage
-                                                        src={getLocalizedAssetPath(previewAssets.playerBoard, locale)}
-                                                        fallbackSrc={previewAssets.playerBoard}
+                                                        src={previewAssets.playerBoard}
+                                                        locale={locale}
                                                         className="h-full w-auto object-contain"
                                                         alt="Player Board"
                                                     />
@@ -237,8 +237,8 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                                         onClick={() => setMagnifyImage(previewAssets.tipBoard!)}
                                                     >
                                                         <OptimizedImage
-                                                            src={getLocalizedAssetPath(previewAssets.tipBoard, locale)}
-                                                            fallbackSrc={previewAssets.tipBoard}
+                                                            src={previewAssets.tipBoard}
+                                                            locale={locale}
                                                             className="h-full w-auto object-contain"
                                                             alt="Tip Board"
                                                         />
@@ -376,9 +376,9 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                     const previewAssets = assets.getPreviewAssets(char.id);
                     return (
                         <React.Fragment key={char.id}>
-                            <img src={getLocalizedAssetPath(previewAssets.playerBoard, locale)} alt="" />
+                            <OptimizedImage src={previewAssets.playerBoard} locale={locale} alt="" placeholder={false} />
                             {previewAssets.tipBoard && (
-                                <img src={getLocalizedAssetPath(previewAssets.tipBoard, locale)} alt="" />
+                                <OptimizedImage src={previewAssets.tipBoard} locale={locale} alt="" placeholder={false} />
                             )}
                         </React.Fragment>
                     );
@@ -394,8 +394,8 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
             >
                 {magnifyImage && (
                     <OptimizedImage
-                        src={getLocalizedAssetPath(magnifyImage, locale)}
-                        fallbackSrc={magnifyImage}
+                        src={magnifyImage}
+                        locale={locale}
                         className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
                         alt="Preview"
                     />

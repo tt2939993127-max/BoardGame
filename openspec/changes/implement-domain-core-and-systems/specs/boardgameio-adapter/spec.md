@@ -1,15 +1,17 @@
+> **状态：已完成**。旧框架（boardgame.io）已完全移除，自研传输层已全面接管。本文档保留为历史记录。
+
 ## ADDED Requirements
 
-### Requirement: Boardgame.io 适配层
-系统 SHALL 提供 Boardgame.io 适配层，用于在 Boardgame.io 对局中承载领域内核 + 系统层。
+### Requirement: 引擎适配层
+系统 SHALL 提供 引擎适配层，用于承载领域内核 + 系统层。
 
-#### Scenario: 通过领域内核构建 Boardgame.io Game
+#### Scenario: 通过领域内核构建可运行的游戏引擎
 - **GIVEN** 一个领域内核模块与一组启用的系统
-- **WHEN** 平台通过适配层构建 Boardgame.io Game
-- **THEN** 该游戏可通过现有 Boardgame.io client/server 基础设施运行
+- **WHEN** 平台通过适配层构建可运行的游戏引擎
+- **THEN** 该游戏可通过自研传输层（GameTransportServer/Client）运行
 
 ### Requirement: moves 不包含规则主体
-在使用适配层的游戏中，Boardgame.io moves SHALL 仅用于把输入翻译为 Command，并调用适配层管线，不得承载规则主体。
+在使用适配层的游戏中，dispatch 调用 SHALL 仅用于发送 Command 到引擎管线，不得承载规则主体。
 
 #### Scenario: move 委托给适配层
 - **WHEN** 一个 move 被调用

@@ -5,11 +5,12 @@
  * 遵循 lastSeenEventId 模式，首次挂载跳过历史事件
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { MatchState } from '../../../engine/types';
 import type { SmashUpCore } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
+import { useEventStreamCursor } from '../../../engine/hooks';
 
 // ============================================================================
 // 类型
@@ -63,8 +64,8 @@ interface UseGameEventsParams {
 }
 
 export function useGameEvents({ G }: UseGameEventsParams) {
-  const lastSeenEventId = useRef(-1);
-  const isFirstMount = useRef(true);
+  const entries = getEventStreamEntries(G);
+  const { consumeNew } = useEventStreamCursor({ entries });
 
   // 动画队列
   const [minionEntries, setMinionEntries] = useState<MinionEntryEffect[]>([]);
@@ -75,21 +76,8 @@ export function useGameEvents({ G }: UseGameEventsParams) {
 
   // 消费事件流
   useEffect(() => {
-    const entries = getEventStreamEntries(G);
-    if (entries.length === 0) return;
-
-    // 首次挂载：跳过历史事件
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      const lastEntry = entries[entries.length - 1];
-      if (lastEntry) lastSeenEventId.current = lastEntry.id;
-      return;
-    }
-
-    const newEntries = entries.filter(e => e.id > lastSeenEventId.current);
+    const { entries: newEntries } = consumeNew();
     if (newEntries.length === 0) return;
-
-    lastSeenEventId.current = newEntries[newEntries.length - 1].id;
 
     let uidCounter = Date.now();
 
@@ -157,7 +145,7 @@ export function useGameEvents({ G }: UseGameEventsParams) {
         }
       }
     }
-  }, [G]);
+  }, [G, consumeNew]);
 
   // 清除已完成的效果
   const removeMinionEntry = useCallback((id: string) => {

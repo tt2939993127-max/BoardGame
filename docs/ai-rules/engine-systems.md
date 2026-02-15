@@ -10,8 +10,42 @@
 
 - **Domain Core**：Command/Event + Reducer，确定性可回放。
 - **Systems**：Undo/Interaction/Log 等跨游戏能力以 hook 管线参与执行。
-- **Adapter**：Boardgame.io moves 仅做输入翻译，规则主体在引擎层。自动合并系统命令到 commandTypes。
-- **统一状态**：`G.sys`（系统状态） + `G.core`（领域状态）。
+- **Adapter**（`createGameEngine`）：将 Domain Core + Systems 组装成 `GameEngineConfig`，供 `GameTransportServer` 使用。自动合并系统命令到 commandTypes。
+- **Transport**：自研传输层（`GameTransportServer` + `GameTransportClient`）。
+- **统一状态**：`G.sys`（系统状态） + `G.core`（领域状态）。`G.sys.gameover` 为游戏结束的唯一检测来源。
+
+### 传输层架构（强制理解）
+
+项目使用自研传输层：
+
+| 组件 | 路径 | 职责 |
+|------|------|------|
+| `GameTransportServer` | `src/engine/transport/server.ts` | 服务端：管理对局生命周期、执行管线、广播状态、持久化 |
+| `GameTransportClient` | `src/engine/transport/client.ts` | 客户端：socket.io 连接、命令发送、状态同步 |
+| `GameProvider` / `LocalGameProvider` | `src/engine/transport/react.tsx` | React 集成：在线/本地模式的 Provider + BoardBridge |
+| `GameBoardProps` | `src/engine/transport/protocol.ts` | Board 组件 Props 契约 |
+| `createGameEngine` | `src/engine/adapter.ts` | 适配器工厂：Domain + Systems → GameEngineConfig |
+
+#### GameBoardProps 契约（强制）
+
+```typescript
+interface GameBoardProps<TCore, TCommandMap> {
+    G: MatchState<TCore>;           // 完整状态（core + sys）
+    dispatch: (type, payload) => void; // 类型安全命令分发
+    moves: Record<string, Function>;   // 兼容层（过渡期保留）
+    playerID: string | null;
+    matchData?: MatchPlayerInfo[];
+    isMultiplayer?: boolean;
+    isConnected?: boolean;
+    reset?: () => void;
+}
+```
+
+- **不再有 `ctx` prop**：`ctx`（含 `ctx.currentPlayer`、`ctx.gameover`、`ctx.phase` 等）已不存在。
+- **当前玩家**：从 `G.core` 中读取（各游戏自定义字段，如 `G.core.currentPlayer`），`playerID` prop 为当前客户端的玩家 ID。
+- **游戏结束**：使用 `G.sys.gameover`（见下方「游戏结束检测」节）。
+- **阶段**：使用 `G.sys.phase`。
+- **新代码应使用 `dispatch`**，`moves` 为过渡期兼容层。
 
 ---
 
@@ -103,6 +137,71 @@ fxBus.pushSequence([
 
 ---
 
+## 游戏结束检测（`sys.gameover`）（强制）
+
+### 架构
+
+管线（`executePipeline`）在每次命令执行成功后自动调用 `domain.isGameOver(core)` 检测游戏是否结束，结果写入 `sys.gameover`：
+
+```typescript
+// pipeline.ts 内部辅助函数（两个成功返回点都会调用）
+const applyGameoverCheck = (s: MatchState<TCore>): MatchState<TCore> => {
+    if (!domain.isGameOver) return s;
+    const result = domain.isGameOver(s.core);
+    if (result === s.sys.gameover) return s;
+    return { ...s, sys: { ...s.sys, gameover: result } };
+};
+```
+
+### GameOverResult 类型
+
+```typescript
+interface GameOverResult {
+    winner?: PlayerId;
+    winners?: PlayerId[];
+    draw?: boolean;
+    scores?: Record<PlayerId, number>;
+}
+```
+
+### 各层读取方式（强制）
+
+| 层级 | 正确读取方式 | 禁止 |
+|------|-------------|------|
+| Board 组件 | `G.sys.gameover` | ❌ `G.core.gameover`、❌ `ctx.gameover` |
+| 服务端 | `result.state.sys.gameover` | ❌ 再次调用 `isGameOver()` |
+| 测试 | `state.sys.gameover` | ❌ `state.core.gameover` |
+| 交互裁决 | `state.sys.gameover` | ❌ `core.gameover` |
+
+### 服务端处理
+
+`GameTransportServer.executeCommandInternal` 在管线执行成功后读取 `result.state.sys.gameover`，若检测到游戏结束且 metadata 尚未标记，则：
+1. 更新 `match.metadata.gameover`
+2. 持久化 metadata
+3. 触发 `onGameOver` 回调（用于归档战绩等）
+
+### 游戏层实现
+
+每个游戏在 `DomainCore.isGameOver` 中实现检测逻辑，返回 `GameOverResult | undefined`：
+
+```typescript
+// 示例：DiceThrone — HP 归零判定
+isGameOver: (core) => {
+    const loser = Object.values(core.players).find(p => p.hp <= 0);
+    if (!loser) return undefined;
+    const winner = Object.values(core.players).find(p => p.hp > 0);
+    return { winner: winner?.id };
+},
+```
+
+### 禁止事项
+
+- ❌ 禁止在 Board 组件中读取 `G.core.gameover` 或 `ctx.gameover`（前者不存在于 core，后者已移除）
+- ❌ 禁止在服务端重复调用 `isGameOver()` 检测——管线已自动完成
+- ❌ 禁止在 core 状态中存储名为 `gameover` 的字段——游戏结束结果由管线自动写入 `sys.gameover`。core 中可以有 `gameResult` 等中间字段供 `isGameOver()` 读取，但 UI/服务端必须统一从 `sys.gameover` 获取最终结果。
+
+---
+
 ## 通用能力框架（强制）
 
 ### 核心组件（`engine/primitives/ability.ts`）
@@ -131,6 +230,112 @@ fxBus.pushSequence([
 **状态/buff 原语（TagContainer / ModifierStack）**：
 - **SummonerWars 历史债务**：`BoardUnit` 上 `tempAbilities`/`boosts`/`extraAttacks`/`healingMode`/`wasAttackedThisTurn`/`originalOwner` 为 ad-hoc 字段，未用 TagContainer，回合清理靠手动解构。**新游戏禁止模仿**，必须用 `createTagContainer()` + `tickDurations`。
 - DiceThrone 已用引擎层 TagContainer；SmashUp 无 buff 系统。
+
+---
+
+## `createSimpleChoice` API 使用规范（强制）
+
+> 所有使用 `createSimpleChoice` 创建交互的代码必须遵守。
+
+### 函数签名
+
+```typescript
+function createSimpleChoice<T>(
+    id: string,                              // 交互 ID（通常为能力 ID）
+    playerId: PlayerId,                      // 做选择的玩家
+    title: string,                           // 弹窗标题（i18n key）
+    options: PromptOption<T>[],              // 选项列表
+    sourceIdOrConfig?: string | SimpleChoiceConfig, // 第 5 参数：sourceId 字符串 或 配置对象
+    timeout?: number,                        // 第 6 参数：超时（仅位置参数形式有效）
+    multi?: PromptMultiConfig,               // 第 7 参数：多选配置（仅位置参数形式有效）
+): InteractionDescriptor<SimpleChoiceData<T>>
+```
+
+### 两种调用约定
+
+**约定 A：位置参数形式**（第 5 参数为 `string`）
+```typescript
+createSimpleChoice(id, playerId, title, options, sourceId, undefined, { min: 0, max: N })
+//                                                ^^^^^^^^  ^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
+//                                                第5:string 第6:timeout 第7:multi
+```
+
+**约定 B：配置对象形式**（第 5 参数为 `SimpleChoiceConfig`）
+```typescript
+createSimpleChoice(id, playerId, title, options, {
+    sourceId: 'ability_id',
+    multi: { min: 0, max: N },    // ← multi 必须嵌套在 config 对象内
+    autoResolveIfSingle: false,
+})
+```
+
+### SimpleChoiceConfig 结构
+
+```typescript
+interface SimpleChoiceConfig {
+    sourceId?: string;
+    timeout?: number;
+    multi?: PromptMultiConfig;        // { min?: number; max?: number }
+    targetType?: 'base' | 'minion' | 'generic';
+    autoResolveIfSingle?: boolean;    // 默认 true
+}
+```
+
+### 强制规则
+
+1. **"任意数量"/"any number" → 必须传 `multi: { min: 0, max: N }`**，N 为候选项总数。不传 `multi` 会导致单选模式。
+2. **"恰好 N 个" → `multi: { min: N, max: N }`**。
+3. **"最多 N 个" → `multi: { min: 0, max: N }` 或 `multi: { min: 1, max: N }`**（视是否可跳过）。
+4. **卡牌选项必须声明 `displayMode: 'card'`（强制）**。`PromptOption` 新增 `displayMode?: 'card' | 'button'` 字段，用于显式声明 UI 渲染模式。使用 `buildMinionTargetOptions()` 构建的选项已自动设置。手动构建卡牌选项时必须显式添加 `displayMode: 'card'`。UI 层对未设置 `displayMode` 的选项 fallback 到 `extractDefId` 猜测（向后兼容，但新代码禁止依赖此 fallback）。
+5. **选项代表卡牌时，`option.value` 必须包含 `defId` 字段**。UI 层从 `defId` 查找卡牌预览图。缺少 `defId` → 即使 `displayMode: 'card'` 也无法展示预览图。
+6. **配置对象形式中 `multi` 必须嵌套**：`{ sourceId, multi: { min, max } }` ✅，`{ sourceId, min, max }` ❌（`min`/`max` 作为顶层字段会被忽略）。
+
+### PromptOption.displayMode（渲染模式声明）
+
+```typescript
+interface PromptOption<T = unknown> {
+    id: string;
+    label: string;
+    value: T;
+    disabled?: boolean;
+    /** 'card' = 卡牌预览模式，'button' | undefined = 按钮模式 */
+    displayMode?: 'card' | 'button';
+}
+```
+
+- **设计原则**：渲染模式由选项创建者显式声明，而非 UI 层从 `value` 字段名猜测。`defId` 是业务数据，不是 UI 渲染声明。
+- **`buildMinionTargetOptions()`** 已自动设置 `displayMode: 'card'`。
+- **手动构建卡牌选项**时必须显式添加：`{ id, label, value: { cardUid, defId }, displayMode: 'card' }`。
+- **非卡牌选项**（跳过/完成/基地选择等）不需要设置 `displayMode`，默认为按钮。
+- **向后兼容**：UI 层 `isCardOption()` 优先读 `displayMode`，未设置时 fallback 到 `extractDefId()` + `previewRef` 检查。新代码禁止依赖此 fallback。
+
+### 反模式
+
+```typescript
+// ❌ multi 传到 timeout 位置（第 6 参数）
+createSimpleChoice(id, pid, title, opts, sourceId, { min: 0, max: 3 })
+
+// ❌ config 对象中 min/max 平铺（不在 multi 子对象内）
+createSimpleChoice(id, pid, title, opts, { sourceId: 'xxx', min: 0, max: 3 })
+
+// ❌ 描述说"任意数量"但不传 multi
+createSimpleChoice(id, pid, title, opts, sourceId)  // → 单选模式
+
+// ❌ 选项代表卡牌但 value 缺少 defId（无法展示预览图）
+options.map(c => ({ id: c.instanceId, label: c.name, value: { instanceId: c.instanceId } }))
+
+// ❌ 卡牌选项未声明 displayMode（依赖 UI 层猜测，新代码禁止）
+options.map(c => ({ id: c.uid, label: c.name, value: { cardUid: c.uid, defId: c.defId } }))
+
+// ✅ 位置参数形式 + multi
+createSimpleChoice(id, pid, title, opts, sourceId, undefined, { min: 0, max: opts.length })
+
+// ✅ 配置对象形式 + multi 嵌套
+createSimpleChoice(id, pid, title, opts, { sourceId: 'xxx', multi: { min: 0, max: opts.length } })
+
+// ✅ 卡牌选项：displayMode + defId
+options.map(c => ({ id: c.uid, label: c.name, value: { cardUid: c.uid, defId: c.defId }, displayMode: 'card' as const }))
+```
 
 ---
 
@@ -179,6 +384,7 @@ fxBus.pushSequence([
 - 系统命令由 adapter 自动合并，游戏层只列业务命令
 - Move payload 必须包装为对象，禁止裸值；系统命令用 `UNDO_COMMANDS.*` 等常量
 - 需要 `reset()` 的系统必须保证重开后回到初始值
+- **`_noSnapshot` 跳过快照（通用机制）**：当命令是前一个操作的后续动作（如 afterMove 技能），UI 层 dispatch 时在 payload 加 `_noSnapshot: true`，UndoSystem 跳过该命令的快照创建，撤回时与前一个命令原子回退。适用于任何游戏的"操作 A 触发操作 B"场景。
 
 ---
 
@@ -292,25 +498,44 @@ if (fxId) fxImpactMap.set(fxId, `hp-${targetId}`);
 > 所有消费 EventStream 的 Hook/Effect 必须遵循，无例外。
 
 **模式 A：过滤式消费（推荐，处理多条新事件）**
+
+使用引擎层通用 hook `useEventStreamCursor`（`src/engine/hooks/useEventStreamCursor.ts`），
+自动处理首次挂载跳过历史 + Undo 恢复重置游标。
+所有判断在 `consumeNew()` 内同步完成，不依赖 useEffect 时序，
+消费者用 `useEffect` 或 `useLayoutEffect` 均可。
+
+简单场景（不需要 reset 清理）：
 ```typescript
-const lastSeenIdRef = useRef<number>(-1);
-const isFirstMountRef = useRef(true);
-// 首次挂载：指针推进到末尾
+import { useEventStreamCursor } from '../../../engine/hooks';
+
+const { consumeNew } = useEventStreamCursor({ entries: eventStreamEntries });
+
 useEffect(() => {
-  if (isFirstMountRef.current && entries.length > 0) {
-    lastSeenIdRef.current = entries[entries.length - 1].id;
-    isFirstMountRef.current = false;
+  const { entries: newEntries } = consumeNew();
+  if (newEntries.length === 0) return;
+  // ... 处理 newEntries（游标已自动推进）
+}, [eventStreamEntries, consumeNew]);
+```
+
+需要 Undo 回退清理（攻击队列/技能模式等）：
+```typescript
+const { consumeNew } = useEventStreamCursor({ entries });
+
+useLayoutEffect(() => {
+  const { entries: newEntries, didReset } = consumeNew();
+  if (didReset) {
+    // 清理 UI 状态：待播放队列、技能模式、视觉缓冲等
+    clearPendingAttack(); setAbilityMode(null); damageBuffer.clear();
   }
-}, [entries]);
-// 后续：只处理 id > lastSeenId
-useEffect(() => {
-  if (isFirstMountRef.current) return;
-  const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);
   if (newEntries.length === 0) return;
   // ... 处理 newEntries
-  lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
-}, [entries]);
+}, [entries, consumeNew]);
 ```
+
+> `consumeNew()` 返回 `{ entries, didReset }`。`didReset=true` 表示检测到 Undo 回退
+> （entries 清空或 ID 回退），消费者据此清理 UI 状态。
+> 内部封装了：首次挂载跳过历史、Undo 检测与游标重置、`e.id > lastSeenId` 过滤 + 自动推进。
+> 消费者无需手动管理 `lastSeenIdRef` / `isFirstMountRef` / `prevEntriesLenRef`。
 
 **模式 B：单条最新事件消费**
 ```typescript
@@ -325,9 +550,9 @@ useEffect(() => {
 
 **禁止**：初始值为 `null/-1` 且无首次挂载跳过逻辑；仅靠 `mountedRef` 守卫（后续 state 变化仍会重播）。
 
-**检查清单**：① 首次挂载是否推进指针到最新？② 后续是否只处理 `id > lastSeenId`？③ 模式 B 的 `useRef` 初始值是否为 `currentEntry?.id ?? null`？④ 同一 Hook 内所有 effect 是否一致？
+**检查清单**：① 是否使用 `useEventStreamCursor` 通用 hook？② `consumeNew` 返回的 `didReset` 是否被正确处理（需要清理 UI 状态的场景）？③ 模式 B 的 `useRef` 初始值是否为 `currentEntry?.id ?? null`？④ `consumeNew` 是否在依赖数组中？
 
-**参考**：模式 A → `dicethrone/hooks/useCardSpotlight.ts`、`useActiveModifiers.ts`、`useAnimationEffects.ts`；模式 B → `lib/audio/useGameAudio.ts`
+**参考**：模式 A → `dicethrone/hooks/useCardSpotlight.ts`（简单）、`summonerwars/ui/useGameEvents.ts`（含 didReset 清理）；模式 B → `lib/audio/useGameAudio.ts`
 
 ---
 
@@ -382,7 +607,7 @@ useEffect(() => {
 
 ## 重赛系统
 
-- **多人**：socket.io 房间层投票（`RematchContext` + `matchSocket.ts`），不走 boardgame.io move（绕过 `ctx.gameover` 限制）
+- **多人**：socket.io 房间层投票（`RematchContext` + `matchSocket.ts`），独立于游戏命令管线
 - **单人**：直接 `reset()`
 - 服务端 `server.ts` REMATCH_EVENTS → 客户端 `matchSocket.ts` + `RematchContext.tsx` → UI `RematchActions` + `useRematch()`
 

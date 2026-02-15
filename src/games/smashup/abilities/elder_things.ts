@@ -28,7 +28,8 @@ import { drawCards } from '../domain/utils';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { registerTrigger, registerProtection } from '../domain/ongoingEffects';
 import type { TriggerContext, ProtectionCheckContext } from '../domain/ongoingEffects';
-import type { SmashUpCore, CardToDeckBottomEvent } from '../domain/types';
+import { getPlayerEffectivePowerOnBase } from '../domain/ongoingModifiers';
+import type { CardToDeckBottomEvent } from '../domain/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
@@ -80,29 +81,29 @@ function elderThingByakhee(ctx: AbilityContext): AbilityResult {
     return { events: evt ? [evt] : [] };
 }
 
-/** ??onPlay：每个对手可抽疯狂卡，不收回抽的让你抽一张牌（MVP：对手全部抽疯狂卡） */
+/**
+ * 米-格 onPlay：每个其他玩家可以抽一张疯狂卡。每个不这样做的玩家，都能让你抽一张卡。
+ * "可以" → 每个对手需要选择是否抽疯狂卡，链式处理
+ */
 function elderThingMiGo(ctx: AbilityContext): AbilityResult {
-    const events: SmashUpEvent[] = [];
-    for (const pid of ctx.state.turnOrder) {
-        if (pid === ctx.playerId) continue;
-        const evt = drawMadnessCards(pid, 1, ctx.state, 'elder_thing_mi_go', ctx.now);
-        if (evt) {
-            events.push(evt);
-        } else {
-            // 疯狂牌库空了，对手无法抽 ?你抽一张牌
-            const player = ctx.state.players[ctx.playerId];
-            const { drawnUids } = drawCards(player, 1, ctx.random);
-            if (drawnUids.length > 0) {
-                const drawEvt: CardsDrawnEvent = {
-                    type: SU_EVENTS.CARDS_DRAWN,
-                    payload: { playerId: ctx.playerId, count: 1, cardUids: drawnUids },
-                    timestamp: ctx.now,
-                };
-                events.push(drawEvt);
-            }
-        }
-    }
-    return { events };
+    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
+    if (opponents.length === 0) return { events: [] };
+
+    // 链式处理：第一个对手选择
+    const options = [
+        { id: 'draw_madness', label: '抽一张疯狂卡', value: { choice: 'draw_madness' } },
+        { id: 'decline', label: '拒绝（让对方抽一张牌）', value: { choice: 'decline' } },
+    ];
+    const interaction = createSimpleChoice(
+        `elder_thing_mi_go_${opponents[0]}_${ctx.now}`, opponents[0],
+        '米-格：你可以抽一张疯狂卡，否则对方抽一张牌', options as any[], 'elder_thing_mi_go',
+    );
+    (interaction.data as any).continuationContext = {
+        casterPlayerId: ctx.playerId,
+        opponents,
+        opponentIdx: 0,
+    };
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 精神错乱 onPlay：每个对手抽两张疯狂卡?*/
@@ -394,6 +395,13 @@ function elderThingElderThingOnPlay(ctx: AbilityContext): AbilityResult {
 
 /** 修格斯 onPlay：每个对手可抽疯狂卡，不收回抽则消灭该对手在此基地的一个随从*/
 function elderThingShoggoth(ctx: AbilityContext): AbilityResult {
+    // 前置条件：你只能将这张卡打到你至少拥有6点力量的基地
+    const base = ctx.state.bases[ctx.baseIndex];
+    if (base) {
+        const playerPower = getPlayerEffectivePowerOnBase(ctx.state, base, ctx.baseIndex, ctx.playerId);
+        if (playerPower < 6) return { events: [] };
+    }
+
     const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
     if (opponents.length === 0) return { events: [] };
 
@@ -420,12 +428,60 @@ function elderThingShoggoth(ctx: AbilityContext): AbilityResult {
 
 /** 注册远古之物派系的交互解决处理函数 */
 export function registerElderThingInteractionHandlers(): void {
+    // 米-格：对手选择是否抽疯狂卡（链式处理）
+    registerInteractionHandler('elder_thing_mi_go', (state, _playerId, value, iData, _random, timestamp) => {
+        const { choice } = value as { choice: string };
+        const ctx = (iData as any)?.continuationContext as { casterPlayerId: string; opponents: string[]; opponentIdx: number };
+        if (!ctx) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+        const currentOpponent = ctx.opponents[ctx.opponentIdx];
+
+        if (choice === 'draw_madness') {
+            const evt = drawMadnessCards(currentOpponent, 1, state.core, 'elder_thing_mi_go', timestamp);
+            if (evt) events.push(evt);
+        } else {
+            // 对手拒绝 → 施法者抽一张牌
+            const caster = state.core.players[ctx.casterPlayerId];
+            if (caster && caster.deck.length > 0) {
+                const drawnUid = caster.deck[0].uid;
+                events.push({
+                    type: SU_EVENTS.CARDS_DRAWN,
+                    payload: { playerId: ctx.casterPlayerId, count: 1, cardUids: [drawnUid] },
+                    timestamp,
+                } as CardsDrawnEvent);
+            }
+        }
+
+        // 链式处理下一个对手
+        const nextIdx = ctx.opponentIdx + 1;
+        if (nextIdx < ctx.opponents.length) {
+            const nextPid = ctx.opponents[nextIdx];
+            const options = [
+                { id: 'draw_madness', label: '抽一张疯狂卡', value: { choice: 'draw_madness' } },
+                { id: 'decline', label: '拒绝（让对方抽一张牌）', value: { choice: 'decline' } },
+            ];
+            const interaction = createSimpleChoice(
+                `elder_thing_mi_go_${nextPid}_${timestamp}`, nextPid,
+                '米-格：你可以抽一张疯狂卡，否则对方抽一张牌', options as any[], 'elder_thing_mi_go',
+            );
+            (interaction.data as any).continuationContext = {
+                casterPlayerId: ctx.casterPlayerId,
+                opponents: ctx.opponents,
+                opponentIdx: nextIdx,
+            };
+            return { state: queueInteraction(state, interaction), events };
+        }
+
+        return { state, events };
+    });
+
     registerInteractionHandler('elder_thing_begin_the_summoning', (state, playerId, value, _iData, _random, timestamp) => {
         const { cardUid } = value as { cardUid: string };
         const player = state.core.players[playerId];
+        // DECK_REORDERED：将弃牌堆中的随从放到牌库顶，reducer 会自动从弃牌堆移除
         const newDeckUids = [cardUid, ...player.deck.map(c => c.uid)];
         return { state, events: [
-            { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids: newDeckUids }, timestamp },
+            { type: SU_EVENTS.DECK_REORDERED, payload: { playerId, deckUids: newDeckUids }, timestamp },
             grantExtraAction(playerId, 'elder_thing_begin_the_summoning', timestamp),
         ] };
     });

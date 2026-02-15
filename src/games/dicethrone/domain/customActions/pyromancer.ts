@@ -125,6 +125,8 @@ const resolveSoulBurn4 = (ctx: CustomActionContext): DiceThroneEvent[] => {
 const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
     const timestamp = ctx.timestamp;
+    // 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
+    const opponentId = ctx.ctx.defenderId;
 
     const currentFM = getFireMasteryCount(ctx);
     const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
@@ -139,9 +141,12 @@ const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
     } as TokenGrantedEvent);
 
     const dmg = 5 + updatedFM;
+    const modifiers: import('../events').DamageModifier[] = updatedFM > 0 ? [
+        { type: 'token', value: updatedFM, sourceId: TOKEN_IDS.FIRE_MASTERY, sourceName: 'tokens.fire_mastery.name' },
+    ] : [];
     events.push({
         type: 'DAMAGE_DEALT',
-        payload: { targetId: ctx.targetId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId },
+        payload: { targetId: opponentId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId, modifiers },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: timestamp + 0.1
     } as DamageDealtEvent);
@@ -155,11 +160,16 @@ const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
  * 此处只负责伤害：造成 5 + 当前FM 点伤害
  */
 const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
+    // 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
+    const opponentId = ctx.ctx.defenderId;
     const fm = getFireMasteryCount(ctx);
     const dmg = 5 + fm;
+    const modifiers: import('../events').DamageModifier[] = fm > 0 ? [
+        { type: 'token', value: fm, sourceId: TOKEN_IDS.FIRE_MASTERY, sourceName: 'tokens.fire_mastery.name' },
+    ] : [];
     return [{
         type: 'DAMAGE_DEALT',
-        payload: { targetId: ctx.targetId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId },
+        payload: { targetId: opponentId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId, modifiers },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: ctx.timestamp
     } as DamageDealtEvent];
@@ -188,7 +198,7 @@ const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
     } as TokenGrantedEvent);
 
     // FM 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
-    const opponentId = Object.keys(ctx.state.players).find(id => id !== ctx.attackerId) ?? ctx.attackerId;
+    const opponentId = ctx.ctx.defenderId;
     if (updatedFM > 0) {
         events.push({
             type: 'DAMAGE_DEALT',
@@ -208,6 +218,8 @@ const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
 const resolveBurnDown = (ctx: CustomActionContext, dmgPerToken: number, limit: number): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
     const timestamp = ctx.timestamp;
+    // 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
+    const opponentId = ctx.ctx.defenderId;
 
     const currentFM = getFireMasteryCount(ctx);
     const maxLimit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
@@ -231,7 +243,7 @@ const resolveBurnDown = (ctx: CustomActionContext, dmgPerToken: number, limit: n
 
         events.push({
             type: 'DAMAGE_DEALT',
-            payload: { targetId: ctx.targetId, amount: toConsume * dmgPerToken, actualDamage: toConsume * dmgPerToken, sourceAbilityId: ctx.sourceAbilityId },
+            payload: { targetId: opponentId, amount: toConsume * dmgPerToken, actualDamage: toConsume * dmgPerToken, sourceAbilityId: ctx.sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 0.2
         } as DamageDealtEvent);
@@ -248,6 +260,8 @@ const resolveBurnDown = (ctx: CustomActionContext, dmgPerToken: number, limit: n
 const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: number): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
     const timestamp = ctx.timestamp;
+    // 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
+    const opponentId = ctx.ctx.defenderId;
 
     const currentFM = getFireMasteryCount(ctx);
     const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
@@ -261,10 +275,14 @@ const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: numbe
         timestamp
     } as TokenGrantedEvent);
 
-    const dmg = base + (updatedFM * multiplier);
+    const fmBonus = updatedFM * multiplier;
+    const dmg = base + fmBonus;
+    const modifiers: import('../events').DamageModifier[] = fmBonus > 0 ? [
+        { type: 'token', value: fmBonus, sourceId: TOKEN_IDS.FIRE_MASTERY, sourceName: 'tokens.fire_mastery.name' },
+    ] : [];
     events.push({
         type: 'DAMAGE_DEALT',
-        payload: { targetId: ctx.targetId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId },
+        payload: { targetId: opponentId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId, modifiers },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp: timestamp + 0.1
     } as DamageDealtEvent);
@@ -368,6 +386,8 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
     if (!ctx.random) return [];
     const dice: BonusDieInfo[] = [];
     const events: DiceThroneEvent[] = [];
+    // 伤害/状态目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
+    const opponentId = ctx.ctx.defenderId;
 
     for (let i = 0; i < config.diceCount; i++) {
         const value = ctx.random.d(6);
@@ -375,7 +395,7 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
         dice.push({ index: i, value, face });
         events.push({
             type: 'BONUS_DIE_ROLLED',
-            payload: { value, face, playerId: ctx.attackerId, targetPlayerId: ctx.targetId, effectKey: config.dieEffectKey, effectParams: { value, index: i } },
+            payload: { value, face, playerId: ctx.attackerId, targetPlayerId: opponentId, effectKey: config.dieEffectKey, effectParams: { value, index: i } },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: ctx.timestamp + i
         } as BonusDieRolledEvent);
@@ -389,7 +409,7 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
             id: `${ctx.sourceAbilityId}-${ctx.timestamp}`,
             sourceAbilityId: ctx.sourceAbilityId,
             attackerId: ctx.attackerId,
-            targetId: ctx.targetId,
+            targetId: opponentId,
             dice,
             rerollCostTokenId: TOKEN_IDS.FIRE_MASTERY,
             rerollCostAmount: 1,
@@ -403,8 +423,8 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
     } else {
         dice.forEach((d, idx) => {
             const eff = getPyroBlastDieEffect(d.face);
-            if (eff.damage) events.push({ type: 'DAMAGE_DEALT', payload: { targetId: ctx.targetId, amount: eff.damage, actualDamage: eff.damage, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as DamageDealtEvent);
-            if (eff.burn) events.push({ type: 'STATUS_APPLIED', payload: { targetId: ctx.targetId, statusId: STATUS_IDS.BURN, stacks: 1, newTotal: (ctx.state.players[ctx.targetId]?.statusEffects[STATUS_IDS.BURN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
+            if (eff.damage) events.push({ type: 'DAMAGE_DEALT', payload: { targetId: opponentId, amount: eff.damage, actualDamage: eff.damage, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as DamageDealtEvent);
+            if (eff.burn) events.push({ type: 'STATUS_APPLIED', payload: { targetId: opponentId, statusId: STATUS_IDS.BURN, stacks: 1, newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.BURN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
             if (eff.fm) {
                 rollingFM = Math.min(rollingFM + eff.fm, fmLimit);
                 const newTotal = rollingFM;
@@ -415,7 +435,7 @@ const createPyroBlastRollEvents = (ctx: CustomActionContext, config: { diceCount
                     timestamp: ctx.timestamp + 5 + idx
                 } as TokenGrantedEvent);
             }
-            if (eff.knockdown) events.push({ type: 'STATUS_APPLIED', payload: { targetId: ctx.targetId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal: (ctx.state.players[ctx.targetId]?.statusEffects[STATUS_IDS.KNOCKDOWN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
+            if (eff.knockdown) events.push({ type: 'STATUS_APPLIED', payload: { targetId: opponentId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal: (ctx.state.players[opponentId]?.statusEffects[STATUS_IDS.KNOCKDOWN] || 0) + 1, sourceAbilityId: ctx.sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp: ctx.timestamp + 5 + idx } as StatusAppliedEvent);
         });
     }
     return events;
@@ -449,27 +469,25 @@ const resolveSpendCpForFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
 
     const maxSpend = Math.min(currentCp, fmRoom);
 
-    // 动态生成选项：花费 1~maxSpend CP
+    // slider 模式：确认选项（value=maxSpend 作为默认/上限）+ 跳过选项
     const options: Array<{
         value: number;
         customId: string;
-        tokenId: string;
+        tokenId?: string;
         labelKey: string;
-    }> = [];
-    for (let i = maxSpend; i >= 1; i--) {
-        options.push({
-            value: i,
+    }> = [
+        {
+            value: maxSpend,
             customId: 'pyro-spend-cp-for-fm-confirmed',
             tokenId: TOKEN_IDS.FIRE_MASTERY,
-            labelKey: `choices.pyroSpendCpForFM.pay_${i}`,
-        });
-    }
-    // 跳过选项
-    options.push({
-        value: 0,
-        customId: 'pyro-spend-cp-for-fm-skip',
-        labelKey: 'choices.pyroSpendCpForFM.skip',
-    });
+            labelKey: 'choices.pyroSpendCpForFM.confirm',
+        },
+        {
+            value: 0,
+            customId: 'pyro-spend-cp-for-fm-skip',
+            labelKey: 'choices.pyroSpendCpForFM.skip',
+        },
+    ];
 
     return [{
         type: 'CHOICE_REQUESTED',
@@ -477,6 +495,10 @@ const resolveSpendCpForFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
             playerId: ctx.attackerId,
             sourceAbilityId: ctx.sourceAbilityId,
             titleKey: 'choices.pyroSpendCpForFM.title',
+            slider: {
+                confirmLabelKey: 'choices.pyroSpendCpForFM.confirmSpend',
+                hintKey: 'choices.pyroSpendCpForFM.sliderHint',
+            },
             options,
         },
         sourceCommandType: 'ABILITY_EFFECT',

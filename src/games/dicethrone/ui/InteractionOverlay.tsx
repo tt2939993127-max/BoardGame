@@ -48,12 +48,12 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
     const selectedItems = interaction.selected ?? [];
     const targetPlayerIds = interaction.targetPlayerIds ?? Object.keys(players);
 
-    // 状态效果选择模式
-    const isStatusSelection = interactionType === 'selectStatus' || interactionType === 'selectTargetStatus';
+    // 转移模式的第二阶段：选择目标玩家（必须在 isStatusSelection 之前判断）
+    const isTransferTargetSelection = interactionType === 'selectTargetStatus' && !!interaction.transferConfig?.statusId;
+    // 状态效果选择模式（第一阶段，排除已进入第二阶段的情况）
+    const isStatusSelection = !isTransferTargetSelection && (interactionType === 'selectStatus' || interactionType === 'selectTargetStatus');
     // 玩家选择模式（移除所有状态）
     const isPlayerSelection = interactionType === 'selectPlayer';
-    // 转移模式的第二阶段：选择目标玩家
-    const isTransferTargetSelection = interactionType === 'selectTargetStatus' && interaction.transferConfig?.statusId;
 
     // 获取已选择的状态信息（用于显示）
     const selectedStatusId = isStatusSelection ? selectedItems[0] : undefined;
@@ -166,14 +166,22 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                             }
 
                             // 状态效果选择模式
+                            // 判断该玩家下是否有被选中的状态效果
+                            const hasSelectedEffect = selectedStatusId
+                                ? Object.keys(player.statusEffects ?? {}).includes(selectedStatusId)
+                                    || Object.keys(player.tokens ?? {}).includes(selectedStatusId)
+                                : false;
+
                             return (
                                 <div
                                     key={pid}
                                     className={`
                                         p-4 rounded-xl border-2 transition-all duration-200 min-w-[200px]
-                                        ${hasStatus
-                                            ? 'border-amber-500/50 bg-slate-800/50'
-                                            : 'border-slate-700 bg-slate-800/30 opacity-50'}
+                                        ${!hasStatus
+                                            ? 'border-slate-700 bg-slate-800/30 opacity-50'
+                                            : hasSelectedEffect
+                                                ? 'border-amber-500 bg-slate-800/60'
+                                                : 'border-slate-600 bg-slate-800/40'}
                                     `}
                                 >
                                     <div className="text-center mb-2">
@@ -186,7 +194,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                             effects={player.statusEffects ?? {}}
                                             tokens={player.tokens}
                                             selectedId={selectedStatusId}
-                                            highlightAll={true}
+                                            highlightAll={false}
                                             onSelectEffect={(statusId) => onSelectStatus(pid, statusId)}
                                             size="normal"
                                             className="justify-center"
@@ -225,7 +233,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                             hover:scale-105
                                             ${isSelected
                                                 ? 'border-green-500 bg-green-900/30 ring-2 ring-green-400'
-                                                : 'border-amber-500/50 bg-slate-800/50 hover:border-amber-400'}
+                                                : 'border-slate-600 bg-slate-800/40 hover:border-slate-400'}
                                         `}
                                     >
                                         <div className="text-center">

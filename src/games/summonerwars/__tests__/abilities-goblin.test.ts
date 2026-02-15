@@ -18,6 +18,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS, SW_EVENTS } from '../domain';
 import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, EventCard, PlayerId } from '../domain/types';
 import type { RandomFn, GameEvent } from '../../../engine/types';
+import { generateInstanceId } from '../domain/utils';
 import {
   canMoveToEnhanced, canAttackEnhanced,
   isImmobileBase, hasChargeAbilityBase, hasFerocityAbilityBase,
@@ -55,8 +56,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -547,6 +550,7 @@ describe('部落投石手 - 凶残 (ferocity)', () => {
     });
     expect(result.valid).toBe(false);
   });
+
 });
 
 // ============================================================================
@@ -558,7 +562,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeGoblinSummoner('test-summoner'),
       owner: '0',
@@ -575,7 +579,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'vanish',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       targetPosition: { row: 4, col: 4 },
     });
 
@@ -592,7 +596,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeGoblinSummoner('test-summoner'),
       owner: '0',
@@ -612,7 +616,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'vanish',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
@@ -626,7 +630,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makeGoblinSummoner('test-summoner'),
       owner: '0',
@@ -646,7 +650,7 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'vanish',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetPosition: { row: 4, col: 4 },
       },
       playerId: '0',
@@ -654,6 +658,50 @@ describe('思尼克斯 - 神出鬼没 (vanish)', () => {
     });
     expect(result.valid).toBe(false);
     expect(result.error).toContain('友方');
+  });
+
+  it('同 cardId 的不同实例也可交换（按 instanceId 判定自身）', () => {
+    const state = createGoblinState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'shared-card',
+      card: makeGoblinSummoner('shared-source-card'),
+      owner: '0',
+    });
+
+    const ally = placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'shared-card',
+      card: makeZeroCostAlly('shared-target-card'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const validateResult = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'vanish',
+        sourceUnitId: summoner.instanceId,
+        targetPosition: { row: 4, col: 4 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(validateResult.valid).toBe(true);
+
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'vanish',
+      sourceUnitId: summoner.instanceId,
+      targetPosition: { row: 4, col: 4 },
+    });
+
+    const swapEvents = events.filter(e => e.type === SW_EVENTS.UNITS_SWAPPED);
+    expect(swapEvents.length).toBe(1);
+    expect(newState.board[4][2].unit?.instanceId).toBe(ally.instanceId);
+    expect(newState.board[4][4].unit?.instanceId).toBe(summoner.instanceId);
   });
 });
 
@@ -666,7 +714,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const blarf = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-blarf',
       card: makeBlarf('test-blarf'),
       owner: '0',
@@ -677,7 +725,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'blood_rune',
-      sourceUnitId: 'test-blarf',
+      sourceUnitId: blarf.instanceId,
       choice: 'damage',
     });
 
@@ -692,7 +740,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const blarf = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-blarf',
       card: makeBlarf('test-blarf'),
       owner: '0',
@@ -704,7 +752,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'blood_rune',
-      sourceUnitId: 'test-blarf',
+      sourceUnitId: blarf.instanceId,
       choice: 'charge',
     });
 
@@ -723,7 +771,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const blarf = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-blarf',
       card: makeBlarf('test-blarf'),
       owner: '0',
@@ -738,7 +786,7 @@ describe('布拉夫 - 鲜血符文 (blood_rune)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'blood_rune',
-        sourceUnitId: 'test-blarf',
+        sourceUnitId: blarf.instanceId,
         choice: 'charge',
       },
       playerId: '0',
@@ -804,7 +852,7 @@ describe('史米革 - 魔力成瘾 (magic_addiction)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const smirg = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-smirg',
       card: makeSmirg('test-smirg'),
       owner: '0',
@@ -816,7 +864,7 @@ describe('史米革 - 魔力成瘾 (magic_addiction)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'magic_addiction',
-      sourceUnitId: 'test-smirg',
+      sourceUnitId: smirg.instanceId,
     });
 
     const magicEvents = events.filter(e => e.type === SW_EVENTS.MAGIC_CHANGED);
@@ -833,7 +881,7 @@ describe('史米革 - 魔力成瘾 (magic_addiction)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const smirg = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-smirg',
       card: makeSmirg('test-smirg'),
       owner: '0',
@@ -845,7 +893,7 @@ describe('史米革 - 魔力成瘾 (magic_addiction)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'magic_addiction',
-      sourceUnitId: 'test-smirg',
+      sourceUnitId: smirg.instanceId,
     });
 
     const destroyEvents = events.filter(
@@ -865,7 +913,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-glutton',
       card: makeGlutton('test-glutton'),
       owner: '0',
@@ -882,7 +930,8 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'feed_beast',
-      sourceUnitId: 'test-glutton',
+      sourceUnitId: glutton.instanceId,
+      choice: 'destroy_adjacent',
       targetPosition: { row: 4, col: 3 },
     });
 
@@ -900,7 +949,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-glutton',
       card: makeGlutton('test-glutton'),
       owner: '0',
@@ -911,7 +960,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'feed_beast',
-      sourceUnitId: 'test-glutton',
+      sourceUnitId: glutton.instanceId,
       choice: 'self_destroy',
     });
 
@@ -926,7 +975,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     const state = createGoblinState();
     clearArea(state, [2, 3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-glutton',
       card: makeGlutton('test-glutton'),
       owner: '0',
@@ -946,7 +995,8 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'feed_beast',
-        sourceUnitId: 'test-glutton',
+        sourceUnitId: glutton.instanceId,
+        choice: 'destroy_adjacent',
         targetPosition: { row: 2, col: 2 },
       },
       playerId: '0',
@@ -960,7 +1010,7 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-glutton',
       card: makeGlutton('test-glutton'),
       owner: '0',
@@ -980,7 +1030,8 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'feed_beast',
-        sourceUnitId: 'test-glutton',
+        sourceUnitId: glutton.instanceId,
+        choice: 'destroy_adjacent',
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',
@@ -990,11 +1041,93 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
     expect(result.error).toContain('友方');
   });
 
+  it('缺少 choice 时验证拒绝（契约 required）', () => {
+    const state = createGoblinState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-glutton',
+      card: makeGlutton('test-glutton'),
+      owner: '0',
+    });
+
+    placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-food',
+      card: makeZeroCostAlly('test-food'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'feed_beast',
+        sourceUnitId: glutton.instanceId,
+        targetPosition: { row: 4, col: 3 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('必须选择');
+  });
+
+  it('同 cardId 的相邻友方可被吞噬（按 instanceId 判定自身）', () => {
+    const state = createGoblinState();
+    clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
+
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'shared-glutton-card',
+      card: makeGlutton('glutton-source-card'),
+      owner: '0',
+    });
+
+    const food = placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'shared-glutton-card',
+      card: makeZeroCostAlly('glutton-target-card'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+
+    const fullState = { core: state, sys: {} as any };
+    const validateResult = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'feed_beast',
+        sourceUnitId: glutton.instanceId,
+        choice: 'destroy_adjacent',
+        targetPosition: { row: 4, col: 3 },
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(validateResult.valid).toBe(true);
+
+    const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'feed_beast',
+      sourceUnitId: glutton.instanceId,
+      choice: 'destroy_adjacent',
+      targetPosition: { row: 4, col: 3 },
+    });
+
+    const destroyEvents = events.filter(
+      e => e.type === SW_EVENTS.UNIT_DESTROYED && (e.payload as any).reason === 'feed_beast'
+    );
+    expect(destroyEvents.length).toBe(1);
+    expect((destroyEvents[0].payload as any).instanceId).toBe(food.instanceId);
+    expect(newState.board[4][3].unit).toBeUndefined();
+  });
+
   it('不能在非攻击阶段使用（验证拒绝）', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-glutton',
       card: makeGlutton('test-glutton'),
       owner: '0',
@@ -1008,13 +1141,44 @@ describe('巨食兽 - 喂养巨食兽 (feed_beast)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'feed_beast',
-        sourceUnitId: 'test-glutton',
+        sourceUnitId: glutton.instanceId,
         choice: 'self_destroy',
       },
       playerId: '0',
       timestamp: fixedTimestamp,
     });
     expect(result.valid).toBe(false);
+  });
+
+  it('本回合已击杀时不能发动（验证拒绝）', () => {
+    const state = createGoblinState();
+    clearArea(state, [3, 4, 5], [1, 2, 3]);
+
+    const glutton = placeUnit(state, { row: 4, col: 2 }, {
+      cardId: 'test-glutton',
+      card: makeGlutton('test-glutton'),
+      owner: '0',
+    });
+
+    state.phase = 'attack';
+    state.currentPlayer = '0';
+    state.unitKillCountThisTurn = {
+      [glutton.instanceId]: 1,
+    };
+
+    const fullState = { core: state, sys: {} as any };
+    const result = SummonerWarsDomain.validate(fullState, {
+      type: SW_COMMANDS.ACTIVATE_ABILITY,
+      payload: {
+        abilityId: 'feed_beast',
+        sourceUnitId: glutton.instanceId,
+        choice: 'self_destroy',
+      },
+      playerId: '0',
+      timestamp: fixedTimestamp,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('已消灭单位');
   });
 });
 
@@ -1029,20 +1193,20 @@ describe('洞穴地精事件卡 - 群情激愤', () => {
     clearArea(state, [3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
     // 0费友方单位
-    placeUnit(state, { row: 4, col: 2 }, {
+    const zero1 = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-zero-1',
       card: makeZeroCostAlly('test-zero-1'),
       owner: '0',
     });
 
-    placeUnit(state, { row: 4, col: 4 }, {
+    const zero2 = placeUnit(state, { row: 4, col: 4 }, {
       cardId: 'test-zero-2',
       card: makeClimber('test-zero-2'),
       owner: '0',
     });
 
     // 非0费友方单位（不应获得额外攻击）
-    placeUnit(state, { row: 5, col: 2 }, {
+    const costly = placeUnit(state, { row: 5, col: 2 }, {
       cardId: 'test-costly',
       card: makeBeastRider('test-costly'), // cost=2
       owner: '0',
@@ -1067,10 +1231,10 @@ describe('洞穴地精事件卡 - 群情激愤', () => {
     // 应有2个0费单位获得额外攻击
     expect(extraAttackEvents.length).toBe(2);
     const grantedIds = extraAttackEvents.map(e => (e.payload as any).targetUnitId);
-    expect(grantedIds).toContain('test-zero-1');
-    expect(grantedIds).toContain('test-zero-2');
+    expect(grantedIds).toContain(zero1.instanceId);
+    expect(grantedIds).toContain(zero2.instanceId);
     // 非0费单位不应获得
-    expect(grantedIds).not.toContain('test-costly');
+    expect(grantedIds).not.toContain(costly.instanceId);
   });
 
   it('召唤师（0费但非士兵）不获得额外攻击', () => {
@@ -1078,14 +1242,14 @@ describe('洞穴地精事件卡 - 群情激愤', () => {
     clearArea(state, [3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
     // 召唤师 cost=0 但 unitClass=summoner
-    placeUnit(state, { row: 5, col: 2 }, {
+    const summoner = placeUnit(state, { row: 5, col: 2 }, {
       cardId: 'test-summoner',
       card: makeGoblinSummoner('test-summoner'),
       owner: '0',
     });
 
     // 0费士兵
-    placeUnit(state, { row: 4, col: 2 }, {
+    const zero = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-zero',
       card: makeZeroCostAlly('test-zero'),
       owner: '0',
@@ -1108,8 +1272,8 @@ describe('洞穴地精事件卡 - 群情激愤', () => {
 
     const extraAttackEvents = events.filter(e => e.type === SW_EVENTS.EXTRA_ATTACK_GRANTED);
     const grantedIds = extraAttackEvents.map(e => (e.payload as any).targetUnitId);
-    expect(grantedIds).not.toContain('test-summoner');
-    expect(grantedIds).toContain('test-zero');
+    expect(grantedIds).not.toContain(summoner.instanceId);
+    expect(grantedIds).toContain(zero.instanceId);
   });
 });
 
@@ -1200,6 +1364,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
 
     // 攻击者
     const attacker: BoardUnit = {
+      instanceId: generateInstanceId('test-attacker'),
       cardId: 'test-attacker', card: makeZeroCostAlly('test-attacker'), owner: '0',
       position: { row: 4, col: 2 }, damage: 0, boosts: 0,
       hasMoved: false, hasAttacked: false,
@@ -1208,6 +1373,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
 
     // 目标
     const target: BoardUnit = {
+      instanceId: generateInstanceId('test-target'),
       cardId: 'test-target', card: makeEnemy('test-target'), owner: '1',
       position: { row: 4, col: 3 }, damage: 0, boosts: 0,
       hasMoved: false, hasAttacked: false,
@@ -1216,6 +1382,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
 
     // 友方单位与目标相邻（(3,3) 和 (5,3)）
     const ally1: BoardUnit = {
+      instanceId: generateInstanceId('test-ally-1'),
       cardId: 'test-ally-1', card: makeZeroCostAlly('test-ally-1'), owner: '0',
       position: { row: 3, col: 3 }, damage: 0, boosts: 0,
       hasMoved: false, hasAttacked: false,
@@ -1223,6 +1390,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
     state.board[3][3].unit = ally1;
 
     const ally2: BoardUnit = {
+      instanceId: generateInstanceId('test-ally-2'),
       cardId: 'test-ally-2', card: makeZeroCostAlly('test-ally-2'), owner: '0',
       position: { row: 5, col: 3 }, damage: 0, boosts: 0,
       hasMoved: false, hasAttacked: false,
@@ -1252,6 +1420,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
     const attacker: BoardUnit = {
+      instanceId: generateInstanceId('test-attacker'),
       cardId: 'test-attacker', card: makeZeroCostAlly('test-attacker'), owner: '0',
       position: { row: 4, col: 2 }, damage: 0, boosts: 0,
       hasMoved: false, hasAttacked: false,
@@ -1259,6 +1428,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
     state.board[4][2].unit = attacker;
 
     const target: BoardUnit = {
+      instanceId: generateInstanceId('test-target'),
       cardId: 'test-target', card: makeEnemy('test-target'), owner: '1',
       position: { row: 4, col: 3 }, damage: 0, boosts: 0,
       hasMoved: false, hasAttacked: false,
@@ -1267,6 +1437,7 @@ describe('洞穴地精事件卡 - 成群结队（围攻加成）', () => {
 
     // 友方相邻目标
     state.board[3][3] = { ...state.board[3][3], unit: {
+      instanceId: generateInstanceId('test-ally'),
       cardId: 'test-ally', card: makeZeroCostAlly('test-ally'), owner: '0',
       position: { row: 3, col: 3 }, damage: 0, boosts: 0,
       hasMoved: false, hasAttacked: false,
@@ -1289,14 +1460,14 @@ describe('部落抓附手 - 抓附 (grab)', () => {
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
     // 抓附手在 (4,2)
-    placeUnit(state, { row: 4, col: 2 }, {
+    const grabber = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-grabber',
       card: makeGrabber('test-grabber'),
       owner: '0',
     });
 
     // 友方单位在 (4,3)，与抓附手相邻
-    placeUnit(state, { row: 4, col: 3 }, {
+    const mover = placeUnit(state, { row: 4, col: 3 }, {
       cardId: 'test-mover',
       card: makeZeroCostAlly('test-mover'),
       owner: '0',
@@ -1313,8 +1484,8 @@ describe('部落抓附手 - 抓附 (grab)', () => {
 
     const grabEvents = events.filter(e => e.type === SW_EVENTS.GRAB_FOLLOW_REQUESTED);
     expect(grabEvents.length).toBe(1);
-    expect((grabEvents[0].payload as any).grabberUnitId).toBe('test-grabber');
-    expect((grabEvents[0].payload as any).movedUnitId).toBe('test-mover');
+    expect((grabEvents[0].payload as any).grabberUnitId).toBe(grabber.instanceId);
+    expect((grabEvents[0].payload as any).movedUnitId).toBe(mover.instanceId);
   });
 
   it('非相邻友方单位移动不触发抓附', () => {
@@ -1353,7 +1524,7 @@ describe('部落抓附手 - 抓附 (grab)', () => {
     clearArea(state, [3, 4, 5], [1, 2, 3, 4]);
 
     // 抓附手在 (4,2)
-    placeUnit(state, { row: 4, col: 2 }, {
+    const grabber = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-grabber',
       card: makeGrabber('test-grabber'),
       owner: '0',
@@ -1364,7 +1535,7 @@ describe('部落抓附手 - 抓附 (grab)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'grab',
-      sourceUnitId: 'test-grabber',
+      sourceUnitId: grabber.instanceId,
       targetPosition: { row: 4, col: 3 },
     });
 
@@ -1380,7 +1551,7 @@ describe('部落抓附手 - 抓附 (grab)', () => {
     const state = createGoblinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const grabber = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-grabber',
       card: makeGrabber('test-grabber'),
       owner: '0',
@@ -1400,7 +1571,7 @@ describe('部落抓附手 - 抓附 (grab)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'grab',
-        sourceUnitId: 'test-grabber',
+        sourceUnitId: grabber.instanceId,
         targetPosition: { row: 4, col: 3 },
       },
       playerId: '0',

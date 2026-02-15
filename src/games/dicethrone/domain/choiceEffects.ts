@@ -32,9 +32,7 @@ const choiceEffectHandlers: Map<string, ChoiceEffectHandler> = new Map();
  * 注册 Choice Effect 处理器
  */
 export function registerChoiceEffectHandler(customId: string, handler: ChoiceEffectHandler): void {
-    if (choiceEffectHandlers.has(customId)) {
-        console.warn(`[DiceThrone] ChoiceEffect "${customId}" 已存在，将被覆盖`);
-    }
+    // HMR 会重新执行模块导致重复注册，静默覆盖即可
     choiceEffectHandlers.set(customId, handler);
 }
 

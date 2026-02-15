@@ -16,7 +16,7 @@
 ```mermaid
 graph TD
     subgraph 引擎层
-        Adapter[Boardgame.io 适配器]
+        Adapter[引擎适配器]
         Pipeline[Command/Event 管线]
         FlowSys[FlowSystem]
         PromptSys[PromptSystem]

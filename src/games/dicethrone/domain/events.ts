@@ -121,6 +121,8 @@ export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
         sourceAbilityId?: string;
         /** 伤害修改记录（用于 ActionLog 展示完整的伤害计算过程） */
         modifiers?: DamageModifier[];
+        /** 跳过护盾消耗（用于 HP 重置类效果，如神圣祝福将 HP 设为 1） */
+        bypassShields?: boolean;
     };
 }
 
@@ -350,6 +352,18 @@ export interface ChoiceRequestedEvent extends GameEvent<'CHOICE_REQUESTED'> {
         playerId: PlayerId;
         sourceAbilityId: string;
         titleKey: string;
+        /**
+         * slider 模式配置（连续数值选择）。
+         * 约定：options[0] = 确认选项（value=max），options[last] = 跳过选项（value=0）。
+         * - confirmLabelKey: 确认按钮文案 i18n key，支持 {{count}} 插值
+         * - hintKey: 滑动条下方提示文案 i18n key，支持 {{value}} 插值
+         * - skipLabelKey: 跳过按钮文案 i18n key（可选，默认用 skip option 的 labelKey）
+         */
+        slider?: {
+            confirmLabelKey: string;
+            hintKey?: string;
+            skipLabelKey?: string;
+        };
         options: Array<{
             /** 被动状态 ID（如 STATUS_IDS.KNOCKDOWN） */
             statusId?: string;

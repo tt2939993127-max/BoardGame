@@ -18,6 +18,7 @@ import type { SummonerWarsCore, CellCoord, BoardUnit, UnitCard, EventCard, Playe
 import type { RandomFn, GameEvent } from '../../../engine/types';
 import { canAttackEnhanced, manhattanDistance, getPlayerUnits } from '../domain/helpers';
 import { calculateEffectiveStrength } from '../domain/abilityResolver';
+import { generateInstanceId } from '../domain/utils';
 import { createInitializedCore } from './test-helpers';
 
 // ============================================================================
@@ -49,8 +50,10 @@ function placeUnit(
   pos: CellCoord,
   overrides: Partial<BoardUnit> & { card: UnitCard; owner: PlayerId }
 ): BoardUnit {
+  const cardId = overrides.cardId ?? `test-${pos.row}-${pos.col}`;
   const unit: BoardUnit = {
-    cardId: overrides.cardId ?? `test-${pos.row}-${pos.col}`,
+    instanceId: overrides.instanceId ?? generateInstanceId(cardId),
+    cardId,
     card: overrides.card,
     owner: overrides.owner,
     position: pos,
@@ -590,7 +593,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makePaladinSummoner('test-summoner'),
       owner: '0',
@@ -615,7 +618,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'fortress_power',
-      sourceUnitId: 'test-summoner',
+      sourceUnitId: summoner.instanceId,
       targetCardId: 'fortress-warrior-discard',
     });
 
@@ -635,7 +638,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makePaladinSummoner('test-summoner'),
       owner: '0',
@@ -653,7 +656,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'fortress_power',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetCardId: 'fortress-warrior-discard',
       },
       playerId: '0',
@@ -667,7 +670,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const summoner = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-summoner',
       card: makePaladinSummoner('test-summoner'),
       owner: '0',
@@ -691,7 +694,7 @@ describe('瑟拉·艾德温 - 城塞之力 (fortress_power)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'fortress_power',
-        sourceUnitId: 'test-summoner',
+        sourceUnitId: summoner.instanceId,
         targetCardId: 'temple-priest-discard',
       },
       playerId: '0',
@@ -711,7 +714,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const valentina = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-valentina',
       card: makeValentina('test-valentina'),
       owner: '0',
@@ -727,7 +730,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'guidance',
-      sourceUnitId: 'test-valentina',
+      sourceUnitId: valentina.instanceId,
     });
 
     const drawEvents = events.filter(e => e.type === SW_EVENTS.CARD_DRAWN);
@@ -742,7 +745,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const valentina = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-valentina',
       card: makeValentina('test-valentina'),
       owner: '0',
@@ -755,7 +758,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'guidance',
-      sourceUnitId: 'test-valentina',
+      sourceUnitId: valentina.instanceId,
     });
 
     const drawEvents = events.filter(e => e.type === SW_EVENTS.CARD_DRAWN);
@@ -769,7 +772,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const valentina = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-valentina',
       card: makeValentina('test-valentina'),
       owner: '0',
@@ -783,7 +786,7 @@ describe('瓦伦蒂娜 - 指引 (guidance)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'guidance',
-        sourceUnitId: 'test-valentina',
+        sourceUnitId: valentina.instanceId,
       },
       playerId: '0',
       timestamp: fixedTimestamp,
@@ -803,7 +806,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeFortressArcher('test-archer'),
       owner: '0',
@@ -819,7 +822,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
 
     const { events, newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'holy_arrow',
-      sourceUnitId: 'test-archer',
+      sourceUnitId: archer.instanceId,
       discardCardIds: ['discard-unit-1'],
     });
 
@@ -843,7 +846,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeFortressArcher('test-archer'),
       owner: '0',
@@ -859,7 +862,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
 
     const { newState } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'holy_arrow',
-      sourceUnitId: 'test-archer',
+      sourceUnitId: archer.instanceId,
       discardCardIds: ['discard-unit-a', 'discard-unit-b'],
     });
 
@@ -871,7 +874,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeFortressArcher('test-archer'),
       owner: '0',
@@ -889,7 +892,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'holy_arrow',
-        sourceUnitId: 'test-archer',
+        sourceUnitId: archer.instanceId,
         discardCardIds: ['ally-1', 'ally-2'],
       },
       playerId: '0',
@@ -903,7 +906,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeFortressArcher('test-archer'),
       owner: '0',
@@ -920,7 +923,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'holy_arrow',
-        sourceUnitId: 'test-archer',
+        sourceUnitId: archer.instanceId,
         discardCardIds: ['archer-in-hand'],
       },
       playerId: '0',
@@ -934,7 +937,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
     const state = createPaladinState();
     clearArea(state, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
 
-    placeUnit(state, { row: 4, col: 2 }, {
+    const archer = placeUnit(state, { row: 4, col: 2 }, {
       cardId: 'test-archer',
       card: makeFortressArcher('test-archer'),
       owner: '0',
@@ -948,7 +951,7 @@ describe('城塞弓箭手 - 圣光箭 (holy_arrow)', () => {
       type: SW_COMMANDS.ACTIVATE_ABILITY,
       payload: {
         abilityId: 'holy_arrow',
-        sourceUnitId: 'test-archer',
+        sourceUnitId: archer.instanceId,
         discardCardIds: ['some-card'],
       },
       playerId: '0',

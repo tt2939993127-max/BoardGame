@@ -7,7 +7,7 @@
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
-import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionCardDef } from '../domain/types';
+import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionCardDef, DeckReorderedEvent } from '../domain/types';
 import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion,
@@ -221,31 +221,54 @@ function miskatonicLibrarianTalent(ctx: AbilityContext): AbilityResult {
  * 心理学家 onPlay：将手牌或弃牌堆中的1张疯狂卡返回疯狂牌库
  *
  * 官方规则：You may return a Madness card from your hand or discard pile to the Madness deck.
+ * "你可以" → 需要跳过选项
  */
 function miskatonicPsychologistOnPlay(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    // 优先从手牌中找疯狂卡
-    const madnessInHand = player.hand.find(c => c.defId === MADNESS_CARD_DEF_ID && c.uid !== ctx.cardUid);
-    if (madnessInHand) {
-        return { events: [returnMadnessCard(ctx.playerId, madnessInHand.uid, 'miskatonic_psychologist', ctx.now)] };
+    // 收集所有可返回的疯狂卡（手牌+弃牌堆）
+    const candidates: { uid: string; source: 'hand' | 'discard'; label: string }[] = [];
+    for (const c of player.hand) {
+        if (c.defId === MADNESS_CARD_DEF_ID && c.uid !== ctx.cardUid) {
+            candidates.push({ uid: c.uid, source: 'hand', label: '疯狂卡（手牌）' });
+        }
     }
-    // 其次从弃牌堆中找
-    const madnessInDiscard = player.discard.find(c => c.defId === MADNESS_CARD_DEF_ID);
-    if (madnessInDiscard) {
-        return { events: [returnMadnessCard(ctx.playerId, madnessInDiscard.uid, 'miskatonic_psychologist', ctx.now)] };
+    for (const c of player.discard) {
+        if (c.defId === MADNESS_CARD_DEF_ID) {
+            candidates.push({ uid: c.uid, source: 'discard', label: '疯狂卡（弃牌堆）' });
+        }
     }
-    return { events: [] };
+    if (candidates.length === 0) return { events: [] };
+    // 单候选也需要确认（"你可以"=可选）
+    const options = candidates.map((c, i) => ({
+        id: `madness-${i}`, label: c.label, value: { cardUid: c.uid, source: c.source },
+    }));
+    const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
+    const interaction = createSimpleChoice(
+        `miskatonic_psychologist_${ctx.now}`, ctx.playerId,
+        '选择要返回疯狂牌库的疯狂卡（可跳过）', [...options, skipOption] as any[], 'miskatonic_psychologist',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /**
  * 研究员 onPlay：抽1张疯狂卡
  *
  * 官方规则：You may draw a Madness card.
+ * "你可以" → 需要确认交互
  */
 function miskatonicResearcherOnPlay(ctx: AbilityContext): AbilityResult {
-    const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_researcher', ctx.now);
-    if (madnessEvt) return { events: [madnessEvt] };
-    return { events: [] };
+    // 检查疯狂牌库是否有牌
+    if (!ctx.state.madnessDeck || ctx.state.madnessDeck.length === 0) return { events: [] };
+    const interaction = createSimpleChoice(
+        `miskatonic_researcher_${ctx.now}`, ctx.playerId,
+        '是否抽取一张疯狂卡？',
+        [
+            { id: 'draw', label: '抽取疯狂卡', value: { draw: true } },
+            { id: 'skip', label: '跳过', value: { skip: true } },
+        ],
+        'miskatonic_researcher',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 // ============================================================================
@@ -336,30 +359,46 @@ function miskatonicBookOfIterTheUnseen(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 门口之物 onPlay：搜索牌库找1张卡放入手牌 + 抽1张疯狂卡
+ * 门口之物 onPlay：搜寻牌库找一张随从或行动卡加入手牌，然后洗牌，再抽1张疯狂卡
  *
- * MVP：自动选牌库中第一张非疯狂卡（不创建 Prompt）
+ * 描述："从牌组搜寻一张随从或战术并加入手牌。抽一张疯狂卡。"
  */
 function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
-    const events: SmashUpEvent[] = [];
     const player = ctx.state.players[ctx.playerId];
 
-    // 从牌库中找第一张非疯狂卡
-    const targetCard = player.deck.find(c => c.defId !== MADNESS_CARD_DEF_ID);
-    if (targetCard) {
-        const drawEvt: CardsDrawnEvent = {
-            type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId: ctx.playerId, count: 1, cardUids: [targetCard.uid] },
-            timestamp: ctx.now,
-        };
-        events.push(drawEvt);
+    // 搜索牌库中所有非疯狂卡（随从或行动卡）
+    const eligible = player.deck.filter(c => c.defId !== MADNESS_CARD_DEF_ID);
+    if (eligible.length === 0) {
+        // 牌库无可选卡，仅抽疯狂卡
+        const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_thing_on_the_doorstep', ctx.now);
+        return { events: madnessEvt ? [madnessEvt] : [] };
     }
 
-    // 抽1张疯狂卡
-    const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_thing_on_the_doorstep', ctx.now);
-    if (madnessEvt) events.push(madnessEvt);
+    // 单候选自动选择
+    if (eligible.length === 1) {
+        const card = eligible[0];
+        const remainingDeck = player.deck.filter(c => c.uid !== card.uid).map(c => c.uid);
+        const events: SmashUpEvent[] = [
+            { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId: ctx.playerId, count: 1, cardUids: [card.uid] }, timestamp: ctx.now } as CardsDrawnEvent,
+            { type: SU_EVENTS.DECK_REORDERED, payload: { playerId: ctx.playerId, deckUids: remainingDeck }, timestamp: ctx.now } as DeckReorderedEvent,
+        ];
+        const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_thing_on_the_doorstep', ctx.now);
+        if (madnessEvt) events.push(madnessEvt);
+        return { events };
+    }
 
-    return { events };
+    // 多候选：创建搜索选择交互
+    const options = eligible.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        const typeLabel = c.type === 'minion' ? '随从' : '行动';
+        return { id: `card-${i}`, label: `${name}（${typeLabel}）`, value: { cardUid: c.uid, defId: c.defId } };
+    });
+    const interaction = createSimpleChoice(
+        `miskatonic_thing_on_the_doorstep_${ctx.now}`, ctx.playerId,
+        '搜寻牌库：选择一张随从或行动卡加入手牌', options as any[], 'miskatonic_thing_on_the_doorstep',
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /**
@@ -382,7 +421,7 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
         '选择要放到牌库底的卡牌（每放一张抽一张）',
         options as any[],
         'miskatonic_field_trip',
-        { min: 1, max: handCards.length },
+        undefined, { min: 0, max: handCards.length },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -431,9 +470,12 @@ export function registerMiskatonicInteractionHandlers(): void {
         const target = base.minions.find(m => m.uid === minionUid);
         if (!target) return undefined;
         const events: SmashUpEvent[] = [];
-        for (const uid of ctx.madnessUids) {
-            events.push(returnMadnessCard(playerId, uid, 'miskatonic_it_might_just_work', timestamp));
-        }
+        // 修复：描述说"弃掉两张疯狂卡"，应使用 CARDS_DISCARDED（放入弃牌堆），而非 returnMadnessCard（返回疯狂牌库）
+        events.push({
+            type: SU_EVENTS.CARDS_DISCARDED,
+            payload: { playerId, cardUids: ctx.madnessUids },
+            timestamp,
+        } as SmashUpEvent);
         events.push(destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'miskatonic_it_might_just_work', timestamp));
         return { state, events };
     });
@@ -465,29 +507,88 @@ export function registerMiskatonicInteractionHandlers(): void {
         return { state, events };
     });
 
-    // 这些多管闲事的小鬼：选择基地后消灭所有行动卡
-    registerInteractionHandler('miskatonic_those_meddling_kids', (state, _playerId, value, _iData, _random, timestamp) => {
+    // 这些多管闲事的小鬼：选择基地后→多选要消灭的行动卡（任意数量）
+    registerInteractionHandler('miskatonic_those_meddling_kids', (state, playerId, value, _iData, _random, timestamp) => {
         const { baseIndex } = value as { baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return { state, events: [] };
-        const events: SmashUpEvent[] = [];
+        // 收集该基地上所有行动卡
+        const actionCards: { uid: string; defId: string; ownerId: string; label: string }[] = [];
         for (const ongoing of base.ongoingActions) {
-            events.push({
-                type: SU_EVENTS.ONGOING_DETACHED,
-                payload: { cardUid: ongoing.uid, defId: ongoing.defId, ownerId: ongoing.ownerId, reason: 'miskatonic_those_meddling_kids' },
-                timestamp,
-            } as OngoingDetachedEvent);
+            const def = getCardDef(ongoing.defId);
+            actionCards.push({ uid: ongoing.uid, defId: ongoing.defId, ownerId: ongoing.ownerId, label: def?.name ?? ongoing.defId });
         }
         for (const m of base.minions) {
             for (const attached of m.attachedActions) {
-                events.push({
-                    type: SU_EVENTS.ONGOING_DETACHED,
-                    payload: { cardUid: attached.uid, defId: attached.defId, ownerId: attached.ownerId, reason: 'miskatonic_those_meddling_kids' },
-                    timestamp,
-                } as OngoingDetachedEvent);
+                const def = getCardDef(attached.defId);
+                const mDef = getCardDef(m.defId);
+                actionCards.push({ uid: attached.uid, defId: attached.defId, ownerId: attached.ownerId, label: `${def?.name ?? attached.defId}（附着在 ${mDef?.name ?? m.defId} 上）` });
             }
         }
+        if (actionCards.length === 0) return { state, events: [] };
+        // 创建多选交互（min:0 = 可不选任何）
+        const options = actionCards.map((c, i) => ({
+            id: `action-${i}`, label: c.label, value: { cardUid: c.uid, defId: c.defId, ownerId: c.ownerId },
+        }));
+        const next = createSimpleChoice(
+            `miskatonic_those_meddling_kids_select_${timestamp}`, playerId,
+            '选择要消灭的行动卡（任意数量）', options as any[], 'miskatonic_those_meddling_kids_select',
+            undefined, { min: 0, max: actionCards.length },
+        );
+        return { state: queueInteraction(state, next), events: [] };
+    });
+
+    // 这些多管闲事的小鬼：多选行动卡后消灭
+    registerInteractionHandler('miskatonic_those_meddling_kids_select', (state, _playerId, value, _iData, _random, timestamp) => {
+        const selections = (Array.isArray(value) ? value : [value]) as { cardUid: string; defId: string; ownerId: string }[];
+        if (!selections || selections.length === 0 || !selections[0]?.cardUid) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+        for (const sel of selections) {
+            events.push({
+                type: SU_EVENTS.ONGOING_DETACHED,
+                payload: { cardUid: sel.cardUid, defId: sel.defId, ownerId: sel.ownerId, reason: 'miskatonic_those_meddling_kids' },
+                timestamp,
+            } as OngoingDetachedEvent);
+        }
         return { state, events };
+    });
+
+    // 门口之物：搜索牌库选择卡牌加入手牌 + 洗牌 + 抽疯狂卡
+    registerInteractionHandler('miskatonic_thing_on_the_doorstep', (state, playerId, value, _iData, _random, timestamp) => {
+        const { cardUid } = value as { cardUid: string; defId: string };
+        const player = state.core.players[playerId];
+        const events: SmashUpEvent[] = [];
+        // 从牌库取出选中的卡加入手牌
+        events.push({
+            type: SU_EVENTS.CARDS_DRAWN,
+            payload: { playerId, count: 1, cardUids: [cardUid] },
+            timestamp,
+        } as CardsDrawnEvent);
+        // 洗牌（排除已取出的卡）
+        const remainingDeck = player.deck.filter(c => c.uid !== cardUid).map(c => c.uid);
+        events.push({
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId, deckUids: remainingDeck },
+            timestamp,
+        } as DeckReorderedEvent);
+        // 抽1张疯狂卡
+        const madnessEvt = drawMadnessCards(playerId, 1, state.core, 'miskatonic_thing_on_the_doorstep', timestamp);
+        if (madnessEvt) events.push(madnessEvt);
+        return { state, events };
+    });
+
+    // 心理学家：选择疯狂卡返回疯狂牌库（可跳过）
+    registerInteractionHandler('miskatonic_psychologist', (state, playerId, value, _iData, _random, timestamp) => {
+        if (value && (value as any).skip) return { state, events: [] };
+        const { cardUid } = value as { cardUid: string };
+        return { state, events: [returnMadnessCard(playerId, cardUid, 'miskatonic_psychologist', timestamp)] };
+    });
+
+    // 研究员：确认是否抽取疯狂卡（可跳过）
+    registerInteractionHandler('miskatonic_researcher', (state, playerId, value, _iData, _random, timestamp) => {
+        if (value && (value as any).skip) return { state, events: [] };
+        const madnessEvt = drawMadnessCards(playerId, 1, state.core, 'miskatonic_researcher', timestamp);
+        return { state, events: madnessEvt ? [madnessEvt] : [] };
     });
 
     // 实地考察：选择卡牌后放牌库底 + 抽等量牌

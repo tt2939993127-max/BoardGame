@@ -42,6 +42,7 @@ export interface ContentSlotProps {
     playerID?: string | null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ActionsSlotProps extends Omit<RematchActionsProps, 'className'> { }
 
 export interface EndgameOverlayProps {
@@ -75,7 +76,7 @@ function DefaultContent({ result, playerID }: ContentSlotProps): React.ReactElem
 
     if (!result) return null;
 
-    // boardgame.io 的获胜者字段可能是数字或字符串；这里统一转字符串再比较。
+    // 获胜者字段可能是数字或字符串；这里统一转字符串再比较。
     // 规则：
     // - 如果当前客户端是旁观者/本地同屏（没有 playerID），不显示“胜利/失败”，只显示“游戏结束”。
     // - 如果有 playerID，则基于 winner 与 playerID 判断胜负。

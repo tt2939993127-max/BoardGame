@@ -15,7 +15,7 @@ export const TECH_STACK = `## 技术栈
 - **Tailwind CSS 4**（使用新版语法）
 - React 19 + TypeScript
 - Lucide React 图标库
-- boardgame.io（游戏框架，仅效果/规则代码需要）`;
+- 自研游戏引擎（状态管理/命令分发/事件流）`;
 
 /** 通用输出规则 */
 export const OUTPUT_RULES = `## ⚠️ 输出规则（必须遵守）
@@ -406,7 +406,7 @@ ${techStack}
 3. 只输出纯 JSON，不要 markdown 代码块
 4. tags 字段必须使用已定义的可用标签`;
 
-    case 'batch-tags':
+    case 'batch-tags': {
       const existingGroups = [...new Set((schema?.tagDefinitions || []).map(t => t.group).filter(Boolean))];
       const existingGroupsInfo = existingGroups.length > 0 
         ? `\n已有分组: ${existingGroups.join(', ')}`
@@ -445,6 +445,7 @@ Tag 用于描述**单个实体的固有属性**，不是组合规则或游戏逻
 ]
 
 注意：只输出纯 JSON，不要 markdown 代码块`;
+    }
 
     default:
       return '';

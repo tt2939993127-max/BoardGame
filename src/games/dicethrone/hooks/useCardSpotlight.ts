@@ -11,6 +11,7 @@ import type { PlayerId, EventStreamEntry } from '../../../engine/types';
 import type { DieFace, CharacterId } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
 import { findHeroCard } from '../heroes';
+import { useEventStreamCursor } from '../../../engine/hooks';
 
 /**
  * 卡牌特写配置
@@ -90,37 +91,21 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
     const [bonusDieCharacterId, setBonusDieCharacterId] = useState<string | undefined>(undefined);
     const [showBonusDie, setShowBonusDie] = useState(false);
 
-    // lastSeenEventId 模式追踪已消费事件（首次挂载时跳过历史）
-    const lastSeenEventIdRef = useRef<number>(-1);
-    const isFirstMountRef = useRef(true);
+    // 通用游标（自动处理首次挂载跳过 + Undo 重置）
+    const { consumeNew } = useEventStreamCursor({ entries: eventStreamEntries });
 
     // 同步队列到 ref
     useEffect(() => {
         cardSpotlightQueueRef.current = cardSpotlightQueue;
     }, [cardSpotlightQueue]);
 
-    // 首次挂载：将指针推进到末尾，跳过历史事件
-    useEffect(() => {
-        if (isFirstMountRef.current && eventStreamEntries.length > 0) {
-            lastSeenEventIdRef.current = eventStreamEntries[eventStreamEntries.length - 1].id;
-            isFirstMountRef.current = false;
-        }
-    }, [eventStreamEntries]);
-
     /**
      * 核心：消费 EventStream 中的新事件
      */
     useEffect(() => {
-        if (isFirstMountRef.current) {
-            return;
-        }
-        if (eventStreamEntries.length === 0) return;
-
-        const lastSeenId = lastSeenEventIdRef.current;
-        const newEntries = eventStreamEntries.filter(e => e.id > lastSeenId);
+        const { entries: newEntries } = consumeNew();
         if (newEntries.length === 0) return;
 
-        lastSeenEventIdRef.current = newEntries[newEntries.length - 1].id;
         const selfId = normalizePlayerId(currentPlayerId);
 
         for (const entry of newEntries) {
@@ -228,7 +213,7 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 }
             }
         }
-    }, [eventStreamEntries, currentPlayerId, opponentName, isSpectator, selectedCharacters]);
+    }, [eventStreamEntries, consumeNew, currentPlayerId, opponentName, isSpectator, selectedCharacters]);
 
     /**
      * 关闭卡牌特写

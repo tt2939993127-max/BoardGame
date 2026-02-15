@@ -234,23 +234,25 @@ describe('robot_microbot_alpha（微型机阿尔法号 ongoing）', () => {
 // ============================================================================
 
 describe('robot_microbot_fixer（微型机修理者 ongoing）', () => {
-    it('修理者在场时己方所有随从 +1', () => {
+    it('修理者在场时己方微型机 +1（非微型机不受益）', () => {
         const fixer = makeMinion('fixer', 'robot_microbot_fixer', '0', 1);
-        const m1 = makeMinion('m1', 'test_a', '0', 2);
-        const base = { defId: 'base_a', minions: [fixer, m1], ongoingActions: [] };
+        const m1 = makeMinion('m1', 'test_a', '0', 2); // 非微型机
+        const guard = makeMinion('guard', 'robot_microbot_guard', '0', 1); // 微型机
+        const base = { defId: 'base_a', minions: [fixer, m1, guard], ongoingActions: [] };
         const state = makeState({ bases: [base] });
-        expect(getEffectivePower(state, fixer, 0)).toBe(2); // 1 + 1（修理者自身也受益）
-        expect(getEffectivePower(state, m1, 0)).toBe(3); // 2 + 1
+        expect(getEffectivePower(state, fixer, 0)).toBe(2); // 1 + 1（修理者自身是微型机，受益）
+        expect(getEffectivePower(state, guard, 0)).toBe(2); // 1 + 1（微型机受益）
+        expect(getEffectivePower(state, m1, 0)).toBe(2); // 非微型机不受益
     });
 
-    it('两个修理者叠加 +2', () => {
+    it('两个修理者叠加 +2（仅微型机受益）', () => {
         const f1 = makeMinion('f1', 'robot_microbot_fixer', '0', 1);
         const f2 = makeMinion('f2', 'robot_microbot_fixer', '0', 1);
-        const m1 = makeMinion('m1', 'test_a', '0', 2);
+        const m1 = makeMinion('m1', 'test_a', '0', 2); // 非微型机
         const base = { defId: 'base_a', minions: [f1, f2, m1], ongoingActions: [] };
         const state = makeState({ bases: [base] });
-        expect(getEffectivePower(state, m1, 0)).toBe(4); // 2 + 2
-        expect(getEffectivePower(state, f1, 0)).toBe(3); // 1 + 2
+        expect(getEffectivePower(state, m1, 0)).toBe(2); // 非微型机不受益
+        expect(getEffectivePower(state, f1, 0)).toBe(3); // 1 + 2（两个修理者各 +1）
     });
 
     it('不影响对手随从', () => {
@@ -261,13 +263,24 @@ describe('robot_microbot_fixer（微型机修理者 ongoing）', () => {
         expect(getEffectivePower(state, enemy, 0)).toBe(3); // 不受修理者影响
     });
 
-    it('跨基地生效', () => {
+    it('跨基地生效（仅微型机受益）', () => {
         const fixer = makeMinion('fixer', 'robot_microbot_fixer', '0', 1);
-        const m1 = makeMinion('m1', 'test_a', '0', 2);
+        const m1 = makeMinion('m1', 'test_a', '0', 2); // 非微型机
+        const guard = makeMinion('guard', 'robot_microbot_guard', '0', 1); // 微型机
         const base0 = { defId: 'base_a', minions: [fixer], ongoingActions: [] };
-        const base1 = { defId: 'base_b', minions: [m1], ongoingActions: [] };
+        const base1 = { defId: 'base_b', minions: [m1, guard], ongoingActions: [] };
         const state = makeState({ bases: [base0, base1] });
-        expect(getEffectivePower(state, m1, 1)).toBe(3); // 2 + 1（修理者在另一个基地）
+        expect(getEffectivePower(state, m1, 1)).toBe(2); // 非微型机不受益
+        expect(getEffectivePower(state, guard, 1)).toBe(2); // 1 + 1（微型机跨基地受益）
+    });
+
+    it('alpha 在场时所有己方随从视为微型机均受益', () => {
+        const fixer = makeMinion('fixer', 'robot_microbot_fixer', '0', 1);
+        const alpha = makeMinion('alpha', 'robot_microbot_alpha', '0', 1);
+        const m1 = makeMinion('m1', 'test_a', '0', 2); // alpha 在场时视为微型机
+        const base = { defId: 'base_a', minions: [fixer, alpha, m1], ongoingActions: [] };
+        const state = makeState({ bases: [base] });
+        expect(getEffectivePower(state, m1, 0)).toBe(3); // 2 + 1（alpha 在场，视为微型机）
     });
 
     it('无修理者时无修正', () => {
@@ -372,9 +385,10 @@ describe('多个持续修正组合', () => {
         const fixer = makeMinion('fixer', 'robot_microbot_fixer', '0', 1);
         const base = { defId: 'base_a', minions: [raptor, fixer], ongoingActions: [] };
         const state = makeState({ bases: [base] });
-        // 猛禽：basePower=2 + 猛禽修正=1（只有自己） + 修理者修正=1 = 4
-        expect(getEffectivePower(state, raptor, 0)).toBe(4);
-        // 修理者：basePower=1 + 修理者修正=1 = 2
+        // 猛禽不是微型机，不受修理者加成
+        // 猛禽：basePower=2 + 猛禽修正=1（只有自己） = 3
+        expect(getEffectivePower(state, raptor, 0)).toBe(3);
+        // 修理者：basePower=1 + 修理者修正=1（自身是微型机） = 2
         expect(getEffectivePower(state, fixer, 0)).toBe(2);
     });
 

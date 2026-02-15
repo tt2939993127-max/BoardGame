@@ -10,7 +10,6 @@ import { SU_EVENTS } from '../domain/types';
 import { MADNESS_CARD_DEF_ID } from '../domain/types';
 import type {
     SmashUpEvent,
-    DeckReshuffledEvent,
     CardsDrawnEvent,
     VpAwardedEvent,
     MinionCardDef,
@@ -25,7 +24,7 @@ import {
     addPowerCounter, revealAndPickFromDeck,
 } from '../domain/abilityHelpers';
 import { registerTrigger } from '../domain/ongoingEffects';
-import type { TriggerContext } from '../domain/ongoingEffects';
+import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
@@ -63,10 +62,9 @@ export function registerCthulhuAbilities(): void {
     registerTrigger('cthulhu_complete_the_ritual', 'onTurnStart', cthulhuCompleteTheRitualTrigger);
 }
 
-/** 强制招募 onPlay：将弃牌堆中力量的的随从放到牌库顶（MVP：全部放入） */
+/** 强制招募 onPlay：将弃牌堆中力量≤3的随从放到牌库顶（玩家选择任意数量） */
 function cthulhuRecruitByForce(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    const events: SmashUpEvent[] = [];
 
     // 从弃牌堆找力量≤3的随从
     const eligibleMinions = player.discard.filter(c => {
@@ -77,21 +75,19 @@ function cthulhuRecruitByForce(ctx: AbilityContext): AbilityResult {
 
     if (eligibleMinions.length === 0) return { events: [] };
 
-    // 随从放牌库顶：先随从，再原牌堆?
-    // DECK_RESHUFFLED reducer 会合并?deck+discard，按 deckUids 排序
-    // 所以我们需要把弃牌堆中非目标卡也包含在 deckUids 中（它们会留在弃牌堆被合并）
-    const newDeck = [...eligibleMinions, ...player.deck];
-    const evt: DeckReshuffledEvent = {
-        type: SU_EVENTS.DECK_RESHUFFLED,
-        payload: {
-            playerId: ctx.playerId,
-            deckUids: newDeck.map(c => c.uid),
-        },
-        timestamp: ctx.now,
-    };
-    events.push(evt);
-
-    return { events };
+    // 创建多选交互让玩家选择任意数量
+    const options = eligibleMinions.map((c, i) => {
+        const def = getCardDef(c.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? c.defId;
+        const power = def?.power ?? 0;
+        return { id: `minion-${i}`, label: `${name} (力量 ${power})`, value: { cardUid: c.uid, defId: c.defId } };
+    });
+    const interaction = createSimpleChoice(
+        `cthulhu_recruit_by_force_${ctx.now}`, ctx.playerId,
+        '选择要放到牌库顶的随从（任意数量）', options as any[], 'cthulhu_recruit_by_force',
+        undefined, { min: 0, max: eligibleMinions.length },
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 再次降临 onPlay：将弃牌堆中任意数量的行动卡洗回牌库（MVP：全部洗回） */
@@ -100,18 +96,18 @@ function cthulhuItBeginsAgain(ctx: AbilityContext): AbilityResult {
     const actionsInDiscard = player.discard.filter(c => c.type === 'action');
     if (actionsInDiscard.length === 0) return { events: [] };
 
-    // 合并牌库 + 弃牌堆行动卡，洗牌
-    const newDeckCards = [...player.deck, ...actionsInDiscard];
-    const shuffled = ctx.random.shuffle([...newDeckCards]);
-    const evt: DeckReshuffledEvent = {
-        type: SU_EVENTS.DECK_RESHUFFLED,
-        payload: {
-            playerId: ctx.playerId,
-            deckUids: shuffled.map(c => c.uid),
-        },
-        timestamp: ctx.now,
-    };
-    return { events: [evt] };
+    // "任意数量的战术"：玩家选择要洗回牌库的行动卡（min:0 允许不选）
+    const options = actionsInDiscard.map((c, i) => {
+        const def = getCardDef(c.defId);
+        const name = def?.name ?? c.defId;
+        return { id: `action-${i}`, label: name, value: { cardUid: c.uid } };
+    });
+    const interaction = createSimpleChoice(
+        `cthulhu_it_begins_again_${ctx.now}`, ctx.playerId,
+        '选择要洗回牌库的战术（任意数量）', options,
+        { sourceId: 'cthulhu_it_begins_again', multi: { min: 0, max: actionsInDiscard.length } },
+    );
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 克苏鲁的馈赠 onPlay：从牌库顶搜索直到找到2张行动卡，放入手牌，其余放牌库底 */
@@ -204,6 +200,7 @@ function cthulhuMadnessUnleashed(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `cthulhu_madness_unleashed_${ctx.now}`, ctx.playerId,
         '选择要弃掉的疑狂卡（每张抽1牌+额外行动）', options as any[], 'cthulhu_madness_unleashed',
+        undefined, { min: 0, max: madnessInHand.length },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -310,24 +307,35 @@ function cthulhuCompleteTheRitualTrigger(ctx: TriggerContext): SmashUpEvent[] {
     return events;
 }
 
-/** 天选之人?beforeScoring：抽一张疑狂卡，本随从+2力量 */
-function cthulhuChosenBeforeScoring(ctx: TriggerContext): SmashUpEvent[] {
-    const events: SmashUpEvent[] = [];
+/**
+ * 天选之人 beforeScoring：你可以抽一张疯狂卡，该随从获得+2力量直到回合结束。
+ * "你可以" → 可选效果，需要创建交互让玩家选择是否抽取
+ */
+function cthulhuChosenBeforeScoring(ctx: TriggerContext): TriggerResult {
     const scoringBaseIndex = ctx.baseIndex;
-    if (scoringBaseIndex === undefined) return events;
+    if (scoringBaseIndex === undefined) return { events: [] };
 
     const base = ctx.state.bases[scoringBaseIndex];
-    if (!base) return events;
+    if (!base) return { events: [] };
 
+    let ms = ctx.matchState;
     for (const m of base.minions) {
         if (m.defId !== 'cthulhu_chosen') continue;
-        // 抽一张疑狂卡
-        const madnessEvt = drawMadnessCards(m.controller, 1, ctx.state, 'cthulhu_chosen', ctx.now);
-        if (madnessEvt) events.push(madnessEvt);
-        // +2 力量
-        events.push(addPowerCounter(m.uid, scoringBaseIndex, 2, 'cthulhu_chosen', ctx.now));
+        // "你可以"：创建交互让玩家选择
+        const options = [
+            { id: 'accept', label: '抽一张疯狂卡（+2力量）', value: { accept: true, minionUid: m.uid } },
+            { id: 'decline', label: '跳过', value: { accept: false, minionUid: m.uid } },
+        ];
+        const interaction = createSimpleChoice(
+            `cthulhu_chosen_${m.uid}_${ctx.now}`, m.controller,
+            '天选之人：是否抽一张疯狂卡获得+2力量？', options as any[], 'cthulhu_chosen',
+        );
+        (interaction.data as any).continuationContext = { minionUid: m.uid, baseIndex: scoringBaseIndex };
+        if (ms) {
+            ms = queueInteraction(ms, interaction);
+        }
     }
-    return events;
+    return { events: [], matchState: ms };
 }
 
 // ============================================================================
@@ -454,6 +462,39 @@ function cthulhuServitor(ctx: AbilityContext): AbilityResult {
 
 /** 注册克苏鲁之仆派系的交互解决处理函数 */
 export function registerCthulhuInteractionHandlers(): void {
+    // 天选之人：玩家选择是否抽疯狂卡
+    registerInteractionHandler('cthulhu_chosen', (state, playerId, value, iData, _random, timestamp) => {
+        const { accept, minionUid } = value as { accept: boolean; minionUid: string };
+        if (!accept) return { state, events: [] };
+        const ctx = (iData as any)?.continuationContext as { minionUid: string; baseIndex: number };
+        const baseIndex = ctx?.baseIndex;
+        const events: SmashUpEvent[] = [];
+        const madnessEvt = drawMadnessCards(playerId, 1, state.core, 'cthulhu_chosen', timestamp);
+        if (madnessEvt) events.push(madnessEvt);
+        if (baseIndex !== undefined) {
+            events.push(addPowerCounter(minionUid, baseIndex, 2, 'cthulhu_chosen', timestamp));
+        }
+        return { state, events };
+    });
+
+    // 重新开始：玩家选择任意数量的行动卡洗回牌库
+    registerInteractionHandler('cthulhu_it_begins_again', (state, playerId, value, _iData, random, timestamp) => {
+        const selectedCards = Array.isArray(value) ? value : (value ? [value] : []);
+        if (selectedCards.length === 0) return { state, events: [] };
+        const cardUids = selectedCards.map((v: any) => v.cardUid).filter(Boolean) as string[];
+        if (cardUids.length === 0) return { state, events: [] };
+        const player = state.core.players[playerId];
+        const selectedUidSet = new Set(cardUids);
+        const actionsFromDiscard = player.discard.filter(c => selectedUidSet.has(c.uid));
+        const newDeck = [...player.deck, ...actionsFromDiscard];
+        const shuffled = random.shuffle([...newDeck]);
+        return { state, events: [{
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId, deckUids: shuffled.map(c => c.uid) },
+            timestamp,
+        }] };
+    });
+
     registerInteractionHandler('cthulhu_corruption', (state, _playerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
@@ -469,9 +510,10 @@ export function registerCthulhuInteractionHandlers(): void {
         if (!player) return { state, events: [] };
         const actionCard = player.discard.find(c => c.uid === cardUid);
         if (!actionCard) return { state, events: [] };
+        // DECK_REORDERED：将弃牌堆中的行动卡放到牌库顶，reducer 会自动从弃牌堆移除
         const newDeckUids = [actionCard.uid, ...player.deck.map(c => c.uid)];
         return { state, events: [{
-            type: SU_EVENTS.DECK_RESHUFFLED,
+            type: SU_EVENTS.DECK_REORDERED,
             payload: { playerId, deckUids: newDeckUids },
             timestamp,
         }] };
@@ -502,6 +544,26 @@ export function registerCthulhuInteractionHandlers(): void {
             payload: { playerId, count: drawCount, cardUids: drawnUids },
             timestamp,
         } as CardsDrawnEvent] };
+    });
+
+    // 强制招募：玩家选择任意数量的随从放到牌库顶
+    registerInteractionHandler('cthulhu_recruit_by_force', (state, playerId, value, _iData, _random, timestamp) => {
+        const selectedCards = Array.isArray(value) ? value : (value ? [value] : []);
+        if (selectedCards.length === 0) return { state, events: [] };
+        const cardUids = selectedCards.map((v: any) => v.cardUid).filter(Boolean) as string[];
+        if (cardUids.length === 0) return { state, events: [] };
+        const player = state.core.players[playerId];
+        // 从弃牌堆取出选中的卡放到牌库顶
+        const selectedFromDiscard = cardUids
+            .map(uid => player.discard.find(c => c.uid === uid))
+            .filter(Boolean);
+        // DECK_REORDERED：选中的弃牌堆卡放牌库顶，reducer 会自动从弃牌堆移除
+        const newDeck = [...selectedFromDiscard, ...player.deck];
+        return { state, events: [{
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId, deckUids: newDeck.map(c => c!.uid) },
+            timestamp,
+        }] };
     });
 
     registerInteractionHandler('cthulhu_madness_unleashed', (state, playerId, value, _iData, _random, timestamp) => {

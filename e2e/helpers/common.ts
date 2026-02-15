@@ -103,7 +103,7 @@ export const ensureGameServerAvailable = async (page: Page) => {
 
 /**
  * 轮询等待指定对局在服务端可查询到。
- * gameName 为 boardgame.io 注册的游戏名（如 'dicethrone'、'summonerwars'）。
+ * gameName 为服务端注册的游戏名（如 'dicethrone'、'summonerwars'）。
  */
 export const waitForMatchAvailable = async (
     page: Page,
@@ -212,7 +212,7 @@ export const dismissLobbyConfirmIfNeeded = async (page: Page) => {
 
 /**
  * 向服务端 join 对局并返回 credentials。
- * gameName 为 boardgame.io 注册的游戏名。
+ * gameName 为服务端注册的游戏名。
  */
 export const joinMatchViaAPI = async (
     page: Page,

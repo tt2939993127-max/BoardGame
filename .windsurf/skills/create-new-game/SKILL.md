@@ -191,7 +191,7 @@ export default <GameId>;
 
 ```tsx
 import React from 'react';
-import type { BoardProps } from 'boardgame.io/react';
+import type { GameBoardProps } from '../../engine/transport/protocol';
 import type { MatchState } from '../../engine/types';
 import type { <GameId>Core } from './domain/types';
 

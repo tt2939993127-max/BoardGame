@@ -29,9 +29,11 @@ export const BaseZone: React.FC<{
     selectableMinionUids?: Set<string>;
     /** 基地选择交互模式：该基地可被直接点击选中 */
     isSelectable?: boolean;
+    /** 选择模式下该基地不可选（置灰） */
+    isDimmed?: boolean;
     isMyTurn: boolean;
     myPlayerId: string | null;
-    moves: Record<string, (payload?: unknown) => void>;
+    dispatch: (type: string, payload?: unknown) => void;
     onClick: () => void;
     onMinionSelect?: (minionUid: string, baseIndex: number) => void;
     onViewMinion: (defId: string) => void;
@@ -39,7 +41,7 @@ export const BaseZone: React.FC<{
     onViewBase: (defId: string) => void;
     tokenRef?: (el: HTMLDivElement | null) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, isSelectable, isMyTurn, myPlayerId, moves, onClick, onMinionSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
+}> = ({ base, baseIndex, core, turnOrder, isDeployMode, isMinionSelectMode, selectableMinionUids, isSelectable, isDimmed, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onViewMinion, onViewAction, onViewBase, tokenRef, isTutorialTargetAllowed }) => {
     const { t } = useTranslation('game-smashup');
     const baseDef = getBaseDef(base.defId);
     const baseName = resolveCardName(baseDef, t) || base.defId;
@@ -104,7 +106,9 @@ export const BaseZone: React.FC<{
                 onClick={onClick}
                 className={`
                     relative w-[14vw] aspect-[1.43] bg-white p-[0.4vw] shadow-sm rounded-sm transition-all duration-300 z-20
-                    ${isSelectable
+                    ${isDimmed
+                        ? 'opacity-40 grayscale cursor-not-allowed rotate-1'
+                        : isSelectable
                         ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2.5vw_rgba(251,191,36,0.6)] ring-4 ring-amber-400'
                         : isDeployMode && !isMinionSelectMode
                         ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2vw_rgba(255,255,255,0.4)] ring-4 ring-green-400'
@@ -213,7 +217,7 @@ export const BaseZone: React.FC<{
 
                             {/* --- MINIONS --- */}
                             {minions.length > 0 ? (
-                                <div className="flex flex-col items-center isolate z-10">
+                                <div className="flex flex-col items-center isolate z-10 hover:z-[100]">
                                     {minions.map((m, i) => (
                                         <MinionCard
                                             key={m.uid}
@@ -224,8 +228,9 @@ export const BaseZone: React.FC<{
                                             baseIndex={baseIndex}
                                             isMyTurn={isMyTurn}
                                             myPlayerId={myPlayerId}
-                                            moves={moves}
+                                            dispatch={dispatch}
                                             isMinionSelectMode={isMinionSelectMode && (!selectableMinionUids || selectableMinionUids.has(m.uid))}
+                                            isDimmed={!!isMinionSelectMode && !!selectableMinionUids && !selectableMinionUids.has(m.uid)}
                                             onMinionSelect={onMinionSelect}
                                             onView={() => onViewMinion(m.defId)}
                                             onViewAction={onViewAction}
@@ -272,7 +277,7 @@ export const BaseZone: React.FC<{
 
 /** 附着行动卡角标（纯视觉提示，不含交互） */
 const AttachedBadge: React.FC<{ count: number }> = ({ count }) => (
-    <div className="absolute -bottom-[0.3vw] -left-[0.3vw] w-[1.1vw] h-[1.1vw] rounded-full
+    <div className="absolute -top-[0.3vw] -right-[0.3vw] w-[1.1vw] h-[1.1vw] rounded-full
         bg-purple-600 border-[0.1vw] border-white shadow-md
         flex items-center justify-center pointer-events-none z-30">
         <Paperclip className="w-[0.6vw] h-[0.6vw] text-white" strokeWidth={3} />
@@ -297,13 +302,15 @@ const MinionCard: React.FC<{
     baseIndex: number;
     isMyTurn: boolean;
     myPlayerId: string | null;
-    moves: Record<string, (payload?: unknown) => void>;
+    dispatch: (type: string, payload?: unknown) => void;
     isMinionSelectMode?: boolean;
+    /** 随从选择模式下该随从不可选（置灰） */
+    isDimmed?: boolean;
     onMinionSelect?: (minionUid: string, baseIndex: number) => void;
     onView: () => void;
     onViewAction: (defId: string) => void;
     isTutorialTargetAllowed?: (targetId: string) => boolean;
-}> = ({ minion, effectivePower, index, pid, baseIndex, isMyTurn, myPlayerId, moves, isMinionSelectMode, onMinionSelect, onView, onViewAction, isTutorialTargetAllowed }) => {
+}> = ({ minion, effectivePower, index, pid, baseIndex, isMyTurn, myPlayerId, dispatch, isMinionSelectMode, isDimmed, onMinionSelect, onView, onViewAction, isTutorialTargetAllowed }) => {
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
@@ -331,11 +338,11 @@ const MinionCard: React.FC<{
             return;
         }
         if (canUseTalent) {
-            moves[SU_COMMANDS.USE_TALENT]?.({ minionUid: minion.uid, baseIndex });
+            dispatch(SU_COMMANDS.USE_TALENT, { minionUid: minion.uid, baseIndex });
         } else {
             onView();
         }
-    }, [isMinionSelectMode, onMinionSelect, canUseTalent, moves, minion.uid, baseIndex, onView]);
+    }, [isMinionSelectMode, onMinionSelect, canUseTalent, dispatch, minion.uid, baseIndex, onView]);
 
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
@@ -347,7 +354,9 @@ const MinionCard: React.FC<{
                 relative w-[5.5vw] aspect-[0.714] bg-white p-[0.2vw] rounded-[0.2vw] 
                 transition-shadow duration-200 group hover:!z-[999] hover:scale-110 hover:rotate-0
                 border-[0.15vw] shadow-md
-                ${isSelectableMinion
+                ${isDimmed
+                    ? 'opacity-40 grayscale cursor-not-allowed'
+                    : isSelectableMinion
                     ? 'cursor-pointer border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'
                     : canUseTalent
                     ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
@@ -399,8 +408,10 @@ const MinionCard: React.FC<{
 
             {/* 力量徽章 - 增益绿色/减益红色（左上角，避免与放大镜重叠） */}
             {((effectivePower !== minion.basePower) || !def?.previewRef) && (
-                <div className={`absolute -top-[0.4vw] -left-[0.4vw] w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.7vw] font-black text-white shadow-sm border border-white ${effectivePower > minion.basePower ? 'bg-green-600' : (effectivePower < minion.basePower ? 'bg-red-600' : 'bg-slate-700')} z-30`}>
-                    {effectivePower}
+                <div className={`absolute -top-[0.4vw] -left-[0.4vw] min-w-[1.2vw] h-[1.2vw] rounded-full flex items-center justify-center text-[0.7vw] font-black text-white shadow-sm border border-white px-[0.15vw] ${effectivePower > minion.basePower ? 'bg-green-600' : (effectivePower < minion.basePower ? 'bg-red-600' : 'bg-slate-700')} z-30`}>
+                    {effectivePower === minion.basePower
+                        ? effectivePower
+                        : `${effectivePower > minion.basePower ? '+' : ''}${effectivePower - minion.basePower}`}
                 </div>
             )}
 

@@ -6,10 +6,8 @@
  * 在 registerBaseInteractionHandlers() 末尾调用 registerExpansionBaseInteractionHandlers()。
  */
 
-import type { PlayerId } from '../../../engine/types';
 import type {
     SmashUpEvent,
-    MinionPlayedEvent,
     MinionDestroyedEvent,
     CardsDrawnEvent,
     CardToDeckBottomEvent,
@@ -23,6 +21,7 @@ import {
     grantExtraMinion,
     grantExtraAction,
     recoverCardsFromDiscard,
+    buildMinionPlayedEvents,
 } from './abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -115,58 +114,49 @@ export function registerExpansionBaseAbilities(): void {
     });
 
     // ── 密斯卡托尼克大学基地（Miskatonic University Base）────────
-    // "在这个基地计分后，每位在此有随从的玩家可以将一张疯狂卡返回疯狂牌堆?
+    // "在这个基地计分后，冠军可以搜寻他的手牌和弃牌堆中任意数量的疯狂卡，然后返回到疯狂卡牌库。"
     registerBaseAbility('base_miskatonic_university_base', 'afterScoring', (ctx) => {
         if (!ctx.state.madnessDeck) return { events: [] };
-        const base = ctx.state.bases[ctx.baseIndex];
-        if (!base) return { events: [] };
+        if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
 
-        // 找出在此基地有随从的玩家
-        const playersWithMinions = new Set<PlayerId>();
-        for (const m of base.minions) {
-            playersWithMinions.add(m.controller);
+        // 只限冠军操作
+        const winnerId = ctx.rankings[0].playerId;
+        const winner = ctx.state.players[winnerId];
+        if (!winner) return { events: [] };
+
+        // 收集冠军手牌和弃牌堆中的疯狂卡
+        const madnessCards: { uid: string; source: 'hand' | 'discard' }[] = [];
+        for (const c of winner.hand) {
+            if (c.defId === MADNESS_CARD_DEF_ID) {
+                madnessCards.push({ uid: c.uid, source: 'hand' });
+            }
         }
-
-        const events: SmashUpEvent[] = [];
-        for (const pid of playersWithMinions) {
-            const player = ctx.state.players[pid];
-            if (!player) continue;
-
-            // 收集该玩家手牌和弃牌堆中的疯狂卡
-            const madnessCards: { uid: string; source: 'hand' | 'discard' }[] = [];
-            for (const c of player.hand) {
-                if (c.defId === MADNESS_CARD_DEF_ID) {
-                    madnessCards.push({ uid: c.uid, source: 'hand' });
-                }
-            }
-            for (const c of player.discard) {
-                if (c.defId === MADNESS_CARD_DEF_ID) {
-                    madnessCards.push({ uid: c.uid, source: 'discard' });
-                }
-            }
-
-            // 无疯狂卡 ?跳过该玩家
-            if (madnessCards.length === 0) continue;
-
-            const options: { id: string; label: string; value: Record<string, unknown> }[] = [
-                { id: 'skip', label: '跳过', value: { skip: true } },
-                ...madnessCards.map((m, i) => ({
-                    id: `madness-${i}`,
-                    label: `疯狂卡(${m.source === 'hand' ? '手牌' : '弃牌堆'})`,
-                    value: { cardUid: m.uid, source: m.source },
-                })),
-            ];
-
-            if (ctx.matchState) {
-                const interaction = createSimpleChoice(
-                    `base_miskatonic_university_base_${pid}_${ctx.now}`, pid,
-                    '密大基地：选择返回一张疯狂卡', options as any[], 'base_miskatonic_university_base',
-                );
-                ctx.matchState = queueInteraction(ctx.matchState, interaction);
+        for (const c of winner.discard) {
+            if (c.defId === MADNESS_CARD_DEF_ID) {
+                madnessCards.push({ uid: c.uid, source: 'discard' });
             }
         }
 
-        return { events, matchState: ctx.matchState };
+        // 无疯狂卡 → 跳过
+        if (madnessCards.length === 0) return { events: [] };
+
+        // "任意数量"→多选交互，min: 0 允许跳过
+        const options = madnessCards.map((m, i) => ({
+            id: `madness-${i}`,
+            label: `疯狂卡(${m.source === 'hand' ? '手牌' : '弃牌堆'})`,
+            value: { cardUid: m.uid, source: m.source },
+        }));
+
+        if (ctx.matchState) {
+            const interaction = createSimpleChoice(
+                `base_miskatonic_university_base_${winnerId}_${ctx.now}`, winnerId,
+                '密大基地：选择返回任意数量的疯狂卡到疯狂牌库', options as any[], 'base_miskatonic_university_base',
+                undefined, { min: 0, max: madnessCards.length },
+            );
+            ctx.matchState = queueInteraction(ctx.matchState, interaction);
+        }
+
+        return { events: [], matchState: ctx.matchState };
     });
 
     // ── 冷原高地（Plateau of Leng）──────────────────────────────
@@ -614,9 +604,14 @@ export function registerExpansionBaseInteractionHandlers(): void {
     });
 
     registerInteractionHandler('base_miskatonic_university_base', (state, playerId, value, _iData, _random, timestamp) => {
-        const selected = value as { skip?: boolean; cardUid?: string; source?: string };
-        if (selected.skip) return { state, events: [] };
-        return { state, events: [returnMadnessCard(playerId, selected.cardUid!, '密大基地：返回疯狂卡', timestamp)] };
+        // 多选：value 是数组（任意数量的疯狂卡）
+        const selected = value as Array<{ cardUid: string; source: string }>;
+        if (!Array.isArray(selected) || selected.length === 0) return { state, events: [] };
+        const events: SmashUpEvent[] = [];
+        for (const item of selected) {
+            events.push(returnMadnessCard(playerId, item.cardUid, '密大基地：返回疯狂卡', timestamp));
+        }
+        return { state, events };
     });
 
     registerInteractionHandler('base_plateau_of_leng', (state, playerId, value, iData, _random, timestamp) => {
@@ -626,11 +621,11 @@ export function registerExpansionBaseInteractionHandlers(): void {
         if (!ctx) return { state, events: [] };
         const mDef = getMinionDef(selected.defId!);
         const power = mDef?.power ?? 0;
-        return { state, events: [({
-            type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, power },
-            timestamp,
-        } as MinionPlayedEvent)] };
+        const result = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid: selected.cardUid!, defId: selected.defId!,
+            baseIndex: ctx.baseIndex, power, random: _random, now: timestamp,
+        });
+        return { state: result.matchState ?? state, events: result.events };
     });
 
     registerInteractionHandler('base_greenhouse', (state, playerId, value, iData, _random, timestamp) => {
@@ -639,11 +634,11 @@ export function registerExpansionBaseInteractionHandlers(): void {
         const ctx = (iData as any)?.continuationContext as { baseIndex: number };
         if (!ctx) return { state, events: [] };
         const power = selected.power ?? (getMinionDef(selected.defId!)?.power ?? 0);
-        return { state, events: [({
-            type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, power },
-            timestamp,
-        } as MinionPlayedEvent)] };
+        const result = buildMinionPlayedEvents({
+            core: state.core, matchState: state, playerId, cardUid: selected.cardUid!, defId: selected.defId!,
+            baseIndex: ctx.baseIndex, power, random: _random, now: timestamp,
+        });
+        return { state: result.matchState ?? state, events: result.events };
     });
 
     registerInteractionHandler('base_inventors_salon', (state, playerId, value, _iData, _random, timestamp) => {

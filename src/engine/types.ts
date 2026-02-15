@@ -109,10 +109,27 @@ export interface EventStreamState {
 }
 
 /**
+ * 数值分解明细行（用于 breakdown tooltip）
+ */
+export interface BreakdownLine {
+    /** 显示标签（纯文本或 i18n key） */
+    label: string;
+    /** 标签是否为 i18n key（需要翻译） */
+    labelIsI18n?: boolean;
+    /** i18n namespace（labelIsI18n 为 true 时必填） */
+    labelNs?: string;
+    /** 数值（正数显示 +，负数显示 -） */
+    value: number;
+    /** 颜色提示：positive=绿色增益, negative=红色减益, neutral=默认 */
+    color?: 'positive' | 'negative' | 'neutral';
+}
+
+/**
  * 操作日志片段
  * - text: 纯文本
  * - card: 卡牌片段（用于 hover 预览）
  * - i18n: 延迟翻译片段（存储 key + params，渲染时翻译，支持服务端无 i18n 环境）
+ * - breakdown: 带 tooltip 的数值片段（hover 显示构成明细，虚线下划线）
  */
 export type ActionLogSegment =
     | { type: 'text'; text: string }
@@ -133,6 +150,13 @@ export type ActionLogSegment =
           params?: Record<string, string | number>;
           /** 需要先翻译的 params key 列表（值为同 ns 下的 i18n key） */
           paramI18nKeys?: string[];
+      }
+    | {
+          type: 'breakdown';
+          /** 显示的数值文本（如 "5"） */
+          displayText: string;
+          /** 分解明细行 */
+          lines: BreakdownLine[];
       };
 
 /**
@@ -325,6 +349,8 @@ export interface SystemState {
     phase: string;
     /** FlowSystem: onPhaseExit 返回 halt 后置为 true，阶段成功推进后置为 false */
     flowHalted?: boolean;
+    /** 游戏结束结果（由管线在每次命令执行后自动检测并写入） */
+    gameover?: GameOverResult;
 }
 
 // ============================================================================

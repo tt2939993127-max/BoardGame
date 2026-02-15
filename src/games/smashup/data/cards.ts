@@ -79,7 +79,6 @@ export const BASE_CARDS: BaseCardDef[] = [
         vpAwards: [4, 2, 1],
         faction: 'aliens',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE1, index: 1 },
-        restrictions: [{ type: 'play_minion', condition: { extraPlayMinionPowerMax: 2 } }],
     },
     {
         id: 'base_the_mothership',

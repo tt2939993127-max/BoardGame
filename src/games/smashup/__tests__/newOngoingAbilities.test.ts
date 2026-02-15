@@ -504,7 +504,12 @@ describe('pirate_first_mate afterScoring', () => {
 });
 
 describe('cthulhu_chosen beforeScoring', () => {
-    it('计分前抽疑狂卡并+2力量', () => {
+    /** 包装为 MatchState */
+    function makeMS(core: SmashUpCore) {
+        return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
+    }
+
+    it('计分前创建交互让玩家选择是否抽疯狂卡', () => {
         const chosen = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
         const scoringBase = makeBase({ minions: [chosen] });
         const state = makeState({
@@ -512,20 +517,42 @@ describe('cthulhu_chosen beforeScoring', () => {
             madnessDeck: Array.from({ length: 5 }, (_, i) => ({ uid: `mad-${i}`, defId: MADNESS_CARD_DEF_ID, type: 'madness' as const })),
             nextUid: 200,
         });
+        const ms = makeMS(state);
 
-        const { events } = fireTriggers(state, 'beforeScoring', {
-            state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
+        const result = fireTriggers(state, 'beforeScoring', {
+            state, matchState: ms, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
-        // 应有疯狂卡抽取事件
-        expect(events.some(e => e.type === SU_EVENTS.MADNESS_DRAWN)).toBe(true);
-        // 应有+2力量事件
-        const powerEvts = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as PowerCounterAddedEvent[];
+        // 不再直接产生事件，而是创建交互
+        expect(result.events.length).toBe(0);
+        expect(result.matchState).toBeDefined();
+        const current = (result.matchState!.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('cthulhu_chosen');
+
+        // 模拟玩家选择"接受"
+        const handler = getInteractionHandler('cthulhu_chosen');
+        expect(handler).toBeDefined();
+        const resolved = handler!(ms, '0', { accept: true, minionUid: 'ch1' }, { continuationContext: { minionUid: 'ch1', baseIndex: 0 } }, dummyRandom, 0);
+        expect(resolved).toBeDefined();
+        const { events: resolvedEvents } = resolved!;
+        expect(resolvedEvents.some(e => e.type === SU_EVENTS.MADNESS_DRAWN)).toBe(true);
+        const powerEvts = resolvedEvents.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as PowerCounterAddedEvent[];
         expect(powerEvts.length).toBe(1);
         expect(powerEvts[0].payload.minionUid).toBe('ch1');
         expect(powerEvts[0].payload.amount).toBe(2);
     });
 
-    it('多个天选之人各自独立触发', () => {
+    it('玩家选择跳过时不产生事件', () => {
+        const handler = getInteractionHandler('cthulhu_chosen');
+        expect(handler).toBeDefined();
+        const state = makeState();
+        const ms = makeMS(state);
+        const resolved = handler!(ms, '0', { accept: false, minionUid: 'ch1' }, {}, dummyRandom, 0);
+        expect(resolved).toBeDefined();
+        expect(resolved!.events.length).toBe(0);
+    });
+
+    it('多个天选之人各自独立创建交互', () => {
         const ch1 = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
         const ch2 = makeMinion('ch2', 'cthulhu_chosen', '1', 3);
         const scoringBase = makeBase({ minions: [ch1, ch2] });
@@ -534,12 +561,15 @@ describe('cthulhu_chosen beforeScoring', () => {
             madnessDeck: Array.from({ length: 5 }, (_, i) => ({ uid: `mad-${i}`, defId: MADNESS_CARD_DEF_ID, type: 'madness' as const })),
             nextUid: 200,
         });
+        const ms = makeMS(state);
 
-        const { events } = fireTriggers(state, 'beforeScoring', {
-            state, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
+        const result = fireTriggers(state, 'beforeScoring', {
+            state, matchState: ms, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
-        const powerEvts = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as PowerCounterAddedEvent[];
-        expect(powerEvts.length).toBe(2);
+        // 应创建2个交互（current + queue）
+        const interaction = (result.matchState!.sys as any)?.interaction;
+        const all = [interaction?.current, ...(interaction?.queue ?? [])].filter(Boolean);
+        expect(all.length).toBe(2);
     });
 });
 
@@ -786,26 +816,28 @@ describe('BASE_REPLACED keepCards 模式 (terraform)', () => {
 });
 
 // ============================================================================
-// 海盗 Buccaneer - 事件拦截（替代效果）
+// 海盗 Buccaneer - onMinionDestroyed 触发器（被消灭→移动）
 // ============================================================================
 
-describe('pirate_buccaneer 替代效果：被消灭→移动', () => {
-    it('消灭 buccaneer 被替换为 MINION_MOVED', () => {
+describe('pirate_buccaneer 触发器：被消灭→移动', () => {
+    it('两个基地时自动移动（产生 MINION_MOVED）', () => {
         const buccaneer = makeMinion('buc-1', 'pirate_buccaneer', '0', 4);
         const base0 = makeBase({ minions: [buccaneer] });
         const base1 = makeBase();
         const state = makeState({ bases: [base0, base1] });
 
-        const destroyEvt: MinionDestroyedEvent = {
-            type: SU_EVENTS.MINION_DESTROYED,
-            payload: { minionUid: 'buc-1', minionDefId: 'pirate_buccaneer', fromBaseIndex: 0, ownerId: '0', reason: 'test' },
-            timestamp: 0,
-        };
-        const result = interceptEvent(state, destroyEvt);
-        // 应被替换为 MINION_MOVED
-        expect(result).not.toBeUndefined();
-        expect(result).not.toBeNull();
-        const moved = result as MinionMovedEvent;
+        const result = fireTriggers(state, 'onMinionDestroyed', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'buc-1',
+            triggerMinionDefId: 'pirate_buccaneer',
+            random: dummyRandom,
+            now: 0,
+        });
+        // 应产生 MINION_MOVED 事件
+        expect(result.events.length).toBe(1);
+        const moved = result.events[0] as MinionMovedEvent;
         expect(moved.type).toBe(SU_EVENTS.MINION_MOVED);
         expect(moved.payload.minionUid).toBe('buc-1');
         expect(moved.payload.fromBaseIndex).toBe(0);
@@ -813,49 +845,96 @@ describe('pirate_buccaneer 替代效果：被消灭→移动', () => {
         expect(moved.payload.reason).toBe('pirate_buccaneer');
     });
 
-    it('无其他基地时不拦截（正常消灭）', () => {
+    it('无其他基地时不触发（正常消灭）', () => {
         const buccaneer = makeMinion('buc-1', 'pirate_buccaneer', '0', 4);
         const base = makeBase({ minions: [buccaneer] });
         const state = makeState({ bases: [base] }); // 只有一个基地
 
-        const destroyEvt: MinionDestroyedEvent = {
-            type: SU_EVENTS.MINION_DESTROYED,
-            payload: { minionUid: 'buc-1', minionDefId: 'pirate_buccaneer', fromBaseIndex: 0, ownerId: '0', reason: 'test' },
-            timestamp: 0,
-        };
-        const result = interceptEvent(state, destroyEvt);
-        expect(result).toBeUndefined(); // 不拦截
+        const result = fireTriggers(state, 'onMinionDestroyed', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'buc-1',
+            triggerMinionDefId: 'pirate_buccaneer',
+            random: dummyRandom,
+            now: 0,
+        });
+        expect(result.events.length).toBe(0);
     });
 
-    it('非 buccaneer 随从不被拦截', () => {
+    it('非 buccaneer 随从不触发', () => {
         const minion = makeMinion('m1', 'test_minion', '0', 3);
         const buccaneer = makeMinion('buc-1', 'pirate_buccaneer', '0', 4);
         const base0 = makeBase({ minions: [minion, buccaneer] });
         const base1 = makeBase();
         const state = makeState({ bases: [base0, base1] });
 
-        const destroyEvt: MinionDestroyedEvent = {
-            type: SU_EVENTS.MINION_DESTROYED,
-            payload: { minionUid: 'm1', minionDefId: 'test_minion', fromBaseIndex: 0, ownerId: '0', reason: 'test' },
-            timestamp: 0,
-        };
-        const result = interceptEvent(state, destroyEvt);
-        expect(result).toBeUndefined(); // 不拦截
+        const result = fireTriggers(state, 'onMinionDestroyed', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'm1',
+            triggerMinionDefId: 'test_minion',
+            random: dummyRandom,
+            now: 0,
+        });
+        expect(result.events.length).toBe(0);
     });
 
-    it('buccaneer 不在场时不拦截', () => {
+    it('buccaneer 不在场时不触发', () => {
         const base0 = makeBase(); // 没有 buccaneer
         const base1 = makeBase();
         const state = makeState({ bases: [base0, base1] });
 
-        const destroyEvt: MinionDestroyedEvent = {
-            type: SU_EVENTS.MINION_DESTROYED,
-            payload: { minionUid: 'buc-1', minionDefId: 'pirate_buccaneer', fromBaseIndex: 0, ownerId: '0', reason: 'test' },
-            timestamp: 0,
-        };
-        const result = interceptEvent(state, destroyEvt);
-        // isSourceActive 检查 buccaneer 不在场，拦截器不触发
-        expect(result).toBeUndefined();
+        const result = fireTriggers(state, 'onMinionDestroyed', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'buc-1',
+            triggerMinionDefId: 'pirate_buccaneer',
+            random: dummyRandom,
+            now: 0,
+        });
+        // isSourceActive 检查 buccaneer 不在场，触发器不触发
+        expect(result.events.length).toBe(0);
+    });
+
+    it('三个以上基地时创建交互（玩家选择目标基地）', () => {
+        const buccaneer = makeMinion('buc-1', 'pirate_buccaneer', '0', 4);
+        const base0 = makeBase({ minions: [buccaneer] });
+        const base1 = makeBase();
+        const base2 = makeBase();
+        const state = makeState({ bases: [base0, base1, base2] });
+        // 构造 matchState 以支持交互创建
+        const matchState = {
+            core: state,
+            playerIds: ['0', '1'],
+            sys: { interaction: { current: null, queue: [] }, gameover: null, eventStream: { entries: [], nextId: 0 } },
+        } as unknown as import('../../../engine/types').MatchState<SmashUpCore>;
+
+        const result = fireTriggers(state, 'onMinionDestroyed', {
+            state,
+            matchState,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'buc-1',
+            triggerMinionDefId: 'pirate_buccaneer',
+            random: dummyRandom,
+            now: 1,
+        });
+        // 不产生移动事件（等待玩家选择）
+        expect(result.events.length).toBe(0);
+        // 应创建交互
+        expect(result.matchState).toBeDefined();
+        const ms = result.matchState!;
+        const pending = ms.sys.interaction.current ?? ms.sys.interaction.queue[0];
+        expect(pending).toBeDefined();
+        expect((pending!.data as { sourceId?: string }).sourceId).toBe('pirate_buccaneer_move');
+    });
+
+    it('交互处理函数已注册', () => {
+        const handler = getInteractionHandler('pirate_buccaneer_move');
+        expect(handler).toBeDefined();
     });
 
     it('reducer 验证：MINION_MOVED 正确移动随从', () => {
@@ -1101,14 +1180,14 @@ describe('killer_plant_venus_man_trap 搜索牌库', () => {
             state, playerId: '0', cardUid: 'trap', defId: 'killer_plant_venus_man_trap',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        // 应产生 4 个事件：CARDS_DRAWN + LIMIT_MODIFIED + MINION_PLAYED + DECK_RESHUFFLED
+        // 应产生 4 个事件：CARDS_DRAWN + LIMIT_MODIFIED + MINION_PLAYED + DECK_REORDERED
         expect(result.events.length).toBe(4);
         expect(result.events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
         expect(result.events[1].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
         expect(result.events[2].type).toBe(SU_EVENTS.MINION_PLAYED);
         // 验证随从被打出到此基地（baseIndex=0）
         expect((result.events[2] as any).payload.baseIndex).toBe(0);
-        expect(result.events[3].type).toBe(SU_EVENTS.DECK_RESHUFFLED);
+        expect(result.events[3].type).toBe(SU_EVENTS.DECK_REORDERED);
     });
 
     it('牌库无合格随从→不产生事件', () => {

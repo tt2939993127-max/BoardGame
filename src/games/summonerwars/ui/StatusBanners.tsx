@@ -109,7 +109,6 @@ interface StatusBannersProps {
   onConfirmTelekinesis: (direction: 'push' | 'pull') => void;
   onCancelTelekinesis: () => void;
   onAfterMoveSelfCharge: () => void;
-  onFrostAxeAttach?: () => void;
 }
 
 // ============================================================================
@@ -193,7 +192,6 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   onConfirmRapidFire, onCancelRapidFire,
   onConfirmTelekinesis, onCancelTelekinesis,
   onAfterMoveSelfCharge,
-  onFrostAxeAttach,
 }) => {
   const { t } = useTranslation('game-summonerwars');
 
@@ -203,7 +201,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
     outerLoop: for (let row = 0; row < core.board.length; row++) {
       for (let col = 0; col < (core.board[0]?.length ?? 0); col++) {
         const unit = core.board[row]?.[col]?.unit;
-        if (unit && unit.cardId === abilityMode.sourceUnitId) {
+        if (unit && unit.instanceId === abilityMode.sourceUnitId) {
           sourceUnitBoosts = unit.boosts ?? 0;
           break outerLoop;
         }
@@ -227,13 +225,20 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
           {abilityMode.abilityId === 'blood_rune' && t('statusBanners.ability.bloodRune')}
           {abilityMode.abilityId === 'ice_shards' && t('statusBanners.ability.iceShards')}
           {abilityMode.abilityId === 'feed_beast' && t('statusBanners.ability.feedBeast')}
-          {abilityMode.abilityId === 'spirit_bond' && t('statusBanners.ability.spiritBond')}
+          {abilityMode.abilityId === 'spirit_bond' && (
+            sourceUnitBoosts < 1
+              ? t('statusBanners.ability.spiritBondChargeOnly', '祖灵交流：充能不足，只能充能自身')
+              : t('statusBanners.ability.spiritBond')
+          )}
           {abilityMode.abilityId === 'ancestral_bond' && t('statusBanners.ability.ancestralBond')}
           {abilityMode.abilityId === 'structure_shift' && t('statusBanners.ability.structureShift')}
           {abilityMode.abilityId === 'ice_ram' && abilityMode.step === 'selectUnit' && t('statusBanners.ability.iceRamSelectTarget', '寒冰冲撞：选择建筑相邻的一个单位')}
           {abilityMode.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection' && t('statusBanners.ability.iceRamSelectPush', '寒冰冲撞：选择推拉方向（或跳过）')}
-          {abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget' && t('statusBanners.ability.frostAxe')}
-          {abilityMode.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget' && t('statusBanners.ability.frostAxeSelectTarget')}
+          {abilityMode.abilityId === 'frost_axe' && (
+            sourceUnitBoosts < 1
+              ? t('statusBanners.ability.frostAxeChargeOnly', '冰霜战斧：充能不足，只能充能自身')
+              : t('statusBanners.ability.frostAxe')
+          )}
           {abilityMode.abilityId === 'vanish' && t('statusBanners.ability.vanish')}
         </span>
         {abilityMode.step === 'selectCards' && (
@@ -270,21 +275,10 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         {abilityMode.abilityId === 'feed_beast' && (
           <GameButton onClick={onConfirmFeedBeastSelfDestroy} variant="secondary" size="sm">{t('actions.feedBeastSelfDestroy')}</GameButton>
         )}
-        {(abilityMode.abilityId === 'spirit_bond' || (abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget')) && (
+        {(abilityMode.abilityId === 'spirit_bond' || abilityMode.abilityId === 'frost_axe') && (
           <GameButton onClick={onAfterMoveSelfCharge} variant="primary" size="sm">{t('actions.chargeSelf')}</GameButton>
         )}
-        {abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget' && (
-          <GameButton 
-            onClick={onFrostAxeAttach} 
-            variant="primary" 
-            size="sm"
-            disabled={sourceUnitBoosts < 1}
-            title={sourceUnitBoosts < 1 ? '需要至少1点充能' : undefined}
-          >
-            {t('actions.attachToSoldier')}
-          </GameButton>
-        )}
-        {['spirit_bond', 'ancestral_bond', 'structure_shift'].includes(abilityMode.abilityId) && (
+        {['spirit_bond', 'ancestral_bond', 'structure_shift', 'frost_axe'].includes(abilityMode.abilityId) && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
         )}
         {abilityMode.abilityId === 'ice_ram' && abilityMode.step === 'selectUnit' && (
@@ -292,12 +286,6 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         )}
         {abilityMode.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection' && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skipPush', '跳过推拉')}</GameButton>
-        )}
-        {abilityMode.abilityId === 'frost_axe' && abilityMode.step !== 'selectAttachTarget' && (
-          <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
-        )}
-        {abilityMode.abilityId === 'frost_axe' && abilityMode.step === 'selectAttachTarget' && (
-          <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
         )}
         {!['blood_rune', 'ice_shards', 'feed_beast', 'spirit_bond', 'ancestral_bond', 'structure_shift', 'frost_axe', 'vanish', 'ice_ram'].includes(abilityMode.abilityId) && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
@@ -445,7 +433,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
     withdrawSearch: for (let row = 0; row < core.board.length; row++) {
       for (let col = 0; col < (core.board[0]?.length ?? 0); col++) {
         const unit = core.board[row]?.[col]?.unit;
-        if (unit && unit.cardId === withdrawMode.sourceUnitId) {
+        if (unit && unit.instanceId === withdrawMode.sourceUnitId) {
           withdrawUnitBoosts = unit.boosts ?? 0;
           break withdrawSearch;
         }

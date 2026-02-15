@@ -121,13 +121,13 @@
 ## Design Decisions
 
 ### Pure Functions Only
-所有 primitives 模块导出纯函数，不使用 class 或 singleton。符合 boardgame.io 的纯函数状态更新要求。
+所有 primitives 模块导出纯函数，不使用 class 或 singleton。符合引擎层纯函数状态更新要求。
 
 ### Registry Pattern for Extensibility
 condition/target/effects 模块使用注册器模式，引擎提供框架和内置类型，游戏在 setup 阶段注册自定义处理器。
 
 ### Immutable Operations
-所有操作返回新对象/数组，不修改原数据。符合 React/boardgame.io 的不可变数据原则。
+所有操作返回新对象/数组，不修改原数据。符合 React 和引擎层的不可变数据原则。
 
 ## Related Specs
 - `dice-system` — 骰子操作的前身，部分能力迁移到 primitives/dice
