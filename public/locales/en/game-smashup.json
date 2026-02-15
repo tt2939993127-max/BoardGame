@@ -76,7 +76,15 @@
     "prompt_no_options": "No options available",
     "invalid_base_target": "This base cannot be selected",
     "discard_play_available": "Play from discard pile",
-    "click_base_to_deploy": "Click a base to deploy"
+    "click_base_to_deploy": "Click a base to deploy",
+    "power_limit_exceeded": "Power limit exceeded",
+    "minion_short": "Minion",
+    "action_short": "Action",
+    "close": "Close",
+    "reveal_your_hand_shown": "Your hand has been shown to opponent",
+    "reveal_confirmed": "Confirmed",
+    "deselect_all": "Deselect All",
+    "select_all": "Select All"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",

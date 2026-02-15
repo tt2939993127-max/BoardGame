@@ -76,7 +76,15 @@
     "prompt_no_options": "暂无可选项",
     "invalid_base_target": "该基地不可选择",
     "discard_play_available": "可从弃牌堆打出",
-    "click_base_to_deploy": "点击基地部署"
+    "click_base_to_deploy": "点击基地部署",
+    "power_limit_exceeded": "力量超出限制",
+    "minion_short": "随从",
+    "action_short": "战术",
+    "close": "关闭",
+    "reveal_your_hand_shown": "你的手牌已展示给对手",
+    "reveal_confirmed": "已确认",
+    "deselect_all": "取消全选",
+    "select_all": "全选"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",

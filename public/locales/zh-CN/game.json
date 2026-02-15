@@ -283,7 +283,8 @@
       "empty": "暂无可用动作"
     },
     "placeholders": {
-      "moveArgs": "参数 (JSON/String)..."
+      "moveArgs": "参数 (JSON/String)...",
+      "commandName": "命令名称"
     },
     "events": {
       "endTurn": "🛑 结束回合",

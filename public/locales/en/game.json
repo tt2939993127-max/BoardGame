@@ -283,7 +283,8 @@
       "empty": "No actions available"
     },
     "placeholders": {
-      "moveArgs": "Args (JSON/String)..."
+      "moveArgs": "Args (JSON/String)...",
+      "commandName": "Command name"
     },
     "events": {
       "endTurn": "🛑 End Turn",
