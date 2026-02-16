@@ -1922,12 +1922,12 @@
       "description": "升级点燃至 II 级。"
     },
     "upgrade-pickpocket-2": {
-      "name": "抢夺 II",
-      "description": "升级抢夺至 II 级。"
+      "name": "迅捷突袭 II",
+      "description": "升级迅捷突袭至 II 级。"
     },
     "upgrade-kidney-shot-2": {
-      "name": "肾击 II",
-      "description": "升级肾击至 II 级。"
+      "name": "破隐一击 II",
+      "description": "升级破隐一击至 II 级。"
     },
     "upgrade-shadow-assault": {
       "name": "暗影突袭",
@@ -1938,11 +1938,11 @@
       "description": "将偷窃升级为穿刺攻击。"
     },
     "action-into-the-shadows": {
-      "name": "遁入暗影！",
+      "name": "遁入阴影！",
       "description": "获得1个暗影标记。"
     },
     "action-one-with-shadows": {
-      "name": "与影同行！",
+      "name": "与影共生！",
       "description": "投掷1骰：若为暗影，获得伏击+2CP；否则抽1张牌。"
     },
     "upgrade-fearless-riposte-2": {
@@ -1950,11 +1950,11 @@
       "description": "将恐惧反击升级为后发制人 II。"
     },
     "upgrade-shadow-defense-2": {
-      "name": "暗影守护 II",
-      "description": "将暗影守护升级为暗影守护 II。"
+      "name": "暗影防御 II",
+      "description": "将暗影守护升级为暗影防御 II。"
     },
     "action-poison-tip": {
-      "name": "淬毒！",
+      "name": "毒伤！",
       "description": "对对手施加中毒。"
     },
     "action-card-trick": {
@@ -1966,20 +1966,28 @@
       "description": "改变任意1颗骰子的数值。若拥有暗影，转而改变任意2颗骰子的数值。"
     },
     "upgrade-dagger-strike-2": {
-      "name": "匕首打击 II",
-      "description": "升级匕首打击至 II 级。"
+      "name": "匕首突刺 II",
+      "description": "升级匕首突刺至 II 级。"
     },
     "upgrade-shadow-dance-2": {
       "name": "暗影之舞 II",
       "description": "升级暗影之舞至 II 级。"
     },
     "upgrade-steal-2": {
-      "name": "偷窃 II",
-      "description": "升级偷窃至 II 级。"
+      "name": "扒窃 II",
+      "description": "升级扒窃至 II 级。"
     },
     "upgrade-cornucopia-2": {
-      "name": "聚宝盆 II",
-      "description": "升级聚宝盆至 II 级。"
+      "name": "卡牌大师 II",
+      "description": "升级卡牌大师至 II 级。"
+    },
+    "action-sneaky-sneaky": {
+      "name": "鬼鬼崇崇！",
+      "description": "获得隐匿攻击🗡。"
+    },
+    "action-shadow-coins": {
+      "name": "暗影币！",
+      "description": "获得2CP。如果拥有暗影🌑，转而获得3CP。"
     },
     "moon-shadow-strike": {
       "name": "月影突袭",

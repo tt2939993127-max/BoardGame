@@ -34,7 +34,7 @@ export function validate(
                 return { valid: false, error: '只能在出牌阶段打出随从' };
             }
             if (command.playerId !== currentPlayerId) {
-                return { valid: false, error: '不是你的回合' };
+                return { valid: false, error: 'player_mismatch' };
             }
             const player = core.players[command.playerId];
             if (!player) return { valid: false, error: '玩家不存在' };
@@ -160,7 +160,7 @@ export function validate(
                 return { valid: false, error: '只能在出牌阶段打出行动卡' };
             }
             if (command.playerId !== currentPlayerId) {
-                return { valid: false, error: '不是你的回合' };
+                return { valid: false, error: 'player_mismatch' };
             }
             const player = core.players[command.playerId];
             if (!player) return { valid: false, error: '玩家不存在' };
@@ -214,7 +214,7 @@ export function validate(
                 return { valid: false, error: '只能在抽牌阶段弃牌' };
             }
             if (command.playerId !== currentPlayerId) {
-                return { valid: false, error: '不是你的回合' };
+                return { valid: false, error: 'player_mismatch' };
             }
             const player = core.players[command.playerId];
             if (!player) return { valid: false, error: '玩家不存在' };
@@ -238,7 +238,7 @@ export function validate(
             }
             // Check turn order strictness
             if (command.playerId !== currentPlayerId) {
-                return { valid: false, error: '不是你的回合' };
+                return { valid: false, error: 'player_mismatch' };
             }
             const selection = core.factionSelection;
             if (!selection) return { valid: false, error: '派系选择状态未初始化' };
@@ -260,7 +260,7 @@ export function validate(
                 return { valid: false, error: '只能在出牌阶段使用天赋' };
             }
             if (command.playerId !== currentPlayerId) {
-                return { valid: false, error: '不是你的回合' };
+                return { valid: false, error: 'player_mismatch' };
             }
             const { minionUid, baseIndex } = command.payload;
             const targetBase = core.bases[baseIndex];

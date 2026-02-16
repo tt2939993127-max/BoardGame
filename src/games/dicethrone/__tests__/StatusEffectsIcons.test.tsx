@@ -24,7 +24,7 @@ describe('StatusEffectsIcons', () => {
             )
         );
 
-        expect(html).toContain('/assets/dicethrone/images/monk/compressed/status-icons-atlas.avif');
+        expect(html).toContain('/assets/dicethrone/images/monk/compressed/status-icons-atlas.webp');
     });
 });
 

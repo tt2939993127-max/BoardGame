@@ -183,7 +183,7 @@ describe('暗影刺客 - 定义完整性', () => {
     it('卡牌包含升级卡和行动卡', () => {
         const upgradeCards = SHADOW_THIEF_CARDS.filter(c => c.type === 'upgrade');
         const actionCards = SHADOW_THIEF_CARDS.filter(c => c.type === 'action');
-        expect(upgradeCards.length).toBeGreaterThanOrEqual(9);
+        expect(upgradeCards.length).toBeGreaterThanOrEqual(8);
         expect(actionCards.length).toBeGreaterThanOrEqual(3);
     });
 

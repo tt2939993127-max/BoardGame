@@ -1164,7 +1164,7 @@ test.describe('SummonerWars', () => {
     await clickBoardElement(hostPage, '[data-testid^="sw-unit-"][data-owner="0"][data-unit-class="summoner"]');
 
     // 检查复活死灵按钮是否显示（召唤师默认有此技能）
-    const reviveButton = hostPage.getByRole('button', { name: /复活死灵/i });
+    const reviveButton = hostPage.getByRole('button', { name: /复活死灵|Revive Undead/i });
     await expect(reviveButton).toBeVisible({ timeout: 5000 });
 
     const summonerDamageBefore = Number(await summoner.getAttribute('data-unit-damage') ?? '0');
@@ -1257,7 +1257,7 @@ test.describe('SummonerWars', () => {
     await expect(elutBar).toBeVisible({ timeout: 5000 });
 
     await clickBoardElement(hostPage, '[data-testid^="sw-unit-"][data-owner="0"][data-unit-name*="伊路特"]');
-    const fireSacrificeButton = hostPage.getByRole('button', { name: /火祀召唤/i });
+    const fireSacrificeButton = hostPage.getByRole('button', { name: /火祀召唤|Fire Sacrifice/i });
     await expect(fireSacrificeButton).toBeVisible({ timeout: 3000 });
     await fireSacrificeButton.click();
 
@@ -1289,7 +1289,7 @@ test.describe('SummonerWars', () => {
     await expect(dragos).toBeVisible({ timeout: 5000 });
 
     await clickBoardElement(hostPage, '[data-testid^="sw-unit-"][data-owner="0"][data-unit-name*="德拉戈斯"]');
-    const lifeDrainButton = hostPage.getByRole('button', { name: /吸取生命/i });
+    const lifeDrainButton = hostPage.getByRole('button', { name: /吸取生命|Life Drain/i });
     await expect(lifeDrainButton).toBeVisible({ timeout: 3000 });
     await lifeDrainButton.click();
 
@@ -1462,7 +1462,7 @@ test.describe('SummonerWars', () => {
       await clickBoardElement(hostPage, '[data-owner="0"]:not([data-unit-class="summoner"])');
 
       // 验证确认选择按钮出现
-      const confirmButton = hostPage.getByRole('button', { name: /确认选择/i });
+      const confirmButton = hostPage.getByRole('button', { name: /确认选择|Confirm/i });
       const hasConfirmButton = await confirmButton.isVisible({ timeout: 3000 }).catch(() => false);
 
       if (hasConfirmButton) {
@@ -1473,7 +1473,7 @@ test.describe('SummonerWars', () => {
     }
 
     // 取消操作
-    const cancelButton = hostPage.getByRole('button', { name: /取消/i });
+    const cancelButton = hostPage.getByRole('button', { name: /取消|Cancel/i });
     if (await cancelButton.isVisible().catch(() => false)) {
       await cancelButton.click();
     }

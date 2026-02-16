@@ -391,6 +391,19 @@ function handleOneWithShadows({ targetId, state, timestamp, random }: CustomActi
     return events;
 }
 
+/** 暗影币: 获得2CP；若拥有暗影🌑，转而获得3CP */
+function handleShadowCoins({ targetId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    const hasShadow = (state.players[targetId]?.tokens[TOKEN_IDS.SNEAK] ?? 0) > 0;
+    const cpGain = hasShadow ? 3 : 2;
+    const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
+    return [{
+        type: 'CP_CHANGED',
+        payload: { playerId: targetId, delta: cpGain, newValue: Math.min(currentCp + cpGain, CP_MAX) },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp
+    } as CpChangedEvent];
+}
+
 /** 卡牌戏法: 对手弃1。自己抽1 (若有Sneak抽2) */
 function handleCardTrick({ targetId, attackerId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
@@ -756,6 +769,7 @@ export function registerShadowThiefCustomActions(): void {
     registerCustomActionHandler('shadow_thief-fearless-riposte-2', handleFearlessRiposte2, { categories: ['damage', 'defense'] });
 
     registerCustomActionHandler('shadow_thief-one-with-shadows', handleOneWithShadows, { categories: ['dice', 'resource'] });
+    registerCustomActionHandler('shadow_thief-shadow-coins', handleShadowCoins, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other'] });
     registerCustomActionHandler('shadow_thief-shadow-manipulation', handleShadowManipulation, {
         categories: ['dice'],

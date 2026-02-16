@@ -268,7 +268,13 @@ export function LocalGameProvider({
                     return rest;
                 })()
                 : payload;
-            const coreCurrentPlayer = (prev.core as { currentPlayer?: string })?.currentPlayer;
+            const coreAny = prev.core as Record<string, unknown>;
+            // 兼容两种当前玩家字段：currentPlayer（直接字段）或 turnOrder[currentPlayerIndex]（索引模式）
+            const coreCurrentPlayer = typeof coreAny.currentPlayer === 'string'
+                ? coreAny.currentPlayer
+                : (Array.isArray(coreAny.turnOrder) && typeof coreAny.currentPlayerIndex === 'number'
+                    ? (coreAny.turnOrder as string[])[coreAny.currentPlayerIndex as number]
+                    : undefined);
             const resolvedPlayerId = tutorialOverrideId ?? coreCurrentPlayer ?? '0';
 
             const command: Command = {

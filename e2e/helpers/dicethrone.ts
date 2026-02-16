@@ -478,7 +478,10 @@ export const setupOnlineMatch = async (
 
     await hostPage.goto(`/play/dicethrone/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
 
-    // 客人上下文（独立 context，WebSocket 直连游戏服务器，不经过 Vite 代理）
+    // 等待 host 先建立 WebSocket 连接（避免并发连接竞争）
+    await waitForRoomReady(hostPage, 30000);
+
+    // 客人上下文
     const guestContext = await browser.newContext({ baseURL });
     await initContext(guestContext, { storageKey: '__dt_storage_reset_g' });
     const guestPage = await guestContext.newPage();
@@ -492,12 +495,8 @@ export const setupOnlineMatch = async (
     await seedMatchCredentials(guestContext, GAME_NAME, matchId, '1', guestCredentials);
     await guestPage.goto(`/play/dicethrone/match/${matchId}?playerID=1`, { waitUntil: 'domcontentloaded' });
 
-    // 两个页面并行等待就绪（直连游戏服务器，无 Vite 代理瓶颈）
     try {
-        await Promise.all([
-            waitForRoomReady(hostPage, 60000),
-            waitForRoomReady(guestPage, 60000),
-        ]);
+        await waitForRoomReady(guestPage, 60000);
     } catch {
         if ((await isRoomMissing(hostPage).catch(() => false)) || (await isRoomMissing(guestPage).catch(() => false))) {
             await hostContext.close();

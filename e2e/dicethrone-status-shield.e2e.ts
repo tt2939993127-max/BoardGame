@@ -2,11 +2,12 @@
  * 状态防护盾（preventStatus）机制 E2E 测试
  *
  * 测试场景：
- * 1. 厚皮 II 的状态防护盾应该阻止 debuff（通过 reducer 注入 + 攻击流程验证）
- * 2. 状态防护盾不应该减少伤害（护盾只防状态，不防伤害）
- * 3. 攻击结算后护盾被清理
+ * 1. preventStatus 护盾注入后在 UI 中可见，攻击结算后被清理
+ * 2. 护盾不减伤（只防状态）
  *
  * 使用在线双人对局模式，通过调试面板注入状态。
+ * 单元测试已覆盖核心逻辑（preventStatus.test.ts, shield-cleanup.test.ts），
+ * E2E 测试验证 UI 集成。
  */
 
 import { test, expect } from '@playwright/test';
@@ -66,7 +67,15 @@ test.describe('DiceThrone 状态防护盾（preventStatus）', () => {
                 },
             };
             await applyCoreStateDirect(attackerPage, injectedCore);
-            await attackerPage.waitForTimeout(300);
+            await attackerPage.waitForTimeout(500);
+
+            // 验证护盾已注入
+            const coreWithShield = await readCoreState(attackerPage) as Record<string, unknown>;
+            const playersWithShield = coreWithShield.players as Record<string, Record<string, unknown>>;
+            const defenderWithShield = playersWithShield[defenderId];
+            const shields = (defenderWithShield.damageShields as Array<Record<string, unknown>>) ?? [];
+            expect(shields.length, '护盾注入失败').toBe(1);
+            expect(shields[0].preventStatus, '护盾 preventStatus 标记错误').toBe(true);
 
             // 2. 推进到攻击掷骰阶段
             await advanceToOffensiveRoll(attackerPage);
@@ -75,48 +84,65 @@ test.describe('DiceThrone 状态防护盾（preventStatus）', () => {
             const rollButton = attackerPage.locator('[data-tutorial-id="dice-roll-button"]');
             await expect(rollButton).toBeEnabled({ timeout: 5000 });
             await rollButton.click();
-            await attackerPage.waitForTimeout(300);
+            await attackerPage.waitForTimeout(500);
 
-            // 设置骰子值（尝试触发带 debuff 的技能）
-            await applyDiceValues(attackerPage, [1, 1, 1, 4, 5]);
+            // 设置骰子值：3 SWORD (1,2,3) + 2 HEART (4,5) → 触发 slap（3 SWORD = 4 伤害）
+            await applyDiceValues(attackerPage, [1, 2, 3, 4, 5]);
+            await attackerPage.waitForTimeout(300);
 
             const confirmButton = attackerPage.locator('[data-tutorial-id="dice-confirm-button"]');
             await expect(confirmButton).toBeEnabled({ timeout: 5000 });
             await confirmButton.click();
+            await attackerPage.waitForTimeout(500);
 
-            // 4. 选择高亮技能并结算
+            // 4. 选择高亮技能
             const highlightedSlots = attackerPage
                 .locator('[data-ability-slot]')
                 .filter({ has: attackerPage.locator('div.animate-pulse[class*="border-"]') });
-            const hasHighlight = await highlightedSlots.first().isVisible({ timeout: 5000 }).catch(() => false);
+
+            // 等待技能高亮出现
+            const hasHighlight = await highlightedSlots.first().isVisible({ timeout: 8000 }).catch(() => false);
 
             if (hasHighlight) {
                 await highlightedSlots.first().click();
+                await attackerPage.waitForTimeout(300);
+
+                // 点击结算攻击
                 const resolveButton = attackerPage.getByRole('button', { name: /Resolve Attack|结算攻击/i });
                 await expect(resolveButton).toBeVisible({ timeout: 10000 });
                 await resolveButton.click();
+                await attackerPage.waitForTimeout(500);
             } else {
-                // 没有可用技能，推进阶段
+                // 没有可用技能 — 跳过攻击
                 const advanceButton = attackerPage.locator('[data-tutorial-id="advance-phase-button"]');
                 await advanceButton.click();
-                const confirmHeading = attackerPage.getByRole('heading', { name: /End offensive roll\?|确认结束攻击掷骰？/i });
-                if (await confirmHeading.isVisible({ timeout: 4000 }).catch(() => false)) {
-                    await confirmHeading.locator('..').locator('..').getByRole('button', { name: /Confirm|确认/i }).click();
+                await attackerPage.waitForTimeout(300);
+                // 确认结束攻击掷骰
+                const confirmEnd = attackerPage.getByRole('button', { name: /Confirm|确认/i });
+                if (await confirmEnd.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    await confirmEnd.click();
                 }
             }
 
-            // 5. 处理响应窗口
-            for (let i = 0; i < 6; i++) {
+            // 5. 处理响应窗口（防御方可能有响应机会）
+            for (let i = 0; i < 10; i++) {
+                await hostPage.waitForTimeout(500);
                 const hp = await maybePassResponse(hostPage);
                 const gp = await maybePassResponse(guestPage);
-                if (!hp && !gp) break;
-                await hostPage.waitForTimeout(300);
+                if (!hp && !gp) {
+                    // 检查是否已到 Main Phase 2
+                    const atMainPhase2 = await attackerPage
+                        .getByText(/Main Phase \(2\)|主要阶段 \(2\)/)
+                        .isVisible({ timeout: 500 })
+                        .catch(() => false);
+                    if (atMainPhase2) break;
+                }
             }
 
-            // 等待攻击结算完成（进入 Main Phase 2 或防御阶段）
+            // 等待攻击结算完成（进入 Main Phase 2）
             await expect(
                 attackerPage.getByText(/Main Phase \(2\)|主要阶段 \(2\)/)
-            ).toBeVisible({ timeout: 15000 });
+            ).toBeVisible({ timeout: 20000 });
 
             // 6. 验证结果
             const coreAfter = await readCoreState(attackerPage) as Record<string, unknown>;
@@ -127,11 +153,13 @@ test.describe('DiceThrone 状态防护盾（preventStatus）', () => {
             const statusAfter = defenderAfter.statusEffects as Record<string, number>;
             const shieldsAfter = (defenderAfter.damageShields as Array<Record<string, unknown>>) ?? [];
 
-            // preventStatus 护盾不减伤 — 如果有伤害技能命中，HP 应该减少
-            // （这里不强制断言 HP 变化，因为取决于骰面和技能选择）
+            // 如果有技能命中（slap 造成 4 伤害），preventStatus 护盾不减伤
+            if (hasHighlight) {
+                expect(hpAfter, 'preventStatus 护盾不应减伤').toBeLessThan(hpBefore);
+            }
 
             // 攻击结算后护盾应该被清理
-            expect(shieldsAfter.length).toBe(0);
+            expect(shieldsAfter.length, '攻击结算后护盾未清理').toBe(0);
 
             await attackerPage.screenshot({
                 path: testInfo.outputPath('status-shield-after-attack.png'),
@@ -176,14 +204,14 @@ test.describe('DiceThrone 状态防护盾（preventStatus）', () => {
                     },
                 },
             });
-            await attackerPage.waitForTimeout(300);
+            await attackerPage.waitForTimeout(500);
 
             // 验证护盾已注入
             const coreWithShield = await readCoreState(attackerPage) as Record<string, unknown>;
             const playersWithShield = coreWithShield.players as Record<string, Record<string, unknown>>;
             const defenderWithShield = playersWithShield[defenderId];
             const shields = (defenderWithShield.damageShields as Array<Record<string, unknown>>) ?? [];
-            expect(shields.length).toBe(1);
+            expect(shields.length, '护盾注入失败').toBe(1);
             expect(shields[0].preventStatus).toBe(true);
 
             // 执行一次完整攻击流程
@@ -191,50 +219,68 @@ test.describe('DiceThrone 状态防护盾（preventStatus）', () => {
             const rollButton = attackerPage.locator('[data-tutorial-id="dice-roll-button"]');
             await expect(rollButton).toBeEnabled({ timeout: 5000 });
             await rollButton.click();
-            await attackerPage.waitForTimeout(300);
+            await attackerPage.waitForTimeout(500);
+
+            // 5 STRENGTH (全6) → 触发 reckless-strike（终极技能，15 伤害）
             await applyDiceValues(attackerPage, [6, 6, 6, 6, 6]);
+            await attackerPage.waitForTimeout(300);
 
             const confirmButton = attackerPage.locator('[data-tutorial-id="dice-confirm-button"]');
             await expect(confirmButton).toBeEnabled({ timeout: 5000 });
             await confirmButton.click();
+            await attackerPage.waitForTimeout(500);
 
+            // 选择高亮技能
             const highlightedSlots = attackerPage
                 .locator('[data-ability-slot]')
                 .filter({ has: attackerPage.locator('div.animate-pulse[class*="border-"]') });
-            const hasHighlight = await highlightedSlots.first().isVisible({ timeout: 5000 }).catch(() => false);
+            const hasHighlight = await highlightedSlots.first().isVisible({ timeout: 8000 }).catch(() => false);
 
             if (hasHighlight) {
-                await highlightedSlots.first().click();
+                // 可能有多个技能高亮（violent-assault 和 reckless-strike），选最后一个（优先级最高）
+                const count = await highlightedSlots.count();
+                await highlightedSlots.nth(count - 1).click();
+                await attackerPage.waitForTimeout(300);
+
                 const resolveButton = attackerPage.getByRole('button', { name: /Resolve Attack|结算攻击/i });
                 await expect(resolveButton).toBeVisible({ timeout: 10000 });
                 await resolveButton.click();
+                await attackerPage.waitForTimeout(500);
             } else {
+                // 没有可用技能 — 跳过
                 const advanceButton = attackerPage.locator('[data-tutorial-id="advance-phase-button"]');
                 await advanceButton.click();
-                const confirmHeading = attackerPage.getByRole('heading', { name: /End offensive roll\?|确认结束攻击掷骰？/i });
-                if (await confirmHeading.isVisible({ timeout: 4000 }).catch(() => false)) {
-                    await confirmHeading.locator('..').locator('..').getByRole('button', { name: /Confirm|确认/i }).click();
+                await attackerPage.waitForTimeout(300);
+                const confirmEnd = attackerPage.getByRole('button', { name: /Confirm|确认/i });
+                if (await confirmEnd.isVisible({ timeout: 3000 }).catch(() => false)) {
+                    await confirmEnd.click();
                 }
             }
 
             // 处理响应窗口
-            for (let i = 0; i < 6; i++) {
+            for (let i = 0; i < 10; i++) {
+                await hostPage.waitForTimeout(500);
                 const hp = await maybePassResponse(hostPage);
                 const gp = await maybePassResponse(guestPage);
-                if (!hp && !gp) break;
-                await hostPage.waitForTimeout(300);
+                if (!hp && !gp) {
+                    const atMainPhase2 = await attackerPage
+                        .getByText(/Main Phase \(2\)|主要阶段 \(2\)/)
+                        .isVisible({ timeout: 500 })
+                        .catch(() => false);
+                    if (atMainPhase2) break;
+                }
             }
 
             await expect(
                 attackerPage.getByText(/Main Phase \(2\)|主要阶段 \(2\)/)
-            ).toBeVisible({ timeout: 15000 });
+            ).toBeVisible({ timeout: 20000 });
 
             // 验证攻击结算后护盾被清理
             const coreAfter = await readCoreState(attackerPage) as Record<string, unknown>;
             const playersAfter = coreAfter.players as Record<string, Record<string, unknown>>;
             const defenderAfter = playersAfter[defenderId];
             const shieldsAfter = (defenderAfter.damageShields as Array<Record<string, unknown>>) ?? [];
-            expect(shieldsAfter.length).toBe(0);
+            expect(shieldsAfter.length, '攻击结算后护盾未清理').toBe(0);
 
             await attackerPage.screenshot({
                 path: testInfo.outputPath('status-shield-cleanup.png'),

@@ -78,27 +78,29 @@ const completeFactionSelectionLocal = async (page: Page) => {
     // 按名称依次选择 4 个派系（蛇形选秀：P0, P1, P1, P0）
     const factionNames = ['Pirates', 'Ninjas', 'Dinosaurs', 'Aliens'];
 
-    for (const name of factionNames) {
-        // 等待派系选择界面稳定（弹窗关闭动画完成）
+    for (let i = 0; i < factionNames.length; i++) {
+        const name = factionNames[i];
+
+        // 等待派系网格可见且没有弹窗遮挡
         await page.waitForTimeout(500);
 
         // 通过派系名称文本找到对应卡片的父级可点击容器
-        // h3 在卡片内部，点击其最近的 group 祖先（即整个卡片区域）
         const factionCard = page.locator('h3').filter({ hasText: new RegExp(`^${name}$`, 'i') }).first()
             .locator('xpath=ancestor::div[contains(@class,"group")]').first();
         await expect(factionCard).toBeVisible({ timeout: 5000 });
-        await factionCard.click({ force: true });
-        await page.waitForTimeout(500);
-
-        // 在弹窗中找到确认按钮
+        await factionCard.click();
+        
+        // 等待弹窗出现：确认按钮或已选/已被占用的状态
         const confirmBtn = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
-        await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+        await expect(confirmBtn).toBeVisible({ timeout: 8000 });
         await expect(confirmBtn).toBeEnabled({ timeout: 3000 });
         await confirmBtn.click();
-        await page.waitForTimeout(500);
+
+        // 等待弹窗关闭（focusedFactionId 被设为 null 后弹窗消失）
+        await expect(confirmBtn).toBeHidden({ timeout: 5000 });
     }
     // 等待派系选择完成，游戏界面加载
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 };
 
 const waitForHandArea = async (page: Page, timeout = 30000) => {
@@ -122,9 +124,6 @@ test.describe('SmashUp 本地模式 E2E', () => {
     test('本地模式：派系选择 → 游戏界面加载', async ({ page }, testInfo) => {
         await gotoLocalSmashUp(page);
         await completeFactionSelectionLocal(page);
-
-        // 截图看看派系选择后的状态
-        await page.screenshot({ path: '.tmp/e2e-after-faction-selection.png' });
 
         // 验证游戏界面加载
         await waitForHandArea(page);

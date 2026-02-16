@@ -82,7 +82,7 @@ describe('派系选择系统', () => {
                 ],
             });
             expect(result.steps[0]?.success).toBe(false);
-            expect(result.steps[0]?.error).toContain('不是你的回合');
+            expect(result.steps[0]?.error).toContain('player_mismatch');
         });
 
         it('蛇形选秀顺序正确（2人：P0→P1→P1→P0）', () => {

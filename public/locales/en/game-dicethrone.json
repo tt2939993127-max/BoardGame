@@ -1966,6 +1966,14 @@
       "name": "Cornucopia II",
       "description": "Upgrade Cornucopia to Level 2."
     },
+    "action-sneaky-sneaky": {
+      "name": "Sneaky Sneaky!",
+      "description": "Gain Sneak Attack 🗡."
+    },
+    "action-shadow-coins": {
+      "name": "Shadow Coins!",
+      "description": "Gain 2 CP. If you have Shadow 🌑, gain 3 CP instead."
+    },
     "moon-shadow-strike": {
       "name": "Moon Shadow Strike",
       "description": "Roll 1 die: Bow → Draw 1 card; Foot → Inflict Entangle; Moon → Inflict Blinded + Targeted."
