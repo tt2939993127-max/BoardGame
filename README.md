@@ -256,6 +256,7 @@ npm run test:e2e:ci
 - [原型构建器](docs/ugc-builder.md) — 简易游戏原型工具
 - [自动化测试](docs/automated-testing.md) — 测试策略与实践
 
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
@@ -271,3 +272,14 @@ npm run test:e2e:ci
 本项目代码基于 [MIT License](LICENSE) 开源。
 
 游戏图片素材来自对应桌游的官方图包和民间汉化，版权归原作者所有，仅供学习交流使用，不可商用。
+
+
+## 💖 赞助
+
+如果喜欢这个项目，可以支持一点维护服务器的钱。我会在关于中展示您的昵称信息（不需要也可以备注）。
+
+<p align="center">
+  <img src="public/logos/weixin.jpg" alt="微信赞助二维码" width="250" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="public/logos/zhifubao.jpg" alt="支付宝赞助二维码" width="250" />
+</p>

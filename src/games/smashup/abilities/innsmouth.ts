@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { addPowerCounter, grantExtraMinion, drawMadnessCards, getMinionPower, revealAndPickFromDeck } from '../domain/abilityHelpers';
+import { addPowerCounter, grantExtraMinion, drawMadnessCards, getMinionPower, revealAndPickFromDeck, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, DeckReorderedEvent, CardsDrawnEvent, MinionReturnedEvent } from '../domain/types';
 import { registerProtection } from '../domain/ongoingEffects';
@@ -187,7 +187,7 @@ function innsmouthMysteriesOfTheDeep(ctx: AbilityContext): AbilityResult {
             break;
         }
     }
-    if (!hasTriple) return { events: [] };
+    if (!hasTriple) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
 
     const events: SmashUpEvent[] = [];
     const player = ctx.state.players[ctx.playerId];
@@ -232,12 +232,12 @@ function innsmouthSacredCircle(ctx: AbilityContext): AbilityResult {
 
     const base = ctx.state.bases[sacredBaseIndex];
     const minionDefIds = new Set(base.minions.map(m => m.defId));
-    if (minionDefIds.size === 0) return { events: [] };
+    if (minionDefIds.size === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     // 检查手牌是否有同名随从
     const player = ctx.state.players[ctx.playerId];
     const hasMatch = player.hand.some(c => c.type === 'minion' && minionDefIds.has(c.defId));
-    if (!hasMatch) return { events: [] };
+    if (!hasMatch) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     return { events: [grantExtraMinion(ctx.playerId, 'innsmouth_sacred_circle', ctx.now, sacredBaseIndex)] };
 }
@@ -254,7 +254,7 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
             inPlayDefIds.add(m.defId);
         }
     }
-    if (inPlayDefIds.size === 0) return { events: [] };
+    if (inPlayDefIds.size === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     // 检查手牌中有哪些 defId 匹配在场随从
     const player = ctx.state.players[ctx.playerId];
@@ -264,7 +264,7 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
             matchingDefIds.add(c.defId);
         }
     }
-    if (matchingDefIds.size === 0) return { events: [] };
+    if (matchingDefIds.size === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     // 只有一个匹配名称时自动选择，多个时让玩家选
     const defIdArray = Array.from(matchingDefIds);

@@ -52,8 +52,10 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
     const isTransferTargetSelection = interactionType === 'selectTargetStatus' && !!interaction.transferConfig?.statusId;
     // 状态效果选择模式（第一阶段，排除已进入第二阶段的情况）
     const isStatusSelection = !isTransferTargetSelection && (interactionType === 'selectStatus' || interactionType === 'selectTargetStatus');
-    // 玩家选择模式（移除所有状态）
+    // 玩家选择模式（移除所有状态 / 授予 Token 等）
     const isPlayerSelection = interactionType === 'selectPlayer';
+    // 是否为 Token 授予模式（所有玩家都可选，不需要检查 hasStatus）
+    const isTokenGrantMode = isPlayerSelection && !!interaction.tokenGrantConfig;
 
     // 获取已选择的状态信息（用于显示）
     const selectedStatusId = isStatusSelection ? selectedItems[0] : undefined;
@@ -124,16 +126,19 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
 
                             // 玩家选择模式
                             if (isPlayerSelection) {
+                                // Token 授予模式：所有玩家都可选
+                                // 状态移除模式：只有有状态的玩家可选
+                                const canSelect = isTokenGrantMode || hasStatus;
                                 return (
                                     <div
                                         key={pid}
-                                        onClick={() => hasStatus && onSelectPlayer(pid)}
+                                        onClick={() => canSelect && onSelectPlayer(pid)}
                                         className={`
                                             p-4 rounded-xl border-2 transition-all duration-200 min-w-[200px]
-                                            ${hasStatus ? 'cursor-pointer hover:scale-105' : 'opacity-50 cursor-not-allowed'}
+                                            ${canSelect ? 'cursor-pointer hover:scale-105' : 'opacity-50 cursor-not-allowed'}
                                             ${isSelected
                                                 ? 'border-green-500 bg-green-900/30 ring-2 ring-green-400'
-                                                : hasStatus
+                                                : canSelect
                                                     ? 'border-amber-500/50 bg-slate-800/50 hover:border-amber-400'
                                                     : 'border-slate-700 bg-slate-800/30'}
                                         `}
@@ -156,7 +161,7 @@ export const InteractionOverlay: React.FC<InteractionOverlayProps> = ({
                                             locale={locale}
                                             atlas={statusIconAtlas}
                                         />
-                                        {!hasStatus && (
+                                        {!isTokenGrantMode && !hasStatus && (
                                             <div className="text-slate-500 text-sm text-center mt-2">
                                                 {t('interaction.noStatus')}
                                             </div>

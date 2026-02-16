@@ -31,17 +31,14 @@ function buildFactionCardPool(factionId: string): Card[] {
 
     // 牌组中的卡牌（去除副本后缀 -0, -1, -2...）
     // 起始单位是牌组中已有普通单位的副本，无需单独处理
+    // 城门（isGate）和史诗事件（legendary）不加入卡池——已由 autoCards 自动填充，用户不应手动添加
     for (const card of deckData.deck) {
+      if (card.cardType === 'structure' && (card as StructureCard).isGate) continue;
+      if (card.cardType === 'event' && (card as EventCard).eventType === 'legendary') continue;
       const baseId = card.id.replace(/-\d+$/, '');
       if (!seen.has(baseId)) {
         seen.set(baseId, { ...card, id: baseId });
       }
-    }
-
-    // 起始城门
-    const gateBaseId = deckData.startingGate.id.replace(/-\d+$/, '');
-    if (!seen.has(gateBaseId)) {
-      seen.set(gateBaseId, { ...deckData.startingGate, id: gateBaseId });
     }
 
     const pool = Array.from(seen.values());

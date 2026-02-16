@@ -17,6 +17,7 @@ export const LeftSidebar = ({
     statusIconAtlas,
     selfBuffRef,
     selfHpRef,
+    selfCpRef,
     hitStopActive,
     hitStopConfig,
     drawDeckRef,
@@ -36,6 +37,7 @@ export const LeftSidebar = ({
     statusIconAtlas?: StatusAtlases | null;
     selfBuffRef?: RefObject<HTMLDivElement | null>;
     selfHpRef?: RefObject<HTMLDivElement | null>;
+    selfCpRef?: RefObject<HTMLDivElement | null>;
     hitStopActive?: boolean;
     hitStopConfig?: HitStopConfig;
     drawDeckRef?: RefObject<HTMLDivElement | null>;
@@ -115,6 +117,7 @@ export const LeftSidebar = ({
                     <PlayerStats
                         player={viewPlayer}
                         hpRef={selfHpRef}
+                        cpRef={selfCpRef}
                         hitStopActive={hitStopActive}
                         hitStopConfig={hitStopConfig}
                         isShaking={isSelfShaking}

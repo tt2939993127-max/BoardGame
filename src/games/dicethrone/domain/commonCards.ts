@@ -71,6 +71,12 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'roll',
         description: cardText('card-give-hand', 'description'),
+        playCondition: {
+            requireIsNotRoller: true,
+            requireRollConfirmed: true,
+            requireHasRolled: true,
+            requireOpponentDiceExists: true,
+        },
         effects: [{ description: '强制对手重投1颗骰子', action: { type: 'custom', target: 'opponent', customActionId: 'reroll-opponent-die-1' }, timing: 'immediate' }],
     },
     {

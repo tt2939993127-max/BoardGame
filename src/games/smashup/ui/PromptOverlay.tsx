@@ -42,7 +42,7 @@ interface Props {
         onSelect?: (uid: string | null) => void;
         /** 选中卡牌后的提示文本 */
         selectHint?: string;
-        /** 可打出的卡牌类型（defId）集合 */
+        /** 可打出的卡牌 defId 集合（同 defId 的卡功能一样，选哪张都行） */
         playableDefIds?: Set<string>;
     };
 }
@@ -57,16 +57,13 @@ function extractDefId(value: unknown): string | undefined {
     return undefined;
 }
 
-/** 判断选项是否为卡牌类型：优先读 displayMode，fallback 到 extractDefId 猜测 */
+/** 判断选项是否为卡牌类型：根据 value 中是否包含 defId/minionDefId 自动推断 */
 function isCardOption(option: { value: unknown; displayMode?: 'card' | 'button' }): boolean {
-    // 显式声明优先
-    if (option.displayMode === 'card') return true;
+    // 显式声明 button 时强制按钮模式（用于 skip/confirm 等非卡牌选项）
     if (option.displayMode === 'button') return false;
-    // 向后兼容：未声明 displayMode 时 fallback 到 defId 猜测
+    // 自动推断：value 中包含 defId/minionDefId 即为卡牌选项
     const defId = extractDefId(option.value);
-    if (!defId) return false;
-    const def = getCardDef(defId) ?? getBaseDef(defId);
-    return !!def?.previewRef;
+    return !!defId;
 }
 
 /** 从 continuationContext 提取上下文卡牌预览 ref */
@@ -135,103 +132,10 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     }, [prompt?.options, t]);
 
     // ====== 通用卡牌展示模式（弃牌堆查看等，优先级最高） ======
+    // 统一渲染：永远显示所有卡牌，可打出的高亮，不分"选择模式"和"查看模式"
     if (displayCards) {
         const { selectedUid: selUid, onSelect: onSel, playableDefIds } = displayCards;
-        const isSelectable = !!onSel;
 
-        // 选择模式（弃牌堆出牌等）：底部固定面板，不遮挡游戏区域（用户需要点击基地）
-        if (isSelectable) {
-            return (
-                <AnimatePresence>
-                    <motion.div
-                        key="prompt-display-select"
-                        initial={{ y: 80, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: 80, opacity: 0 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                        className="fixed bottom-0 inset-x-0"
-                        style={{ zIndex: UI_Z_INDEX.overlay }}
-                    >
-                        <div 
-                            className="bg-gradient-to-t from-black/90 via-black/75 to-transparent pt-8 pb-4 px-4"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <h2 className="text-center text-base font-black text-amber-100 uppercase tracking-tight mb-3 drop-shadow-lg">
-                                {displayCards.title}
-                            </h2>
-                            <div ref={revealScrollRef} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-2 smashup-h-scrollbar justify-center">
-                                {displayCards.cards.map((card, idx) => {
-                                    const def = getCardDef(card.defId);
-                                    const name = def ? resolveCardName(def, t) : card.defId;
-                                    const isSel = card.uid === selUid;
-                                    const isPlayable = playableDefIds?.has(card.defId) ?? false;
-                                    
-                                    const handleCardClick = () => {
-                                        if (isPlayable && onSel) {
-                                            onSel(isSel ? null : card.uid);
-                                        }
-                                    };
-                                    
-                                    return (
-                                        <motion.div
-                                            key={card.uid}
-                                            initial={{ y: 30, opacity: 0 }}
-                                            animate={{ y: 0, opacity: 1 }}
-                                            transition={{ delay: idx * 0.04, type: 'spring', stiffness: 400, damping: 25 }}
-                                            className={`flex-shrink-0 flex flex-col items-center gap-1 group relative ${isPlayable ? 'cursor-pointer' : 'cursor-default'} ${isSel ? 'scale-110 z-10' : isPlayable ? 'hover:scale-105 hover:z-10' : ''}`}
-                                            style={{ transition: 'transform 200ms, box-shadow 200ms' }}
-                                            onClick={handleCardClick}
-                                        >
-                                            <div className={`rounded shadow-xl overflow-hidden ${
-                                                isSel 
-                                                    ? 'ring-3 ring-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.5)]' 
-                                                    : isPlayable 
-                                                        ? 'ring-2 ring-amber-300/80 group-hover:ring-amber-300 group-hover:shadow-2xl' 
-                                                        : 'ring-1 ring-white/20 group-hover:ring-white/50 group-hover:shadow-2xl'
-                                            }`}>
-                                                {def?.previewRef ? (
-                                                    <CardPreview
-                                                        previewRef={def.previewRef}
-                                                        className="w-[100px] aspect-[0.714] bg-slate-900 rounded"
-                                                        alt={name}
-                                                    />
-                                                ) : (
-                                                    <div className="w-[100px] aspect-[0.714] bg-slate-800 rounded flex items-center justify-center p-2">
-                                                        <span className="text-white text-xs font-bold text-center">{name}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <button
-                                                className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white p-1 rounded-full border border-white shadow-md hover:bg-blue-600 hover:scale-110 cursor-zoom-in z-10"
-                                                onClick={(e) => { e.stopPropagation(); setMagnifyTarget({ defId: card.defId, type: def?.type ?? 'action' }); }}
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                                            </button>
-                                            <span className={`text-[10px] font-bold max-w-[100px] truncate text-center ${isSel ? 'text-amber-300' : 'text-white/70'}`}>
-                                                {name}
-                                            </span>
-                                        </motion.div>
-                                    );
-                                })}
-                            </div>
-                            <div className="flex items-center justify-center gap-3 mt-3">
-                                {selUid && displayCards.selectHint && (
-                                    <span className="text-sm text-amber-200/80 font-bold animate-pulse">
-                                        {displayCards.selectHint}
-                                    </span>
-                                )}
-                                <GameButton variant="secondary" size="sm" onClick={displayCards.onClose}>
-                                    {t('ui.close', { defaultValue: '关闭' })}
-                                </GameButton>
-                            </div>
-                        </div>
-                        <CardMagnifyOverlay target={magnifyTarget} onClose={() => setMagnifyTarget(null)} />
-                    </motion.div>
-                </AnimatePresence>
-            );
-        }
-
-        // 纯查看模式（弃牌堆浏览等）：底部固定面板，无遮罩，不阻挡游戏操作
         return (
             <AnimatePresence>
                 <motion.div
@@ -240,37 +144,63 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: 80, opacity: 0 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    className="fixed bottom-0 inset-x-0 pointer-events-none"
+                    className="fixed bottom-0 inset-x-0"
                     style={{ zIndex: UI_Z_INDEX.overlay }}
                 >
-                    <div data-discard-view-panel className="pointer-events-auto bg-gradient-to-t from-black/90 via-black/75 to-transparent pt-8 pb-4 px-4">
+                    <div 
+                        data-discard-view-panel
+                        className="bg-gradient-to-t from-black/90 via-black/75 to-transparent pt-8 pb-4 px-4"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.nativeEvent.stopImmediatePropagation()}
+                    >
                         <h2 className="text-center text-base font-black text-amber-100 uppercase tracking-tight mb-3 drop-shadow-lg">
                             {displayCards.title}
                         </h2>
-                        <div ref={revealScrollRef} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-2 smashup-h-scrollbar justify-center">
+                        {/* py-3 给 ring 描边留出空间，避免被 overflow-x-auto 裁切 */}
+                        <div ref={revealScrollRef} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-3 smashup-h-scrollbar justify-center">
                             {displayCards.cards.map((card, idx) => {
                                 const def = getCardDef(card.defId);
                                 const name = def ? resolveCardName(def, t) : card.defId;
+                                const isSel = card.uid === selUid;
+                                const isPlayable = playableDefIds?.has(card.defId) ?? false;
+                                
+                                const handleCardClick = () => {
+                                    if (isPlayable && onSel) {
+                                        onSel(isSel ? null : card.uid);
+                                    }
+                                };
+                                
                                 return (
                                     <motion.div
                                         key={card.uid}
                                         initial={{ y: 30, opacity: 0 }}
                                         animate={{ y: 0, opacity: 1 }}
                                         transition={{ delay: idx * 0.04, type: 'spring', stiffness: 400, damping: 25 }}
-                                        className="flex-shrink-0 flex flex-col items-center gap-1 group relative"
+                                        className={`flex-shrink-0 flex flex-col items-center gap-1 group relative ${isPlayable ? 'cursor-pointer' : 'cursor-default'} ${isSel ? 'scale-110 z-10' : isPlayable ? 'hover:scale-105 hover:z-10' : ''}`}
+                                        style={{ transition: 'transform 200ms, box-shadow 200ms' }}
+                                        onClick={isPlayable ? handleCardClick : undefined}
                                     >
-                                        <div className="rounded shadow-xl overflow-hidden ring-1 ring-white/20 group-hover:ring-white/50 group-hover:shadow-2xl">
-                                            {def?.previewRef ? (
-                                                <CardPreview
-                                                    previewRef={def.previewRef}
-                                                    className="w-[8.5vw] aspect-[0.714] bg-slate-900 rounded"
-                                                    alt={name}
-                                                />
-                                            ) : (
-                                                <div className="w-[8.5vw] aspect-[0.714] bg-slate-800 rounded flex items-center justify-center p-2">
-                                                    <span className="text-white text-xs font-bold text-center">{name}</span>
-                                                </div>
-                                            )}
+                                        {/* ring 描边放在外层，避免被内层 overflow-hidden 裁切 */}
+                                        <div className={`rounded ${
+                                            isSel 
+                                                ? 'ring-3 ring-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.5)]' 
+                                                : isPlayable 
+                                                    ? 'ring-2 ring-amber-300/80 group-hover:ring-amber-300 group-hover:shadow-2xl' 
+                                                    : 'ring-1 ring-white/20 group-hover:ring-white/50 group-hover:shadow-2xl'
+                                        }`}>
+                                            <div className="rounded shadow-xl overflow-hidden">
+                                                {def?.previewRef ? (
+                                                    <CardPreview
+                                                        previewRef={def.previewRef}
+                                                        className="w-[8.5vw] aspect-[0.714] bg-slate-900 rounded"
+                                                        alt={name}
+                                                    />
+                                                ) : (
+                                                    <div className="w-[8.5vw] aspect-[0.714] bg-slate-800 rounded flex items-center justify-center p-2">
+                                                        <span className="text-white text-xs font-bold text-center">{name}</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                         <button
                                             className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white p-1 rounded-full border border-white shadow-md hover:bg-blue-600 hover:scale-110 cursor-zoom-in z-10"
@@ -278,7 +208,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                         </button>
-                                        <span className="text-[11px] font-bold max-w-[8.5vw] truncate text-center text-white/70">
+                                        <span className={`text-[10px] font-bold max-w-[8.5vw] truncate text-center ${isSel ? 'text-amber-300' : 'text-white/70'}`}>
                                             {name}
                                         </span>
                                     </motion.div>
@@ -286,6 +216,11 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                             })}
                         </div>
                         <div className="flex items-center justify-center gap-3 mt-3">
+                            {selUid && displayCards.selectHint && (
+                                <span className="text-sm text-amber-200/80 font-bold animate-pulse">
+                                    {displayCards.selectHint}
+                                </span>
+                            )}
                             <GameButton variant="secondary" size="sm" onClick={displayCards.onClose}>
                                 {t('ui.close', { defaultValue: '关闭' })}
                             </GameButton>

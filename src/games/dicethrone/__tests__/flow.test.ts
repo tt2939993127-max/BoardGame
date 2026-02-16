@@ -1547,7 +1547,8 @@ describe('王权骰铸流程测试', () => {
                     cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
-                    cmd('ADVANCE_PHASE', '1'), // -> main2
+                    cmd('ADVANCE_PHASE', '1'), // -> 结算攻击，太极不足以重掷但可用于加伤，触发 Token 响应窗口
+                    cmd('SKIP_TOKEN_RESPONSE', '0'), // 攻击方跳过太极加伤 → autoContinue → main2
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -2091,26 +2092,7 @@ describe('王权骰铸流程测试', () => {
                 setup: createSetupWithHand([], {
                     cp: 10,
                     mutate: (core) => {
-                        core.players['1'].hand = [{
-                            id: 'card-give-hand',
-                            name: '抬一手！',
-                            type: 'action',
-                            cpCost: 1,
-                            timing: 'roll',
-                            description: '',
-                            previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 17 },
-                            playCondition: {
-                                requireIsNotRoller: true,
-                                requireRollConfirmed: true,
-                                requireHasRolled: true,
-                                requireOpponentDiceExists: true,
-                            },
-                            effects: [{
-                                description: '强制对手重掷1颗骰子',
-                                action: { type: 'custom', target: 'opponent', customActionId: 'reroll-opponent-die-1' },
-                                timing: 'immediate',
-                            }],
-                        }];
+                        core.players['1'].hand = [getCardById('card-give-hand')];
                         core.players['1'].resources.cp = 10;
                         core.players['0'].hand = [];
                         core.players['0'].deck = [];

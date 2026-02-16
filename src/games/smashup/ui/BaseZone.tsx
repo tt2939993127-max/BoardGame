@@ -69,6 +69,8 @@ export const BaseZone: React.FC<{
                     {base.ongoingActions.map((oa, idx) => {
                         const actionDef = getCardDef(oa.defId);
                         const actionName = resolveCardName(actionDef, t) || oa.defId;
+                        const actionText = resolveCardText(actionDef, t);
+                        const actionTitle = actionText ? `${actionName}\n${actionText}` : actionName;
                         const pConf = PLAYER_CONFIG[parseInt(oa.ownerId) % PLAYER_CONFIG.length];
                         return (
                             <motion.div
@@ -85,7 +87,7 @@ export const BaseZone: React.FC<{
                                     <CardPreview
                                         previewRef={actionDef?.previewRef}
                                         className="w-full h-full object-cover"
-                                        title={actionName}
+                                        title={actionTitle}
                                     />
                                     {!actionDef?.previewRef && (
                                         <div className="absolute inset-0 flex items-center justify-center p-[0.15vw] bg-gradient-to-br from-purple-100 to-purple-50">
@@ -314,6 +316,8 @@ const MinionCard: React.FC<{
     const { t } = useTranslation('game-smashup');
     const def = getMinionDef(minion.defId);
     const resolvedName = resolveCardName(def, t) || minion.defId;
+    const resolvedText = resolveCardText(def, t);
+    const minionTitle = resolvedText ? `${resolvedName}\n${resolvedText}` : resolvedName;
     const conf = PLAYER_CONFIG[parseInt(pid) % PLAYER_CONFIG.length];
 
     // 天赋判定：有 talent 标签 + 本回合未使用 + 是我的随从 + 轮到我 + 教程允许
@@ -376,7 +380,7 @@ const MinionCard: React.FC<{
                 <CardPreview
                     previewRef={def?.previewRef}
                     className="w-full h-full object-cover"
-                    title={resolvedName}
+                    title={minionTitle}
                 />
 
                 {!def?.previewRef && (
@@ -437,6 +441,8 @@ const MinionCard: React.FC<{
                         {minion.attachedActions.map((aa) => {
                             const actionDef = getCardDef(aa.defId);
                             const actionName = resolveCardName(actionDef, t) || aa.defId;
+                            const actionText = resolveCardText(actionDef, t);
+                            const actionTitle = actionText ? `${actionName}\n${actionText}` : actionName;
                             return (
                                 <motion.div
                                     key={aa.uid}
@@ -444,7 +450,7 @@ const MinionCard: React.FC<{
                                     className="w-[1.8vw] aspect-[0.714] bg-white rounded-[0.1vw] shadow-lg cursor-pointer
                                         hover:scale-[2] hover:translate-x-[0.8vw] transition-transform duration-150
                                         border-[0.08vw] border-purple-400 ring-1 ring-purple-300/50"
-                                    title={actionName}
+                                    title={actionTitle}
                                 >
                                     <div className="w-full h-full overflow-hidden rounded-[0.06vw]">
                                         <CardPreview

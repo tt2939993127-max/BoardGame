@@ -12,7 +12,7 @@
  
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, PowerCounterAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, LimitModifiedEvent } from '../domain/types';
+import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, TempPowerAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, LimitModifiedEvent } from '../domain/types';
 import { countMadnessCards, madnessVpPenalty } from '../domain/abilityHelpers';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from '../domain/baseAbilities';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
@@ -354,9 +354,8 @@ describe('cthulhu_furthering_the_cause 触发', () => {
 // 杀手植物
 // ============================================================================
 
-describe('killer_plant_overgrowth 临界点修正', () => {
-    it('控制者回合时基地临界点降为0', () => {
-        // 使用真实基地 defId 以便 getBaseDef 能找到
+describe('killer_plant_overgrowth 回合开始临界点降为0', () => {
+    it('控制者回合开始时产生 BREAKPOINT_MODIFIED 事件', () => {
         const base = makeBase({
             defId: 'base_the_jungle',
             ongoingActions: [{ uid: 'og-1', defId: 'killer_plant_overgrowth', ownerId: '0' }],
@@ -365,9 +364,67 @@ describe('killer_plant_overgrowth 临界点修正', () => {
             currentPlayerIndex: 0,
             bases: [base],
         });
-        const bp = getEffectiveBreakpoint(state, 0);
-        // 临界点应为 0（控制者回合）
+        const { events } = fireTriggers(state, 'onTurnStart', {
+            state, playerId: '0', random: dummyRandom, now: 0,
+        });
+        const bpEvents = events.filter(e => e.type === SU_EVENTS.BREAKPOINT_MODIFIED);
+        expect(bpEvents.length).toBe(1);
+        const payload = (bpEvents[0] as any).payload;
+        expect(payload.baseIndex).toBe(0);
+        // base_the_jungle 临界点为 12，delta 应为 -12
+        expect(payload.delta).toBe(-12);
+    });
+
+    it('非控制者回合不触发', () => {
+        const base = makeBase({
+            defId: 'base_the_jungle',
+            ongoingActions: [{ uid: 'og-1', defId: 'killer_plant_overgrowth', ownerId: '0' }],
+        });
+        const state = makeState({
+            currentPlayerIndex: 0,
+            bases: [base],
+        });
+        const { events } = fireTriggers(state, 'onTurnStart', {
+            state, playerId: '1', random: dummyRandom, now: 0,
+        });
+        const bpEvents = events.filter(
+            e => e.type === SU_EVENTS.BREAKPOINT_MODIFIED && (e as any).payload.reason === 'killer_plant_overgrowth'
+        );
+        expect(bpEvents.length).toBe(0);
+    });
+
+    it('reduce 后 tempBreakpointModifiers 生效，临界点为0', () => {
+        const base = makeBase({
+            defId: 'base_the_jungle',
+            ongoingActions: [{ uid: 'og-1', defId: 'killer_plant_overgrowth', ownerId: '0' }],
+        });
+        const state = makeState({
+            currentPlayerIndex: 0,
+            bases: [base],
+        });
+        // 模拟 reduce BREAKPOINT_MODIFIED 事件
+        const modified = reduce(state, {
+            type: SU_EVENTS.BREAKPOINT_MODIFIED,
+            payload: { baseIndex: 0, delta: -12, reason: 'killer_plant_overgrowth' },
+            timestamp: 0,
+        });
+        const bp = getEffectiveBreakpoint(modified, 0);
         expect(bp).toBe(0);
+    });
+
+    it('打出当回合 scoreBases 阶段不生效（未经过 onTurnStart）', () => {
+        // 过度生长刚打出，还没经过 onTurnStart，tempBreakpointModifiers 为空
+        const base = makeBase({
+            defId: 'base_the_jungle',
+            ongoingActions: [{ uid: 'og-1', defId: 'killer_plant_overgrowth', ownerId: '0' }],
+        });
+        const state = makeState({
+            currentPlayerIndex: 0,
+            bases: [base],
+        });
+        // 直接查询临界点——不应该被修正（因为没有触发 onTurnStart）
+        const bp = getEffectiveBreakpoint(state, 0);
+        expect(bp).toBe(12);
     });
 });
 
@@ -509,7 +566,7 @@ describe('cthulhu_chosen beforeScoring', () => {
         return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
     }
 
-    it('计分前创建交互让玩家选择是否抽疯狂卡', () => {
+    it('有 matchState 时创建确认交互（"你可以"语义）', () => {
         const chosen = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
         const scoringBase = makeBase({ minions: [chosen] });
         const state = makeState({
@@ -522,37 +579,51 @@ describe('cthulhu_chosen beforeScoring', () => {
         const result = fireTriggers(state, 'beforeScoring', {
             state, matchState: ms, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
-        // 不再直接产生事件，而是创建交互
+        // 有 matchState 时创建交互确认，不直接产生事件
         expect(result.events.length).toBe(0);
         expect(result.matchState).toBeDefined();
-        const current = (result.matchState!.sys as any)?.interaction?.current;
-        expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('cthulhu_chosen');
+    });
 
-        // 模拟玩家选择"接受"
-        const handler = getInteractionHandler('cthulhu_chosen');
-        expect(handler).toBeDefined();
-        const resolved = handler!(ms, '0', { accept: true, minionUid: 'ch1' }, { continuationContext: { minionUid: 'ch1', baseIndex: 0 } }, dummyRandom, 0);
-        expect(resolved).toBeDefined();
-        const { events: resolvedEvents } = resolved!;
-        expect(resolvedEvents.some(e => e.type === SU_EVENTS.MADNESS_DRAWN)).toBe(true);
-        const powerEvts = resolvedEvents.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as PowerCounterAddedEvent[];
+    it('无 matchState 时回退自动执行', () => {
+        const chosen = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
+        const scoringBase = makeBase({ minions: [chosen] });
+        const state = makeState({
+            bases: [scoringBase],
+            madnessDeck: Array.from({ length: 5 }, (_, i) => ({ uid: `mad-${i}`, defId: MADNESS_CARD_DEF_ID, type: 'madness' as const })),
+            nextUid: 200,
+        });
+
+        const result = fireTriggers(state, 'beforeScoring', {
+            state, matchState: undefined as any, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
+        });
+        // 无 matchState 时自动执行
+        expect(result.events.some(e => e.type === SU_EVENTS.MADNESS_DRAWN)).toBe(true);
+        const powerEvts = result.events.filter(e => e.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent[];
         expect(powerEvts.length).toBe(1);
         expect(powerEvts[0].payload.minionUid).toBe('ch1');
         expect(powerEvts[0].payload.amount).toBe(2);
     });
 
-    it('玩家选择跳过时不产生事件', () => {
-        const handler = getInteractionHandler('cthulhu_chosen');
-        expect(handler).toBeDefined();
-        const state = makeState();
-        const ms = makeMS(state);
-        const resolved = handler!(ms, '0', { accept: false, minionUid: 'ch1' }, {}, dummyRandom, 0);
-        expect(resolved).toBeDefined();
-        expect(resolved!.events.length).toBe(0);
+    it('无疯狂牌库时回退自动执行仍获得+2力量', () => {
+        const chosen = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
+        const scoringBase = makeBase({ minions: [chosen] });
+        const state = makeState({
+            bases: [scoringBase],
+            madnessDeck: [],
+            nextUid: 200,
+        });
+
+        const result = fireTriggers(state, 'beforeScoring', {
+            state, matchState: undefined as any, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
+        });
+        // 无疯狂牌库 → 不产生 MADNESS_DRAWN，但仍获得 +2 力量
+        expect(result.events.some(e => e.type === SU_EVENTS.MADNESS_DRAWN)).toBe(false);
+        const powerEvts = result.events.filter(e => e.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent[];
+        expect(powerEvts.length).toBe(1);
+        expect(powerEvts[0].payload.amount).toBe(2);
     });
 
-    it('多个天选之人各自独立创建交互', () => {
+    it('多个天选之人时创建链式确认交互', () => {
         const ch1 = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
         const ch2 = makeMinion('ch2', 'cthulhu_chosen', '1', 3);
         const scoringBase = makeBase({ minions: [ch1, ch2] });
@@ -566,10 +637,29 @@ describe('cthulhu_chosen beforeScoring', () => {
         const result = fireTriggers(state, 'beforeScoring', {
             state, matchState: ms, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
         });
-        // 应创建2个交互（current + queue）
-        const interaction = (result.matchState!.sys as any)?.interaction;
-        const all = [interaction?.current, ...(interaction?.queue ?? [])].filter(Boolean);
-        expect(all.length).toBe(2);
+        // 有 matchState 时创建交互，不直接产生事件
+        expect(result.events.length).toBe(0);
+        expect(result.matchState).toBeDefined();
+    });
+
+    it('不在计分基地上的天选之人也能触发（回退模式）', () => {
+        const ch1 = makeMinion('ch1', 'cthulhu_chosen', '0', 3);
+        const otherBase = makeBase({ minions: [ch1] });
+        const scoringBase = makeBase({ minions: [makeMinion('m1', 'test_minion', '1', 5)] });
+        const state = makeState({
+            bases: [scoringBase, otherBase],
+            madnessDeck: Array.from({ length: 5 }, (_, i) => ({ uid: `mad-${i}`, defId: MADNESS_CARD_DEF_ID, type: 'madness' as const })),
+            nextUid: 200,
+        });
+
+        const result = fireTriggers(state, 'beforeScoring', {
+            state, matchState: undefined as any, playerId: '0', baseIndex: 0, random: dummyRandom, now: 0,
+        });
+        // 天选之人在 base[1]，计分的是 base[0]，仍然触发
+        const powerEvts = result.events.filter(e => e.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent[];
+        expect(powerEvts.length).toBe(1);
+        expect(powerEvts[0].payload.minionUid).toBe('ch1');
+        expect(powerEvts[0].payload.baseIndex).toBe(1); // 力量加在天选之人所在的基地
     });
 });
 
@@ -994,21 +1084,25 @@ describe('elder_thing_elder_thing 保护', () => {
 });
 
 describe('elder_thing_elder_thing onPlay', () => {
-    it('不足2个其他随从→自动放牌库底', () => {
+    it('不足2个其他随从→产生 Interaction（消灭选项置灰）', () => {
         const elderThing = makeMinion('et-1', 'elder_thing_elder_thing', '0', 10);
         const base = makeBase({ minions: [elderThing] });
         const state = makeState({ bases: [base] });
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
 
         const executor = resolveAbility('elder_thing_elder_thing', 'onPlay');
         expect(executor).toBeDefined();
         const result = executor!({
-            state, playerId: '0', cardUid: 'et-1', defId: 'elder_thing_elder_thing',
+            state, matchState: ms, playerId: '0', cardUid: 'et-1', defId: 'elder_thing_elder_thing',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(1);
-        expect(result.events[0].type).toBe(SU_EVENTS.CARD_TO_DECK_BOTTOM);
-        const evt = result.events[0] as CardToDeckBottomEvent;
-        expect(evt.payload.cardUid).toBe('et-1');
+        // 始终走 Interaction，不足时消灭选项 disabled
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('elder_thing_elder_thing_choice');
+        // 消灭选项应该被禁用
+        const destroyOption = current?.data?.options?.find((o: any) => o.id === 'destroy');
+        expect(destroyOption?.disabled).toBe(true);
     });
 
     it('≥2个其他随从→产生 Interaction 选择', () => {
@@ -1070,7 +1164,7 @@ describe('elder_thing_shoggoth 打出限制', () => {
         const cmd = { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'sh-1', baseIndex: 0 } } as any;
         const result = validate(matchState, cmd);
         expect(result.valid).toBe(false);
-        expect(result.error).toContain('修格斯');
+        expect(result.error).toContain('6点力量');
     });
 
     it('己方力量≥6的基地可以打出修格斯', () => {
@@ -1205,7 +1299,10 @@ describe('killer_plant_venus_man_trap 搜索牌库', () => {
             state, playerId: '0', cardUid: 'trap', defId: 'killer_plant_venus_man_trap',
             baseIndex: 0, random: dummyRandom, now: 0,
         } as AbilityContext);
-        expect(result.events.length).toBe(0);
+        // 搜索不到合格随从，但规则仍要求重洗牌库，并发送反馈提示
+        expect(result.events.length).toBe(2);
+        expect(result.events[0].type).toBe('su:deck_reordered');
+        expect(result.events[1].type).toBe(SU_EVENTS.ABILITY_FEEDBACK);
     });
 });
 

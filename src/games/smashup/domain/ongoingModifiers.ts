@@ -82,7 +82,91 @@ export function registerPowerModifier(
     sourceDefId: string,
     modifier: PowerModifierFn
 ): void {
+    // 去重保护：同一 sourceDefId 只注册一次（防止 HMR 重复注册）
+    if (modifierRegistry.some(e => e.sourceDefId === sourceDefId)) return;
     modifierRegistry.push({ sourceDefId, modifier });
+}
+
+// ============================================================================
+// 声明式 ongoing 力量修正 API（通用，自动按实例数叠加）
+// ============================================================================
+
+/** ongoing 卡附着位置 */
+type OngoingLocation = 'base' | 'minion';
+
+/** ongoing 卡生效目标 */
+type OngoingTarget =
+    | 'allMinions'       // 基地上所有随从
+    | 'opponentMinions'  // 基地上非 owner 的随从
+    | 'ownerMinions'     // 基地上 owner 的随从
+    | 'self'             // 被附着的随从自身
+    | 'firstOwnerMinion'; // owner 在此基地的第一个随从（用于"总力量+N"效果）
+
+/**
+ * 声明式注册 ongoing 力量修正（通用，自动按实例数叠加）
+ *
+ * 适用于"基地/随从上有 N 张该 ongoing 卡 → 每张给目标 +delta 力量"的标准模式。
+ * 计算层自动 filter 实例数并乘以 delta，无需手写查询逻辑。
+ *
+ * @param defId ongoing 行动卡的 defId
+ * @param location 卡附着在基地上还是随从上
+ * @param target 修正生效的目标随从范围
+ * @param delta 每张卡的力量修正值（正=加，负=减）
+ * @param condition 额外生效条件（可选，返回 false 时该张卡不生效）
+ */
+export function registerOngoingPowerModifier(
+    defId: string,
+    location: OngoingLocation,
+    target: OngoingTarget,
+    delta: number,
+    condition?: (ctx: PowerModifierContext) => boolean,
+): void {
+    registerPowerModifier(defId, (ctx: PowerModifierContext) => {
+        if (location === 'minion') {
+            // 附着在随从上：只对被附着的随从生效
+            const count = ctx.minion.attachedActions.filter(a => a.defId === defId).length;
+            if (count === 0) return 0;
+            if (condition && !condition(ctx)) return 0;
+            return count * delta;
+        }
+
+        // 附着在基地上
+        const cards = ctx.base.ongoingActions.filter(a => a.defId === defId);
+        if (cards.length === 0) return 0;
+
+        switch (target) {
+            case 'opponentMinions': {
+                // 统计 owner 不是当前随从控制者的张数
+                const count = cards.filter(a => a.ownerId !== ctx.minion.controller).length;
+                if (count === 0) return 0;
+                if (condition && !condition(ctx)) return 0;
+                return count * delta;
+            }
+            case 'ownerMinions': {
+                // 统计 owner 是当前随从控制者的张数
+                const count = cards.filter(a => a.ownerId === ctx.minion.controller).length;
+                if (count === 0) return 0;
+                if (condition && !condition(ctx)) return 0;
+                return count * delta;
+            }
+            case 'firstOwnerMinion': {
+                // 只给 owner 在此基地的第一个随从加成（用于"总力量+N"效果）
+                const count = cards.filter(a => a.ownerId === ctx.minion.controller).length;
+                if (count === 0) return 0;
+                const firstMinion = ctx.base.minions.find(m => m.controller === ctx.minion.controller);
+                if (!firstMinion || firstMinion.uid !== ctx.minion.uid) return 0;
+                if (condition && !condition(ctx)) return 0;
+                return count * delta;
+            }
+            case 'allMinions': {
+                if (condition && !condition(ctx)) return 0;
+                return cards.length * delta;
+            }
+            case 'self':
+            default:
+                return 0; // 'self' 对基地 ongoing 无意义
+        }
+    });
 }
 
 /**
@@ -95,6 +179,8 @@ export function registerBreakpointModifier(
     sourceDefId: string,
     modifier: BreakpointModifierFn
 ): void {
+    // 去重保护：同一 sourceDefId 只注册一次（防止 HMR 重复注册）
+    if (breakpointModifierRegistry.some(e => e.sourceDefId === sourceDefId)) return;
     breakpointModifierRegistry.push({ sourceDefId, modifier });
 }
 
@@ -136,18 +222,9 @@ export function getOngoingPowerModifier(
     if (!base) return 0;
 
     let total = 0;
-    const debug: string[] = [];
     for (const entry of modifierRegistry) {
-        // 检查基地上是否有提供修正的随从（可以是任意基地，取决于修正函数自身逻辑）
         const ctx: PowerModifierContext = { state, minion, baseIndex, base };
-        const delta = entry.modifier(ctx);
-        if (delta !== 0) {
-            debug.push(`${entry.sourceDefId}: ${delta}`);
-        }
-        total += delta;
-    }
-    if (debug.length > 0) {
-        console.log(`[getOngoingPowerModifier] minion=${minion.defId} base=${baseIndex} modifiers:`, debug, `total=${total}`);
+        total += entry.modifier(ctx);
     }
     return total;
 }

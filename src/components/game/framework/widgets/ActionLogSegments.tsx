@@ -4,6 +4,7 @@ import type { ActionLogSegment } from '../../../../engine/types';
 import { CardPreviewTooltip } from './CardPreviewTooltip';
 import { BreakdownTooltip } from '../../../common/overlays/BreakdownTooltip';
 import type { CardPreviewRef } from '../../../../core';
+import { buildLocalizedImageSet } from '../../../../core';
 
 interface ActionLogSegmentsProps {
     segments: ActionLogSegment[];
@@ -64,6 +65,38 @@ const CardSegmentRenderer: React.FC<{
 };
 
 /**
+ * 渲染骰面精灵图小图标
+ */
+const DiceResultSegment: React.FC<{
+    segment: Extract<ActionLogSegment, { type: 'diceResult' }>;
+    locale?: string;
+}> = ({ segment, locale }) => {
+    const { spriteAsset, spriteCols, spriteRows, dice } = segment;
+    const bgImage = buildLocalizedImageSet(spriteAsset, locale);
+    const bgSize = `${spriteCols * 100}% ${spriteRows * 100}%`;
+
+    return (
+        <span className="inline-flex items-center gap-0.5 align-middle">
+            {dice.map((die, i) => {
+                const xPos = spriteCols > 1 ? (die.col / (spriteCols - 1)) * 100 : 0;
+                const yPos = spriteRows > 1 ? (die.row / (spriteRows - 1)) * 100 : 0;
+                return (
+                    <span
+                        key={i}
+                        className="inline-block w-4 h-4 rounded-[2px] bg-slate-800 border border-white/20"
+                        style={{
+                            backgroundImage: bgImage,
+                            backgroundSize: bgSize,
+                            backgroundPosition: `${xPos}% ${yPos}%`,
+                        }}
+                    />
+                );
+            })}
+        </span>
+    );
+};
+
+/**
  * 渲染 ActionLog 片段
  * 
  * - text 片段：直接显示文本
@@ -117,6 +150,16 @@ export const ActionLogSegments: React.FC<ActionLogSegmentsProps> = ({
                             key={index}
                             displayText={segment.displayText}
                             lines={segment.lines}
+                        />
+                    );
+                }
+
+                if (segment.type === 'diceResult') {
+                    return (
+                        <DiceResultSegment
+                            key={index}
+                            segment={segment}
+                            locale={locale}
                         />
                     );
                 }

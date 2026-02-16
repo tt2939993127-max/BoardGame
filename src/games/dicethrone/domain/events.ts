@@ -259,6 +259,8 @@ export interface CardDrawnEvent extends GameEvent<'CARD_DRAWN'> {
     payload: {
         playerId: PlayerId;
         cardId: string;
+        /** 来源技能 ID（用于 action log 标注来源） */
+        sourceAbilityId?: string;
     };
 }
 
@@ -317,6 +319,8 @@ export interface CpChangedEvent extends GameEvent<'CP_CHANGED'> {
         playerId: PlayerId;
         delta: number;
         newValue: number;
+        /** 来源技能 ID（用于 action log 标注来源） */
+        sourceAbilityId?: string;
     };
 }
 
@@ -646,6 +650,15 @@ export interface ExtraAttackTriggeredEvent extends GameEvent<'EXTRA_ATTACK_TRIGG
     };
 }
 
+/** 被动能力升级事件（如教皇税 I → II） */
+export interface PassiveAbilityUpgradedEvent extends GameEvent<'PASSIVE_ABILITY_UPGRADED'> {
+    payload: {
+        playerId: PlayerId;
+        /** 被动能力 ID */
+        passiveId: string;
+    };
+}
+
 /** 所有 DiceThrone 事件 */
 export type DiceThroneEvent =
     | DiceRolledEvent
@@ -699,4 +712,5 @@ export type DiceThroneEvent =
     | BonusDiceRerollRequestedEvent
     | BonusDieRerolledEvent
     | BonusDiceSettledEvent
-    | ExtraAttackTriggeredEvent;
+    | ExtraAttackTriggeredEvent
+    | PassiveAbilityUpgradedEvent;

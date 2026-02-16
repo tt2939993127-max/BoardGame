@@ -60,12 +60,12 @@ export function registerExpansionBaseAbilities(): void {
         // 无疯狂卡 ?不生成 Prompt
         if (madnessCards.length === 0) return { events: [] };
 
-        const options: { id: string; label: string; value: Record<string, unknown> }[] = [
+        const options: { id: string; label: string; value: Record<string, unknown>; displayMode?: 'card' | 'button' }[] = [
             { id: 'skip', label: '跳过', value: { skip: true } },
             ...madnessCards.map((m, i) => ({
                 id: `madness-${i}`,
                 label: `疯狂卡(${m.source === 'hand' ? '手牌' : '弃牌堆'})`,
-                value: { cardUid: m.uid, source: m.source },
+                value: { cardUid: m.uid, defId: MADNESS_CARD_DEF_ID, source: m.source },
             })),
         ];
 
@@ -144,7 +144,7 @@ export function registerExpansionBaseAbilities(): void {
         const options = madnessCards.map((m, i) => ({
             id: `madness-${i}`,
             label: `疯狂卡(${m.source === 'hand' ? '手牌' : '弃牌堆'})`,
-            value: { cardUid: m.uid, source: m.source },
+            value: { cardUid: m.uid, defId: MADNESS_CARD_DEF_ID, source: m.source },
         }));
 
         if (ctx.matchState) {
@@ -439,7 +439,7 @@ export function registerExpansionBaseAbilities(): void {
                 { id: 'move', label: '移动到九命之屋', value: { move: true, minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, houseBaseIndex } },
                 { id: 'skip', label: '不移动（正常消灭）', value: { move: false, minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, ownerId } },
             ],
-            'base_nine_lives_intercept',
+            { sourceId: 'base_nine_lives_intercept', targetType: 'generic' },
         );
         const updatedMS = queueInteraction(trigCtx.matchState, interaction);
         // 返回空事件 + 更新后的 matchState（processDestroyTriggers 检测到 matchState 变化 → pendingSaveMinionUids）

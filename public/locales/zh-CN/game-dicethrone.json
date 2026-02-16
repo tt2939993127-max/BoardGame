@@ -113,9 +113,9 @@
       ]
     },
     "poison": {
-      "name": "中毒",
+      "name": "毒液",
       "description": [
-        "回合开始时受到等同层数的伤害，然后移除1层"
+        "在每个自己的维持阶段受到n点伤害（n=毒液层数），持续效果"
       ]
     },
     "blinded": {
@@ -133,7 +133,7 @@
     "targeted": {
       "name": "锁定",
       "description": [
-        "受到的伤害+2，受到伤害后移除此标记"
+        "受到的伤害+2。持续效果"
       ]
     }
   },
@@ -175,49 +175,51 @@
     "sneak": {
       "name": "潜行",
       "description": [
-        "拥有此标记时，若受到伤害，移除此标记并免除该伤害"
+        "因某次攻击掷骰阶段获得伤害时，不受到伤害且不进行防御掷骰（攻击仍视为\u201c成功\u201d，其他效果可能触发）",
+        "经过一个完整的自己回合后，在回合末自动弃除"
       ]
     },
     "sneak_attack": {
       "name": "伏击",
       "description": [
-        "攻击结算时，投掷1个骰子并将结果加到伤害中"
+        "在某次攻击掷骰阶段结束时，可花费此标记掷骰1🎲，将掷骰结果加至本次攻击的伤害",
+        "不可用于增强溅射伤害"
       ]
     },
     "crit": {
       "name": "暴击",
       "description": [
-        "攻击结算前消耗1层，伤害+1"
+        "攻击伤害≥5时可消耗此标记，+4伤害。不能用于溅射伤害。不叠加。"
       ]
     },
     "accuracy": {
       "name": "精准",
       "description": [
-        "攻击结算前消耗1层，本次攻击不可防御"
+        "攻击掷骰阶段结束时可花费此标记，使这次攻击变为不可防御。不叠加。"
       ]
     },
     "protect": {
       "name": "守护",
       "description": [
-        "受到伤害前消耗1层，伤害-1"
+        "任何时候花费此标记将即将受到的伤害减半（减的量向上取整）。不叠加。"
       ]
     },
     "retribution": {
       "name": "神罚",
       "description": [
-        "受到伤害前消耗1层，对攻击者造成2点不可防御伤害"
+        "受到攻击伤害时可花费此标记，将本次受到伤害的一半（向上取整）返还给对手（不减少自己所受伤害）。不叠加。"
       ]
     },
     "tithes_upgraded": {
-      "name": "教会税升级",
+      "name": "教皇税升级",
       "description": [
-        "收入阶段额外获得1CP"
+        "被动能力已升级为教皇税 II"
       ]
     },
     "blessing_of_divinity": {
       "name": "神圣祝福",
       "description": [
-        "受到致死伤害时，移除此标记，将HP设为1并回复5HP"
+        "生命值降到0时，移除此标记并将生命值回到1。此标记无法被任何方式移除、转移、偷取。不叠加。"
       ]
     }
   },
@@ -281,7 +283,21 @@
       "damageReduction": "减伤",
       "evasionAttempt": "闪避判定",
       "removeDebuff": "净化"
-    }
+    },
+    "cpGained": "获得 {{amount}} CP（{{source}}）",
+    "cpGainedPlain": "获得 {{amount}} CP",
+    "cpSpent": "消耗 {{amount}} CP（{{source}}）",
+    "cpSpentPlain": "消耗 {{amount}} CP",
+    "cardDrawn": "抽了 {{count}} 张牌（{{source}}）",
+    "cardDrawnPlain": "抽了 {{count}} 张牌",
+    "usePurify": "使用净化移除 {{statusLabel}}",
+    "payToRemoveKnockdown": "花费 2CP 移除击倒",
+    "usePassiveAbility": "使用被动能力：{{abilityName}}",
+    "confirmRoll": "确认投掷：",
+    "confirmRollWithAbility": "确认投掷（{{abilityName}}）：",
+    "confirmRollDefense": "确认防御投掷：",
+    "confirmRollDefenseWithAbility": "确认防御投掷（{{abilityName}}）：",
+    "cardRollResult": "投掷结果："
   },
   "purify": {
     "title": "使用净化",
@@ -460,10 +476,16 @@
       "pyroBlast3Reroll": "重投!",
       "shadowDamage": "暗影之舞",
       "default": "额外投掷",
+      "oneWithShadowsHit": "暗影! 伏击+2CP",
+      "oneWithShadowsMiss": "抽 1 张牌",
       "sneakAttack": "偷袭!",
       "explodingArrow": "投出 {{value}}",
       "moonShadowStrike": "投出 {{value}}",
       "blinded": "致盲判定",
+      "sword": "剑: 伤害 +2",
+      "helm": "头盔: 伤害 +1",
+      "heart": "心: 治疗 2",
+      "pray": "祈祷: 获得 1 CP",
       "fire": "烈焰: 伤害 +3",
       "magma": "熔岩: 施加灼烧",
       "fiery_soul": "焚魂: 获得 2 烈焰精通",
@@ -606,6 +628,8 @@
     "selectDiceToReroll": "选择要重掷的骰子（至多2颗）",
     "selectStatusToRemove": "选择要移除的状态效果",
     "selectPlayerToRemoveAllStatus": "选择要移除所有状态的玩家",
+    "selectPlayerForRetribution": "选择获得反击的玩家",
+    "selectPlayerForConsecrate": "选择获得祝圣的玩家",
     "selectStatusToTransfer": "选择要转移的状态效果"
   },
   "abilitySlots": {
@@ -1497,16 +1521,16 @@
       }
     },
     "covert-fire": {
-      "name": "隐蔽射击",
-      "description": "3弓+1月触发：施加锁定，造成4伤害",
+      "name": "隐秘射击",
+      "description": "3弓+3月触发：施加锁定，然后造成4伤害",
       "effects": {
         "inflictTargeted": "施加1个锁定标记",
         "damage4": "造成4点伤害"
       }
     },
     "covert-fire-2": {
-      "name": "隐蔽射击 II",
-      "description": "包含精准射击与聚焦两个变体"
+      "name": "赐死射击 II",
+      "description": "包含赐死射击与专注两个变体"
     },
     "deadeye-shot": {
       "effects": {
@@ -1522,14 +1546,14 @@
     },
     "covering-fire": {
       "name": "掩护射击",
-      "description": "2弓+2足触发：获得闪避，造成7伤害",
+      "description": "2弓+3足触发：获得闪避，造成7伤害",
       "effects": {
         "gainEvasive": "获得1个闪避标记",
         "damage7": "造成7点伤害"
       }
     },
     "covering-fire-2": {
-      "name": "掩护射击 II",
+      "name": "隐蔽射击 II",
       "description": "包含掩护射击与消音追踪两个变体",
       "effects": {
         "gainEvasive": "获得1个闪避标记",
@@ -1543,18 +1567,18 @@
     },
     "exploding-arrow": {
       "name": "爆裂箭",
-      "description": "1弓+3月触发：投掷骰子并结算效果",
+      "description": "1弓+3月触发：掷骰5骰，造成 3 + 2×弓 + 1×足 伤害，另外对手丢失 1×月 CP，造成致盲",
       "effects": {
-        "rollAndResolve": "投掷骰子并结算效果"
+        "rollAndResolve": "掷骰5骰并结算效果"
       }
     },
     "exploding-arrow-2": {
-      "name": "爆裂箭 II",
-      "description": "升级版爆裂箭"
+      "name": "爆炸射击 II",
+      "description": "1弓+3月触发：掷骰5骰，造成 3 + 1×弓 + 2×足 伤害，对手失去 1×月 CP，施加致盲"
     },
     "exploding-arrow-3": {
-      "name": "爆裂箭 III",
-      "description": "升级版爆裂箭（可重掷）"
+      "name": "爆炸射击 III",
+      "description": "1弓+3月触发：掷骰5骰，造成 3 + 1×弓 + 2×足 伤害，对手失去 1×月 CP，施加致盲和缠绕"
     },
     "entangling-shot": {
       "name": "缠绕射击",
@@ -1573,7 +1597,7 @@
       }
     },
     "eclipse": {
-      "name": "月蚀",
+      "name": "星蚀",
       "description": "4月触发：施加锁定、缠绕、致盲，造成7伤害",
       "effects": {
         "inflictTargeted": "施加1个锁定标记",
@@ -1583,7 +1607,7 @@
       }
     },
     "eclipse-2": {
-      "name": "月蚀 II",
+      "name": "星蚀 II",
       "description": "包含月蚀与暗月两个变体",
       "effects": {
         "inflictBlinded": "施加1个致盲标记",
@@ -1636,15 +1660,15 @@
       }
     },
     "elusive-step": {
-      "name": "迷影步",
-      "description": "防御阶段（5骰）：根据骰面结果进行防御结算",
+      "name": "打不到我",
+      "description": "防御阶段（5骰）：若足面≥2，抵挡一半伤害（向上取整）；每有足面，造成1伤害",
       "effects": {
         "resolveDefense": "防御结算"
       }
     },
     "elusive-step-2": {
-      "name": "迷影步 II",
-      "description": "防御阶段（5骰）：升级版防御结算",
+      "name": "打不到我 II",
+      "description": "防御阶段（5骰）：若足面≥2，防止一半伤害（向上取整）；造成1×弓面数伤害",
       "effects": {
         "resolveDefense": "防御结算"
       }
@@ -1990,32 +2014,32 @@
       "description": "获得2CP。如果拥有暗影🌑，转而获得3CP。"
     },
     "moon-shadow-strike": {
-      "name": "月影突袭",
-      "description": "投掷1骰：弓→抽1牌；足→施加缠绕；月→施加致盲+锁定。"
+      "name": "月影袭人！",
+      "description": "投掷1骰：如果投出月🌙，对对手施加致盲、缠绕和锁定。否则抽取1张牌。"
     },
     "dodge": {
-      "name": "闪避！",
-      "description": "获得1个闪避标记。"
+      "name": "闪躲！",
+      "description": "1名玩家获得闪避。"
     },
     "volley": {
-      "name": "齐射！",
-      "description": "本次攻击伤害+3。"
+      "name": "万箭齐发！",
+      "description": "攻击修正。投掷5骰：增加弓🏹数量的伤害。施加缠绕。"
     },
     "watch-out": {
-      "name": "小心！",
-      "description": "对对手施加锁定。"
+      "name": "看箭！",
+      "description": "攻击修正。投掷1骰：弓🏹→增加2伤害；足🦶→施加缠绕；月🌙→施加致盲。"
     },
     "moonlight-magic": {
       "name": "月光魔法！",
       "description": "获得闪避，对对手施加致盲、缠绕和锁定。"
     },
     "upgrade-elusive-step-2": {
-      "name": "迷影步 II",
-      "description": "升级迷影步至 II 级。"
+      "name": "打不到我 II",
+      "description": "升级打不到我至 II 级。"
     },
     "upgrade-eclipse-2": {
-      "name": "月蚀 II",
-      "description": "升级月蚀至 II 级。"
+      "name": "星蚀 II",
+      "description": "升级星蚀至 II 级。"
     },
     "upgrade-blinding-shot-2": {
       "name": "致盲射击 II",
@@ -2026,20 +2050,20 @@
       "description": "升级缠绕射击至 II 级。"
     },
     "upgrade-exploding-arrow-3": {
-      "name": "爆裂箭 III",
-      "description": "升级爆裂箭至 III 级。"
+      "name": "爆炸射击 III",
+      "description": "升级爆炸射击至 III 级。"
     },
     "upgrade-exploding-arrow-2": {
-      "name": "爆裂箭 II",
-      "description": "升级爆裂箭至 II 级。"
+      "name": "爆炸射击 II",
+      "description": "升级爆炸射击至 II 级。"
     },
     "upgrade-covering-fire-2": {
-      "name": "掩护射击 II",
-      "description": "升级掩护射击至 II 级。"
+      "name": "隐蔽射击 II",
+      "description": "升级隐蔽射击至 II 级。"
     },
     "upgrade-deadeye-shot-2": {
-      "name": "精准射击 II",
-      "description": "升级隐蔽射击至 II 级。"
+      "name": "赐死射击 II",
+      "description": "升级赐死射击至 II 级。"
     },
     "upgrade-longbow-3": {
       "name": "长弓 III",
@@ -2107,8 +2131,30 @@
     },
     "card-tithes-2": {
       "name": "教会税 II",
-      "description": "升级教会税：收入阶段额外获得1CP。"
+      "description": "升级教皇税：抽牌消耗降为2CP，进攻阶段激活含🙏技能时获得1CP。"
     }
+  },
+  "passive": {
+    "tithes": {
+      "name": "教皇税",
+      "reroll": "花费1CP重掷1颗你的骰子",
+      "draw": "花费3CP抽1张牌"
+    },
+    "tithes-2": {
+      "name": "教皇税 II",
+      "reroll": "花费1CP重掷1颗你的骰子",
+      "draw": "花费2CP抽1张牌"
+    },
+    "useButton": "使用",
+    "rerollDie": "选择要重掷的骰子",
+    "drawCard": "抽1张牌",
+    "cpCost": "{{cost}}CP",
+    "action": {
+      "reroll": "重掷",
+      "draw": "抽牌",
+      "cancel": "取消"
+    },
+    "selectDieHint": "点击骰子重掷"
   },
   "cardSpotlight": {
     "playerPlayed": "{{player}} 打出了卡牌",

@@ -96,6 +96,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         ]
     },
     // 聚宝盆 (Cornucopia) I
+    // 抽 1×Card面 牌，若有Shadow弃对手1牌
     {
         id: 'cornucopia',
         name: abilityText('cornucopia', 'name'),
@@ -104,8 +105,7 @@ export const SHADOW_THIEF_ABILITIES: AbilityDef[] = [
         sfxKey: SHADOW_THIEF_SFX_DAGGER,
         trigger: { type: 'diceSet', faces: { [FACE.CARD]: 2 } },
         effects: [
-            { description: 'Draw 1 Card', action: { type: 'drawCard', target: 'self', value: 1 }, timing: 'withDamage' },
-            { description: '若有Shadow丢弃对手1卡', action: { type: 'custom', target: 'opponent', customActionId: 'shadow_thief-cornucopia-discard' }, timing: 'withDamage' }
+            { description: '抽Card面数量牌+若有Shadow弃对手1牌', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-cornucopia' }, timing: 'withDamage' }
         ]
     },
     // 终极: Shadow Shank

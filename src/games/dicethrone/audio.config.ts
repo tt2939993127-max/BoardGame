@@ -120,10 +120,8 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         }
 
         if (event.type === 'CP_CHANGED') {
-            const delta = (event as AudioEvent & { payload?: { delta?: number } }).payload?.delta ?? 0;
-            return delta >= 0
-                ? 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001'
-                : 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
+            // CP 变化音效由 FX 飞行动画 onImpact 播放，feedbackResolver 不再处理
+            return null;
         }
 
         if (event.type === 'CARD_PLAYED') {

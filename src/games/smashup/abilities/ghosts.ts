@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, grantExtraAction, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, recoverCardsFromDiscard } from '../domain/abilityHelpers';
+import { grantExtraMinion, grantExtraAction, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, recoverCardsFromDiscard, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, VpAwardedEvent, SmashUpEvent, MinionPlayedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -55,17 +55,17 @@ export function registerGhostAbilities(): void {
             if (player.hand.length > 2) return [];
             const cards = player.discard.filter(c => c.defId === 'ghost_spectre');
             if (cards.length === 0) return [];
-            const card = cards[0];
-            const def = getCardDef(card.defId) as MinionCardDef | undefined;
-            return [{
+            // 返回所有同 defId 的卡牌，用户选哪张都行
+            const def = getCardDef('ghost_spectre') as MinionCardDef | undefined;
+            return cards.map(card => ({
                 card,
-                allowedBaseIndices: 'all',
+                allowedBaseIndices: 'all' as const,
                 consumesNormalLimit: false, // 额外打出
                 sourceId: 'ghost_spectre',
                 defId: card.defId,
                 power: def?.power ?? 0,
                 name: def?.name ?? card.defId,
-            }];
+            }));
         },
     });
 }
@@ -74,7 +74,7 @@ export function registerGhostAbilities(): void {
 function ghostGhost(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const discardable = player.hand.filter(c => c.uid !== ctx.cardUid);
-    if (discardable.length === 0) return { events: [] };
+    if (discardable.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
     // Prompt 选择弃哪张（可跳过）
     const options = discardable.map((c, i) => {
         const def = getCardDef(c.defId);
@@ -94,7 +94,7 @@ function ghostSeance(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     // 打出行动卡后手牌会减1，所以用当前手牌堆?1判断
     const handAfterPlay = player.hand.length - 1;
-    if (handAfterPlay > 2) return { events: [] };
+    if (handAfterPlay > 2) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
     const drawCount = Math.max(0, 5 - handAfterPlay);
     if (drawCount === 0) return { events: [] };
     const { drawnUids } = drawCards(player, drawCount, ctx.random);
@@ -111,7 +111,7 @@ function ghostSeance(ctx: AbilityContext): AbilityResult {
 function ghostShadyDeal(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const handAfterPlay = player.hand.length - 1;
-    if (handAfterPlay > 2) return { events: [] };
+    if (handAfterPlay > 2) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
     const evt: VpAwardedEvent = {
         type: SU_EVENTS.VP_AWARDED,
         payload: { playerId: ctx.playerId, amount: 1, reason: 'ghost_shady_deal' },
@@ -167,7 +167,7 @@ function ghostMakeContact(ctx: AbilityContext): AbilityResult {
     // 前置条件：本卡必须是唯一手牌（打出后手牌为空）
     const player = ctx.state.players[ctx.playerId];
     const otherHandCards = player.hand.filter(c => c.uid !== ctx.cardUid);
-    if (otherHandCards.length > 0) return { events: [] };
+    if (otherHandCards.length > 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
 
     const targets: { uid: string; defId: string; baseIndex: number; owner: string; power: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
@@ -181,7 +181,7 @@ function ghostMakeContact(ctx: AbilityContext): AbilityResult {
             targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, power, label: `${name} (力量 ${power}) @ ${baseName}` });
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // Prompt 选择
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
@@ -197,13 +197,14 @@ function ghostMakeContact(ctx: AbilityContext): AbilityResult {
 function ghostSpirit(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const discardable = player.hand.filter(c => c.uid !== ctx.cardUid);
-    if (discardable.length === 0) return { events: [] };
+    if (discardable.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
 
-    // 找所有可消灭的对手随从（力量 ?可弃手牌数）
+    // 找所有可消灭的随从（力量 ≤ 可弃手牌数，不限所有者）
+    // 描述：「选择一个随从。你可以弃置等同于该随从力量数量的卡来消灭它。」
     const targets: { uid: string; defId: string; baseIndex: number; owner: string; power: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
-            if (m.controller === ctx.playerId) continue;
+            if (m.uid === ctx.cardUid) continue; // 排除灵魂自身
             const power = getMinionPower(ctx.state, m, i);
             if (power <= discardable.length) {
                 const def = getCardDef(m.defId) as MinionCardDef | undefined;
@@ -214,7 +215,7 @@ function ghostSpirit(ctx: AbilityContext): AbilityResult {
             }
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // Prompt 选择（包含取消选项）
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
@@ -233,7 +234,7 @@ function ghostSpirit(ctx: AbilityContext): AbilityResult {
 function ghostTheDeadRise(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const discardable = player.hand.filter(c => c.uid !== ctx.cardUid);
-    if (discardable.length === 0) return { events: [] };
+    if (discardable.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
     // 检查弃牌堆中有没有随从可打出（至少力量<1，即力量0的也不行，需力量<弃牌数）
     // 先让玩家选弃几张）?
     const options = discardable.map((c, i) => {
@@ -257,7 +258,7 @@ function ghostTheDeadRise(ctx: AbilityContext): AbilityResult {
 function ghostAcrossTheDivide(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const minionsInDiscard = player.discard.filter(c => c.type === 'minion');
-    if (minionsInDiscard.length === 0) return { events: [] };
+    if (minionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     // ?defId 分组
     const groups = new Map<string, { defId: string; uids: string[]; name: string }>();
     for (const c of minionsInDiscard) {
@@ -313,12 +314,14 @@ export function registerGhostInteractionHandlers(): void {
         if (discardable.length < power) return { state, events: [] };
         // 力量为 0 → 无需弃牌直接消灭（但仍需确认"你可以"）
         if (power === 0) {
+            const base = state.core.bases[baseIndex];
+            const targetMinion = base.minions.find(m => m.uid === minionUid);
             const confirmInteraction = createSimpleChoice(
                 `ghost_spirit_confirm_${timestamp}`, playerId,
                 `是否消灭该随从？（力量 0，无需弃牌）`,
                 [
-                    { id: 'yes', label: '消灭', value: { confirm: true, minionUid, baseIndex } },
-                    { id: 'no', label: '跳过', value: { confirm: false } },
+                    { id: 'yes', label: '消灭', value: { confirm: true, minionUid, minionDefId: targetMinion?.defId, baseIndex, baseDefId: base.defId } },
+                    { id: 'no', label: '跳过', value: { confirm: false, minionDefId: targetMinion?.defId } },
                 ],
                 'ghost_spirit_confirm',
             );

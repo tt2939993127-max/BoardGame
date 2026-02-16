@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { DiceThroneDebugConfig } from './debug-config';
-import { getViewportCenter, getElementCenter } from '../../components/common/animations/FlyingEffect';
+import { getElementCenter } from '../../components/common/animations/FlyingEffect';
 import { usePulseGlow } from '../../components/common/animations/PulseGlow';
 import { useImpactFeedback } from '../../components/common/animations';
 import { useFxBus, FxLayer } from '../../engine/fx';
@@ -59,6 +59,7 @@ import { LayoutSaveButton } from './ui/LayoutSaveButton';
 import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
 import { useAttackShowcase } from './hooks/useAttackShowcase';
 import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
+import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
 
 type DiceThroneMatchState = MatchState<DiceThroneCore>;
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
@@ -251,6 +252,8 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // DOM 引用
     const opponentHpRef = React.useRef<HTMLDivElement>(null);
     const selfHpRef = React.useRef<HTMLDivElement>(null);
+    const opponentCpRef = React.useRef<HTMLDivElement>(null);
+    const selfCpRef = React.useRef<HTMLDivElement>(null);
     const opponentBuffRef = React.useRef<HTMLDivElement>(null);
     const opponentHeaderRef = React.useRef<HTMLDivElement>(null);
     const selfBuffRef = React.useRef<HTMLDivElement>(null);
@@ -412,6 +415,65 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         (player.statusEffects?.[STATUS_IDS.KNOCKDOWN] ?? 0) > 0 &&
         (player.resources?.[RESOURCE_IDS.CP] ?? 0) >= 2;
 
+    // ========== 被动能力（如教皇税）==========
+    const [rerollSelectingAction, setRerollSelectingAction] = React.useState<{ passiveId: string; actionIndex: number } | null>(null);
+
+    const playerPassives = React.useMemo(
+        () => getPlayerPassiveAbilities(G, rootPid),
+        [G, rootPid]
+    );
+
+    const passiveActionUsability = React.useMemo(() => {
+        const map = new Map<string, boolean[]>();
+        for (const passive of playerPassives) {
+            const usability = passive.actions.map((_, idx) =>
+                !isSpectator && isPassiveActionUsable(G, rootPid, passive.id, idx, currentPhase)
+            );
+            map.set(passive.id, usability);
+        }
+        return map;
+    }, [playerPassives, G, rootPid, currentPhase, isSpectator]);
+
+    const handlePassiveActionClick = React.useCallback((passiveId: string, actionIndex: number) => {
+        const passive = playerPassives.find(p => p.id === passiveId);
+        if (!passive) return;
+        const action = passive.actions[actionIndex];
+        if (!action) return;
+
+        if (action.type === 'rerollDie') {
+            // 进入骰子选择模式
+            setRerollSelectingAction({ passiveId, actionIndex });
+        } else if (action.type === 'drawCard') {
+            // 直接执行抽牌
+            engineMoves.usePassiveAbility(passiveId, actionIndex);
+        }
+    }, [playerPassives, engineMoves]);
+
+    // 被动重掷：骰子选择回调
+    const handlePassiveRerollDieSelect = React.useCallback((dieId: number) => {
+        if (!rerollSelectingAction) return;
+        engineMoves.usePassiveAbility(
+            rerollSelectingAction.passiveId,
+            rerollSelectingAction.actionIndex,
+            dieId
+        );
+        setRerollSelectingAction(null);
+        setRerollingDiceIds([dieId]);
+        setTimeout(() => setRerollingDiceIds([]), 600);
+    }, [rerollSelectingAction, engineMoves, setRerollingDiceIds]);
+
+    const passiveAbilityProps = React.useMemo(() => {
+        if (playerPassives.length === 0) return null;
+        return {
+            passives: playerPassives,
+            actionUsability: passiveActionUsability,
+            currentCp: player.resources[RESOURCE_IDS.CP] ?? 0,
+            rerollSelectingAction,
+            onActionClick: handlePassiveActionClick,
+            onCancelRerollSelect: () => setRerollSelectingAction(null),
+        };
+    }, [playerPassives, passiveActionUsability, player.resources, rerollSelectingAction, handlePassiveActionClick]);
+
     // 使用 useDiceInteractionConfig Hook 生成骰子交互配置（简化132行代码）
     const diceInteractionConfig = useDiceInteractionConfig({
         pendingInteraction,
@@ -521,12 +583,14 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     };
 
     const getAbilityStartPos = React.useCallback((abilityId?: string) => {
-        if (!abilityId) return getViewportCenter();
+        if (!abilityId) return getElementCenter(opponentHeaderRef.current);
         const slotId = getAbilitySlotId(abilityId);
-        if (!slotId) return getViewportCenter();
+        if (!slotId) return getElementCenter(opponentHeaderRef.current);
         const element = document.querySelector(`[data-ability-slot="${slotId}"]`) as HTMLElement | null;
-        return getElementCenter(element);
-    }, []);
+        // 技能槽在 DOM 中存在 → 从技能槽飞出（自己的技能）
+        // 技能槽不存在 → 说明是对手的技能，从对手悬浮窗飞出
+        return element ? getElementCenter(element) : getElementCenter(opponentHeaderRef.current);
+    }, [opponentHeaderRef]);
 
     // 获取效果动画的起点位置（优先从技能槽位置获取）
     const getEffectStartPos = React.useCallback(
@@ -583,7 +647,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
     React.useEffect(() => {
         let isActive = true;
-        loadStatusAtlases()
+        loadStatusAtlases(locale)
             .then((config) => {
                 if (isActive) setStatusIconAtlas(config);
             })
@@ -593,7 +657,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         return () => {
             isActive = false;
         };
-    }, []);
+    }, [locale]);
 
     const shouldBlockTutorialAction = React.useCallback((targetId: string) => {
         return Boolean(
@@ -676,8 +740,11 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         refs: {
             opponentHp: opponentHpRef,
             selfHp: selfHpRef,
+            opponentCp: opponentCpRef,
+            selfCp: selfCpRef,
             opponentBuff: opponentBuffRef,
             selfBuff: selfBuffRef,
+            opponentHeader: opponentHeaderRef,
         },
         getEffectStartPos,
         getAbilityStartPos,
@@ -773,6 +840,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         headerError={headerError}
                         opponentBuffRef={opponentBuffRef}
                         opponentHpRef={opponentHpRef}
+                        opponentCpRef={opponentCpRef}
                         statusIconAtlas={statusIconAtlas}
                         locale={locale}
                         containerRef={opponentHeaderRef}
@@ -790,7 +858,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         // 飞行动画到达目标：释放对应 HP 冻结 + 触发受击反馈
                         const info = fxImpactMapRef.current.get(id);
                         if (info) {
-                            damageBuffer.release([info.bufferKey]);
+                            // CP 步骤 bufferKey 为空，无需释放缓冲
+                            if (info.bufferKey) {
+                                damageBuffer.release([info.bufferKey]);
+                            }
                             // 根据 bufferKey 判断目标，触发对应面板的受击反馈
                             if (info.damage > 0) {
                                 const isOpponentHit = info.bufferKey === `hp-${otherPid}`;
@@ -816,6 +887,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         statusIconAtlas={statusIconAtlas}
                         selfBuffRef={selfBuffRef}
                         selfHpRef={selfHpRef}
+                        selfCpRef={selfCpRef}
                         hitStopActive={selfImpact.hitStop.isActive}
                         hitStopConfig={selfImpact.hitStop.config}
                         drawDeckRef={drawDeckRef}
@@ -866,12 +938,19 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         rollLimit={G.rollLimit}
                         rollConfirmed={rollConfirmed}
                         currentPhase={currentPhase}
-                        canInteractDice={canInteractDice}
+                        canInteractDice={canInteractDice || !!rerollSelectingAction}
                         isRolling={isRolling}
                         setIsRolling={(rolling: boolean) => setIsRolling(rolling)}
                         rerollingDiceIds={rerollingDiceIds}
                         locale={locale}
-                        onToggleLock={(id) => engineMoves.toggleDieLock(id)}
+                        onToggleLock={(id) => {
+                            // 被动重掷选择模式：点击骰子直接执行重掷
+                            if (rerollSelectingAction) {
+                                handlePassiveRerollDieSelect(id);
+                                return;
+                            }
+                            engineMoves.toggleDieLock(id);
+                        }}
                         onRoll={() => {
                             if (!canInteractDice) return;
                             if (shouldBlockTutorialAction('dice-roll-button')) return;
@@ -900,6 +979,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         sellButtonVisible={sellButtonVisible}
                         diceInteractionConfig={diceInteractionConfig}
                         activeModifiers={activeModifiers}
+                        passiveAbilityProps={passiveAbilityProps}
                     />
                 </div>
 
@@ -923,6 +1003,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 thinkingOffsetClass={thinkingOffsetClass}
                                 onResponsePass={() => engineMoves.responsePass()}
                                 currentPhase={currentPhase}
+                                isPassiveRerollSelecting={!!rerollSelectingAction}
                             />
                             <HandArea
                                 hand={handOwner.hand}

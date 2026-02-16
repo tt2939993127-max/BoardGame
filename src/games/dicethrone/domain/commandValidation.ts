@@ -38,6 +38,7 @@ import type {
     PayToRemoveKnockdownCommand,
     RerollBonusDieCommand,
     SkipBonusDiceRerollCommand,
+    UsePassiveAbilityCommand,
 } from './types';
 import {
     getRollerId,
@@ -238,10 +239,11 @@ const validateSelectAbility = (
         }
 
         // 防御阶段分两步：
-        // 1. 掷骰前选择防御技能（规则 §3.6 步骤 2）：只需验证玩家拥有该防御技能
+        // 1. 掷骰前选择/切换防御技能（规则 §3.6 步骤 2）：只需验证玩家拥有该防御技能
+        //    暗影刺客等拥有多个防御技能的英雄，在投掷前可以自由切换选择
         // 2. 掷骰后确认骰面后的技能激活：用 getAvailableAbilityIds 检查骰面
-        if (!state.pendingAttack.defenseAbilityId && state.rollCount === 0) {
-            // 掷骰前选择：验证玩家拥有该防御技能（不检查骰面）
+        if (state.rollCount === 0) {
+            // 掷骰前选择/切换：验证玩家拥有该防御技能（不检查骰面）
             const defender = state.players[state.pendingAttack.defenderId];
             if (!defender) return fail('player_not_found');
             const hasAbility = defender.abilities.some(a => {
@@ -855,6 +857,43 @@ const validateSkipBonusDiceReroll = (
     return ok();
 };
 
+/**
+ * 验证使用被动能力命令（如教皇税：花费 CP 重掷/抽牌）
+ */
+const validateUsePassiveAbility = (
+    state: DiceThroneCore,
+    cmd: UsePassiveAbilityCommand,
+    playerId: PlayerId,
+    _phase: TurnPhase,
+): ValidationResult => {
+    const player = state.players[playerId];
+    if (!player) return fail('player_not_found');
+
+    const passives = player.passiveAbilities ?? [];
+    const passive = passives.find(p => p.id === cmd.payload.passiveId);
+    if (!passive) return fail('passive_not_found');
+
+    const action = passive.actions[cmd.payload.actionIndex];
+    if (!action) return fail('action_not_found');
+
+    // CP 检查
+    const cp = player.resources[RESOURCE_IDS.CP] ?? 0;
+    if (cp < action.cpCost) return fail('not_enough_cp');
+
+    // rerollDie 需要 targetDieId
+    if (action.type === 'rerollDie' && cmd.payload.targetDieId === undefined) {
+        return fail('target_die_required');
+    }
+
+    // rerollDie 需要在投掷阶段且有骰子
+    if (action.type === 'rerollDie' && cmd.payload.targetDieId !== undefined) {
+        const die = state.dice.find(d => d.id === cmd.payload.targetDieId);
+        if (!die) return fail('die_not_found');
+    }
+
+    return ok();
+};
+
 // ============================================================================
 // 主验证入口
 // ============================================================================
@@ -904,6 +943,7 @@ export const validateCommand = (
     }
     if (isCommandType(command, 'REROLL_BONUS_DIE')) return validateRerollBonusDie(state, command, playerId);
     if (isCommandType(command, 'SKIP_BONUS_DICE_REROLL')) return validateSkipBonusDiceReroll(state, command, playerId);
+    if (isCommandType(command, 'USE_PASSIVE_ABILITY')) return validateUsePassiveAbility(state, command, playerId, phase);
 
     const _exhaustive: never = command;
     return fail(`unknown_command: ${(_exhaustive as DiceThroneCommand).type}`);

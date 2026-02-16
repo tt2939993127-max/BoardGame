@@ -4,7 +4,7 @@
 
 import type { AbilityCard } from '../../types';
 import type { AbilityEffect } from '../../domain/combat';
-import { DICETHRONE_CARD_ATLAS_IDS, TOKEN_IDS } from '../../domain/ids';
+import { DICETHRONE_CARD_ATLAS_IDS, TOKEN_IDS, PALADIN_DICE_FACE_IDS as PALADIN_FACES } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import type { RandomFn } from '../../../../engine/types';
 import {
@@ -64,12 +64,11 @@ export const PALADIN_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-consecrate', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 2 },
-        effects: [
-            grantToken(TOKEN_IDS.PROTECT, 1, '获得守护'),
-            grantToken(TOKEN_IDS.RETRIBUTION, 1, '获得神罚'),
-            grantToken(TOKEN_IDS.CRIT, 1, '获得暴击'),
-            grantToken(TOKEN_IDS.ACCURACY, 1, '获得精准')
-        ]
+        effects: [{
+            description: '选择1名玩家获得守护、弹反、暴击和精准',
+            action: { type: 'custom', target: 'self', customActionId: 'paladin-consecrate' },
+            timing: 'immediate'
+        }]
     },
     {
         id: 'card-divine-favor',
@@ -81,21 +80,37 @@ export const PALADIN_CARDS: AbilityCard[] = [
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 3 },
         effects: [{
             description: '投掷1骰：剑-抽2; 头盔-治愈3; 心-治愈4; 祈祷-3CP',
-            action: { type: 'custom', target: 'self', customActionId: 'paladin-divine-favor' },
+            action: {
+                type: 'rollDie', target: 'self', diceCount: 1,
+                conditionalEffects: [
+                    { face: PALADIN_FACES.SWORD, drawCard: 2 },
+                    { face: PALADIN_FACES.HELM, heal: 3 },
+                    { face: PALADIN_FACES.HEART, heal: 4 },
+                    { face: PALADIN_FACES.PRAY, cp: 3 },
+                ],
+            },
             timing: 'immediate'
         }]
     },
     {
         id: 'card-absolution',
         name: cardText('card-absolution', 'name'),
-        type: 'action', // Instant/Reaction
+        type: 'action',
         cpCost: 1,
         timing: 'instant',
         description: cardText('card-absolution', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 4 },
         effects: [{
             description: '被攻击后投掷1骰防御',
-            action: { type: 'custom', target: 'self', customActionId: 'paladin-absolution' },
+            action: {
+                type: 'rollDie', target: 'self', diceCount: 1,
+                conditionalEffects: [
+                    { face: PALADIN_FACES.SWORD, bonusDamage: 3 },
+                    { face: PALADIN_FACES.HELM, grantDamageShield: { value: 3 } },
+                    { face: PALADIN_FACES.HEART, grantDamageShield: { value: 5 } },
+                    { face: PALADIN_FACES.PRAY, grantDamageShield: { value: 2 }, cp: 2 },
+                ],
+            },
             timing: 'immediate'
         }]
     },
@@ -110,7 +125,13 @@ export const PALADIN_CARDS: AbilityCard[] = [
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 11 },
         effects: [{
             description: '投掷1骰：祈祷-4CP; 否则-抽1',
-            action: { type: 'custom', target: 'self', customActionId: 'paladin-gods-grace' },
+            action: {
+                type: 'rollDie', target: 'self', diceCount: 1,
+                conditionalEffects: [
+                    { face: PALADIN_FACES.PRAY, cp: 4 },
+                ],
+                defaultEffect: { drawCard: 1 },
+            },
             timing: 'immediate'
         }]
     },

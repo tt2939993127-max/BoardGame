@@ -42,6 +42,9 @@ export interface GameHintsProps {
 
     /** 当前阶段 */
     currentPhase: TurnPhase;
+
+    /** 是否处于被动重掷选择模式 */
+    isPassiveRerollSelecting?: boolean;
 }
 
 /**
@@ -181,6 +184,26 @@ const ResponseWindowHint: React.FC<{
 };
 
 /**
+ * 被动重掷选择提示
+ */
+const PassiveRerollHint: React.FC = () => {
+    const { t } = useTranslation('game-dicethrone');
+
+    return (
+        <div
+            className="absolute top-[6vw] left-1/2 -translate-x-1/2 pointer-events-none animate-pulse"
+            style={{ zIndex: UI_Z_INDEX.hint }}
+        >
+            <div className="bg-emerald-600/90 backdrop-blur-sm rounded-xl px-[2vw] py-[0.6vw] border border-emerald-400/60 shadow-lg text-center">
+                <span className="text-white font-bold text-[1vw] tracking-wide">
+                    {t('passive.selectDieHint')}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+/**
  * 游戏提示统一管理组件
  */
 export const GameHints: React.FC<GameHintsProps> = ({
@@ -194,6 +217,7 @@ export const GameHints: React.FC<GameHintsProps> = ({
     isResponder,
     thinkingOffsetClass,
     onResponsePass,
+    isPassiveRerollSelecting,
 }) => {
     return (
         <>
@@ -205,6 +229,11 @@ export const GameHints: React.FC<GameHintsProps> = ({
             {/* 骰子交互提示（画面顶部中央） */}
             {isDiceInteraction && isInteractionOwner && pendingInteraction && (
                 <DiceInteractionHint pendingInteraction={pendingInteraction} />
+            )}
+
+            {/* 被动重掷选择提示 */}
+            {isPassiveRerollSelecting && (
+                <PassiveRerollHint />
             )}
 
             {/* 对手思考中提示（画面正中央，无背景，缓慢闪烁） */}

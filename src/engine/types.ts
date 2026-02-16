@@ -157,6 +157,17 @@ export type ActionLogSegment =
           displayText: string;
           /** 分解明细行 */
           lines: BreakdownLine[];
+      }
+    | {
+          type: 'diceResult';
+          /** 精灵图资源路径（不含扩展名，如 'dicethrone/images/monk/dice'） */
+          spriteAsset: string;
+          /** 精灵图网格列数 */
+          spriteCols: number;
+          /** 精灵图网格行数 */
+          spriteRows: number;
+          /** 每个骰子的点数 (1-6) 和在精灵图中的位置 */
+          dice: Array<{ value: number; col: number; row: number }>;
       };
 
 /**

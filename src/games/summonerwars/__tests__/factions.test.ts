@@ -107,7 +107,7 @@ describe('cardRegistry 卡牌池去重', () => {
         }
     });
 
-    it('每个阵营的卡牌池应包含召唤师、冠军、普通、事件、建筑', () => {
+    it('每个阵营的卡牌池应包含召唤师、冠军、普通、事件（建筑可选，gate 已由 autoCards 填充）', () => {
         const selectableFactions = FACTION_CATALOG.filter(f => f.selectable);
 
         for (const faction of selectableFactions) {
@@ -118,7 +118,8 @@ describe('cardRegistry 卡牌池去重', () => {
             expect(groups.champions.length).toBeGreaterThanOrEqual(1);
             expect(groups.commons.length).toBeGreaterThanOrEqual(1);
             expect(groups.events.length).toBeGreaterThanOrEqual(1);
-            expect(groups.structures.length).toBeGreaterThanOrEqual(1);
+            // 建筑不强制要求：gate 类建筑已由 autoCards 自动填充，不进入卡池
+            // 只有拥有非 gate 建筑的阵营（如 frost 的护城墙）才会有 structures
         }
     });
 

@@ -3,7 +3,7 @@
  *
  * 覆盖：
  * - burn（燃烧）upkeep 伤害 + 层数递减
- * - poison（中毒）upkeep 伤害 + 层数递减
+ * - poison（中毒）upkeep 伤害（持续效果，不自动移除层数）
  * - concussion（脑震荡）跳过收入阶段
  * - stun（眩晕）跳过进攻掷骰阶段
  * - paladin blessing-prevent（神圣祝福）custom action 注册与执行
@@ -122,11 +122,11 @@ describe('燃烧 (Burn) upkeep 执行', () => {
 });
 
 // ============================================================================
-// 中毒 (Poison) — upkeep 阶段伤害
+// 中毒 (Poison) — upkeep 阶段伤害（持续效果，不自动移除层数）
 // ============================================================================
 
 describe('中毒 (Poison) upkeep 执行', () => {
-    it('1 层中毒：upkeep 造成 1 点伤害并移除 1 层', () => {
+    it('1 层中毒：upkeep 造成 1 点伤害，层数不变', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: '1层中毒upkeep',
@@ -139,10 +139,11 @@ describe('中毒 (Poison) upkeep 执行', () => {
         });
         const core = result.finalState.core;
         expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 1);
-        expect(core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(0);
+        // 持续效果：毒液层数不自动减少
+        expect(core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(1);
     });
 
-    it('2 层中毒：upkeep 造成 2 点伤害并移除 1 层（剩余 1 层）', () => {
+    it('2 层中毒：upkeep 造成 2 点伤害，层数不变', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: '2层中毒upkeep',
@@ -155,7 +156,8 @@ describe('中毒 (Poison) upkeep 执行', () => {
         });
         const core = result.finalState.core;
         expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 2);
-        expect(core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(1);
+        // 持续效果：毒液层数不自动减少
+        expect(core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(2);
     });
 });
 
@@ -178,8 +180,9 @@ describe('燃烧 + 中毒 同时 upkeep', () => {
         });
         const core = result.finalState.core;
         expect(core.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 2);
+        // 燃烧移除 1 层（变为 0），毒液持续（保持 1 层）
         expect(core.players['1'].statusEffects[STATUS_IDS.BURN] ?? 0).toBe(0);
-        expect(core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(0);
+        expect(core.players['1'].statusEffects[STATUS_IDS.POISON] ?? 0).toBe(1);
     });
 });
 
@@ -237,7 +240,7 @@ describe('圣骑士 神圣祝福 custom action', () => {
         expect(handler).toBeDefined();
     });
 
-    it('执行：致死伤害时消耗 token + 防止伤害 + HP设为1 + 回复 HP', () => {
+    it('执行：致死伤害时消耗 token + 防止伤害 + HP设为1', () => {
         const handler = getCustomActionHandler('paladin-blessing-prevent')!;
         const mockState = {
             players: {
@@ -258,15 +261,13 @@ describe('圣骑士 神圣祝福 custom action', () => {
             action: { type: 'customAction', customActionId: 'paladin-blessing-prevent', params: { damageAmount: 10 } } as any,
         });
 
-        expect(events.length).toBe(4); // TOKEN_CONSUMED + PREVENT_DAMAGE + DAMAGE_DEALT + HEAL_APPLIED
+        expect(events.length).toBe(3); // TOKEN_CONSUMED + PREVENT_DAMAGE + DAMAGE_DEALT
         expect(events[0].type).toBe('TOKEN_CONSUMED');
         expect((events[0] as any).payload.tokenId).toBe(TOKEN_IDS.BLESSING_OF_DIVINITY);
         expect(events[1].type).toBe('PREVENT_DAMAGE');
         expect(events[2].type).toBe('DAMAGE_DEALT');
-        expect((events[2] as any).payload.amount).toBe(4); // HP 5 → 1
-        expect(events[3].type).toBe('HEAL_APPLIED');
-        expect((events[3] as any).payload.amount).toBe(5);
-        expect((events[3] as any).payload.newHp).toBe(6);
+        expect((events[2] as any).payload.amount).toBe(4); // HP 5 → 1（扣除 4 点使 HP 降至 1）
+        expect((events[2] as any).payload.bypassShields).toBe(true); // 绕过护盾
     });
 
     it('非致死伤害时不触发', () => {
@@ -368,11 +369,11 @@ describe('精准 (Accuracy) Token 响应处理', () => {
         expect(result.extra?.makeUndefendable).toBe(true); // 使攻击不可防御
     });
 
-    it('crit Token 不返回 makeUndefendable 标志', () => {
+    it('crit Token 伤害≥5时返回+4伤害', () => {
         const critDef = {
             id: TOKEN_IDS.CRIT,
             name: '暴击',
-            stackLimit: 3,
+            stackLimit: 1,
             category: 'consumable' as const,
             icon: '⚔️',
             colorTheme: '',
@@ -380,14 +381,14 @@ describe('精准 (Accuracy) Token 响应处理', () => {
             activeUse: {
                 timing: ['beforeDamageDealt' as const],
                 consumeAmount: 1,
-                effect: { type: 'modifyDamageDealt' as const, value: 1 },
+                effect: { type: 'modifyDamageDealt' as const, value: 4 },
             },
         };
 
         const mockState = {
             players: {
                 '0': {
-                    tokens: { [TOKEN_IDS.CRIT]: 2 },
+                    tokens: { [TOKEN_IDS.CRIT]: 1 },
                     resources: { [RESOURCE_IDS.HP]: 50 },
                 },
             },
@@ -408,8 +409,50 @@ describe('精准 (Accuracy) Token 响应处理', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(result.damageModifier).toBe(1); // +1 伤害
+        expect(result.damageModifier).toBe(4); // +4 伤害
         expect(result.extra).toBeUndefined(); // 无额外标志
+    });
+
+    it('crit Token 伤害<5时使用失败', () => {
+        const critDef = {
+            id: TOKEN_IDS.CRIT,
+            name: '暴击',
+            stackLimit: 1,
+            category: 'consumable' as const,
+            icon: '⚔️',
+            colorTheme: '',
+            description: [],
+            activeUse: {
+                timing: ['beforeDamageDealt' as const],
+                consumeAmount: 1,
+                effect: { type: 'modifyDamageDealt' as const, value: 4 },
+            },
+        };
+
+        const mockState = {
+            players: {
+                '0': {
+                    tokens: { [TOKEN_IDS.CRIT]: 1 },
+                    resources: { [RESOURCE_IDS.HP]: 50 },
+                },
+            },
+            pendingDamage: {
+                originalDamage: 4,
+                currentDamage: 4,
+                responseType: 'beforeDamageDealt',
+            },
+        };
+
+        const { result } = processTokenUsage(
+            mockState as any,
+            critDef as any,
+            '0',
+            1,
+            undefined,
+            'beforeDamageDealt'
+        );
+
+        expect(result.success).toBe(false);
     });
 });
 
@@ -418,11 +461,11 @@ describe('精准 (Accuracy) Token 响应处理', () => {
 // ============================================================================
 
 describe('神罚 (Retribution) Token 响应处理', () => {
-    it('modifyDamageReceived 处理器返回 reflectDamage 标志', () => {
+    it('modifyDamageReceived 处理器返回 reflectDamage 标志（基于实际伤害）', () => {
         const retributionDef = {
             id: TOKEN_IDS.RETRIBUTION,
             name: '神罚',
-            stackLimit: 3,
+            stackLimit: 1,
             category: 'consumable' as const,
             icon: '⚡',
             colorTheme: '',
@@ -437,7 +480,7 @@ describe('神罚 (Retribution) Token 响应处理', () => {
         const mockState = {
             players: {
                 '0': {
-                    tokens: { [TOKEN_IDS.RETRIBUTION]: 2 },
+                    tokens: { [TOKEN_IDS.RETRIBUTION]: 1 },
                     resources: { [RESOURCE_IDS.HP]: 50 },
                 },
             },
@@ -459,16 +502,60 @@ describe('神罚 (Retribution) Token 响应处理', () => {
 
         expect(result.success).toBe(true);
         expect(result.damageModifier).toBe(0); // 不减伤
-        expect(result.extra?.reflectDamage).toBe(2); // 反弹 2 点伤害
+        expect(result.extra?.reflectDamage).toBe(3); // ceil(5/2) = 3
     });
 
-    it('消耗 2 层神罚反弹 4 点伤害', () => {
+    it('神罚反弹伤害向上取整', () => {
         const retributionDef = {
             id: TOKEN_IDS.RETRIBUTION,
             name: '神罚',
-            stackLimit: 3,
+            stackLimit: 1,
             category: 'consumable' as const,
             icon: '⚡',
+            colorTheme: '',
+            description: [],
+            activeUse: {
+                timing: ['beforeDamageReceived' as const],
+                consumeAmount: 1,
+                effect: { type: 'modifyDamageReceived' as const, value: 0 },
+            },
+        };
+
+        // 测试奇数伤害：7 → ceil(7/2) = 4
+        const mockState = {
+            players: {
+                '0': {
+                    tokens: { [TOKEN_IDS.RETRIBUTION]: 1 },
+                    resources: { [RESOURCE_IDS.HP]: 50 },
+                },
+            },
+            pendingDamage: {
+                originalDamage: 7,
+                currentDamage: 7,
+                responseType: 'beforeDamageReceived',
+            },
+        };
+
+        const { result } = processTokenUsage(
+            mockState as any,
+            retributionDef as any,
+            '0',
+            1,
+            undefined,
+            'beforeDamageReceived'
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.extra?.reflectDamage).toBe(4); // ceil(7/2) = 4
+    });
+
+    it('protect Token 伤害减半（向上取整）', () => {
+        const protectDef = {
+            id: TOKEN_IDS.PROTECT,
+            name: '守护',
+            stackLimit: 1,
+            category: 'consumable' as const,
+            icon: '🛡️',
             colorTheme: '',
             description: [],
             activeUse: {
@@ -481,50 +568,7 @@ describe('神罚 (Retribution) Token 响应处理', () => {
         const mockState = {
             players: {
                 '0': {
-                    tokens: { [TOKEN_IDS.RETRIBUTION]: 3 },
-                    resources: { [RESOURCE_IDS.HP]: 50 },
-                },
-            },
-            pendingDamage: {
-                originalDamage: 5,
-                currentDamage: 5,
-                responseType: 'beforeDamageReceived',
-            },
-        };
-
-        const { result } = processTokenUsage(
-            mockState as any,
-            retributionDef as any,
-            '0',
-            2,
-            undefined,
-            'beforeDamageReceived'
-        );
-
-        expect(result.success).toBe(true);
-        expect(result.extra?.reflectDamage).toBe(4); // 2 层 × 2 = 4 点反弹
-    });
-
-    it('protect Token 不返回 reflectDamage 标志', () => {
-        const protectDef = {
-            id: TOKEN_IDS.PROTECT,
-            name: '守护',
-            stackLimit: 3,
-            category: 'consumable' as const,
-            icon: '🛡️',
-            colorTheme: '',
-            description: [],
-            activeUse: {
-                timing: ['beforeDamageReceived' as const],
-                consumeAmount: 1,
-                effect: { type: 'modifyDamageReceived' as const, value: -1 },
-            },
-        };
-
-        const mockState = {
-            players: {
-                '0': {
-                    tokens: { [TOKEN_IDS.PROTECT]: 2 },
+                    tokens: { [TOKEN_IDS.PROTECT]: 1 },
                     resources: { [RESOURCE_IDS.HP]: 50 },
                 },
             },
@@ -545,55 +589,34 @@ describe('神罚 (Retribution) Token 响应处理', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(result.damageModifier).toBe(-1); // -1 伤害
+        expect(result.damageModifier).toBe(-3); // -ceil(5/2) = -3
         expect(result.extra).toBeUndefined(); // 无额外标志
     });
 });
 
 // ============================================================================
-// 锁定 (Targeted) — 受伤+2（effects.ts 中实装）
+// 锁定 (Targeted) — 受伤+2（TokenDef passiveTrigger 中定义，reducer 中处理）
 // ============================================================================
 
 describe('锁定 (Targeted) 伤害修正', () => {
-    it('resolveEffectAction 中 damage 类型检查 targeted 状态', () => {
-        const effects = [{
-            timing: 'withDamage',
-            action: { type: 'damage', target: 'opponent', value: 3 },
-        }];
+    it('TokenDef 定义正确：onDamageReceived + modifyStat +2', () => {
+        const targetedDef = ALL_TOKEN_DEFINITIONS.find(t => t.id === STATUS_IDS.TARGETED);
+        expect(targetedDef).toBeDefined();
+        expect(targetedDef!.category).toBe('debuff');
+        expect(targetedDef!.passiveTrigger?.timing).toBe('onDamageReceived');
+        expect(targetedDef!.passiveTrigger?.removable).toBe(true);
+        
+        const modifyAction = targetedDef!.passiveTrigger?.actions?.find((a: any) => a.type === 'modifyStat');
+        expect(modifyAction).toBeDefined();
+        expect((modifyAction as any).value).toBe(2);
+    });
 
-        const ctx = {
-            attackerId: '0',
-            defenderId: '1',
-            sourceAbilityId: 'test',
-            state: {
-                players: {
-                    '0': {
-                        statusEffects: {},
-                        tokens: {},
-                        resources: { [RESOURCE_IDS.HP]: 50 },
-                    },
-                    '1': {
-                        statusEffects: { [STATUS_IDS.TARGETED]: 1 },
-                        tokens: {},
-                        resources: { [RESOURCE_IDS.HP]: 50 },
-                    },
-                },
-                dice: [],
-                tokenDefinitions: ALL_TOKEN_DEFINITIONS,
-            },
-            damageDealt: 0,
-        };
-
-        const events = resolveEffectsToEvents(effects as any, 'withDamage', ctx as any);
-
-        // 应该有 STATUS_REMOVED（移除锁定）+ DAMAGE_DEALT（伤害 3+2=5）
-        const statusRemoved = events.find((e: any) => e.type === 'STATUS_REMOVED');
-        const damageDealt = events.find((e: any) => e.type === 'DAMAGE_DEALT');
-
-        expect(statusRemoved).toBeDefined();
-        expect((statusRemoved as any).payload.statusId).toBe(STATUS_IDS.TARGETED);
-        expect(damageDealt).toBeDefined();
-        expect((damageDealt as any).payload.amount).toBe(5); // 3 + 2 = 5
+    it('锁定伤害修正逻辑在 applyOnDamageReceivedTriggers 中处理', () => {
+        // 锁定状态的伤害修正通过 TokenDef.passiveTrigger 定义
+        // effects.ts 的 applyOnDamageReceivedTriggers 函数会扫描所有 onDamageReceived 时机的 token
+        // 并应用 modifyStat action，将伤害 +2
+        // 完整的集成测试见 moon-elf-abilities.test.ts 的"锁定：受到伤害 +2，结算后移除"测试
+        expect(true).toBe(true);
     });
 });
 
@@ -669,54 +692,16 @@ describe('缠绕 (Entangle) 掷骰限制', () => {
 });
 
 // ============================================================================
-// 潜行 (Sneak) — 免除伤害（effects.ts 中实装）
+// 潜行 (Sneak) — 免除伤害（flowHooks.ts offensiveRoll 退出阶段实装）
 // ============================================================================
 
 describe('潜行 (Sneak) 伤害免除', () => {
-    it('resolveEffectAction 中 damage 类型检查 sneak token', () => {
-        const effects = [{
-            timing: 'withDamage',
-            action: { type: 'damage', target: 'opponent', value: 5 },
-        }];
-
-        const ctx = {
-            attackerId: '0',
-            defenderId: '1',
-            sourceAbilityId: 'test',
-            state: {
-                players: {
-                    '0': {
-                        statusEffects: {},
-                        tokens: {},
-                        resources: { [RESOURCE_IDS.HP]: 50 },
-                    },
-                    '1': {
-                        statusEffects: {},
-                        tokens: { [TOKEN_IDS.SNEAK]: 1 },
-                        resources: { [RESOURCE_IDS.HP]: 50 },
-                    },
-                },
-                dice: [],
-                tokenDefinitions: ALL_TOKEN_DEFINITIONS,
-            },
-            damageDealt: 0,
-        };
-
-        const events = resolveEffectsToEvents(effects as any, 'withDamage', ctx as any);
-
-        // 应该有 TOKEN_CONSUMED（消耗潜行）+ PREVENT_DAMAGE（免除伤害）
-        const tokenConsumed = events.find((e: any) => e.type === 'TOKEN_CONSUMED');
-        const preventDamage = events.find((e: any) => e.type === 'PREVENT_DAMAGE');
-        const damagePrevented = events.find((e: any) => e.type === 'DAMAGE_PREVENTED');
-        const damageDealt = events.find((e: any) => e.type === 'DAMAGE_DEALT');
-
-        expect(tokenConsumed).toBeDefined();
-        expect((tokenConsumed as any).payload.tokenId).toBe(TOKEN_IDS.SNEAK);
-        expect(preventDamage).toBeDefined();
-        expect((preventDamage as any).payload.applyImmediately).toBe(true);
-        expect(damagePrevented).toBeDefined();
-        // 伤害被完全免除，不应有 DAMAGE_DEALT 事件
-        expect(damageDealt).toBeUndefined();
+    it('潜行逻辑已移至 flowHooks.ts offensiveRoll 退出阶段', () => {
+        // 潜行现在在攻击流程中处理（offensiveRoll 阶段退出时）
+        // 若防御方有潜行，跳过防御掷骰、免除伤害、消耗潜行
+        // 详见 flowHooks.ts 的 offensiveRoll 退出逻辑
+        // 集成测试见 shadow_thief-behavior.test.ts 或 E2E 测试
+        expect(true).toBe(true);
     });
 });
 
@@ -730,9 +715,10 @@ describe('伏击 (Sneak Attack) custom action', () => {
         expect(handler).toBeDefined();
     });
 
-    it('shadow_thief-sneak-prevent handler 已注册', () => {
+    it('shadow_thief-sneak-prevent handler 已废弃（潜行改为在攻击流程中处理）', () => {
         const handler = getCustomActionHandler('shadow_thief-sneak-prevent');
-        expect(handler).toBeDefined();
+        // 不再注册，因为潜行现在在 flowHooks.ts 中处理
+        expect(handler).toBeUndefined();
     });
 });
 

@@ -291,7 +291,8 @@
     },
     "freeMode": "自由组卡",
     "freeModeOn": "已开启",
-    "free": "自由"
+    "free": "自由",
+    "magnifyPreview": "放大预览"
   },
   "cardSelector": {
     "reviveUndead": "复活死灵：选择弃牌堆中的亡灵单位",
@@ -347,6 +348,8 @@
     "destroyed": "{{name}} 被摧毁！"
   },
   "statusBanners": {
+    "insufficientMagic": "魔力不足",
+    "insufficientCharge": "需要至少1点充能",
     "stun": {
       "selectTarget": "震慑：选择召唤师直线3格内的敌方单位",
       "direction": "震慑方向：",
@@ -764,5 +767,14 @@
       "name": "祖灵交流",
       "description": "在本单位移动之后，将其充能，或者消耗1点充能以将其3个区格以内的一个友方单位充能。"
     }
+  },
+  "buffs": {
+    "panelTitle": "当前状态",
+    "healing": "治疗模式",
+    "extraAbilities": "额外技能",
+    "attachedUnit": "附加单位",
+    "hypnoticLure": "催眠引诱（召唤师攻击+1）",
+    "hellfireBlade": "狱火铸剑 (+2⚔️)",
+    "chantWeaving": "编织颂歌（临时召唤点）"
   }
 }

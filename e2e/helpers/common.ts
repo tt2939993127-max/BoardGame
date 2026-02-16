@@ -42,6 +42,39 @@ export const blockAudioRequests = async (context: BrowserContext) => {
 };
 
 /**
+ * 拦截 CDN 资源请求（图片/字体等），返回空响应。
+ * E2E 测试不需要加载真实图片，大量 CDN 404 会严重拖慢页面加载。
+ */
+export const blockCdnRequests = async (context: BrowserContext) => {
+    // 拦截 assets.easyboardgame.top 域名的所有请求
+    await context.route(/assets\.easyboardgame\.top/i, (route) => {
+        const url = route.request().url();
+        // 图片请求返回 1x1 透明 PNG
+        if (/\.(png|jpg|jpeg|webp|avif|gif|svg)(\?.*)?$/i.test(url)) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'image/png',
+                // 1x1 透明 PNG（最小有效 PNG）
+                body: Buffer.from(
+                    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==',
+                    'base64',
+                ),
+            });
+        }
+        // JSON 配置文件返回空对象
+        if (/\.json(\?.*)?$/i.test(url)) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: '{}',
+            });
+        }
+        // 其他资源直接 abort
+        return route.abort();
+    });
+};
+
+/**
  * 重置客户端对局凭证，生成新的 guestId。
  * storageKey 用于防止同一页面重复执行（不同游戏用不同 key）。
  */
@@ -294,14 +327,26 @@ export const injectDirectGameServerUrl = async (context: BrowserContext) => {
     }, gameServerUrl);
 };
 
-/** 对 BrowserContext 执行标准初始化（英文 locale + 禁音 + 拦截音频 + 跳过教学 + 重置凭证 + 拦截大厅 socket + 直连游戏服务器） */
+/**
+ * 注入 __E2E_SKIP_IMAGE_GATE__，跳过 CriticalImageGate 图片预加载门禁。
+ * E2E 测试不需要等待图片预加载完成。
+ */
+export const injectSkipImageGate = async (context: BrowserContext) => {
+    await context.addInitScript(() => {
+        (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+    });
+};
+
+/** 对 BrowserContext 执行标准初始化（英文 locale + 禁音 + 拦截音频 + 拦截 CDN + 跳过教学 + 重置凭证 + 拦截大厅 socket + 直连游戏服务器 + 跳过图片门禁） */
 export const initContext = async (
     context: BrowserContext,
     opts?: { storageKey?: string; skipTutorial?: boolean },
 ) => {
     await blockAudioRequests(context);
+    await blockCdnRequests(context);
     await blockLobbySocket(context);
     await injectDirectGameServerUrl(context);
+    await injectSkipImageGate(context);
     await setEnglishLocale(context);
     await resetMatchStorage(context, opts?.storageKey);
     if (opts?.skipTutorial !== false) await disableTutorial(context);

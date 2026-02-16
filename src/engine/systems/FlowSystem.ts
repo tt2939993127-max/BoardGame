@@ -67,45 +67,53 @@ export interface PhaseExitResult {
     updatedState?: MatchState<any>;
 }
 
+/** onPhaseEnter 的结构化返回值（进入阶段后产生事件 + 可选的 sys 状态更新） */
+export interface PhaseEnterResult {
+    /** 产生的事件（领域事件 or 系统事件均可） */
+    events?: GameEvent[];
+    /** 如果基地能力/ongoing 效果创建了 Interaction，返回更新后的 matchState */
+    updatedState?: MatchState<any>;
+}
+
 export interface FlowHooks<TCore = unknown> {
     /** 初始阶段 */
     initialPhase: string;
 
     /** 是否允许推进（可返回错误原因） */
     canAdvance?(args: {
-        state: MatchState<TCore>;
+        state: Readonly<MatchState<TCore>>;
         from: string;
         command: Command;
     }): CanAdvanceResult;
 
     /** 计算下一阶段 */
     getNextPhase(args: {
-        state: MatchState<TCore>;
+        state: Readonly<MatchState<TCore>>;
         from: string;
         command: Command;
     }): string;
 
     /** 离开阶段时产生的事件（可阻止切换或覆盖下一阶段） */
     onPhaseExit?(args: {
-        state: MatchState<TCore>;
+        state: Readonly<MatchState<TCore>>;
         from: string;
         to: string;
         command: Command;
         random: RandomFn;
     }): GameEvent[] | PhaseExitResult | void;
 
-    /** 进入阶段时产生的事件 */
+    /** 进入阶段时产生的事件（可携带 updatedState 传播 sys 变更，如 Interaction） */
     onPhaseEnter?(args: {
-        state: MatchState<TCore>; // 注意：此时 sys.phase 已更新
+        state: Readonly<MatchState<TCore>>;
         from: string;
         to: string;
         command: Command;
         random: RandomFn;
-    }): GameEvent[] | void;
+    }): GameEvent[] | PhaseEnterResult | void;
 
     /** 用于 SYS_PHASE_CHANGED 事件的 activePlayerId（可选） */
     getActivePlayerId?(args: {
-        state: MatchState<TCore>;
+        state: Readonly<MatchState<TCore>>;
         from: string;
         to: string;
         command: Command;
@@ -120,7 +128,7 @@ export interface FlowHooks<TCore = unknown> {
      *          playerId 必须指定，用于构造虚拟命令
      */
     onAutoContinueCheck?(args: {
-        state: MatchState<TCore>;
+        state: Readonly<MatchState<TCore>>;
         events: GameEvent[];
         random: RandomFn;
     }): { autoContinue: boolean; playerId: PlayerId } | void;
@@ -235,11 +243,27 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
     };
 
     const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command, random });
-    const enterEvents = Array.isArray(enter) ? enter : (enter ?? []);
+    let enterEvents: GameEvent[] = [];
+    let enterUpdatedState: MatchState<TCore> | undefined;
+
+    if (enter) {
+        if (Array.isArray(enter)) {
+            enterEvents = enter;
+        } else {
+            enterEvents = enter.events ?? [];
+            enterUpdatedState = enter.updatedState as MatchState<TCore> | undefined;
+        }
+    }
+
+    // 如果 onPhaseEnter 返回了 updatedState（如基地能力创建了 Interaction），
+    // 合并 sys 到 nextState，确保 Interaction 等 sys 变更不丢失
+    const finalState = enterUpdatedState
+        ? { ...nextState, sys: { ...enterUpdatedState.sys, phase: to, flowHalted: false } }
+        : nextState;
 
     return {
         halt: haltOnExit ? true : undefined,
-        state: nextState,
+        state: finalState,
         events: [...exitEvents, phaseChanged, ...enterEvents],
     };
 }

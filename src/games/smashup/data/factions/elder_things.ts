@@ -21,6 +21,7 @@ export const ELDER_THINGS_MINIONS: MinionCardDef[] = [
         power: 6,
         abilityTags: ['onPlay'],
         count: 2,
+        playConstraint: { type: 'requireOwnPower', minPower: 6 },
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS2, index: 43 },
     },
     {

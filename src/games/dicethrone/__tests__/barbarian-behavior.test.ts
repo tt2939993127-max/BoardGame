@@ -235,38 +235,6 @@ describe('野蛮人 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // energetic-roll: 投1骰，星→治疗2+脑震荡，其他→抽1牌
-    // ========================================================================
-    describe('energetic-roll (精力充沛)', () => {
-        it('投出星面时治疗2点并施加脑震荡', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('energetic-roll')!;
-            const events = handler(buildCtx(state, 'energetic-roll', {
-                random: () => 1, // d(6)→6 → strength
-            }));
-
-            const heal = eventsOfType(events, 'HEAL_APPLIED');
-            expect(heal).toHaveLength(1);
-            expect((heal[0] as any).payload.amount).toBe(2);
-
-            const status = eventsOfType(events, 'STATUS_APPLIED');
-            expect(status).toHaveLength(1);
-            expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.CONCUSSION);
-        });
-
-        it('投出非星面时不治疗不施加脑震荡', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('energetic-roll')!;
-            const events = handler(buildCtx(state, 'energetic-roll', {
-                random: () => 1 / 6, // d(6)→1 → sword
-            }));
-
-            expect(eventsOfType(events, 'HEAL_APPLIED')).toHaveLength(0);
-            expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(0);
-        });
-    });
-
-    // ========================================================================
     // lucky-roll-heal: 投3骰，治疗 1+2×心面数
     // ========================================================================
     describe('lucky-roll-heal (大吉大利)', () => {

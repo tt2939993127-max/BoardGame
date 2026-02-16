@@ -54,10 +54,10 @@ const isStatusIconAtlasResponse = (value: unknown): value is StatusIconAtlasResp
 // Map of Atlas ID -> Config
 export type StatusAtlases = Record<string, StatusIconAtlasConfig>;
 
-export const loadStatusAtlases = async (): Promise<StatusAtlases> => {
+export const loadStatusAtlases = async (locale?: string): Promise<StatusAtlases> => {
     const promises = Object.entries(STATUS_ATLAS_PATHS).map(async ([id, path]) => {
         try {
-            const url = getLocalizedAssetPath(path);
+            const url = getLocalizedAssetPath(path, locale);
             const response = await fetch(url);
             if (!response.ok) return null;
             const data: unknown = await response.json();
@@ -126,7 +126,8 @@ export const getStatusEffectIconNode = (
     }
 
     if (!frame || !targetAtlas) {
-        return <span className="drop-shadow-md">{meta.icon ?? '❓'}</span>;
+        // 无精灵图时不显示内容，外层渐变背景已提供视觉标识
+        return <span className="block w-full h-full" />;
     }
     const sizeClass = size === 'choice' ? 'w-full h-full' : 'w-full h-full';
     const frameStyle = getStatusIconFrameStyle(targetAtlas, frame);
@@ -164,7 +165,7 @@ export const StatusEffectBadge = ({
     clickable?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const meta = STATUS_EFFECT_META[effectId] || { icon: '❓', color: 'from-gray-500 to-gray-600' };
+    const meta = STATUS_EFFECT_META[effectId] || { color: 'from-gray-500 to-gray-600' };
 
     // Check if sprite exists in the resolved atlas
     let hasSprite = false;
@@ -302,7 +303,7 @@ export const TokenBadge = ({
     clickable?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const meta = TOKEN_META[tokenId] || { icon: '❓', color: 'from-gray-500 to-gray-600' };
+    const meta = TOKEN_META[tokenId] || { color: 'from-gray-500 to-gray-600' };
 
     let hasSprite = false;
     if (atlas && meta.frameId) {
@@ -460,7 +461,7 @@ export const SelectableStatusBadge = ({
     atlas?: StatusAtlases | null;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const meta = STATUS_EFFECT_META[effectId] || TOKEN_META[effectId] || { icon: '❓', color: 'from-gray-500 to-gray-600' };
+    const meta = STATUS_EFFECT_META[effectId] || TOKEN_META[effectId] || { color: 'from-gray-500 to-gray-600' };
 
     let hasSprite = false;
     if (atlas && meta.frameId) {

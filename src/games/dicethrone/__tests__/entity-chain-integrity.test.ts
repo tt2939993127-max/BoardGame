@@ -141,8 +141,8 @@ describe('customActionId 引用链', () => {
     );
 
     it('TokenDef 中提取到 customActionId 引用', () => {
-        // 至少 paladin-blessing-prevent 和 shadow_thief-sneak-prevent 应存在
-        expect(tokenChains.length).toBeGreaterThanOrEqual(2);
+        // paladin-blessing-prevent 应存在（shadow_thief-sneak-prevent 已废弃）
+        expect(tokenChains.length).toBeGreaterThanOrEqual(1);
     });
 
     it('所有 TokenDef customActionId 有对应的 handler 注册（注释参考）', () => {

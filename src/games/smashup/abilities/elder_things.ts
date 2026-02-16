@@ -15,6 +15,7 @@ import {
     buildMinionTargetOptions,
     addPowerCounter,
     revealHand,
+    buildAbilityFeedback,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type {
@@ -23,6 +24,7 @@ import type {
     CardsDiscardedEvent,
     DeckReshuffledEvent,
     MinionCardDef,
+    MinionOnBase,
 } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { getCardDef, getBaseDef } from '../data/cards';
@@ -237,7 +239,8 @@ function elderThingBeginTheSummoning(ctx: AbilityContext): AbilityResult {
     const minionsInDiscard = player.discard.filter(c => c.type === 'minion');
 
     if (minionsInDiscard.length === 0) {
-        // 没有随从可选，仍给额外行动
+        // 没有随从可选，仍给额外行动，但提示弃牌堆为空
+        events.push(buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now));
         events.push(grantExtraAction(ctx.playerId, 'elder_thing_begin_the_summoning', ctx.now));
         return { events };
     }
@@ -350,7 +353,7 @@ function elderThingProtectionChecker(ctx: ProtectionCheckContext): boolean {
     return ctx.sourcePlayerId !== ctx.targetMinion.controller;
 }
 
-/** 远古之物 onPlay：消灭两个己方其他随从或将本随从放到牌库底?*/
+/** 远古之物 onPlay：消灭两个己方其他随从或将本随从放到牌库底 */
 function elderThingElderThingOnPlay(ctx: AbilityContext): AbilityResult {
     // 收集己方其他随从
     const otherMinions: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
@@ -366,20 +369,16 @@ function elderThingElderThingOnPlay(ctx: AbilityContext): AbilityResult {
         }
     }
 
-    // 不收回足2个其他随从→必须放牌库底
-    if (otherMinions.length < 2) {
-        const evt: CardToDeckBottomEvent = {
-            type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
-            payload: { cardUid: ctx.cardUid, defId: ctx.defId, ownerId: ctx.playerId, reason: 'elder_thing_elder_thing' },
-            timestamp: ctx.now,
-        };
-        return { events: [evt] };
-    }
-
-    // ?2 个其他随从→ Prompt 选择
+    // 始终显示选择界面，随从不足 2 个时"消灭"选项置灰
+    const canDestroy = otherMinions.length >= 2;
     const options = [
-        { id: 'destroy', label: '消灭两个己方其他随从', value: { choice: 'destroy' } },
-        { id: 'deckbottom', label: '将本随从放到牌库底底', value: { choice: 'deckbottom' } },
+        {
+            id: 'destroy',
+            label: canDestroy ? '消灭两个己方其他随从' : '消灭两个己方其他随从（随从不足）',
+            value: { choice: 'destroy' },
+            disabled: !canDestroy,
+        },
+        { id: 'deckbottom', label: '将本随从放到牌库底', value: { choice: 'deckbottom' } },
     ];
     const interaction = createSimpleChoice(
         `elder_thing_elder_thing_choice_${ctx.now}`, ctx.playerId,
@@ -414,6 +413,7 @@ function elderThingShoggoth(ctx: AbilityContext): AbilityResult {
         '修格斯：你可以抽一张疯狂卡，否则你在此基地的一个随从将被消灭', options as any[], 'elder_thing_shoggoth_opponent',
     );
     (interaction.data as any).continuationContext = {
+        casterPlayerId: ctx.playerId,
         targetPlayerId: opponents[0],
         baseIndex: ctx.baseIndex,
         opponents,
@@ -425,6 +425,35 @@ function elderThingShoggoth(ctx: AbilityContext): AbilityResult {
 // ============================================================================
 // 交互解决处理函数
 // ============================================================================
+
+/** 修格斯链式处理：继续询问下一个对手 */
+function shoggothContinueChain(
+    state: any, events: SmashUpEvent[],
+    ctx: { casterPlayerId: string; baseIndex: number; opponents: string[]; opponentIdx: number },
+    timestamp: number,
+): { state: any; events: SmashUpEvent[] } {
+    const nextIdx = ctx.opponentIdx + 1;
+    if (nextIdx < ctx.opponents.length) {
+        const nextPid = ctx.opponents[nextIdx];
+        const options = [
+            { id: 'draw_madness', label: '抽一张疯狂卡', value: { choice: 'draw_madness' } },
+            { id: 'decline', label: '拒绝（被消灭一个随从）', value: { choice: 'decline' } },
+        ];
+        const interaction = createSimpleChoice(
+            `elder_thing_shoggoth_opponent_${nextIdx}_${timestamp}`, nextPid,
+            '修格斯：你可以抽一张疯狂卡，否则你在此基地的一个随从将被消灭', options as any[], 'elder_thing_shoggoth_opponent',
+        );
+        (interaction.data as any).continuationContext = {
+            casterPlayerId: ctx.casterPlayerId,
+            targetPlayerId: nextPid,
+            baseIndex: ctx.baseIndex,
+            opponents: ctx.opponents,
+            opponentIdx: nextIdx,
+        };
+        return { state: queueInteraction(state, interaction), events };
+    }
+    return { state, events };
+}
 
 /** 注册远古之物派系的交互解决处理函数 */
 export function registerElderThingInteractionHandlers(): void {
@@ -499,26 +528,58 @@ export function registerElderThingInteractionHandlers(): void {
             }] };
         }
 
-        // choice === 'destroy' → 收集己方随从，MVP 自动选前两个
-        const myMinions: { uid: string; defId: string; baseIndex: number; owner: string }[] = [];
+        // choice === 'destroy' → 收集己方其他随从，让玩家选择消灭哪两个
+        const myMinions: { minion: MinionOnBase; baseIndex: number }[] = [];
         for (let i = 0; i < state.core.bases.length; i++) {
             for (const m of state.core.bases[i].minions) {
                 if (m.controller === playerId && m.uid !== ctx.cardUid) {
-                    myMinions.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner });
+                    myMinions.push({ minion: m, baseIndex: i });
                 }
             }
         }
+        // ≤2 个随从时直接全部消灭（无需选择）
+        if (myMinions.length <= 2) {
+            const events: SmashUpEvent[] = [];
+            for (const t of myMinions) {
+                events.push(destroyMinion(t.minion.uid, t.minion.defId, t.baseIndex, t.minion.owner, 'elder_thing_elder_thing', timestamp));
+            }
+            return { state, events };
+        }
+        // >2 个随从时创建多选交互让玩家选择 2 个
+        const options = myMinions.map(({ minion: m, baseIndex: bi }) => {
+            const def = getCardDef(m.defId) as MinionCardDef | undefined;
+            const name = def?.name ?? m.defId;
+            const baseDef = getBaseDef(state.core.bases[bi].defId);
+            const baseName = baseDef?.name ?? `基地 ${bi + 1}`;
+            const power = getMinionPower(state.core, m, bi);
+            return { uid: m.uid, defId: m.defId, baseIndex: bi, label: `${name} (力量 ${power}) @ ${baseName}` };
+        });
+        const interaction = createSimpleChoice(
+            `elder_thing_elder_thing_destroy_select_${timestamp}`, playerId,
+            '远古之物：选择两个己方随从消灭', buildMinionTargetOptions(options),
+            { sourceId: 'elder_thing_elder_thing_destroy_select', multi: { min: 2, max: 2 } },
+        );
+        return { state: queueInteraction(state, interaction), events: [] };
+    });
+
+    // 远古之物：玩家选择两个己方随从消灭（多选交互处理）
+    registerInteractionHandler('elder_thing_elder_thing_destroy_select', (state, _playerId, value, _iData, _random, timestamp) => {
+        const selected = value as Array<{ minionUid: string; defId: string; baseIndex: number }>;
+        if (!Array.isArray(selected) || selected.length === 0) return { state, events: [] };
         const events: SmashUpEvent[] = [];
-        const toDestroy = myMinions.slice(0, 2);
-        for (const t of toDestroy) {
-            events.push(destroyMinion(t.uid, t.defId, t.baseIndex, t.owner, 'elder_thing_elder_thing', timestamp));
+        for (const item of selected) {
+            const base = state.core.bases[item.baseIndex];
+            const target = base?.minions.find(m => m.uid === item.minionUid);
+            if (target) {
+                events.push(destroyMinion(target.uid, target.defId, item.baseIndex, target.owner, 'elder_thing_elder_thing', timestamp));
+            }
         }
         return { state, events };
     });
 
     registerInteractionHandler('elder_thing_shoggoth_opponent', (state, _playerId, value, iData, _random, timestamp) => {
         const { choice } = value as { choice: string };
-        const ctx = (iData as any)?.continuationContext as { baseIndex: number; opponents: string[]; opponentIdx: number; targetPlayerId: string };
+        const ctx = (iData as any)?.continuationContext as { baseIndex: number; opponents: string[]; opponentIdx: number; targetPlayerId: string; casterPlayerId: string };
         if (!ctx) return { state, events: [] };
         const events: SmashUpEvent[] = [];
 
@@ -526,39 +587,53 @@ export function registerElderThingInteractionHandlers(): void {
             const evt = drawMadnessCards(ctx.targetPlayerId, 1, state.core, 'elder_thing_shoggoth', timestamp);
             if (evt) events.push(evt);
         } else {
+            // 对手拒绝抽疯狂卡 → 由修格斯控制者选择消灭该对手在此基地的一个随从
             const base = state.core.bases[ctx.baseIndex];
             if (base) {
-                const opMinions = base.minions
-                    .filter((m: any) => m.controller === ctx.targetPlayerId)
-                    .sort((a: any, b: any) => getMinionPower(state.core, a, ctx.baseIndex) - getMinionPower(state.core, b, ctx.baseIndex));
-                if (opMinions.length > 0) {
+                const opMinions = base.minions.filter((m: any) => m.controller === ctx.targetPlayerId);
+                if (opMinions.length === 1) {
+                    // 只有一个随从，直接消灭
                     events.push(destroyMinion(opMinions[0].uid, opMinions[0].defId, ctx.baseIndex, opMinions[0].owner, 'elder_thing_shoggoth', timestamp));
+                } else if (opMinions.length > 1) {
+                    // 多个随从，由修格斯控制者选择
+                    const options = opMinions.map(m => {
+                        const def = getCardDef(m.defId) as MinionCardDef | undefined;
+                        return { uid: m.uid, defId: m.defId, baseIndex: ctx.baseIndex, label: def?.name ?? m.defId };
+                    });
+                    const interaction = createSimpleChoice(
+                        `elder_thing_shoggoth_destroy_${ctx.opponentIdx}_${timestamp}`, ctx.casterPlayerId,
+                        `修格斯：选择消灭对手在此基地的一个随从`, buildMinionTargetOptions(options), 'elder_thing_shoggoth_destroy',
+                    );
+                    (interaction.data as any).continuationContext = {
+                        casterPlayerId: ctx.casterPlayerId,
+                        baseIndex: ctx.baseIndex,
+                        opponents: ctx.opponents,
+                        opponentIdx: ctx.opponentIdx,
+                    };
+                    return { state: queueInteraction(state, interaction), events };
                 }
             }
         }
 
         // 链式垂询下一个对手
-        const nextIdx = ctx.opponentIdx + 1;
-        if (nextIdx < ctx.opponents.length) {
-            const nextPid = ctx.opponents[nextIdx];
-            const options = [
-                { id: 'draw_madness', label: '抽一张疯狂卡', value: { choice: 'draw_madness' } },
-                { id: 'decline', label: '拒绝（被消灭一个随从）', value: { choice: 'decline' } },
-            ];
-            const interaction = createSimpleChoice(
-                `elder_thing_shoggoth_opponent_${nextIdx}_${timestamp}`, nextPid,
-                '修格斯：你可以抽一张疯狂卡，否则你在此基地的一个随从将被消灭', options as any[], 'elder_thing_shoggoth_opponent',
-            );
-            (interaction.data as any).continuationContext = {
-                targetPlayerId: nextPid,
-                baseIndex: ctx.baseIndex,
-                opponents: ctx.opponents,
-                opponentIdx: nextIdx,
-            };
-            return { state: queueInteraction(state, interaction), events };
+        return shoggothContinueChain(state, events, ctx, timestamp);
+    });
+
+    // 修格斯：控制者选择消灭对手随从后的处理
+    registerInteractionHandler('elder_thing_shoggoth_destroy', (state, _playerId, value, iData, _random, timestamp) => {
+        const { minionUid, baseIndex, defId } = value as { minionUid: string; baseIndex: number; defId: string };
+        const ctx = (iData as any)?.continuationContext as { casterPlayerId: string; baseIndex: number; opponents: string[]; opponentIdx: number };
+        if (!ctx) return { state, events: [] };
+
+        const base = state.core.bases[baseIndex];
+        const target = base?.minions.find(m => m.uid === minionUid);
+        const events: SmashUpEvent[] = [];
+        if (target) {
+            events.push(destroyMinion(target.uid, target.defId, baseIndex, target.owner, 'elder_thing_shoggoth', timestamp));
         }
 
-        return { state, events };
+        // 继续链式处理下一个对手
+        return shoggothContinueChain(state, events, ctx, timestamp);
     });
 
     // 深不可测的目的：对手选择消灭自己的随从（链式处理多个对手）

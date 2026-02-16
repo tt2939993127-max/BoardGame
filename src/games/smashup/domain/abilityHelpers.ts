@@ -30,6 +30,7 @@ import type {
     SmashUpEvent,
     CardsDrawnEvent,
     DeckReorderedEvent,
+    AbilityFeedbackEvent,
 } from './types';
 import { SU_EVENTS } from './types';
 import { getEffectivePower } from './ongoingModifiers';
@@ -699,7 +700,6 @@ export function buildMinionTargetOptions(
         id: `minion-${i}`,
         label: c.label,
         value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
-        displayMode: 'card' as const,
     }));
 }
 
@@ -770,5 +770,20 @@ export function resolveOrPrompt<T>(
         } as SimpleChoiceConfig,
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
+/** 生成能力反馈事件（纯 UI 提示，不影响状态） */
+export function buildAbilityFeedback(
+    playerId: PlayerId,
+    messageKey: string,
+    now: number,
+    messageParams?: Record<string, string | number>,
+    tone: 'info' | 'warning' = 'info',
+): AbilityFeedbackEvent {
+    return {
+        type: SU_EVENTS.ABILITY_FEEDBACK,
+        payload: { playerId, messageKey, messageParams, tone },
+        timestamp: now,
+    };
 }
 

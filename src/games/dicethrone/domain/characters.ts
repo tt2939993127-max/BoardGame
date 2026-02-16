@@ -6,12 +6,14 @@
 import type { PlayerId, RandomFn } from '../../../engine/types';
 import type { TokenDef } from './tokenTypes';
 import type { AbilityCard, HeroState, SelectableCharacterId, Die, DieFace } from './types';
+import type { PassiveAbilityDef } from './passiveAbility';
 import { MONK_ABILITIES, MONK_TOKENS, MONK_INITIAL_TOKENS, getMonkStartingDeck } from '../heroes/monk';
 import { BARBARIAN_ABILITIES, BARBARIAN_TOKENS, BARBARIAN_INITIAL_TOKENS, getBarbarianStartingDeck } from '../heroes/barbarian';
 import { PYROMANCER_ABILITIES, PYROMANCER_TOKENS, PYROMANCER_INITIAL_TOKENS, getPyromancerStartingDeck } from '../heroes/pyromancer';
 import { MOON_ELF_ABILITIES, MOON_ELF_TOKENS, MOON_ELF_INITIAL_TOKENS, getMoonElfStartingDeck } from '../heroes/moon_elf';
 import { SHADOW_THIEF_ABILITIES, SHADOW_THIEF_TOKENS, SHADOW_THIEF_INITIAL_TOKENS, getShadowThiefStartingDeck } from '../heroes/shadow_thief';
 import { PALADIN_ABILITIES, PALADIN_TOKENS, PALADIN_INITIAL_TOKENS, getPaladinStartingDeck } from '../heroes/paladin';
+import { PALADIN_TITHES_BASE } from '../heroes/paladin/abilities';
 import { createDie } from '../../../engine/primitives';
 import { getDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
@@ -31,6 +33,8 @@ export interface CharacterData {
     statusAtlasId: string;
     /** 状态图集 JSON 路径 */
     statusAtlasPath: string;
+    /** 被动能力定义（可选，如圣骑士教皇税） */
+    passiveAbilities?: PassiveAbilityDef[];
 }
 
 const BARBARIAN_DATA: CharacterData = {
@@ -158,6 +162,7 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
         },
         statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
         statusAtlasPath: 'dicethrone/images/paladin/status-icons-atlas.json',
+        passiveAbilities: [PALADIN_TITHES_BASE],
     },
 };
 
@@ -247,6 +252,7 @@ export function initHeroState(
         abilities: data.abilities,
         abilityLevels: { ...data.initialAbilityLevels },
         upgradeCardByAbilityId: {},
+        passiveAbilities: data.passiveAbilities ? [...data.passiveAbilities] : undefined,
     };
 }
 

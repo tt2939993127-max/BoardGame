@@ -316,7 +316,8 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **本地模式（local）**：不做领域校验（`skipValidation=true`），视角单一，入口 `/play/:gameId/local`。
 - **联机模式（online）**：严格校验，按玩家身份限制交互。
 - **教学模式（tutorial）**：走 `MatchRoom`，默认与联机一致。
-- **唯一判断来源**：`src/games/*/manifest.ts` 的 `allowLocalMode`。DiceThrone：`allowLocalMode=false`。
+- **唯一判断来源**：`src/games/*/manifest.ts` 的 `allowLocalMode`。
+- **联机优先（强制）**：当前除井字棋（tictactoe）外，所有游戏均 `allowLocalMode=false`，开发和测试以联机模式为准。E2E 测试必须使用 `setupOnlineMatch` 创建在线对局，禁止使用 `page.goto('/play/<gameId>/local')`。
 
 ### i18n（强制）
 - 通用文案 → `public/locales/{lang}/common.json`；游戏文案 → `game-<id>.json`。
@@ -382,7 +383,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **阶段结束技能时序对齐（强制）**：阶段结束时需要玩家确认的技能（描述含"你可以"/"may"），`onPhaseExit` 必须返回 `{ halt: true }` 阻止阶段推进，UI 跳过时必须 dispatch `ADVANCE_PHASE` 恢复流程。**事件产生门控必须普适生效**：`triggerPhaseAbilities` 等循环中的门控函数（如 `canActivateAbility`）禁止用 `abilityId === 'xxx'` 限定为特定技能，必须对所有同类技能生效。详见 `docs/ai-rules/testing-audit.md`「D8 子项：引擎批处理时序与 UI 交互对齐」。
 - **"可以/可选"效果必须有交互确认（强制）**：描述中"你可以"/"may"→ 必须有确认/跳过 UI，禁止自动执行。
 - **测试必须验证状态变更（强制）**：事件发射 ≠ 状态生效，必须断言 reduce 后的最终状态。详见 `docs/ai-rules/testing-audit.md`「审计反模式清单」。
-- **DiceThrone E2E 测试禁止使用本地模式（强制）**：DiceThrone 的 `allowLocalMode=false`，英雄选择需要双人交互，本地模式无法完成。所有 DiceThrone E2E 测试必须使用 `setupOnlineMatch`（`e2e/helpers/dicethrone.ts`）创建在线双人对局，通过调试面板（`readCoreState`/`applyCoreStateDirect`/`applyDiceValues`）注入状态。禁止使用 `page.goto('/play/dicethrone/local')`、禁止假设 `window.__BG_DISPATCH__`/`window.__BG_STATE__` 等全局变量存在。
+- **E2E 测试禁止使用本地模式（强制）**：除井字棋外所有游戏 `allowLocalMode=false`，E2E 测试必须使用 `setupOnlineMatch` 创建在线对局，通过调试面板（`readCoreState`/`applyCoreStateDirect`/`applyDiceValues`）注入状态。禁止使用 `page.goto('/play/<gameId>/local')`（井字棋除外）、禁止假设 `window.__BG_DISPATCH__`/`window.__BG_STATE__` 等全局变量存在。
 
 ---
 

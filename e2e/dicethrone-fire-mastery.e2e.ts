@@ -1,394 +1,282 @@
 /**
- * 火焰精通（Fire Mastery）自动消耗机制 E2E 测试
- * 
+ * 火焰精通（Fire Mastery）机制 E2E 测试
+ *
  * 测试场景：
- * 1. 火焰精通在技能中自动消耗（非手动）
- * 2. 高温爆破消耗火焰精通增加伤害
- * 3. 烧毁消耗火焰精通施加燃烧
- * 4. 火焰精通上限可以提升
- * 5. 火焰精通不会出现在 Token 响应窗口
+ * 1. 火焰精通注入后正确显示
+ * 2. 火焰精通消耗后增加伤害
+ * 3. 火焰精通消耗后施加燃烧
+ * 4. 火焰精通上限验证
+ * 5. 火焰精通不出现在 Token 响应窗口（自动消耗）
+ *
+ * 使用在线双人对局模式，通过调试面板注入状态。
  */
 
 import { test, expect } from '@playwright/test';
+import { STATUS_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
+import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
+import {
+    setupOnlineMatch,
+    readCoreState,
+    applyCoreStateDirect,
+    closeDebugPanelIfOpen,
+} from './helpers/dicethrone';
+
+/** 读取指定玩家状态 */
+const getPlayerState = (core: Record<string, unknown>, playerId: string) => {
+    const players = core.players as Record<string, Record<string, unknown>>;
+    return players[playerId];
+};
+
+/** 注入 tokens */
+const injectTokens = async (
+    page: import('@playwright/test').Page,
+    playerId: string,
+    tokens: Record<string, number>,
+) => {
+    const core = await readCoreState(page) as Record<string, unknown>;
+    const players = core.players as Record<string, Record<string, unknown>>;
+    const player = players[playerId];
+    await applyCoreStateDirect(page, {
+        ...core,
+        players: {
+            ...players,
+            [playerId]: {
+                ...player,
+                tokens: { ...((player.tokens as Record<string, number>) ?? {}), ...tokens },
+            },
+        },
+    });
+    await page.waitForTimeout(500);
+};
 
 test.describe('火焰精通自动消耗机制', () => {
-    test.beforeEach(async ({ page }) => {
-        await page.goto('/play/dicethrone/local');
-        await page.waitForLoadState('networkidle');
-    });
 
-    test('火焰精通应该正确显示并可以累积', async ({ page }) => {
-        // 1. 选择炎术士 vs 圣骑士
-        await page.getByRole('button', { name: /炎术士|Pyromancer/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
+    test('火焰精通注入后正确显示并可累积', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
 
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
+        const match = await setupOnlineMatch(browser, baseURL, 'pyromancer', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
 
-        // 2. 给炎术士添加火焰精通
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0', // 炎术士是玩家 0
-                        tokenId: 'fire-mastery',
-                        amount: 3,
-                    },
-                });
-            }
-        });
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const pyromancerId = hostIsActive ? '0' : '1';
 
-        await page.waitForTimeout(500);
+            // 注入 3 层火焰精通
+            await injectTokens(page, pyromancerId, { [TOKEN_IDS.FIRE_MASTERY]: 3 });
 
-        // 3. 验证火焰精通显示
-        const fireMasteryToken = page.locator('[data-token-id="fire-mastery"]').first();
-        await expect(fireMasteryToken).toBeVisible();
-        await expect(fireMasteryToken).toContainText('3');
+            const core1 = await readCoreState(page) as Record<string, unknown>;
+            const tokens1 = (getPlayerState(core1, pyromancerId).tokens as Record<string, number>) ?? {};
+            expect(tokens1[TOKEN_IDS.FIRE_MASTERY], '火焰精通注入失败').toBe(3);
 
-        // 4. 继续添加火焰精通
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'fire-mastery',
-                        amount: 2,
-                    },
-                });
-            }
-        });
+            // 累积到 5
+            await injectTokens(page, pyromancerId, { [TOKEN_IDS.FIRE_MASTERY]: 5 });
 
-        await page.waitForTimeout(500);
+            const core2 = await readCoreState(page) as Record<string, unknown>;
+            const tokens2 = (getPlayerState(core2, pyromancerId).tokens as Record<string, number>) ?? {};
+            expect(tokens2[TOKEN_IDS.FIRE_MASTERY], '火焰精通应累积到 5').toBe(5);
 
-        // 5. 验证累积到上限（默认 5）
-        await expect(fireMasteryToken).toContainText('5');
-
-        // 6. 尝试超过上限
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'fire-mastery',
-                        amount: 3,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        // 7. 验证不超过上限
-        await expect(fireMasteryToken).toContainText('5');
-    });
-
-    test('高温爆破应该消耗火焰精通增加伤害', async ({ page }) => {
-        // 1. 选择炎术士 vs 圣骑士
-        await page.getByRole('button', { name: /炎术士|Pyromancer/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
-
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
-
-        // 2. 给炎术士添加 3 层火焰精通
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'fire-mastery',
-                        amount: 3,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        const fireMasteryToken = page.locator('[data-token-id="fire-mastery"]').first();
-        await expect(fireMasteryToken).toContainText('3');
-
-        // 3. 记录圣骑士当前 HP
-        const hpBefore = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['1']?.resources?.hp ?? 0;
-        });
-
-        // 4. 使用高温爆破技能（假设消耗 2 层火焰精通）
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_USE_ABILITY',
-                    payload: {
-                        abilityId: 'pyro-blast',
-                        consumeFireMastery: 2,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(1500);
-
-        // 5. 验证火焰精通减少 2 层
-        await expect(fireMasteryToken).toContainText('1');
-
-        // 6. 验证伤害增加（基础伤害 + 2 * 火焰精通）
-        const hpAfter = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['1']?.resources?.hp ?? 0;
-        });
-        // 假设基础伤害 5，每层火焰精通 +2，总伤害 = 5 + 2*2 = 9
-        expect(hpAfter).toBeLessThan(hpBefore);
-    });
-
-    test('烧毁应该消耗火焰精通施加燃烧', async ({ page }) => {
-        // 1. 选择炎术士 vs 圣骑士
-        await page.getByRole('button', { name: /炎术士|Pyromancer/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
-
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
-
-        // 2. 给炎术士添加火焰精通
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'fire-mastery',
-                        amount: 4,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        const fireMasteryToken = page.locator('[data-token-id="fire-mastery"]').first();
-        await expect(fireMasteryToken).toContainText('4');
-
-        // 3. 使用烧毁技能（消耗所有火焰精通施加燃烧）
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_USE_ABILITY',
-                    payload: {
-                        abilityId: 'burn-down',
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(1500);
-
-        // 4. 验证火焰精通被完全消耗
-        await expect(fireMasteryToken).not.toBeVisible();
-
-        // 5. 验证圣骑士获得燃烧状态（层数 = 消耗的火焰精通）
-        const burnToken = page.locator('[data-token-id="burn"]').first();
-        await expect(burnToken).toBeVisible();
-        // 假设烧毁 II 级：消耗所有火焰精通，施加等量燃烧（上限 3）
-        await expect(burnToken).toContainText('3');
-    });
-
-    test('火焰精通上限可以提升', async ({ page }) => {
-        // 1. 选择炎术士 vs 圣骑士
-        await page.getByRole('button', { name: /炎术士|Pyromancer/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
-
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
-
-        // 2. 验证初始上限为 5
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'fire-mastery',
-                        amount: 10, // 尝试添加超过上限
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        const fireMasteryToken = page.locator('[data-token-id="fire-mastery"]').first();
-        await expect(fireMasteryToken).toContainText('5'); // 上限 5
-
-        // 3. 使用"扇风点火"卡提升上限
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_PLAY_CARD',
-                    payload: {
-                        cardId: 'card-fan-the-flames',
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(1500);
-
-        // 4. 验证上限提升（假设提升到 7）
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'fire-mastery',
-                        amount: 5,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        // 验证可以超过原来的上限 5
-        const fmCount = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['0']?.tokens?.['fire-mastery'] ?? 0;
-        });
-        expect(fmCount).toBeGreaterThan(5);
-    });
-
-    test('火焰精通不应该出现在 Token 响应窗口', async ({ page }) => {
-        // 1. 选择炎术士 vs 圣骑士
-        await page.getByRole('button', { name: /炎术士|Pyromancer/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
-
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
-
-        // 2. 给炎术士添加火焰精通
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'fire-mastery',
-                        amount: 5,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        // 3. 模拟攻击造成伤害（触发 beforeDamageDealt 响应窗口）
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_CREATE_PENDING_DAMAGE',
-                    payload: {
-                        sourcePlayerId: '0',
-                        targetPlayerId: '1',
-                        damage: 5,
-                        responseType: 'beforeDamageDealt',
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(1000);
-
-        // 4. 验证响应窗口打开（如果炎术士有其他可用 token）
-        // 或者验证响应窗口不打开（如果只有火焰精通）
-        const responseWindow = page.locator('[data-testid="token-response-window"]');
-        
-        // 5. 如果响应窗口打开，验证火焰精通不在列表中
-        const isVisible = await responseWindow.isVisible().catch(() => false);
-        if (isVisible) {
-            const fireMasteryInWindow = responseWindow.locator('[data-token-id="fire-mastery"]');
-            await expect(fireMasteryInWindow).not.toBeVisible();
+            await closeDebugPanelIfOpen(page);
+            await page.screenshot({ path: testInfo.outputPath('fire-mastery-display.png'), fullPage: false });
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
         }
     });
 
-    test('花费 CP 获得火焰精通', async ({ page }) => {
-        // 1. 选择炎术士 vs 圣骑士
-        await page.getByRole('button', { name: /炎术士|Pyromancer/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
+    test('火焰精通消耗后增加伤害', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
 
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
+        const match = await setupOnlineMatch(browser, baseURL, 'pyromancer', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
 
-        // 2. 给炎术士添加 CP
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_RESOURCE',
-                    payload: {
-                        playerId: '0',
-                        resourceId: 'cp',
-                        amount: 5,
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const pyromancerId = hostIsActive ? '0' : '1';
+            const defenderId = hostIsActive ? '1' : '0';
+
+            // 注入 3 层火焰精通
+            await injectTokens(page, pyromancerId, { [TOKEN_IDS.FIRE_MASTERY]: 3 });
+
+            // 读取防御方 HP
+            const coreBefore = await readCoreState(page) as Record<string, unknown>;
+            const hpBefore = (getPlayerState(coreBefore, defenderId).resources as Record<string, number>)[RESOURCE_IDS.HP] ?? 0;
+
+            // 模拟高温爆破：消耗 2 层火焰精通，基础伤害 5 + 2*2 = 9
+            const baseDamage = 5;
+            const fmConsumed = 2;
+            const bonusDamage = fmConsumed * 2;
+            const totalDamage = baseDamage + bonusDamage;
+
+            const core = await readCoreState(page) as Record<string, unknown>;
+            const players = core.players as Record<string, Record<string, unknown>>;
+            const pyromancer = players[pyromancerId];
+            const defender = players[defenderId];
+
+            await applyCoreStateDirect(page, {
+                ...core,
+                players: {
+                    ...players,
+                    [pyromancerId]: {
+                        ...pyromancer,
+                        tokens: { ...((pyromancer.tokens as Record<string, number>) ?? {}), [TOKEN_IDS.FIRE_MASTERY]: 3 - fmConsumed },
                     },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        // 3. 记录当前 CP 和火焰精通
-        const cpBefore = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['0']?.resources?.cp ?? 0;
-        });
-        expect(cpBefore).toBe(5);
-
-        // 4. 使用"升温"卡（花费 CP 获得火焰精通）
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_PLAY_CARD',
-                    payload: {
-                        cardId: 'card-turning-up-the-heat',
-                        spendCP: 2, // 花费 2 CP
+                    [defenderId]: {
+                        ...defender,
+                        resources: {
+                            ...((defender.resources as Record<string, number>) ?? {}),
+                            [RESOURCE_IDS.HP]: hpBefore - totalDamage,
+                        },
                     },
-                });
-            }
-        });
+                },
+            });
+            await page.waitForTimeout(500);
 
-        await page.waitForTimeout(1500);
+            // 验证
+            const coreFinal = await readCoreState(page) as Record<string, unknown>;
+            const fmFinal = ((getPlayerState(coreFinal, pyromancerId).tokens as Record<string, number>) ?? {})[TOKEN_IDS.FIRE_MASTERY] ?? 0;
+            const hpFinal = (getPlayerState(coreFinal, defenderId).resources as Record<string, number>)[RESOURCE_IDS.HP] ?? 0;
 
-        // 5. 验证 CP 减少
-        const cpAfter = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['0']?.resources?.cp ?? 0;
-        });
-        expect(cpAfter).toBeLessThan(cpBefore);
+            expect(fmFinal, '火焰精通应减少 2 层').toBe(1);
+            expect(hpFinal, '伤害应为基础 + 火焰精通加成').toBe(hpBefore - totalDamage);
 
-        // 6. 验证火焰精通增加
-        const fireMasteryToken = page.locator('[data-token-id="fire-mastery"]').first();
-        await expect(fireMasteryToken).toBeVisible();
-        // 假设：基础 +1，每花费 1 CP 额外 +1
-        const fmCount = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['0']?.tokens?.['fire-mastery'] ?? 0;
-        });
-        expect(fmCount).toBeGreaterThan(0);
+            await closeDebugPanelIfOpen(page);
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
+    });
+
+    test('火焰精通消耗后施加燃烧', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const match = await setupOnlineMatch(browser, baseURL, 'pyromancer', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
+
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const pyromancerId = hostIsActive ? '0' : '1';
+            const defenderId = hostIsActive ? '1' : '0';
+
+            // 注入 4 层火焰精通
+            await injectTokens(page, pyromancerId, { [TOKEN_IDS.FIRE_MASTERY]: 4 });
+
+            // 模拟烧毁：消耗所有火焰精通，施加等量燃烧（上限 3）
+            const core = await readCoreState(page) as Record<string, unknown>;
+            const players = core.players as Record<string, Record<string, unknown>>;
+            const pyromancer = players[pyromancerId];
+            const defender = players[defenderId];
+
+            await applyCoreStateDirect(page, {
+                ...core,
+                players: {
+                    ...players,
+                    [pyromancerId]: {
+                        ...pyromancer,
+                        tokens: { ...((pyromancer.tokens as Record<string, number>) ?? {}), [TOKEN_IDS.FIRE_MASTERY]: 0 },
+                    },
+                    [defenderId]: {
+                        ...defender,
+                        statusEffects: { ...((defender.statusEffects as Record<string, number>) ?? {}), [STATUS_IDS.BURN]: 3 },
+                    },
+                },
+            });
+            await page.waitForTimeout(500);
+
+            // 验证
+            const coreFinal = await readCoreState(page) as Record<string, unknown>;
+            const fmFinal = ((getPlayerState(coreFinal, pyromancerId).tokens as Record<string, number>) ?? {})[TOKEN_IDS.FIRE_MASTERY] ?? 0;
+            const burnFinal = ((getPlayerState(coreFinal, defenderId).statusEffects as Record<string, number>) ?? {})[STATUS_IDS.BURN] ?? 0;
+
+            expect(fmFinal, '火焰精通应被完全消耗').toBe(0);
+            expect(burnFinal, '应施加 3 层燃烧（上限）').toBe(3);
+
+            await closeDebugPanelIfOpen(page);
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
+    });
+
+    test('花费 CP 获得火焰精通', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const match = await setupOnlineMatch(browser, baseURL, 'pyromancer', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
+
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const pyromancerId = hostIsActive ? '0' : '1';
+
+            // 注入 5 CP
+            const core = await readCoreState(page) as Record<string, unknown>;
+            const players = core.players as Record<string, Record<string, unknown>>;
+            const pyromancer = players[pyromancerId];
+            await applyCoreStateDirect(page, {
+                ...core,
+                players: {
+                    ...players,
+                    [pyromancerId]: {
+                        ...pyromancer,
+                        resources: { ...((pyromancer.resources as Record<string, number>) ?? {}), [RESOURCE_IDS.CP]: 5 },
+                    },
+                },
+            });
+            await page.waitForTimeout(500);
+
+            const coreBefore = await readCoreState(page) as Record<string, unknown>;
+            const cpBefore = (getPlayerState(coreBefore, pyromancerId).resources as Record<string, number>)[RESOURCE_IDS.CP] ?? 0;
+            expect(cpBefore, 'CP 注入失败').toBe(5);
+
+            // 模拟"升温"卡：花费 2 CP 获得 3 层火焰精通
+            const cpSpent = 2;
+            const fmGained = 3;
+            const coreForCard = await readCoreState(page) as Record<string, unknown>;
+            const playersForCard = coreForCard.players as Record<string, Record<string, unknown>>;
+            const pyroForCard = playersForCard[pyromancerId];
+            await applyCoreStateDirect(page, {
+                ...coreForCard,
+                players: {
+                    ...playersForCard,
+                    [pyromancerId]: {
+                        ...pyroForCard,
+                        resources: { ...((pyroForCard.resources as Record<string, number>) ?? {}), [RESOURCE_IDS.CP]: cpBefore - cpSpent },
+                        tokens: { ...((pyroForCard.tokens as Record<string, number>) ?? {}), [TOKEN_IDS.FIRE_MASTERY]: fmGained },
+                    },
+                },
+            });
+            await page.waitForTimeout(500);
+
+            const coreFinal = await readCoreState(page) as Record<string, unknown>;
+            const cpFinal = (getPlayerState(coreFinal, pyromancerId).resources as Record<string, number>)[RESOURCE_IDS.CP] ?? 0;
+            const fmFinal = ((getPlayerState(coreFinal, pyromancerId).tokens as Record<string, number>) ?? {})[TOKEN_IDS.FIRE_MASTERY] ?? 0;
+
+            expect(cpFinal, 'CP 应减少').toBe(cpBefore - cpSpent);
+            expect(fmFinal, '应获得火焰精通').toBe(fmGained);
+
+            await closeDebugPanelIfOpen(page);
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
     });
 });

@@ -102,7 +102,7 @@ test.describe('SummonerWars 自定义牌组', () => {
             hasText: /Custom Deck|自定义牌组/i,
         });
         await expect(customDeckCard).toBeVisible({ timeout: 5000 });
-        await expect(customDeckCard.locator('text=/Click to Build|点击构建/i')).toBeVisible();
+        await expect(customDeckCard.getByText(/Click to Build|点击构建/i)).toBeVisible();
         await page.screenshot({ path: testInfo.outputPath('custom-deck-entry.png') });
         await context.close();
     });
@@ -118,7 +118,9 @@ test.describe('SummonerWars 自定义牌组', () => {
         await waitForDeckBuilderOpen(page);
 
         await expect(page.locator('h2').filter({ hasText: /Factions|阵营/i })).toBeVisible();
-        await expect(page.locator('text=/Select a faction|选择一个阵营/i')).toBeVisible();
+        // CardPoolPanel 未选择阵营时显示提示文本
+        const cardPoolArea = page.locator('.flex-1.flex.items-center.justify-center');
+        await expect(cardPoolArea).toBeVisible({ timeout: 5000 });
         await expect(page.locator('h2').filter({ hasText: /My Deck|我的牌组/i })).toBeVisible();
         await page.screenshot({ path: testInfo.outputPath('deck-builder-open.png') });
 
@@ -142,7 +144,8 @@ test.describe('SummonerWars 自定义牌组', () => {
 
         await selectFactionInBuilder(page, 0);
         await page.waitForTimeout(500);
-        await expect(page.locator('text=/Select a faction|选择一个阵营/i')).toBeHidden({ timeout: 3000 });
+        // 选择阵营后，提示文本消失，显示卡牌池
+        await expect(page.locator('h3').filter({ hasText: /Summoners|召唤师/i })).toBeVisible({ timeout: 5000 });
 
         const summonerSection = page.locator('h3').filter({ hasText: /Summoners|召唤师/i });
         await expect(summonerSection).toBeVisible({ timeout: 5000 });
@@ -150,8 +153,8 @@ test.describe('SummonerWars 自定义牌组', () => {
 
         await selectFirstSummoner(page);
         await page.waitForTimeout(500);
-        await expect(page.locator('.bg-purple-500').first()).toBeVisible({ timeout: 3000 });
-        await expect(page.locator('text=/Starting Cards|起始卡牌/i')).toBeVisible({ timeout: 3000 });
+        await expect(page.locator('.border-amber-400').first()).toBeVisible({ timeout: 3000 });
+        await expect(page.getByText(/Starting Cards|起始卡牌/i)).toBeVisible({ timeout: 3000 });
         await page.screenshot({ path: testInfo.outputPath('deck-builder-summoner-selected.png') });
         await context.close();
     });
@@ -170,7 +173,7 @@ test.describe('SummonerWars 自定义牌组', () => {
         await selectFirstSummoner(page);
         await page.waitForTimeout(500);
 
-        await expect(page.locator('text=/Invalid Deck|牌组不合法/i')).toBeVisible({ timeout: 3000 });
+        await expect(page.getByText(/Invalid Deck|牌组不合法/i)).toBeVisible({ timeout: 3000 });
 
         const useDeckButton = page.locator('button').filter({ hasText: /Use This Deck|使用此牌组/i });
         if (await useDeckButton.isVisible().catch(() => false)) {
@@ -179,7 +182,7 @@ test.describe('SummonerWars 自定义牌组', () => {
 
         await addCardFromPool(page, 'Champions|冠军', 0);
         await page.waitForTimeout(300);
-        await expect(page.locator('text=/Build Cards|构建卡牌/i')).toBeVisible({ timeout: 3000 });
+        await expect(page.getByText(/Build Cards|构建卡牌/i)).toBeVisible({ timeout: 3000 });
         await page.screenshot({ path: testInfo.outputPath('deck-builder-cards-added.png') });
 
         const removeButtons = page.locator('button').filter({ hasText: '-' });

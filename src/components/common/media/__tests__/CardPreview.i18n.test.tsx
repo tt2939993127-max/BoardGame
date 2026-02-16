@@ -26,7 +26,7 @@ describe('CardPreview i18n atlas path', () => {
             <CardPreview previewRef={{ type: 'atlas', atlasId, index: 0 }} />
         );
 
-        expect(html).toContain('/assets/i18n/zh-CN/smashup/cards/compressed/cards1.avif');
+        // buildLocalizedImageSet 只使用 webp 格式（不再使用 image-set/avif）
         expect(html).toContain('/assets/i18n/zh-CN/smashup/cards/compressed/cards1.webp');
     });
 

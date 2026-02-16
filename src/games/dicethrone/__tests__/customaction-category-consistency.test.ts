@@ -220,7 +220,6 @@ describe('CustomAction categories 与 handler 输出一致性审计', () => {
             'paladin-holy-defense',
             'paladin-holy-defense-2',
             'paladin-holy-defense-3',
-            'paladin-absolution',
             // 影子盗贼防御反击：依赖骰面结果
             'shadow_thief-fearless-riposte',
             'shadow_thief-fearless-riposte-2',
@@ -239,6 +238,11 @@ describe('CustomAction categories 与 handler 输出一致性审计', () => {
             'magma-armor-resolve',
             'magma-armor-2-resolve',
             'magma-armor-3-resolve',
+            // 火法师炎爆术：投掷额外骰子，伤害依赖骰面结果（fire 面才造成伤害），
+            // mock 中骰子定义未注册导致 getPlayerDieFace 返回 null，骰面无法解析
+            'pyro-blast-2-roll',
+            // 火法师炎爆术 III：有 FM 时走 reroll 分支（BONUS_DICE_REROLL_REQUESTED），不直接产生 DAMAGE_DEALT
+            'pyro-blast-3-roll',
         ]);
 
         for (const actionId of registeredIds) {

@@ -24,18 +24,23 @@ import type {
     HostStartedEvent,
     PlayerReadyEvent,
     PendingInteraction,
+    TokenGrantedEvent,
 } from './types';
 import {
     getRollerId,
     getNextPlayerId,
     getResponderQueue,
+    getTokenStackLimit,
 } from './rules';
 import { findPlayerAbility, playerAbilityHasDamage } from './abilityLookup';
 
-import { DICETHRONE_COMMANDS, STATUS_IDS } from './ids';
+import { DICETHRONE_COMMANDS } from './ids';
 import { CHARACTER_DATA_MAP } from './characters';
 import { executeCardCommand } from './executeCards';
 import { executeTokenCommand } from './executeTokens';
+import { getPlayerPassiveAbilities } from './passiveAbility';
+import { buildDrawEvents } from './deckEvents';
+import { RESOURCE_IDS } from './resources';
 
 // ============================================================================
 // 辅助函数
@@ -44,8 +49,6 @@ import { executeTokenCommand } from './executeTokens';
 const resolveTimestamp = (command?: DiceThroneCommand): number => {
     return typeof command?.timestamp === 'number' ? command.timestamp : 0;
 };
-
-import { getGameMode } from './utils';
 
 /**
  * 判断该进攻技能是否可被防御（是否进入防御投掷阶段）
@@ -87,12 +90,13 @@ const isDefendableAttack = (state: DiceThroneCore, attackerId: string, abilityId
  * 执行命令，生成事件
  */
 export function execute(
-    matchState: { core: DiceThroneCore; sys?: { phase?: string; responseWindow?: { current?: { windowType: string } }; interaction?: { current?: { kind: string; data: unknown } | null } } },
+    matchState: { core: DiceThroneCore; sys?: { phase?: string; tutorial?: { active?: boolean }; responseWindow?: { current?: { windowType: string } }; interaction?: { current?: { kind: string; data: unknown } | null } } },
     command: DiceThroneCommand,
     random: RandomFn
 ): DiceThroneEvent[] {
     const state = matchState.core;
     const phase = (matchState.sys?.phase ?? 'setup') as TurnPhase;
+    const isTutorialActive = matchState.sys?.tutorial?.active === true;
     // 从 sys.interaction 读取 pendingInteraction（单一权威）
     const sysInteraction = matchState.sys?.interaction?.current;
     const pendingInteraction = sysInteraction?.kind === 'dt:card-interaction'
@@ -110,12 +114,13 @@ export function execute(
         case 'ROLL_DICE': {
             const rollerId = getRollerId(state, phase);
             const results: number[] = [];
-            const isTutorialMode = getGameMode() === 'tutorial';
-            const fixedValue = 1;
+            // 教程模式：骰子固定为 1（fist），确保教程流程中技能匹配
+            // randomPolicy.values:[6] 控制其他随机（如悟道卡 rollDie → lotus）
+            const tutorialFixedValue = 1;
             
             state.dice.slice(0, state.rollDiceCount).forEach(die => {
                 if (!die.isKept) {
-                    results.push(isTutorialMode ? fixedValue : random.d(6));
+                    results.push(isTutorialActive ? tutorialFixedValue : random.d(6));
                 }
             });
             
@@ -501,6 +506,55 @@ export function execute(
                 }
             }
 
+            // 处理 selectPlayer + tokenGrantConfig 类型交互（如 Vengeance）
+            if (interaction.type === 'selectPlayer' && interaction.tokenGrantConfig && interaction.selected.length > 0) {
+                const targetPlayerId = interaction.selected[0] as PlayerId;
+                const { tokenId, amount } = interaction.tokenGrantConfig;
+                const currentTokens = state.players[targetPlayerId]?.tokens[tokenId] ?? 0;
+                const tokenLimit = getTokenStackLimit(state, targetPlayerId, tokenId);
+                const actualAmount = Math.min(amount, tokenLimit - currentTokens);
+                
+                if (actualAmount > 0) {
+                    const tokenEvent: TokenGrantedEvent = {
+                        type: 'TOKEN_GRANTED',
+                        payload: {
+                            targetId: targetPlayerId,
+                            tokenId,
+                            amount: actualAmount,
+                            newTotal: currentTokens + actualAmount,
+                            sourceAbilityId: interaction.sourceCardId,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    };
+                    events.push(tokenEvent);
+                }
+            }
+
+            // 处理 selectPlayer + tokenGrantConfigs 批量授予（如祝圣）
+            if (interaction.type === 'selectPlayer' && interaction.tokenGrantConfigs && interaction.selected.length > 0) {
+                const targetPlayerId = interaction.selected[0] as PlayerId;
+                for (const { tokenId, amount } of interaction.tokenGrantConfigs) {
+                    const currentTokens = state.players[targetPlayerId]?.tokens[tokenId] ?? 0;
+                    const tokenLimit = getTokenStackLimit(state, targetPlayerId, tokenId);
+                    const actualAmount = Math.min(amount, tokenLimit - currentTokens);
+                    if (actualAmount > 0) {
+                        events.push({
+                            type: 'TOKEN_GRANTED',
+                            payload: {
+                                targetId: targetPlayerId,
+                                tokenId,
+                                amount: actualAmount,
+                                newTotal: currentTokens + actualAmount,
+                                sourceAbilityId: interaction.sourceCardId,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp,
+                        } as TokenGrantedEvent);
+                    }
+                }
+            }
+
             const event: InteractionCompletedEvent = {
                 type: 'INTERACTION_COMPLETED',
                 payload: {
@@ -546,6 +600,71 @@ export function execute(
         case 'REROLL_BONUS_DIE':
         case 'SKIP_BONUS_DICE_REROLL':
             return executeTokenCommand(state, command, random, timestamp);
+
+        case 'USE_PASSIVE_ABILITY': {
+            const { passiveId, actionIndex, targetDieId } = command.payload as {
+                passiveId: string;
+                actionIndex: number;
+                targetDieId?: number;
+            };
+            const passives = getPlayerPassiveAbilities(state, command.playerId);
+            const passive = passives.find(p => p.id === passiveId);
+            if (!passive) break;
+            const action = passive.actions[actionIndex];
+            if (!action) break;
+
+            const player = state.players[command.playerId];
+            if (!player) break;
+            const currentCp = player.resources[RESOURCE_IDS.CP] ?? 0;
+            if (currentCp < action.cpCost) break;
+
+            // 扣除 CP
+            const newCp = currentCp - action.cpCost;
+            events.push({
+                type: 'CP_CHANGED',
+                payload: { playerId: command.playerId, delta: -action.cpCost, newValue: newCp, sourceAbilityId: passiveId },
+                sourceCommandType: command.type,
+                timestamp,
+            });
+
+            // 执行动作
+            if (action.type === 'rerollDie' && targetDieId !== undefined) {
+                const die = state.dice.find(d => d.id === targetDieId);
+                const newValue = random.d(6);
+                events.push({
+                    type: 'DIE_REROLLED',
+                    payload: {
+                        dieId: targetDieId,
+                        oldValue: die?.value ?? newValue,
+                        newValue,
+                        playerId: command.playerId,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp: timestamp + 1,
+                } as DieRerolledEvent);
+
+                // 重掷后如果在进攻阶段且已选技能，触发重选
+                if (phase === 'offensiveRoll' &&
+                    state.pendingAttack &&
+                    !state.pendingAttack.isUltimate) {
+                    events.push({
+                        type: 'ABILITY_RESELECTION_REQUIRED',
+                        payload: {
+                            playerId: state.activePlayerId,
+                            previousAbilityId: state.pendingAttack.sourceAbilityId,
+                            reason: 'dieRerolled',
+                        },
+                        sourceCommandType: command.type,
+                        timestamp: timestamp + 2,
+                    } as DiceThroneEvent);
+                }
+            } else if (action.type === 'drawCard') {
+                events.push(
+                    ...buildDrawEvents(state, command.playerId, 1, random, command.type, timestamp + 1, passiveId)
+                );
+            }
+            break;
+        }
 
          default: {
             console.warn(`Unknown command type: ${(command as DiceThroneCommand).type}`);

@@ -646,10 +646,10 @@ describe('食人花派系能力', () => {
             });
 
             const events = execPlayMinion(state, '0', 'm1', 0);
-            const powerEvents = events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_REMOVED);
+            const powerEvents = events.filter(e => e.type === SU_EVENTS.TEMP_POWER_ADDED);
             expect(powerEvents.length).toBe(1);
             expect((powerEvents[0] as any).payload.minionUid).toBe('m1');
-            expect((powerEvents[0] as any).payload.amount).toBe(2);
+            expect((powerEvents[0] as any).payload.amount).toBe(-2);
         });
 
         it('力量修正正确应用（reduce 验证）', () => {
@@ -667,12 +667,86 @@ describe('食人花派系能力', () => {
             const newState = applyEvents(state, events);
             const minion = newState.bases[0].minions.find(m => m.uid === 'm1');
             expect(minion).toBeDefined();
-            // basePower=5, powerModifier 被减2 → 但 POWER_COUNTER_REMOVED 的 reduce 用 Math.max(0, mod - amount)
-            // 初始 powerModifier=0, 减2 → Math.max(0, 0-2) = 0
-            // 所以实际力量 = 5 + 0 = 5（因为 powerModifier 不能低于0）
-            expect(minion!.powerModifier).toBe(0);
-            // 有效力量 = basePower(5) + powerModifier(0) = 5
-            // 注意：这是 MVP 实现的限制，实际应该允许负数修正
+            // TEMP_POWER_ADDED amount=-2 → tempPowerModifier = -2
+            expect(minion!.tempPowerModifier).toBe(-2);
         });
+    });
+});
+
+// ============================================================================
+// 完成仪式 (Complete the Ritual) - playConstraint: requireOwnMinion
+// ============================================================================
+
+describe('cthulhu_complete_the_ritual 打出约束', () => {
+    it('目标基地有自己随从时可以打出', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'cthulhu_complete_the_ritual', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('m1', 'test_minion', '0', 3)],
+                ongoingActions: [],
+            }],
+            baseDeck: ['b2'],
+        });
+
+        const result = runCommand(makeMatchState(state), {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a1', targetBaseIndex: 0 },
+        } as any);
+        expect(result.success).toBe(true);
+    });
+
+    it('目标基地没有自己随从时被拒绝', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'cthulhu_complete_the_ritual', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('m1', 'test_minion', '1', 3)], // 对手的随从
+                ongoingActions: [],
+            }],
+        });
+
+        const result = runCommand(makeMatchState(state), {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a1', targetBaseIndex: 0 },
+        } as any);
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('随从');
+    });
+
+    it('目标基地无随从时被拒绝', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'cthulhu_complete_the_ritual', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [],
+                ongoingActions: [],
+            }],
+        });
+
+        const result = runCommand(makeMatchState(state), {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a1', targetBaseIndex: 0 },
+        } as any);
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('随从');
     });
 });

@@ -12,8 +12,10 @@ import type {
 import type { RandomFn } from '../../../engine/types';
 import { getDieFaceByDefinition, getTokenStackLimit, getRollerId } from './rules';
 import { RESOURCE_IDS } from './resources';
+import { TOKEN_IDS } from './ids';
 import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
 import { initHeroState, createCharacterDice } from './characters';
+import { getPassiveAbilityUpgrade } from './passiveAbilityUpgrades';
 import { getChoiceEffectHandler, registerChoiceEffectHandler } from './choiceEffects';
 import { removeCard } from './utils';
 import {
@@ -280,6 +282,12 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
     const target = state.players[targetId];
     if (!target) return state;
 
+    // 潜行获得时记录当前回合号（用于自动弃除判定）
+    let sneakGainedTurn = state.sneakGainedTurn;
+    if (tokenId === TOKEN_IDS.SNEAK && newTotal > 0) {
+        sneakGainedTurn = { ...(sneakGainedTurn || {}), [targetId]: state.turnNumber };
+    }
+
     return {
         ...state,
         players: {
@@ -289,6 +297,7 @@ const handleTokenGranted: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_G
         lastEffectSourceByPlayerId: sourceAbilityId
             ? { ...(state.lastEffectSourceByPlayerId || {}), [targetId]: sourceAbilityId }
             : state.lastEffectSourceByPlayerId,
+        sneakGainedTurn,
     };
 };
 
@@ -303,12 +312,20 @@ const handleTokenConsumed: EventHandler<Extract<DiceThroneEvent, { type: 'TOKEN_
     const player = state.players[playerId];
     if (!player) return state;
 
+    // 潜行消耗时清除获得回合追踪
+    let sneakGainedTurn = state.sneakGainedTurn;
+    if (tokenId === TOKEN_IDS.SNEAK && newTotal <= 0 && sneakGainedTurn?.[playerId] !== undefined) {
+        sneakGainedTurn = { ...sneakGainedTurn };
+        delete sneakGainedTurn[playerId];
+    }
+
     return {
         ...state,
         players: {
             ...state.players,
             [playerId]: { ...player, tokens: { ...player.tokens, [tokenId]: newTotal } },
         },
+        sneakGainedTurn,
     };
 };
 
@@ -770,6 +787,25 @@ export const reduce = (
             return handleBonusDiceSettled(state, event);
         case 'EXTRA_ATTACK_TRIGGERED':
             return handleExtraAttackTriggered(state, event);
+        case 'PASSIVE_ABILITY_UPGRADED': {
+            const { playerId, passiveId } = event.payload as { playerId: string; passiveId: string };
+            const player = state.players[playerId];
+            if (!player?.passiveAbilities) return state;
+            const upgradedDef = getPassiveAbilityUpgrade(passiveId);
+            if (!upgradedDef) return state;
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...player,
+                        passiveAbilities: player.passiveAbilities.map(p =>
+                            p.id === passiveId ? upgradedDef : p
+                        ),
+                    },
+                },
+            };
+        }
         case 'CHARACTER_SELECTED':
             return handleCharacterSelected(state, event);
         case 'HERO_INITIALIZED':

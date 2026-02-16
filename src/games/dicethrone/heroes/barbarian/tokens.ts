@@ -30,7 +30,6 @@ export const BARBARIAN_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.CONCUSSION,
         name: statusText(STATUS_IDS.CONCUSSION, 'name'),
-        icon: '💫',
         colorTheme: 'from-red-600 to-orange-500',
         description: statusText(STATUS_IDS.CONCUSSION, 'description') as unknown as string[],
         sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.offensive_spells.offensive_spells_shockwave_slam_001',
@@ -53,7 +52,6 @@ export const BARBARIAN_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.DAZE,
         name: statusText(STATUS_IDS.DAZE, 'name'),
-        icon: '😵',
         colorTheme: 'from-yellow-600 to-amber-500',
         description: statusText(STATUS_IDS.DAZE, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_lightning',

@@ -33,12 +33,16 @@ import type {
     TokenGrantedEvent,
     TokenConsumedEvent,
     TokenUsedEvent,
+    CpChangedEvent,
+    CardDrawnEvent,
+    BonusDieRolledEvent,
 } from './domain/types';
 import { createDiceThroneEventSystem } from './domain/systems';
-import { getNextPhase } from './domain/rules';
+import { getNextPhase, getRollerId, getActiveDice } from './domain/rules';
 import { findPlayerAbility } from './domain/abilityLookup';
 import { diceThroneCheatModifier } from './domain/cheatModifier';
 import { diceThroneFlowHooks } from './domain/flowHooks';
+import { ASSETS } from './ui/assets';
 
 // ============================================================================
 // ActionLog 共享白名单 + 格式化
@@ -52,6 +56,11 @@ const ACTION_LOG_ALLOWLIST = [
     'SELECT_ABILITY',
     'USE_TOKEN',
     'SKIP_TOKEN_RESPONSE',
+    'USE_PURIFY',
+    'PAY_TO_REMOVE_KNOCKDOWN',
+    'USE_PASSIVE_ABILITY',
+    // 确认投掷：记录最终骰面结果
+    'CONFIRM_ROLL',
 ] as const;
 
 const UNDO_ALLOWLIST = [
@@ -80,6 +89,13 @@ function resolveAbilitySourceLabel(
         const found = findPlayerAbility(core, pid, sourceAbilityId);
         if (found?.ability.name) {
             return { label: found.ability.name, isI18n: found.ability.name.includes('.') };
+        }
+    }
+    // 卡牌 ID 解析：sourceAbilityId 以 'card-' 开头时，查找卡牌名称
+    if (sourceAbilityId.startsWith('card-')) {
+        const card = findDiceThroneCard(core, sourceAbilityId);
+        if (card?.name) {
+            return { label: card.name, isI18n: card.name.includes('.') };
         }
     }
     // fallback：用 sourceAbilityId 本身作为文本
@@ -156,6 +172,29 @@ function formatDiceThroneActionEntry({
                 cardSegment,
             ],
         });
+
+        // 卡牌效果包含投掷时，记录投掷结果
+        const bonusDieEvents = events.filter(
+            (e): e is BonusDieRolledEvent => e.type === 'BONUS_DIE_ROLLED'
+        );
+        if (bonusDieEvents.length > 0) {
+            const rollSegments: ActionLogSegment[] = [
+                i18nSeg('actionLog.cardRollResult'),
+            ];
+            for (const bde of bonusDieEvents) {
+                const effectKey = bde.payload.effectKey;
+                if (effectKey) {
+                    rollSegments.push(i18nSeg(effectKey, bde.payload.effectParams));
+                }
+            }
+            entries.push({
+                id: `${command.type}-ROLL-${command.playerId}-${timestamp}`,
+                timestamp: timestamp + 1,
+                actorId: command.playerId,
+                kind: 'CARD_ROLL_RESULT',
+                segments: rollSegments,
+            });
+        }
     }
 
     if (command.type === 'ADVANCE_PHASE') {
@@ -204,6 +243,113 @@ function formatDiceThroneActionEntry({
         }
     }
 
+    if (command.type === 'USE_PURIFY') {
+        const statusId = (command.payload as { statusId?: string }).statusId;
+        if (statusId) {
+            const tokenKey = getTokenI18nKey(statusId);
+            const isI18nKey = tokenKey.includes('.');
+            entries.push({
+                id: `USE_PURIFY-${command.playerId}-${timestamp}`,
+                timestamp,
+                actorId: command.playerId,
+                kind: 'USE_PURIFY',
+                segments: [
+                    i18nSeg('actionLog.usePurify', { statusLabel: tokenKey }, isI18nKey ? ['statusLabel'] : undefined),
+                ],
+            });
+        }
+    }
+
+    if (command.type === 'PAY_TO_REMOVE_KNOCKDOWN') {
+        entries.push({
+            id: `PAY_TO_REMOVE_KNOCKDOWN-${command.playerId}-${timestamp}`,
+            timestamp,
+            actorId: command.playerId,
+            kind: 'PAY_TO_REMOVE_KNOCKDOWN',
+            segments: [
+                i18nSeg('actionLog.payToRemoveKnockdown'),
+            ],
+        });
+    }
+
+    if (command.type === 'USE_PASSIVE_ABILITY') {
+        const passiveId = (command.payload as { passiveId?: string }).passiveId;
+        if (passiveId) {
+            const source = resolveAbilitySourceLabel(passiveId, core, command.playerId);
+            const label = source?.label ?? passiveId;
+            const isI18nKey = source?.isI18n ?? false;
+            entries.push({
+                id: `USE_PASSIVE_ABILITY-${command.playerId}-${timestamp}`,
+                timestamp,
+                actorId: command.playerId,
+                kind: 'USE_PASSIVE_ABILITY',
+                segments: [
+                    i18nSeg('actionLog.usePassiveAbility', { abilityName: label }, isI18nKey ? ['abilityName'] : undefined),
+                ],
+            });
+        }
+    }
+
+    if (command.type === 'CONFIRM_ROLL') {
+        const phase = (state as MatchState<DiceThroneCore>).sys?.phase as TurnPhase | undefined;
+        const rollerId = getRollerId(core, phase);
+        const activeDice = getActiveDice(core);
+        const characterId = core.players[rollerId]?.characterId;
+
+        if (characterId && characterId !== 'unselected' && activeDice.length > 0) {
+            const spriteAsset = ASSETS.DICE_SPRITE(characterId);
+            const SPRITE_COLS = 3;
+            const SPRITE_ROWS = 3;
+            // 精灵图中骰面值→网格位置的映射
+            const FACE_MAP: Record<number, { col: number; row: number }> = {
+                1: { col: 0, row: 2 },
+                2: { col: 0, row: 1 },
+                3: { col: 1, row: 2 },
+                4: { col: 1, row: 1 },
+                5: { col: 2, row: 1 },
+                6: { col: 2, row: 2 },
+            };
+
+            const diceData = activeDice.map(die => {
+                const mapping = FACE_MAP[die.value] ?? FACE_MAP[1];
+                return { value: die.value, col: mapping.col, row: mapping.row };
+            });
+
+            const isDefense = phase === 'defensiveRoll';
+
+            // 获取当前选中的技能名
+            const abilityId = isDefense
+                ? core.pendingAttack?.defenseAbilityId
+                : core.activatingAbilityId;
+            const segments: ActionLogSegment[] = [];
+            if (abilityId) {
+                const rawName = findPlayerAbility(core, rollerId, abilityId)?.ability.name ?? abilityId;
+                const abilityNameKey = getAbilityI18nKey(rawName) || abilityId;
+                const isI18nKey = abilityNameKey.includes('.');
+                const actionKey = isDefense ? 'actionLog.confirmRollDefenseWithAbility' : 'actionLog.confirmRollWithAbility';
+                segments.push(i18nSeg(actionKey, { abilityName: abilityNameKey }, isI18nKey ? ['abilityName'] : undefined));
+            } else {
+                const actionKey = isDefense ? 'actionLog.confirmRollDefense' : 'actionLog.confirmRoll';
+                segments.push(i18nSeg(actionKey));
+            }
+            segments.push({
+                type: 'diceResult',
+                spriteAsset,
+                spriteCols: SPRITE_COLS,
+                spriteRows: SPRITE_ROWS,
+                dice: diceData,
+            });
+
+            entries.push({
+                id: `CONFIRM_ROLL-${rollerId}-${timestamp}`,
+                timestamp,
+                actorId: rollerId,
+                kind: 'CONFIRM_ROLL',
+                segments,
+            });
+        }
+    }
+
     const attackResolved = [...events].reverse().find(
         (event): event is AttackResolvedEvent => event.type === 'ATTACK_RESOLVED'
     );
@@ -238,10 +384,18 @@ function formatDiceThroneActionEntry({
             // 优先使用新管线的 breakdown 格式
             if (breakdown) {
                 // 新格式：基础伤害 + 修正步骤
+                // 引擎层 resolveAbilityName 只返回 abilityId（如 'pickpocket'），
+                // 需要用游戏层 resolveAbilitySourceLabel 获取 i18n key（如 'abilities.pickpocket.name'）
+                let baseLabel = breakdown.base.sourceName || breakdown.base.sourceId;
+                let baseLabelIsI18n = breakdown.base.sourceNameIsI18n ?? false;
+                if (!baseLabelIsI18n && source) {
+                    baseLabel = source.label;
+                    baseLabelIsI18n = source.isI18n;
+                }
                 breakdownLines.push({
-                    label: breakdown.base.sourceName || breakdown.base.sourceId,
-                    labelIsI18n: breakdown.base.sourceNameIsI18n ?? false,
-                    labelNs: breakdown.base.sourceNameIsI18n ? DT_NS : undefined,
+                    label: baseLabel,
+                    labelIsI18n: baseLabelIsI18n,
+                    labelNs: baseLabelIsI18n ? DT_NS : undefined,
                     value: breakdown.base.value,
                     color: 'neutral',
                 });
@@ -477,7 +631,77 @@ function formatDiceThroneActionEntry({
                 segments,
             });
         }
+
+        if (event.type === 'CP_CHANGED') {
+            const cpEvent = event as CpChangedEvent;
+            const { playerId, delta, newValue, sourceAbilityId } = cpEvent.payload;
+            if (delta === 0) return;
+            const source = resolveAbilitySourceLabel(sourceAbilityId, core, command.playerId);
+            const isGain = delta > 0;
+            const key = isGain
+                ? (source ? 'actionLog.cpGained' : 'actionLog.cpGainedPlain')
+                : (source ? 'actionLog.cpSpent' : 'actionLog.cpSpentPlain');
+            const params: Record<string, string | number> = {
+                amount: Math.abs(delta),
+                newValue,
+            };
+            const paramI18nKeys: string[] = [];
+            if (source) {
+                params.source = source.label;
+                if (source.isI18n) paramI18nKeys.push('source');
+            }
+            entries.push({
+                id: `CP_CHANGED-${playerId}-${entryTimestamp}-${index}`,
+                timestamp: entryTimestamp,
+                actorId: playerId,
+                kind: 'CP_CHANGED',
+                segments: [
+                    i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
+                ],
+            });
+        }
+
+        if (event.type === 'CARD_DRAWN') {
+            // 抽牌事件在 forEach 外合并处理，跳过单条
+        }
     });
+
+    // 合并同一批的 CARD_DRAWN 事件，按 (playerId, sourceAbilityId) 分组
+    const drawGroups = new Map<string, { playerId: string; count: number; sourceAbilityId?: string; lastTimestamp: number; lastIndex: number }>();
+    events.forEach((event, index) => {
+        if (event.type !== 'CARD_DRAWN') return;
+        const { playerId, sourceAbilityId } = (event as CardDrawnEvent).payload;
+        const groupKey = `${playerId}|${sourceAbilityId ?? ''}`;
+        const existing = drawGroups.get(groupKey);
+        const rawTs = typeof event.timestamp === 'number' ? event.timestamp : timestamp;
+        const entryTs = Math.max(rawTs, timestamp + 1 + index);
+        if (existing) {
+            existing.count++;
+            existing.lastTimestamp = entryTs;
+            existing.lastIndex = index;
+        } else {
+            drawGroups.set(groupKey, { playerId, count: 1, sourceAbilityId, lastTimestamp: entryTs, lastIndex: index });
+        }
+    });
+    for (const [, group] of drawGroups) {
+        const source = resolveAbilitySourceLabel(group.sourceAbilityId, core, command.playerId);
+        const key = source ? 'actionLog.cardDrawn' : 'actionLog.cardDrawnPlain';
+        const params: Record<string, string | number> = { count: group.count };
+        const paramI18nKeys: string[] = [];
+        if (source) {
+            params.source = source.label;
+            if (source.isI18n) paramI18nKeys.push('source');
+        }
+        entries.push({
+            id: `CARD_DRAWN-${group.playerId}-${group.lastTimestamp}-${group.lastIndex}`,
+            timestamp: group.lastTimestamp,
+            actorId: group.playerId,
+            kind: 'CARD_DRAWN',
+            segments: [
+                i18nSeg(key, params, paramI18nKeys.length > 0 ? paramI18nKeys : undefined),
+            ],
+        });
+    }
 
     if (entries.length === 0) return null;
     return entries.length === 1 ? entries[0] : entries;
@@ -532,8 +756,9 @@ const systems = [
             'MODIFY_DIE', 'REROLL_DIE',
             'REMOVE_STATUS', 'TRANSFER_STATUS',
             'CONFIRM_INTERACTION', 'CANCEL_INTERACTION',
+            'USE_PASSIVE_ABILITY',
         ],
-        responderExemptCommands: ['USE_TOKEN', 'SKIP_TOKEN_RESPONSE'],
+        responderExemptCommands: ['USE_TOKEN', 'SKIP_TOKEN_RESPONSE', 'USE_PASSIVE_ABILITY'],
         responseAdvanceEvents: [
             { eventType: 'CARD_PLAYED' },
         ],
@@ -588,6 +813,8 @@ const COMMAND_TYPES = [
     // 奖励骰重掷
     'REROLL_BONUS_DIE',
     'SKIP_BONUS_DICE_REROLL',
+    // 被动能力（如教皇税）
+    'USE_PASSIVE_ABILITY',
 ];
 
 // 适配器配置

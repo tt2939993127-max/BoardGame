@@ -8,13 +8,13 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
     grantExtraMinion, destroyMinion,
-    buildMinionTargetOptions,
+    buildMinionTargetOptions, buildAbilityFeedback,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type {
-    PowerCounterRemovedEvent, SmashUpEvent, CardsDrawnEvent,
+    SmashUpEvent, CardsDrawnEvent,
     DeckReorderedEvent, MinionCardDef, OngoingDetachedEvent,
-    MinionPlayedEvent,
+    MinionPlayedEvent, BreakpointModifiedEvent,
 } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
@@ -27,15 +27,15 @@ function killerPlantInstaGrow(ctx: AbilityContext): AbilityResult {
     return { events: [grantExtraMinion(ctx.playerId, 'killer_plant_insta_grow', ctx.now)] };
 }
 
-/** 野生食人花?onPlay：打出回?2力量（通过 powerModifier 实现）?*/
+/** 野生食人花 onPlay：打出回合 -2 力量（回合结束自动清零） */
 function killerPlantWeedEater(ctx: AbilityContext): AbilityResult {
-    // 打出时给 -2 力量修正（本回合有效，回合结束时应清除——MVP 先用 powerModifier 实现）?
-    const evt: PowerCounterRemovedEvent = {
-        type: SU_EVENTS.POWER_COUNTER_REMOVED,
+    // 使用临时力量修正（tempPowerModifier），回合结束时 TURN_STARTED 自动清零
+    const evt: SmashUpEvent = {
+        type: SU_EVENTS.TEMP_POWER_ADDED,
         payload: {
             minionUid: ctx.cardUid,
             baseIndex: ctx.baseIndex,
-            amount: 2,
+            amount: -2,
             reason: 'killer_plant_weed_eater',
         },
         timestamp: ctx.now,
@@ -114,7 +114,12 @@ function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                 const def = getMinionDef(c.defId);
                 return def !== undefined && def.power <= 3;
             });
-            if (eligible.length === 0) continue;
+            if (eligible.length === 0) {
+                // 牌库中无符合条件的随从，规则仍要求重洗牌库
+                events.push(buildDeckReshuffle(player, m.controller, [], ctx.now));
+                events.push(buildAbilityFeedback(m.controller, 'feedback.deck_search_no_match', ctx.now));
+                continue;
+            }
             if (eligible.length === 1) {
                 // 只有一个候选，自动选择：直接打出到 sprout 所在基地
                 const card = eligible[0];
@@ -201,7 +206,13 @@ function killerPlantVenusManTrap(ctx: AbilityContext): AbilityResult {
         const def = getMinionDef(c.defId);
         return def !== undefined && def.power <= 2;
     });
-    if (eligible.length === 0) return { events: [] };
+    if (eligible.length === 0) {
+        // 牌库中无符合条件的随从，规则仍要求重洗牌库
+        return { events: [
+            buildDeckReshuffle(player, ctx.playerId, [], ctx.now),
+            buildAbilityFeedback(ctx.playerId, 'feedback.deck_search_no_match', ctx.now),
+        ] };
+    }
     if (eligible.length === 1) {
         // 只有一个候选，自动选择：直接打出到此基地
         const card = eligible[0];
@@ -294,6 +305,8 @@ export function registerKillerPlantAbilities(): void {
     registerTrigger('killer_plant_sprout', 'onTurnStart', killerPlantSproutTrigger);
     // choking_vines: 回合开始时消灭此基地上力量最低的随从
     registerTrigger('killer_plant_choking_vines', 'onTurnStart', killerPlantChokingVinesTrigger);
+    // overgrowth: 回合开始时将本基地临界点降低到0（通过 tempBreakpointModifiers，回合结束自动清零）
+    registerTrigger('killer_plant_overgrowth', 'onTurnStart', killerPlantOvergrowthTrigger);
     // entangled: 有己方随从的基地上的随从不收回可被移动?
     registerProtection('killer_plant_entangled', 'move', killerPlantEntangledChecker);
     // entangled: 控制者回合开始时消灭本卡
@@ -352,7 +365,14 @@ export function registerKillerPlantInteractionHandlers(): void {
     });
 
     registerInteractionHandler('killer_plant_sprout_search', (state, playerId, value, iData, _random, timestamp) => {
-        if (value && (value as any).skip) return { state, events: [] };
+        if (value && (value as any).skip) {
+            // 跳过选择，规则仍要求重洗牌库
+            const player = state.core.players[playerId];
+            return { state, events: [
+                buildDeckReshuffle(player, playerId, [], timestamp),
+                buildAbilityFeedback(playerId, 'feedback.deck_search_skipped', timestamp),
+            ] };
+        }
         const { cardUid, defId } = value as { cardUid: string; defId: string };
         const player = state.core.players[playerId];
         // 从 continuationContext 获取 sprout 所在基地索引
@@ -386,12 +406,44 @@ export function registerKillerPlantInteractionHandlers(): void {
         if (!chosenDefId) return { state, events: [] };
         const player = state.core.players[playerId];
         const sameNameCard = player.deck.find(c => c.defId === chosenDefId);
-        if (!sameNameCard) return { state, events: [] };
+        if (!sameNameCard) {
+            // 牌库中未找到同名卡，规则仍要求重洗牌库
+            return { state, events: [
+                buildDeckReshuffle(player, playerId, [], timestamp),
+                buildAbilityFeedback(playerId, 'feedback.deck_search_no_match', timestamp),
+            ] };
+        }
         return { state, events: [
             { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [sameNameCard.uid] }, timestamp } as CardsDrawnEvent,
             buildDeckReshuffle(player, playerId, [sameNameCard.uid], timestamp),
         ] };
     });
+}
+
+/**
+ * 过度生长触发：控制者回合开始时，将本基地临界点降低到0
+ * 通过 BREAKPOINT_MODIFIED 事件写入 tempBreakpointModifiers（回合结束自动清零）
+ */
+function killerPlantOvergrowthTrigger(ctx: TriggerContext): SmashUpEvent[] {
+    const events: SmashUpEvent[] = [];
+    for (let i = 0; i < ctx.state.bases.length; i++) {
+        const base = ctx.state.bases[i];
+        // 统计属于当前回合玩家的过度生长张数（多张叠加）
+        const count = base.ongoingActions.filter(
+            a => a.defId === 'killer_plant_overgrowth' && a.ownerId === ctx.playerId
+        ).length;
+        if (count === 0) continue;
+        const baseDef = getBaseDef(base.defId);
+        if (!baseDef) continue;
+        // 每张降低一个完整临界点，总计降低 count * breakpoint
+        const delta = -baseDef.breakpoint * count;
+        events.push({
+            type: SU_EVENTS.BREAKPOINT_MODIFIED,
+            payload: { baseIndex: i, delta, reason: 'killer_plant_overgrowth' },
+            timestamp: ctx.now,
+        } as BreakpointModifiedEvent);
+    }
+    return events;
 }
 
 /** 藤蔓缠绕保护检查：有己方随从的基地上的所有随从不收回可被移动 */

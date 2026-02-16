@@ -1,32 +1,30 @@
 import type { TokenDef, TokenState } from '../../domain/tokenTypes';
 import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
 
+const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
+const statusText = (id: string, field: 'name' | 'description') => `statusEffects.${id}.${field}`;
+
 export const SHADOW_THIEF_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.SNEAK,
-        name: '潜行 (Sneak)',
+        name: tokenText(TOKEN_IDS.SNEAK, 'name'),
         category: 'buff',
-        icon: '🥷',
         colorTheme: 'bg-gradient-to-br from-indigo-500 to-purple-800',
-        description: ['拥有此标记时，若受到伤害，移除此标记并免除该伤害。'],
+        description: tokenText(TOKEN_IDS.SNEAK, 'description') as unknown as string[],
         stackLimit: 1,
-        passiveTrigger: {
-            timing: 'onDamageReceived',
-            removable: false,
-            actions: [
-                { type: 'custom', customActionId: 'shadow_thief-sneak-prevent', target: 'self' }
-            ]
-        },
+        // 潜行不再通过 onDamageReceived 被动触发
+        // 而是在攻击流程中（offensiveRoll 阶段退出时）主动检查：
+        // 若防御方有潜行，跳过防御掷骰、免除伤害、消耗潜行
+        // 详见 flowHooks.ts 的 offensiveRoll 退出逻辑
         frameId: 'shadow-soul',
         atlasId: DICETHRONE_STATUS_ATLAS_IDS.SHADOW_THIEF,
     },
     {
         id: TOKEN_IDS.SNEAK_ATTACK,
-        name: '伏击 (Sneak Attack)',
+        name: tokenText(TOKEN_IDS.SNEAK_ATTACK, 'name'),
         category: 'consumable',
-        icon: '🗡️',
         colorTheme: 'bg-gradient-to-br from-red-500 to-orange-800',
-        description: ['攻击结算时，投掷1个骰子并将结果加到伤害中。'],
+        description: tokenText(TOKEN_IDS.SNEAK_ATTACK, 'description') as unknown as string[],
         stackLimit: 1,
         activeUse: {
             timing: ['beforeDamageDealt'],
@@ -42,11 +40,10 @@ export const SHADOW_THIEF_TOKENS: TokenDef[] = [
     // 中毒状态效果定义（暗影刺客引入）
     {
         id: STATUS_IDS.POISON,
-        name: '中毒 (Poison)',
+        name: statusText(STATUS_IDS.POISON, 'name'),
         category: 'debuff',
-        icon: '☠️',
         colorTheme: 'bg-gradient-to-br from-green-600 to-emerald-900',
-        description: ['回合开始时受到等同层数的伤害，然后移除1层。'],
+        description: statusText(STATUS_IDS.POISON, 'description') as unknown as string[],
         stackLimit: 3,
         passiveTrigger: {
             timing: 'onTurnStart',

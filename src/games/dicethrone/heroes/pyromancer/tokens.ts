@@ -34,7 +34,6 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.FIRE_MASTERY,
         name: tokenText(TOKEN_IDS.FIRE_MASTERY, 'name'),
-        icon: '🔥',
         colorTheme: 'from-orange-500 to-red-600',
         description: tokenText(TOKEN_IDS.FIRE_MASTERY, 'description') as unknown as string[],
         sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.fire.flame_armor',
@@ -54,7 +53,6 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.KNOCKDOWN,
         name: statusText(STATUS_IDS.KNOCKDOWN, 'name'),
-        icon: '💫',
         colorTheme: 'from-red-600 to-orange-500',
         description: statusText(STATUS_IDS.KNOCKDOWN, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_explosion',
@@ -75,7 +73,6 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.BURN,
         name: statusText(STATUS_IDS.BURN, 'name'),
-        icon: '🔥',
         colorTheme: 'from-orange-600 to-red-500',
         description: statusText(STATUS_IDS.BURN, 'description') as unknown as string[],
         sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.fire.flame_chain_a',
@@ -97,7 +94,6 @@ export const PYROMANCER_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.STUN,
         name: statusText(STATUS_IDS.STUN, 'name'),
-        icon: '⚡',
         colorTheme: 'from-yellow-500 to-amber-600',
         description: statusText(STATUS_IDS.STUN, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_lightning',

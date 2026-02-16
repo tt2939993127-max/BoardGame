@@ -28,7 +28,6 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.EVASIVE,
         name: tokenText(TOKEN_IDS.EVASIVE, 'name'),
-        icon: '💨', // Replace with correct icon asset if available
         colorTheme: 'from-cyan-500 to-blue-500',
         description: tokenText(TOKEN_IDS.EVASIVE, 'description') as unknown as string[],
         stackLimit: 3,
@@ -58,7 +57,6 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.BLINDED,
         name: statusText(STATUS_IDS.BLINDED, 'name'),
-        icon: '👁️',
         colorTheme: 'from-gray-700 to-black',
         description: statusText(STATUS_IDS.BLINDED, 'description') as unknown as string[],
         stackLimit: 1,
@@ -80,7 +78,6 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.ENTANGLE,
         name: statusText(STATUS_IDS.ENTANGLE, 'name'),
-        icon: '🌿',
         colorTheme: 'from-green-700 to-emerald-900',
         description: statusText(STATUS_IDS.ENTANGLE, 'description') as unknown as string[],
         stackLimit: 1,
@@ -102,7 +99,6 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.TARGETED,
         name: statusText(STATUS_IDS.TARGETED, 'name'),
-        icon: '🎯',
         colorTheme: 'from-red-600 to-rose-700',
         description: statusText(STATUS_IDS.TARGETED, 'description') as unknown as string[],
         stackLimit: 1,
@@ -112,7 +108,7 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
             removable: true,
             actions: [
                 { type: 'modifyStat', target: 'self', value: 2 },
-                { type: 'removeStatus', target: 'self', statusId: STATUS_IDS.TARGETED, value: 1 },
+                // 锁定是持续效果，不会在受伤后自动移除，只能通过净化等手段移除
             ],
         },
         frameId: 'targeted',

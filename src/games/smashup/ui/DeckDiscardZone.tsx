@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Library, Trash2 } from 'lucide-react';
 import type { CardInstance } from '../domain/types';
@@ -14,6 +15,8 @@ type Props = {
     isMyTurn: boolean;
     /** 弃牌堆中有可从弃牌堆打出的卡牌时为 true（仅用于视觉提示） */
     hasPlayableFromDiscard?: boolean;
+    /** 是否为 interaction 驱动的弃牌堆选择（僵尸领主等），自动打开面板 */
+    autoOpenPanel?: boolean;
     /** 可从弃牌堆打出的卡牌列表（用于高亮） */
     playableCards?: { uid: string; defId: string; label: string }[];
     /** 当前选中的卡牌 uid */
@@ -28,9 +31,20 @@ type Props = {
     playerID: string | null;
 };
 
-export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, playableCards, selectedUid, onSelectCard, selectHint, onClosePanel, dispatch, playerID }) => {
+export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, autoOpenPanel, playableCards, selectedUid, onSelectCard, selectHint, onClosePanel, dispatch, playerID }) => {
     const { t } = useTranslation('game-smashup');
     const [showDiscard, setShowDiscard] = useState(false);
+
+    // interaction 驱动的弃牌堆选择（僵尸领主等）：自动打开/关闭面板
+    const prevAutoOpen = React.useRef(false);
+    useEffect(() => {
+        if (autoOpenPanel && !prevAutoOpen.current) {
+            setShowDiscard(true);
+        } else if (!autoOpenPanel && prevAutoOpen.current) {
+            setShowDiscard(false);
+        }
+        prevAutoOpen.current = !!autoOpenPanel;
+    }, [autoOpenPanel]);
 
     const topCard = discard.length > 0 ? discard[discard.length - 1] : null;
     const topDef = topCard ? getCardDef(topCard.defId) : null;
@@ -43,6 +57,9 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
         onSelectCard?.(null);
         onClosePanel?.();
     }, [onSelectCard, onClosePanel]);
+
+    // portal 容器 ref，用于点击外部关闭检测
+    const portalRef = React.useRef<HTMLDivElement | null>(null);
 
     const displayCardsData = useMemo(() => {
         if (!showDiscard || discard.length === 0) return undefined;
@@ -64,18 +81,21 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
         };
     }, [showDiscard, discard, playableCards, selectedUid, onSelectCard, selectHint, t, handleCloseDiscard]);
 
-    // 点击面板外部关闭弃牌堆查看
+    // 点击面板外部关闭弃牌堆查看（interaction 驱动时不关闭，因为用户需要点击基地）
     useEffect(() => {
         if (!showDiscard) return;
+        if (autoOpenPanel) return; // interaction 模式下不监听外部点击
         const handler = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
-            // 点击在弃牌堆查看面板内部、弃牌堆按钮、或放大镜遮罩上，不关闭
+            // 点击在弃牌堆查看面板内部（含 portal）、弃牌堆按钮、或放大镜遮罩上，不关闭
             if (target.closest('[data-discard-view-panel]') || target.closest('[data-discard-toggle]') || target.closest('[data-interaction-allow]')) return;
+            // 额外检查 portal ref（防止 closest 在 portal 中失效）
+            if (portalRef.current?.contains(target)) return;
             setShowDiscard(false);
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
-    }, [showDiscard]);
+    }, [showDiscard, autoOpenPanel]);
 
     return (
         <div
@@ -106,7 +126,7 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
             <div
                 className="flex flex-col items-center pointer-events-auto group cursor-pointer relative"
                 data-discard-toggle
-                onClick={() => setShowDiscard(prev => !prev)}
+                onClick={() => { if (!autoOpenPanel) setShowDiscard(prev => !prev); }}
             >
                 <div className="relative w-[7.5vw] aspect-[0.714]">
                     {hasPlayableFromDiscard && (
@@ -140,13 +160,18 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
                 </div>
             </div>
 
-            {/* 弃牌堆查看：复用 PromptOverlay 通用卡牌展示模式 */}
-            <PromptOverlay
-                interaction={undefined}
-                dispatch={dispatch}
-                playerID={playerID}
-                displayCards={displayCardsData}
-            />
+            {/* 弃牌堆查看：复用 PromptOverlay 通用卡牌展示模式，Portal 到 body 避免被手牌区域 stacking context 遮挡 */}
+            {displayCardsData && createPortal(
+                <div ref={portalRef}>
+                    <PromptOverlay
+                        interaction={undefined}
+                        dispatch={dispatch}
+                        playerID={playerID}
+                        displayCards={displayCardsData}
+                    />
+                </div>,
+                document.body,
+            )}
         </div>
     );
 };

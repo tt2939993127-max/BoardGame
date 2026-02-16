@@ -151,6 +151,10 @@ export interface RollDieConditionalEffect {
     bonusDamage?: number;
     heal?: number;
     cp?: number;
+    /** 抽牌数量 */
+    drawCard?: number;
+    /** 授予伤害护盾 */
+    grantDamageShield?: { value: number; preventStatus?: boolean };
     grantStatus?: { 
         statusId: string; 
         value: number;
@@ -163,10 +167,29 @@ export interface RollDieConditionalEffect {
         /** 目标：self=施法者，opponent=对手。如果未指定，默认为 self */
         target?: 'self' | 'opponent';
     };
+    /** 授予多个 Token（当单个 grantToken 不够时使用） */
+    grantTokens?: Array<{
+        tokenId: string;
+        value: number;
+        target?: 'self' | 'opponent';
+    }>;
     triggerChoice?: {
         titleKey: string;
         options: ChoiceOption[];
     };
+}
+
+/**
+ * rollDie 的"否则/默认"分支效果
+ * 当所有 conditionalEffects 都不匹配时触发
+ */
+export interface RollDieDefaultEffect {
+    /** 抽牌数量 */
+    drawCard?: number;
+    heal?: number;
+    cp?: number;
+    grantToken?: { tokenId: string; value: number; target?: 'self' | 'opponent' };
+    grantStatus?: { statusId: string; value: number; target?: 'self' | 'opponent' };
 }
 
 /**
@@ -186,6 +209,8 @@ export interface EffectAction {
     // rollDie 相关
     diceCount?: number;
     conditionalEffects?: RollDieConditionalEffect[];
+    /** rollDie 的"否则/默认"分支：当所有 conditionalEffects 都不匹配时触发 */
+    defaultEffect?: RollDieDefaultEffect;
     damageMode?: 'sumValues' | 'conditional';
     // drawCard 相关
     drawCount?: number;
@@ -250,8 +275,8 @@ export interface TokenDef {
     id: string;
     /** 显示名称（或 i18n key） */
     name: string;
-    /** 图标（emoji 或图片路径） */
-    icon: string;
+    /** 图标（已废弃，精灵图优先） */
+    icon?: string;
     /** 颜色主题（Tailwind gradient class） */
     colorTheme: string;
     /** 描述文本（供 UI 展示） */

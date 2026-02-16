@@ -156,7 +156,8 @@ describe('暗影刺客 - 定义完整性', () => {
         expect(sneakDef).toBeDefined();
         expect(sneakDef!.category).toBe('buff');
         expect(sneakDef!.stackLimit).toBe(1);
-        expect(sneakDef!.passiveTrigger?.timing).toBe('onDamageReceived');
+        // 潜行不再通过 passiveTrigger 触发，而是在攻击流程中处理
+        expect(sneakDef!.passiveTrigger).toBeUndefined();
 
         expect(sneakAttackDef).toBeDefined();
         expect(sneakAttackDef!.category).toBe('consumable');
@@ -739,5 +740,282 @@ describe('暗影刺客 - 单防御技能时自动选择', () => {
 
         expect(result.assertionErrors).toHaveLength(0);
         expect(result.finalState.core.pendingAttack?.defenseAbilityId).toBe('shadow-defense');
+    });
+});
+
+
+// ============================================================================
+// 暗影守护 I 完整防御结算流程（GameTestRunner）
+// ============================================================================
+
+describe('暗影守护 I - 完整防御结算流程', () => {
+    it('2暗影面时获得 SNEAK + SNEAK_ATTACK token 并免除伤害（4骰）', () => {
+        // 进攻掷骰 5 次 → 全 1（dagger）→ dagger-strike-5（8伤害）
+        // 防御掷骰 4 次 → 6,6,1,3（2 shadow + 1 dagger + 1 bag）
+        const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1, 6, 6, 1, 3]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    // 移除恐惧反击，只保留暗影守护（自动选择）
+                    core.players['1'].abilities = core.players['1'].abilities.filter(a => a.id !== 'fearless-riposte');
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '暗影守护 I - 2暗影面完整结算',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'), // main1 → offensiveRoll
+                cmd('ROLL_DICE', '0'),     // 5 × d(6) → [1,1,1,1,1] 全 dagger
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'dagger-strike-5' }),
+                cmd('ADVANCE_PHASE', '0'), // offensiveRoll → defensiveRoll
+                // 防御阶段（暗影守护 I 自动选择，diceCount=4）
+                cmd('ROLL_DICE', '1'),     // 4 × d(6) → [6,6,1,3] = 2 shadow + 1 dagger + 1 bag
+                cmd('CONFIRM_ROLL', '1'),
+                cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        tokens: {
+                            [TOKEN_IDS.SNEAK]: 1,
+                            [TOKEN_IDS.SNEAK_ATTACK]: 1,
+                        },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toHaveLength(0);
+        // 防御者 HP 不应减少（999 护盾免除伤害）
+        const defenderHp = result.finalState.core.players['1'].resources[RESOURCE_IDS.HP];
+        expect(defenderHp).toBe(50);
+    });
+
+    it('1暗影面时只获得 SNEAK_ATTACK（不获得 SNEAK，4骰）', () => {
+        // 进攻掷骰 5 次 → 全 1（dagger）
+        // 防御掷骰 4 次 → 6,1,1,3（1 shadow + 2 dagger + 1 bag）
+        const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1, 6, 1, 1, 3]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    core.players['1'].abilities = core.players['1'].abilities.filter(a => a.id !== 'fearless-riposte');
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '暗影守护 I - 1暗影面只获得 SNEAK_ATTACK',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'dagger-strike-5' }),
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '1'),
+                cmd('CONFIRM_ROLL', '1'),
+                cmd('ADVANCE_PHASE', '1'),
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        tokens: {
+                            [TOKEN_IDS.SNEAK]: 0,
+                            [TOKEN_IDS.SNEAK_ATTACK]: 1,
+                        },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toHaveLength(0);
+        // 1暗影面没有护盾，防御者应受到伤害
+        const defenderHp = result.finalState.core.players['1'].resources[RESOURCE_IDS.HP];
+        expect(defenderHp).toBeLessThan(50);
+    });
+
+    it('2匕首面时施加毒液给攻击者（4骰）', () => {
+        // 进攻掷骰 5 次 → 全 1（dagger）
+        // 防御掷骰 4 次 → 1,2,3,5（2 dagger + 1 bag + 1 card）
+        const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1, 1, 2, 3, 5]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    core.players['1'].abilities = core.players['1'].abilities.filter(a => a.id !== 'fearless-riposte');
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '暗影守护 I - 2匕首面施加毒液',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'dagger-strike-5' }),
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '1'),
+                cmd('CONFIRM_ROLL', '1'),
+                cmd('ADVANCE_PHASE', '1'),
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '0': {
+                        statusEffects: {
+                            [STATUS_IDS.POISON]: 1,
+                        },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toHaveLength(0);
+    });
+});
+
+// ============================================================================
+// 暗影守护 II 完整防御结算流程（GameTestRunner）
+// ============================================================================
+
+import { SHADOW_DEFENSE_2 } from '../heroes/shadow_thief/abilities';
+
+describe('暗影守护 II - 完整防御结算流程', () => {
+    it('2暗影面时获得 SNEAK + SNEAK_ATTACK token 并免除伤害', () => {
+        // 进攻掷骰 5 次 d(6) → 全 1（dagger）→ dagger-strike-5（8伤害）
+        // 防御掷骰 5 次 d(6) → 6,6,1,3,5（2 shadow + 1 dagger + 1 bag + 1 card）
+        const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1, 6, 6, 1, 3, 5]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    // 升级防御者（玩家1）的暗影守护到 II 级
+                    const defender = core.players['1'];
+                    const idx = defender.abilities.findIndex(a => a.id === 'shadow-defense');
+                    if (idx >= 0) {
+                        defender.abilities[idx] = SHADOW_DEFENSE_2 as any;
+                    }
+                    defender.abilityLevels['shadow-defense'] = 2;
+                    // 移除恐惧反击，只保留暗影守护 II（自动选择）
+                    defender.abilities = defender.abilities.filter(a => a.id !== 'fearless-riposte');
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '暗影守护 II - 2暗影面完整结算',
+            commands: [
+                // 进攻阶段
+                cmd('ADVANCE_PHASE', '0'), // main1 → offensiveRoll
+                cmd('ROLL_DICE', '0'),     // 5 × d(6) → [1,1,1,1,1] 全 dagger
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'dagger-strike-5' }),
+                cmd('ADVANCE_PHASE', '0'), // offensiveRoll → defensiveRoll
+                // 防御阶段（暗影守护 II 自动选择，diceCount=5）
+                cmd('ROLL_DICE', '1'),     // 5 × d(6) → [6,6,1,3,5] = 2 shadow + 1 dagger + 1 bag + 1 card
+                cmd('CONFIRM_ROLL', '1'),
+                cmd('ADVANCE_PHASE', '1'), // defensiveRoll → 攻击结算 → main2
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        tokens: {
+                            [TOKEN_IDS.SNEAK]: 1,
+                            [TOKEN_IDS.SNEAK_ATTACK]: 1,
+                        },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toHaveLength(0);
+
+        // 额外验证：防御者 HP 不应减少（999 护盾免除伤害）
+        const defenderHp = result.finalState.core.players['1'].resources[RESOURCE_IDS.HP];
+        expect(defenderHp).toBe(50); // 初始 HP，未受伤
+    });
+
+    it('1暗影面时只获得 SNEAK_ATTACK（不获得 SNEAK）', () => {
+        // 进攻掷骰 5 次 → 全 1（dagger）
+        // 防御掷骰 5 次 → 6,1,1,3,5（1 shadow + 2 dagger + 1 bag + 1 card）
+        const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1, 6, 1, 1, 3, 5]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    const defender = core.players['1'];
+                    const idx = defender.abilities.findIndex(a => a.id === 'shadow-defense');
+                    if (idx >= 0) {
+                        defender.abilities[idx] = SHADOW_DEFENSE_2 as any;
+                    }
+                    defender.abilityLevels['shadow-defense'] = 2;
+                    defender.abilities = defender.abilities.filter(a => a.id !== 'fearless-riposte');
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '暗影守护 II - 1暗影面只获得 SNEAK_ATTACK',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'dagger-strike-5' }),
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '1'),
+                cmd('CONFIRM_ROLL', '1'),
+                cmd('ADVANCE_PHASE', '1'),
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        tokens: {
+                            [TOKEN_IDS.SNEAK]: 0,
+                            [TOKEN_IDS.SNEAK_ATTACK]: 1,
+                        },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toHaveLength(0);
     });
 });

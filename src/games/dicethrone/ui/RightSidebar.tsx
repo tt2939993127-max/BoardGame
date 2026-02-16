@@ -6,6 +6,7 @@ import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { ActiveModifierBadge } from './ActiveModifierBadge';
 import type { ActiveModifier } from '../hooks/useActiveModifiers';
+import { PassiveAbilityPanel, type PassiveAbilityPanelProps } from './PassiveAbilityPanel';
 
 export const RightSidebar = ({
     dice,
@@ -34,6 +35,7 @@ export const RightSidebar = ({
     sellButtonVisible,
     diceInteractionConfig,
     activeModifiers,
+    passiveAbilityProps,
 }: {
     dice: Die[];
     rollCount: number;
@@ -64,6 +66,8 @@ export const RightSidebar = ({
     diceInteractionConfig?: DiceInteractionConfig;
     /** 已激活的攻击修正卡 */
     activeModifiers?: ActiveModifier[];
+    /** 被动能力面板 props */
+    passiveAbilityProps?: Omit<PassiveAbilityPanelProps, never> | null;
 }) => {
     return (
         <div
@@ -90,6 +94,7 @@ export const RightSidebar = ({
                     rerollingDiceIds={rerollingDiceIds}
                     locale={locale}
                     interactionConfig={diceInteractionConfig}
+                    isPassiveRerollMode={!!passiveAbilityProps?.rerollSelectingAction}
                 />
                 <DiceActions
                     rollCount={rollCount}
@@ -117,6 +122,10 @@ export const RightSidebar = ({
                         {advanceLabel}
                     </GameButton>
                 </div>
+                {/* 被动能力面板（如教皇税） */}
+                {passiveAbilityProps && passiveAbilityProps.passives.length > 0 && (
+                    <PassiveAbilityPanel {...passiveAbilityProps} />
+                )}
                 <div className="w-[10.2vw] flex justify-center">
                     <DiscardPile
                         ref={discardPileRef}

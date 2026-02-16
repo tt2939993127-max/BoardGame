@@ -257,7 +257,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
               variant="primary" 
               size="sm"
               disabled={core.players[core.currentPlayer].magic < 1}
-              title={core.players[core.currentPlayer].magic < 1 ? '魔力不足' : undefined}
+              title={core.players[core.currentPlayer].magic < 1 ? t('statusBanners.insufficientMagic') : undefined}
             >
               {t('actions.bloodRuneCharge')}
             </GameButton>
@@ -270,7 +270,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
               variant="primary" 
               size="sm"
               disabled={sourceUnitBoosts < 1}
-              title={sourceUnitBoosts < 1 ? '需要至少1点充能' : undefined}
+              title={sourceUnitBoosts < 1 ? t('statusBanners.insufficientCharge') : undefined}
             >
               {t('actions.confirm')}
             </GameButton>
@@ -468,7 +468,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
               variant="primary" 
               size="sm"
               disabled={withdrawUnitBoosts < 1}
-              title={withdrawUnitBoosts < 1 ? '需要至少1点充能' : undefined}
+              title={withdrawUnitBoosts < 1 ? t('statusBanners.insufficientCharge') : undefined}
             >
               {t('actions.withdrawCharge')}
             </GameButton>
@@ -477,7 +477,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
               variant="secondary" 
               size="sm"
               disabled={playerMagic < 1}
-              title={playerMagic < 1 ? '魔力不足' : undefined}
+              title={playerMagic < 1 ? t('statusBanners.insufficientMagic') : undefined}
             >
               {t('actions.withdrawMagic')}
             </GameButton>

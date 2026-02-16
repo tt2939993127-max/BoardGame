@@ -7,7 +7,7 @@ dotenv.config({ quiet: true });
 
 const port = process.env.PW_PORT || process.env.E2E_PORT || '3000';
 const baseURL = process.env.VITE_FRONTEND_URL || `http://localhost:${port}`;
-const gameServerPort = process.env.GAME_SERVER_PORT || process.env.PW_GAME_SERVER_PORT || '18000';
+const gameServerPort = process.env.GAME_SERVER_PORT || process.env.PW_GAME_SERVER_PORT || '18001';
 const reuseExistingServer = true;
 
 // 默认使用已运行的服务器（开发模式），设置 PW_START_SERVERS=true 强制启动（CI 模式）

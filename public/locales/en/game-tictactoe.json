@@ -22,6 +22,9 @@
     "tutorial_command_blocked": "This action is blocked in the tutorial",
     "tutorial_step_locked": "The current step cannot be skipped"
   },
+  "actionLog": {
+    "cellClicked": "Placed: {{row}},{{col}}"
+  },
   "tutorial": {
     "steps": {
       "intro": "Welcome to Tic-Tac-Toe! 👋 This classic strategy game challenges you to connect three marks in a row.",

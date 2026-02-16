@@ -35,6 +35,7 @@ const ShieldIcon = ({ value }: { value: number }) => (
 export const PlayerStats = ({
     player,
     hpRef,
+    cpRef,
     hitStopActive,
     hitStopConfig,
     isShaking,
@@ -44,6 +45,7 @@ export const PlayerStats = ({
 }: {
     player: HeroState;
     hpRef?: RefObject<HTMLDivElement | null>;
+    cpRef?: RefObject<HTMLDivElement | null>;
     hitStopActive?: boolean;
     hitStopConfig?: HitStopConfig;
     /** 是否正在震动（自己受击） */
@@ -110,7 +112,7 @@ export const PlayerStats = ({
                                 return hpRef ? <div ref={hpRef}>{content}</div> : content;
                             }
                             return (
-                                <div className="relative group/resource rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]">
+                                <div className="relative group/resource rounded-full overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.4),0_1px_2px_rgba(255,255,255,0.1)]" ref={cpRef}>
                                     {renderResource(key, value)}
                                     {/* 3D Highlights - Optimized for softness */}
                                     <div className="absolute inset-0 pointer-events-none">

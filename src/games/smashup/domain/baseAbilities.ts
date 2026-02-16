@@ -9,6 +9,7 @@ import type { PlayerId, MatchState } from '../../../engine/types';
 import type {
     SmashUpCore,
     SmashUpEvent,
+    MinionCardDef,
     VpAwardedEvent,
     CardsDrawnEvent,
     CardsDiscardedEvent,
@@ -21,7 +22,7 @@ import type {
 } from './types';
 import { SU_EVENTS } from './types';
 import { getEffectivePower } from './ongoingModifiers';
-import { drawMadnessCards, destroyMinion, moveMinion, buildBaseTargetOptions } from './abilityHelpers';
+import { drawMadnessCards, destroyMinion, moveMinion, buildBaseTargetOptions, buildMinionTargetOptions } from './abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -370,6 +371,8 @@ export function registerBaseAbilities(): void {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return { events: [] };
         const events: SmashUpEvent[] = [];
+        // 收集需要玩家选择的平局情况
+        const tieBreakPlayers: { playerId: string; candidates: MinionOnBase[]; maxPower: number }[] = [];
         // 按玩家分组，找每位玩家力量最高的随从
         const playerMinions = new Map<PlayerId, MinionOnBase[]>();
         for (const m of base.minions) {
@@ -377,25 +380,58 @@ export function registerBaseAbilities(): void {
             list.push(m);
             playerMinions.set(m.controller, list);
         }
-        for (const [, minions] of playerMinions) {
+        for (const [pid, minions] of playerMinions) {
             if (minions.length === 0) continue;
-            // 找力量最高的随从
-            const strongest = minions.reduce((best, m) => {
-                const mPower = getEffectivePower(ctx.state, m, ctx.baseIndex);
-                const bPower = getEffectivePower(ctx.state, best, ctx.baseIndex);
-                return mPower > bPower ? m : best;
-            });
-            events.push({
-                type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
-                payload: {
-                    cardUid: strongest.uid,
-                    defId: strongest.defId,
-                    ownerId: strongest.owner,
-                    reason: '刚柔流寺庙：最高力量随从放入牌库底',
-                },
-                timestamp: ctx.now,
-            } as CardToDeckBottomEvent);
+            // 找力量最高值
+            let maxPower = -Infinity;
+            for (const m of minions) {
+                const power = getEffectivePower(ctx.state, m, ctx.baseIndex);
+                if (power > maxPower) maxPower = power;
+            }
+            // 找所有最高力量随从
+            const strongest = minions.filter(m => getEffectivePower(ctx.state, m, ctx.baseIndex) === maxPower);
+            if (strongest.length === 1) {
+                // 唯一最强，直接放牌库底
+                events.push({
+                    type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
+                    payload: {
+                        cardUid: strongest[0].uid,
+                        defId: strongest[0].defId,
+                        ownerId: strongest[0].owner,
+                        reason: '刚柔流寺庙：最高力量随从放入牌库底',
+                    },
+                    timestamp: ctx.now,
+                } as CardToDeckBottomEvent);
+            } else {
+                // 平局：需要拥有者选择
+                tieBreakPlayers.push({ playerId: pid, candidates: strongest, maxPower });
+            }
         }
+
+        if (tieBreakPlayers.length > 0 && ctx.matchState) {
+            // 创建第一个平局选择交互，剩余通过 continuationContext 链式传递
+            const first = tieBreakPlayers[0];
+            const remaining = tieBreakPlayers.slice(1);
+            const options = first.candidates.map(m => {
+                const def = getCardDef(m.defId) as MinionCardDef | undefined;
+                const name = def?.name ?? m.defId;
+                return { uid: m.uid, defId: m.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${first.maxPower})` };
+            });
+            const interaction = createSimpleChoice(
+                `base_temple_of_goju_tiebreak_${ctx.now}`, first.playerId,
+                '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options), 'base_temple_of_goju_tiebreak',
+            );
+            const remainingData = remaining.map(tb => ({
+                playerId: tb.playerId,
+                candidateUids: tb.candidates.map(c => ({ uid: c.uid, defId: c.defId, owner: c.owner })),
+                maxPower: tb.maxPower,
+            }));
+            return { events, matchState: queueInteraction(ctx.matchState, {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex, remainingPlayers: remainingData } },
+            }) };
+        }
+
         return { events };
     });
 
@@ -558,7 +594,7 @@ export function registerBaseAbilities(): void {
             };
         });
         const options: PromptOption<{ skip: true } | { minionUid: string; minionDefId: string; baseIndex: number }>[] = [
-            { id: 'skip', label: '不收回消灭', value: { skip: true } },
+            { id: 'skip', label: '不消灭', value: { skip: true } },
             ...minionOptions,
         ];
         if (!ctx.matchState) return { events: [] };
@@ -996,6 +1032,45 @@ export function registerBaseInteractionHandlers(): void {
             '蘑菇王国：移动对手随从',
             timestamp,
         )] };
+    });
+
+    // 刚柔流寺庙：平局时拥有者选择放入牌库底的随从（链式处理多个玩家）
+    registerInteractionHandler('base_temple_of_goju_tiebreak', (state, _playerId, value, iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number; defId: string };
+        const base = state.core.bases[baseIndex];
+        if (!base) return { state, events: [] };
+        const target = base.minions.find(m => m.uid === minionUid);
+        if (!target) return { state, events: [] };
+        const events: SmashUpEvent[] = [{
+            type: SU_EVENTS.CARD_TO_DECK_BOTTOM,
+            payload: {
+                cardUid: target.uid,
+                defId: target.defId,
+                ownerId: target.owner,
+                reason: '刚柔流寺庙：最高力量随从放入牌库底',
+            },
+            timestamp,
+        } as CardToDeckBottomEvent];
+
+        // 检查是否有剩余玩家需要平局选择
+        const ctx = iData?.continuationContext as { baseIndex: number; remainingPlayers?: { playerId: string; candidateUids: { uid: string; defId: string; owner: string }[]; maxPower: number }[] } | undefined;
+        const remaining = ctx?.remainingPlayers ?? [];
+        if (remaining.length > 0) {
+            const next = remaining[0];
+            const rest = remaining.slice(1);
+            const options = next.candidateUids.map(c => {
+                const def = getCardDef(c.defId) as MinionCardDef | undefined;
+                const name = def?.name ?? c.defId;
+                return { uid: c.uid, defId: c.defId, baseIndex: ctx!.baseIndex, label: `${name} (力量 ${next.maxPower})` };
+            });
+            const interaction = createSimpleChoice(
+                `base_temple_of_goju_tiebreak_${timestamp}`, next.playerId,
+                '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options), 'base_temple_of_goju_tiebreak',
+            );
+            return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { baseIndex: ctx!.baseIndex, remainingPlayers: rest } } }), events };
+        }
+
+        return { state, events };
     });
 
     // === 扩展包基地交互处理函数 ===

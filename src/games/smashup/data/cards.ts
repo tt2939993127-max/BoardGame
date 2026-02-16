@@ -483,6 +483,7 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
         vpAwards: [4, 2, 1],
         faction: 'sheep',
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.BASE4, index: 9 },
+        replaceOnSetup: true,
     },
     {
         id: 'base_locker_room',
@@ -506,30 +507,17 @@ export const BASE_CARDS_SET4: BaseCardDef[] = [
 registerBases(BASE_CARDS_SET4);
 
 // ============================================================================
-// 基地选择：按所选派系推断扩展包（从基地数据推断）
+// 基地选择：按所选派系过滤
 // ============================================================================
 
-type BaseSetKey = 'base' | 'al9000' | 'pretty_pretty' | 'set4';
-
-const BASE_SET_CARDS: Record<BaseSetKey, BaseCardDef[]> = {
-    base: BASE_CARDS,
-    al9000: BASE_CARDS_AL9000,
-    pretty_pretty: BASE_CARDS_PRETTY_PRETTY,
-    set4: BASE_CARDS_SET4,
-};
-
-/** 根据所选派系获取基地定义 ID（按派系对应扩展包聚合） */
+/** 根据所选派系获取基地定义 ID（只使用所选派系的基地） */
 export function getBaseDefIdsForFactions(factionIds: string[]): string[] {
     const selected = new Set(factionIds);
-    const selectedSets = Object.entries(BASE_SET_CARDS)
-        .filter(([, bases]) => bases.some(base => base.faction && selected.has(base.faction)))
-        .map(([setKey]) => setKey as BaseSetKey);
-    if (selectedSets.length === 0) {
-        return getAllBaseDefIds();
-    }
-    return selectedSets.flatMap((setKey) =>
-        BASE_SET_CARDS[setKey].map(base => base.id)
-    );
+    const matched = Array.from(_baseRegistry.values())
+        .filter(base => base.faction && selected.has(base.faction))
+        .map(base => base.id);
+    // fallback：若匹配不到任何基地（派系无对应基地），回退到全部基地
+    return matched.length > 0 ? matched : getAllBaseDefIds();
 }
 
 

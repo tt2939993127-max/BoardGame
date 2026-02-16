@@ -212,6 +212,18 @@ export interface SkipBonusDiceRerollCommand extends Command<'SKIP_BONUS_DICE_RER
     payload: Record<string, never>;
 }
 
+/** 使用被动能力命令（如教皇税：花费 CP 重掷/抽牌） */
+export interface UsePassiveAbilityCommand extends Command<'USE_PASSIVE_ABILITY'> {
+    payload: {
+        /** 被动能力 ID（如 'tithes'） */
+        passiveId: string;
+        /** 动作索引（对应 PassiveAbilityDef.actions 数组下标） */
+        actionIndex: number;
+        /** 目标骰子 ID（rerollDie 时必填） */
+        targetDieId?: number;
+    };
+}
+
 /** 所有 DiceThrone 命令 */
 export type DiceThroneCommand =
     | RollDiceCommand
@@ -242,4 +254,5 @@ export type DiceThroneCommand =
     | UsePurifyCommand
     | PayToRemoveKnockdownCommand
     | RerollBonusDieCommand
-    | SkipBonusDiceRerollCommand;
+    | SkipBonusDiceRerollCommand
+    | UsePassiveAbilityCommand;

@@ -5,8 +5,8 @@
  * ?initAllAbilities() 中调用）?
  */
 
-import { registerPowerModifier, registerBreakpointModifier } from '../domain/ongoingModifiers';
-import type { PowerModifierContext, BreakpointModifierContext } from '../domain/ongoingModifiers';
+import { registerPowerModifier, registerOngoingPowerModifier } from '../domain/ongoingModifiers';
+import type { PowerModifierContext } from '../domain/ongoingModifiers';
 import { getBaseDef } from '../data/cards';
 import { isMicrobot } from '../domain/utils';
 
@@ -36,10 +36,8 @@ function registerDinosaurModifiers(): void {
         return raptorCount;
     });
 
-    // 升级（ongoing 行动卡附着在随从上）：目标随从 +2 力量
-    registerPowerModifier('dino_upgrade', (ctx: PowerModifierContext) => {
-        return ctx.minion.attachedActions.some(a => a.defId === 'dino_upgrade') ? 2 : 0;
-    });
+    // 升级（ongoing 行动卡附着在随从上）：每张 +2 力量
+    registerOngoingPowerModifier('dino_upgrade', 'minion', 'self', 2);
 }
 
 // ============================================================================
@@ -94,16 +92,10 @@ function registerGhostModifiers(): void {
         return player.hand.length <= 2 ? 3 : 0;
     });
 
-    // 通灵之门（ongoing 行动卡附着在基地上）：手牌堆?时同基地己方随从 +2 力量
-    registerPowerModifier('ghost_door_to_the_beyond', (ctx: PowerModifierContext) => {
-        // 检查基地上是否有此 ongoing 行动卡，且属于目标随从的控制者?
-        const hasOngoing = ctx.base.ongoingActions.some(
-            a => a.defId === 'ghost_door_to_the_beyond' && a.ownerId === ctx.minion.controller
-        );
-        if (!hasOngoing) return 0;
+    // 通灵之门（ongoing 行动卡附着在基地上）：手牌≤2时同基地己方随从每张 +2 力量
+    registerOngoingPowerModifier('ghost_door_to_the_beyond', 'base', 'ownerMinions', 2, (ctx) => {
         const player = ctx.state.players[ctx.minion.controller];
-        if (!player) return 0;
-        return player.hand.length <= 2 ? 2 : 0;
+        return !!player && player.hand.length <= 2;
     });
 }
 
@@ -112,13 +104,8 @@ function registerGhostModifiers(): void {
 // ============================================================================
 
 function registerNinjaModifiers(): void {
-    // 毒药（ongoing 行动卡附着在随从上）：目标随从 -4 力量
-    registerPowerModifier('ninja_poison', (ctx: PowerModifierContext) => {
-        const hasPoison = ctx.minion.attachedActions.some(
-            a => a.defId === 'ninja_poison'
-        );
-        return hasPoison ? -4 : 0;
-    });
+    // 毒药（ongoing 行动卡附着在随从上）：每张 -4 力量
+    registerOngoingPowerModifier('ninja_poison', 'minion', 'self', -4);
 }
 
 // ============================================================================
@@ -126,26 +113,13 @@ function registerNinjaModifiers(): void {
 // ============================================================================
 
 function registerKillerPlantModifiers(): void {
-    // 催眠孢子（ongoing 行动卡打出到基地上）：其他玩家在此基地的随从 -1 力量
-    registerPowerModifier('killer_plant_sleep_spores', (ctx: PowerModifierContext) => {
-        // 检查基地上是否有睡眠孢子
-        const sleepSpores = ctx.base.ongoingActions.find(
-            a => a.defId === 'killer_plant_sleep_spores'
-        );
-        if (!sleepSpores) return 0;
-        // 只对其他玩家的随从生效
-        if (ctx.minion.controller === sleepSpores.ownerId) return 0;
-        return -1;
-    });
+    // 催眠孢子（ongoing 行动卡打出到基地上）：每张对其他玩家在此基地的随从 -1 力量
+    registerOngoingPowerModifier('killer_plant_sleep_spores', 'base', 'opponentMinions', -1);
 
-    // 过度生长（ongoing 行动卡附着在基地上）：控制者回合时临界点降低?
-    registerBreakpointModifier('killer_plant_overgrowth', (ctx: BreakpointModifierContext) => {
-        const overgrowth = ctx.base.ongoingActions.find(a => a.defId === 'killer_plant_overgrowth');
-        if (!overgrowth) return 0;
-        const currentPlayer = ctx.state.turnOrder[ctx.state.currentPlayerIndex];
-        if (currentPlayer !== overgrowth.ownerId) return 0;
-        return -ctx.originalBreakpoint;
-    });
+    // 过度生长（ongoing 行动卡附着在基地上）：
+    // 规则："持续：自你的回合开始时，将本基地的爆破点降低到0点。"
+    // 实现方式：onTurnStart 触发器产生 BREAKPOINT_MODIFIED 事件（tempBreakpointModifiers，回合结束自动清零）
+    // 注册在 killer_plants.ts 的 registerKillerPlantAbilities() 中
 }
 
 // ============================================================================
@@ -153,44 +127,26 @@ function registerKillerPlantModifiers(): void {
 // ============================================================================
 
 function registerSteampunkModifiers(): void {
-    // 蒸汽人：按同基地己方行动卡数?+力量（含基地 ongoing + 随从附着了?
+    // 蒸汽人：本基地有至少一个己方战术时 +1 力量（flat +1，非 scaling）
+    // 描述：「持续：+1力量如果你本基地有至少一个你的战术附属在它上面。」
     registerPowerModifier('steampunk_steam_man', (ctx: PowerModifierContext) => {
         if (ctx.minion.defId !== 'steampunk_steam_man') return 0;
-        let actionCount = 0;
-        // 基地上的 ongoing 行动卡（属于同控制者）
-        actionCount += ctx.base.ongoingActions.filter(
+        // 检查基地上是否有己方行动卡（ongoing 或附着在随从上的）
+        const hasBaseOngoing = ctx.base.ongoingActions.some(
             a => a.ownerId === ctx.minion.controller
-        ).length;
-        // 同基地随从上附着的行动卡（属于同控制者）
+        );
+        if (hasBaseOngoing) return 1;
         for (const m of ctx.base.minions) {
-            actionCount += m.attachedActions.filter(
-                a => a.ownerId === ctx.minion.controller
-            ).length;
+            if (m.attachedActions.some(a => a.ownerId === ctx.minion.controller)) return 1;
         }
-        return actionCount;
+        return 0;
     });
 
-    // 蒸汽机车（ongoing 行动卡附着在基地上）：拥有者在此基地有随从时，总力量 +5
-    // "你在这里就拥有+5力量" — 给拥有者在此基地的第一个随从 +5（避免重复计算）
-    registerPowerModifier('steampunk_aggromotive', (ctx: PowerModifierContext) => {
-        // 找到基地上的蒸汽机车 ongoing 行动卡
-        const aggro = ctx.base.ongoingActions.find(
-            a => a.defId === 'steampunk_aggromotive' && a.ownerId === ctx.minion.controller
-        );
-        if (!aggro) return 0;
-        // 只给拥有者在此基地的第一个随从 +5，避免每个随从都 +5
-        const firstMinion = ctx.base.minions.find(m => m.controller === aggro.ownerId);
-        if (!firstMinion || firstMinion.uid !== ctx.minion.uid) return 0;
-        return 5;
-    });
+    // 蒸汽机车（ongoing 行动卡附着在基地上）：拥有者在此基地有随从时，每张 +5 总力量
+    registerOngoingPowerModifier('steampunk_aggromotive', 'base', 'firstOwnerMinion', 5);
 
-    // 旋转弹头发射器（ongoing 行动卡附着在基地上）：同基地己方随从+2 力量
-    registerPowerModifier('steampunk_rotary_slug_thrower', (ctx: PowerModifierContext) => {
-        const hasOngoing = ctx.base.ongoingActions.some(
-            a => a.defId === 'steampunk_rotary_slug_thrower' && a.ownerId === ctx.minion.controller
-        );
-        return hasOngoing ? 2 : 0;
-    });
+    // 旋转弹头发射器（ongoing 行动卡附着在基地上）：每张给同基地己方随从 +2 力量
+    registerOngoingPowerModifier('steampunk_rotary_slug_thrower', 'base', 'ownerMinions', 2);
 }
 
 // ============================================================================
@@ -213,10 +169,8 @@ function registerBearCavalryModifiers(): void {
 // ============================================================================
 
 function registerElderThingModifiers(): void {
-    // 邓威奇恐怖（ongoing 行动卡附着在随从上）：目标随从 +5 力量
-    registerPowerModifier('elder_thing_dunwich_horror', (ctx: PowerModifierContext) => {
-        return ctx.minion.attachedActions.some(a => a.defId === 'elder_thing_dunwich_horror') ? 5 : 0;
-    });
+    // 邓威奇恐怖（ongoing 行动卡附着在随从上）：每张 +5 力量
+    registerOngoingPowerModifier('elder_thing_dunwich_horror', 'minion', 'self', 5);
 }
 // ============================================================================
 // 基地持续力量修正

@@ -196,7 +196,21 @@ const ZEN_FORGET_2: AbilityDef = {
 
 export const MONK_CARDS: AbilityCard[] = [
     // 专属行动卡
-    { id: 'card-enlightenment', name: cardText('card-enlightenment', 'name'), type: 'action', cpCost: 0, timing: 'main', description: cardText('card-enlightenment', 'description'), previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 0 }, effects: [{ description: '投掷1骰：莲花→获得2气+闪避+净化；否则抽1牌', action: { type: 'custom', target: 'self', customActionId: 'enlightenment-roll' }, timing: 'immediate' }] },
+    { id: 'card-enlightenment', name: cardText('card-enlightenment', 'name'), type: 'action', cpCost: 0, timing: 'main', description: cardText('card-enlightenment', 'description'), previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 0 }, effects: [{
+        description: '投掷1骰：莲花→获得2气+闪避+净化；否则抽1牌',
+        action: {
+            type: 'rollDie', target: 'self', diceCount: 1,
+            conditionalEffects: [
+                { face: DICE_FACE_IDS.LOTUS, grantTokens: [
+                    { tokenId: TOKEN_IDS.TAIJI, value: 2 },
+                    { tokenId: TOKEN_IDS.EVASIVE, value: 1 },
+                    { tokenId: TOKEN_IDS.PURIFY, value: 1 },
+                ] },
+            ],
+            defaultEffect: { drawCard: 1 },
+        },
+        timing: 'immediate',
+    }] },
     { id: 'card-inner-peace', name: cardText('card-inner-peace', 'name'), type: 'action', cpCost: 0, timing: 'instant', description: cardText('card-inner-peace', 'description'), previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 1 }, effects: [grantToken(TOKEN_IDS.TAIJI, 2, '获得2太极', { timing: 'immediate' })] },
     { id: 'card-deep-thought', name: cardText('card-deep-thought', 'name'), type: 'action', cpCost: 3, timing: 'instant', description: cardText('card-deep-thought', 'description'), previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 2 }, effects: [grantToken(TOKEN_IDS.TAIJI, 5, '获得5太极', { timing: 'immediate' })] },
     { id: 'card-buddha-light', name: cardText('card-buddha-light', 'name'), type: 'action', cpCost: 3, timing: 'main', description: cardText('card-buddha-light', 'description'), previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.MONK, index: 3 }, effects: [grantToken(TOKEN_IDS.TAIJI, 1, '获得1太极', { timing: 'immediate' }), grantToken(TOKEN_IDS.EVASIVE, 1, '获得1闪避', { timing: 'immediate' }), grantToken(TOKEN_IDS.PURIFY, 1, '获得1净化', { timing: 'immediate' }), inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手倒地')] },

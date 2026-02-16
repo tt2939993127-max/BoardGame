@@ -71,7 +71,8 @@ const HandCard: React.FC<HandCardProps> = ({
     const spacingVw = total <= 7 ? 0.8 : -1 * ((total - 7) * 0.8);
 
     // zIndex 用 CSS hover 提升，避免 state 变化触发 layout 重算导致抽搐
-    const baseZIndex = isSelected || isDiscardSelected ? 100 : index;
+    // 弃牌选中时不提升 z-index，避免遮挡其他卡牌选择
+    const baseZIndex = isSelected && !isDiscardSelected ? 100 : index;
 
     return (
         <motion.div
@@ -87,9 +88,10 @@ const HandCard: React.FC<HandCardProps> = ({
             }}
             initial={{ y: 200, opacity: 0, scale: 0.8 }}
             animate={{
-                y: isSelected ? `-${SELECTED_Y_LIFT_VW}vw` : '0',
-                scale: isSelected ? 1.15 : 1,
-                rotate: isShaking ? [0, -6, 6, -4, 4, 0] : (isSelected ? 0 : rotationSeed),
+                // 弃牌选中时小幅上移（2vw），普通选中时大幅上移（5vw）
+                y: isSelected && !isDiscardSelected ? `-${SELECTED_Y_LIFT_VW}vw` : isDiscardSelected ? '-2vw' : '0',
+                scale: (isSelected && !isDiscardSelected) ? 1.15 : 1,
+                rotate: isShaking ? [0, -6, 6, -4, 4, 0] : ((isSelected && !isDiscardSelected) ? 0 : rotationSeed),
                 opacity: 1
             }}
             exit={{ y: 200, opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
@@ -111,7 +113,7 @@ const HandCard: React.FC<HandCardProps> = ({
                 w-full h-full relative rounded-md shadow-md transition-all duration-200
                 ${isDisabled ? 'opacity-40 grayscale cursor-not-allowed' : ''}
                 ${isSelected ? 'ring-4 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)]' : 'shadow-black/30'}
-                ${isDiscardSelected ? 'ring-4 ring-red-500 shadow-red-500/50 grayscale' : ''}
+                ${isDiscardSelected ? 'ring-4 ring-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]' : ''}
                 ${!isSelected && !isDiscardSelected && !isDisabled ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white hover:shadow-xl') : ''}
             `}>
 
@@ -166,13 +168,6 @@ const HandCard: React.FC<HandCardProps> = ({
                     )}
                 </div>
 
-                {isDiscardSelected && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-md z-30">
-                        <div className="bg-red-600 text-white font-black text-sm rotate-12 border-2 border-white px-2 py-0.5 shadow-lg rounded-sm uppercase tracking-widest">
-                            {t('ui.discard_badge')}
-                        </div>
-                    </div>
-                )}
             </div>
         </motion.div>
     );

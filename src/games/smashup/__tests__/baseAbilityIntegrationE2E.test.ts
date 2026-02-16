@@ -36,7 +36,7 @@ import { smashUpFlowHooks } from '../domain/index';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type { SmashUpCore, SmashUpCommand, CardInstance } from '../domain/types';
 import type { MatchState, RandomFn, Command } from '../../../engine/types';
-import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
+import type { PhaseExitResult, PhaseEnterResult } from '../../../engine/systems/FlowSystem';
 import {
     makePlayer,
     makeState,
@@ -109,10 +109,16 @@ function makeScoreBasesMS(core: SmashUpCore): MatchState<SmashUpCore> {
 
 /** 调用 onPhaseEnter('startTurn')，from='endTurn' */
 function callOnPhaseEnterStartTurn(ms: MatchState<SmashUpCore>) {
-    return smashUpFlowHooks.onPhaseEnter!({
+    const result = smashUpFlowHooks.onPhaseEnter!({
         state: ms, from: 'endTurn', to: 'startTurn',
         command: mockCommand, random: dummyRandom,
     });
+    // onPhaseEnter 返回 PhaseEnterResult.updatedState 而非变异 ms.sys
+    // 将 updatedState 的 sys 同步回 ms，保持测试兼容
+    if (result && !Array.isArray(result) && (result as PhaseEnterResult).updatedState) {
+        ms.sys = (result as PhaseEnterResult).updatedState!.sys;
+    }
+    return result;
 }
 
 /** 调用 onPhaseExit('scoreBases')，返回事件列表 */
@@ -122,6 +128,11 @@ function callOnPhaseExitScoreBases(ms: MatchState<SmashUpCore>) {
         command: mockCommand, random: dummyRandom,
     });
     const events = Array.isArray(result) ? result : (result as PhaseExitResult).events ?? [];
+    // Fix 2 后 onPhaseExit 返回 PhaseExitResult.updatedState 而非变异 ms.sys
+    // 将 updatedState 的 sys 同步回 ms，保持测试兼容
+    if (!Array.isArray(result) && (result as PhaseExitResult).updatedState) {
+        ms.sys = (result as PhaseExitResult).updatedState!.sys;
+    }
     return { events, result };
 }
 

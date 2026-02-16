@@ -200,40 +200,6 @@ describe('僧侣 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // enlightenment-roll: 投1骰，莲花→2太极+闪避+净化，其他→抽1牌
-    // ========================================================================
-    describe('enlightenment-roll (顿悟)', () => {
-        it('投出莲花获得2太极+1闪避+1净化', () => {
-            const state = createState({ taiji: 0 });
-            const handler = getCustomActionHandler('enlightenment-roll')!;
-            const ctx = buildCtx(state, 'enlightenment-roll', {
-                random: () => 1, targetSelf: true, // d(6)→6 → lotus
-            });
-            ctx.targetId = '0' as any;
-            const events = handler(ctx);
-
-            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
-            expect(tokens).toHaveLength(3);
-            expect((tokens[0] as any).payload.tokenId).toBe(TOKEN_IDS.TAIJI);
-            expect((tokens[0] as any).payload.amount).toBe(2);
-            expect((tokens[1] as any).payload.tokenId).toBe(TOKEN_IDS.EVASIVE);
-            expect((tokens[2] as any).payload.tokenId).toBe(TOKEN_IDS.PURIFY);
-        });
-
-        it('投出非莲花不获得Token', () => {
-            const state = createState({ taiji: 0 });
-            const handler = getCustomActionHandler('enlightenment-roll')!;
-            const ctx = buildCtx(state, 'enlightenment-roll', {
-                random: () => 1 / 6, targetSelf: true, // d(6)→1 → fist
-            });
-            ctx.targetId = '0' as any;
-            const events = handler(ctx);
-
-            expect(eventsOfType(events, 'TOKEN_GRANTED')).toHaveLength(0);
-        });
-    });
-
-    // ========================================================================
     // lotus-palm-unblockable-choice: 太极>=2时弹出选择
     // ========================================================================
     describe('lotus-palm-unblockable-choice (莲花掌不可防御)', () => {

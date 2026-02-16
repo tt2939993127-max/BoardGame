@@ -116,7 +116,7 @@
     "poison": {
       "name": "Poison",
       "description": [
-        "At the start of your turn, take damage equal to the number of stacks, then remove 1 stack"
+        "During each of your Upkeep Phases, take n damage (n = number of Poison stacks). Persistent effect."
       ]
     },
     "blinded": {
@@ -134,7 +134,7 @@
     "targeted": {
       "name": "Targeted",
       "description": [
-        "Incoming damage +2. Remove this token after taking damage."
+        "Incoming damage +2. Persistent."
       ]
     }
   },
@@ -176,49 +176,51 @@
     "sneak": {
       "name": "Sneak",
       "description": [
-        "When you would take damage, remove this token to prevent that damage"
+        "When you would take damage from an Offensive Roll Phase, prevent that damage and skip the Defensive Roll (the attack is still considered 'successful' and other effects may trigger)",
+        "After completing one full turn with this token, discard it at end of turn"
       ]
     },
     "sneak_attack": {
       "name": "Sneak Attack",
       "description": [
-        "When dealing damage, roll 1 die and add the result to your damage"
+        "At the end of an Offensive Roll Phase, you may spend this token to roll 1🎲 and add the result to this attack's damage",
+        "Cannot be used to enhance Collateral Damage"
       ]
     },
     "crit": {
       "name": "Crit",
       "description": [
-        "Before attack resolves, consume 1 stack to increase damage by 1"
+        "When your attack deals ≥5 damage, you may spend this token to deal +4 damage. Cannot be used on collateral damage. Does not stack."
       ]
     },
     "accuracy": {
       "name": "Accuracy",
       "description": [
-        "Before attack resolves, consume 1 stack to make this attack undefendable"
+        "At the end of your Offensive Roll Phase, you may spend this token to make this attack undefendable. Does not stack."
       ]
     },
     "protect": {
       "name": "Protect",
       "description": [
-        "Before taking damage, consume 1 stack to reduce damage by 1"
+        "At any time, spend this token to halve incoming damage (rounded up). Does not stack."
       ]
     },
     "retribution": {
       "name": "Retribution",
       "description": [
-        "Before taking damage, consume 1 stack to deal 2 undefendable damage to the attacker"
+        "When taking attack damage, spend this token to reflect half the damage (rounded up) to the attacker. Does not reduce your own damage taken. Does not stack."
       ]
     },
     "tithes_upgraded": {
       "name": "Tithes Upgraded",
       "description": [
-        "During Income Phase, gain 1 extra CP"
+        "Passive ability upgraded to Tithes II"
       ]
     },
     "blessing_of_divinity": {
       "name": "Blessing of Divinity",
       "description": [
-        "When you would take lethal damage, remove this token, set HP to 1, then heal 5 HP"
+        "When your HP drops to 0, remove this token and set HP to 1. This token cannot be removed, transferred, or stolen. Does not stack."
       ]
     }
   },
@@ -282,7 +284,21 @@
       "damageReduction": "Damage Reduction",
       "evasionAttempt": "Evasion Check",
       "removeDebuff": "Purify"
-    }
+    },
+    "cpGained": "Gained {{amount}} CP ({{source}})",
+    "cpGainedPlain": "Gained {{amount}} CP",
+    "cpSpent": "Spent {{amount}} CP ({{source}})",
+    "cpSpentPlain": "Spent {{amount}} CP",
+    "cardDrawn": "Drew {{count}} card(s) ({{source}})",
+    "cardDrawnPlain": "Drew {{count}} card(s)",
+    "usePurify": "Purified {{statusLabel}}",
+    "payToRemoveKnockdown": "Paid 2CP to remove Knockdown",
+    "usePassiveAbility": "Used passive: {{abilityName}}",
+    "confirmRoll": "Confirmed roll:",
+    "confirmRollWithAbility": "Confirmed roll ({{abilityName}}):",
+    "confirmRollDefense": "Confirmed defense roll:",
+    "confirmRollDefenseWithAbility": "Confirmed defense roll ({{abilityName}}):",
+    "cardRollResult": "Roll result:"
   },
   "purify": {
     "title": "Use Purify",
@@ -446,10 +462,16 @@
       "pyroBlast3Reroll": "Rerolled!",
       "shadowDamage": "Shadow Dance",
       "default": "Bonus Die",
+      "oneWithShadowsHit": "Shadow! Sneak Attack+2CP",
+      "oneWithShadowsMiss": "Draw 1 card",
       "sneakAttack": "Sneak Attack!",
       "explodingArrow": "Rolled {{value}}",
       "moonShadowStrike": "Rolled {{value}}",
       "blinded": "Blinded Check",
+      "sword": "Sword: +2 Damage",
+      "helm": "Helm: +1 Damage",
+      "heart": "Heart: Heal 2",
+      "pray": "Pray: Gain 1 CP",
       "fire": "Fire: +3 Damage",
       "magma": "Magma: Inflict Burn",
       "fiery_soul": "Fiery Soul: Gain 2 Fire Mastery",
@@ -592,6 +614,8 @@
     "selectDiceToReroll": "Select dice to reroll (up to 2)",
     "selectStatusToRemove": "Select a status effect to remove",
     "selectPlayerToRemoveAllStatus": "Select a player to remove all status",
+    "selectPlayerForRetribution": "Select a player to gain Retribution",
+    "selectPlayerForConsecrate": "Select a player to consecrate",
     "selectStatusToTransfer": "Select a status effect to transfer"
   },
   "abilitySlots": {
@@ -1035,7 +1059,7 @@
     },
     "covert-fire": {
       "name": "Covert Fire",
-      "description": "3 Bow + 1 Moon: inflict Targeted, deal 4 damage",
+      "description": "3 Bow + 3 Moon: inflict Targeted, then deal 4 damage",
       "effects": {
         "inflictTargeted": "Inflict 1 Targeted token",
         "damage4": "Deal 4 damage"
@@ -1059,7 +1083,7 @@
     },
     "covering-fire": {
       "name": "Covering Fire",
-      "description": "2 Bow + 2 Foot: gain Evasive, deal 7 damage",
+      "description": "2 Bow + 3 Foot: gain Evasive, deal 7 damage",
       "effects": {
         "gainEvasive": "Gain 1 Evasive token",
         "damage7": "Deal 7 damage"
@@ -1080,18 +1104,18 @@
     },
     "exploding-arrow": {
       "name": "Exploding Arrow",
-      "description": "1 Bow + 3 Moon: roll dice and resolve effects",
+      "description": "1 Bow + 3 Moon: roll 5 dice, deal 3 + 2×Bow + 1×Foot damage, opponent loses 1×Moon CP, inflict Blinded",
       "effects": {
-        "rollAndResolve": "Roll dice and resolve effects"
+        "rollAndResolve": "Roll 5 dice and resolve effects"
       }
     },
     "exploding-arrow-2": {
       "name": "Exploding Arrow II",
-      "description": "Upgraded Exploding Arrow"
+      "description": "1 Bow + 3 Moon: Roll 5 dice, deal 3 + 1×Bow + 2×Foot damage, opponent loses 1×Moon CP, inflict Blinded"
     },
     "exploding-arrow-3": {
       "name": "Exploding Arrow III",
-      "description": "Upgraded Exploding Arrow (with reroll)"
+      "description": "1 Bow + 3 Moon: Roll 5 dice, deal 3 + 1×Bow + 2×Foot damage, opponent loses 1×Moon CP, inflict Blinded and Entangle"
     },
     "entangling-shot": {
       "name": "Entangling Shot",
@@ -1174,14 +1198,14 @@
     },
     "elusive-step": {
       "name": "Elusive Step",
-      "description": "Defensive phase (5 dice): resolve defense based on dice results",
+      "description": "Defensive phase (5 dice): if ≥2 Foot, block half damage (round up); for each Foot, deal 1 damage",
       "effects": {
         "resolveDefense": "Resolve defense"
       }
     },
     "elusive-step-2": {
       "name": "Elusive Step II",
-      "description": "Defensive phase (5 dice): upgraded defense resolution",
+      "description": "Defensive phase (5 dice): if ≥2 Foot, block half damage (round up); deal 1 × Bow count damage",
       "effects": {
         "resolveDefense": "Resolve defense"
       }
@@ -1976,7 +2000,7 @@
     },
     "moon-shadow-strike": {
       "name": "Moon Shadow Strike",
-      "description": "Roll 1 die: Bow → Draw 1 card; Foot → Inflict Entangle; Moon → Inflict Blinded + Targeted."
+      "description": "Roll 1 die: Moon → Inflict Blinded, Entangle, and Targeted. Otherwise → Draw 1 card."
     },
     "dodge": {
       "name": "Dodge!",
@@ -1984,11 +2008,11 @@
     },
     "volley": {
       "name": "Volley!",
-      "description": "This attack deals +3 damage."
+      "description": "Attack Modifier. Roll 5 dice: add damage equal to the number of Bows. Inflict Entangle."
     },
     "watch-out": {
       "name": "Watch Out!",
-      "description": "Inflict Targeted on opponent."
+      "description": "Attack Modifier. Roll 1 die: Bow → +2 damage; Foot → Inflict Entangle; Moon → Inflict Blinded."
     },
     "moonlight-magic": {
       "name": "Moonlight Magic!",
@@ -2092,8 +2116,30 @@
     },
     "card-tithes-2": {
       "name": "Tithes II",
-      "description": "Upgrade Tithes: Gain 1 extra CP during Income phase."
+      "description": "Upgrade Tithes: Draw cost reduced to 2CP. Gain 1CP when activating an ability with 🙏 during Offensive Roll."
     }
+  },
+  "passive": {
+    "tithes": {
+      "name": "Tithes",
+      "reroll": "Spend 1CP to reroll 1 die",
+      "draw": "Spend 3CP to draw 1 card"
+    },
+    "tithes-2": {
+      "name": "Tithes II",
+      "reroll": "Spend 1CP to reroll 1 die",
+      "draw": "Spend 2CP to draw 1 card"
+    },
+    "useButton": "Use",
+    "rerollDie": "Select a die to reroll",
+    "drawCard": "Draw 1 card",
+    "cpCost": "{{cost}}CP",
+    "action": {
+      "reroll": "Reroll",
+      "draw": "Draw",
+      "cancel": "Cancel"
+    },
+    "selectDieHint": "Click a die to reroll"
   },
   "cardSpotlight": {
     "playerPlayed": "{{player}} played a card",

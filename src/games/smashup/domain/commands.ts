@@ -3,7 +3,7 @@
  */
 
 import type { MatchState, ValidationResult } from '../../../engine/types';
-import type { SmashUpCommand, SmashUpCore, ActionCardDef } from './types';
+import type { SmashUpCommand, SmashUpCore, ActionCardDef, PlayConstraint } from './types';
 import { SU_COMMANDS, getCurrentPlayerId, HAND_LIMIT } from './types';
 import { getCardDef, getMinionDef } from '../data/cards';
 import { isOperationRestricted } from './ongoingEffects';
@@ -97,13 +97,10 @@ export function validate(
             })) {
                 return { valid: false, error: '该基地禁止打出该随从' };
             }
-            // 修格斯 (Shoggoth) 自身打出限制：只能打到己方≥6力量的基地
-            if (card.defId === 'elder_thing_shoggoth') {
-                const base = core.bases[baseIndex];
-                const myPower = getPlayerEffectivePowerOnBase(core, base, baseIndex, command.playerId);
-                if (myPower < 6) {
-                    return { valid: false, error: '修格斯只能打到你至少拥有6点力量的基地' };
-                }
+            // 随从打出约束（数据驱动）
+            if (minionDef?.playConstraint) {
+                const constraintError = checkPlayConstraint(minionDef.playConstraint, core, baseIndex, command.playerId);
+                if (constraintError) return { valid: false, error: constraintError };
             }
             return { valid: true };
         }
@@ -199,6 +196,12 @@ export function validate(
                     }
                 } else if (targetMinionUid !== undefined) {
                     return { valid: false, error: '该持续行动卡不需要选择随从目标' };
+                }
+
+                // 打出约束检查（数据驱动）
+                if (def.playConstraint) {
+                    const constraintError = checkPlayConstraint(def.playConstraint, core, targetBase, command.playerId);
+                    if (constraintError) return { valid: false, error: constraintError };
                 }
             }
 
@@ -312,4 +315,30 @@ export function validate(
             }
             return { valid: false, error: '未知命令' };
     }
+}
+
+/**
+ * 通用打出约束检查（数据驱动）。
+ * 返回 null 表示通过，返回字符串表示拒绝原因。
+ */
+function checkPlayConstraint(
+    constraint: PlayConstraint,
+    core: SmashUpCore,
+    baseIndex: number,
+    playerId: string,
+): string | null {
+    if (constraint === 'requireOwnMinion') {
+        const hasOwnMinion = core.bases[baseIndex].minions.some(m => m.owner === playerId);
+        if (!hasOwnMinion) return '目标基地上必须有你的随从';
+        return null;
+    }
+    if (typeof constraint === 'object' && constraint.type === 'requireOwnPower') {
+        const base = core.bases[baseIndex];
+        const myPower = getPlayerEffectivePowerOnBase(core, base, baseIndex, playerId);
+        if (myPower < constraint.minPower) {
+            return `只能打到你至少拥有${constraint.minPower}点力量的基地`;
+        }
+        return null;
+    }
+    return null;
 }

@@ -33,6 +33,7 @@ export const DiceTray = ({
     rerollingDiceIds,
     locale,
     interactionConfig,
+    isPassiveRerollMode,
 }: {
     dice: Die[];
     onToggleLock: (id: number) => void;
@@ -44,6 +45,8 @@ export const DiceTray = ({
     locale?: string;
     /** 骰子交互模式配置（有值时进入交互模式） */
     interactionConfig?: DiceInteractionConfig;
+    /** 被动重掷选择模式（翡翠色高亮） */
+    isPassiveRerollMode?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const diceSize = '4vw';
@@ -97,7 +100,9 @@ export const DiceTray = ({
             border-t-[0.12vw] border-l-[0.1vw] border-b-[0.2vw] border-r-[0.12vw]
             ${isInteractionMode
                 ? 'bg-slate-950 border-transparent ring-[0.2vw] ring-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.3)]'
-                : 'bg-gradient-to-b from-[#1a1e36] via-[#0d0e1a] to-[#05060a] border-indigo-300/30 border-black/80 shadow-[inset_0_5px_12px_rgba(0,0,0,0.9),0_15px_30px_rgba(0,0,0,0.4)]'}
+                : isPassiveRerollMode
+                    ? 'bg-slate-950 border-transparent ring-[0.2vw] ring-emerald-500 shadow-[0_0_30px_rgba(52,211,153,0.3)]'
+                    : 'bg-gradient-to-b from-[#1a1e36] via-[#0d0e1a] to-[#05060a] border-indigo-300/30 border-black/80 shadow-[inset_0_5px_12px_rgba(0,0,0,0.9),0_15px_30px_rgba(0,0,0,0.4)]'}
         `}
             data-tutorial-id="dice-tray"
         >

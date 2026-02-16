@@ -4,7 +4,7 @@
  * Task 10.3
  *
  * Property 9: 共享 Token 定义（击倒、闪避）在不同英雄间完全一致
- * Property 10: 燃烧/中毒 upkeep 处理正确（每层1伤害，移除1层）
+ * Property 10: 燃烧/中毒 upkeep 处理正确（燃烧每层1伤害移除1层，中毒持续效果不移除层数）
  */
 
 import { describe, it, expect } from 'vitest';
@@ -150,7 +150,7 @@ describe('燃烧 upkeep 处理正确性', () => {
 });
 
 describe('中毒 upkeep 处理正确性', () => {
-    it('1层中毒：造成1点伤害，移除1层', () => {
+    it('1层中毒：造成1点伤害，层数不变（持续效果）', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: '1层中毒upkeep',
@@ -161,13 +161,13 @@ describe('中毒 upkeep 处理正确性', () => {
             },
             commands: advanceToPlayer0Upkeep(),
             expect: {
-                players: { '0': { hp: 49, statusEffects: { [STATUS_IDS.POISON]: 0 } } },
+                players: { '0': { hp: 49, statusEffects: { [STATUS_IDS.POISON]: 1 } } },
             },
         });
         expect(result.assertionErrors).toEqual([]);
     });
 
-    it('2层中毒：造成2点伤害，移除1层（剩余1层）', () => {
+    it('2层中毒：造成2点伤害，层数不变（持续效果）', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: '2层中毒upkeep',
@@ -178,7 +178,7 @@ describe('中毒 upkeep 处理正确性', () => {
             },
             commands: advanceToPlayer0Upkeep(),
             expect: {
-                players: { '0': { hp: 48, statusEffects: { [STATUS_IDS.POISON]: 1 } } },
+                players: { '0': { hp: 48, statusEffects: { [STATUS_IDS.POISON]: 2 } } },
             },
         });
         expect(result.assertionErrors).toEqual([]);
@@ -201,7 +201,8 @@ describe('燃烧+中毒同时存在时 upkeep 处理', () => {
                 players: {
                     '0': {
                         hp: 47,
-                        statusEffects: { [STATUS_IDS.BURN]: 1, [STATUS_IDS.POISON]: 0 },
+                        // 燃烧移除 1 层（2→1），毒液持续不变（1→1）
+                        statusEffects: { [STATUS_IDS.BURN]: 1, [STATUS_IDS.POISON]: 1 },
                     },
                 },
             },

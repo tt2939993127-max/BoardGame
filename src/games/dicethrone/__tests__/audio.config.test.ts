@@ -41,18 +41,15 @@ const ABILITY_SFX_KEYS = {
 
 describe('DiceThrone 音效配置', () => {
     describe('CP 音效配置', () => {
-        it('feedbackResolver 应根据 delta 正负值返回正确的 CP 音效键', () => {
-            // 测试 CP 增加
+        it('feedbackResolver 应对 CP_CHANGED 返回 null（音效由 FX 飞行动画 onImpact 播放）', () => {
             const gainEvent: AudioEvent = { type: 'CP_CHANGED', payload: { delta: 2 } };
-            expect(resolveKey(gainEvent)).toBe(CP_GAIN_KEY);
+            expect(resolveKey(gainEvent)).toBeNull();
 
-            // 测试 CP 减少
             const spendEvent: AudioEvent = { type: 'CP_CHANGED', payload: { delta: -3 } };
-            expect(resolveKey(spendEvent)).toBe(CP_SPEND_KEY);
+            expect(resolveKey(spendEvent)).toBeNull();
 
-            // 测试 delta 为 0（边界情况）
             const zeroEvent: AudioEvent = { type: 'CP_CHANGED', payload: { delta: 0 } };
-            expect(resolveKey(zeroEvent)).toBe(CP_GAIN_KEY); // delta >= 0 返回 cp_gain
+            expect(resolveKey(zeroEvent)).toBeNull();
         });
     });
 

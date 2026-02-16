@@ -8,7 +8,6 @@ import { ALL_TOKEN_DEFINITIONS } from './characters';
 
 export type StatusEffectMeta = {
     color?: string;
-    icon?: string;
     frameId?: string;
     atlasId?: string;
 };
@@ -29,7 +28,6 @@ function buildVisualMeta(): {
         const meta: StatusEffectMeta = {
             frameId: def.frameId,
             atlasId: def.atlasId,
-            icon: def.icon,
             color: def.colorTheme,
         };
 

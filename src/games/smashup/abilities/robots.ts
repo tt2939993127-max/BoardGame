@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, peekDeckTop } from '../domain/abilityHelpers';
+import { grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, peekDeckTop, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, MinionPlayedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -41,7 +41,7 @@ function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
     const targets = base.minions.filter(
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myMinionCount
     );
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // Prompt 选择
     const options = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
@@ -99,7 +99,7 @@ function robotHoverbot(ctx: AbilityContext): AbilityResult {
         ctx.state.players[ctx.playerId], ctx.playerId,
         'all', 'robot_hoverbot', ctx.now,
     );
-    if (!peek) return { events: [] };
+    if (!peek) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.deck_empty', ctx.now)] };
     const events: SmashUpEvent[] = [peek.revealEvent];
     if (peek.card.type === 'minion') {
         const def = getCardDef(peek.card.defId) as MinionCardDef | undefined;
@@ -129,7 +129,7 @@ function robotZapbot(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         return def?.type === 'minion' && def.power <= 2;
     });
-    if (eligible.length === 0) return { events: [] };
+    if (eligible.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
     // "你可以" → 带跳过选项
     const options = eligible.map((c, i) => {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
@@ -157,7 +157,7 @@ function robotTechCenter(ctx: AbilityContext): AbilityResult {
             candidates.push({ baseIndex: i, count, label: `${baseName} (${count} 个随从)` });
         }
     }
-    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // Prompt 选择（包含取消选项）
     const interaction = createSimpleChoice(
         `robot_tech_center_${ctx.now}`, ctx.playerId,

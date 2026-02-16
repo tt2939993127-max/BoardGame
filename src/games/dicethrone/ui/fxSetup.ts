@@ -30,6 +30,8 @@ export const DT_FX = {
   STATUS: 'fx.status',
   /** Token 飞行图标 */
   TOKEN: 'fx.token',
+  /** CP 变化飞行数字（获得/失去 Combat Points） */
+  CP_CHANGE: 'fx.cp-change',
 } as const;
 
 // ============================================================================
@@ -48,6 +50,10 @@ const IMPACT_SFX = {
   STATUS_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
   TOKEN_GAIN: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.strengthened_a',
   TOKEN_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
+  /** CP 获得音效（法力涌动） */
+  CP_GAIN: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001',
+  /** CP 失去音效（驱散） */
+  CP_LOSE: 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001',
 } as const;
 
 /** 状态效果冲击音效解析（获得/移除） */
@@ -58,6 +64,11 @@ export function resolveStatusImpactKey(isRemove: boolean): string {
 /** Token 冲击音效解析（获得/移除） */
 export function resolveTokenImpactKey(isRemove: boolean): string {
   return isRemove ? IMPACT_SFX.TOKEN_REMOVE : IMPACT_SFX.TOKEN_GAIN;
+}
+
+/** CP 变化冲击音效解析（获得/失去） */
+export function resolveCpImpactKey(delta: number): string {
+  return delta >= 0 ? IMPACT_SFX.CP_GAIN : IMPACT_SFX.CP_LOSE;
 }
 
 // ============================================================================
@@ -154,6 +165,42 @@ const HealRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact }
     startPos,
     endPos,
     intensity: amount,
+    onImpact,
+  }, stableComplete);
+};
+
+// ============================================================================
+// 渲染器：CP 变化飞行数字
+// ============================================================================
+
+/**
+ * params:
+ * - delta: number — CP 变化量（正=获得，负=失去）
+ * - startPos: { x: number; y: number } — 起始位置（像素）
+ * - endPos: { x: number; y: number } — 结束位置（像素）
+ * - soundKey: string — 动态音效 key
+ */
+const CpChangeRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact }) => {
+  const stableComplete = useStableComplete(onComplete);
+
+  const delta = event.params?.delta as number | undefined;
+  const startPos = event.params?.startPos as { x: number; y: number } | undefined;
+  const endPos = event.params?.endPos as { x: number; y: number } | undefined;
+
+  if (delta === undefined || delta === 0 || !startPos || !endPos) {
+    stableComplete();
+    return null;
+  }
+
+  const isGain = delta > 0;
+  const absDelta = Math.abs(delta);
+
+  return renderSingleFlyingEffect({
+    type: isGain ? 'buff' : 'damage',
+    content: `${isGain ? '+' : ''}${delta} CP`,
+    startPos,
+    endPos,
+    intensity: absDelta,
     onImpact,
   }, stableComplete);
 };
@@ -356,6 +403,14 @@ const TOKEN_GAIN_FEEDBACK: FeedbackPack = {
   },
 };
 
+/** CP 变化反馈：冲击瞬间播放音效（从 params.soundKey 读取，动态选择获得/失去音效） */
+const CP_CHANGE_FEEDBACK: FeedbackPack = {
+  sound: {
+    source: 'params',
+    timing: 'on-impact',
+  },
+};
+
 // ============================================================================
 // 注册表工厂
 // ============================================================================
@@ -384,6 +439,10 @@ function createRegistry(): FxRegistry {
   registry.register(DT_FX.TOKEN, TokenRenderer, {
     timeoutMs: 2000,
   }, TOKEN_GAIN_FEEDBACK); // 默认为获得，移除时在 push 时覆盖
+
+  registry.register(DT_FX.CP_CHANGE, CpChangeRenderer, {
+    timeoutMs: 2000,
+  }, CP_CHANGE_FEEDBACK);
 
   return registry;
 }

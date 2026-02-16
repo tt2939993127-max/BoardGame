@@ -18,7 +18,7 @@ import { CP_MAX } from '../types';
 // ============================================================================
 
 /** 通用 CP 获取：params.amount 指定数量 */
-function handleGainCp({ attackerId, state, timestamp, action }: CustomActionContext): DiceThroneEvent[] {
+function handleGainCp({ attackerId, sourceAbilityId, state, timestamp, action }: CustomActionContext): DiceThroneEvent[] {
     const params = (action as any).params;
     const amount = (params?.amount as number) || 0;
     if (amount <= 0) return [];
@@ -28,7 +28,7 @@ function handleGainCp({ attackerId, state, timestamp, action }: CustomActionCont
 
     return [{
         type: 'CP_CHANGED',
-        payload: { playerId: attackerId, delta: amount, newValue: newCp },
+        payload: { playerId: attackerId, delta: amount, newValue: newCp, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as CpChangedEvent];

@@ -292,9 +292,10 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       customValidator: (ctx) => {
         const discardCardIds = ctx.payload.discardCardIds as string[] | undefined;
         
-        // ✅ 允许跳过（选择 0 张卡）："任意数量"包括 0
+        // 跳过时不带 beforeAttack，不会走到这里
+        // 确认弃牌时必须至少选择 1 张卡
         if (!discardCardIds || discardCardIds.length === 0) {
-          return { valid: true };
+          return { valid: false, error: '必须至少弃除 1 张单位卡' };
         }
         
         const haPlayer = ctx.core.players[ctx.playerId];

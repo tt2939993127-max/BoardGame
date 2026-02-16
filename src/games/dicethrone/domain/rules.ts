@@ -912,6 +912,12 @@ export const hasRespondableContent = (
         }
     }
 
+    // 被动能力（如教皇税）不单独触发响应窗口的打开。
+    // 原因：被动能力的"任意时刻"在投掷阶段中作为正常操作使用（确认前），
+    // 如果每次都因为有 CP 就弹响应窗口，会严重打断游戏节奏。
+    // USE_PASSIVE_ABILITY 仍在 allowedCommands 中，如果响应窗口因其他原因
+    // （可用卡牌/Token）已打开，玩家仍可在其中使用被动能力。
+
     return false;
 };
 

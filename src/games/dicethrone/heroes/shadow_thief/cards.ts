@@ -1,5 +1,5 @@
 import type { AbilityCard } from '../../types';
-import { DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
+import { DICETHRONE_CARD_ATLAS_IDS, SHADOW_THIEF_DICE_FACE_IDS } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import type { RandomFn } from '../../../../engine/types';
 import { DAGGER_STRIKE_2, PICKPOCKET_2, KIDNEY_SHOT_2, SHADOW_DEFENSE_2, FEARLESS_RIPOSTE_2, SHADOW_DANCE_2, STEAL_2, CORNUCOPIA_2 } from './abilities';
@@ -50,7 +50,17 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('action-one-with-shadows', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 3 },
-        effects: [{ description: '投掷1骰结算', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-one-with-shadows' }, timing: 'immediate' }]
+        effects: [{
+            description: '投掷1骰：暗影→伏击+2CP；否则抽1牌',
+            action: {
+                type: 'rollDie', target: 'self', diceCount: 1,
+                conditionalEffects: [
+                    { face: SHADOW_THIEF_DICE_FACE_IDS.SHADOW, grantToken: { tokenId: 'sneak_attack', value: 1 }, cp: 2 },
+                ],
+                defaultEffect: { drawCard: 1 },
+            },
+            timing: 'immediate',
+        }]
     },
     // === 图集索引 4: 暗影防御 II (原名: 暗影守护 II) ===
     {
@@ -172,7 +182,7 @@ export const SHADOW_THIEF_CARDS: AbilityCard[] = [
         timing: 'instant',
         description: cardText('action-into-the-shadows', 'description'),
         previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.SHADOW_THIEF, index: 14 },
-        effects: [{ description: '获得1个暗影标记', action: { type: 'grantToken', target: 'self', tokenId: 'shadow', value: 1 }, timing: 'immediate' }]
+        effects: [{ description: '获得1个暗影标记', action: { type: 'grantToken', target: 'self', tokenId: 'sneak', value: 1 }, timing: 'immediate' }]
     },
 
     // 注入通用卡牌

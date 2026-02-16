@@ -7,7 +7,7 @@
     }
   },
   "frames": {
-    "divine-shield": {
+    "holy-strike": {
       "frame": {
         "x": 0,
         "y": 0,
@@ -15,7 +15,7 @@
         "h": 400
       }
     },
-    "holy-strike": {
+    "shield-break": {
       "frame": {
         "x": 402,
         "y": 0,
@@ -23,7 +23,7 @@
         "h": 400
       }
     },
-    "rallying-cry": {
+    "divine-shield": {
       "frame": {
         "x": 804,
         "y": 0,
@@ -31,7 +31,7 @@
         "h": 400
       }
     },
-    "shield-break": {
+    "rallying-cry": {
       "frame": {
         "x": 1206,
         "y": 0,

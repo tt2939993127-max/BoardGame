@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, grantExtraMinion, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, resolveOrPrompt } from '../domain/abilityHelpers';
+import { destroyMinion, grantExtraMinion, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, resolveOrPrompt, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, MinionOnBase, OngoingDetachedEvent, MinionPlayedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -261,10 +261,10 @@ function bearCavalryBearCavalryAbility(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
     const opponentMinions = base.minions.filter(m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid);
-    if (opponentMinions.length === 0) return { events: [] };
+    if (opponentMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // 找目标基地
     const otherBases = ctx.state.bases.map((b, i) => i).filter(i => i !== ctx.baseIndex);
-    if (otherBases.length === 0) return { events: [] };
+    if (otherBases.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     // 选择随从（第一步）
     const options = opponentMinions.map(m => {
@@ -293,7 +293,7 @@ function bearCavalryYoureScrewed(ctx: AbilityContext): AbilityResult {
             candidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
         }
     }
-    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const interaction = createSimpleChoice(
         `bear_cavalry_youre_screwed_choose_base_${ctx.now}`, ctx.playerId,
         '选择有己方随从的基地', buildBaseTargetOptions(candidates),
@@ -316,7 +316,7 @@ function bearCavalryBearRidesYou(ctx: AbilityContext): AbilityResult {
             myMinions.push({ uid: m.uid, defId: m.defId, baseIndex: i, label: `${name} (力量 ${power}) @ ${baseName}` });
         }
     }
-    if (myMinions.length === 0) return { events: [] };
+    if (myMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
         `bear_cavalry_bear_rides_you_choose_minion_${ctx.now}`, ctx.playerId,
@@ -337,7 +337,7 @@ function bearCavalryYourePrettyMuchBorscht(ctx: AbilityContext): AbilityResult {
             candidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
         }
     }
-    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const interaction = createSimpleChoice(
         `bear_cavalry_borscht_choose_from_${ctx.now}`, ctx.playerId,
         '选择基地（移动所有对手随从）', buildBaseTargetOptions(candidates),
@@ -383,7 +383,7 @@ function bearCavalryBearNecessities(ctx: AbilityContext): AbilityResult {
         }
     }
     const allTargets = [...minionTargets, ...actionTargets];
-    if (allTargets.length === 0) return { events: [] };
+    if (allTargets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // 数据驱动：强制效果，单候选自动执行（混合随从和行动卡，用 generic）
     type BearNecessitiesValue = { type: 'minion'; uid: string; defId: string; baseIndex: number; owner: string } | { type: 'action'; uid: string; defId: string; ownerId: string };
     const options = allTargets.map((t, i) => ({

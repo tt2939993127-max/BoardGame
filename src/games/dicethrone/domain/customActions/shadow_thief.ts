@@ -18,8 +18,6 @@ import type {
     CardDiscardedEvent,
     DamageShieldGrantedEvent,
     TokenConsumedEvent,
-    PreventDamageEvent,
-    DamagePreventedEvent,
     PendingInteraction,
     InteractionRequestedEvent,
 } from '../types';
@@ -28,12 +26,19 @@ import { createDamageCalculation } from '../../../../engine/primitives/damageCal
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
 
+/** 计算中毒施加后的新总层数 */
+function calcPoisonNewTotal(state: CustomActionContext['state'], targetId: string, stacks: number): number {
+    const current = state.players[targetId]?.statusEffects[STATUS_IDS.POISON] ?? 0;
+    const def = state.tokenDefinitions?.find(d => d.id === STATUS_IDS.POISON);
+    return Math.min(current + stacks, def?.stackLimit ?? 3);
+}
+
 // ============================================================================
 // 影子盗贼技能处理器
 // ============================================================================
 
 /** 匕首打击：每有[Bag]获得1CP */
-function handleDaggerStrikeCp({ attackerId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+function handleDaggerStrikeCp({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
     const bagCount = faceCounts[FACE.BAG] || 0;
 
@@ -44,19 +49,19 @@ function handleDaggerStrikeCp({ attackerId, state, timestamp }: CustomActionCont
 
     return [{
         type: 'CP_CHANGED',
-        payload: { playerId: attackerId, delta: bagCount, newValue: newCp },
+        payload: { playerId: attackerId, delta: bagCount, newValue: newCp, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as CpChangedEvent];
 }
 
 /** 匕首打击 II：每有[Card]抽1张牌 */
-function handleDaggerStrikeDraw({ attackerId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleDaggerStrikeDraw({ attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const faceCounts = getFaceCounts(getActiveDice(state));
     const cardCount = faceCounts[FACE.CARD] || 0;
     if (cardCount <= 0) return [];
-    return buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp);
+    return buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId);
 }
 
 /** 匕首打击：每有[Shadow]造成毒液 */
@@ -117,7 +122,7 @@ function handleStealCp3(context: CustomActionContext) { return handleStealCpWith
 function handleStealCp4(context: CustomActionContext) { return handleStealCpWithAmount(context, 4); }
 // handleStealCp5 and 6 are defined later
 
-function handleStealCpWithAmount({ targetId, attackerId, state, timestamp }: CustomActionContext, amount: number): DiceThroneEvent[] {
+function handleStealCpWithAmount({ targetId, attackerId, sourceAbilityId, state, timestamp }: CustomActionContext, amount: number): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
     const events: DiceThroneEvent[] = [];
@@ -133,18 +138,15 @@ function handleStealCpWithAmount({ targetId, attackerId, state, timestamp }: Cus
         if (stolenAmount > 0) {
             const event = {
                 type: 'CP_CHANGED',
-                payload: { playerId: targetId, delta: -stolenAmount, newValue: targetCp - stolenAmount },
+                payload: { playerId: targetId, delta: -stolenAmount, newValue: targetCp - stolenAmount, sourceAbilityId },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
             } as CpChangedEvent;
             events.push(event);
         }
 
-        // We gain full 'amount'. 'stolenAmount' came from opponent, rest from bank.
-        // The net effect on self is +amount.
         gained = amount;
     } else {
-        // Just gain from bank
         gained = amount;
     }
 
@@ -153,7 +155,7 @@ function handleStealCpWithAmount({ targetId, attackerId, state, timestamp }: Cus
         const newCp = Math.min(currentCp + gained, CP_MAX);
         const event = {
             type: 'CP_CHANGED',
-            payload: { playerId: attackerId, delta: gained, newValue: newCp },
+            payload: { playerId: attackerId, delta: gained, newValue: newCp, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 1,
         } as CpChangedEvent;
@@ -237,7 +239,37 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
     return events;
 }
 
-/** 聚宝盆：若有Shadow丢弃对手1卡 */
+/** 聚宝盆 I：抽 Card面数量 牌，若有Shadow弃对手1牌 */
+function handleCornucopia({ attackerId, targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+    const events: DiceThroneEvent[] = [];
+    const faceCounts = getFaceCounts(getActiveDice(state));
+
+    const cardCount = faceCounts[FACE.CARD] || 0;
+    const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
+
+    // 抽 Card 面数量的牌
+    if (cardCount > 0 && random) {
+        events.push(...buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
+    }
+
+    // 若有 Shadow，弃对手1牌
+    if (hasShadow && random) {
+        const opponentHand = state.players[targetId]?.hand || [];
+        if (opponentHand.length > 0) {
+            const idx = Math.floor(random.random() * opponentHand.length);
+            events.push({
+                type: 'CARD_DISCARDED',
+                payload: { playerId: targetId, cardId: opponentHand[idx].id },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp: timestamp + 1
+            } as CardDiscardedEvent);
+        }
+    }
+
+    return events;
+}
+
+/** 聚宝盆（旧）：若有Shadow丢弃对手1卡 - 保留向后兼容 */
 function handleCornucopiaDiscard({ targetId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
@@ -279,46 +311,72 @@ function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state,
     return damageCalc.toEvents();
 }
 
-/** 防御：暗影守护结算
+/** 防御：暗影守护 I 结算
  * 防御上下文约定（来自 attack.ts）：
  *   ctx.attackerId = 防御者（使用防御技能的人）
  *   ctx.defenderId = 原攻击者（被防御技能影响的人）
- * 【已迁移到新伤害计算管线】
+ *
+ * 卡牌效果（4骰）：
+ *   若 2匕首 → 造成毒液
+ *   若 1暗影 → 获得伏击
+ *   若 2暗影 → 获得潜行和伏击（忽略传入的伤害）
  */
-function handleDefenseResolve({ sourceAbilityId, state, timestamp, ctx, random }: CustomActionContext): DiceThroneEvent[] {
+function handleDefenseResolve({ sourceAbilityId, state, timestamp, ctx, attackerId }: CustomActionContext): DiceThroneEvent[] {
     const faces = getFaceCounts(getActiveDice(state));
     const events: DiceThroneEvent[] = [];
-    // 防御上下文：ctx.attackerId = 防御者自身，ctx.defenderId = 原攻击者
-    const selfId = ctx.attackerId;
-    const opponentId = ctx.defenderId;
+    const opponentId = ctx.defenderId; // 原攻击者
 
-    // 1 Dagger = 1 Dmg to opponent（原攻击者）
     const daggers = faces[FACE.DAGGER] || 0;
-    if (daggers > 0) {
-        const damageCalc = createDamageCalculation({
-            source: { playerId: selfId, abilityId: sourceAbilityId },
-            target: { playerId: opponentId },
-            baseDamage: daggers,
-            state,
-            timestamp,
-        });
-        events.push(...damageCalc.toEvents());
-    }
-
-    // 1 Bag = 抽 1 张牌（防御者自己抽）
-    const bags = faces[FACE.BAG] || 0;
-    if (bags > 0 && random) {
-        events.push(...buildDrawEvents(state, selfId, bags, random, 'ABILITY_EFFECT', timestamp + 1));
-    }
-
-    // 1 Shadow = 阻挡 1 点伤害（伤害护盾给防御者自己）
     const shadows = faces[FACE.SHADOW] || 0;
-    if (shadows > 0) {
+
+    // 2 Daggers -> Poison
+    if (daggers >= 2) {
+        events.push({
+            type: 'STATUS_APPLIED',
+            payload: { targetId: opponentId, statusId: STATUS_IDS.POISON, stacks: 1, newTotal: calcPoisonNewTotal(state, opponentId, 1), sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as StatusAppliedEvent);
+    }
+
+    // 1 Shadow -> Sneak Attack
+    if (shadows >= 1) {
+        const currentSA = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK_ATTACK] ?? 0;
+        const limitSA = getTokenStackLimit(state, attackerId, TOKEN_IDS.SNEAK_ATTACK);
+        events.push({
+            type: 'TOKEN_GRANTED',
+            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1, newTotal: Math.min(currentSA + 1, limitSA), sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 1,
+        } as TokenGrantedEvent);
+    }
+
+    // 2 Shadows -> Sneak + Sneak Attack + 免除本次伤害
+    if (shadows >= 2) {
+        const currentSneak = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK] ?? 0;
+        const limitSneak = getTokenStackLimit(state, attackerId, TOKEN_IDS.SNEAK);
+        events.push({
+            type: 'TOKEN_GRANTED',
+            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK, amount: 1, newTotal: Math.min(currentSneak + 1, limitSneak), sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 2,
+        } as TokenGrantedEvent);
+
+        const currentSA2 = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK_ATTACK] ?? 0;
+        const limitSA2 = getTokenStackLimit(state, attackerId, TOKEN_IDS.SNEAK_ATTACK);
+        events.push({
+            type: 'TOKEN_GRANTED',
+            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1, newTotal: Math.min(currentSA2 + 1, limitSA2), sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 3,
+        } as TokenGrantedEvent);
+
+        // 免除本次攻击伤害
         events.push({
             type: 'DAMAGE_SHIELD_GRANTED',
-            payload: { targetId: selfId, value: shadows, sourceId: sourceAbilityId, preventStatus: false },
+            payload: { targetId: attackerId, value: 999, sourceId: sourceAbilityId, preventStatus: false },
             sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 2
+            timestamp: timestamp + 4,
         } as DamageShieldGrantedEvent);
     }
 
@@ -352,60 +410,22 @@ function handleRemoveAllDebuffs({ targetId, state, timestamp }: CustomActionCont
 }
 
 
-/** 与影共生: 投掷1骰，Shadow->Sneak Attack + 2CP，否则抽1卡 */
-function handleOneWithShadows({ targetId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-
-    const dieValue = random.d(6);
-    const face = getPlayerDieFace(state, targetId, dieValue) ?? '';
-    const events: DiceThroneEvent[] = [];
-
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: { value: dieValue, face, playerId: targetId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.default' },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp
-    } as BonusDieRolledEvent);
-
-    if (face === FACE.SHADOW) {
-        const currentSneakAttack = state.players[targetId]?.tokens[TOKEN_IDS.SNEAK_ATTACK] ?? 0;
-        const sneakAttackLimit = getTokenStackLimit(state, targetId, TOKEN_IDS.SNEAK_ATTACK);
-        const newSneakAttackTotal = Math.min(currentSneakAttack + 1, sneakAttackLimit);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId, tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1, newTotal: newSneakAttackTotal, sourceAbilityId: 'action-one-with-shadows' },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp
-        } as TokenGrantedEvent);
-
-        const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
-        events.push({
-            type: 'CP_CHANGED',
-            payload: { playerId: targetId, delta: 2, newValue: Math.min(currentCp + 2, CP_MAX) },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp
-        } as CpChangedEvent);
-    } else {
-        events.push(...buildDrawEvents(state, targetId, 1, random, 'ABILITY_EFFECT', timestamp));
-    }
-    return events;
-}
 
 /** 暗影币: 获得2CP；若拥有暗影🌑，转而获得3CP */
-function handleShadowCoins({ targetId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+function handleShadowCoins({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const hasShadow = (state.players[targetId]?.tokens[TOKEN_IDS.SNEAK] ?? 0) > 0;
     const cpGain = hasShadow ? 3 : 2;
     const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
     return [{
         type: 'CP_CHANGED',
-        payload: { playerId: targetId, delta: cpGain, newValue: Math.min(currentCp + cpGain, CP_MAX) },
+        payload: { playerId: targetId, delta: cpGain, newValue: Math.min(currentCp + cpGain, CP_MAX), sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp
     } as CpChangedEvent];
 }
 
 /** 卡牌戏法: 对手弃1。自己抽1 (若有Sneak抽2) */
-function handleCardTrick({ targetId, attackerId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleCardTrick({ targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
 
     // 1. 对手随机弃1张
@@ -428,7 +448,7 @@ function handleCardTrick({ targetId, attackerId, state, timestamp, random }: Cus
     const drawCount = hasSneak ? 2 : 1;
 
     if (random) {
-        events.push(...buildDrawEvents(state, attackerId, drawCount, random, 'ABILITY_EFFECT', timestamp));
+        events.push(...buildDrawEvents(state, attackerId, drawCount, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
     }
 
     return events;
@@ -478,7 +498,7 @@ function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, r
     });
 
     // Draw 1 Card
-    events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp + 3));
+    events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp + 3, sourceAbilityId));
 
     return events;
 }
@@ -489,7 +509,7 @@ function handleStealCp6(params: CustomActionContext) { return handleStealCpWithA
 
 
 /** 聚宝盆 II：每有[Card]抽1。有[Shadow]弃1。有[Bag]得1CP */
-function handleCornucopia2({ attackerId, targetId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleCornucopia2({ attackerId, targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
 
@@ -499,7 +519,7 @@ function handleCornucopia2({ attackerId, targetId, state, timestamp, random }: C
 
     // Draw = Card Count
     if (cardCount > 0 && random) {
-        events.push(...buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp));
+        events.push(...buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
     }
 
     // Opponent Discard (if Shadow)
@@ -522,7 +542,7 @@ function handleCornucopia2({ attackerId, targetId, state, timestamp, random }: C
         const newCp = Math.min(currentCp + 1, CP_MAX);
         events.push({
             type: 'CP_CHANGED',
-            payload: { playerId: attackerId, delta: 1, newValue: newCp },
+            payload: { playerId: attackerId, delta: 1, newValue: newCp, sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 2
         } as CpChangedEvent);
@@ -559,7 +579,7 @@ function handleFearlessRiposte({ sourceAbilityId, state, timestamp, ctx }: Custo
     if (daggers > 0 && shadows > 0) {
         events.push({
             type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: 'poison', stacks: 1, sourceAbilityId },
+            payload: { targetId: opponentId, statusId: STATUS_IDS.POISON, stacks: 1, newTotal: calcPoisonNewTotal(state, opponentId, 1), sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 1
         } as StatusAppliedEvent);
@@ -596,7 +616,7 @@ function handleFearlessRiposte2({ sourceAbilityId, state, timestamp, ctx }: Cust
     if (daggers > 0 && shadows > 0) {
         events.push({
             type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: 'poison', stacks: 1, sourceAbilityId },
+            payload: { targetId: opponentId, statusId: STATUS_IDS.POISON, stacks: 1, newTotal: calcPoisonNewTotal(state, opponentId, 1), sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 1
         } as StatusAppliedEvent);
@@ -619,7 +639,7 @@ function handleShadowDefense2({ sourceAbilityId, state, timestamp, ctx, attacker
     if (daggers >= 2) {
         events.push({
             type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: 'poison', stacks: 1, sourceAbilityId },
+            payload: { targetId: opponentId, statusId: STATUS_IDS.POISON, stacks: 1, newTotal: calcPoisonNewTotal(state, opponentId, 1), sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp
         } as StatusAppliedEvent);
@@ -627,9 +647,11 @@ function handleShadowDefense2({ sourceAbilityId, state, timestamp, ctx, attacker
 
     // 1 Shadow -> Sneak Attack
     if (shadows >= 1) {
+        const currentSA = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK_ATTACK] ?? 0;
+        const limitSA = getTokenStackLimit(state, attackerId, TOKEN_IDS.SNEAK_ATTACK);
         events.push({
             type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1, sourceAbilityId },
+            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1, newTotal: Math.min(currentSA + 1, limitSA), sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 1
         } as TokenGrantedEvent);
@@ -637,16 +659,21 @@ function handleShadowDefense2({ sourceAbilityId, state, timestamp, ctx, attacker
 
     // 2 Shadows -> Sneak + Sneak Attack + 免除本次伤害
     if (shadows >= 2) {
+        const currentSneak = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK] ?? 0;
+        const limitSneak = getTokenStackLimit(state, attackerId, TOKEN_IDS.SNEAK);
         events.push({
             type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK, amount: 1, sourceAbilityId },
+            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK, amount: 1, newTotal: Math.min(currentSneak + 1, limitSneak), sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 2
         } as TokenGrantedEvent);
 
+        // 第二个 SNEAK_ATTACK（与 shadows>=1 的叠加，但 stackLimit=1 会限制）
+        const currentSA2 = state.players[attackerId]?.tokens[TOKEN_IDS.SNEAK_ATTACK] ?? 0;
+        const limitSA2 = getTokenStackLimit(state, attackerId, TOKEN_IDS.SNEAK_ATTACK);
         events.push({
             type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1, sourceAbilityId },
+            payload: { targetId: attackerId, tokenId: TOKEN_IDS.SNEAK_ATTACK, amount: 1, newTotal: Math.min(currentSA2 + 1, limitSA2), sourceAbilityId },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 3
         } as TokenGrantedEvent);
@@ -660,59 +687,6 @@ function handleShadowDefense2({ sourceAbilityId, state, timestamp, ctx, attacker
             timestamp: timestamp + 4
         } as DamageShieldGrantedEvent);
     }
-
-    return events;
-}
-
-/** 潜行：移除标记并免除伤害 */
-function handleSneakPrevent({ state, timestamp, targetId, action }: CustomActionContext): DiceThroneEvent[] {
-    const events: DiceThroneEvent[] = [];
-    const player = state.players[targetId];
-    if (!player) return events;
-
-    const params = action.params as { damageAmount?: number; tokenStacks?: number } | undefined;
-    const damageAmount = params?.damageAmount ?? 0;
-    const currentStacks = params?.tokenStacks ?? (player.tokens[TOKEN_IDS.SNEAK] ?? 0);
-
-    if (currentStacks <= 0 || damageAmount <= 0) {
-        return events;
-    }
-
-    const newTotal = Math.max(0, currentStacks - 1);
-    events.push({
-        type: 'TOKEN_CONSUMED',
-        payload: {
-            playerId: targetId,
-            tokenId: TOKEN_IDS.SNEAK,
-            amount: 1,
-            newTotal,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as TokenConsumedEvent);
-
-    events.push({
-        type: 'PREVENT_DAMAGE',
-        payload: {
-            targetId,
-            amount: damageAmount,
-            sourceAbilityId: 'shadow_thief-sneak-prevent',
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 1,
-    } as PreventDamageEvent);
-
-    events.push({
-        type: 'DAMAGE_PREVENTED',
-        payload: {
-            targetId,
-            originalDamage: damageAmount,
-            preventedAmount: damageAmount,
-            shieldSourceId: TOKEN_IDS.SNEAK,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 2,
-    } as DamagePreventedEvent);
 
     return events;
 }
@@ -759,16 +733,17 @@ export function registerShadowThiefCustomActions(): void {
     registerCustomActionHandler('shadow_thief-damage-full-cp', handleDamageFullCp, { categories: ['damage'] });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll', handleShadowDanceRoll, { categories: ['dice', 'damage'] });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll-2', handleShadowDanceRoll2, { categories: ['dice', 'damage', 'resource', 'card'] });
+    registerCustomActionHandler('shadow_thief-cornucopia', handleCornucopia, { categories: ['card', 'other'] });
     registerCustomActionHandler('shadow_thief-cornucopia-discard', handleCornucopiaDiscard, { categories: ['other'] });
     registerCustomActionHandler('shadow_thief-cornucopia-2', handleCornucopia2, { categories: ['other', 'resource'] });
     registerCustomActionHandler('shadow_thief-shadow-shank-damage', handleShadowShankDamage, { categories: ['damage'] });
 
-    registerCustomActionHandler('shadow_thief-defense-resolve', handleDefenseResolve, { categories: ['damage', 'defense', 'card'] });
-    registerCustomActionHandler('shadow_thief-defense-resolve-2', handleShadowDefense2, { categories: ['damage', 'defense', 'card'] });
+    registerCustomActionHandler('shadow_thief-defense-resolve', handleDefenseResolve, { categories: ['status', 'defense', 'token'] });
+    registerCustomActionHandler('shadow_thief-defense-resolve-2', handleShadowDefense2, { categories: ['status', 'defense', 'token'] });
     registerCustomActionHandler('shadow_thief-fearless-riposte', handleFearlessRiposte, { categories: ['damage', 'defense'] });
     registerCustomActionHandler('shadow_thief-fearless-riposte-2', handleFearlessRiposte2, { categories: ['damage', 'defense'] });
 
-    registerCustomActionHandler('shadow_thief-one-with-shadows', handleOneWithShadows, { categories: ['dice', 'resource'] });
+
     registerCustomActionHandler('shadow_thief-shadow-coins', handleShadowCoins, { categories: ['resource'] });
     registerCustomActionHandler('shadow_thief-card-trick', handleCardTrick, { categories: ['other'] });
     registerCustomActionHandler('shadow_thief-shadow-manipulation', handleShadowManipulation, {
@@ -778,6 +753,5 @@ export function registerShadowThiefCustomActions(): void {
 
     registerCustomActionHandler('shadow_thief-remove-all-debuffs', handleRemoveAllDebuffs, { categories: ['status'] });
 
-    registerCustomActionHandler('shadow_thief-sneak-prevent', handleSneakPrevent, { categories: ['other'] });
     registerCustomActionHandler('shadow_thief-sneak-attack-use', handleSneakAttackUse, { categories: ['dice'] });
 }

@@ -492,6 +492,142 @@ describe('Property 4: 卡牌数量上限约束', () => {
             { numRuns: 100 },
         );
     });
+
+    // ========================================================================
+    // 边界测试：各类别达到上限后拒绝添加
+    // ========================================================================
+
+    it('普通单位达到16张上限后应拒绝继续添加', () => {
+        if (summoners.length === 0 || commons.length === 0) return;
+
+        // 选一个召唤师，用自由模式跳过符号匹配
+        const summoner = summoners[0];
+        const manualCards = new Map<string, { card: Card; count: number }>();
+
+        // 用不同的普通单位填满16张（每种最多4张）
+        let filled = 0;
+        const usedIds = new Set<string>();
+        for (const c of commons) {
+            if (filled >= 16) break;
+            const toAdd = Math.min(4, 16 - filled);
+            manualCards.set(c.id, { card: c, count: toAdd });
+            usedIds.add(c.id);
+            filled += toAdd;
+        }
+
+        const draft: DeckDraft = {
+            name: '普通上限测试',
+            summoner,
+            autoCards: [],
+            manualCards,
+            freeMode: true,
+        };
+
+        // 找一个未使用的普通单位来测试总数上限（避免命中同名上限）
+        const extraCommon = commons.find(c => !usedIds.has(c.id)) ?? commons[0];
+        const result = canAddCard(draft, extraCommon);
+        expect(result.allowed).toBe(false);
+    });
+
+    it('同名普通单位达到4张上限后应拒绝继续添加', () => {
+        if (summoners.length === 0 || commons.length === 0) return;
+
+        const summoner = summoners[0];
+        const targetCommon = commons[0];
+        const manualCards = new Map<string, { card: Card; count: number }>();
+        manualCards.set(targetCommon.id, { card: targetCommon, count: 4 });
+
+        const draft: DeckDraft = {
+            name: '同名普通上限测试',
+            summoner,
+            autoCards: [],
+            manualCards,
+            freeMode: true,
+        };
+
+        const result = canAddCard(draft, targetCommon);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain('4');
+    });
+
+    it('冠军单位达到3个上限后应拒绝继续添加', () => {
+        if (summoners.length === 0 || champions.length < 3) return;
+
+        const summoner = summoners[0];
+        const manualCards = new Map<string, { card: Card; count: number }>();
+
+        // 填满3个不同冠军（每种最多1个）
+        for (let i = 0; i < 3 && i < champions.length; i++) {
+            manualCards.set(champions[i].id, { card: champions[i], count: 1 });
+        }
+
+        const draft: DeckDraft = {
+            name: '冠军上限测试',
+            summoner,
+            autoCards: [],
+            manualCards,
+            freeMode: true,
+        };
+
+        // 再添加任意冠军应被拒绝
+        const extraChampion = champions.length > 3 ? champions[3] : champions[0];
+        const result = canAddCard(draft, extraChampion);
+        expect(result.allowed).toBe(false);
+    });
+
+    it('标准事件达到6张上限后应拒绝继续添加', () => {
+        const standardEvents = events.filter(e => e.eventType !== 'legendary');
+        if (summoners.length === 0 || standardEvents.length === 0) return;
+
+        const summoner = summoners[0];
+        const manualCards = new Map<string, { card: Card; count: number }>();
+
+        // 用不同标准事件填满6张（每种最多2张）
+        let filled = 0;
+        const usedIds = new Set<string>();
+        for (const e of standardEvents) {
+            if (filled >= 6) break;
+            const toAdd = Math.min(2, 6 - filled);
+            manualCards.set(e.id, { card: e, count: toAdd });
+            usedIds.add(e.id);
+            filled += toAdd;
+        }
+
+        const draft: DeckDraft = {
+            name: '标准事件上限测试',
+            summoner,
+            autoCards: [],
+            manualCards,
+            freeMode: true,
+        };
+
+        // 找一个未使用的标准事件来测试总数上限（避免命中同名上限）
+        const extraEvent = standardEvents.find(e => !usedIds.has(e.id)) ?? standardEvents[0];
+        const result = canAddCard(draft, extraEvent);
+        expect(result.allowed).toBe(false);
+    });
+
+    it('同名标准事件达到2张上限后应拒绝继续添加', () => {
+        const standardEvents = events.filter(e => e.eventType !== 'legendary');
+        if (summoners.length === 0 || standardEvents.length === 0) return;
+
+        const summoner = summoners[0];
+        const targetEvent = standardEvents[0];
+        const manualCards = new Map<string, { card: Card; count: number }>();
+        manualCards.set(targetEvent.id, { card: targetEvent, count: 2 });
+
+        const draft: DeckDraft = {
+            name: '同名标准事件上限测试',
+            summoner,
+            autoCards: [],
+            manualCards,
+            freeMode: true,
+        };
+
+        const result = canAddCard(draft, targetEvent);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain('2');
+    });
 });
 
 // ============================================================================

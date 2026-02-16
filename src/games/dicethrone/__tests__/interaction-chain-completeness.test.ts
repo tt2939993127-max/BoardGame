@@ -714,7 +714,7 @@ describe('状态效果交互链', () => {
         expect(result.passed).toBe(true);
     });
 
-    it('poison → upkeep 伤害 + 层数递减', () => {
+    it('poison → upkeep 伤害（持续效果，层数不变）', () => {
         const runner = createRunner(fixedRandom);
         const result = runner.run({
             name: 'poison upkeep 结算',
@@ -730,7 +730,7 @@ describe('状态效果交互链', () => {
                 players: {
                     '1': {
                         hp: INITIAL_HEALTH - 3, // 3 层 poison = 3 点伤害
-                        statusEffects: { [STATUS_IDS.POISON]: 2 }, // 移除 1 层
+                        statusEffects: { [STATUS_IDS.POISON]: 3 }, // 持续效果，层数不变
                     },
                 },
             },
@@ -756,8 +756,8 @@ describe('状态效果交互链', () => {
                     '1': {
                         hp: INITIAL_HEALTH - 3, // burn 2 + poison 1
                         statusEffects: {
-                            [STATUS_IDS.BURN]: 1,
-                            [STATUS_IDS.POISON]: 0,
+                            [STATUS_IDS.BURN]: 1, // 燃烧移除 1 层
+                            [STATUS_IDS.POISON]: 1, // 毒液持续不变
                         },
                     },
                 },

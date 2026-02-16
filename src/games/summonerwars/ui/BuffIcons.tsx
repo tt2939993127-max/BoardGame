@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { BoardUnit, EventCard, PlayerId, SummonerWarsCore } from '../domain/types';
 import { summonerWarsBuffRegistry } from './buffSystem';
 import { BuffIcons as GenericBuffIcons, BuffDetailsPanel as GenericBuffDetailsPanel, generateBuffGlowStyles, type BuffInstance } from '../../../components/game/framework/widgets/BuffSystem';
@@ -76,26 +77,28 @@ export const BuffDetailsPanel: React.FC<BuffDetailsPanelProps> = ({
   getAbilityName,
   core,
 }) => {
+  const { t } = useTranslation('game-summonerwars');
   return (
     <GenericBuffDetailsPanel
       entity={unit}
       gameState={{ activeEvents, core }}
       registry={summonerWarsBuffRegistry}
-      title="当前状态"
+      title={t('buffs.panelTitle')}
       renderBuffDetail={(buff, visualConfig) => {
         const Icon = visualConfig.icon;
-        let label = visualConfig.label;
+        const baseLabel = visualConfig.labelKey ? t(visualConfig.labelKey, visualConfig.label) : visualConfig.label;
+        let label = baseLabel;
         
         // 额外技能：显示具体技能名称
         if (buff.type === 'extraAbilities' && buff.data) {
           const abilityNames = (buff.data as string[]).map(getAbilityName).join('、');
-          label = `额外技能：${abilityNames}`;
+          label = `${baseLabel}：${abilityNames}`;
         }
         
         // 附加单位：显示具体单位名称
         if (buff.type === 'attachedUnit' && buff.data) {
           const unitNames = (buff.data as any[]).map(u => u.card.name).join('、');
-          label = `附加单位：${unitNames}`;
+          label = `${baseLabel}：${unitNames}`;
         }
         
         return (

@@ -45,6 +45,15 @@ export type FactionId = string;
 /** 能力标签 */
 export type AbilityTag = 'onPlay' | 'ongoing' | 'special' | 'talent' | 'extra' | 'onDestroy';
 
+/**
+ * 卡牌打出约束（数据驱动）。
+ * - 'requireOwnMinion'：目标基地上必须有自己的至少一个随从
+ * - { type: 'requireOwnPower', minPower: N }：目标基地上己方力量必须 ≥ N
+ */
+export type PlayConstraint =
+    | 'requireOwnMinion'
+    | { type: 'requireOwnPower'; minPower: number };
+
 /** 随从卡定义 */
 export interface MinionCardDef {
     id: string;
@@ -58,6 +67,8 @@ export interface MinionCardDef {
     /** 牌组中的数量 */
     count: number;
     previewRef?: CardPreviewRef;
+    /** 打出约束（数据驱动），如修格斯只能打到己方≥6力量的基地 */
+    playConstraint?: PlayConstraint;
     /**
      * special 能力限制组：同组的 special 能力共享"每基地每回合一次"限制。
      * 例如忍者派系所有 special 随从共享 'ninja_special' 组。
@@ -79,6 +90,11 @@ export interface ActionCardDef {
     previewRef?: CardPreviewRef;
     /** ongoing 行动卡的附着目标：'base'（默认）或 'minion'（附着到随从上） */
     ongoingTarget?: 'base' | 'minion';
+    /**
+     * ongoing 行动卡的打出约束（数据驱动）。
+     * @see PlayConstraint
+     */
+    playConstraint?: PlayConstraint;
     /** 特殊行动卡是否需要选择目标基地（Me First! 窗口中高亮可选基地） */
     specialNeedsBase?: boolean;
     /**
@@ -129,6 +145,8 @@ export interface BaseCardDef {
     restrictions?: BaseRestriction[];
     /** 基地持续力量加成：在此基地上的所有随从获得该值的力量修正 */
     minionPowerBonus?: number;
+    /** 设置期间翻到此基地时，替换它并重洗基地牌库 */
+    replaceOnSetup?: boolean;
 }
 
 // ============================================================================
@@ -445,6 +463,8 @@ export const SU_EVENTS = {
     BASE_DECK_SHUFFLED: 'su:base_deck_shuffled',
     /** special 能力限制组使用记录（每基地每回合一次） */
     SPECIAL_LIMIT_USED: 'su:special_limit_used',
+    /** 能力执行反馈（搜索失败等，纯 UI 提示，不影响状态） */
+    ABILITY_FEEDBACK: 'su:ability_feedback',
 } as const;
 
 export interface MinionPlayedEvent extends GameEvent<typeof SU_EVENTS.MINION_PLAYED> {
@@ -607,7 +627,8 @@ export type SmashUpEvent =
     | TempPowerAddedEvent
     | BreakpointModifiedEvent
     | BaseDeckShuffledEvent
-    | SpecialLimitUsedEvent;
+    | SpecialLimitUsedEvent
+    | AbilityFeedbackEvent;
 
 // ============================================================================
 // 新增事件接口
@@ -871,5 +892,18 @@ export interface SpecialLimitUsedEvent extends GameEvent<typeof SU_EVENTS.SPECIA
         limitGroup: string;
         /** 触发的能力 defId */
         abilityDefId: string;
+    };
+}
+
+/** 能力执行反馈事件（纯 UI 提示，reducer 不处理） */
+export interface AbilityFeedbackEvent extends GameEvent<typeof SU_EVENTS.ABILITY_FEEDBACK> {
+    payload: {
+        playerId: PlayerId;
+        /** i18n key（在 game-smashup namespace 下） */
+        messageKey: string;
+        /** i18n 插值参数 */
+        messageParams?: Record<string, string | number>;
+        /** 提示级别 */
+        tone?: 'info' | 'warning';
     };
 }

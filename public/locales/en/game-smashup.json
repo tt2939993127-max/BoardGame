@@ -79,12 +79,26 @@
     "click_base_to_deploy": "Click a base to deploy",
     "power_limit_exceeded": "Power limit exceeded",
     "minion_short": "Minion",
+    "minion_global_quota": "Global Quota",
+    "minion_power_cap": "Power Cap ≤{{max}}",
     "action_short": "Action",
+    "action_global_quota": "Global Quota",
+    "action_extra_hint": "Includes extra action quota +{{extra}}",
     "close": "Close",
     "reveal_your_hand_shown": "Your hand has been shown to opponent",
     "reveal_confirmed": "Confirmed",
     "deselect_all": "Deselect All",
     "select_all": "Select All"
+  },
+  "feedback": {
+    "deck_search_no_match": "No matching card found in deck. Deck reshuffled.",
+    "deck_search_skipped": "Selection skipped. Deck reshuffled.",
+    "no_valid_targets": "No valid targets on the field",
+    "discard_empty": "No matching cards in discard pile",
+    "deck_empty": "Deck is empty",
+    "hand_empty": "No matching cards in hand",
+    "condition_not_met": "Condition not met, ability had no effect",
+    "target_protected": "Target is protected, ability had no effect"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",
@@ -184,19 +198,19 @@
     },
     "minions_of_cthulhu": {
       "name": "Minions of Cthulhu",
-      "description": "Use madness cards and sacrifice minions."
+      "description": "Use madness cards and sacrifice minions. Note: every 2 madness cards cost 1 VP at game end."
     },
     "elder_things": {
       "name": "Elder Things",
-      "description": "Hand out madness and manipulate minds."
+      "description": "Hand out madness and manipulate minds. Note: every 2 madness cards cost 1 VP at game end."
     },
     "innsmouth": {
       "name": "Innsmouth",
-      "description": "Swarm tactics; rally identical minions."
+      "description": "Swarm tactics; rally identical minions. Note: every 2 madness cards cost 1 VP at game end."
     },
     "miskatonic_university": {
       "name": "Miskatonic University",
-      "description": "Leverage madness for advantage and research."
+      "description": "Leverage madness for advantage and research. Note: every 2 madness cards cost 1 VP at game end."
     }
   },
   "tutorial": {

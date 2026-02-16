@@ -22,6 +22,9 @@
     "tutorial_command_blocked": "教程中禁止该操作",
     "tutorial_step_locked": "当前步骤不能跳过"
   },
+  "actionLog": {
+    "cellClicked": "落子：{{row}},{{col}}"
+  },
   "tutorial": {
     "steps": {
       "intro": "欢迎来到井字棋！👋 这是一个经典的策略游戏。你的目标是率先将三个棋子连成一条直线（横、竖、斜）。",

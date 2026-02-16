@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, getMinionPower, buildMinionTargetOptions, resolveOrPrompt } from '../domain/abilityHelpers';
+import { destroyMinion, getMinionPower, buildMinionTargetOptions, resolveOrPrompt, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDiscardedEvent, CardsDrawnEvent, OngoingDetachedEvent, SmashUpEvent, LimitModifiedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
@@ -94,7 +94,7 @@ function tricksterDisenchant(ctx: AbilityContext): AbilityResult {
             }
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = targets.map((t, i) => ({
         id: `action-${i}`, label: t.label, value: { cardUid: t.uid, defId: t.defId, ownerId: t.ownerId },
     }));
@@ -233,7 +233,7 @@ function tricksterBlockThePath(ctx: AbilityContext): AbilityResult {
             if (def?.faction) factionSet.add(def.faction);
         }
     }
-    if (factionSet.size === 0) return { events: [] };
+    if (factionSet.size === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = Array.from(factionSet).map((fid, i) => ({
         id: `faction-${i}`, label: fid, value: { factionId: fid },
     }));
@@ -338,6 +338,30 @@ function registerTricksterOngoingEffects(): void {
                 type: SU_EVENTS.LIMIT_MODIFIED,
                 payload: {
                     playerId: mist.ownerId,
+                    limitType: 'minion' as const,
+                    delta: 1,
+                    reason: 'trickster_enshrouding_mist',
+                    restrictToBase: bi,
+                },
+                timestamp: trigCtx.now,
+            }];
+        }
+        return [];
+    });
+
+    // 迷雾笼罩：打出当回合也给予额外随从（与大法师同理，ongoing 能力在进入场上时生效）
+    registerTrigger('trickster_enshrouding_mist', 'onActionPlayed', (trigCtx) => {
+        // 只有打出的是隐蔽迷雾本身时才触发
+        if (trigCtx.triggerActionDefId !== 'trickster_enshrouding_mist') return [];
+        // 找到刚打出的隐蔽迷雾所在基地
+        for (let bi = 0; bi < trigCtx.state.bases.length; bi++) {
+            const base = trigCtx.state.bases[bi];
+            const mist = base.ongoingActions.find(o => o.defId === 'trickster_enshrouding_mist' && o.ownerId === trigCtx.playerId);
+            if (!mist) continue;
+            return [{
+                type: SU_EVENTS.LIMIT_MODIFIED,
+                payload: {
+                    playerId: trigCtx.playerId,
                     limitType: 'minion' as const,
                     delta: 1,
                     reason: 'trickster_enshrouding_mist',

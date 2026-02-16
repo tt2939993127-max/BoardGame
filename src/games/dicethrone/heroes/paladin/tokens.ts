@@ -18,24 +18,24 @@ export const PALADIN_TOKENS: TokenDef[] = [
     // ============================================
 
     /**
-     * 暴击 (Crit) - 增加伤害
-     * 消耗 1 层，攻击伤害 +1
+     * 暴击 (Crit) - 条件性加伤
+     * 攻击伤害≥5时可消耗此标记，+4伤害。不能用于溅射伤害。
+     * 不叠加（stackLimit=1）
      */
     {
         id: TOKEN_IDS.CRIT,
         name: tokenText(TOKEN_IDS.CRIT, 'name'),
-        icon: '⚔️',
         colorTheme: 'from-red-500 to-rose-600',
         description: tokenText(TOKEN_IDS.CRIT, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_fire',
-        stackLimit: 3,
+        stackLimit: 1,
         category: 'consumable',
         activeUse: {
             timing: ['beforeDamageDealt'],
             consumeAmount: 1,
             effect: {
                 type: 'modifyDamageDealt',
-                value: 1,
+                value: 4, // 固定+4伤害（需伤害≥5才可使用，由处理器门控）
             },
         },
         frameId: 'holy-strike',
@@ -44,23 +44,23 @@ export const PALADIN_TOKENS: TokenDef[] = [
 
     /**
      * 精准 (Accuracy) - 攻击不可防御
-     * 消耗 1 层，本次攻击变为不可防御
+     * 攻击掷骰阶段结束时可花费此标记，使攻击变为不可防御。
+     * 不叠加（stackLimit=1）
      */
     {
         id: TOKEN_IDS.ACCURACY,
         name: tokenText(TOKEN_IDS.ACCURACY, 'name'),
-        icon: '🎯',
         colorTheme: 'from-blue-500 to-indigo-600',
         description: tokenText(TOKEN_IDS.ACCURACY, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_lightning',
-        stackLimit: 3,
+        stackLimit: 1,
         category: 'consumable',
         activeUse: {
             timing: ['beforeDamageDealt'],
             consumeAmount: 1,
             effect: {
                 type: 'modifyDamageDealt',
-                value: 0, // 不增加伤害，而是使攻击不可防御（逻辑在 custom action 中）
+                value: 0, // 不增加伤害，而是使攻击不可防御
             },
         },
         frameId: 'rallying-cry',
@@ -68,24 +68,24 @@ export const PALADIN_TOKENS: TokenDef[] = [
     },
 
     /**
-     * 守护 (Protect) - 减免伤害
-     * 消耗 1 层，受到伤害 -1
+     * 守护 (Protect) - 伤害减半
+     * 任何时候花费此标记将即将受到的伤害减半（减的量向上取整）。
+     * 不叠加（stackLimit=1）
      */
     {
         id: TOKEN_IDS.PROTECT,
         name: tokenText(TOKEN_IDS.PROTECT, 'name'),
-        icon: '🛡️',
         colorTheme: 'from-amber-500 to-yellow-600',
         description: tokenText(TOKEN_IDS.PROTECT, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_holy_water',
-        stackLimit: 3,
+        stackLimit: 1,
         category: 'consumable',
         activeUse: {
             timing: ['beforeDamageReceived'],
             consumeAmount: 1,
             effect: {
                 type: 'modifyDamageReceived',
-                value: -1,
+                value: 0, // 动态计算：减半当前伤害（向上取整），由处理器实现
             },
         },
         frameId: 'divine-shield',
@@ -93,24 +93,24 @@ export const PALADIN_TOKENS: TokenDef[] = [
     },
 
     /**
-     * 神罚 (Retribution) - 反弹伤害
-     * 消耗 1 层，对攻击者造成 2 点不可防御伤害
+     * 神罚 (Retribution) - 反弹伤害的一半
+     * 受到攻击伤害时可花费此标记，将本次受到伤害的一半（向上取整）返还给对手。
+     * 不减少自己所受伤害。不叠加（stackLimit=1）
      */
     {
         id: TOKEN_IDS.RETRIBUTION,
         name: tokenText(TOKEN_IDS.RETRIBUTION, 'name'),
-        icon: '⚡',
         colorTheme: 'from-purple-500 to-violet-600',
         description: tokenText(TOKEN_IDS.RETRIBUTION, 'description') as unknown as string[],
         sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.light.heavenly_flame',
-        stackLimit: 3,
+        stackLimit: 1,
         category: 'consumable',
         activeUse: {
             timing: ['beforeDamageReceived'],
             consumeAmount: 1,
             effect: {
                 type: 'modifyDamageReceived',
-                value: 0, // 不减伤，而是反弹 2 点伤害（逻辑在 custom action 中）
+                value: 0, // 不减伤，反弹伤害的一半（向上取整），由处理器动态计算
             },
         },
         frameId: 'shield-break',
@@ -128,7 +128,6 @@ export const PALADIN_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.TITHES_UPGRADED,
         name: tokenText(TOKEN_IDS.TITHES_UPGRADED, 'name'),
-        icon: '💰',
         colorTheme: 'from-emerald-500 to-green-600',
         description: tokenText(TOKEN_IDS.TITHES_UPGRADED, 'description') as unknown as string[],
         stackLimit: 1,
@@ -148,7 +147,6 @@ export const PALADIN_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.BLESSING_OF_DIVINITY,
         name: tokenText(TOKEN_IDS.BLESSING_OF_DIVINITY, 'name'),
-        icon: '✝️',
         colorTheme: 'from-yellow-400 to-amber-500',
         description: tokenText(TOKEN_IDS.BLESSING_OF_DIVINITY, 'description') as unknown as string[],
         sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_celestial_choir_001',

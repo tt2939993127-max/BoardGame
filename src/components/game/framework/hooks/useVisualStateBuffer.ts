@@ -50,6 +50,21 @@ export interface UseVisualStateBufferReturn {
   freezeBatch: (entries: Array<{ key: string; value: number }>) => void;
 
   /**
+   * 同步冻结：仅写 ref（render 阶段安全），不触发 setState。
+   * 用于 render 阶段同步设置冻结值，消除 effect 延迟导致的间隙帧。
+   * 调用后必须在同一批次的 useEffect/useLayoutEffect 中调用 commitSync()
+   * 将 ref 同步到 React state，否则 snapshot/isBuffering 不会更新。
+   */
+  freezeSync: (key: string, value: number) => void;
+
+  /**
+   * 将 freezeSync 写入 ref 的值同步到 React state。
+   * 必须在 useEffect/useLayoutEffect 中调用（不可在 render 阶段调用）。
+   * 如果 ref 与 state 已一致则不触发更新。
+   */
+  commitSync: () => void;
+
+  /**
    * 释放指定 key（删除快照），UI 将回退到 core 真实值。
    * 通常在动画 impact 瞬间调用。
    */
@@ -123,6 +138,19 @@ export function useVisualStateBuffer(): UseVisualStateBufferReturn {
     setSnapshot(null);
   }, []);
 
+  // render 阶段安全的同步冻结：仅写 ref，不触发 setState
+  const freezeSync = useCallback((key: string, value: number) => {
+    const prev = snapshotRef.current;
+    const next = new Map(prev ?? []);
+    next.set(key, value);
+    snapshotRef.current = next;
+  }, []);
+
+  // 将 ref 同步到 React state（必须在 effect 中调用）
+  const commitSync = useCallback(() => {
+    setSnapshot(snapshotRef.current);
+  }, []);
+
   const get = useCallback((key: string, fallback: number): number => {
     const val = snapshotRef.current?.get(key);
     return val !== undefined ? val : fallback;
@@ -131,6 +159,8 @@ export function useVisualStateBuffer(): UseVisualStateBufferReturn {
   return {
     freeze,
     freezeBatch,
+    freezeSync,
+    commitSync,
     release,
     clear,
     get,

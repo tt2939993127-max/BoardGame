@@ -34,13 +34,13 @@ describe('圣骑士技能定义', () => {
             expect(new Set(ids).size).toBe(ids.length);
         });
 
-        it('正义冲击 - 3 Sword + 1 Helm 触发', () => {
+        it('正义冲击 - 3 Sword + 2 Helm 触发', () => {
             const ability = PALADIN_ABILITIES.find(a => a.id === 'righteous-combat');
             expect(ability).toBeDefined();
             expect(ability!.type).toBe('offensive');
             expect(ability!.trigger).toEqual({
                 type: 'diceSet',
-                faces: { [FACES.SWORD]: 3, [FACES.HELM]: 1 },
+                faces: { [FACES.SWORD]: 3, [FACES.HELM]: 2 },
             });
             // 应有 2 个效果：伤害 + rollDie
             expect(ability!.effects).toHaveLength(2);
@@ -108,7 +108,7 @@ describe('圣骑士技能定义', () => {
                 type: 'diceSet',
                 faces: { [FACES.PRAY]: 4 },
             });
-            // 效果：8 伤害 + 暴击 + 2 CP
+            // 效果：8 伤害 + 暴击 + 20 CP
             expect(ability!.effects).toHaveLength(3);
             expect(ability!.effects![0].action.value).toBe(8);
         });
@@ -187,10 +187,18 @@ describe('圣骑士技能定义', () => {
             expect(HOLY_STRIKE_2.variants![1].effects[1].action.value).toBe(9);
         });
 
-        it('复仇 II - 新增混合变体', () => {
+        it('复仇 II - 新增混合变体 + 玩家选择交互', () => {
             expect(VENGEANCE_2.variants).toHaveLength(2);
             // 混合变体: 4 种不同符号
             expect(VENGEANCE_2.variants![0].trigger.type).toBe('allSymbolsPresent');
+            // 主变体: 3 Helm + 1 Pray，使用 custom action 生成玩家选择交互
+            expect(VENGEANCE_2.variants![1].trigger).toEqual({
+                type: 'diceSet',
+                faces: { [FACES.HELM]: 3, [FACES.PRAY]: 1 },
+            });
+            // 第一个效果应该是 custom action（玩家选择）
+            expect(VENGEANCE_2.variants![1].effects[0].action.type).toBe('custom');
+            expect(VENGEANCE_2.variants![1].effects[0].action.customActionId).toBe('paladin-vengeance-select-player');
         });
 
         it('正义祈祷 II - 新增繁盛变体', () => {

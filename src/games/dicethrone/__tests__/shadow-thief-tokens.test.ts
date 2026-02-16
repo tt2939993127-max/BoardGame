@@ -4,12 +4,14 @@
  * 覆盖范围：
  * 1. Token 定义完整性（sneak、sneak_attack、poison）
  * 2. 初始状态验证
- * 3. Sneak 被动触发定义（onDamageReceived + custom action）
+ * 3. Sneak 定义（不再通过 passiveTrigger，而是在攻击流程中处理）
  * 4. Sneak Attack activeUse 定义（beforeDamageDealt）
  * 5. Poison 被动触发定义（onTurnStart）
  *
- * 注意：poison onTurnStart 伤害的执行逻辑尚未在 game.ts onPhaseEnter 中实现，
- * 此处仅测试定义属性。Sneak/SneakAttack 的实际执行在 custom action 中。
+ * 注意：
+ * - Sneak 不再通过 onDamageReceived 被动触发，而是在 flowHooks.ts 的 offensiveRoll 阶段退出时主动检查
+ * - Sneak Attack 的实际执行在 custom action 中
+ * - Poison onTurnStart 伤害在 flowHooks.ts onPhaseEnter 中实现
  */
 
 import { describe, it, expect } from 'vitest';
@@ -21,24 +23,13 @@ import { TOKEN_IDS, STATUS_IDS } from '../domain/ids';
 // ============================================================================
 
 describe('暗影刺客 Token 定义', () => {
-    it('应包含 Sneak（潜行）— buff, onDamageReceived, stackLimit=1', () => {
+    it('应包含 Sneak（潜行）— buff, stackLimit=1, 不再有 passiveTrigger', () => {
         const sneak = SHADOW_THIEF_TOKENS.find(t => t.id === TOKEN_IDS.SNEAK);
         expect(sneak).toBeDefined();
         expect(sneak!.category).toBe('buff');
         expect(sneak!.stackLimit).toBe(1);
-        expect(sneak!.passiveTrigger).toBeDefined();
-        expect(sneak!.passiveTrigger!.timing).toBe('onDamageReceived');
-        expect(sneak!.passiveTrigger!.removable).toBe(false);
-        // 触发 custom action: shadow_thief-sneak-prevent
-        expect(sneak!.passiveTrigger!.actions).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    type: 'custom',
-                    customActionId: 'shadow_thief-sneak-prevent',
-                    target: 'self',
-                }),
-            ])
-        );
+        // 潜行不再通过 passiveTrigger 触发，而是在攻击流程中（flowHooks.ts offensiveRoll 退出时）主动检查
+        expect(sneak!.passiveTrigger).toBeUndefined();
     });
 
     it('应包含 Sneak Attack（伏击）— consumable, beforeDamageDealt', () => {
@@ -84,27 +75,23 @@ describe('暗影刺客初始 Token 状态', () => {
 });
 
 // ============================================================================
-// 3. Sneak 被动触发定义验证
+// 3. Sneak 定义验证（不再有 passiveTrigger）
 // ============================================================================
 
-describe('暗影刺客 Sneak 被动触发', () => {
-    it('Sneak 触发时机为 onDamageReceived（受到伤害时）', () => {
+describe('暗影刺客 Sneak 定义', () => {
+    it('Sneak 不再有 passiveTrigger（改为在攻击流程中处理）', () => {
         const sneak = SHADOW_THIEF_TOKENS.find(t => t.id === TOKEN_IDS.SNEAK)!;
-        expect(sneak.passiveTrigger!.timing).toBe('onDamageReceived');
+        expect(sneak.passiveTrigger).toBeUndefined();
     });
 
-    it('Sneak 不可通过 CP 移除（removable=false）', () => {
+    it('Sneak 是 buff 类型', () => {
         const sneak = SHADOW_THIEF_TOKENS.find(t => t.id === TOKEN_IDS.SNEAK)!;
-        expect(sneak.passiveTrigger!.removable).toBe(false);
+        expect(sneak.category).toBe('buff');
     });
 
-    it('Sneak 触发的 custom action ID 正确', () => {
+    it('Sneak 最大叠加 1 层', () => {
         const sneak = SHADOW_THIEF_TOKENS.find(t => t.id === TOKEN_IDS.SNEAK)!;
-        const customAction = sneak.passiveTrigger!.actions!.find(
-            (a: any) => a.type === 'custom'
-        ) as any;
-        expect(customAction).toBeDefined();
-        expect(customAction.customActionId).toBe('shadow_thief-sneak-prevent');
+        expect(sneak.stackLimit).toBe(1);
     });
 });
 

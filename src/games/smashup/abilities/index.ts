@@ -33,12 +33,14 @@ import { registerCthulhuAbilities } from './cthulhu';
 import { registerCthulhuInteractionHandlers } from './cthulhu';
 import { registerElderThingAbilities } from './elder_things';
 import { registerElderThingInteractionHandlers } from './elder_things';
-import { registerBaseAbilities, registerBaseInteractionHandlers } from '../domain/baseAbilities';
+import { registerBaseAbilities, registerBaseInteractionHandlers, clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
 import { clearPowerModifierRegistry } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 import { clearDiscardPlayProviders } from '../domain/discardPlayability';
+import { clearRegistry } from '../domain/abilityRegistry';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 
 let initialized = false;
 
@@ -46,6 +48,14 @@ let initialized = false;
 export function initAllAbilities(): void {
     if (initialized) return;
     initialized = true;
+
+    // HMR 安全：先清除所有注册表，防止模块热更新时 initialized 被重置但注册表保留旧数据
+    clearRegistry();
+    clearInteractionHandlers();
+    clearBaseAbilityRegistry();
+    clearPowerModifierRegistry();
+    clearOngoingEffectRegistry();
+    clearDiscardPlayProviders();
 
     // 基础?8 派系
     registerAlienAbilities();
@@ -99,6 +109,9 @@ export function initAllAbilities(): void {
 /** 重置初始化状态（测试用） */
 export function resetAbilityInit(): void {
     initialized = false;
+    clearRegistry();
+    clearInteractionHandlers();
+    clearBaseAbilityRegistry();
     clearPowerModifierRegistry();
     clearOngoingEffectRegistry();
     clearDiscardPlayProviders();

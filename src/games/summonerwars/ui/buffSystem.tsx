@@ -119,11 +119,15 @@ const detectChantWeaving: BuffDetector<GameState, BoardUnit> = (unit, gameState)
 // Buff 注册配置
 // ============================================================================
 
+const SW_NS = 'game-summonerwars';
+
 const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
   {
     type: 'healing',
     visual: {
       label: '治疗模式',
+      labelKey: 'buffs.healing',
+      labelNs: SW_NS,
       icon: HealingIcon,
       iconColor: 'text-green-100',
       bgColor: 'bg-green-500',
@@ -135,6 +139,8 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
     type: 'extraAbilities',
     visual: {
       label: '额外技能',
+      labelKey: 'buffs.extraAbilities',
+      labelNs: SW_NS,
       icon: SparkleIcon,
       iconColor: 'text-purple-100',
       bgColor: 'bg-purple-500',
@@ -146,6 +152,8 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
     type: 'attachedUnit',
     visual: {
       label: '附加单位',
+      labelKey: 'buffs.attachedUnit',
+      labelNs: SW_NS,
       icon: SwordIcon,
       iconColor: 'text-blue-100',
       bgColor: 'bg-blue-500',
@@ -157,6 +165,8 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
     type: 'hypnoticLure',
     visual: {
       label: '催眠引诱（召唤师攻击+1）',
+      labelKey: 'buffs.hypnoticLure',
+      labelNs: SW_NS,
       icon: TargetIcon,
       iconColor: 'text-pink-100',
       bgColor: 'bg-pink-500',
@@ -168,6 +178,8 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
     type: 'hellfireBlade',
     visual: {
       label: '狱火铸剑 (+2⚔️)',
+      labelKey: 'buffs.hellfireBlade',
+      labelNs: SW_NS,
       icon: FlameIcon,
       iconColor: 'text-orange-100',
       bgColor: 'bg-orange-500',
@@ -179,6 +191,8 @@ const BUFF_REGISTRATIONS: BuffRegistration<GameState, BoardUnit>[] = [
     type: 'chantWeaving',
     visual: {
       label: '编织颂歌（临时召唤点）',
+      labelKey: 'buffs.chantWeaving',
+      labelNs: SW_NS,
       icon: TargetIcon,
       iconColor: 'text-amber-100',
       bgColor: 'bg-amber-500',

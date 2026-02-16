@@ -17,6 +17,7 @@ import type {
     StatusRemovedEvent,
     AbilityActivatedEvent,
     ExtraAttackTriggeredEvent,
+    TokenConsumedEvent,
 } from './types';
 import { STATUS_IDS, TOKEN_IDS } from './ids';
 import { canAdvancePhase, getNextPhase, getNextPlayerId, getPlayerDieFace, getResponderQueue } from './rules';
@@ -278,6 +279,43 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     }
                 }
 
+                // ========== 潜行判定：防御方有潜行时跳过防御掷骰、免除伤害 ==========
+                // 终极技能不可被任何方式回避（规则 §4.4）
+                const defender = core.players[core.pendingAttack.defenderId];
+                const sneakStacks = defender?.tokens[TOKEN_IDS.SNEAK] ?? 0;
+                if (sneakStacks > 0 && !core.pendingAttack.isUltimate) {
+                    // 消耗潜行标记
+                    events.push({
+                        type: 'TOKEN_CONSUMED',
+                        payload: {
+                            playerId: core.pendingAttack.defenderId,
+                            tokenId: TOKEN_IDS.SNEAK,
+                            amount: 1,
+                            newTotal: sneakStacks - 1,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as TokenConsumedEvent);
+
+                    // 处理 preDefense 效果（攻击方的非伤害效果仍然生效）
+                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp);
+                    events.push(...preDefenseEventsSneak);
+
+                    const hasSneakChoice = preDefenseEventsSneak.some((event) => event.type === 'CHOICE_REQUESTED');
+                    if (hasSneakChoice) {
+                        return { events, halt: true };
+                    }
+
+                    // 攻击仍视为"成功"——postDamage 效果（如 grantToken）仍需执行
+                    const coreForPostDamage = preDefenseEventsSneak.length > 0
+                        ? applyEvents(core, [...events] as DiceThroneEvent[], reduce)
+                        : core;
+                    const postDamageEventsSneak = resolvePostDamageEffects(coreForPostDamage, random, timestamp);
+                    events.push(...postDamageEventsSneak);
+
+                    return { events, overrideNextPhase: 'main2' };
+                }
+
                 // 处理进攻方的 preDefense 效果
                 const preDefenseEvents = resolveOffensivePreDefenseEffects(core, timestamp);
                 events.push(...preDefenseEvents);
@@ -390,8 +428,29 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             return { events, overrideNextPhase: 'main2' };
         }
 
-        // ========== discard 阶段退出：切换回合 ==========
+        // ========== discard 阶段退出：潜行自动弃除 + 切换回合 ==========
         if (from === 'discard') {
+            // 潜行自动弃除：经过一个完整的自己回合后，回合末弃除
+            // 判定条件：sneakGainedTurn[playerId] < 当前 turnNumber（不是本回合获得的）
+            const activeId = core.activePlayerId;
+            const sneakStacks = core.players[activeId]?.tokens[TOKEN_IDS.SNEAK] ?? 0;
+            if (sneakStacks > 0 && core.sneakGainedTurn?.[activeId] !== undefined) {
+                const gainedTurn = core.sneakGainedTurn[activeId];
+                if (gainedTurn < core.turnNumber) {
+                    events.push({
+                        type: 'TOKEN_CONSUMED',
+                        payload: {
+                            playerId: activeId,
+                            tokenId: TOKEN_IDS.SNEAK,
+                            amount: sneakStacks,
+                            newTotal: 0,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                }
+            }
+
             const nextPlayerId = getNextPlayerId(core);
             const turnEvent: TurnChangedEvent = {
                 type: 'TURN_CHANGED',
@@ -516,7 +575,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     } as DiceThroneEvent);
                 }
 
-                // 2. 中毒 (poison) — 每层造成 1 点伤害，然后移除 1 层
+                // 2. 中毒 (poison) — 每层造成 1 点伤害，持续效果（不自动移除层数）
                 // 【已迁移到新伤害计算管线】
                 const poisonStacks = player.statusEffects[STATUS_IDS.POISON] ?? 0;
                 if (poisonStacks > 0) {
@@ -529,13 +588,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     });
                     const damageEvents = damageCalc.toEvents();
                     events.push(...damageEvents);
-                    // 移除 1 层中毒
-                    events.push({
-                        type: 'STATUS_REMOVED',
-                        payload: { targetId: activeId, statusId: STATUS_IDS.POISON, stacks: 1 },
-                        sourceCommandType: command.type,
-                        timestamp,
-                    } as DiceThroneEvent);
+                    // 持续效果：毒液层数不自动减少，只能通过净化等手段移除
                 }
             }
         }
@@ -656,9 +709,8 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return events;
                 }
 
-                // CP +1（教会税升级时 +2）
-                const tithesUpgraded = (player.tokens[TOKEN_IDS.TITHES_UPGRADED] ?? 0) > 0;
-                const cpDelta = tithesUpgraded ? 2 : 1;
+                // CP +1
+                const cpDelta = 1;
                 const cpResult = resourceSystem.modify(
                     player.resources,
                     RESOURCE_IDS.CP,

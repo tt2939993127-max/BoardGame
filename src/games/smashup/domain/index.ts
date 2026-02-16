@@ -6,7 +6,7 @@
 
 import type { DomainCore, GameEvent, GameOverResult, PlayerId, RandomFn, MatchState } from '../../../engine/types';
 import { processDestroyTriggers, processMoveTriggers, processAffectTriggers } from './reducer';
-import type { FlowHooks } from '../../../engine/systems/FlowSystem';
+import type { FlowHooks, PhaseEnterResult } from '../../../engine/systems/FlowSystem';
 import type {
     SmashUpCommand,
     SmashUpCore,
@@ -73,9 +73,35 @@ function scoreOneBase(
     const base = core.bases[baseIndex];
     const baseDef = getBaseDef(base.defId)!;
 
-    // 触发 beforeScoring 基地能力
-    const beforeCtx = {
+    // 触发 ongoing beforeScoring（如 pirate_king 移动到该基地、cthulhu_chosen +2力量）
+    // 先于基地能力执行，确保基地能力能看到 ongoing 效果的结果
+    const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
         state: core,
+        matchState: ms,
+        playerId: pid,
+        baseIndex,
+        random: rng,
+        now,
+    });
+    events.push(...beforeScoringEvents.events);
+    if (beforeScoringEvents.matchState) ms = beforeScoringEvents.matchState;
+
+    // beforeScoring 可能创建了交互（如海盗王移动确认）
+    // 必须先 halt 等交互解决、事件 reduce 到 core 后，再继续
+    if (ms?.sys?.interaction?.current) {
+        return { events, newBaseDeck: baseDeck, matchState: ms };
+    }
+
+    // 将 ongoing beforeScoring 产生的事件（如 TEMP_POWER_ADDED、MINION_MOVED）reduce 到 core，
+    // 确保后续基地能力和排名计算使用最新状态
+    let updatedCore = core;
+    for (const evt of events) {
+        updatedCore = reduce(updatedCore, evt as SmashUpEvent);
+    }
+
+    // 触发 beforeScoring 基地能力（用 reduce 后的 core，包含 ongoing 效果）
+    const beforeCtx = {
+        state: updatedCore,
         matchState: ms,
         baseIndex,
         baseDefId: base.defId,
@@ -86,22 +112,17 @@ function scoreOneBase(
     events.push(...beforeResult.events);
     if (beforeResult.matchState) ms = beforeResult.matchState;
 
-    // 触发 ongoing beforeScoring（如 pirate_king 移动到该基地、cthulhu_chosen +2力量）
-    const beforeScoringEvents = fireTriggers(core, 'beforeScoring', {
-        state: core,
-        playerId: pid,
-        baseIndex,
-        random: rng,
-        now,
-    });
-    events.push(...beforeScoringEvents.events);
-    if (beforeScoringEvents.matchState) ms = beforeScoringEvents.matchState;
+    // 基地能力也可能产生事件（如 VP_AWARDED），继续 reduce
+    for (const evt of beforeResult.events) {
+        updatedCore = reduce(updatedCore, evt as SmashUpEvent);
+    }
 
-    // 计算排名
+    // 计算排名（使用 reduce 后的 core，包含 beforeScoring 的临时力量修正）
+    const updatedBase = updatedCore.bases[baseIndex];
     const playerPowers = new Map<PlayerId, number>();
-    for (const m of base.minions) {
+    for (const m of updatedBase.minions) {
         const prev = playerPowers.get(m.controller) ?? 0;
-        playerPowers.set(m.controller, prev + getEffectivePower(core, m, baseIndex));
+        playerPowers.set(m.controller, prev + getEffectivePower(updatedCore, m, baseIndex));
     }
     const sorted = Array.from(playerPowers.entries())
         .filter(([, p]) => p > 0)
@@ -223,15 +244,23 @@ function setup(playerIds: PlayerId[], random: RandomFn): SmashUpCore {
         playerSelections[pid] = [];
     }
 
-    // 翻开 玩家数+1 张基地
-    const allBaseIds = random.shuffle(getAllBaseDefIds());
+    // 翻开 玩家数+1 张基地（设置期间翻到 replaceOnSetup 的基地时替换并重洗）
+    let shuffledBaseIds = random.shuffle(getAllBaseDefIds());
     const baseCount = playerIds.length + 1;
-    const activeBases: BaseInPlay[] = allBaseIds.slice(0, baseCount).map(defId => ({
-        defId,
-        minions: [],
-        ongoingActions: [],
-    }));
-    const baseDeck = allBaseIds.slice(baseCount);
+    const activeBases: BaseInPlay[] = [];
+
+    while (activeBases.length < baseCount && shuffledBaseIds.length > 0) {
+        const defId = shuffledBaseIds.shift()!;
+        const def = getBaseDef(defId);
+        if (def?.replaceOnSetup) {
+            // 放回牌库并重洗
+            shuffledBaseIds.push(defId);
+            shuffledBaseIds = random.shuffle(shuffledBaseIds);
+            continue;
+        }
+        activeBases.push({ defId, minions: [], ongoingActions: [] });
+    }
+    const baseDeck = shuffledBaseIds;
 
     return {
         players,
@@ -320,7 +349,10 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             }
 
             // Property 14: 2+ 基地达标 → 通过 InteractionSystem(simple-choice) 让当前玩家选择计分顺序
-            if (eligibleBases.length >= 2 && !state.sys.interaction.current) {
+            // flowHalted 守卫：Interaction 解决后同一 afterEvents 轮次中 FlowSystem 会再次调用 onPhaseExit，
+            // 此时 SmashUpEventSystem 尚未处理计分事件（core 未更新），跳过 Interaction 创建，
+            // 直接走下方的单基地循环计分逻辑，避免重复创建 Interaction 导致流程卡死
+            if (eligibleBases.length >= 2 && !state.sys.interaction.current && !state.sys.flowHalted) {
                 const candidates = eligibleBases.map(eb => {
                     const baseDef = getBaseDef(eb.defId);
                     return {
@@ -343,6 +375,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // Property 15: 循环检查所有达到临界点的基地
             let remainingBaseIndices = core.bases.map((_, index) => index);
             let currentBaseDeck = core.baseDeck;
+            let currentMatchState: MatchState<SmashUpCore> = state;
 
             const maxIterations = remainingBaseIndices.length;
             for (let iter = 0; iter < maxIterations; iter++) {
@@ -359,14 +392,24 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 }
                 if (foundIndex === null) break;
 
-                const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random, state);
+                const result = scoreOneBase(core, foundIndex, currentBaseDeck, pid, now, random, currentMatchState);
                 events.push(...result.events);
                 currentBaseDeck = result.newBaseDeck;
-                // 传播 matchState（afterScoring 基地能力可能创建 Interaction）
+                // 不可变传播 matchState（afterScoring 基地能力可能创建 Interaction）
                 if (result.matchState) {
-                    state.sys = result.matchState.sys;
+                    currentMatchState = result.matchState;
+                }
+                // beforeScoring 创建了交互（如海盗王移动确认）→ halt 等交互解决后重新计分
+                if (currentMatchState.sys.interaction?.current) {
+                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
                 }
                 remainingBaseIndices = remainingBaseIndices.filter((index) => index !== foundIndex);
+            }
+
+            // 如果基地能力创建了 Interaction（如托尔图加 afterScoring），
+            // 需要 halt 等待玩家响应，不能直接推进到下一阶段
+            if (currentMatchState.sys.interaction?.current) {
+                return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
             }
 
             return events;
@@ -375,11 +418,14 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         return [];
     },
 
-    onPhaseEnter({ state, from, to, random, command }): GameEvent[] {
+    onPhaseEnter({ state, from, to, random, command }): GameEvent[] | PhaseEnterResult {
         const core = state.core;
         const pid = getCurrentPlayerId(core);
         const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
         const events: GameEvent[] = [];
+        // 追踪 sys 变更（基地能力/ongoing 可能创建 Interaction）
+        let currentMatchState: MatchState<SmashUpCore> = state;
+        let hasSysUpdate = false;
 
         if (to === 'startTurn') {
             let nextPlayerId = pid;
@@ -402,25 +448,33 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             events.push(turnStarted);
 
             // 触发基地 onTurnStart 能力（如拉莱耶：消灭随从获1VP、蘑菇王国：移动对手随从）
-            const baseResult = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now, undefined, state);
+            const baseResult = triggerAllBaseAbilities('onTurnStart', core, nextPlayerId, now, undefined, currentMatchState);
             events.push(...baseResult.events);
-            // 传播 matchState（onTurnStart 基地能力可能创建 Interaction）
+            // 不可变传播 matchState（onTurnStart 基地能力可能创建 Interaction）
             if (baseResult.matchState) {
-                state.sys = baseResult.matchState.sys;
+                currentMatchState = baseResult.matchState;
+                hasSysUpdate = true;
             }
 
             // 触发 ongoing 效果 onTurnStart
             const onTurnStartEvents = fireTriggers(core, 'onTurnStart', {
                 state: core,
-                matchState: state,
+                matchState: currentMatchState,
                 playerId: nextPlayerId,
                 random,
                 now,
             });
             events.push(...onTurnStartEvents.events);
             if (onTurnStartEvents.matchState) {
-                state.sys = onTurnStartEvents.matchState.sys;
+                currentMatchState = onTurnStartEvents.matchState;
+                hasSysUpdate = true;
             }
+
+            // 有 sys 变更时返回 PhaseEnterResult，否则返回纯事件数组
+            if (hasSysUpdate) {
+                return { events, updatedState: currentMatchState } as PhaseEnterResult;
+            }
+            return events;
         }
 
         if (to === 'scoreBases') {
@@ -479,6 +533,12 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         const pid = getCurrentPlayerId(core);
         const phase = state.sys.phase as GamePhase;
 
+        // 通用守卫：任何阶段有待处理的 Interaction 时都不自动推进
+        // （基地能力如拉莱耶 onTurnStart、托尔图加 afterScoring 等可能在任意阶段创建 Interaction）
+        if (state.sys.interaction?.current) {
+            return undefined;
+        }
+
         // factionSelect 自动推进 check
         if (phase === 'factionSelect') {
             // 如果所有人都选完了（reducer把selection置空了），则自动进入下一阶段
@@ -502,11 +562,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 // 响应窗口仍然打开，不自动推进
                 return undefined;
             }
-            // Property 14: 有待处理的 Interaction 时不自动推进（等待玩家选择计分顺序）
-            if (state.sys.interaction.current) {
-                return undefined;
-            }
-            // 响应窗口已关闭且无 Prompt，自动推进
+            // 响应窗口已关闭，自动推进
             return { autoContinue: true, playerId: pid };
         }
 

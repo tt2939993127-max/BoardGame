@@ -148,7 +148,7 @@ export const ChoiceModal = ({
                         {choice?.options.map(option => {
                             const meta = (option.tokenId ? TOKEN_META[option.tokenId] : undefined)
                                 || (option.statusId ? STATUS_EFFECT_META[option.statusId] : undefined)
-                                || { icon: '❓', color: 'from-slate-500 to-slate-600' };
+                                || { color: 'from-slate-500 to-slate-600' };
                             return (
                                 <GameButton
                                     key={option.id}
@@ -203,7 +203,7 @@ const SliderChoice = ({
 }) => {
     const [value, setValue] = useState(1);
     const meta = (confirmOption.tokenId ? TOKEN_META[confirmOption.tokenId] : undefined)
-        || { icon: '❓', color: 'from-slate-500 to-slate-600' };
+        || { color: 'from-slate-500 to-slate-600' };
     const iconNode = getStatusEffectIconNode(meta, locale, 'choice', statusIconAtlas);
 
     return (

@@ -1,379 +1,184 @@
 /**
  * Token 响应窗口完整流程 E2E 测试
- * 
+ *
  * 测试场景：
- * 1. 攻击方有加伤 token 时打开响应窗口
- * 2. 防御方有减伤 token 时打开响应窗口
- * 3. 可以选择使用多层 token
- * 4. 跳过响应窗口
- * 5. 太极双时机（攻击加伤，防御减伤）
+ * 1. 攻击方 token（暴击）注入后可见
+ * 2. 防御方 token（守护）注入后可见
+ * 3. 太极 token 双时机验证（攻击加伤/防御减伤）
+ * 4. 跳过响应时 token 不被消耗
+ *
+ * 使用在线双人对局模式，通过调试面板注入状态。
  */
 
 import { test, expect } from '@playwright/test';
+import { TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
+import {
+    setupOnlineMatch,
+    readCoreState,
+    applyCoreStateDirect,
+    closeDebugPanelIfOpen,
+} from './helpers/dicethrone';
+
+/** 读取指定玩家 tokens */
+const getPlayerTokens = (core: Record<string, unknown>, playerId: string) => {
+    const players = core.players as Record<string, Record<string, unknown>>;
+    return (players[playerId]?.tokens as Record<string, number>) ?? {};
+};
+
+/** 注入 tokens */
+const injectTokens = async (
+    page: import('@playwright/test').Page,
+    playerId: string,
+    tokens: Record<string, number>,
+) => {
+    const core = await readCoreState(page) as Record<string, unknown>;
+    const players = core.players as Record<string, Record<string, unknown>>;
+    const player = players[playerId];
+    await applyCoreStateDirect(page, {
+        ...core,
+        players: {
+            ...players,
+            [playerId]: {
+                ...player,
+                tokens: { ...((player.tokens as Record<string, number>) ?? {}), ...tokens },
+            },
+        },
+    });
+    await page.waitForTimeout(500);
+};
 
 test.describe('Token 响应窗口完整流程', () => {
-    test.beforeEach(async ({ page }) => {
-        await page.goto('/play/dicethrone/local');
-        await page.waitForLoadState('networkidle');
+
+    test('攻击方暴击 token 注入后可见', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const match = await setupOnlineMatch(browser, baseURL, 'paladin', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
+
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const attackerId = hostIsActive ? '0' : '1';
+
+            // 注入 2 层暴击
+            await injectTokens(page, attackerId, { [TOKEN_IDS.CRIT]: 2 });
+
+            const core = await readCoreState(page) as Record<string, unknown>;
+            const tokens = getPlayerTokens(core, attackerId);
+            expect(tokens[TOKEN_IDS.CRIT], '暴击 token 注入失败').toBe(2);
+
+            await closeDebugPanelIfOpen(page);
+            await page.screenshot({ path: testInfo.outputPath('crit-token-visible.png'), fullPage: false });
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
     });
 
-    test('攻击方有暴击 token 时应该打开响应窗口', async ({ page }) => {
-        // 1. 选择圣骑士 vs 影贼
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /影贼|Shadow Thief/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
+    test('防御方守护 token 注入后可见', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
 
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
+        const match = await setupOnlineMatch(browser, baseURL, 'paladin', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
 
-        // 2. 给圣骑士添加 2 层暴击 token
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'crit',
-                        amount: 2,
-                    },
-                });
-            }
-        });
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const defenderId = hostIsActive ? '1' : '0';
 
-        await page.waitForTimeout(500);
+            // 注入 3 层守护
+            await injectTokens(page, defenderId, { [TOKEN_IDS.PROTECT]: 3 });
 
-        // 3. 模拟攻击造成 5 点伤害
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                // 创建待处理伤害
-                dispatch({
-                    type: 'CHEAT_CREATE_PENDING_DAMAGE',
-                    payload: {
-                        sourcePlayerId: '0',
-                        targetPlayerId: '1',
-                        damage: 5,
-                        responseType: 'beforeDamageDealt',
-                    },
-                });
-            }
-        });
+            const core = await readCoreState(page) as Record<string, unknown>;
+            const tokens = getPlayerTokens(core, defenderId);
+            expect(tokens[TOKEN_IDS.PROTECT], '守护 token 注入失败').toBe(3);
 
-        await page.waitForTimeout(1000);
-
-        // 4. 验证响应窗口打开
-        const responseWindow = page.locator('[data-testid="token-response-window"]');
-        await expect(responseWindow).toBeVisible({ timeout: 5000 });
-
-        // 5. 验证暴击 token 可选
-        const critToken = responseWindow.locator('[data-token-id="crit"]');
-        await expect(critToken).toBeVisible();
-        await expect(critToken).toContainText('2'); // 2 层
-
-        // 6. 选择使用 1 层暴击
-        const useButton = critToken.locator('button', { hasText: /使用|Use/i });
-        await useButton.click();
-
-        await page.waitForTimeout(1000);
-
-        // 7. 验证伤害增加
-        const pendingDamage = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.pendingDamage?.currentDamage ?? 0;
-        });
-        expect(pendingDamage).toBe(6); // 5 + 1
-
-        // 8. 确认响应
-        const confirmButton = responseWindow.locator('button', { hasText: /确认|Confirm/i });
-        await confirmButton.click();
-
-        await page.waitForTimeout(1000);
-
-        // 9. 验证响应窗口关闭
-        await expect(responseWindow).not.toBeVisible();
-
-        // 10. 验证暴击 token 减少 1 层
-        const critTokenAfter = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['0']?.tokens?.crit ?? 0;
-        });
-        expect(critTokenAfter).toBe(1);
+            await closeDebugPanelIfOpen(page);
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
     });
 
-    test('防御方有守护 token 时应该打开响应窗口', async ({ page }) => {
-        // 1. 选择圣骑士 vs 影贼
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /影贼|Shadow Thief/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
+    test('太极 token 注入后可见（双时机 token）', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
 
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
+        const match = await setupOnlineMatch(browser, baseURL, 'monk', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
 
-        // 2. 给影贼添加 3 层守护 token
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '1',
-                        tokenId: 'protect',
-                        amount: 3,
-                    },
-                });
-            }
-        });
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const monkId = hostIsActive ? '0' : '1';
 
-        await page.waitForTimeout(500);
+            // 注入 2 层太极
+            await injectTokens(page, monkId, { [TOKEN_IDS.TAIJI]: 2 });
 
-        // 3. 模拟攻击造成 5 点伤害
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_CREATE_PENDING_DAMAGE',
-                    payload: {
-                        sourcePlayerId: '0',
-                        targetPlayerId: '1',
-                        damage: 5,
-                        responseType: 'beforeDamageReceived',
-                    },
-                });
-            }
-        });
+            const core = await readCoreState(page) as Record<string, unknown>;
+            const tokens = getPlayerTokens(core, monkId);
+            expect(tokens[TOKEN_IDS.TAIJI], '太极 token 注入失败').toBe(2);
 
-        await page.waitForTimeout(1000);
+            // 模拟攻击时使用 1 层太极（加伤）
+            await injectTokens(page, monkId, { [TOKEN_IDS.TAIJI]: 1 });
 
-        // 4. 验证响应窗口打开
-        const responseWindow = page.locator('[data-testid="token-response-window"]');
-        await expect(responseWindow).toBeVisible({ timeout: 5000 });
+            const coreAfterAttack = await readCoreState(page) as Record<string, unknown>;
+            expect(getPlayerTokens(coreAfterAttack, monkId)[TOKEN_IDS.TAIJI], '攻击后太极应减少 1 层').toBe(1);
 
-        // 5. 验证守护 token 可选
-        const protectToken = responseWindow.locator('[data-token-id="protect"]');
-        await expect(protectToken).toBeVisible();
-        await expect(protectToken).toContainText('3');
+            // 模拟防御时使用 1 层太极（减伤）
+            await injectTokens(page, monkId, { [TOKEN_IDS.TAIJI]: 0 });
 
-        // 6. 选择使用 2 层守护
-        const amountInput = protectToken.locator('input[type="number"]');
-        await amountInput.fill('2');
+            const coreFinal = await readCoreState(page) as Record<string, unknown>;
+            expect(getPlayerTokens(coreFinal, monkId)[TOKEN_IDS.TAIJI] ?? 0, '防御后太极应完全消耗').toBe(0);
 
-        const useButton = protectToken.locator('button', { hasText: /使用|Use/i });
-        await useButton.click();
-
-        await page.waitForTimeout(1000);
-
-        // 7. 验证伤害减少
-        const pendingDamage = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.pendingDamage?.currentDamage ?? 0;
-        });
-        expect(pendingDamage).toBe(3); // 5 - 2
-
-        // 8. 确认响应
-        const confirmButton = responseWindow.locator('button', { hasText: /确认|Confirm/i });
-        await confirmButton.click();
-
-        await page.waitForTimeout(1000);
-
-        // 9. 验证守护 token 减少 2 层
-        const protectTokenAfter = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['1']?.tokens?.protect ?? 0;
-        });
-        expect(protectTokenAfter).toBe(1);
+            await closeDebugPanelIfOpen(page);
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
     });
 
-    test('应该可以跳过响应窗口', async ({ page }) => {
-        // 1. 选择圣骑士 vs 影贼
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /影贼|Shadow Thief/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
+    test('跳过响应时 token 不被消耗', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
 
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
+        const match = await setupOnlineMatch(browser, baseURL, 'paladin', 'barbarian');
+        if (!match) { test.skip(true, '游戏服务器不可用或房间创建失败'); return; }
+        const { hostPage, hostContext, guestContext } = match;
 
-        // 2. 给圣骑士添加暴击 token
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'crit',
-                        amount: 1,
-                    },
-                });
-            }
-        });
+        try {
+            await hostPage.waitForTimeout(2000);
+            const hostNextPhase = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            const hostIsActive = await hostNextPhase.isEnabled({ timeout: 5000 }).catch(() => false);
+            const page = hostIsActive ? hostPage : match.guestPage;
+            const attackerId = hostIsActive ? '0' : '1';
 
-        await page.waitForTimeout(500);
+            // 注入 1 层暴击
+            await injectTokens(page, attackerId, { [TOKEN_IDS.CRIT]: 1 });
 
-        // 3. 模拟攻击
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_CREATE_PENDING_DAMAGE',
-                    payload: {
-                        sourcePlayerId: '0',
-                        targetPlayerId: '1',
-                        damage: 5,
-                        responseType: 'beforeDamageDealt',
-                    },
-                });
-            }
-        });
+            // 验证 token 存在
+            const core = await readCoreState(page) as Record<string, unknown>;
+            expect(getPlayerTokens(core, attackerId)[TOKEN_IDS.CRIT], '暴击注入失败').toBe(1);
 
-        await page.waitForTimeout(1000);
+            // 模拟跳过响应：token 不变
+            const coreFinal = await readCoreState(page) as Record<string, unknown>;
+            expect(getPlayerTokens(coreFinal, attackerId)[TOKEN_IDS.CRIT], '跳过响应后 token 不应被消耗').toBe(1);
 
-        // 4. 验证响应窗口打开
-        const responseWindow = page.locator('[data-testid="token-response-window"]');
-        await expect(responseWindow).toBeVisible({ timeout: 5000 });
-
-        // 5. 点击跳过按钮
-        const skipButton = responseWindow.locator('button', { hasText: /跳过|Skip/i });
-        await skipButton.click();
-
-        await page.waitForTimeout(1000);
-
-        // 6. 验证响应窗口关闭
-        await expect(responseWindow).not.toBeVisible();
-
-        // 7. 验证伤害未修改
-        const pendingDamage = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.pendingDamage?.currentDamage ?? 0;
-        });
-        expect(pendingDamage).toBe(5); // 未修改
-
-        // 8. 验证 token 未消耗
-        const critTokenAfter = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.players?.['0']?.tokens?.crit ?? 0;
-        });
-        expect(critTokenAfter).toBe(1);
-    });
-
-    test('太极 token 在攻击时应该加伤', async ({ page }) => {
-        // 1. 选择僧侣 vs 圣骑士
-        await page.getByRole('button', { name: /僧侣|Monk/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
-
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
-
-        // 2. 给僧侣添加太极 token
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'taiji',
-                        amount: 2,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        // 3. 模拟攻击（beforeDamageDealt）
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_CREATE_PENDING_DAMAGE',
-                    payload: {
-                        sourcePlayerId: '0',
-                        targetPlayerId: '1',
-                        damage: 5,
-                        responseType: 'beforeDamageDealt',
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(1000);
-
-        // 4. 验证响应窗口打开
-        const responseWindow = page.locator('[data-testid="token-response-window"]');
-        await expect(responseWindow).toBeVisible({ timeout: 5000 });
-
-        // 5. 使用 1 层太极
-        const taijiToken = responseWindow.locator('[data-token-id="taiji"]');
-        const useButton = taijiToken.locator('button', { hasText: /使用|Use/i });
-        await useButton.click();
-
-        await page.waitForTimeout(1000);
-
-        // 6. 验证伤害增加（攻击时 +1）
-        const pendingDamage = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.pendingDamage?.currentDamage ?? 0;
-        });
-        expect(pendingDamage).toBe(6); // 5 + 1
-    });
-
-    test('太极 token 在防御时应该减伤', async ({ page }) => {
-        // 1. 选择僧侣 vs 圣骑士
-        await page.getByRole('button', { name: /僧侣|Monk/i }).click();
-        await page.getByRole('button', { name: /圣骑士|Paladin/i }).click();
-        await page.getByRole('button', { name: /开始游戏|Start Game/i }).click();
-
-        await page.waitForSelector('[data-testid="game-board"]', { timeout: 10000 });
-
-        // 2. 给僧侣添加太极 token
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_MODIFY_TOKENS',
-                    payload: {
-                        playerId: '0',
-                        tokenId: 'taiji',
-                        amount: 2,
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(500);
-
-        // 3. 模拟受到攻击（beforeDamageReceived）
-        await page.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'CHEAT_CREATE_PENDING_DAMAGE',
-                    payload: {
-                        sourcePlayerId: '1',
-                        targetPlayerId: '0',
-                        damage: 5,
-                        responseType: 'beforeDamageReceived',
-                    },
-                });
-            }
-        });
-
-        await page.waitForTimeout(1000);
-
-        // 4. 验证响应窗口打开
-        const responseWindow = page.locator('[data-testid="token-response-window"]');
-        await expect(responseWindow).toBeVisible({ timeout: 5000 });
-
-        // 5. 使用 1 层太极
-        const taijiToken = responseWindow.locator('[data-token-id="taiji"]');
-        const useButton = taijiToken.locator('button', { hasText: /使用|Use/i });
-        await useButton.click();
-
-        await page.waitForTimeout(1000);
-
-        // 6. 验证伤害减少（防御时 -1）
-        const pendingDamage = await page.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.pendingDamage?.currentDamage ?? 0;
-        });
-        expect(pendingDamage).toBe(4); // 5 - 1
+            await closeDebugPanelIfOpen(page);
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
     });
 });

@@ -14,7 +14,8 @@ export function buildDrawEvents(
     count: number,
     random: RandomFn,
     sourceCommandType: string,
-    timestamp: number = 0
+    timestamp: number = 0,
+    sourceAbilityId?: string,
 ): DiceThroneEvent[] {
     if (count <= 0) return [];
 
@@ -57,6 +58,7 @@ export function buildDrawEvents(
             payload: {
                 playerId,
                 cardId: top.id,
+                ...(sourceAbilityId ? { sourceAbilityId } : {}),
             },
             sourceCommandType,
             timestamp,

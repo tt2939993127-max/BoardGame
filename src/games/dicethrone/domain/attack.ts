@@ -87,6 +87,7 @@ export const resolveAttack = (
     if (defenseAbilityId) {
         const defenseEffects = getPlayerAbilityEffects(state, defenderId, defenseAbilityId);
         // 防御技能的上下文：防御者是 "attacker"，原攻击者是 "defender"
+        // isDefensiveContext=true：防御反击伤害不是"攻击"（规则 §7.2），不触发 Token 响应窗口
         const defenseCtx: EffectContext = {
             attackerId: defenderId,  // 防御者（使用防御技能的人）
             defenderId: attackerId,  // 原攻击者（被防御技能影响的人）
@@ -94,6 +95,7 @@ export const resolveAttack = (
             state,
             damageDealt: 0,
             timestamp,
+            isDefensiveContext: true,
         };
 
         defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));

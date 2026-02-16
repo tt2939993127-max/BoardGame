@@ -17,7 +17,7 @@ import type {
 import {
     buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower,
     grantExtraMinion, moveMinion, revealHand, shuffleBaseDeck,
-    resolveOrPrompt,
+    resolveOrPrompt, buildAbilityFeedback,
 } from '../domain/abilityHelpers';
 import { getBaseDef, getCardDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -61,7 +61,7 @@ function alienSupremeOverlord(ctx: AbilityContext): AbilityResult {
             targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, label: `${name} (力量 ${power}) @ ${baseDef?.name ?? `基地 ${i + 1}`}` });
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const minionOptions = buildMinionTargetOptions(targets);
     const options = [
         { id: 'skip', label: '跳过（不返回随从）', value: { skip: true } },
@@ -79,7 +79,7 @@ function alienCollector(ctx: AbilityContext): AbilityResult {
     const targets = base.minions.filter(
         m => getMinionPower(ctx.state, m, ctx.baseIndex) <= 3
     );
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const minionTargets = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
         const name = def?.name ?? t.defId;
@@ -127,7 +127,7 @@ function alienScoutAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerRe
         `alien_scout_return_${ctx.now}`, first.controller,
         '侦察兵：基地记分后，是否将此侦察兵返回手牌？',
         [
-            { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: first.uid, minionDefId: first.defId, owner: first.owner, baseIndex: first.baseIndex } },
+            { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: first.uid, minionDefId: first.defId, owner: first.owner, baseIndex: first.baseIndex, baseDefId: base.defId } },
             { id: 'no', label: '留在基地', value: { returnIt: false } },
         ],
         'alien_scout_return',
@@ -144,7 +144,7 @@ function alienScoutAfterScoring(ctx: TriggerContext): SmashUpEvent[] | TriggerRe
 // ============================================================================
 
 function alienInvasion(ctx: AbilityContext): AbilityResult {
-    if (ctx.state.bases.length <= 1) return { events: [] };
+    if (ctx.state.bases.length <= 1) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const targets: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         for (const m of ctx.state.bases[i].minions) {
@@ -153,7 +153,7 @@ function alienInvasion(ctx: AbilityContext): AbilityResult {
             targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, label: `${def?.name ?? m.defId} (力量 ${getMinionPower(ctx.state, m, i)}) @ ${baseDef?.name ?? `基地 ${i + 1}`}` });
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_invasion_${ctx.now}`, ctx.playerId, '选择要移动的随从', buildMinionTargetOptions(targets), 'alien_invasion_choose_minion',
     )) };
@@ -170,7 +170,7 @@ function alienDisintegrator(ctx: AbilityContext): AbilityResult {
             }
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_disintegrator_${ctx.now}`, ctx.playerId, '选择要放到牌库底的力量≤3的随从', buildMinionTargetOptions(targets), 'alien_disintegrator',
     )) };
@@ -185,7 +185,7 @@ function alienBeamUp(ctx: AbilityContext): AbilityResult {
             targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, label: `${def?.name ?? m.defId} (力量 ${getMinionPower(ctx.state, m, i)}) @ ${baseDef?.name ?? `基地 ${i + 1}`}` });
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_beam_up_${ctx.now}`, ctx.playerId, '选择要返回手牌的随从', buildMinionTargetOptions(targets), 'alien_beam_up',
     )) };
@@ -199,7 +199,7 @@ function alienCropCircles(ctx: AbilityContext): AbilityResult {
             baseCandidates.push({ baseIndex: i, label: `${baseDef?.name ?? `基地 ${i + 1}`} (${ctx.state.bases[i].minions.length} 个随从)` });
         }
     }
-    if (baseCandidates.length === 0) return { events: [] };
+    if (baseCandidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_crop_circles_${ctx.now}`, ctx.playerId, '选择一个基地，将随从返回手牌', buildBaseTargetOptions(baseCandidates), 'alien_crop_circles',
     )) };
@@ -753,11 +753,12 @@ export function registerAlienInteractionHandlers(): void {
         if (remaining.length > 0) {
             const next = remaining[0];
             const rest = remaining.slice(1);
+            const base = state.core.bases[next.baseIndex];
             const interaction = createSimpleChoice(
                 `alien_scout_return_${timestamp}`, next.controller,
                 '侦察兵：基地记分后，是否将此侦察兵返回手牌？',
                 [
-                    { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: next.uid, minionDefId: next.defId, owner: next.owner, baseIndex: next.baseIndex } },
+                    { id: 'yes', label: '返回手牌', value: { returnIt: true, minionUid: next.uid, minionDefId: next.defId, owner: next.owner, baseIndex: next.baseIndex, baseDefId: base.defId } },
                     { id: 'no', label: '留在基地', value: { returnIt: false } },
                 ],
                 'alien_scout_return',

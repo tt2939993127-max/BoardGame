@@ -12,30 +12,12 @@
  */
 
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
-
-// ============================================================================
-// 工具函数
-// ============================================================================
-
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-  await context.addInitScript(() => {
-    localStorage.setItem('i18nextLng', 'en');
-  });
-};
-
-const disableAudio = async (context: BrowserContext | Page) => {
-  await context.addInitScript(() => {
-    localStorage.setItem('audio_muted', 'true');
-    localStorage.setItem('audio_master_volume', '0');
-    localStorage.setItem('audio_sfx_volume', '0');
-    localStorage.setItem('audio_bgm_volume', '0');
-    (window as Window & { __BG_DISABLE_AUDIO__?: boolean }).__BG_DISABLE_AUDIO__ = true;
-  });
-};
-
-const blockAudioRequests = async (context: BrowserContext) => {
-  await context.route(/\.(mp3|ogg|webm|wav)(\?.*)?$/i, route => route.abort());
-};
+import {
+  initContext,
+  setEnglishLocale,
+  disableAudio,
+  blockAudioRequests,
+} from './helpers/common';
 
 /** 等待教程覆盖层出现并显示指定步骤 */
 const waitForTutorialStep = async (page: Page, stepId: string, timeout = 30000) => {
@@ -120,7 +102,7 @@ test.describe('Summoner Wars Tutorial E2E', () => {
   test.describe.configure({ retries: 1 });
 
   test.beforeEach(async ({ context }) => {
-    await blockAudioRequests(context);
+    await initContext(context, { storageKey: '__sw_tutorial_reset' });
   });
 
   test('教程完整流程 - 从初始化到完成', async ({ page }) => {
@@ -392,7 +374,7 @@ test.describe('Summoner Wars Tutorial E2E', () => {
     await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('[data-game-id]').first()).toBeVisible({ timeout: 20000 });
 
-    let card = page.locator('[data-game-id="summonerwars"]');
+    const card = page.locator('[data-game-id="summonerwars"]');
     if (await card.count() === 0) {
       const allTab = page.getByRole('button', { name: /All Games|全部游戏/i });
       if (await allTab.isVisible().catch(() => false)) {

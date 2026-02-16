@@ -6,7 +6,7 @@
 export * from './types';
 
 // 系统实现
-export { createFlowSystem, getCurrentPhase, setPhase, FLOW_COMMANDS, FLOW_EVENTS, type FlowHooks, type FlowSystemConfig, type PhaseChangedEvent, type PhaseExitResult, type CanAdvanceResult } from './FlowSystem';
+export { createFlowSystem, getCurrentPhase, setPhase, FLOW_COMMANDS, FLOW_EVENTS, type FlowHooks, type FlowSystemConfig, type PhaseChangedEvent, type PhaseExitResult, type PhaseEnterResult, type CanAdvanceResult } from './FlowSystem';
 export { createUndoSystem, UNDO_COMMANDS, type UndoSystemConfig } from './UndoSystem';
 export { createInteractionSystem, createSimpleChoice, queueInteraction, resolveInteraction, asSimpleChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS, type InteractionDescriptor, type InteractionState, type SimpleChoiceData, type InteractionSystemConfig } from './InteractionSystem';
 export { createLogSystem, getCommands, getEvents, getEventsByType, getRecentLogs } from './LogSystem';

@@ -18,6 +18,8 @@ import { SW_COMMANDS, SW_EVENTS } from './domain';
 import type { SummonerWarsCore } from './domain/types';
 import { abilityRegistry } from './domain/abilities';
 import { getSummonerWarsCardPreviewMeta } from './ui/cardPreviewHelper';
+import type { DiceFace } from './config/dice';
+import { DICE_FACE_SPRITE_MAP } from './ui/cardAtlas';
 
 // ============================================================================
 // ActionLog 共享白名单
@@ -91,6 +93,32 @@ const withCardSegments = (i18nKey: string, cardId?: string, params?: Record<stri
 };
 
 const buildPositionKey = (pos?: { row: number; col: number }) => (pos ? `${pos.row},${pos.col}` : '');
+
+/** 构建骰子结果 segment（使用精灵图） */
+const buildDiceResultSegment = (diceResults?: DiceFace[]): ActionLogSegment | null => {
+    if (!diceResults || diceResults.length === 0) return null;
+    
+    // 骰子精灵图：3x3 网格，帧索引 0-8
+    const SPRITE_COLS = 3;
+    const SPRITE_ROWS = 3;
+    
+    // 将 DiceFace 转换为精灵图位置
+    const dice = diceResults.map((face, index) => {
+        // 每种面取第一个变体帧索引
+        const frameIndex = DICE_FACE_SPRITE_MAP[face]?.[0] ?? 0;
+        const col = frameIndex % SPRITE_COLS;
+        const row = Math.floor(frameIndex / SPRITE_COLS);
+        return { value: index + 1, col, row };
+    });
+    
+    return {
+        type: 'diceResult',
+        spriteAsset: 'summonerwars/common/dice',
+        spriteCols: SPRITE_COLS,
+        spriteRows: SPRITE_ROWS,
+        dice,
+    };
+};
 
 // ============================================================================
 // ActionLog 格式化
@@ -199,22 +227,33 @@ export function formatSummonerWarsActionEntry({
             }
             case SW_COMMANDS.DECLARE_ATTACK: {
                 const attackEvent = [...events].reverse().find((e) => e.type === SW_EVENTS.UNIT_ATTACKED) as
-                    | { payload?: { hits?: number; target?: { row: number; col: number }; attackerId?: string } } | undefined;
+                    | { payload?: { hits?: number; target?: { row: number; col: number }; attackerId?: string; diceResults?: DiceFace[] } } | undefined;
                 const hits = attackEvent?.payload?.hits;
+                const diceResults = attackEvent?.payload?.diceResults;
+                const segments: ActionLogSegment[] = [
+                    ...withCardSegments('actionLog.attackUnit', attackEvent?.payload?.attackerId),
+                    textSegment(' → '),
+                    ...(attackEvent?.payload?.target
+                        ? [i18nSeg('actionLog.position', { row: attackEvent.payload.target.row + 1, col: attackEvent.payload.target.col + 1 })]
+                        : [i18nSeg('actionLog.positionUnknown')]),
+                    textSegment(' '),
+                ];
+                // 添加骰子结果精灵图
+                const diceSegment = buildDiceResultSegment(diceResults);
+                if (diceSegment) {
+                    segments.push(diceSegment);
+                    segments.push(textSegment(' '));
+                }
+                // 添加命中数
+                segments.push(
+                    hits === undefined
+                        ? i18nSeg('actionLog.attackDeclared')
+                        : i18nSeg('actionLog.attackHits', { hits })
+                );
                 return {
                     id: `${command.type}-${command.playerId}-${timestamp}`,
                     timestamp, actorId, kind: command.type,
-                    segments: [
-                        ...withCardSegments('actionLog.attackUnit', attackEvent?.payload?.attackerId),
-                        textSegment(' → '),
-                        ...(attackEvent?.payload?.target
-                            ? [i18nSeg('actionLog.position', { row: attackEvent.payload.target.row + 1, col: attackEvent.payload.target.col + 1 })]
-                            : [i18nSeg('actionLog.positionUnknown')]),
-                        textSegment(' '),
-                        hits === undefined
-                            ? i18nSeg('actionLog.attackDeclared')
-                            : i18nSeg('actionLog.attackHits', { hits }),
-                    ],
+                    segments,
                 };
             }
             case SW_COMMANDS.BUILD_STRUCTURE: {

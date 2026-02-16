@@ -6,26 +6,21 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
+import { TOKEN_IDS, STATUS_IDS } from '../src/games/dicethrone/domain/ids';
 import { setEnglishLocale } from './helpers/common';
 import {
     setupOnlineMatch,
     waitForBoardReady,
-    waitForMainPhase,
     getPlayerIdFromUrl,
     setPlayerToken,
     advanceToOffensiveRoll,
     applyDiceValues,
     getModalContainerByHeading,
-    closeTokenResponseModal,
     readCoreState,
-    applyCoreState,
     assertHandCardsVisible,
-    ensureCardInHand,
-    dragCardUp,
     waitForTutorialStep,
-    setPlayerCp,
-    closeDebugPanelIfOpen,
+    dispatchLocalCommand,
+    patchCoreViaDispatch,
 } from './helpers/dicethrone';
 
 test.describe('DiceThrone E2E', () => {
@@ -278,29 +273,90 @@ test.describe('DiceThrone E2E', () => {
         const diceTray = page.locator('[data-tutorial-id="dice-tray"]');
         await expect(diceTray).toBeVisible();
 
-        // 掷骰并设置骰面
+        // 步骤 B1: 掷骰（教学 randomPolicy=fixed:[6]，全莲花）
         const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
         await expect(rollButton).toBeEnabled({ timeout: 10000 });
         await rollButton.click();
-        await page.waitForTimeout(300);
-        await applyDiceValues(page, [1, 1, 1, 3, 6]);
         await page.waitForTimeout(500);
 
-        const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]');
-        await expect(confirmButton).toBeEnabled({ timeout: 10000 });
-        await confirmButton.click();
+        // 步骤 B2: play-six 出牌（教学期望打出"玩得六啊"修改骰面）
+        const waitForPlaySixOrConfirm = async () => {
+            const deadline = Date.now() + 15000;
+            while (Date.now() < deadline) {
+                const stepId = await getTutorialStepId();
+                if (stepId === 'play-six') return 'play-six';
+                if (stepId === 'dice-confirm') return 'dice-confirm';
+                await page.waitForTimeout(300);
+            }
+            return null;
+        };
+        const playSixStep = await waitForPlaySixOrConfirm();
 
-        // 尝试点击高亮技能槽
-        const highlightedSlots = page
-            .locator('[data-ability-slot]')
-            .filter({ has: page.locator('div.animate-pulse[class*="border-"]') });
-        const hasSlot = await highlightedSlots.first().isVisible({ timeout: 4000 }).catch(() => false);
-        if (hasSlot) {
-            try {
-                await highlightedSlots.first().click({ timeout: 2000 });
+        if (playSixStep === 'play-six') {
+            // 通过 dispatch 直接打出 card-play-six（framer-motion 拖拽在 Playwright 中不可靠）
+            // 教学牌组保证 card-play-six 在起手牌中
+            await page.waitForTimeout(300);
+            await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-play-six' });
+            await page.waitForTimeout(800);
+
+            // 等待骰子交互模式出现（set 模式：选择骰子后自动设为 6）
+            const diceInteractionTray = page.locator('[data-tutorial-id="dice-tray"]');
+            await expect(diceInteractionTray).toBeVisible({ timeout: 10000 });
+
+            // 点击第一颗骰子选中
+            const firstDie = diceInteractionTray.locator('.dice3d-perspective').first();
+            if (await firstDie.isVisible({ timeout: 3000 }).catch(() => false)) {
+                await firstDie.click();
+                await page.waitForTimeout(300);
+            }
+
+            // 点击确认按钮完成交互
+            const interactionConfirm = page.getByRole('button', { name: /Confirm|确认/i }).first();
+            if (await interactionConfirm.isEnabled({ timeout: 3000 }).catch(() => false)) {
+                await interactionConfirm.click();
                 await page.waitForTimeout(500);
-            } catch {
-                // 点击失败则继续
+            }
+        }
+
+        // 步骤 B3: dice-confirm 确认骰子
+        const waitForDiceConfirmStep = async () => {
+            const deadline = Date.now() + 15000;
+            while (Date.now() < deadline) {
+                const stepId = await getTutorialStepId();
+                if (stepId === 'dice-confirm' || stepId === 'abilities' || stepId === 'resolve-attack') return stepId;
+                await page.waitForTimeout(300);
+            }
+            return null;
+        };
+        const diceConfirmStep = await waitForDiceConfirmStep();
+
+        if (diceConfirmStep === 'dice-confirm') {
+            const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]');
+            await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+            await confirmButton.click();
+            await page.waitForTimeout(500);
+        }
+
+        // 步骤 B4: abilities 选择技能
+        const waitForAbilitiesStep = async () => {
+            const deadline = Date.now() + 15000;
+            while (Date.now() < deadline) {
+                const stepId = await getTutorialStepId();
+                if (stepId === 'abilities' || stepId === 'resolve-attack') return stepId;
+                await page.waitForTimeout(300);
+            }
+            return null;
+        };
+        const abilitiesStep = await waitForAbilitiesStep();
+
+        if (abilitiesStep === 'abilities') {
+            const highlightedSlots = page
+                .locator('[data-ability-slot]')
+                .filter({ has: page.locator('div.animate-pulse[class*="border-"]') });
+            const hasSlot = await highlightedSlots.first().isVisible({ timeout: 8000 }).catch(() => false);
+            if (hasSlot) {
+                await highlightedSlots.first().click({ timeout: 3000 }).catch(() => {});
+                await page.waitForTimeout(500);
             }
         }
 
@@ -309,261 +365,131 @@ test.describe('DiceThrone E2E', () => {
         await expect(advanceButton).toBeEnabled({ timeout: 10000 });
         await advanceButton.click();
 
-        // 教学步骤顺序表
+        // 教学步骤顺序表（与 tutorial.ts 定义一致）
         const stepOrder = [
             'setup', 'intro', 'stats', 'phases', 'player-board', 'tip-board',
-            'dice', 'rollButton', 'confirmButton', 'abilities', 'hand', 'discard',
-            'status-tokens', 'advance', 'resolve-attack',
-            'taiji-setup', 'taiji-response', 'evasive-setup', 'evasive-response',
-            'purify-setup', 'purify-use', 'inner-peace', 'play-six', 'meditation-2',
-            'defense-roll', 'defense-end', 'finish',
+            'hand', 'discard', 'status-tokens',
+            'advance', 'dice-tray', 'dice-roll', 'play-six', 'dice-confirm', 'abilities', 'resolve-attack',
+            'opponent-defense', 'card-enlightenment', 'ai-turn',
+            'knockdown-explain', 'enlightenment-play', 'purify-use',
+            'inner-peace', 'meditation-2', 'finish',
         ];
         const getStepIndex = (id: string) => stepOrder.indexOf(id);
 
-        const canFallbackToStep = async (targetStep: string) => {
-            if (['inner-peace', 'play-six', 'meditation-2'].includes(targetStep)) {
-                const handVisible = await page.locator('[data-tutorial-id="hand-area"]').first().isVisible({ timeout: 500 }).catch(() => false);
-                if (!handVisible) return false;
-                return await page.getByText(/Main Phase \(1\)|主要阶段 \(1\)/).isVisible({ timeout: 500 }).catch(() => false);
-            }
-            if (targetStep === 'defense-roll') {
-                const diceTrayVisible = await page.locator('[data-tutorial-id="dice-tray"]').first().isVisible({ timeout: 500 }).catch(() => false);
-                const defensePhaseVisible = await page.getByText(/Defensive Roll|防御掷骰/i).isVisible({ timeout: 500 }).catch(() => false);
-                return diceTrayVisible || defensePhaseVisible;
-            }
-            if (targetStep === 'defense-end') {
-                const main2Visible = await page.getByText(/Main Phase \(2\)|主要阶段 \(2\)/).isVisible({ timeout: 500 }).catch(() => false);
-                const nextPhaseVisible = await page.locator('[data-tutorial-id="advance-phase-button"]').isVisible({ timeout: 500 }).catch(() => false);
-                return main2Visible || nextPhaseVisible;
-            }
-            if (targetStep === 'finish') {
-                return await page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).first().isVisible({ timeout: 500 }).catch(() => false);
-            }
-            return false;
-        };
-
+        /** 等待教学步骤，支持 fallback 检测 */
         const advanceToStep = async (targetStep: string, timeout = 15000) => {
             const targetIndex = getStepIndex(targetStep);
             const deadline = Date.now() + timeout;
             while (Date.now() < deadline) {
                 const stepId = await getTutorialStepId();
                 if (!stepId) {
-                    if (await canFallbackToStep(targetStep)) return targetStep;
+                    // 教学覆盖层消失，可能已经跳过了目标步骤
+                    if (targetStep === 'finish') {
+                        const finishBtn = await page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).first().isVisible({ timeout: 500 }).catch(() => false);
+                        if (finishBtn) return targetStep;
+                    }
                     await page.waitForTimeout(300);
                     continue;
                 }
                 if (stepId === targetStep) return stepId;
                 const currentIndex = getStepIndex(stepId);
-                if (currentIndex < 0) {
-                    if (await canFallbackToStep(targetStep)) return targetStep;
-                    await page.waitForTimeout(300);
-                    continue;
-                }
-                if (targetIndex >= 0 && currentIndex > targetIndex) return stepId;
-                if (targetIndex >= 0 && currentIndex < targetIndex) {
+                // 已经超过目标步骤
+                if (targetIndex >= 0 && currentIndex >= 0 && currentIndex > targetIndex) return stepId;
+                // 还没到目标步骤，尝试点击 Next
+                if (targetIndex >= 0 && currentIndex >= 0 && currentIndex < targetIndex) {
                     await clickNextOverlayStep();
                     await page.waitForTimeout(200);
                     continue;
                 }
                 await page.waitForTimeout(300);
             }
+            const finalStep = await getTutorialStepId();
             if (targetStep === 'finish') return targetStep;
-            throw new Error(`未能到达 ${targetStep} 步骤`);
+            throw new Error(`未能到达 ${targetStep} 步骤（最终步骤=${finalStep}）`);
         };
 
-        const waitStepWithFallback = async (stepId: string, timeout = 15000) => {
-            const quickFallbackSteps = new Set(['inner-peace', 'play-six', 'meditation-2', 'defense-roll', 'defense-end', 'finish']);
-            const effectiveTimeout = quickFallbackSteps.has(stepId) ? Math.min(timeout, 6000) : timeout;
-            try {
-                await advanceToStep(stepId, effectiveTimeout);
-            } catch (error) {
-                if (stepId === 'finish') {
-                    const hasOverlay = await page.locator('[data-tutorial-step]').first().isVisible({ timeout: 500 }).catch(() => false);
-                    const finishVisible = await page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).first().isVisible({ timeout: 500 }).catch(() => false);
-                    if (!hasOverlay && !finishVisible) return;
-                }
-                if (await canFallbackToStep(stepId)) return;
-                throw error;
-            }
-        };
-
-        const waitForSetupThenResponse = async (setupId: string, responseId: string, timeout = 15000) => {
-            const targetIndex = Math.min(getStepIndex(setupId), getStepIndex(responseId));
-            const deadline = Date.now() + timeout;
-            while (Date.now() < deadline) {
-                const stepId = await getTutorialStepId();
-                if (!stepId) { await page.waitForTimeout(300); continue; }
-                const currentIndex = getStepIndex(stepId);
-                if (stepId === responseId) return stepId;
-                if (stepId === setupId) {
-                    await clickNextOverlayStep();
-                    await advanceToStep(responseId, timeout);
-                    return responseId;
-                }
-                if (currentIndex < targetIndex && currentIndex >= 0) {
-                    await clickNextOverlayStep();
-                    await page.waitForTimeout(200);
-                    continue;
-                }
-                if (currentIndex > targetIndex && targetIndex >= 0) return stepId;
-                await page.waitForTimeout(300);
-            }
-            throw new Error(`未能到达 ${setupId} 或 ${responseId} 步骤`);
-        };
-
-        // 太极响应
-        await waitForSetupThenResponse('taiji-setup', 'taiji-response');
-        try {
-            const taijiModal = await getModalContainerByHeading(page, /Respond|响应/i, 4000);
-            const useTaijiButton = taijiModal.getByRole('button', { name: /Use Taiji|使用太极/i });
-            if (await useTaijiButton.isVisible().catch(() => false)) await useTaijiButton.click({ force: true });
-            await closeTokenResponseModal(taijiModal);
-        } catch {
-            await clickNextOverlayStep();
-        }
-
-        // 闪避响应
-        await waitForSetupThenResponse('evasive-setup', 'evasive-response');
-        try {
-            const evasiveModal = await getModalContainerByHeading(page, /Respond|响应/i, 4000);
-            const useEvasiveButton = evasiveModal.getByRole('button', { name: /Use Evasive|使用闪避/i });
-            if (await useEvasiveButton.isVisible().catch(() => false)) await useEvasiveButton.click({ force: true });
-            await page.waitForTimeout(300);
-            if (await evasiveModal.isVisible().catch(() => false)) await closeTokenResponseModal(evasiveModal);
-        } catch {
-            await clickNextOverlayStep();
-        }
+        // ====== 段 B 完成：resolve-attack → opponent-defense（AI 自动） ======
+        // opponent-defense 步骤有 aiActions，教学系统会自动执行 AI 防御
+        // 等待 AI 完成后进入 card-enlightenment
+        await advanceToStep('card-enlightenment', 30000);
+        // card-enlightenment 是信息步骤，点击 Next
         await clickNextOverlayStep();
 
-        // 净化步骤
-        const waitForPurifyStep = async () => {
-            const deadline = Date.now() + 15000;
-            while (Date.now() < deadline) {
-                const stepId = await getTutorialStepId();
-                if (stepId === 'evasive-response') { await clickNextOverlayStep(); await page.waitForTimeout(300); continue; }
-                if (stepId === 'purify-setup' || stepId === 'purify-use') return stepId;
-                await page.waitForTimeout(300);
-            }
-            throw new Error('未能到达 purify-setup 或 purify-use 步骤');
-        };
-        const purifyStep = await waitForPurifyStep();
-        if (purifyStep === 'purify-setup') {
-            await clickNextOverlayStep();
-            await waitStepWithFallback('purify-use');
-        }
+        // ====== 段 C：ai-turn（AI 完整回合） ======
+        // ai-turn 步骤有大量 aiActions，教学系统自动执行
+        // AI 回合结束后进入 knockdown-explain
+        await advanceToStep('knockdown-explain', 45000);
+        // knockdown-explain 是信息步骤
+        await clickNextOverlayStep();
 
-        // 关闭残留弹窗
-        const residualModal = page.locator('[data-testid="token-response-modal"], div[data-modal="true"]').first();
-        if (await residualModal.isVisible({ timeout: 1000 }).catch(() => false)) {
-            const closeBtn = residualModal.getByRole('button', { name: /Close|关闭|Skip|跳过/i }).first();
-            await closeBtn.click({ force: true }).catch(() => undefined);
-            await page.waitForTimeout(300);
-        }
+        // ====== 段 D：净化教程 ======
+        // enlightenment-play：通过 dispatch 直接打出悟道卡（framer-motion 拖拽在 Playwright 中不可靠）
+        await advanceToStep('enlightenment-play', 15000);
+        // 教学牌组保证 card-enlightenment 在起手牌中，直接 dispatch 出牌
+        await page.waitForTimeout(500);
+        await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-enlightenment' });
+        await page.waitForTimeout(500);
 
-        // 通过 debug 命令执行净化
-        await applyCoreState(page, (core) => {
+        // purify-use：使用净化 token 移除击倒
+        // 注意：enlightenment-roll 的骰子结果取决于 seeded random，不一定是莲花面
+        // 确保玩家有净化 token 和击倒状态，以便 USE_PURIFY 能成功执行
+        await advanceToStep('purify-use', 15000);
+        await patchCoreViaDispatch(page, {
+            [`players.0.tokens.${TOKEN_IDS.PURIFY}`]: 1,
+            [`players.0.statusEffects.${STATUS_IDS.KNOCKDOWN}`]: 1,
+        });
+        await page.waitForTimeout(300);
+        await dispatchLocalCommand(page, 'USE_PURIFY', { statusId: STATUS_IDS.KNOCKDOWN });
+        await page.waitForTimeout(500);
+
+        // ====== 段 E：补充卡牌教学 ======
+        // inner-peace：出牌内心平静
+        await advanceToStep('inner-peace', 15000);
+        await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-inner-peace' });
+        await page.waitForTimeout(500);
+
+        // meditation-2：升级冥想技能（需要 2 CP + 卡牌在手中）
+        await advanceToStep('meditation-2', 15000);
+        // 原子操作：读取状态 → 设置 CP + 确保卡牌在手中 → dispatch 更新
+        await page.evaluate(() => {
+            const w = window as Window & {
+                __BG_LOCAL_DISPATCH__?: (type: string, payload: unknown) => void;
+                __BG_LOCAL_STATE__?: { core?: Record<string, unknown> };
+            };
+            if (!w.__BG_LOCAL_DISPATCH__ || !w.__BG_LOCAL_STATE__?.core) return;
+            // 深拷贝避免直接修改 React 状态引用
+            const core = JSON.parse(JSON.stringify(w.__BG_LOCAL_STATE__.core)) as Record<string, unknown>;
             const players = core.players as Record<string, Record<string, unknown>> | undefined;
             const player = players?.['0'];
-            if (!player) return core;
-            player.tokens = (player.tokens as Record<string, unknown>) ?? {};
-            (player.tokens as Record<string, number>).purify = Math.max(0, ((player.tokens as Record<string, number>).purify ?? 1) - 1);
-            player.statusEffects = (player.statusEffects as Record<string, unknown>) ?? {};
-            delete (player.statusEffects as Record<string, unknown>).knockdown;
-            return core;
-        });
-        await page.waitForTimeout(500);
-
-        // 推进到 inner-peace
-        const tutorialNextBtn = page.locator('[data-tutorial-step="purify-use"] button, [data-tutorial-step="purify-use"] .cursor-pointer').first();
-        if (await tutorialNextBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await tutorialNextBtn.click({ force: true }).catch(() => undefined);
-        }
-
-        await waitStepWithFallback('inner-peace');
-        await dragCardUp(page, 'card-inner-peace');
-        await clickNextOverlayStep();
-
-        await waitStepWithFallback('play-six');
-        await ensureCardInHand(page, 'card-play-six');
-        await dragCardUp(page, 'card-play-six');
-
-        // 设置阶段为 offensiveRoll 并设置骰子值
-        await applyCoreState(page, (core) => {
-            const c = core as Record<string, unknown>;
-            c.phase = 'offensiveRoll';
-            c.dice = (c.dice as unknown[]) ?? [];
-            c.rollCount = 1;
-            c.rollConfirmed = false;
-            for (let i = 0; i < 5; i++) {
-                const dice = c.dice as Array<Record<string, unknown>>;
-                if (dice[i]) { dice[i].value = 1; dice[i].isKept = false; }
-            }
-            return c;
-        });
-        await page.waitForTimeout(500);
-
-        const diceTrayInteraction = page.locator('[data-tutorial-id="dice-tray"]');
-        await expect(diceTrayInteraction).toBeVisible({ timeout: 15000 });
-        const diceTrayButton = diceTrayInteraction.locator('.cursor-pointer').first();
-        try {
-            await diceTrayButton.click({ force: true, timeout: 3000 });
-        } catch {
-            await diceTrayButton.evaluate((node) => (node as HTMLElement).click());
-        }
-        const confirmDiceButton = page.getByRole('button', { name: /Confirm|确认/i }).first();
-        await expect(confirmDiceButton).toBeVisible({ timeout: 15000 });
-        await page.evaluate(() => {
-            const modalRoot = document.querySelector('#modal-root') as HTMLElement | null;
-            if (modalRoot) modalRoot.style.pointerEvents = 'none';
-        });
-        try {
-            await confirmDiceButton.click({ force: true, timeout: 3000 });
-        } catch {
-            await confirmDiceButton.evaluate((node) => (node as HTMLElement).click());
-        }
-
-        await waitStepWithFallback('meditation-2');
-        await setPlayerCp(page, '0', 2);
-        await ensureCardInHand(page, 'card-meditation-2');
-        await dragCardUp(page, 'card-meditation-2');
-
-        await waitStepWithFallback('defense-roll');
-        // 模拟对手防御掷骰
-        await applyCoreState(page, (core) => {
-            core.phase = 'defensiveRoll';
-            const opponent = (core.players as Record<string, Record<string, unknown>> | undefined)?.['1'];
-            if (opponent) {
-                opponent.dice = (opponent.dice as unknown[]) ?? [];
-                for (let i = 0; i < 5; i++) {
-                    const dice = opponent.dice as Array<Record<string, unknown>>;
-                    if (!dice[i]) dice[i] = { id: i, value: 1, isKept: false };
-                    dice[i].value = 1;
-                    dice[i].isKept = true;
+            if (!player) return;
+            // 设置 CP = 2
+            const resources = (player.resources as Record<string, unknown>) ?? {};
+            resources.cp = 2;
+            player.resources = resources;
+            // 确保 card-meditation-2 在手牌中
+            const hand = (player.hand as Array<{ id?: string }>) ?? [];
+            if (!hand.some(c => c?.id === 'card-meditation-2')) {
+                const deck = (player.deck as Array<{ id?: string }>) ?? [];
+                const discard = (player.discard as Array<{ id?: string }>) ?? [];
+                const idx1 = deck.findIndex(c => c?.id === 'card-meditation-2');
+                if (idx1 >= 0) {
+                    hand.push(deck.splice(idx1, 1)[0]);
+                } else {
+                    const idx2 = discard.findIndex(c => c?.id === 'card-meditation-2');
+                    if (idx2 >= 0) hand.push(discard.splice(idx2, 1)[0]);
                 }
+                player.hand = hand;
+                player.deck = deck;
+                player.discard = discard;
             }
-            return core;
+            w.__BG_LOCAL_DISPATCH__('SYS_CHEAT_SET_STATE', { state: core });
         });
+        await page.waitForTimeout(300);
+        await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-meditation-2' });
         await page.waitForTimeout(500);
 
-        await clickNextOverlayStep();
-        await waitStepWithFallback('defense-end');
-        await clickNextOverlayStep();
-
-        // 点击结束阶段按钮
-        const endPhaseBtn = page.locator('[data-tutorial-id="advance-phase-button"]');
-        if (await endPhaseBtn.isEnabled({ timeout: 3000 }).catch(() => false)) {
-            await endPhaseBtn.click();
-            await page.waitForTimeout(300);
-        }
-
-        // 处理确认弹窗
-        const confirmHeading = page.getByRole('heading', { name: /End offensive roll\?|确认结束攻击掷骰？/i });
-        if (await confirmHeading.isVisible({ timeout: 2000 }).catch(() => false)) {
-            const confirmSkipModal = confirmHeading.locator('..').locator('..');
-            await confirmSkipModal.getByRole('button', { name: /Confirm|确认/i }).click();
-        }
-
-        await waitStepWithFallback('finish');
+        // finish：教学完成
+        await advanceToStep('finish', 30000);
         const finishButton = page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).first();
         const overlayVisible = await page.locator('[data-tutorial-step]').first().isVisible({ timeout: 500 }).catch(() => false);
         const finishVisible = await finishButton.isVisible({ timeout: 1000 }).catch(() => false);

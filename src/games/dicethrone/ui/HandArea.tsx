@@ -92,6 +92,14 @@ export const HandArea = ({
     const [hoveredCardKey, setHoveredCardKey] = React.useState<string | null>(null);
     // 飞出动画卡牌（成功使用后飞向目标）
     const [flyingOutCard, setFlyingOutCard] = React.useState<FlyingOutCard | null>(null);
+    // 弃牌模式下等待飞出的卡牌（点击弃牌时记录，卡牌从手牌移除后触发飞出动画）
+    const pendingDiscardRef = React.useRef<{
+        cardKey: string;
+        card: AbilityCard;
+        originalIndex: number;
+    } | null>(null);
+    // 正在弃牌的 cardKey（用于跳过 exit 动画，避免和飞出动画重叠）
+    const [discardingCardKey, setDiscardingCardKey] = React.useState<string | null>(null);
     const handEntriesRef = React.useRef<HandCardEntry[]>([]);
     const cardKeySequenceRef = React.useRef<Map<string, number>>(new Map());
     const pendingPlayRef = React.useRef<{
@@ -274,9 +282,25 @@ export const HandArea = ({
 
     React.useEffect(() => {
         handKeysRef.current = handKeys;
+
+        // 弃牌模式：卡牌从手牌移除后触发飞向弃牌堆动画
+        const pendingDiscard = pendingDiscardRef.current;
+        if (pendingDiscard && !handKeys.includes(pendingDiscard.cardKey)) {
+            const { card, cardKey, originalIndex } = pendingDiscard;
+            setFlyingOutCard({
+                card,
+                cardKey,
+                startOffset: { x: 0, y: 0 },
+                startIndex: originalIndex,
+                targetType: 'discard',
+            });
+            pendingDiscardRef.current = null;
+            setDiscardingCardKey(null);
+        }
+
+        // 拖拽打出：卡牌成功使用（从手牌移除），触发飞出动画
         const pending = pendingPlayRef.current;
         if (pending && !handKeys.includes(pending.cardKey)) {
-            // 卡牌成功使用（从手牌移除），触发飞出动画
             const { card, offset, originalIndex, cardKey } = pending;
 
             // 判断目标位置：升级卡飞向技能槽，普通卡飞向弃牌堆
@@ -342,12 +366,13 @@ export const HandArea = ({
                 return;
             }
             triggerReturn(pending.cardKey, pending.offset, pending.originalIndex);
+            resetDragValues(pending.cardKey, 'drag');
             clearPendingPlay();
         };
 
         window.addEventListener(ENGINE_NOTIFICATION_EVENT, handler as EventListener);
         return () => window.removeEventListener(ENGINE_NOTIFICATION_EVENT, handler as EventListener);
-    }, [clearPendingPlay, triggerReturn]);
+    }, [clearPendingPlay, resetDragValues, triggerReturn]);
 
     React.useEffect(() => {
         const currentKeys = handKeys;
@@ -465,6 +490,8 @@ export const HandArea = ({
                     window.clearTimeout(pendingPlayTimeoutRef.current);
                 }
                 pendingPlayTimeoutRef.current = window.setTimeout(() => {
+                    // 超时安全网：reset drag values 并回弹
+                    resetDragValues(entry.key, 'drag');
                     clearPendingPlay();
                 }, PENDING_PLAY_TIMEOUT);
                 onPlayCard(card.id);
@@ -476,6 +503,15 @@ export const HandArea = ({
             if (!canPlayCards && onError) {
                 onError(t('error.notYourTurn'));
             } else if (onSellCard) {
+                // 和拖拽打出一样，记录 pending 状态，卡牌移除后触发飞向弃牌堆动画
+                pendingPlayRef.current = { cardKey: entry.key, card, offset, originalIndex: currentIndex };
+                if (pendingPlayTimeoutRef.current) {
+                    window.clearTimeout(pendingPlayTimeoutRef.current);
+                }
+                pendingPlayTimeoutRef.current = window.setTimeout(() => {
+                    resetDragValues(entry.key, 'drag');
+                    clearPendingPlay();
+                }, PENDING_PLAY_TIMEOUT);
                 onSellCard(card.id);
                 actionTaken = true;
             }
@@ -483,8 +519,8 @@ export const HandArea = ({
 
         if (!actionTaken) {
             triggerReturn(entry.key, offset, currentIndex);
+            resetDragValues(entry.key, source);
         }
-        resetDragValues(entry.key, source);
         setDraggingCardKey(null);
         draggingCardRef.current = null;
         dragOffsetRef.current = { x: 0, y: 0 };
@@ -581,6 +617,8 @@ export const HandArea = ({
                         // 动画期间（dealing/returning）统一禁用 hover
                         const isHovered = hoveredCardKey === cardKey && (canDrag || canClickDiscard) && !isDragging && !isReturning && !isDealing;
                         const dragValues = getDragValues(cardKey);
+                        // 正在弃牌的卡牌立即消失（飞出动画由 flyingOutCard 接管）
+                        const isBeingDiscarded = discardingCardKey === cardKey;
 
                         return (
                             <motion.div
@@ -604,6 +642,13 @@ export const HandArea = ({
                                 onClick={() => {
                                     // 弃牌模式下点击卡牌直接弃置
                                     if (canClickDiscard && onDiscardCard) {
+                                        // 记录弃牌信息，卡牌从手牌移除后触发飞向弃牌堆动画
+                                        pendingDiscardRef.current = {
+                                            cardKey,
+                                            card,
+                                            originalIndex: i,
+                                        };
+                                        setDiscardingCardKey(cardKey);
                                         onDiscardCard(card.id);
                                     }
                                 }}
@@ -663,7 +708,10 @@ export const HandArea = ({
                                         scale: isDragging ? 1.15 : (isHovered ? 1.2 : 1),
                                         rotate: isDragging || isHovered ? 0 : rotation,
                                     }}
-                                    exit={{ opacity: 0, scale: 0.8 }}
+                                    exit={isBeingDiscarded
+                                        ? { opacity: 0, scale: 1, transition: { duration: 0 } }
+                                        : { opacity: 0, scale: 0.8 }
+                                    }
                                     transition={isDragging
                                         ? { duration: 0 }
                                         : {

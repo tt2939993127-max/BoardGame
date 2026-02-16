@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { MatchState } from '../../../engine/types';
 import type { SmashUpCore } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
+import type { AbilityFeedbackEvent } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
 import { useEventStreamCursor } from '../../../engine/hooks';
 
@@ -54,6 +55,15 @@ export interface CardDrawnEffect {
   count: number;
 }
 
+/** 能力反馈提示数据 */
+export interface AbilityFeedbackEffect {
+  id: string;
+  playerId: string;
+  messageKey: string;
+  messageParams?: Record<string, string | number>;
+  tone: 'info' | 'warning';
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -73,6 +83,7 @@ export function useGameEvents({ G }: UseGameEventsParams) {
   const [baseScored, setBaseScored] = useState<BaseScoredEffect[]>([]);
   const [powerChanges, setPowerChanges] = useState<PowerChangeEffect[]>([]);
   const [cardDrawns, setCardDrawns] = useState<CardDrawnEffect[]>([]);
+  const [feedbacks, setFeedbacks] = useState<AbilityFeedbackEffect[]>([]);
 
   // 消费事件流
   useEffect(() => {
@@ -143,6 +154,18 @@ export function useGameEvents({ G }: UseGameEventsParams) {
           }]);
           break;
         }
+
+        case SU_EVENTS.ABILITY_FEEDBACK: {
+          const p = (event as AbilityFeedbackEvent).payload;
+          setFeedbacks(prev => [...prev, {
+            id: `fb-${uidCounter++}`,
+            playerId: p.playerId,
+            messageKey: p.messageKey,
+            messageParams: p.messageParams,
+            tone: p.tone ?? 'info',
+          }]);
+          break;
+        }
       }
     }
   }, [G, consumeNew]);
@@ -168,11 +191,16 @@ export function useGameEvents({ G }: UseGameEventsParams) {
     setCardDrawns(prev => prev.filter(e => e.id !== id));
   }, []);
 
+  const removeFeedback = useCallback((id: string) => {
+    setFeedbacks(prev => prev.filter(e => e.id !== id));
+  }, []);
+
   return {
     minionEntries, removeMinionEntry,
     actionShows, removeActionShow,
     baseScored, removeBaseScored,
     powerChanges, removePowerChange,
     cardDrawns, removeCardDrawn,
+    feedbacks, removeFeedback,
   };
 }

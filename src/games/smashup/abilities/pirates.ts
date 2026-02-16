@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, addPowerCounter, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions } from '../domain/abilityHelpers';
+import { destroyMinion, addPowerCounter, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
@@ -50,7 +50,7 @@ function pirateSaucyWench(ctx: AbilityContext): AbilityResult {
     const targets = base.minions.filter(
         m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) <= 2
     );
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
         const name = def?.name ?? t.defId;
@@ -88,7 +88,7 @@ function pirateBroadside(ctx: AbilityContext): AbilityResult {
             candidates.push({ baseIndex: i, opponentId: pid, count, label: `${baseName}（对手 ${pid}，${count}个弱随从）` });
         }
     }
-    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = candidates.map((c, i) => ({ id: `target-${i}`, label: c.label, value: { baseIndex: c.baseIndex, opponentId: c.opponentId } }));
     const interaction = createSimpleChoice(
         `pirate_broadside_${ctx.now}`, ctx.playerId,
@@ -113,7 +113,7 @@ function pirateCannon(ctx: AbilityContext): AbilityResult {
             }
         }
     }
-    if (allTargets.length === 0) return { events: [] };
+    if (allTargets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // 创建选择第一个目标的 Interaction
     const options = allTargets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
@@ -226,9 +226,9 @@ function buccaneerOnDestroyed(ctx: TriggerContext): SmashUpEvent[] | TriggerResu
         candidates.map(c => ({
             id: `base_${c.baseIndex}`,
             label: c.label,
-            value: { minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, toBaseIndex: c.baseIndex },
+            value: { minionUid: triggerMinionUid, minionDefId: triggerMinionDefId, fromBaseIndex: baseIndex, toBaseIndex: c.baseIndex, baseDefId: c.baseDefId },
         })),
-        'pirate_buccaneer_move',
+        { sourceId: 'pirate_buccaneer_move', targetType: 'generic' },
     );
     const updatedMS = queueInteraction(ctx.matchState, interaction);
     return { events: [], matchState: updatedMS };

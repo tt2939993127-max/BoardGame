@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, addPowerCounter, addTempPower, modifyBreakpoint, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, resolveOrPrompt } from '../domain/abilityHelpers';
+import { destroyMinion, addPowerCounter, addTempPower, modifyBreakpoint, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, resolveOrPrompt, buildAbilityFeedback } from '../domain/abilityHelpers';
 import type { SmashUpEvent, SmashUpCore, MinionOnBase, OngoingDetachedEvent, MinionDestroyedEvent, MinionReturnedEvent, CardToDeckBottomEvent } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { getCardDef, getBaseDef } from '../data/cards';
@@ -122,7 +122,7 @@ function dinoNaturalSelection(ctx: AbilityContext): AbilityResult {
             }
         }
     }
-    if (myMinions.length === 0) return { events: [] };
+    if (myMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = myMinions.map((entry) => {
         const def = getCardDef(entry.minion.defId) as MinionCardDef | undefined;
         const name = def?.name ?? entry.minion.defId;

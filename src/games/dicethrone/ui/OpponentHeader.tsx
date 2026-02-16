@@ -27,6 +27,7 @@ export const OpponentHeader = ({
     headerError,
     opponentBuffRef,
     opponentHpRef,
+    opponentCpRef,
     statusIconAtlas,
     locale,
     containerRef,
@@ -46,6 +47,7 @@ export const OpponentHeader = ({
     headerError?: string | null;
     opponentBuffRef?: RefObject<HTMLDivElement | null>;
     opponentHpRef?: RefObject<HTMLDivElement | null>;
+    opponentCpRef?: RefObject<HTMLDivElement | null>;
     statusIconAtlas?: StatusAtlases | null;
     locale?: string;
     /** 对手悬浮窗容器引用（用于卡牌特写动画起点） */
@@ -112,7 +114,7 @@ export const OpponentHeader = ({
                                             <div className="w-[0.5vw] h-[0.5vw] bg-red-500 rounded-full shadow-[0_0_6px_rgba(239,68,68,0.4)]"></div>
                                             <span className="text-red-400 font-bold text-[0.75vw]">{overrideHp ?? (opponent.resources[RESOURCE_IDS.HP] ?? 0)}</span>
                                         </div>
-                                        <div className="flex items-center gap-[0.2vw]">
+                                        <div ref={opponentCpRef} className="flex items-center gap-[0.2vw]">
                                             <div className="w-[0.5vw] h-[0.5vw] bg-amber-500 rounded-full shadow-[0_0_6px_rgba(245,158,11,0.4)]"></div>
                                             <span className="text-amber-500 font-bold text-[0.75vw]">{opponent.resources[RESOURCE_IDS.CP] ?? 0}</span>
                                         </div>

@@ -101,16 +101,7 @@ export const CardPoolPanel: React.FC<CardPoolPanelProps> = ({ factionId, current
                 />
             )}
 
-            {/* 建筑 */}
-            {groups.structures.length > 0 && (
-                <CardSection
-                    title={t('deckBuilder.structures')}
-                    cards={groups.structures}
-                    currentDeck={currentDeck}
-                    onAdd={onAddCard}
-                    onMagnify={handleMagnify}
-                />
-            )}
+            {/* 建筑（城门）已由 buildAutoCards 自动填充，不在卡牌池中显示 */}
 
             {/* 卡牌放大预览 */}
             <MagnifyOverlay
@@ -184,7 +175,7 @@ const CardSection: React.FC<CardSectionProps> = ({ title, cards, currentDeck, on
                             <button
                                 onClick={(e) => { e.stopPropagation(); onMagnify(card); }}
                                 className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white/70 hover:bg-black/80 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
-                                title="放大预览"
+                                title={t('deckBuilder.magnifyPreview')}
                             >
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <circle cx="11" cy="11" r="8" />

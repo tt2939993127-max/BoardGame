@@ -442,9 +442,9 @@ describe('食人花 ongoing 能力', () => {
             expect(events.length).toBeGreaterThanOrEqual(1);
             expect(events[0].type).toBe(SU_EVENTS.MINION_DESTROYED);
             expect((events[0] as any).payload.minionUid).toBe('sp-1');
-            // 第二个事件是抽牌（如果牌库有随从）
+            // 第二个事件：如果牌库有符合条件的随从则是 CARDS_DRAWN，否则是 DECK_REORDERED（洗牌）
             if (events.length > 1) {
-                expect(events[1].type).toBe(SU_EVENTS.CARDS_DRAWN);
+                expect([SU_EVENTS.CARDS_DRAWN, SU_EVENTS.DECK_REORDERED]).toContain(events[1].type);
             }
         });
     });

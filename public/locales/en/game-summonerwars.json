@@ -291,7 +291,8 @@
     },
     "freeMode": "Free Build",
     "freeModeOn": "ON",
-    "free": "Free"
+    "free": "Free",
+    "magnifyPreview": "Magnify Preview"
   },
   "cardSelector": {
     "reviveUndead": "Revive Undead: Select an undead unit from the discard pile",
@@ -339,6 +340,8 @@
     "destroyed": "{{name}} destroyed!"
   },
   "statusBanners": {
+    "insufficientMagic": "Insufficient magic",
+    "insufficientCharge": "Requires at least 1 charge",
     "stun": {
       "selectTarget": "Stun: Select an enemy unit within 3 straight spaces of your summoner",
       "direction": "Stun direction:",
@@ -764,5 +767,14 @@
       "name": "Spirit Bond",
       "description": "After this unit moves, charge it, or spend 1 charge to charge a friendly unit within 3 spaces."
     }
+  },
+  "buffs": {
+    "panelTitle": "Current Status",
+    "healing": "Healing Mode",
+    "extraAbilities": "Extra Abilities",
+    "attachedUnit": "Attached Unit",
+    "hypnoticLure": "Hypnotic Lure (Summoner +1 ATK)",
+    "hellfireBlade": "Hellfire Blade (+2⚔️)",
+    "chantWeaving": "Chant of Weaving (Temp Summon Point)"
   }
 }

@@ -20,6 +20,7 @@ import type {
     PlayerId,
     RandomFn,
     SystemState,
+    TutorialState,
     ValidationResult,
 } from './types';
 import { DEFAULT_TUTORIAL_STATE } from './types';
@@ -315,6 +316,63 @@ function runAfterEventsRounds<TCore, TCommand extends Command, TEvent extends Ga
 }
 
 // ============================================================================
+// 教程随机策略
+// ============================================================================
+
+/**
+ * 当教程活跃且定义了 randomPolicy 时，用固定/序列值包装原始 random。
+ * fixed 模式：所有 d()/range() 返回固定值（values[0]）。
+ * sequence 模式：按顺序消费 values，耗尽后使用最后一个值。cursor 通过 _getCursor() 暴露，
+ *   由 executePipeline 在命令执行后写回 sys.tutorial.randomPolicy.cursor，实现跨命令持久化。
+ * shuffle 保持原始行为（教程不需要控制洗牌）。
+ */
+interface TutorialRandomFn extends RandomFn {
+    /** sequence 模式下获取当前 cursor 位置（用于持久化） */
+    _getCursor?: () => number;
+}
+
+function applyTutorialRandomPolicy(tutorial: TutorialState | undefined, baseRandom: RandomFn): TutorialRandomFn {
+    if (!tutorial?.active || !tutorial.randomPolicy) return baseRandom;
+    const policy = tutorial.randomPolicy;
+    const { values } = policy;
+    if (!values || values.length === 0) return baseRandom;
+
+    if (policy.mode === 'fixed') {
+        const fixedValue = values[0];
+        return {
+            random: () => fixedValue / 6,
+            d: (max: number) => Math.min(Math.max(1, fixedValue), max),
+            range: (min: number, max: number) => Math.min(Math.max(min, fixedValue), max),
+            shuffle: baseRandom.shuffle,
+        };
+    }
+
+    // sequence 模式：cursor 从 policy.cursor 恢复，跨命令持久化
+    let cursor = policy.cursor ?? 0;
+    const fallback = values[values.length - 1];
+    const fn: TutorialRandomFn = {
+        random: () => {
+            const raw = values[cursor] ?? fallback;
+            cursor += 1;
+            return raw / 6;
+        },
+        d: (max: number) => {
+            const raw = values[cursor] ?? fallback;
+            cursor += 1;
+            return Math.min(Math.max(1, raw), max);
+        },
+        range: (min: number, max: number) => {
+            const raw = values[cursor] ?? fallback;
+            cursor += 1;
+            return Math.min(Math.max(min, raw), max);
+        },
+        shuffle: baseRandom.shuffle,
+        _getCursor: () => cursor,
+    };
+    return fn;
+}
+
+// ============================================================================
 // 执行管线
 // ============================================================================
 
@@ -338,12 +396,33 @@ export function executePipeline<
     const preCommandEvents: GameEvent[] = [];
     const systemEventsToReduce: GameEvent[] = [];
 
+    // 教程随机策略覆盖：当教程活跃且定义了 randomPolicy 时，用固定/序列值替代原始 random
+    const effectiveRandom = applyTutorialRandomPolicy(state.sys.tutorial, random);
+
+    // 辅助：将 sequence 模式的 cursor 写回 sys.tutorial.randomPolicy.cursor
+    const persistRandomCursor = (s: MatchState<TCore>): MatchState<TCore> => {
+        const getCursor = (effectiveRandom as TutorialRandomFn)._getCursor;
+        if (!getCursor || !s.sys.tutorial?.randomPolicy) return s;
+        const newCursor = getCursor();
+        if (newCursor === (s.sys.tutorial.randomPolicy.cursor ?? 0)) return s;
+        return {
+            ...s,
+            sys: {
+                ...s.sys,
+                tutorial: {
+                    ...s.sys.tutorial,
+                    randomPolicy: { ...s.sys.tutorial.randomPolicy, cursor: newCursor },
+                },
+            },
+        };
+    };
+
     // 构建管线上下文
     const ctx: PipelineContext<TCore> = {
         state: currentState,
         command,
         events: [],
-        random,
+        random: effectiveRandom,
         playerIds,
     };
 
@@ -405,12 +484,15 @@ export function executePipeline<
 
             // 执行 afterEvents hooks（多轮迭代）
             currentState = runAfterEventsRounds({
-                domain, systems, ctx, allEvents, systemEventsToReduce, random,
+                domain, systems, ctx, allEvents, systemEventsToReduce, random: effectiveRandom,
                 maxRounds: MAX_AFTER_EVENTS_ROUNDS,
             });
 
             // 检测游戏结束
             currentState = applyGameoverCheck(currentState);
+
+            // 持久化教程 sequence cursor
+            currentState = persistRandomCursor(currentState);
 
             return {
                 success: true,
@@ -460,7 +542,8 @@ export function executePipeline<
     }
 
     // 3. Core.execute -> 产生 Events
-    const events = domain.execute(currentState, command, random);
+    // 使用 effectiveRandom 确保教程随机策略对领域层生效
+    const events = domain.execute(currentState, command, effectiveRandom);
 
     // 4. 逐个 Reduce events -> 更新 state.core（含事件拦截/替换）
     const reduced = reduceEventsToCore(domain, currentState.core, events as unknown as GameEvent[]);
@@ -475,7 +558,7 @@ export function executePipeline<
             const processResult = domain.postProcessSystemEvents(
                 currentState.core,
                 domainEvents as unknown as TEvent[],
-                random,
+                effectiveRandom,
                 currentState,
             );
             // 兼容两种返回格式
@@ -506,12 +589,15 @@ export function executePipeline<
 
     // 5. 执行 Systems.afterEvents hooks -> 更新 state.sys（多轮迭代）
     currentState = runAfterEventsRounds({
-        domain, systems, ctx, allEvents, systemEventsToReduce, random,
+        domain, systems, ctx, allEvents, systemEventsToReduce, random: effectiveRandom,
         maxRounds: MAX_AFTER_EVENTS_ROUNDS,
     });
 
     // 6. 检测游戏结束
     currentState = applyGameoverCheck(currentState);
+
+    // 7. 持久化教程 sequence cursor
+    currentState = persistRandomCursor(currentState);
 
     return {
         success: true,

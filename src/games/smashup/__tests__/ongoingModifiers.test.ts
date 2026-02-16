@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import type { SmashUpCore, PlayerState, MinionOnBase, CardInstance } from '../domain/types';
+
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
@@ -426,3 +426,299 @@ describe('多个持续修正组合', () => {
         expect(getTotalEffectivePowerOnBase(state, base, 0)).toBe(13);
     });
 });
+
+// ============================================================================
+// registerOngoingPowerModifier 声明式 API 通用测试
+// ============================================================================
+
+describe('registerOngoingPowerModifier 通用叠加', () => {
+    // 辅助：创建基地 ongoing 行动卡
+    function makeOngoing(defId: string, ownerId: string, uid?: string) {
+        return { uid: uid ?? `ongoing_${defId}_${ownerId}`, defId, ownerId };
+    }
+
+    // --- opponentMinions：睡眠孢子 ---
+    describe('opponentMinions（睡眠孢子 killer_plant_sleep_spores）', () => {
+        it('单张对对手随从 -1', () => {
+            const m1 = makeMinion('m1', 'test_a', '1', 5);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [makeOngoing('killer_plant_sleep_spores', '0')],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(4); // 5 - 1
+        });
+
+        it('两张叠加对对手随从 -2', () => {
+            const m1 = makeMinion('m1', 'test_a', '1', 5);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [
+                    makeOngoing('killer_plant_sleep_spores', '0', 'sp1'),
+                    makeOngoing('killer_plant_sleep_spores', '0', 'sp2'),
+                ],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(3); // 5 - 2
+        });
+
+        it('不影响 owner 自己的随从', () => {
+            const own = makeMinion('own', 'test_a', '0', 5);
+            const base = {
+                defId: 'base_a',
+                minions: [own],
+                ongoingActions: [makeOngoing('killer_plant_sleep_spores', '0')],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, own, 0)).toBe(5);
+        });
+
+        it('力量最低为 0', () => {
+            const m1 = makeMinion('m1', 'test_a', '1', 1);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [
+                    makeOngoing('killer_plant_sleep_spores', '0', 'sp1'),
+                    makeOngoing('killer_plant_sleep_spores', '0', 'sp2'),
+                    makeOngoing('killer_plant_sleep_spores', '0', 'sp3'),
+                ],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(0); // max(0, 1-3)
+        });
+    });
+
+    // --- ownerMinions：旋转弹头发射器 ---
+    describe('ownerMinions（旋转弹头发射器 steampunk_rotary_slug_thrower）', () => {
+        it('单张给己方随从 +2', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [makeOngoing('steampunk_rotary_slug_thrower', '0')],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(5); // 3 + 2
+        });
+
+        it('两张叠加给己方随从 +4', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [
+                    makeOngoing('steampunk_rotary_slug_thrower', '0', 'rst1'),
+                    makeOngoing('steampunk_rotary_slug_thrower', '0', 'rst2'),
+                ],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(7); // 3 + 4
+        });
+
+        it('不影响对手随从', () => {
+            const enemy = makeMinion('e1', 'test_a', '1', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [enemy],
+                ongoingActions: [makeOngoing('steampunk_rotary_slug_thrower', '0')],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, enemy, 0)).toBe(3);
+        });
+    });
+
+    // --- firstOwnerMinion：蒸汽机车 ---
+    describe('firstOwnerMinion（蒸汽机车 steampunk_aggromotive）', () => {
+        it('只给 owner 在基地的第一个随从 +5', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 2);
+            const m2 = makeMinion('m2', 'test_b', '0', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [m1, m2],
+                ongoingActions: [makeOngoing('steampunk_aggromotive', '0')],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(7); // 2 + 5（第一个）
+            expect(getEffectivePower(state, m2, 0)).toBe(3); // 不是第一个
+        });
+
+        it('两张叠加给第一个随从 +10', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 2);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [
+                    makeOngoing('steampunk_aggromotive', '0', 'ag1'),
+                    makeOngoing('steampunk_aggromotive', '0', 'ag2'),
+                ],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(12); // 2 + 10
+        });
+
+        it('owner 无随从时无效', () => {
+            const enemy = makeMinion('e1', 'test_a', '1', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [enemy],
+                ongoingActions: [makeOngoing('steampunk_aggromotive', '0')],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, enemy, 0)).toBe(3);
+        });
+    });
+
+    // --- self (minion-attached)：升级 / 毒药 / 邓威奇恐怖 ---
+    describe('self minion-attached（升级 / 毒药 / 邓威奇恐怖）', () => {
+        it('升级：附着 1 张 +2', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3, {
+                attachedActions: [{ uid: 'u1', defId: 'dino_upgrade', ownerId: '0' }],
+            });
+            const base = { defId: 'base_a', minions: [m1], ongoingActions: [] };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(5); // 3 + 2
+        });
+
+        it('升级：附着 2 张叠加 +4', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3, {
+                attachedActions: [
+                    { uid: 'u1', defId: 'dino_upgrade', ownerId: '0' },
+                    { uid: 'u2', defId: 'dino_upgrade', ownerId: '0' },
+                ],
+            });
+            const base = { defId: 'base_a', minions: [m1], ongoingActions: [] };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(7); // 3 + 4
+        });
+
+        it('毒药：附着 1 张 -4', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 5, {
+                attachedActions: [{ uid: 'p1', defId: 'ninja_poison', ownerId: '1' }],
+            });
+            const base = { defId: 'base_a', minions: [m1], ongoingActions: [] };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(1); // 5 - 4
+        });
+
+        it('邓威奇恐怖：附着 1 张 +5', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3, {
+                attachedActions: [{ uid: 'dh1', defId: 'elder_thing_dunwich_horror', ownerId: '0' }],
+            });
+            const base = { defId: 'base_a', minions: [m1], ongoingActions: [] };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m1, 0)).toBe(8); // 3 + 5
+        });
+
+        it('不影响未附着的其他随从', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3, {
+                attachedActions: [{ uid: 'u1', defId: 'dino_upgrade', ownerId: '0' }],
+            });
+            const m2 = makeMinion('m2', 'test_b', '0', 4);
+            const base = { defId: 'base_a', minions: [m1, m2], ongoingActions: [] };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m2, 0)).toBe(4);
+        });
+    });
+
+    // --- condition 参数：通灵之门 ---
+    describe('condition 参数（通灵之门 ghost_door_to_the_beyond）', () => {
+        it('手牌≤2 时己方随从 +2', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [makeOngoing('ghost_door_to_the_beyond', '0')],
+            };
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', { hand: [makeCard('c1', 'test', 'minion', '0')] }),
+                    '1': makePlayer('1'),
+                },
+                bases: [base],
+            });
+            expect(getEffectivePower(state, m1, 0)).toBe(5); // 3 + 2
+        });
+
+        it('手牌>2 时不生效', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [makeOngoing('ghost_door_to_the_beyond', '0')],
+            };
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [
+                            makeCard('c1', 'test', 'minion', '0'),
+                            makeCard('c2', 'test', 'minion', '0'),
+                            makeCard('c3', 'test', 'minion', '0'),
+                        ],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [base],
+            });
+            expect(getEffectivePower(state, m1, 0)).toBe(3);
+        });
+
+        it('条件满足时两张叠加 +4', () => {
+            const m1 = makeMinion('m1', 'test_a', '0', 3);
+            const base = {
+                defId: 'base_a',
+                minions: [m1],
+                ongoingActions: [
+                    makeOngoing('ghost_door_to_the_beyond', '0', 'gd1'),
+                    makeOngoing('ghost_door_to_the_beyond', '0', 'gd2'),
+                ],
+            };
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', { hand: [] }),
+                    '1': makePlayer('1'),
+                },
+                bases: [base],
+            });
+            expect(getEffectivePower(state, m1, 0)).toBe(7); // 3 + 4
+        });
+    });
+
+    // --- 混合场景：多种 ongoing 在同一基地 ---
+    describe('多种 ongoing 在同一基地组合', () => {
+        it('睡眠孢子 + 旋转弹头发射器同时生效', () => {
+            const own = makeMinion('own', 'test_a', '0', 4);
+            const enemy = makeMinion('enemy', 'test_b', '1', 6);
+            const base = {
+                defId: 'base_a',
+                minions: [own, enemy],
+                ongoingActions: [
+                    makeOngoing('killer_plant_sleep_spores', '0'),
+                    makeOngoing('steampunk_rotary_slug_thrower', '0'),
+                ],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, own, 0)).toBe(6);   // 4 + 2（弹头）
+            expect(getEffectivePower(state, enemy, 0)).toBe(5); // 6 - 1（孢子）
+        });
+
+        it('双方各打一张睡眠孢子互相减力', () => {
+            const m0 = makeMinion('m0', 'test_a', '0', 5);
+            const m1 = makeMinion('m1', 'test_b', '1', 5);
+            const base = {
+                defId: 'base_a',
+                minions: [m0, m1],
+                ongoingActions: [
+                    makeOngoing('killer_plant_sleep_spores', '0', 'sp_p0'),
+                    makeOngoing('killer_plant_sleep_spores', '1', 'sp_p1'),
+                ],
+            };
+            const state = makeState({ bases: [base] });
+            expect(getEffectivePower(state, m0, 0)).toBe(4); // 5 - 1（被玩家1的孢子影响）
+            expect(getEffectivePower(state, m1, 0)).toBe(4); // 5 - 1（被玩家0的孢子影响）
+        });
+    });
+});
+

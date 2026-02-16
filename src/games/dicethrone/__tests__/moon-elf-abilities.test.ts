@@ -457,7 +457,7 @@ describe('Moon Elf 状态效果逻辑', () => {
                 players: {
                     '1': {
                         hp: INITIAL_HEALTH - 5, // 3基础 + 2锁定
-                        statusEffects: { [STATUS_IDS.TARGETED]: 0 }, // 锁定已移除
+                        statusEffects: { [STATUS_IDS.TARGETED]: 1 }, // 锁定是持续效果，不会自动移除
                     },
                 },
             },
@@ -708,12 +708,14 @@ describe('Moon Elf 自定义动作', () => {
      *
      * 骰子值序列：[1,6,6,6,4] 攻击骰, [bonus_die_value] 爆裂箭骰, [防御骰...]
      */
-    it('爆裂箭 I：投掷1骰造成骰值伤害', () => {
+    it('爆裂箭 I：投掷5骰造成伤害+CP丢失+致盲', () => {
         // 攻击骰 [1,6,6,6,4] = 1弓+3月+1足 → 触发 exploding-arrow
         // 防御骰 [1,1,1,1]（4颗，defensiveRoll rollDiceCount=4）
-        // 爆裂箭骰值 = 4 → 造成4伤害
-        // 队列：[攻击骰×5, 防御骰×4, 爆裂箭骰×1] = 10个值
-        const random = createQueuedRandom([1, 6, 6, 6, 4, 1, 1, 1, 1, 4]);
+        // 爆裂箭5骰 = [1,1,1,1,1] = 5弓+0足+0月
+        // 伤害 = 3 + 2×5弓 + 1×0足 = 3 + 10 + 0 = 13
+        // 对手丢失 1×0月 = 0 CP
+        // 队列：[攻击骰×5, 防御骰×4, 爆裂箭骰×5] = 14个值
+        const random = createQueuedRandom([1, 6, 6, 6, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
         const runner = new GameTestRunner({
             domain: DiceThroneDomain,
             systems: testSystems,
@@ -725,7 +727,7 @@ describe('Moon Elf 自定义动作', () => {
         });
 
         const result = runner.run({
-            name: '爆裂箭I 骰值伤害',
+            name: '爆裂箭I 投掷5骰结算',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
@@ -739,7 +741,12 @@ describe('Moon Elf 自定义动作', () => {
             expect: {
                 turnPhase: 'main2',
                 players: {
-                    '1': { hp: INITIAL_HEALTH - 4 }, // 骰值4 = 4伤害
+                    // 爆裂箭5骰：5弓 + 0足 + 0月
+                    // 伤害 = 3 + 2×5 + 1×0 = 13
+                    '1': { 
+                        hp: INITIAL_HEALTH - 13,
+                        statusEffects: { [STATUS_IDS.BLINDED]: 1 }, // 造成致盲
+                    },
                 },
             },
         });
@@ -747,13 +754,17 @@ describe('Moon Elf 自定义动作', () => {
     });
 
     /**
-     * 爆裂箭 II (exploding-arrow-resolve-2)：
-     * 效果：投掷1骰，造成骰值+1伤害
+     * 爆炸射击 II (exploding-arrow-resolve-2)：
+     * 效果：投掷5骰，造成 3 + 1×弓 + 2×足 伤害，对手失去 1×月 CP，施加致盲
      */
-    it('爆裂箭 II：投掷1骰造成骰值+1伤害', () => {
-        // 攻击骰 [1,6,6,6,4], 防御骰 [1,1,1,1], 爆裂箭骰值=3 → 3+1=4伤害
-        // 队列：[攻击骰×5, 防御骰×4, 爆裂箭骰×1] = 10个值
-        const random = createQueuedRandom([1, 6, 6, 6, 4, 1, 1, 1, 1, 3]);
+    it('爆炸射击 II：投掷5骰公式伤害 + 致盲', () => {
+        // 攻击骰 [1,6,6,6,4], 防御骰 [1,1,1,1,1]（5颗）, 爆炸射击5骰 [1,2,4,5,6]
+        // 爆炸射击5骰：1→弓,2→弓,4→足,5→足,6→月 → 2弓2足1月
+        // 伤害 = 3 + 1×2 + 2×2 = 9
+        // 对手失去1CP（1月）
+        // 施加致盲（II级无缠绕）
+        // 队列：[攻击骰×5, 防御骰×5, 爆炸射击骰×5] = 15个值
+        const random = createQueuedRandom([1, 6, 6, 6, 4, 1, 1, 1, 1, 1, 1, 2, 4, 5, 6]);
         const runner = new GameTestRunner({
             domain: DiceThroneDomain,
             systems: testSystems,
@@ -771,7 +782,7 @@ describe('Moon Elf 自定义动作', () => {
         });
 
         const result = runner.run({
-            name: '爆裂箭II 骰值+1伤害',
+            name: '爆炸射击II 5骰公式伤害+致盲',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
@@ -785,7 +796,10 @@ describe('Moon Elf 自定义动作', () => {
             expect: {
                 turnPhase: 'main2',
                 players: {
-                    '1': { hp: INITIAL_HEALTH - 4 }, // 骰值3 + 1 = 4伤害
+                    '1': {
+                        hp: INITIAL_HEALTH - 9, // 3 + 1×2弓 + 2×2足 = 9
+                        statusEffects: { [STATUS_IDS.BLINDED]: 1 }, // 只有致盲，无缠绕
+                    },
                 },
             },
         });
@@ -793,13 +807,17 @@ describe('Moon Elf 自定义动作', () => {
     });
 
     /**
-     * 爆裂箭 III (exploding-arrow-resolve-3)：
-     * 效果：投掷1骰，造成骰值+2伤害 + 施加缠绕
+     * 爆炸射击 III (exploding-arrow-resolve-3)：
+     * 效果：投掷5骰，造成 3 + 1×弓 + 2×足 伤害，对手失去 1×月 CP，施加致盲和缠绕
      */
-    it('爆裂箭 III：投掷1骰造成骰值+2伤害 + 缠绕', () => {
-        // 攻击骰 [1,6,6,6,4], 防御骰 [1,1,1,1], 爆裂箭骰值=5 → 5+2=7伤害+缠绕
-        // 队列：[攻击骰×5, 防御骰×4, 爆裂箭骰×1] = 10个值
-        const random = createQueuedRandom([1, 6, 6, 6, 4, 1, 1, 1, 1, 5]);
+    it('爆炸射击 III：投掷5骰公式伤害 + 致盲 + 缠绕', () => {
+        // 攻击骰 [1,6,6,6,4], 防御骰 [1,1,1,1,1]（5颗，月精灵diceCount=5）, 爆炸射击5骰 [1,2,4,5,6]
+        // 爆炸射击5骰：1→弓,2→弓,4→足,5→足,6→月 → 2弓2足1月
+        // 伤害 = 3 + 1×2 + 2×2 = 9
+        // 对手失去1CP（1月）
+        // 施加致盲和缠绕
+        // 队列：[攻击骰×5, 防御骰×5, 爆炸射击骰×5] = 15个值
+        const random = createQueuedRandom([1, 6, 6, 6, 4, 1, 1, 1, 1, 1, 1, 2, 4, 5, 6]);
         const runner = new GameTestRunner({
             domain: DiceThroneDomain,
             systems: testSystems,
@@ -817,7 +835,7 @@ describe('Moon Elf 自定义动作', () => {
         });
 
         const result = runner.run({
-            name: '爆裂箭III 骰值+2伤害+缠绕',
+            name: '爆炸射击III 5骰公式伤害+致盲+缠绕',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
@@ -832,8 +850,8 @@ describe('Moon Elf 自定义动作', () => {
                 turnPhase: 'main2',
                 players: {
                     '1': {
-                        hp: INITIAL_HEALTH - 7, // 骰值5 + 2 = 7伤害
-                        statusEffects: { [STATUS_IDS.ENTANGLE]: 1 },
+                        hp: INITIAL_HEALTH - 9, // 3 + 1×2弓 + 2×2足 = 9
+                        statusEffects: { [STATUS_IDS.BLINDED]: 1, [STATUS_IDS.ENTANGLE]: 1 },
                     },
                 },
             },

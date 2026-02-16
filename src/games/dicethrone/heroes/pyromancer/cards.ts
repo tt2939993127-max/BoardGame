@@ -79,7 +79,13 @@ export const PYROMANCER_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: abilityEffectText('card-infernal-embrace', 'roll'),
-                action: { type: 'custom', target: 'self', customActionId: 'pyro-infernal-embrace' },
+                action: {
+                    type: 'rollDie', target: 'self', diceCount: 1,
+                    conditionalEffects: [
+                        { face: PYROMANCER_DICE_FACE_IDS.FIRE, grantToken: { tokenId: TOKEN_IDS.FIRE_MASTERY, value: 2 } },
+                    ],
+                    defaultEffect: { drawCard: 1 },
+                },
                 timing: 'immediate'
             }
         ],

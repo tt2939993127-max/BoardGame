@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
 import type { DamageDealtEvent, HealAppliedEvent, HeroState } from '../domain/types';
+import type { CpChangedEvent } from '../domain/events';
 import type { PlayerId } from '../../../engine/types';
 import type { StatusAtlases } from '../ui/statusEffects';
 import { getStatusEffectIconNode } from '../ui/statusEffects';
@@ -22,6 +23,7 @@ import {
     resolveDamageImpactKey,
     resolveStatusImpactKey,
     resolveTokenImpactKey,
+    resolveCpImpactKey,
 } from '../ui/fxSetup';
 import { useVisualStateBuffer } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import type { UseVisualStateBufferReturn } from '../../../components/game/framework/hooks/useVisualStateBuffer';
@@ -57,8 +59,12 @@ export interface AnimationEffectsConfig {
     refs: {
         opponentHp: React.RefObject<HTMLDivElement | null>;
         selfHp: React.RefObject<HTMLDivElement | null>;
+        opponentCp: React.RefObject<HTMLDivElement | null>;
+        selfCp: React.RefObject<HTMLDivElement | null>;
         opponentBuff: React.RefObject<HTMLDivElement | null>;
         selfBuff: React.RefObject<HTMLDivElement | null>;
+        /** 对手悬浮窗容器（对手效果的 fallback 起点） */
+        opponentHeader: React.RefObject<HTMLDivElement | null>;
     };
     /** 获取效果起始位置的函数（基于 lastEffectSourceByPlayerId 查找） */
     getEffectStartPos: (targetId?: string) => { x: number; y: number };
@@ -111,9 +117,6 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     const damageBuffer = useVisualStateBuffer();
     // FX 事件 ID → { bufferKey, damage } 映射（飞行动画到达时释放对应 key + 触发受击反馈）
     const fxImpactMapRef = useRef(new Map<string, { bufferKey: string; damage: number }>());
-    // damageBuffer ref 镜像（供 effect 内同步访问）
-    const damageBufferRef = useRef(damageBuffer);
-    damageBufferRef.current = damageBuffer;
 
     /**
      * 构建单个伤害事件的 FX 参数
@@ -153,7 +156,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
      * 构建单个治疗事件的 FX 参数
      * 
      * 治疗起点：从触发治疗的技能槽位置飞出（sourceAbilityId），
-     * 找不到技能槽时 fallback 到屏幕中心（如手牌触发的治疗）。
+     * 找不到技能槽时 fallback 到对手悬浮窗（说明是对手的技能）。
      * 不使用 getEffectStartPos（它查的是"对目标造成效果的来源"，
      * 治疗自己时会错误地指向对手的技能）。
      * 
@@ -175,7 +178,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         const frozenHp = coreHp - amount;
 
         const isOpponent = targetId === opponentId;
-        // 治疗起点：直接从 sourceAbilityId 查技能槽位置，找不到则屏幕中心
+        // 治疗起点：直接从 sourceAbilityId 查技能槽位置，找不到则从对手悬浮窗飞出
         const startPos = getAbilityStartPos(sourceAbilityId);
         const endPos = getElementCenter(isOpponent ? refs.opponentHp.current : refs.selfHp.current);
 
@@ -189,18 +192,66 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     }, [opponentId, opponent, player, getAbilityStartPos, refs.opponentHp, refs.selfHp]);
 
     /**
-     * 统一消费事件流：伤害 + 治疗
-     * 单一 effect、单一游标，无条件推进到最新 entry.id。
+     * 构建单个 CP 变化事件的 FX 参数
      * 
-     * 同一批事件中的伤害和治疗按队列顺序播放（伤害先、治疗后）。
-     * 事件到来时只 push 第一步，剩余步骤入队。
-     * Board 层在 onEffectComplete 回调中调用 advanceQueue 推进下一步。
-     * 每步都通过 push 获取 fxId，建立 fxId → bufferKey 映射。
+     * CP 获得（delta > 0）：从触发技能的来源位置飞到自己的 CP 条（金色 buff 飞行数字）
+     * CP 被偷（delta < 0 且来源是技能效果）：从被偷者 CP 条飞向技能来源位置（红色 damage 飞行数字）
+     * CP 花费（delta < 0 且来源是打牌等）：不播放动画
+     */
+    const buildCpStep = useCallback((cpEvent: CpChangedEvent): AnimStep | null => {
+        const { playerId, delta } = cpEvent.payload;
+
+        if (delta > 0) {
+            // CP 获得：从技能来源飞到目标的 CP 条
+            const isOpponent = playerId === opponentId;
+            const soundKey = resolveCpImpactKey(delta);
+            const startPos = getEffectStartPos(isOpponent ? opponentId : currentPlayerId);
+            const endPos = getElementCenter(isOpponent ? refs.opponentCp.current : refs.selfCp.current);
+
+            return {
+                cue: DT_FX.CP_CHANGE,
+                params: { delta, startPos, endPos, soundKey },
+                bufferKey: '',
+                frozenHp: -1,
+                damage: 0,
+            };
+        }
+
+        // CP 减少：只有技能效果触发的扣减（偷窃/扒取）才播放动画，日常花费不需要
+        if (delta < 0 && cpEvent.sourceCommandType === 'ABILITY_EFFECT') {
+            const isOpponent = playerId === opponentId;
+            const soundKey = resolveCpImpactKey(delta);
+            // 被偷：从被偷者的 CP 条飞向对方（技能来源位置）
+            const startPos = getElementCenter(isOpponent ? refs.opponentCp.current : refs.selfCp.current);
+            const endPos = getEffectStartPos(isOpponent ? currentPlayerId : opponentId);
+
+            return {
+                cue: DT_FX.CP_CHANGE,
+                params: { delta, startPos, endPos, soundKey },
+                bufferKey: '',
+                frozenHp: -1,
+                damage: 0,
+            };
+        }
+
+        return null;
+    }, [opponentId, currentPlayerId, getEffectStartPos, refs.opponentCp, refs.selfCp]);
+
+    /**
+     * 统一消费事件流：伤害 + 治疗
+     * 
+     * 分两阶段执行：
+     * 1. render 阶段（同步）：消费事件 + freezeSync 写 ref → 同一帧 get() 即可读到冻结值
+     * 2. effect 阶段（异步）：commitSync 同步 state + push FX 动画（需要 DOM 位置）
+     * 
+     * 这样消除了"core HP 已变但 freeze 还没生效"的间隙帧。
      */
     // 待播放步骤队列（FIFO）
     const pendingStepsRef = useRef<AnimStep[]>([]);
     // 当前正在播放的 fxId（用于 advanceQueue 匹配）
     const activeFxIdRef = useRef<string | null>(null);
+    // render 阶段计算出的待推送步骤（effect 中消费）
+    const pendingPushRef = useRef<AnimStep[] | null>(null);
 
     /** 推入队列中的下一步，返回是否成功 */
     const pushNextStep = useCallback(() => {
@@ -229,40 +280,55 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         }
     }, [pushNextStep]);
 
-    useEffect(() => {
-        const { entries: newEntries } = consumeNew();
-        if (newEntries.length === 0) return;
-
-        // 收集本批次的伤害和治疗步骤（伤害优先、治疗在后）
+    // ── 阶段 1：render 阶段同步消费事件 + freezeSync ──
+    // consumeNew() 是幂等的（内部游标 ref 保证同一批 entries 只消费一次），
+    // 在 render 中调用安全（无 setState，仅写 ref）。
+    const { entries: newEntries } = consumeNew();
+    if (newEntries.length > 0) {
         const damageSteps: AnimStep[] = [];
         const healSteps: AnimStep[] = [];
+        const cpSteps: AnimStep[] = [];
 
         for (const entry of newEntries) {
             const event = entry.event as { type: string; payload: Record<string, unknown> };
-
             if (event.type === 'DAMAGE_DEALT') {
                 const step = buildDamageStep(event as unknown as DamageDealtEvent);
                 if (step) damageSteps.push(step);
             } else if (event.type === 'HEAL_APPLIED') {
                 const step = buildHealStep(event as unknown as HealAppliedEvent);
                 if (step) healSteps.push(step);
+            } else if (event.type === 'CP_CHANGED') {
+                const step = buildCpStep(event as unknown as CpChangedEvent);
+                if (step) cpSteps.push(step);
             }
         }
 
-        // 合并：伤害在前、治疗在后
-        const allSteps = [...damageSteps, ...healSteps];
-        if (allSteps.length === 0) return;
-
-        // 冻结所有涉及的 HP（取最早快照）
-        for (const step of allSteps) {
-            const currentFrozen = damageBufferRef.current.get(step.bufferKey, -1);
-            if (currentFrozen === -1) {
-                damageBufferRef.current.freeze(step.bufferKey, step.frozenHp);
+        const allSteps = [...damageSteps, ...healSteps, ...cpSteps];
+        if (allSteps.length > 0) {
+            // 同步冻结 HP（仅写 ref，render 阶段安全）— 跳过 CP 步骤（无需冻结）
+            for (const step of allSteps) {
+                if (!step.bufferKey) continue;
+                const currentFrozen = damageBuffer.get(step.bufferKey, -1);
+                if (currentFrozen === -1) {
+                    damageBuffer.freezeSync(step.bufferKey, step.frozenHp);
+                }
             }
+            // 缓存待推送步骤，effect 中消费
+            pendingPushRef.current = allSteps;
         }
+    }
+
+    // ── 阶段 2：effect 中 commitSync + push FX ──
+    useEffect(() => {
+        const steps = pendingPushRef.current;
+        if (!steps) return;
+        pendingPushRef.current = null;
+
+        // 将 freezeSync 写入的 ref 同步到 React state
+        damageBuffer.commitSync();
 
         // 第一步立即 push，剩余入队
-        const [first, ...rest] = allSteps;
+        const [first, ...rest] = steps;
         pendingStepsRef.current.push(...rest);
 
         const fxId = fxBus.push(first.cue, {}, first.params);
@@ -270,22 +336,13 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             fxImpactMapRef.current.set(fxId, { bufferKey: first.bufferKey, damage: first.damage });
             activeFxIdRef.current = fxId;
         } else {
-            // 首步失败，尝试推进队列
             pushNextStep();
         }
     }, [
         eventStreamEntries,
-        consumeNew,
-        opponentId,
-        opponent,
-        currentPlayerId,
-        refs.opponentHp,
-        refs.selfHp,
-        getEffectStartPos,
         fxBus,
-        buildDamageStep,
-        buildHealStep,
         pushNextStep,
+        damageBuffer,
     ]);
 
     // ========================================================================
@@ -321,7 +378,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(currentStatus).forEach(([effectId, stacks]) => {
                 const prevStacks = prevStatus[effectId] ?? 0;
                 if (stacks > prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
@@ -335,7 +392,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
                 const currentStacks = currentStatus[effectId] ?? 0;
                 if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',
@@ -361,7 +418,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(currentStatus).forEach(([effectId, stacks]) => {
                 const prevStacks = prevStatus[effectId] ?? 0;
                 if (stacks > prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
@@ -375,7 +432,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(prevStatus).forEach(([effectId, prevStacks]) => {
                 const currentStacks = currentStatus[effectId] ?? 0;
                 if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = STATUS_EFFECT_META[effectId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = STATUS_EFFECT_META[effectId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.STATUS, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',
@@ -403,7 +460,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
                 const prevStacks = prevTokens[tokenId] ?? 0;
                 if (stacks > prevStacks) {
-                    const info = TOKEN_META[tokenId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
@@ -417,7 +474,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
                 const currentStacks = currentTokens[tokenId] ?? 0;
                 if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = TOKEN_META[tokenId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',
@@ -443,7 +500,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
                 const prevStacks = prevTokens[tokenId] ?? 0;
                 if (stacks > prevStacks) {
-                    const info = TOKEN_META[tokenId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: info.color,
@@ -457,7 +514,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
                 const currentStacks = currentTokens[tokenId] ?? 0;
                 if (prevStacks > 0 && currentStacks < prevStacks) {
-                    const info = TOKEN_META[tokenId] || { icon: '✨', color: 'from-slate-500 to-slate-600' };
+                    const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
                     fxBus.push(DT_FX.TOKEN, {}, {
                         content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                         color: 'from-slate-400 to-slate-600',

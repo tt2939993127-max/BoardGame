@@ -8,6 +8,7 @@ import type { CardPreviewRef } from '../../../core';
 import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
+import type { PassiveAbilityDef } from './passiveAbility';
 
 // ============================================================================
 // 基础类型
@@ -221,6 +222,20 @@ export interface PendingInteraction {
         /** 已选择的状态 ID */
         statusId?: string;
     };
+    /** Token 授予配置（用于 selectPlayer + grantToken） */
+    tokenGrantConfig?: {
+        /** 要授予的 Token ID */
+        tokenId: string;
+        /** 授予的数量 */
+        amount: number;
+    };
+    /** 多 Token 授予配置（用于 selectPlayer + 批量 grantToken，如祝圣） */
+    tokenGrantConfigs?: Array<{
+        /** 要授予的 Token ID */
+        tokenId: string;
+        /** 授予的数量 */
+        amount: number;
+    }>;
     /** 是否针对对手的骰子（card-give-hand） */
     targetOpponentDice?: boolean;
 }
@@ -365,6 +380,8 @@ export interface HeroState {
     abilityLevels: Record<string, number>;
     /** 已覆盖在技能上的升级卡信息（用于 II->III 差价计算 / 未来 UI 展示） */
     upgradeCardByAbilityId: Record<string, { cardId: string; cpCost: number }>;
+    /** 被动能力列表（如教皇税：花费 CP 重掷/抽牌） */
+    passiveAbilities?: PassiveAbilityDef[];
 }
 
 // ============================================================================
@@ -419,6 +436,13 @@ export interface DiceThroneCore {
         /** 原回合的活跃玩家（额外攻击结束后恢复） */
         originalActivePlayerId: PlayerId;
     };
+    /**
+     * 潜行获得回合追踪
+     * key: playerId, value: 获得潜行时的 turnNumber
+     * 用于"经过一个完整的自己回合后，回合末自动弃除"逻辑
+     * TOKEN_GRANTED 时写入，TOKEN_CONSUMED/潜行自动弃除时清除
+     */
+    sneakGainedTurn?: Record<PlayerId, number>;
 }
 
 // ============================================================================

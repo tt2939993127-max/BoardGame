@@ -12,7 +12,7 @@ import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion,
     getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions,
-    resolveOrPrompt, revealHand,
+    resolveOrPrompt, revealHand, buildAbilityFeedback,
 } from '../domain/abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -241,7 +241,7 @@ function miskatonicPsychologistOnPlay(ctx: AbilityContext): AbilityResult {
     if (candidates.length === 0) return { events: [] };
     // 单候选也需要确认（"你可以"=可选）
     const options = candidates.map((c, i) => ({
-        id: `madness-${i}`, label: c.label, value: { cardUid: c.uid, source: c.source },
+        id: `madness-${i}`, label: c.label, value: { cardUid: c.uid, defId: MADNESS_CARD_DEF_ID, source: c.source },
     }));
     const skipOption = { id: 'skip', label: '跳过', value: { skip: true } };
     const interaction = createSimpleChoice(
@@ -259,7 +259,7 @@ function miskatonicPsychologistOnPlay(ctx: AbilityContext): AbilityResult {
  */
 function miskatonicResearcherOnPlay(ctx: AbilityContext): AbilityResult {
     // 检查疯狂牌库是否有牌
-    if (!ctx.state.madnessDeck || ctx.state.madnessDeck.length === 0) return { events: [] };
+    if (!ctx.state.madnessDeck || ctx.state.madnessDeck.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
     const interaction = createSimpleChoice(
         `miskatonic_researcher_${ctx.now}`, ctx.playerId,
         '是否抽取一张疯狂卡？',
@@ -284,7 +284,7 @@ function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
     const madnessInHand = player.hand.filter(
         c => c.defId === MADNESS_CARD_DEF_ID && c.uid !== ctx.cardUid
     );
-    if (madnessInHand.length < 2) return { events: [] };
+    if (madnessInHand.length < 2) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
 
     // 收集所有可消灭的随从
     const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; label: string }[] = [];
@@ -298,7 +298,7 @@ function miskatonicItMightJustWork(ctx: AbilityContext): AbilityResult {
             allMinions.push({ uid: m.uid, defId: m.defId, baseIndex: i, owner: m.owner, label: `${name} (力量 ${power}) @ ${baseName}` });
         }
     }
-    if (allMinions.length === 0) return { events: [] };
+    if (allMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // Prompt 选择
     const options = allMinions.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
@@ -370,9 +370,18 @@ function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
     // 搜索牌库中所有非疯狂卡（随从或行动卡）
     const eligible = player.deck.filter(c => c.defId !== MADNESS_CARD_DEF_ID);
     if (eligible.length === 0) {
-        // 牌库无可选卡，仅抽疯狂卡
+        // 牌库无可选卡，规则仍要求重洗牌库 + 抽疯狂卡
+        const events: SmashUpEvent[] = [];
+        const shuffled = ctx.random.shuffle([...player.deck]);
+        events.push({
+            type: SU_EVENTS.DECK_REORDERED,
+            payload: { playerId: ctx.playerId, deckUids: shuffled.map(c => c.uid) },
+            timestamp: ctx.now,
+        } as DeckReorderedEvent);
+        events.push(buildAbilityFeedback(ctx.playerId, 'feedback.deck_search_no_match', ctx.now));
         const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'miskatonic_thing_on_the_doorstep', ctx.now);
-        return { events: madnessEvt ? [madnessEvt] : [] };
+        if (madnessEvt) events.push(madnessEvt);
+        return { events };
     }
 
     // 单候选自动选择
@@ -409,7 +418,7 @@ function miskatonicFieldTrip(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     // 排除刚打出的自己
     const handCards = player.hand.filter(c => c.uid !== ctx.cardUid);
-    if (handCards.length === 0) return { events: [] };
+    if (handCards.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
 
     // 创建多选 Prompt 让玩家选择要放牌库底的卡
     const options = handCards.map((c, i) => {

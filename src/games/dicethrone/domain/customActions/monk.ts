@@ -91,7 +91,7 @@ function handleMeditationDamage({ ctx, targetId, sourceAbilityId, state, timesta
 }
 
 /** 一掷千金：投掷1骰子，获得½数值的CP（向上取整） */
-function handleOneThrowFortuneCp({ targetId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
+function handleOneThrowFortuneCp({ targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
     const dieValue = random.d(6);
@@ -106,42 +106,13 @@ function handleOneThrowFortuneCp({ targetId, state, timestamp, random }: CustomA
 
     events.push({
         type: 'CP_CHANGED',
-        payload: { playerId: targetId, delta: cpGain, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + cpGain },
+        payload: { playerId: targetId, delta: cpGain, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + cpGain, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     });
     return events;
 }
 
-/** 顿悟：投掷1骰，莲花→获得2气+闪避+净化；否则抽1牌 */
-function handleEnlightenmentRoll({ targetId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-    const dieValue = random.d(6);
-    const face = getPlayerDieFace(state, targetId, dieValue) ?? '';
-    const isLotus = face === DICE_FACE_IDS.LOTUS;
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: { value: dieValue, face, playerId: targetId, targetPlayerId: targetId, effectKey: isLotus ? 'bonusDie.effect.enlightenmentLotus' : 'bonusDie.effect.enlightenmentOther' },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
-    if (isLotus) {
-        const target = state.players[targetId];
-        const taijiMax = getTokenStackLimit(state, targetId, TOKEN_IDS.TAIJI);
-        const taijiCurrent = target?.tokens[TOKEN_IDS.TAIJI] ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.TAIJI, amount: 2, newTotal: Math.min(taijiCurrent + 2, taijiMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-        const evasiveMax = getTokenStackLimit(state, targetId, TOKEN_IDS.EVASIVE);
-        const evasiveCurrent = target?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.EVASIVE, amount: 1, newTotal: Math.min(evasiveCurrent + 1, evasiveMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-        const purifyMax = getTokenStackLimit(state, targetId, TOKEN_IDS.PURIFY);
-        const purifyCurrent = target?.tokens[TOKEN_IDS.PURIFY] ?? 0;
-        events.push({ type: 'TOKEN_GRANTED', payload: { targetId, tokenId: TOKEN_IDS.PURIFY, amount: 1, newTotal: Math.min(purifyCurrent + 1, purifyMax), sourceAbilityId }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as TokenGrantedEvent);
-    } else {
-        events.push(...buildDrawEvents(state, targetId, 1, random, 'ABILITY_EFFECT', timestamp));
-    }
-    return events;
-}
 
 /** 莲花掌：可花费2太极令此次攻击不可防御 */
 function handleLotusPalmUnblockableChoice({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
@@ -314,10 +285,10 @@ function handleThunderStrike2RollDamage(context: CustomActionContext): DiceThron
 }
 
 /** 获得2CP */
-function handleGrantCp2({ targetId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+function handleGrantCp2({ targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     return [{
         type: 'CP_CHANGED',
-        payload: { playerId: targetId, delta: 2, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + 2 },
+        payload: { playerId: targetId, delta: 2, newValue: (state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0) + 2, sourceAbilityId },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     }];
@@ -363,9 +334,7 @@ export function registerMonkCustomActions(): void {
     registerCustomActionHandler('one-throw-fortune-cp', handleOneThrowFortuneCp, {
         categories: ['resource', 'dice'],
     });
-    registerCustomActionHandler('enlightenment-roll', handleEnlightenmentRoll, {
-        categories: ['resource', 'dice'],
-    });
+
     registerCustomActionHandler('lotus-palm-unblockable-choice', handleLotusPalmUnblockableChoice, {
         categories: ['choice'],
     });

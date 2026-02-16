@@ -13,38 +13,6 @@ import {
 } from './helpers/common';
 
 // ============================================================================
-// 调试面板工具函数
-// ============================================================================
-
-const ensureDebugPanelOpen = async (page: Page) => {
-    const panel = page.getByTestId('debug-panel');
-    if (await panel.isVisible().catch(() => false)) return;
-    await page.getByTestId('debug-toggle').click();
-    await expect(panel).toBeVisible({ timeout: 5000 });
-};
-
-const closeDebugPanel = async (page: Page) => {
-    const panel = page.getByTestId('debug-panel');
-    if (await panel.isVisible().catch(() => false)) {
-        await page.getByTestId('debug-toggle').click();
-        await expect(panel).toBeHidden({ timeout: 5000 });
-    }
-};
-
-const ensureDebugStateTab = async (page: Page) => {
-    await ensureDebugPanelOpen(page);
-    const stateTab = page.getByTestId('debug-tab-state');
-    if (await stateTab.isVisible().catch(() => false)) await stateTab.click();
-};
-
-const readCoreState = async (page: Page) => {
-    await ensureDebugStateTab(page);
-    const raw = await page.getByTestId('debug-state-json').innerText();
-    const parsed = JSON.parse(raw) as { core?: Record<string, unknown> };
-    return JSON.parse(JSON.stringify(parsed?.core ?? parsed)) as Record<string, unknown>;
-};
-
-// ============================================================================
 // 本地模式入口
 // ============================================================================
 
@@ -82,19 +50,20 @@ const completeFactionSelectionLocal = async (page: Page) => {
         const name = factionNames[i];
 
         // 等待派系网格可见且没有弹窗遮挡
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(600);
 
         // 通过派系名称文本找到对应卡片的父级可点击容器
         const factionCard = page.locator('h3').filter({ hasText: new RegExp(`^${name}$`, 'i') }).first()
             .locator('xpath=ancestor::div[contains(@class,"group")]').first();
         await expect(factionCard).toBeVisible({ timeout: 5000 });
-        await factionCard.click();
+        await factionCard.click({ force: true });
         
         // 等待弹窗出现：确认按钮或已选/已被占用的状态
         const confirmBtn = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
         await expect(confirmBtn).toBeVisible({ timeout: 8000 });
         await expect(confirmBtn).toBeEnabled({ timeout: 3000 });
-        await confirmBtn.click();
+        await page.waitForTimeout(400);
+        await confirmBtn.click({ force: true });
 
         // 等待弹窗关闭（focusedFactionId 被设为 null 后弹窗消失）
         await expect(confirmBtn).toBeHidden({ timeout: 5000 });
@@ -156,7 +125,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
         const handArea = page.getByTestId('su-hand-area');
         const firstCard = handArea.locator('> div > div').first();
         await firstCard.click();
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(600);
 
         // 点击第一个基地
         const bases = page.locator('.group\\/base');
@@ -169,7 +138,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
             const options = promptOverlay.locator('button:not([disabled])');
             if (await options.first().isVisible().catch(() => false)) {
                 await options.first().click();
-                await page.waitForTimeout(500);
+                await page.waitForTimeout(600);
             }
         }
 
@@ -183,23 +152,31 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await page.screenshot({ path: testInfo.outputPath('after-play-card.png') });
     });
 
-    test('本地模式：调试面板可用 → 读取/写入状态', async ({ page }, testInfo) => {
+    test('本地模式：游戏状态正确初始化', async ({ page }, testInfo) => {
         await gotoLocalSmashUp(page);
         await completeFactionSelectionLocal(page);
         await waitForHandArea(page);
 
-        // 调试面板在游戏界面应该可用
-        const debugToggle = page.getByTestId('debug-toggle');
-        await expect(debugToggle).toBeVisible({ timeout: 10000 });
+        // 验证游戏界面核心元素
+        const handArea = page.getByTestId('su-hand-area');
+        await expect(handArea).toBeVisible({ timeout: 5000 });
 
-        // 读取状态
-        const coreState = await readCoreState(page);
-        expect(coreState).toBeTruthy();
-        expect(coreState.players).toBeTruthy();
-        expect(coreState.turnOrder).toBeTruthy();
+        // 验证有手牌
+        const cards = handArea.locator('> div > div');
+        await expect(cards.first()).toBeVisible({ timeout: 5000 });
+        const cardCount = await cards.count();
+        expect(cardCount).toBe(5);
 
-        await page.screenshot({ path: testInfo.outputPath('debug-panel-state.png') });
-        await closeDebugPanel(page);
+        // 验证基地可见
+        const bases = page.locator('.group\\/base');
+        const baseCount = await bases.count();
+        expect(baseCount).toBeGreaterThanOrEqual(3);
+
+        // 验证结束回合按钮可见
+        const finishBtn = page.getByRole('button', { name: /Finish Turn|结束回合/i });
+        await expect(finishBtn).toBeVisible({ timeout: 5000 });
+
+        await page.screenshot({ path: testInfo.outputPath('game-state-initialized.png') });
     });
 
     test('本地模式：多回合循环正常', async ({ page }, testInfo) => {
@@ -226,7 +203,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
                     const throwBtn = page.getByRole('button', { name: /Throw Away|丢弃并继续/i });
                     if (await throwBtn.isEnabled().catch(() => false)) {
                         await throwBtn.click();
-                        await page.waitForTimeout(500);
+                        await page.waitForTimeout(600);
                     }
                 }
 
@@ -234,7 +211,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
                 const meFirstPass = page.getByTestId('me-first-pass-button');
                 if (await meFirstPass.isVisible().catch(() => false)) {
                     await meFirstPass.click();
-                    await page.waitForTimeout(500);
+                    await page.waitForTimeout(600);
                 }
             }
         }

@@ -34,6 +34,8 @@ export type DiceThroneMoveMap = {
     // 奖励骰重掷
     rerollBonusDie: (dieIndex: number) => void;
     skipBonusDiceReroll: () => void;
+    // 被动能力（如教皇税）
+    usePassiveAbility: (passiveId: string, actionIndex: number, targetDieId?: number) => void;
     // 选角相关
     selectCharacter: (characterId: string) => void;
     hostStartGame: () => void;
@@ -72,6 +74,9 @@ export const resolveMoves = (
     // 奖励骰重掷
     rerollBonusDie: (dieIndex) => dispatch('REROLL_BONUS_DIE', { dieIndex }),
     skipBonusDiceReroll: () => dispatch('SKIP_BONUS_DICE_REROLL', {}),
+    // 被动能力
+    usePassiveAbility: (passiveId, actionIndex, targetDieId) =>
+        dispatch('USE_PASSIVE_ABILITY', { passiveId, actionIndex, targetDieId }),
     selectCharacter: (characterId) => dispatch('SELECT_CHARACTER', { characterId }),
     hostStartGame: () => dispatch('HOST_START_GAME', {}),
     playerReady: () => dispatch('PLAYER_READY', {}),

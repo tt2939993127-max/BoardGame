@@ -139,11 +139,12 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
         const rollerId = turnPhase === 'defensiveRoll' && core.pendingAttack
             ? core.pendingAttack.defenderId
             : core.activePlayerId;
-        // 防御阶段掷骰前（未选择防御技能）：列出所有防御技能供选择（不检查骰面）
+        // 防御阶段掷骰前：列出所有防御技能供选择/切换（不检查骰面）
         // 规则 §3.6 步骤 2：先选择防御技能，再掷骰
+        // 暗影刺客等拥有多个防御技能的英雄，在投掷前可以自由切换选择
         const isPreRollDefenseSelection = turnPhase === 'defensiveRoll'
-            && core.pendingAttack
-            && !core.pendingAttack.defenseAbilityId;
+            && core.rollCount === 0
+            && core.pendingAttack;
         const availableAbilityIds = isPreRollDefenseSelection
             ? getDefensiveAbilityIds(core, rollerId)
             : isRollPhase

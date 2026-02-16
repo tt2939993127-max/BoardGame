@@ -86,28 +86,17 @@ const resolveRegistryFilePath = (key: string): string => {
 
 describe.skipIf(!registryExists)('DiceThrone 音效配置属性测试', () => {
     describe('属性 1：CP 变化音效正确性', () => {
-        it('应对所有 CP 变化值返回正确的音效键', () => {
-            
-            // 测试多个随机 delta 值
-            const testCases = [
-                { delta: 5, expected: CP_GAIN_KEY },
-                { delta: 1, expected: CP_GAIN_KEY },
-                { delta: 0, expected: CP_GAIN_KEY },
-                { delta: -1, expected: CP_SPEND_KEY },
-                { delta: -3, expected: CP_SPEND_KEY },
-                { delta: -10, expected: CP_SPEND_KEY },
-                { delta: 100, expected: CP_GAIN_KEY },
-                { delta: -100, expected: CP_SPEND_KEY },
-            ];
+        it('CP_CHANGED 应返回 null（音效由 FX 飞行动画 onImpact 播放）', () => {
+            const testDeltas = [5, 1, 0, -1, -3, -10, 100, -100];
 
-            for (const { delta, expected } of testCases) {
+            for (const delta of testDeltas) {
                 const event: AudioEvent = { type: 'CP_CHANGED', payload: { delta } };
                 const result = resolveKey(event);
-                expect(result).toBe(expected);
+                expect(result).toBeNull();
             }
         });
 
-        it('CP 音效 key 必须存在于 registry', () => {
+        it('CP 音效 key 必须存在于 registry（供 FX 系统使用）', () => {
             expect(registryMap.has(CP_GAIN_KEY)).toBe(true);
             expect(registryMap.has(CP_SPEND_KEY)).toBe(true);
         });

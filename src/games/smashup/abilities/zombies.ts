@@ -14,7 +14,7 @@ import type {
     MinionCardDef,
     MinionPlayedEvent,
 } from '../domain/types';
-import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerRestriction, registerTrigger } from '../domain/ongoingEffects';
@@ -47,22 +47,21 @@ export function registerZombieAbilities(): void {
         getPlayableCards(core, playerId) {
             const player = core.players[playerId];
             if (!player) return [];
-            // 每回合限一次
+            // 每回合限一次（能力级别限制，不是卡牌级别）
             if (player.usedDiscardPlayAbilities?.includes('zombie_tenacious_z')) return [];
             const cards = player.discard.filter(c => c.defId === 'zombie_tenacious_z');
             if (cards.length === 0) return [];
-            // 只取第一张（每回合只能用一个顽强丧尸的能力）
-            const card = cards[0];
-            const def = getCardDef(card.defId) as MinionCardDef | undefined;
-            return [{
+            // 返回所有同 defId 的卡牌，用户选哪张都行（同名卡无区别）
+            const def = getCardDef('zombie_tenacious_z') as MinionCardDef | undefined;
+            return cards.map(card => ({
                 card,
-                allowedBaseIndices: 'all',
+                allowedBaseIndices: 'all' as const,
                 consumesNormalLimit: false, // 额外打出，不消耗正常额度
                 sourceId: 'zombie_tenacious_z',
                 defId: card.defId,
                 power: def?.power ?? 0,
                 name: def?.name ?? card.defId,
-            }];
+            }));
         },
     });
 
@@ -103,7 +102,7 @@ export function registerZombieAbilities(): void {
 function zombieGraveDigger(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const minionsInDiscard = player.discard.filter(c => c.type === 'minion');
-    if (minionsInDiscard.length === 0) return { events: [] };
+    if (minionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     const options = minionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
@@ -120,7 +119,7 @@ function zombieGraveDigger(ctx: AbilityContext): AbilityResult {
 /** 行尸 onPlay：查看牌库顶，选择弃掉或放回 */
 function zombieWalker(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    if (player.deck.length === 0) return { events: [] };
+    if (player.deck.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.deck_empty', ctx.now)] };
     const topCard = player.deck[0];
     const def = getCardDef(topCard.defId);
     const cardName = def?.name ?? topCard.defId;
@@ -144,7 +143,7 @@ function zombieWalker(ctx: AbilityContext): AbilityResult {
 /** 掘墓 onPlay：从弃牌堆取回一张卡到手牌 */
 function zombieGraveRobbing(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    if (player.discard.length === 0) return { events: [] };
+    if (player.discard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     const options = player.discard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
@@ -161,7 +160,7 @@ function zombieGraveRobbing(ctx: AbilityContext): AbilityResult {
 function zombieNotEnoughBullets(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const minionsInDiscard = player.discard.filter(c => c.type === 'minion');
-    if (minionsInDiscard.length === 0) return { events: [] };
+    if (minionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     // 按 defId 分组
     const groups = new Map<string, { defId: string; uids: string[]; name: string }>();
     for (const c of minionsInDiscard) {
@@ -186,7 +185,7 @@ function zombieNotEnoughBullets(ctx: AbilityContext): AbilityResult {
 /** 借把手 onPlay：选择任意数量的牌从弃牌堆洗回牌库 */
 function zombieLendAHand(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    if (player.discard.length === 0) return { events: [] };
+    if (player.discard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     const options = player.discard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
@@ -211,11 +210,11 @@ function zombieOutbreak(ctx: AbilityContext): AbilityResult {
             emptyBases.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
         }
     }
-    if (emptyBases.length === 0) return { events: [] };
+    if (emptyBases.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // 检查手牌中是否有随从
     const player = ctx.state.players[ctx.playerId];
     const handMinions = player.hand.filter(c => c.type === 'minion' && c.uid !== ctx.cardUid);
-    if (handMinions.length === 0) return { events: [] };
+    if (handMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.hand_empty', ctx.now)] };
     // 第一步：选择基地
     const baseOptions = buildBaseTargetOptions(emptyBases);
     const interaction = createSimpleChoice(
@@ -239,7 +238,7 @@ function zombieLord(ctx: AbilityContext): AbilityResult {
             emptyBases.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
         }
     }
-    if (emptyBases.length === 0) return { events: [] };
+    if (emptyBases.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     // 找弃牌堆中力量≤2的随从
     const player = ctx.state.players[ctx.playerId];
     const discardMinions = player.discard.filter(c => {
@@ -247,7 +246,7 @@ function zombieLord(ctx: AbilityContext): AbilityResult {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         return def != null && def.power <= 2;
     });
-    if (discardMinions.length === 0) return { events: [] };
+    if (discardMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     // 单步交互：展示弃牌堆可选随从，玩家选随从+点基地一起响应
     const interaction = zombieLordBuildInteraction(ctx.playerId, discardMinions, emptyBases, [], [], ctx.now);
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -290,7 +289,7 @@ function zombieLordBuildInteraction(
 /** 进发商场 onPlay：选择一个卡名，搜索牌库中所有同名卡放入弃牌堆 */
 function zombieMallCrawl(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
-    if (player.deck.length === 0) return { events: [] };
+    if (player.deck.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.deck_empty', ctx.now)] };
     // 按 defId 分组
     const groups = new Map<string, { defId: string; uids: string[] }>();
     for (const c of player.deck) {
@@ -326,7 +325,7 @@ function zombieMallCrawl(ctx: AbilityContext): AbilityResult {
 function zombieTheyKeepComing(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const minionsInDiscard = player.discard.filter(c => c.type === 'minion');
-    if (minionsInDiscard.length === 0) return { events: [] };
+    if (minionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     const options = minionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
         const name = def?.name ?? c.defId;
@@ -443,7 +442,15 @@ export function registerZombieInteractionHandlers(): void {
         const { defId } = value as { defId: string };
         const player = state.core.players[playerId];
         const sameNameCards = player.deck.filter(c => c.defId === defId);
-        if (sameNameCards.length === 0) return { state, events: [] };
+        if (sameNameCards.length === 0) {
+            // 牌库中未找到同名卡（极端边缘情况），规则仍要求重洗牌库
+            const shuffled = random.shuffle([...player.deck]);
+            const deckUids = [...shuffled.map(c => c.uid), ...player.discard.map(c => c.uid)];
+            return { state, events: [
+                { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids }, timestamp } as DeckReshuffledEvent,
+                buildAbilityFeedback(playerId, 'feedback.deck_search_no_match', timestamp),
+            ] };
+        }
         const uids = sameNameCards.map(c => c.uid);
         // 剩余牌库洗牌，同名卡放在最前面（它们会被后续 CARDS_DISCARDED 移走）
         const remainingDeck = player.deck.filter(c => c.defId !== defId);

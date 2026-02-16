@@ -245,7 +245,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
     expect(result.error).toContain('同名');
   });
 
-  it('空弃牌列表时验证通过', () => {
+  it('空弃牌列表时验证失败（必须至少弃除1张）', () => {
     const state = createPaladinState();
     clearArea(state, [3, 4, 5], [1, 2, 3]);
 
@@ -269,7 +269,7 @@ describe('雅各布 - 圣光箭 (holy_arrow) execute 流程', () => {
       playerId: '0',
       timestamp: fixedTimestamp,
     });
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
   });
 });
 

@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 // ============================================================================
 // 核心类型定义
@@ -31,8 +32,12 @@ export interface BuffInstance<TData = any> {
  * Buff 视觉配置
  */
 export interface BuffVisualConfig {
-  /** 显示标签 */
+  /** 显示标签（直接文本或 i18n fallback） */
   label: string;
+  /** i18n key（优先于 label） */
+  labelKey?: string;
+  /** i18n namespace（配合 labelKey 使用） */
+  labelNs?: string;
   /** 图标组件 */
   icon: React.ComponentType<{ className?: string }>;
   /** 图标颜色（Tailwind 类名） */
@@ -128,15 +133,25 @@ interface BuffIconBadgeProps {
   onClick?: (buff: BuffInstance) => void;
 }
 
+/** 解析 buff label：优先使用 i18n key，fallback 到 label 文本 */
+function useBuffLabel(visualConfig: BuffVisualConfig): string {
+  const { t } = useTranslation(visualConfig.labelNs);
+  if (visualConfig.labelKey && visualConfig.labelNs) {
+    return t(visualConfig.labelKey, visualConfig.label);
+  }
+  return visualConfig.label;
+}
+
 export const BuffIconBadge: React.FC<BuffIconBadgeProps> = ({ buff, visualConfig, onClick }) => {
   const Icon = visualConfig.icon;
+  const resolvedLabel = useBuffLabel(visualConfig);
   // 只有来源卡牌有精灵图配置时才可点击
   const clickable = !!onClick && !!buff.spriteConfig;
 
   return (
     <div
       className={`relative w-[1.4vw] h-[1.4vw] rounded-full ${visualConfig.bgColor} flex items-center justify-center shadow-lg border-2 border-white/40 ${clickable ? 'cursor-pointer pointer-events-auto hover:brightness-125 transition-[filter]' : ''}`}
-      title={visualConfig.label}
+      title={resolvedLabel}
       onClick={clickable ? (e) => { e.stopPropagation(); onClick(buff); } : undefined}
     >
       <Icon className={`w-[0.9vw] h-[0.9vw] ${visualConfig.iconColor}`} />
@@ -250,11 +265,23 @@ interface BuffDetailsPanelProps<TGameState = any, TEntity = any> {
   renderBuffDetail?: (buff: BuffInstance, visualConfig: BuffVisualConfig) => React.ReactNode;
 }
 
+/** 默认 buff 详情行（支持 i18n label） */
+const DefaultBuffDetailRow: React.FC<{ visualConfig: BuffVisualConfig }> = ({ visualConfig }) => {
+  const resolvedLabel = useBuffLabel(visualConfig);
+  const Icon = visualConfig.icon;
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className={`w-[1vw] h-[1vw] ${visualConfig.iconColor.replace('100', '400')} flex-shrink-0`} />
+      <span className="text-gray-200">{resolvedLabel}</span>
+    </div>
+  );
+};
+
 export function BuffDetailsPanel<TGameState = any, TEntity = any>({
   entity,
   gameState,
   registry,
-  title = '当前状态',
+  title,
   className = '',
   renderBuffDetail,
 }: BuffDetailsPanelProps<TGameState, TEntity>) {
@@ -266,9 +293,11 @@ export function BuffDetailsPanel<TGameState = any, TEntity = any>({
 
   return (
     <div className={`bg-black/95 text-white text-[0.7vw] rounded-lg px-3 py-2 shadow-2xl border border-white/30 min-w-[14vw] backdrop-blur-sm ${className}`}>
-      <div className="font-bold mb-2 text-amber-400 text-[0.75vw] border-b border-amber-400/30 pb-1">
-        {title}
-      </div>
+      {title && (
+        <div className="font-bold mb-2 text-amber-400 text-[0.75vw] border-b border-amber-400/30 pb-1">
+          {title}
+        </div>
+      )}
       <div className="space-y-1.5">
         {buffs.map((buff, index) => {
           const visualConfig = registry.getVisualConfig(buff.type);
@@ -278,13 +307,7 @@ export function BuffDetailsPanel<TGameState = any, TEntity = any>({
             return <div key={index}>{renderBuffDetail(buff, visualConfig)}</div>;
           }
 
-          const Icon = visualConfig.icon;
-          return (
-            <div key={index} className="flex items-center gap-2">
-              <Icon className={`w-[1vw] h-[1vw] ${visualConfig.iconColor.replace('100', '400')} flex-shrink-0`} />
-              <span className="text-gray-200">{visualConfig.label}</span>
-            </div>
-          );
+          return <DefaultBuffDetailRow key={index} visualConfig={visualConfig} />;
         })}
       </div>
     </div>

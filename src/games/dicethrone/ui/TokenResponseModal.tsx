@@ -107,7 +107,7 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
     const isOpen = Boolean(pendingDamage && responsePhase);
 
     // 辅助函数：渲染 Token 图标
-    const renderTokenIcon = (tokenId: string, fallbackIcon: string) => {
+    const renderTokenIcon = (tokenId: string, _fallbackIcon: string) => {
         const meta = TOKEN_META[tokenId];
         if (meta && statusIconAtlas) {
             return (
@@ -116,7 +116,8 @@ export const TokenResponseModal: React.FC<TokenResponseModalProps> = ({
                 </div>
             );
         }
-        return <span className="text-2xl">{fallbackIcon}</span>;
+        // 无精灵图时显示渐变圆形
+        return <div className={`w-8 h-8 flex-shrink-0 rounded-full bg-gradient-to-br ${meta?.color ?? 'from-gray-500 to-gray-600'}`} />;
     };
 
     return (

@@ -456,6 +456,11 @@ export function useCellInteraction({
     // 事件卡/多步骤模式优先处理
     if (eventCardModes.handleEventModeClick(gameRow, gameCol)) return;
 
+    // 技能选卡模式（圣光箭/治疗弃牌选择）：拦截格子点击，防止重复触发
+    if (abilityMode && abilityMode.step === 'selectCards') {
+      return; // 选卡模式下只允许手牌交互，不响应棋盘点击
+    }
+
     // 技能单位选择模式（火祀召唤、吸取生命、幻化、结构变换等）
     if (abilityMode && abilityMode.step === 'selectUnit') {
       const isValid = validAbilityUnits.some(p => p.row === gameRow && p.col === gameCol);
@@ -910,38 +915,37 @@ export function useCellInteraction({
     const selected = abilityMode.selectedCardIds ?? [];
     
     if (abilityMode.abilityId === 'holy_arrow') {
-      // ✅ 允许选择 0 张卡（跳过）
-      setPendingBeforeAttack({
-        abilityId: 'holy_arrow',
-        sourceUnitId: abilityMode.sourceUnitId,
-        discardCardIds: selected,
-      });
+      // "任意数量"包括 0，允许不选择任何卡直接确认
       
-      // ✅ 如果有 pendingAttackTarget，立即发送攻击命令
+      // 有 pendingAttackTarget 时立即发送攻击命令
       if (abilityMode.pendingAttackTarget && core.selectedUnit) {
         dispatch(SW_COMMANDS.DECLARE_ATTACK, {
           attacker: core.selectedUnit,
           target: abilityMode.pendingAttackTarget,
-          beforeAttack: {
+          beforeAttack: selected.length > 0 ? {
             abilityId: 'holy_arrow',
             discardCardIds: selected,
-          },
+          } : undefined,
         });
         setAbilityMode(null);
         setPendingBeforeAttack(null);
         return;
       }
+      
+      // 旧流程（无 pendingAttackTarget）
+      if (selected.length > 0) {
+        setPendingBeforeAttack({
+          abilityId: 'holy_arrow',
+          sourceUnitId: abilityMode.sourceUnitId,
+          discardCardIds: selected,
+        });
+      }
     }
     
     if (abilityMode.abilityId === 'healing') {
-      // ✅ 允许选择 0 张卡（跳过）
-      setPendingBeforeAttack({
-        abilityId: 'healing',
-        sourceUnitId: abilityMode.sourceUnitId,
-        targetCardId: selected[0],
-      });
+      // "你可以"弃牌，允许不选择任何卡直接确认
       
-      // ✅ 如果有 pendingAttackTarget，立即发送攻击命令
+      // 有 pendingAttackTarget 时立即发送攻击命令
       if (abilityMode.pendingAttackTarget && core.selectedUnit) {
         dispatch(SW_COMMANDS.DECLARE_ATTACK, {
           attacker: core.selectedUnit,
@@ -955,10 +959,19 @@ export function useCellInteraction({
         setPendingBeforeAttack(null);
         return;
       }
+      
+      // 旧流程（无 pendingAttackTarget）
+      if (selected.length > 0) {
+        setPendingBeforeAttack({
+          abilityId: 'healing',
+          sourceUnitId: abilityMode.sourceUnitId,
+          targetCardId: selected[0],
+        });
+      }
     }
     
     setAbilityMode(null);
-  }, [abilityMode, core, dispatch]);
+  }, [abilityMode, core, dispatch, showToast, t]);
 
   const handleCancelBeforeAttack = useCallback(() => {
     // ✅ 如果是被动触发模式（有 pendingAttackTarget），跳过能力并直接攻击

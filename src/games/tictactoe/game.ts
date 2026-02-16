@@ -4,7 +4,7 @@
  * 使用领域内核 + 引擎适配器
  */
 
-import type { ActionLogEntry, Command, GameEvent, MatchState } from '../../engine/types';
+import type { ActionLogEntry, ActionLogSegment, Command, GameEvent, MatchState } from '../../engine/types';
 import {
     createActionLogSystem,
     createLogSystem,
@@ -22,6 +22,18 @@ import { TicTacToeDomain } from './domain';
 // ============================================================================
 
 const ACTION_ALLOWLIST = ['CLICK_CELL'] as const;
+
+const TT_NS = 'game-tictactoe';
+
+const i18nSeg = (
+    key: string,
+    params?: Record<string, string | number>,
+): ActionLogSegment => ({
+    type: 'i18n' as const,
+    ns: TT_NS,
+    key,
+    ...(params ? { params } : {}),
+});
 
 function formatTicTacToeActionEntry({
     command,
@@ -42,7 +54,7 @@ function formatTicTacToeActionEntry({
         timestamp,
         actorId: command.playerId,
         kind: command.type,
-        segments: [{ type: 'text', text: `落子：${row},${col}` }],
+        segments: [i18nSeg('actionLog.cellClicked', { row, col })],
     };
 }
 

@@ -329,6 +329,41 @@ isGameOver: (core) => {
 
 ---
 
+## 被动触发能力（beforeAttack）交互模式（SummonerWars）
+
+> 攻击前自动触发的被动能力（如圣光箭 `holy_arrow`、治疗 `healing`、生命汲取 `life_drain`），使用 `abilityMode` 状态驱动 UI，**不使用弹窗式 `CardSelectorOverlay`**。
+
+### 交互流程
+
+1. 玩家点击攻击目标 → `useCellInteraction` 检测攻击者是否有 `passiveTrigger: 'beforeAttack'` 能力
+2. 有被动能力 → 设置 `abilityMode = { step: 'selectCards', context: 'beforeAttack', pendingAttackTarget, ... }`
+3. **StatusBanners** 渲染 amber 横幅，显示能力提示文本 + "确认弃牌"按钮 + "跳过"按钮
+4. **HandArea** 收到 `abilitySelectingCards=true`，手牌区直接高亮可选，点击手牌切换选中状态（`data-selected="true/false"`）
+5. 点击"确认弃牌"（`onConfirmBeforeAttackCards`）→ 发送 `DECLARE_ATTACK` 命令（带 `beforeAttack` payload）
+6. 点击"跳过"（`onCancelBeforeAttack`）→ 发送 `DECLARE_ATTACK` 命令（不带 `beforeAttack`）
+
+### UI 选择器（E2E 测试强制）
+
+| 元素 | 正确选择器 | ❌ 错误选择器 |
+|------|-----------|-------------|
+| 确认弃牌按钮 | `button:has-text("Confirm Discard")` 或 `button:has-text("确认弃牌")` | ❌ `[data-testid="sw-card-selector-overlay"] button` |
+| 跳过按钮 | `button:has-text("Skip")` 或 `button:has-text("跳过")` | ❌ overlay 内的跳过按钮 |
+| 手牌选择 | `[data-testid="sw-hand-area"] [data-card-type="unit"]` 直接点击 | ❌ `[data-testid="sw-card-selector-overlay"] [data-card-type]` |
+| 选中状态验证 | `[data-selected="true"]` | — |
+
+### 关键文件
+
+- `useCellInteraction.ts` — `handleCellClick` 中检测被动能力并设置 `abilityMode`
+- `StatusBanners.tsx` — 渲染 `abilityMode.step === 'selectCards'` 时的横幅和按钮
+- `HandArea.tsx` — `abilitySelectingCards` prop 控制手牌选择模式（绕过魔力检查）
+- `abilities-paladin.ts` — `holy_arrow`/`healing` 的 `passiveTrigger: 'beforeAttack'` 定义
+
+### 教训
+
+此模式从"青色波纹按钮手动触发"重构为"攻击时自动弹出确认横幅"。重构后 E2E 测试未同步更新选择器（仍查找 `sw-card-selector-overlay`），导致测试从未真正执行过弃牌选择流程。**重构 UI 交互模式后，必须同步更新所有 E2E 测试的选择器**。
+
+---
+
 ## 通用能力约束系统（强制）
 
 > **新游戏必须使用**。现有游戏（SummonerWars）标记为过时但保持兼容。
@@ -860,6 +895,17 @@ useEffect(() => {
 - **用途**：`onAutoContinueCheck` 中，战斗阶段（如 `offensiveRoll`/`defensiveRoll`）只在 `state.sys.flowHalted === true` 时才尝试自动推进。这样可以精确区分"onPhaseExit halt 后的阻塞清除"和"卡牌效果中的阻塞清除"。
 - **禁止**：在业务数据（如 `PendingBonusDiceSettlement`）中打 `phaseExitHalt` 标记来区分来源。流程控制信息应由引擎层追踪，不应污染业务数据。
 - **所有游戏受益**：新游戏的 `onAutoContinueCheck` 可直接读取 `state.sys.flowHalted` 判断是否处于 halt 恢复状态。
+
+---
+
+## onPhaseEnter 返回 PhaseEnterResult（强制）
+
+`FlowHooks.onPhaseEnter` 支持三种返回值：`GameEvent[]`（纯事件）、`PhaseEnterResult`（事件 + updatedState）、`void`。
+
+- **何时使用 `PhaseEnterResult`**：当 `onPhaseEnter` 中触发的能力（基地能力、ongoing 效果等）创建了 Interaction 或修改了 `sys` 状态时，必须通过 `{ events, updatedState }` 返回更新后的 `matchState`，由引擎层合并到最终状态。
+- **禁止变异 `state.sys`**：`onPhaseEnter` 接收的 `state` 参数是引擎层创建的新对象，直接变异 `state.sys` 虽然在当前实现中碰巧能传播，但属于未定义行为，未来引擎重构可能导致静默丢失。
+- **与 `PhaseExitResult` 的区别**：`PhaseEnterResult` 没有 `halt`（阶段已切换）和 `overrideNextPhase`（不适用），只有 `events` 和 `updatedState`。
+- **引擎层处理**：`executePhaseAdvance` 检测到 `updatedState` 后，将其 `sys` 合并到 `nextState`（保留 `phase` 和 `flowHalted`），确保 Interaction 等 sys 变更不丢失。
 
 ---
 

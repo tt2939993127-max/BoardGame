@@ -336,6 +336,21 @@ export function LocalGameProvider({
         reset,
     }), [state, dispatch, matchPlayers, reset]);
 
+    // E2E 测试支持：在本地/教程模式下暴露 dispatch 和 state 到 window，供 Playwright 直接操作
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const w = window as Window & {
+            __BG_LOCAL_DISPATCH__?: typeof dispatch;
+            __BG_LOCAL_STATE__?: typeof state;
+        };
+        w.__BG_LOCAL_DISPATCH__ = dispatch;
+        w.__BG_LOCAL_STATE__ = state;
+        return () => {
+            delete w.__BG_LOCAL_DISPATCH__;
+            delete w.__BG_LOCAL_STATE__;
+        };
+    }, [dispatch, state]);
+
     return (
         <GameClientContext.Provider value={value}>
             {children}

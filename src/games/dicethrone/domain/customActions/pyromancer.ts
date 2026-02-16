@@ -420,35 +420,6 @@ const resolveMagmaArmor = (ctx: CustomActionContext, _diceCount: number, dmgPerF
 
 
 /**
- * 地狱拥抱 (Infernal Embrace) 结算
- */
-const resolveInfernalEmbrace = (ctx: CustomActionContext): DiceThroneEvent[] => {
-    if (!ctx.random) return [];
-    const roll = ctx.random.d(6);
-    const face = getPlayerDieFace(ctx.state, ctx.attackerId, roll) ?? '';
-    const events: DiceThroneEvent[] = [{
-        type: 'BONUS_DIE_ROLLED',
-        payload: { value: roll, face, playerId: ctx.attackerId, targetPlayerId: ctx.attackerId, effectKey: `bonusDie.effect.infernalEmbrace.${roll}` },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: ctx.timestamp
-    } as BonusDieRolledEvent];
-
-    if (face === PYROMANCER_DICE_FACE_IDS.METEOR) {
-        const currentFM = getFireMasteryCount(ctx);
-        const limit = ctx.state.players[ctx.attackerId]?.tokenStackLimits?.[TOKEN_IDS.FIRE_MASTERY] || 5;
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: ctx.attackerId, tokenId: TOKEN_IDS.FIRE_MASTERY, amount: Math.max(0, limit - currentFM), newTotal: limit, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + 0.1
-        } as TokenGrantedEvent);
-    } else {
-        events.push(...buildDrawEvents(ctx.state, ctx.attackerId, 1, ctx.random, 'ABILITY_EFFECT', ctx.timestamp + 0.1));
-    }
-    return events;
-};
-
-/**
  * 炎爆术逻辑
  */
 const getPyroBlastDieEffect = (face: string) => {
@@ -622,8 +593,6 @@ export function registerPyromancerCustomActions(): void {
 
     registerCustomActionHandler('increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
     registerCustomActionHandler('pyro-increase-fm-limit', resolveIncreaseFMLimit, { categories: ['resource'] });
-
-    registerCustomActionHandler('pyro-infernal-embrace', resolveInfernalEmbrace, { categories: ['resource', 'other'] });
 
     registerCustomActionHandler('pyro-details-dmg-per-fm', resolveDmgPerFM, { categories: ['damage'] });
     registerCustomActionHandler('pyro-spend-cp-for-fm', resolveSpendCpForFM, { categories: ['resource', 'choice'] });

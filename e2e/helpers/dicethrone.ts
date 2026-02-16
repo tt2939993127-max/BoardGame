@@ -311,6 +311,61 @@ export const dragCardUp = async (page: Page, cardId: string, distance = 220) => 
     await page.mouse.up();
 };
 
+/**
+ * 通过 LocalGameProvider 暴露的 dispatch 直接分发命令（本地/教程模式专用）。
+ * 当 framer-motion 拖拽在 Playwright 中不可靠时，用此函数替代 dragCardUp。
+ */
+export const dispatchLocalCommand = async (
+    page: Page,
+    commandType: string,
+    payload: Record<string, unknown> = {},
+) => {
+    await page.evaluate(
+        ({ type, pl }) => {
+            const w = window as Window & { __BG_LOCAL_DISPATCH__?: (type: string, payload: unknown) => void };
+            if (!w.__BG_LOCAL_DISPATCH__) throw new Error('__BG_LOCAL_DISPATCH__ 未暴露，非本地/教程模式');
+            w.__BG_LOCAL_DISPATCH__(type, pl);
+        },
+        { type: commandType, pl: payload },
+    );
+};
+
+/**
+ * 通过 dispatch SYS_CHEAT_SET_STATE 修改 core 状态（本地/教程模式专用）。
+ * 避免使用 debug panel UI 交互（在某些场景下 debug panel 交互不稳定）。
+ * patches 格式：{ "players.0.tokens.purify": 1, "players.0.resources.cp": 2 }
+ */
+export const patchCoreViaDispatch = async (
+    page: Page,
+    patches: Record<string, unknown>,
+) => {
+    await page.evaluate(
+        (p) => {
+            const w = window as Window & {
+                __BG_LOCAL_DISPATCH__?: (type: string, payload: unknown) => void;
+                __BG_LOCAL_STATE__?: { core?: Record<string, unknown> };
+            };
+            if (!w.__BG_LOCAL_DISPATCH__) throw new Error('__BG_LOCAL_DISPATCH__ 未暴露');
+            if (!w.__BG_LOCAL_STATE__) throw new Error('__BG_LOCAL_STATE__ 未暴露');
+            const core = JSON.parse(JSON.stringify(w.__BG_LOCAL_STATE__.core ?? {})) as Record<string, unknown>;
+            // 应用 patches（支持点号路径）
+            for (const [path, value] of Object.entries(p)) {
+                const parts = path.split('.');
+                let obj = core as Record<string, unknown>;
+                for (let i = 0; i < parts.length - 1; i++) {
+                    if (obj[parts[i]] === undefined || obj[parts[i]] === null) {
+                        obj[parts[i]] = {};
+                    }
+                    obj = obj[parts[i]] as Record<string, unknown>;
+                }
+                obj[parts[parts.length - 1]] = value;
+            }
+            w.__BG_LOCAL_DISPATCH__('SYS_CHEAT_SET_STATE', { state: core });
+        },
+        patches,
+    );
+};
+
 /** 等待教学步骤 */
 export const waitForTutorialStep = async (page: Page, stepId: string, timeout = 15000) => {
     await page.waitForFunction(
@@ -469,6 +524,11 @@ export const setupOnlineMatch = async (
     await initContext(hostContext, { storageKey: '__dt_storage_reset' });
     const hostPage = await hostContext.newPage();
 
+    // 先导航到首页预热 Vite 模块缓存（避免直接导航到对局页面时模块加载不完整）
+    await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+    // 等待 React 应用完全加载（游戏列表渲染 = Vite 模块缓存已预热）
+    await hostPage.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
+
     if (!(await ensureGameServerAvailable(hostPage))) return null;
 
     const matchId = await createRoomViaAPI(hostPage);
@@ -485,6 +545,10 @@ export const setupOnlineMatch = async (
     const guestContext = await browser.newContext({ baseURL });
     await initContext(guestContext, { storageKey: '__dt_storage_reset_g' });
     const guestPage = await guestContext.newPage();
+
+    // guest 也先预热 Vite 模块缓存
+    await guestPage.goto('/', { waitUntil: 'domcontentloaded' });
+    await guestPage.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
 
     const guestCredentials = await joinMatchViaAPI(guestPage, GAME_NAME, matchId, '1', 'Guest-E2E');
     if (!guestCredentials) {

@@ -171,6 +171,8 @@ export function registerProtection(
     checker: ProtectionChecker,
     options?: { consumable?: boolean }
 ): void {
+    // 去重保护：同一 sourceDefId + protectionType 只注册一次（防止 HMR 重复注册）
+    if (protectionRegistry.some(e => e.sourceDefId === sourceDefId && e.protectionType === protectionType)) return;
     protectionRegistry.push({ sourceDefId, protectionType, checker, consumable: options?.consumable });
 }
 
@@ -180,6 +182,8 @@ export function registerRestriction(
     restrictionType: RestrictionType,
     checker: RestrictionChecker
 ): void {
+    // 去重保护：同一 sourceDefId + restrictionType 只注册一次（防止 HMR 重复注册）
+    if (restrictionRegistry.some(e => e.sourceDefId === sourceDefId && e.restrictionType === restrictionType)) return;
     restrictionRegistry.push({ sourceDefId, restrictionType, checker });
 }
 
@@ -189,6 +193,8 @@ export function registerTrigger(
     timing: TriggerTiming,
     callback: TriggerCallback
 ): void {
+    // 去重保护：同一 sourceDefId + timing 只注册一次（防止 HMR 重复注册）
+    if (triggerRegistry.some(e => e.sourceDefId === sourceDefId && e.timing === timing)) return;
     triggerRegistry.push({ sourceDefId, timing, callback });
 }
 
@@ -197,6 +203,8 @@ export function registerInterceptor(
     sourceDefId: string,
     interceptor: EventInterceptor
 ): void {
+    // 去重保护：同一 sourceDefId 只注册一次（防止 HMR 重复注册）
+    if (interceptorRegistry.some(e => e.sourceDefId === sourceDefId)) return;
     interceptorRegistry.push({ sourceDefId, interceptor });
 }
 
@@ -205,6 +213,8 @@ export function registerBaseAbilitySuppression(
     sourceDefId: string,
     checker: BaseAbilitySuppressionChecker
 ): void {
+    // 去重保护：同一 sourceDefId 只注册一次（防止 HMR 重复注册）
+    if (baseAbilitySuppressionRegistry.some(e => e.sourceDefId === sourceDefId)) return;
     baseAbilitySuppressionRegistry.push({ sourceDefId, checker });
 }
 

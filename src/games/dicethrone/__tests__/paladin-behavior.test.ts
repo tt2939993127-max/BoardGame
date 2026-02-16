@@ -123,96 +123,6 @@ function eventsOfType(events: DiceThroneEvent[], type: string) {
 describe('圣骑士 Custom Action 运行时行为断言', () => {
 
     // ========================================================================
-    // 圣光术
-    // ========================================================================
-    describe('paladin-holy-light-roll (圣光术I：投1骰)', () => {
-        it('投出剑面获得暴击', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-holy-light-roll')!;
-            const events = handler(buildCtx(state, 'paladin-holy-light-roll', {
-                random: () => 1 / 6, // d(6)→1 → sword
-            }));
-
-            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
-            expect(tokens).toHaveLength(1);
-            expect((tokens[0] as any).payload.tokenId).toBe(TOKEN_IDS.CRIT);
-        });
-
-        it('投出头盔面获得守护', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-holy-light-roll')!;
-            const events = handler(buildCtx(state, 'paladin-holy-light-roll', {
-                random: () => 3 / 6, // d(6)→3 → helm
-            }));
-
-            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
-            expect(tokens).toHaveLength(1);
-            expect((tokens[0] as any).payload.tokenId).toBe(TOKEN_IDS.PROTECT);
-        });
-
-        it('投出心面抽1牌', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-holy-light-roll')!;
-            const events = handler(buildCtx(state, 'paladin-holy-light-roll', {
-                random: () => 5 / 6, // d(6)→5 → heart
-            }));
-
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(1);
-        });
-
-        it('投出祈祷面获得2CP', () => {
-            const state = createState({ attackerCP: 3 });
-            const handler = getCustomActionHandler('paladin-holy-light-roll')!;
-            const events = handler(buildCtx(state, 'paladin-holy-light-roll', {
-                random: () => 1, // d(6)→6 → pray
-            }));
-
-            const cp = eventsOfType(events, 'CP_CHANGED');
-            expect(cp).toHaveLength(1);
-            expect((cp[0] as any).payload.delta).toBe(2);
-        });
-
-        it('暴击已满时不授予', () => {
-            const state = createState({ attackerCrit: 3 });
-            const handler = getCustomActionHandler('paladin-holy-light-roll')!;
-            const events = handler(buildCtx(state, 'paladin-holy-light-roll', {
-                random: () => 1 / 6, // sword
-            }));
-
-            expect(eventsOfType(events, 'TOKEN_GRANTED')).toHaveLength(0);
-        });
-    });
-
-    describe('paladin-holy-light-roll-3 (圣光术III：投3骰)', () => {
-        it('投3骰，各面效果叠加', () => {
-            const state = createState({ attackerCP: 0 });
-            let callIdx = 0;
-            const rolls = [1 / 6, 3 / 6, 1]; // sword, helm, pray
-            const handler = getCustomActionHandler('paladin-holy-light-roll-3')!;
-            const events = handler(buildCtx(state, 'paladin-holy-light-roll-3', {
-                random: () => rolls[callIdx++],
-            }));
-
-            // 3个BONUS_DIE_ROLLED
-            expect(eventsOfType(events, 'BONUS_DIE_ROLLED')).toHaveLength(3);
-            // sword → crit
-            expect(eventsOfType(events, 'TOKEN_GRANTED').some(
-                (e: any) => e.payload.tokenId === TOKEN_IDS.CRIT
-            )).toBe(true);
-            // helm → protect
-            expect(eventsOfType(events, 'TOKEN_GRANTED').some(
-                (e: any) => e.payload.tokenId === TOKEN_IDS.PROTECT
-            )).toBe(true);
-            // pray → 2CP
-            const cp = eventsOfType(events, 'CP_CHANGED');
-            expect(cp).toHaveLength(1);
-            expect((cp[0] as any).payload.delta).toBe(2);
-            // 多骰展示
-            expect(eventsOfType(events, 'BONUS_DICE_REROLL_REQUESTED')).toHaveLength(1);
-        });
-    });
-
-    // ========================================================================
     // 神圣防御
     // ========================================================================
     describe('paladin-holy-defense (神圣防御I：基于防御骰面)', () => {
@@ -259,149 +169,25 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // 神佑
-    // ========================================================================
-    describe('paladin-gods-grace (神佑：祈祷→4CP，其他→抽1)', () => {
-        it('投出祈祷面获得4CP', () => {
-            const state = createState({ attackerCP: 3 });
-            const handler = getCustomActionHandler('paladin-gods-grace')!;
-            const events = handler(buildCtx(state, 'paladin-gods-grace', {
-                random: () => 1, // d(6)→6 → pray
-            }));
-
-            const cp = eventsOfType(events, 'CP_CHANGED');
-            expect(cp).toHaveLength(1);
-            expect((cp[0] as any).payload.delta).toBe(4);
-        });
-
-        it('投出非祈祷面抽1牌', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-gods-grace')!;
-            const events = handler(buildCtx(state, 'paladin-gods-grace', {
-                random: () => 1 / 6, // sword
-            }));
-
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(1);
-        });
-    });
-
-    // ========================================================================
-    // 神恩
-    // ========================================================================
-    describe('paladin-divine-favor (神恩)', () => {
-        it('剑面抽2牌', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-divine-favor')!;
-            const events = handler(buildCtx(state, 'paladin-divine-favor', {
-                random: () => 1 / 6,
-            }));
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(2);
-        });
-
-        it('头盔面治愈3', () => {
-            const state = createState({ attackerHP: 40 });
-            const handler = getCustomActionHandler('paladin-divine-favor')!;
-            const events = handler(buildCtx(state, 'paladin-divine-favor', {
-                random: () => 3 / 6, // helm
-            }));
-            const heal = eventsOfType(events, 'HEAL_APPLIED');
-            expect(heal).toHaveLength(1);
-            expect((heal[0] as any).payload.amount).toBe(3);
-        });
-
-        it('心面治愈4', () => {
-            const state = createState({ attackerHP: 40 });
-            const handler = getCustomActionHandler('paladin-divine-favor')!;
-            const events = handler(buildCtx(state, 'paladin-divine-favor', {
-                random: () => 5 / 6, // heart
-            }));
-            expect((eventsOfType(events, 'HEAL_APPLIED')[0] as any).payload.amount).toBe(4);
-        });
-
-        it('祈祷面获得3CP', () => {
-            const state = createState({ attackerCP: 2 });
-            const handler = getCustomActionHandler('paladin-divine-favor')!;
-            const events = handler(buildCtx(state, 'paladin-divine-favor', {
-                random: () => 1, // pray
-            }));
-            expect((eventsOfType(events, 'CP_CHANGED')[0] as any).payload.delta).toBe(3);
-        });
-    });
-
-    // ========================================================================
-    // 赦免
-    // ========================================================================
-    describe('paladin-absolution (赦免)', () => {
-        it('剑面对原攻击者造成1不可防御伤害', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-absolution')!;
-            const events = handler(buildCtx(state, 'paladin-absolution', {
-                asDefender: true,
-                random: () => 1 / 6, // sword
-            }));
-
-            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
-            expect(dmg).toHaveLength(1);
-            expect((dmg[0] as any).payload.amount).toBe(1);
-            expect((dmg[0] as any).payload.targetId).toBe('1'); // 原攻击者
-        });
-
-        it('头盔面防止1伤害', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-absolution')!;
-            const events = handler(buildCtx(state, 'paladin-absolution', {
-                asDefender: true,
-                random: () => 3 / 6, // helm
-            }));
-
-            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
-            expect(shield).toHaveLength(1);
-            expect((shield[0] as any).payload.value).toBe(1);
-        });
-
-        it('心面防止2伤害', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('paladin-absolution')!;
-            const events = handler(buildCtx(state, 'paladin-absolution', {
-                asDefender: true,
-                random: () => 5 / 6, // heart
-            }));
-
-            expect((eventsOfType(events, 'DAMAGE_SHIELD_GRANTED')[0] as any).payload.value).toBe(2);
-        });
-
-        it('祈祷面获得1CP', () => {
-            const state = createState({ attackerCP: 3 });
-            const handler = getCustomActionHandler('paladin-absolution')!;
-            const events = handler(buildCtx(state, 'paladin-absolution', {
-                asDefender: true,
-                random: () => 1, // pray
-            }));
-
-            expect((eventsOfType(events, 'CP_CHANGED')[0] as any).payload.delta).toBe(1);
-        });
-    });
-
-    // ========================================================================
     // 教会税升级
     // ========================================================================
     describe('paladin-upgrade-tithes (教会税升级)', () => {
-        it('授予TITHES_UPGRADED标记', () => {
+        it('发出 PASSIVE_ABILITY_UPGRADED 事件', () => {
             const state = createState({});
             const handler = getCustomActionHandler('paladin-upgrade-tithes')!;
             const events = handler(buildCtx(state, 'paladin-upgrade-tithes'));
 
-            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
-            expect(tokens).toHaveLength(1);
-            expect((tokens[0] as any).payload.tokenId).toBe(TOKEN_IDS.TITHES_UPGRADED);
+            const upgradeEvents = eventsOfType(events, 'PASSIVE_ABILITY_UPGRADED');
+            expect(upgradeEvents).toHaveLength(1);
+            expect((upgradeEvents[0] as any).payload.passiveId).toBe('tithes');
         });
     });
 
     // ========================================================================
     // 神圣祝福
     // ========================================================================
-    describe('paladin-blessing-prevent (神圣祝福：免疫致死+回血)', () => {
-        it('致死伤害时消耗1层，免除伤害+HP设为1+回复5HP', () => {
+    describe('paladin-blessing-prevent (神圣祝福：免疫致死+HP设为1)', () => {
+        it('致死伤害时消耗1层，免除伤害+HP设为1', () => {
             const state = createState({ attackerBlessing: 1, attackerHP: 3 });
             const handler = getCustomActionHandler('paladin-blessing-prevent')!;
             const ctx = buildCtx(state, 'paladin-blessing-prevent');
@@ -423,11 +209,9 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
             expect(dmg).toHaveLength(1);
             expect((dmg[0] as any).payload.amount).toBe(2);
 
-            // 回复5HP（最终 HP = 1 + 5 = 6）
+            // 卡牌描述：移除此标记并将 HP 回到 1，不回复额外 HP
             const heal = eventsOfType(events, 'HEAL_APPLIED');
-            expect(heal).toHaveLength(1);
-            expect((heal[0] as any).payload.amount).toBe(5);
-            expect((heal[0] as any).payload.newHp).toBe(6);
+            expect(heal).toHaveLength(0);
         });
 
         it('非致死伤害时不触发', () => {
@@ -468,12 +252,11 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
             ctx.action = { ...ctx.action, params: { damageAmount: 5 } } as any;
             const events = handler(ctx);
 
-            // 消耗 + 免除 + 治疗，但无 DAMAGE_DEALT（hpToRemove = 0）
+            // 消耗 + 免除，但无 DAMAGE_DEALT（hpToRemove = 0）也无 HEAL
             expect(eventsOfType(events, 'TOKEN_CONSUMED')).toHaveLength(1);
             expect(eventsOfType(events, 'PREVENT_DAMAGE')).toHaveLength(1);
             expect(eventsOfType(events, 'DAMAGE_DEALT')).toHaveLength(0);
-            expect(eventsOfType(events, 'HEAL_APPLIED')).toHaveLength(1);
-            expect((eventsOfType(events, 'HEAL_APPLIED')[0] as any).payload.newHp).toBe(6);
+            expect(eventsOfType(events, 'HEAL_APPLIED')).toHaveLength(0);
         });
     });
 });

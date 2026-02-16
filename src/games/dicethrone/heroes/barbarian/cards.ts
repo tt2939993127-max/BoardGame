@@ -6,7 +6,7 @@
 import type { AbilityCard } from '../../types';
 import type { RandomFn } from '../../../../engine/types';
 import type { AbilityEffect, EffectTiming, EffectCondition, AbilityDef } from '../../domain/combat';
-import { STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS } from '../../domain/ids';
+import { STATUS_IDS, DICETHRONE_CARD_ATLAS_IDS, BARBARIAN_DICE_FACE_IDS as FACES } from '../../domain/ids';
 import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
 import {
     SLAP_2, SLAP_3,
@@ -69,7 +69,13 @@ export const BARBARIAN_CARDS: AbilityCard[] = [
         effects: [
             {
                 description: '投掷1骰：⭐→治疗2+脑震荡；否则抽1牌',
-                action: { type: 'custom', target: 'self', customActionId: 'energetic-roll' },
+                action: {
+                    type: 'rollDie', target: 'self', diceCount: 1,
+                    conditionalEffects: [
+                        { face: FACES.STRENGTH, heal: 2, grantStatus: { statusId: STATUS_IDS.CONCUSSION, value: 1, target: 'opponent' } },
+                    ],
+                    defaultEffect: { drawCard: 1 },
+                },
                 timing: 'immediate',
             },
         ],

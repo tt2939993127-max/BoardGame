@@ -14,7 +14,6 @@ import type {
     DamageShieldGrantedEvent,
     BonusDieInfo,
 } from '../types';
-import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
@@ -210,63 +209,6 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
 }
 
 /**
- * 精力充沛！(Energetic)：投掷1骰
- * - 星 → 治疗2 + 对对手施加脑震荡
- * - 其他 → 抽1牌
- */
-function handleEnergeticRoll({ ctx, targetId, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
-    if (!random) return [];
-    const events: DiceThroneEvent[] = [];
-
-    const dieValue = random.d(6);
-    const face = getPlayerDieFace(state, attackerId, dieValue) ?? '';
-    const isStrength = face === FACES.STRENGTH;
-
-    events.push({
-        type: 'BONUS_DIE_ROLLED',
-        payload: {
-            value: dieValue,
-            face,
-            playerId: attackerId,
-            targetPlayerId: targetId,
-            effectKey: isStrength ? 'bonusDie.effect.energeticStrength' : 'bonusDie.effect.energeticOther',
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDieRolledEvent);
-
-    if (isStrength) {
-        // 治疗2点
-        events.push({
-            type: 'HEAL_APPLIED',
-            payload: { targetId: attackerId, amount: 2, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as HealAppliedEvent);
-
-        // 对对手施加脑震荡
-        const opponentId = ctx.defenderId;
-        const opponent = state.players[opponentId];
-        const currentStacks = opponent?.statusEffects[STATUS_IDS.CONCUSSION] ?? 0;
-        const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.CONCUSSION);
-        const maxStacks = def?.stackLimit || 1;
-        const newTotal = Math.min(currentStacks + 1, maxStacks);
-
-        events.push({
-            type: 'STATUS_APPLIED',
-            payload: { targetId: opponentId, statusId: STATUS_IDS.CONCUSSION, stacks: 1, newTotal, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as StatusAppliedEvent);
-    } else {
-        // 抽1牌
-        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp));
-    }
-
-    return events;
-}
-
-/**
  * 大吉大利！(Lucky)：投掷3骰，治疗 1 + 2×心骰面数
  */
 function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
@@ -396,9 +338,6 @@ export function registerBarbarianCustomActions(): void {
     });
     registerCustomActionHandler('barbarian-thick-skin-2', handleBarbarianThickSkin2, {
         categories: ['other'],
-    });
-    registerCustomActionHandler('energetic-roll', handleEnergeticRoll, {
-        categories: ['dice', 'resource'],
     });
     registerCustomActionHandler('lucky-roll-heal', handleLuckyRollHeal, {
         categories: ['dice', 'resource'],

@@ -72,9 +72,15 @@ const deriveManualSkip = (step: TutorialStepSnapshot, manifest?: TutorialManifes
 const deriveRandomPolicy = (step: TutorialStepSnapshot, manifest?: TutorialManifest): TutorialRandomPolicy | undefined =>
     normalizeRandomPolicy(step.randomPolicy ?? manifest?.randomPolicy);
 
-const deriveStepState = (manifest: TutorialManifest, stepIndex: number): TutorialState => {
+const deriveStepState = (manifest: TutorialManifest, stepIndex: number, currentCursor?: number): TutorialState => {
     const step = manifest.steps[stepIndex];
     if (!step) return { ...DEFAULT_TUTORIAL_STATE };
+
+    const policy = deriveRandomPolicy(step, manifest);
+    // sequence 模式下保留跨步骤的 cursor 位置
+    const randomPolicy = policy?.mode === 'sequence' && currentCursor !== undefined
+        ? { ...policy, cursor: currentCursor }
+        : policy;
 
     return {
         active: true,
@@ -84,7 +90,7 @@ const deriveStepState = (manifest: TutorialManifest, stepIndex: number): Tutoria
         step,
         manifestAllowManualSkip: manifest.allowManualSkip,
         manifestRandomPolicy: manifest.randomPolicy,
-        randomPolicy: deriveRandomPolicy(step, manifest),
+        randomPolicy,
         aiActions: step.aiActions ? [...step.aiActions] : undefined,
         allowManualSkip: deriveManualSkip(step, manifest),
         pendingAnimationAdvance: false,
@@ -214,7 +220,7 @@ const advanceStep = <TCore>(
         };
     }
 
-    const nextTutorial = deriveStepState(manifest, nextIndex);
+    const nextTutorial = deriveStepState(manifest, nextIndex, tutorial.randomPolicy?.cursor);
     return {
         state: applyTutorialState(state, nextTutorial),
         events: [...events, createStepChangedEvent(prevIndex, nextIndex, nextTutorial.step, timestamp)],

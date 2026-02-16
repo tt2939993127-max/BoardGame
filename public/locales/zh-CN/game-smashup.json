@@ -79,12 +79,26 @@
     "click_base_to_deploy": "点击基地部署",
     "power_limit_exceeded": "力量超出限制",
     "minion_short": "随从",
+    "minion_global_quota": "通用额度",
+    "minion_power_cap": "力量限制 ≤{{max}}",
     "action_short": "战术",
+    "action_global_quota": "通用额度",
+    "action_extra_hint": "含额外行动额度 +{{extra}}",
     "close": "关闭",
     "reveal_your_hand_shown": "你的手牌已展示给对手",
     "reveal_confirmed": "已确认",
     "deselect_all": "取消全选",
     "select_all": "全选"
+  },
+  "feedback": {
+    "deck_search_no_match": "牌库中未找到符合条件的卡牌，已重洗牌库",
+    "deck_search_skipped": "跳过选择，已重洗牌库",
+    "no_valid_targets": "场上没有符合条件的目标",
+    "discard_empty": "弃牌堆中没有符合条件的卡牌",
+    "deck_empty": "牌库为空",
+    "hand_empty": "手牌中没有符合条件的卡牌",
+    "condition_not_met": "条件不满足，能力未生效",
+    "target_protected": "目标受到保护，能力未生效"
   },
   "actionLog": {
     "playerLabel": "P{{playerId}}",
@@ -184,19 +198,19 @@
     },
     "minions_of_cthulhu": {
       "name": "克苏鲁仆从",
-      "description": "利用疯狂牌，献祭随从。"
+      "description": "利用疯狂牌，献祭随从。注意：每2张疯狂牌终局扣1VP。"
     },
     "elder_things": {
       "name": "远古物种",
-      "description": "给予疯狂牌，控制人心。"
+      "description": "给予疯狂牌，控制人心。注意：每2张疯狂牌终局扣1VP。"
     },
     "innsmouth": {
       "name": "印斯茅斯",
-      "description": "人海战术，同样的随从集结。"
+      "description": "人海战术，同样的随从集结。注意：每2张疯狂牌终局扣1VP。"
     },
     "miskatonic_university": {
       "name": "米斯卡塔尼克",
-      "description": "利用疯狂牌获得优势，研究知识。"
+      "description": "利用疯狂牌获得优势，研究知识。注意：每2张疯狂牌终局扣1VP。"
     }
   },
   "tutorial": {

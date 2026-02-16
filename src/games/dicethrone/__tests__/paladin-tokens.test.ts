@@ -21,43 +21,43 @@ import { TOKEN_IDS, PALADIN_DICE_FACE_IDS } from '../domain/ids';
 // ============================================================================
 
 describe('圣骑士 Token 定义', () => {
-    it('应包含 Crit（暴击）— consumable, beforeDamageDealt', () => {
+    it('应包含 Crit（暴击）— consumable, beforeDamageDealt, 伤害≥5时+4', () => {
         const crit = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.CRIT);
         expect(crit).toBeDefined();
         expect(crit!.category).toBe('consumable');
-        expect(crit!.stackLimit).toBe(3);
+        expect(crit!.stackLimit).toBe(1);
         expect(crit!.activeUse).toBeDefined();
         expect(crit!.activeUse!.timing).toContain('beforeDamageDealt');
         expect(crit!.activeUse!.consumeAmount).toBe(1);
         expect(crit!.activeUse!.effect.type).toBe('modifyDamageDealt');
-        expect(crit!.activeUse!.effect.value).toBe(1);
+        expect(crit!.activeUse!.effect.value).toBe(4);
     });
 
-    it('应包含 Accuracy（精准）— consumable, beforeDamageDealt', () => {
+    it('应包含 Accuracy（精准）— consumable, beforeDamageDealt, 不叠加', () => {
         const acc = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.ACCURACY);
         expect(acc).toBeDefined();
         expect(acc!.category).toBe('consumable');
-        expect(acc!.stackLimit).toBe(3);
+        expect(acc!.stackLimit).toBe(1);
         expect(acc!.activeUse).toBeDefined();
         expect(acc!.activeUse!.timing).toContain('beforeDamageDealt');
     });
 
-    it('应包含 Protect（守护）— consumable, beforeDamageReceived', () => {
+    it('应包含 Protect（守护）— consumable, beforeDamageReceived, 伤害减半', () => {
         const prot = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.PROTECT);
         expect(prot).toBeDefined();
         expect(prot!.category).toBe('consumable');
-        expect(prot!.stackLimit).toBe(3);
+        expect(prot!.stackLimit).toBe(1);
         expect(prot!.activeUse).toBeDefined();
         expect(prot!.activeUse!.timing).toContain('beforeDamageReceived');
         expect(prot!.activeUse!.effect.type).toBe('modifyDamageReceived');
-        expect(prot!.activeUse!.effect.value).toBe(-1);
+        expect(prot!.activeUse!.effect.value).toBe(0); // 动态计算减半
     });
 
-    it('应包含 Retribution（神罚）— consumable, beforeDamageReceived', () => {
+    it('应包含 Retribution（神罚）— consumable, beforeDamageReceived, 不叠加', () => {
         const ret = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.RETRIBUTION);
         expect(ret).toBeDefined();
         expect(ret!.category).toBe('consumable');
-        expect(ret!.stackLimit).toBe(3);
+        expect(ret!.stackLimit).toBe(1);
         expect(ret!.activeUse).toBeDefined();
         expect(ret!.activeUse!.timing).toContain('beforeDamageReceived');
     });

@@ -10,6 +10,7 @@
 
 import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
 import { STATUS_IDS, TOKEN_IDS, MOON_ELF_DICE_FACE_IDS } from '../ids';
+import { RESOURCE_IDS } from '../resources';
 import type {
     DiceThroneEvent,
     DamageDealtEvent,
@@ -113,24 +114,82 @@ function handleLongbowBonusCheck3(context: CustomActionContext): DiceThroneEvent
 // ============================================================================
 
 /**
- * 爆裂箭 I：投掷1骰，造成骰值伤害
+ * 爆裂箭 I：投掷5骰，造成 3 + 2×弓 + 1×足 伤害，对手丢失 1×月 CP，造成致盲
+ * 
+ * 图片规则：
+ * - 掷骰5骰
+ * - 造成 3 + 2×弓面数 + 1×足面数 伤害
+ * - 另外对手丢失 1×月面数 CP
+ * - 造成致盲
  */
 function handleExplodingArrowResolve1(context: CustomActionContext): DiceThroneEvent[] {
     const { targetId, attackerId, sourceAbilityId, state, timestamp, random } = context;
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
 
-    const value = random.d(6);
-    const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    // 投掷5骰
+    const diceValues: number[] = [];
+    const diceFaces: string[] = [];
+    for (let i = 0; i < 5; i++) {
+        const value = random.d(6);
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        diceValues.push(value);
+        diceFaces.push(face);
+    }
+
+    // 统计骰面
+    const faceCounts: Record<string, number> = {};
+    diceFaces.forEach(face => {
+        faceCounts[face] = (faceCounts[face] || 0) + 1;
+    });
+
+    const bowCount = faceCounts[FACE.BOW] || 0;
+    const footCount = faceCounts[FACE.FOOT] || 0;
+    const moonCount = faceCounts[FACE.MOON] || 0;
+
+    // 发射骰子事件（显示5骰结果）
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
+        payload: { 
+            value: diceValues[0], // 主要显示第一个骰子
+            face: diceFaces[0], 
+            playerId: attackerId, 
+            targetPlayerId: targetId, 
+            effectKey: 'bonusDie.effect.explodingArrow', 
+            effectParams: { 
+                diceValues, 
+                diceFaces,
+                bowCount,
+                footCount,
+                moonCount
+            } 
+        },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
 
-    // 造成骰值点伤害
-    events.push(dealDamage(context, targetId, value, sourceAbilityId, timestamp));
+    // 计算伤害：3 + 2×弓 + 1×足
+    const damageAmount = 3 + (2 * bowCount) + (1 * footCount);
+    if (damageAmount > 0) {
+        events.push(dealDamage(context, targetId, damageAmount, sourceAbilityId, timestamp + 1));
+    }
+
+    // 对手丢失 1×月 CP
+    if (moonCount > 0) {
+        const targetPlayer = state.players[targetId];
+        const currentCp = targetPlayer?.resources[RESOURCE_IDS.CP] ?? 0;
+        const cpLoss = moonCount;
+        const newCp = Math.max(0, currentCp - cpLoss);
+        events.push({
+            type: 'CP_CHANGED',
+            payload: { playerId: targetId, delta: -cpLoss, newValue: newCp, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 2,
+        } as import('../types').CpChangedEvent);
+    }
+
+    // 造成致盲
+    events.push(applyStatus(targetId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp + 3));
 
     return events;
 }
@@ -143,16 +202,63 @@ function handleExplodingArrowResolve2(context: CustomActionContext): DiceThroneE
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
 
-    const value = random.d(6);
-    const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    // 投掷5骰
+    const diceValues: number[] = [];
+    const diceFaces: string[] = [];
+    for (let i = 0; i < 5; i++) {
+        const value = random.d(6);
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        diceValues.push(value);
+        diceFaces.push(face);
+    }
+
+    // 统计骰面
+    const faceCounts: Record<string, number> = {};
+    diceFaces.forEach(face => {
+        faceCounts[face] = (faceCounts[face] || 0) + 1;
+    });
+
+    const bowCount = faceCounts[FACE.BOW] || 0;
+    const footCount = faceCounts[FACE.FOOT] || 0;
+    const moonCount = faceCounts[FACE.MOON] || 0;
+
+    // 发射骰子事件
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
+        payload: { 
+            value: diceValues[0],
+            face: diceFaces[0], 
+            playerId: attackerId, 
+            targetPlayerId: targetId, 
+            effectKey: 'bonusDie.effect.explodingArrow', 
+            effectParams: { diceValues, diceFaces, bowCount, footCount, moonCount } 
+        },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
 
-    events.push(dealDamage(context, targetId, value + 1, sourceAbilityId, timestamp));
+    // 计算伤害：3 + 1×弓 + 2×足（II级公式与I级不同，与III级相同）
+    const damageAmount = 3 + (1 * bowCount) + (2 * footCount);
+    if (damageAmount > 0) {
+        events.push(dealDamage(context, targetId, damageAmount, sourceAbilityId, timestamp + 1));
+    }
+
+    // 对手丢失 1×月 CP
+    if (moonCount > 0) {
+        const targetPlayer = state.players[targetId];
+        const currentCp = targetPlayer?.resources[RESOURCE_IDS.CP] ?? 0;
+        const cpLoss = moonCount;
+        const newCp = Math.max(0, currentCp - cpLoss);
+        events.push({
+            type: 'CP_CHANGED',
+            payload: { playerId: targetId, delta: -cpLoss, newValue: newCp, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 2,
+        } as import('../types').CpChangedEvent);
+    }
+
+    // 施加致盲（II级只有致盲，无缠绕）
+    events.push(applyStatus(targetId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp + 3));
 
     return events;
 }
@@ -165,17 +271,64 @@ function handleExplodingArrowResolve3(context: CustomActionContext): DiceThroneE
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
 
-    const value = random.d(6);
-    const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    // 投掷5骰
+    const diceValues: number[] = [];
+    const diceFaces: string[] = [];
+    for (let i = 0; i < 5; i++) {
+        const value = random.d(6);
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        diceValues.push(value);
+        diceFaces.push(face);
+    }
+
+    // 统计骰面
+    const faceCounts: Record<string, number> = {};
+    diceFaces.forEach(face => {
+        faceCounts[face] = (faceCounts[face] || 0) + 1;
+    });
+
+    const bowCount = faceCounts[FACE.BOW] || 0;
+    const footCount = faceCounts[FACE.FOOT] || 0;
+    const moonCount = faceCounts[FACE.MOON] || 0;
+
+    // 发射骰子事件
     events.push({
         type: 'BONUS_DIE_ROLLED',
-        payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.explodingArrow', effectParams: { value } },
+        payload: { 
+            value: diceValues[0],
+            face: diceFaces[0], 
+            playerId: attackerId, 
+            targetPlayerId: targetId, 
+            effectKey: 'bonusDie.effect.explodingArrow', 
+            effectParams: { diceValues, diceFaces, bowCount, footCount, moonCount } 
+        },
         sourceCommandType: 'ABILITY_EFFECT',
         timestamp,
     } as BonusDieRolledEvent);
 
-    events.push(dealDamage(context, targetId, value + 2, sourceAbilityId, timestamp));
-    events.push(applyStatus(targetId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
+    // 计算伤害：3 + 1×弓 + 2×足（III级公式与I级不同）
+    const damageAmount = 3 + (1 * bowCount) + (2 * footCount);
+    if (damageAmount > 0) {
+        events.push(dealDamage(context, targetId, damageAmount, sourceAbilityId, timestamp + 1));
+    }
+
+    // 对手丢失 1×月 CP
+    if (moonCount > 0) {
+        const targetPlayer = state.players[targetId];
+        const currentCp = targetPlayer?.resources[RESOURCE_IDS.CP] ?? 0;
+        const cpLoss = moonCount;
+        const newCp = Math.max(0, currentCp - cpLoss);
+        events.push({
+            type: 'CP_CHANGED',
+            payload: { playerId: targetId, delta: -cpLoss, newValue: newCp, sourceAbilityId },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 2,
+        } as import('../types').CpChangedEvent);
+    }
+
+    // 施加致盲和缠绕
+    events.push(applyStatus(targetId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp + 3));
+    events.push(applyStatus(targetId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp + 4));
 
     return events;
 }
@@ -186,9 +339,9 @@ function handleExplodingArrowResolve3(context: CustomActionContext): DiceThroneE
 
 /**
  * 迷影步 I：防御掷骰，统计足(FOOT)数量
- * - 1个足：造成2伤害
- * - 2个足：造成2伤害 + 获得1闪避
- * - 3+个足：造成4伤害 + 获得1闪避
+ * 图片规则：
+ * - 若足面≥2，抵挡一半伤害（向上取整）
+ * - 每有足面，造成1伤害
  */
 function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, state, timestamp, ctx } = context;
@@ -198,31 +351,25 @@ function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEven
     // 防御上下文：ctx.attackerId = 防御者，ctx.defenderId = 原攻击者
     const opponentId = ctx.defenderId;
 
-    if (footCount >= 3) {
-        events.push(dealDamage(context, opponentId, 4, sourceAbilityId, timestamp));
-        // 获得闪避
-        const current = state.players[attackerId]?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-        const maxStacks = 3;
-        const newTotal = Math.min(current + 1, maxStacks);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.EVASIVE, amount: 1, newTotal, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as TokenGrantedEvent);
-    } else if (footCount >= 2) {
-        events.push(dealDamage(context, opponentId, 2, sourceAbilityId, timestamp));
-        const current = state.players[attackerId]?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-        const maxStacks = 3;
-        const newTotal = Math.min(current + 1, maxStacks);
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.EVASIVE, amount: 1, newTotal, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as TokenGrantedEvent);
-    } else if (footCount >= 1) {
-        events.push(dealDamage(context, opponentId, 2, sourceAbilityId, timestamp));
+    // 每个足面造成1伤害
+    if (footCount > 0) {
+        events.push(dealDamage(context, opponentId, footCount, sourceAbilityId, timestamp));
+    }
+
+    // 足面≥2时，抵挡一半伤害（向上取整）
+    if (footCount >= 2 && state.pendingAttack) {
+        const originalDamage = state.pendingAttack.damage + (state.pendingAttack.bonusDamage ?? 0);
+        const reducedDamage = Math.ceil(originalDamage / 2);
+        const reduction = originalDamage - reducedDamage;
+        
+        if (reduction > 0) {
+            events.push({
+                type: 'PREVENT_DAMAGE',
+                payload: { targetId: attackerId, amount: reduction, sourceAbilityId },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            } as any);
+        }
     }
 
     return events;
@@ -230,39 +377,39 @@ function handleElusiveStepResolve1(context: CustomActionContext): DiceThroneEven
 
 /**
  * 迷影步 II：防御掷骰，统计足(FOOT)数量
- * - 1个足：造成3伤害
- * - 2个足：造成3伤害 + 获得1闪避
- * - 3+个足：造成5伤害 + 获得1闪避 + 施加缠绕
+ * 图片规则（推测升级版）：
+ * - 若足面≥2，抵挡一半伤害（向上取整）
+ * - 每有足面，造成1伤害
+ * - 额外：足面≥3时获得1闪避
  */
 function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEvent[] {
     const { attackerId, sourceAbilityId, state, timestamp, ctx } = context;
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
     const footCount = faceCounts[FACE.FOOT] ?? 0;
+    const bowCount = faceCounts[FACE.BOW] ?? 0;
     // 防御上下文：ctx.attackerId = 防御者，ctx.defenderId = 原攻击者
     const opponentId = ctx.defenderId;
 
-    if (footCount >= 3) {
-        events.push(dealDamage(context, opponentId, 5, sourceAbilityId, timestamp));
-        const current = state.players[attackerId]?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.EVASIVE, amount: 1, newTotal: Math.min(current + 1, 3), sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as TokenGrantedEvent);
-        events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
-    } else if (footCount >= 2) {
-        events.push(dealDamage(context, opponentId, 3, sourceAbilityId, timestamp));
-        const current = state.players[attackerId]?.tokens[TOKEN_IDS.EVASIVE] ?? 0;
-        events.push({
-            type: 'TOKEN_GRANTED',
-            payload: { targetId: attackerId, tokenId: TOKEN_IDS.EVASIVE, amount: 1, newTotal: Math.min(current + 1, 3), sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as TokenGrantedEvent);
-    } else if (footCount >= 1) {
-        events.push(dealDamage(context, opponentId, 3, sourceAbilityId, timestamp));
+    // 造成 1×弓面数 伤害（升级版改为弓面计算）
+    if (bowCount > 0) {
+        events.push(dealDamage(context, opponentId, bowCount, sourceAbilityId, timestamp));
+    }
+
+    // 足面≥2时，防止一半伤害（向上取整）
+    if (footCount >= 2 && state.pendingAttack) {
+        const originalDamage = state.pendingAttack.damage + (state.pendingAttack.bonusDamage ?? 0);
+        const reducedDamage = Math.ceil(originalDamage / 2);
+        const reduction = originalDamage - reducedDamage;
+        
+        if (reduction > 0) {
+            events.push({
+                type: 'PREVENT_DAMAGE',
+                payload: { targetId: attackerId, amount: reduction, sourceAbilityId },
+                sourceCommandType: 'ABILITY_EFFECT',
+                timestamp,
+            } as any);
+        }
     }
 
     return events;
@@ -273,10 +420,9 @@ function handleElusiveStepResolve2(context: CustomActionContext): DiceThroneEven
 // ============================================================================
 
 /**
- * 月影突袭 (Moon Shadow Strike)：投掷1骰判定
- * - 弓(BOW)：抽1张牌
- * - 足(FOOT)：施加缠绕
- * - 月(MOON)：施加致盲 + 锁定
+ * 月影袭人 (Moon Shadow Strike)：投掷1骰判定
+ * - 月(MOON)：施加致盲 + 缠绕 + 锁定
+ * - 其他：抽1张牌
  */
 function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[] {
     const { targetId, attackerId, sourceAbilityId, state, timestamp, random } = context;
@@ -292,44 +438,87 @@ function handleMoonShadowStrike(context: CustomActionContext): DiceThroneEvent[]
         timestamp,
     } as BonusDieRolledEvent);
 
-    if (face === FACE.BOW) {
-        // 抽1张牌
-        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp));
-    } else if (face === FACE.FOOT) {
-        // 施加缠绕
-        events.push(applyStatus(targetId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
-    } else if (face === FACE.MOON) {
-        // 施加致盲 + 锁定
+    if (face === FACE.MOON) {
+        // 月：施加致盲 + 缠绕 + 锁定
         events.push(applyStatus(targetId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp));
+        events.push(applyStatus(targetId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
         events.push(applyStatus(targetId, STATUS_IDS.TARGETED, 1, sourceAbilityId, state, timestamp));
+    } else {
+        // 非月：抽1张牌
+        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
     }
 
     return events;
 }
 
 /**
- * 齐射 (Volley)：本次攻击伤害 +3
- * 实现方式：通过 pendingAttack.bonusDamage 增加伤害
+ * 万箭齐发 (Volley)：攻击修正。投掷5骰，增加弓面数×1伤害，施加缠绕
  */
 function handleVolley(context: CustomActionContext): DiceThroneEvent[] {
-    const { attackerId, state } = context;
-    // 通过修改 pendingAttack 的 bonusDamage 来增加伤害
-    // 由于 custom action 只能返回事件，我们通过累加 ctx 的 accumulatedBonusDamage 来实现
-    if (state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
-        state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + 3;
+    const { targetId, attackerId, sourceAbilityId, state, timestamp, random } = context;
+    if (!random) return [];
+    const events: DiceThroneEvent[] = [];
+
+    // 投掷5骰，统计弓面数量
+    let bowCount = 0;
+    for (let i = 0; i < 5; i++) {
+        const value = random.d(6);
+        const face = getPlayerDieFace(state, attackerId, value) ?? '';
+        events.push({
+            type: 'BONUS_DIE_ROLLED',
+            payload: { value, face, playerId: attackerId, targetPlayerId: targetId, effectKey: 'bonusDie.effect.volley', effectParams: { value } },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as BonusDieRolledEvent);
+        if (face === FACE.BOW) bowCount++;
     }
-    // Volley 的效果是修改状态而非生成事件，返回空
-    return [];
+
+    // 增加弓面数量的伤害（作为攻击修正加到 pendingAttack）
+    if (bowCount > 0 && state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
+        state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + bowCount;
+    }
+
+    // 施加缠绕
+    events.push(applyStatus(targetId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
+
+    return events;
 }
 
 /**
- * 小心！(Watch Out)：施加锁定给对手
+ * 看箭 (Watch Out)：攻击修正。投掷1骰判定
+ * - 弓(BOW)：增加2伤害
+ * - 足(FOOT)：施加缠绕
+ * - 月(MOON)：施加致盲
  */
 function handleWatchOut(context: CustomActionContext): DiceThroneEvent[] {
-    const { sourceAbilityId, state, timestamp, ctx } = context;
-    // 进攻上下文：ctx.defenderId = 对手
+    const { attackerId, sourceAbilityId, state, timestamp, random, ctx } = context;
+    if (!random) return [];
+    const events: DiceThroneEvent[] = [];
     const opponentId = ctx.defenderId;
-    return [applyStatus(opponentId, STATUS_IDS.TARGETED, 1, sourceAbilityId, state, timestamp)];
+
+    const value = random.d(6);
+    const face = getPlayerDieFace(state, attackerId, value) ?? '';
+    events.push({
+        type: 'BONUS_DIE_ROLLED',
+        payload: { value, face, playerId: attackerId, targetPlayerId: opponentId, effectKey: 'bonusDie.effect.watchOut', effectParams: { value } },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as BonusDieRolledEvent);
+
+    if (face === FACE.BOW) {
+        // 弓：增加2伤害（攻击修正）
+        if (state.pendingAttack && state.pendingAttack.attackerId === attackerId) {
+            state.pendingAttack.bonusDamage = (state.pendingAttack.bonusDamage ?? 0) + 2;
+        }
+    } else if (face === FACE.FOOT) {
+        // 足：施加缠绕
+        events.push(applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp));
+    } else if (face === FACE.MOON) {
+        // 月：施加致盲
+        events.push(applyStatus(opponentId, STATUS_IDS.BLINDED, 1, sourceAbilityId, state, timestamp));
+    }
+
+    return events;
 }
 
 // ============================================================================
@@ -412,27 +601,9 @@ function handleEntangleEffect(context: CustomActionContext): DiceThroneEvent[] {
     return events;
 }
 
-/**
- * 锁定效果 (Targeted Effect)：增加受到的伤害 +2
- * 在伤害结算时由 resolveEffectAction 的 damage 分支检查
- * 这里提供一个钩子用于在攻击结算后移除锁定
- */
-function handleTargetedRemoval(context: CustomActionContext): DiceThroneEvent[] {
-    const { targetId, state, timestamp } = context;
-    const events: DiceThroneEvent[] = [];
-
-    const currentStacks = state.players[targetId]?.statusEffects[STATUS_IDS.TARGETED] ?? 0;
-    if (currentStacks > 0) {
-        events.push({
-            type: 'STATUS_REMOVED',
-            payload: { targetId, statusId: STATUS_IDS.TARGETED, stacks: currentStacks },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp,
-        } as StatusRemovedEvent);
-    }
-
-    return events;
-}
+// 锁定 (Targeted) 是持续效果，受伤时 +2 伤害，不会自动移除。
+// 伤害修正通过 TokenDef.passiveTrigger.actions[modifyStat] 在 applyOnDamageReceivedTriggers 中自动处理。
+// 移除只能通过净化等主动手段。
 
 // ============================================================================
 // 注册
@@ -449,13 +620,13 @@ export function registerMoonElfCustomActions(): void {
 
     // 爆裂箭结算
     registerCustomActionHandler('moon_elf-exploding-arrow-resolve-1', handleExplodingArrowResolve1, {
-        categories: ['dice', 'damage'],
+        categories: ['dice', 'damage', 'status', 'resource'],
     });
     registerCustomActionHandler('moon_elf-exploding-arrow-resolve-2', handleExplodingArrowResolve2, {
-        categories: ['dice', 'damage'],
+        categories: ['dice', 'damage', 'status', 'resource'],
     });
     registerCustomActionHandler('moon_elf-exploding-arrow-resolve-3', handleExplodingArrowResolve3, {
-        categories: ['dice', 'damage', 'status'],
+        categories: ['dice', 'damage', 'status', 'resource'],
     });
 
     // 迷影步结算
@@ -471,10 +642,10 @@ export function registerMoonElfCustomActions(): void {
         categories: ['dice', 'status', 'resource'],
     });
     registerCustomActionHandler('moon_elf-action-volley', handleVolley, {
-        categories: ['other'],
+        categories: ['dice', 'status'],
     });
     registerCustomActionHandler('moon_elf-action-watch-out', handleWatchOut, {
-        categories: ['status'],
+        categories: ['dice', 'status'],
     });
 
     // 状态效果钩子
@@ -484,7 +655,5 @@ export function registerMoonElfCustomActions(): void {
     registerCustomActionHandler('moon_elf-entangle-effect', handleEntangleEffect, {
         categories: ['dice', 'status'],
     });
-    registerCustomActionHandler('moon_elf-targeted-removal', handleTargetedRemoval, {
-        categories: ['status'],
-    });
+    // 锁定 (Targeted) 是持续效果，无需注册移除 handler
 }

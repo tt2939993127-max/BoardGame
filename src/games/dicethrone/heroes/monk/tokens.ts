@@ -29,7 +29,6 @@ export const MONK_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.TAIJI,
         name: tokenText(TOKEN_IDS.TAIJI, 'name'),
-        icon: '☯',
         colorTheme: 'from-purple-500 to-indigo-500',
         description: tokenText(TOKEN_IDS.TAIJI, 'description') as unknown as string[],
         sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.light.heavenly_flame',
@@ -53,7 +52,6 @@ export const MONK_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.EVASIVE,
         name: tokenText(TOKEN_IDS.EVASIVE, 'name'),
-        icon: '💨',
         colorTheme: 'from-cyan-500 to-blue-500',
         description: tokenText(TOKEN_IDS.EVASIVE, 'description') as unknown as string[],
         sfxKey: 'magic.general.simple_magic_sound_fx_pack_vol.ice.glacial_shield',
@@ -77,7 +75,6 @@ export const MONK_TOKENS: TokenDef[] = [
     {
         id: TOKEN_IDS.PURIFY,
         name: tokenText(TOKEN_IDS.PURIFY, 'name'),
-        icon: '✨',
         colorTheme: 'from-emerald-400 to-green-500',
         description: tokenText(TOKEN_IDS.PURIFY, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_holy_water',
@@ -102,7 +99,6 @@ export const MONK_TOKENS: TokenDef[] = [
     {
         id: STATUS_IDS.KNOCKDOWN,
         name: statusText(STATUS_IDS.KNOCKDOWN, 'name'),
-        icon: '💫',
         colorTheme: 'from-red-600 to-orange-500',
         description: statusText(STATUS_IDS.KNOCKDOWN, 'description') as unknown as string[],
         sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_explosion',

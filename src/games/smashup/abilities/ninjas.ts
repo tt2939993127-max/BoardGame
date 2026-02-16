@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, moveMinion, getMinionPower, grantExtraMinion, buildMinionTargetOptions, buildBaseTargetOptions, isSpecialLimitBlocked, emitSpecialLimitUsed } from '../domain/abilityHelpers';
+import { destroyMinion, moveMinion, getMinionPower, grantExtraMinion, buildMinionTargetOptions, buildBaseTargetOptions, isSpecialLimitBlocked, emitSpecialLimitUsed, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, MinionReturnedEvent, OngoingDetachedEvent, MinionPlayedEvent } from '../domain/types';
 import { getCardDef, getBaseDef } from '../data/cards';
@@ -97,7 +97,7 @@ function ninjaSeeingStars(ctx: AbilityContext): AbilityResult {
             }
         }
     }
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
         `ninja_seeing_stars_${ctx.now}`, ctx.playerId,
@@ -207,7 +207,7 @@ function ninjaWayOfDeception(ctx: AbilityContext): AbilityResult {
             myMinions.push({ uid: m.uid, defId: m.defId, baseIndex: i, label: `${name} (力量 ${power}) @ ${baseName}` });
         }
     }
-    if (myMinions.length === 0) return { events: [] };
+    if (myMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
         `ninja_way_of_deception_${ctx.now}`, ctx.playerId,

@@ -27,7 +27,7 @@ import { clearRegistry, getRegisteredAbilityKeys } from '../domain/abilityRegist
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { getRegisteredOngoingEffectIds } from '../domain/ongoingEffects';
 import { getRegisteredModifierIds } from '../domain/ongoingModifiers';
-import type { CardDef, ActionCardDef } from '../domain/types';
+import type { CardDef, ActionCardDef, MinionCardDef } from '../domain/types';
 
 // ============================================================================
 // i18n 数据
@@ -355,6 +355,76 @@ describe('SmashUp 能力行为审计', () => {
             }
 
             expect(violations, '以下 ongoing 行动卡的 ongoingTarget 字段缺失或错误').toEqual([]);
+        });
+
+        it('描述含条件性打出目标的 ongoing 行动卡必须有 playConstraint', () => {
+            const allDefs = getAllCardDefs();
+            const violations: string[] = [];
+
+            // 匹配"打出到一个<条件>的基地上"模式
+            // 例如："打出到一个你至少拥有一个随从的基地上"
+            const conditionalPlayPatterns = [
+                /打出到一个.*拥有.*随从.*基地/,
+                /打出到.*你.*至少.*随从.*基地/,
+                /打出到一个.*的基地上/,  // 通用：打出到一个<限定条件>的基地上
+            ];
+
+            for (const def of allDefs) {
+                if (def.type !== 'action') continue;
+                const actionDef = def as ActionCardDef;
+                if (actionDef.subtype !== 'ongoing') continue;
+
+                const i18n = zhCN.cards?.[def.id];
+                const effectText: string = i18n?.effectText ?? '';
+                if (!effectText) continue;
+
+                const hasConditionalPlay = conditionalPlayPatterns.some(p => p.test(effectText));
+                if (!hasConditionalPlay) continue;
+
+                if (!actionDef.playConstraint) {
+                    violations.push(
+                        `[${def.id}]（${i18n?.name ?? def.id}）` +
+                        `描述含条件性打出目标但缺少 playConstraint 字段` +
+                        `\n  effectText: ${effectText.slice(0, 80)}...`,
+                    );
+                }
+            }
+
+            expect(violations, '以下 ongoing 行动卡描述含条件性打出目标但缺少 playConstraint').toEqual([]);
+        });
+
+        it('描述含条件性打出限制的随从卡必须有 playConstraint', () => {
+            const allDefs = getAllCardDefs();
+            const violations: string[] = [];
+
+            // 匹配"只能将这张卡打到…的基地"、"只能打出到…力量…基地"等模式
+            const conditionalMinionPatterns = [
+                /只能.*打到.*基地/,
+                /只能.*打出到.*基地/,
+                /只能将.*打到.*基地/,
+            ];
+
+            for (const def of allDefs) {
+                if (def.type !== 'minion') continue;
+                const minionDef = def as MinionCardDef;
+
+                const i18n = zhCN.cards?.[def.id];
+                const abilityText: string = i18n?.abilityText ?? '';
+                if (!abilityText) continue;
+
+                const hasConditionalPlay = conditionalMinionPatterns.some(p => p.test(abilityText));
+                if (!hasConditionalPlay) continue;
+
+                if (!minionDef.playConstraint) {
+                    violations.push(
+                        `[${def.id}]（${i18n?.name ?? def.id}）` +
+                        `描述含条件性打出限制但缺少 playConstraint 字段` +
+                        `\n  abilityText: ${abilityText.slice(0, 80)}...`,
+                    );
+                }
+            }
+
+            expect(violations, '以下随从卡描述含条件性打出限制但缺少 playConstraint').toEqual([]);
         });
 
         it('描述含"打出到基地上"的 ongoing 行动卡不应有 ongoingTarget: "minion"', () => {

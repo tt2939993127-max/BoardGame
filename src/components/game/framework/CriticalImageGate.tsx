@@ -30,23 +30,28 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     loadingDescription,
     children,
 }) => {
-    const [ready, setReady] = useState(!enabled);
+    // E2E 测试可通过 window.__E2E_SKIP_IMAGE_GATE__ 跳过图片预加载门禁
+    const skipGate = typeof window !== 'undefined'
+        && (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ === true;
+    const effectiveEnabled = enabled && !skipGate;
+
+    const [ready, setReady] = useState(!effectiveEnabled);
     const inFlightRef = useRef(false);
     const lastReadyKeyRef = useRef<string | null>(null);
     const gameStateRef = useRef(gameState);
     const stateKey = gameState ? 'ready' : 'empty';
 
     const phaseKey = useMemo(() => {
-        if (!enabled || !gameId || !gameState) return '';
+        if (!effectiveEnabled || !gameId || !gameState) return '';
         const resolved = resolveCriticalImages(gameId, gameState, locale);
         return resolved.phaseKey ?? '';
-    }, [enabled, gameId, gameState, locale]);
+    }, [effectiveEnabled, gameId, gameState, locale]);
 
     const runKey = `${gameId ?? ''}:${locale ?? ''}:${phaseKey}:${stateKey}`;
 
     // 同步判断：runKey 变了但还没完成预加载 → 立即阻塞
     // 这比 useEffect 里的 setReady(false) 更早生效，避免 children 渲染一帧
-    const needsPreload = enabled && !!gameId && stateKey === 'ready'
+    const needsPreload = effectiveEnabled && !!gameId && stateKey === 'ready'
         && lastReadyKeyRef.current !== runKey;
 
     useEffect(() => {
@@ -54,7 +59,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     }, [gameState]);
 
     useEffect(() => {
-        if (!enabled || !gameId) {
+        if (!effectiveEnabled || !gameId) {
             setReady(true);
             inFlightRef.current = false;
             lastReadyKeyRef.current = null;
@@ -94,7 +99,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             .finally(() => {
                 inFlightRef.current = false;
             });
-    }, [enabled, gameId, locale, phaseKey, runKey, stateKey]);
+    }, [effectiveEnabled, gameId, locale, phaseKey, runKey, stateKey]);
 
     // needsPreload 同步阻塞：phaseKey 变化的同一渲染帧就拦住，不泄漏一帧给 children
     if (!ready || needsPreload) {

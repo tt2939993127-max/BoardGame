@@ -147,16 +147,30 @@ export function createTokenResponseRequestedEvent(
 const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThroneCore>> = {
     /**
      * 修改造成的伤害（加伤）
-     * - crit: value=1，每层 +1 伤害
+     * - crit: 伤害≥5时+4（门控条件），不能用于溅射伤害
      * - accuracy: value=0，不加伤害但使攻击不可防御
      */
     modifyDamageDealt: (ctx) => {
-        const { tokenDef, amount } = ctx;
+        const { tokenDef, amount, pendingDamage } = ctx;
         const effect = tokenDef.activeUse?.effect;
-        const modifier = (effect?.value ?? 1) * amount;
+
+        // 暴击 (crit)：需要当前伤害≥5才能使用
+        const isCrit = tokenDef.id === TOKEN_IDS.CRIT;
+        if (isCrit) {
+            const currentDamage = pendingDamage?.currentDamage ?? 0;
+            if (currentDamage < 5) {
+                return { success: false };
+            }
+            // TODO: 溅射伤害限制需要在 validate 层检查（当前无溅射机制）
+            return {
+                success: true,
+                damageModifier: (effect?.value ?? 4) * amount,
+            };
+        }
 
         // 精准 (accuracy)：value=0 且 tokenId 为 accuracy → 使攻击不可防御
         const isAccuracy = tokenDef.id === TOKEN_IDS.ACCURACY;
+        const modifier = (effect?.value ?? 0) * amount;
         return {
             success: true,
             damageModifier: modifier,
@@ -165,27 +179,48 @@ const effectProcessors: Record<TokenUseEffectType, TokenEffectProcessor<DiceThro
     },
 
     /**
-     * 修改受到的伤害（减伤/加伤，根据使用时机动态决定）
+     * 修改受到的伤害（减伤/反弹，根据 tokenId 动态决定）
+     * - protect: 伤害减半（向上取整）
+     * - retribution: 不减伤，反弹受到伤害的一半（向上取整）给攻击者
      * - 太极 beforeDamageDealt: value=-1 → 反转为 +1（加伤）
      * - 太极 beforeDamageReceived: value=-1 → 保持 -1（减伤）
-     * - protect: value=-1，每层 -1 伤害
-     * - retribution: value=0，不减伤但反弹 2 点不可防御伤害给攻击者
      */
     modifyDamageReceived: (ctx) => {
         const { tokenDef, amount, pendingDamage } = ctx;
         const effect = tokenDef.activeUse?.effect;
         const rawValue = effect?.value ?? -1;
 
+        // 守护 (protect)：伤害减半（向上取整）
+        const isProtect = tokenDef.id === TOKEN_IDS.PROTECT;
+        if (isProtect) {
+            const currentDamage = pendingDamage?.currentDamage ?? 0;
+            // 减半向上取整：减的量 = ceil(currentDamage / 2)
+            const reduction = -Math.ceil(currentDamage / 2);
+            return {
+                success: true,
+                damageModifier: reduction,
+            };
+        }
+
+        // 神罚 (retribution)：不减伤，反弹受到伤害的一半（向上取整）
+        const isRetribution = tokenDef.id === TOKEN_IDS.RETRIBUTION;
+        if (isRetribution) {
+            const currentDamage = pendingDamage?.currentDamage ?? 0;
+            const reflectAmount = Math.ceil(currentDamage / 2);
+            return {
+                success: true,
+                damageModifier: 0,
+                extra: { reflectDamage: reflectAmount },
+            };
+        }
+
         // 太极等双时机 token：在 beforeDamageDealt 时反转 modifier（减伤值变加伤值）
         const isOffensiveUse = pendingDamage?.responseType === 'beforeDamageDealt';
         const modifier = isOffensiveUse ? Math.abs(rawValue) * amount : rawValue * amount;
 
-        // 神罚 (retribution)：value=0 且 tokenId 为 retribution → 反弹 2 点伤害
-        const isRetribution = tokenDef.id === TOKEN_IDS.RETRIBUTION;
         return {
             success: true,
             damageModifier: modifier,
-            extra: isRetribution ? { reflectDamage: 2 * amount } : undefined,
         };
     },
 

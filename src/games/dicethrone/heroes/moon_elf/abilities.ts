@@ -50,7 +50,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('covert-fire', 'description'),
         sfxKey: MOON_ELF_SFX_SHOT,
-        trigger: { type: 'diceSet', faces: { [FACE.BOW]: 3, [FACE.MOON]: 1 } },
+        trigger: { type: 'diceSet', faces: { [FACE.BOW]: 3, [FACE.MOON]: 3 } },
         effects: [
             inflictStatus(STATUS_IDS.TARGETED, 1, abilityEffectText('covert-fire', 'inflictTargeted')),
             damage(4, abilityEffectText('covert-fire', 'damage4')),
@@ -63,7 +63,7 @@ export const MOON_ELF_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('covering-fire', 'description'),
         sfxKey: MOON_ELF_SFX_SHOT,
-        trigger: { type: 'diceSet', faces: { [FACE.BOW]: 2, [FACE.FOOT]: 2 } },
+        trigger: { type: 'diceSet', faces: { [FACE.BOW]: 2, [FACE.FOOT]: 3 } },
         effects: [
             grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('covering-fire', 'gainEvasive'), { timing: 'preDefense' }),
             damage(7, abilityEffectText('covering-fire', 'damage7')),

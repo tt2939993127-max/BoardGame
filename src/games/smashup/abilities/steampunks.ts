@@ -6,14 +6,16 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { recoverCardsFromDiscard, grantExtraAction, moveMinion, resolveOrPrompt } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraAction, moveMinion, resolveOrPrompt, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { SmashUpEvent, SmashUpCore, CardsDrawnEvent, MinionReturnedEvent, OngoingDetachedEvent } from '../domain/types';
+import type { SmashUpEvent, SmashUpCore, CardsDrawnEvent, MinionReturnedEvent, OngoingDetachedEvent, ActionCardDef } from '../domain/types';
 import { registerProtection, registerRestriction, registerTrigger, registerInterceptor } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, RestrictionCheckContext, TriggerContext } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { resolveOnPlay } from '../domain/abilityRegistry';
+import { reduce } from '../domain/reduce';
 
 /** 注册蒸汽朋克派系所有能力*/
 export function registerSteampunkAbilities(): void {
@@ -44,7 +46,7 @@ export function registerSteampunkAbilities(): void {
 function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const actionsInDiscard = player.discard.filter(c => c.type === 'action' && c.uid !== ctx.cardUid);
-    if (actionsInDiscard.length === 0) return { events: [] };
+    if (actionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
@@ -217,7 +219,7 @@ function steampunkEscapeHatchTrigger(ctx: TriggerContext): SmashUpEvent[] {
 function steampunkMechanic(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const actionsInDiscard = player.discard.filter(c => c.type === 'action' && c.uid !== ctx.cardUid);
-    if (actionsInDiscard.length === 0) return { events: [] };
+    if (actionsInDiscard.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.discard_empty', ctx.now)] };
     const options = actionsInDiscard.map((c, i) => {
         const def = getCardDef(c.defId);
         const name = def?.name ?? c.defId;
@@ -274,7 +276,7 @@ function steampunkCaptainAhab(ctx: AbilityContext): AbilityResult {
             break;
         }
     }
-    if (currentBaseIndex === -1) return { events: [] };
+    if (currentBaseIndex === -1) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     // 找有己方 ongoing 行动卡的其他基地
     const candidates: { baseIndex: number; label: string }[] = [];
@@ -286,7 +288,7 @@ function steampunkCaptainAhab(ctx: AbilityContext): AbilityResult {
             candidates.push({ baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` });
         }
     }
-    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     // 单候选自动执行，多候选让玩家选择
     return resolveOrPrompt<{ baseIndex: number }>(ctx,
@@ -311,7 +313,7 @@ function steampunkZeppelin(ctx: AbilityContext): AbilityResult {
             break;
         }
     }
-    if (zepBaseIndex === -1) return { events: [] };
+    if (zepBaseIndex === -1) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     const zepBase = ctx.state.bases[zepBaseIndex];
     const candidates: { id: string; label: string; value: { minionUid: string; minionDefId: string; fromBase: number; toBase: number } }[] = [];
@@ -348,11 +350,12 @@ function steampunkZeppelin(ctx: AbilityContext): AbilityResult {
         }
     }
 
-    if (candidates.length === 0) return { events: [] };
+    if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     const interaction = createSimpleChoice(
         `steampunk_zeppelin_${ctx.now}`, ctx.playerId,
-        '选择要移动的随从', candidates as any[], 'steampunk_zeppelin',
+        '选择要移动的随从', candidates as any[],
+        { sourceId: 'steampunk_zeppelin', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -383,28 +386,183 @@ export function registerSteampunkInteractionHandlers(): void {
         return { state, events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_scrap_diving', timestamp)] };
     });
 
-    registerInteractionHandler('steampunk_mechanic', (state, playerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('steampunk_mechanic', (state, playerId, value, _iData, random, timestamp) => {
         // 检查取消标记
         if ((value as any).__cancel__) return { state, events: [] };
         
-        const { cardUid } = value as { cardUid: string };
-        // 从弃牌堆取回到手牌 + 额外行动（模拟"打出弃牌堆行动卡"）
-        return { state, events: [
+        const { cardUid, defId } = value as { cardUid: string; defId?: string };
+        const card = state.core.players[playerId].discard.find(c => c.uid === cardUid);
+        const cardDefId = defId ?? card?.defId ?? '';
+        const def = getCardDef(cardDefId) as ActionCardDef | undefined;
+
+        // ongoing 卡需要选择附着目标基地 → 创建后续交互
+        if (def?.subtype === 'ongoing') {
+            const baseOptions = state.core.bases.map((base, i) => {
+                const baseDef = getBaseDef(base.defId);
+                const name = baseDef?.name ?? base.defId;
+                return { id: `base-${i}`, label: name, value: { baseIndex: i } };
+            });
+            const interaction = createSimpleChoice(
+                `steampunk_mechanic_target_${timestamp}`, playerId,
+                '选择要将行动卡打出到的基地', baseOptions, 'steampunk_mechanic_target',
+            );
+            const extended = {
+                ...interaction,
+                data: { ...interaction.data, continuationContext: { cardUid, defId: cardDefId } },
+            };
+            // 先恢复到手牌（后续 ACTION_PLAYED 需要从手牌移除）
+            return {
+                state: queueInteraction(state, extended),
+                events: [recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp)],
+            };
+        }
+
+        // standard 行动卡：恢复到手牌→立刻打出（不消耗行动额度）
+        const events: SmashUpEvent[] = [
             recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp),
-            grantExtraAction(playerId, 'steampunk_mechanic', timestamp),
-        ] };
+            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId: cardDefId }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+        ];
+        // 执行 onPlay 能力
+        const executor = resolveOnPlay(cardDefId);
+        if (executor) {
+            let simCore = state.core;
+            for (const evt of events) { simCore = reduce(simCore, evt); }
+            const ctx: AbilityContext = {
+                state: simCore, matchState: { ...state, core: simCore },
+                playerId, cardUid, defId: cardDefId, baseIndex: 0, random, now: timestamp,
+            };
+            const result = executor(ctx);
+            events.push(...result.events);
+            if (result.matchState) return { state: result.matchState, events };
+        }
+        return { state, events };
     });
 
     registerInteractionHandler('steampunk_change_of_venue', (state, playerId, value, _iData, _random, timestamp) => {
         const { cardUid, defId, ownerId } = value as { cardUid: string; defId: string; ownerId: string };
-        return { state, events: [
-            { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'steampunk_change_of_venue' }, timestamp },
-            grantExtraAction(playerId, 'steampunk_change_of_venue', timestamp),
-        ] };
+        const cardDef = getCardDef(defId) as ActionCardDef | undefined;
+        // 从基地/随从上移除 ongoing 卡（ONGOING_DETACHED 会把卡放入弃牌堆）
+        const detachEvt = { type: SU_EVENTS.ONGOING_DETACHED, payload: { cardUid, defId, ownerId, reason: 'steampunk_change_of_venue' }, timestamp };
+        // 从弃牌堆恢复到手牌（为后续 ACTION_PLAYED 准备）
+        const recoverEvt = recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_change_of_venue', timestamp);
+
+        // ongoing 卡需要选择新的附着目标
+        if (cardDef?.subtype === 'ongoing') {
+            const ongoingTarget = cardDef.ongoingTarget ?? 'base';
+            if (ongoingTarget === 'minion') {
+                // 附着到随从的 ongoing 卡：需要选择目标随从
+                const minionOptions: { id: string; label: string; value: { baseIndex: number; minionUid: string } }[] = [];
+                for (let i = 0; i < state.core.bases.length; i++) {
+                    for (const m of state.core.bases[i].minions) {
+                        if (m.controller === playerId) {
+                            const mDef = getCardDef(m.defId);
+                            minionOptions.push({ id: m.uid, label: mDef?.name ?? m.defId, value: { baseIndex: i, minionUid: m.uid } });
+                        }
+                    }
+                }
+                if (minionOptions.length === 0) {
+                    // 没有可附着的随从，仍给额外行动
+                    return { state, events: [detachEvt as SmashUpEvent, recoverEvt, grantExtraAction(playerId, 'steampunk_change_of_venue', timestamp)] };
+                }
+                const interaction = createSimpleChoice(
+                    `steampunk_cov_target_${timestamp}`, playerId,
+                    '选择要将行动卡附着到的随从', minionOptions, 'steampunk_change_of_venue_target',
+                );
+                const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid, defId } } };
+                return { state: queueInteraction(state, extended), events: [detachEvt as SmashUpEvent, recoverEvt] };
+            }
+            // 附着到基地的 ongoing 卡
+            const baseOptions = state.core.bases.map((base, i) => {
+                const baseDef = getBaseDef(base.defId);
+                return { id: `base-${i}`, label: baseDef?.name ?? base.defId, value: { baseIndex: i } };
+            });
+            const interaction = createSimpleChoice(
+                `steampunk_cov_target_${timestamp}`, playerId,
+                '选择要将行动卡打出到的基地', baseOptions, 'steampunk_change_of_venue_target',
+            );
+            const extended = { ...interaction, data: { ...interaction.data, continuationContext: { cardUid, defId } } };
+            return { state: queueInteraction(state, extended), events: [detachEvt as SmashUpEvent, recoverEvt] };
+        }
+
+        // standard 行动卡：直接打出
+        const events: SmashUpEvent[] = [
+            detachEvt as SmashUpEvent,
+            recoverEvt,
+            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+        ];
+        const executor = resolveOnPlay(defId);
+        if (executor) {
+            let simCore = state.core;
+            for (const evt of events) { simCore = reduce(simCore, evt); }
+            const ctx: AbilityContext = {
+                state: simCore, matchState: { ...state, core: simCore },
+                playerId, cardUid, defId, baseIndex: 0, random: _random, now: timestamp,
+            };
+            const result = executor(ctx);
+            events.push(...result.events);
+            if (result.matchState) return { state: result.matchState, events };
+        }
+        return { state, events };
     });
 
     registerInteractionHandler('steampunk_zeppelin', (state, _playerId, value, _iData, _random, timestamp) => {
         const { minionUid, minionDefId, fromBase, toBase } = value as { minionUid: string; minionDefId: string; fromBase: number; toBase: number };
         return { state, events: [moveMinion(minionUid, minionDefId, fromBase, toBase, 'steampunk_zeppelin', timestamp)] };
+    });
+
+    // 机械师：ongoing 卡选择附着目标基地后打出
+    registerInteractionHandler('steampunk_mechanic_target', (state, playerId, value, iData, random, timestamp) => {
+        const { baseIndex } = value as { baseIndex: number; minionUid?: string };
+        const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string };
+        if (!ctx) return { state, events: [] };
+        const { cardUid, defId } = ctx;
+        const events: SmashUpEvent[] = [
+            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'base', targetBaseIndex: baseIndex }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+        ];
+        // 执行 ongoing 卡的 onPlay 能力（如果有）
+        const executor = resolveOnPlay(defId);
+        if (executor) {
+            let simCore = state.core;
+            for (const evt of events) { simCore = reduce(simCore, evt); }
+            const abilityCtx: AbilityContext = {
+                state: simCore, matchState: { ...state, core: simCore },
+                playerId, cardUid, defId, baseIndex, random, now: timestamp,
+            };
+            const result = executor(abilityCtx);
+            events.push(...result.events);
+            if (result.matchState) return { state: result.matchState, events };
+        }
+        return { state, events };
+    });
+
+    // 集结号角：ongoing 卡选择新附着目标后打出
+    registerInteractionHandler('steampunk_change_of_venue_target', (state, playerId, value, iData, random, timestamp) => {
+        const { baseIndex, minionUid } = value as { baseIndex: number; minionUid?: string };
+        const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string };
+        if (!ctx) return { state, events: [] };
+        const { cardUid, defId } = ctx;
+        const targetType = minionUid ? 'minion' : 'base';
+        const events: SmashUpEvent[] = [
+            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType, targetBaseIndex: baseIndex, ...(minionUid ? { targetMinionUid: minionUid } : {}) }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+        ];
+        const executor = resolveOnPlay(defId);
+        if (executor) {
+            let simCore = state.core;
+            for (const evt of events) { simCore = reduce(simCore, evt); }
+            const abilityCtx: AbilityContext = {
+                state: simCore, matchState: { ...state, core: simCore },
+                playerId, cardUid, defId, baseIndex, targetMinionUid: minionUid, random, now: timestamp,
+            };
+            const result = executor(abilityCtx);
+            events.push(...result.events);
+            if (result.matchState) return { state: result.matchState, events };
+        }
+        return { state, events };
     });
 }

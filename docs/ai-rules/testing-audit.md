@@ -41,6 +41,25 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 
 ---
 
+## E2E 测试选择器一致性检查（强制）
+
+> **重构 UI 交互模式后必须执行**。UI 组件的渲染方式变更（如从弹窗改为内联横幅）时，所有引用旧选择器的 E2E 测试必须同步更新。
+
+### 检查清单
+
+1. **选择器来源验证**：E2E 测试中的 `data-testid`/CSS 选择器/文本匹配，必须对应实际渲染的组件。重构后用 `grep` 搜索旧选择器，确认所有 E2E 文件已更新。
+2. **交互路径验证**：测试中的点击/输入序列必须与实际 UI 交互路径一致。例如：手牌选择在 HandArea 中直接点击 vs 在弹窗 overlay 中选择，两者选择器完全不同。
+3. **按钮文本验证**：按钮文本来自 i18n，测试中的正则匹配必须覆盖中英文两种 locale（`/Confirm Discard|确认弃牌/i`）。
+4. **状态验证**：测试必须验证 UI 状态变更（如 `data-selected="true"`），不能只验证"点击了按钮"。
+
+### 典型反模式
+
+- ❌ 重构了交互模式（弹窗→横幅），E2E 测试仍查找旧弹窗选择器 → 测试超时/skip，从未真正执行
+- ❌ 测试中硬编码了组件内部 CSS 类名（如 `.card-selector-overlay`）→ 样式重构后测试失效
+- ✅ 使用 `data-testid` + 按钮文本匹配，与实际渲染组件对齐
+
+---
+
 ## 通用实现缺陷检查维度（D1-D20）
 
 > 所有审查/审计/新增功能验证时按维度检查。D1-D10 为原有维度（已扩展），D11-D20 为新增维度。
@@ -74,6 +93,15 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 **D2 边界完整 — 概念载体覆盖（强制）**：游戏描述中的一个名词在数据层可能有多种承载形式。筛选该概念时必须覆盖所有载体。**核心原则：一个游戏术语 ≠ 一种数据结构。审查时必须穷举该术语在数据层的所有承载形式。** 审查方法：① 锁定描述中的目标名词 ② 列出该名词在数据层的所有承载形式 ③ 追踪每个筛选点是否覆盖所有载体。只查了一种 = ❌。
 
 > **示例（SummonerWars）**："建筑"有 `cell.structure`（地图格子上的固定建筑）和拥有 `mobile_structure` 能力的 `cell.unit`（可移动建筑单位）两种载体
+
+**D2 子项：打出约束审计（强制）**（新增/修改 ongoing 行动卡、或修"卡牌打出到不合法基地"时触发）：描述中含条件性打出目标的 ongoing 行动卡，必须在数据定义中声明 `playConstraint`，并在验证层和 UI 层同步检查。**核心原则：卡牌描述中的打出前置条件必须在三层（数据定义 → 验证层 → UI 层）全部体现，缺任何一层都会导致非法打出或 UI 误导。** 审查方法：
+1. **识别条件性打出描述**：grep 所有 ongoing 行动卡的 i18n effectText，匹配 `打出到一个.*的基地上` 等模式（如"打出到一个你至少拥有一个随从的基地上"）
+2. **检查数据定义**：匹配到的卡牌在 `ActionCardDef` 中必须有 `playConstraint` 字段（如 `'requireOwnMinion'`）
+3. **检查验证层**：`commands.ts` 中 ongoing 行动卡验证逻辑必须检查 `def.playConstraint`，拒绝不满足条件的打出
+4. **检查 UI 层**：`Board.tsx` 的 `deployableBaseIndices` 计算必须根据 `playConstraint` 过滤不可选基地
+5. **自动化审计**：`abilityBehaviorAudit.test.ts` section 5 已添加自动检查——描述含条件性打出目标的 ongoing 卡必须有 `playConstraint` 字段
+
+> **示例（SmashUp 完成仪式）**：描述"打出到一个你至少拥有一个随从的基地上"，但 `ActionCardDef` 无 `playConstraint` 字段 → 验证层和 UI 层均无检查 → 玩家可以打出到空基地上。修复：添加 `playConstraint: 'requireOwnMinion'`，验证层和 UI 层同步检查
 
 **D4 查询一致性 — 深入审查**（新增 buff/共享机制或修"没效果"时触发）：① 识别统一查询入口并列出 ② grep 原始字段访问（含 `.tsx`），排除合法场景 ③ 判定：查询结果会因 buff/光环/临时效果改变？→ 必须走统一入口。只关心"印刷值"→ 可直接访问 ④ 输出绕过清单：文件+行号+当前代码+应改为。
 
@@ -427,3 +455,4 @@ ID 只出现在定义+注册 = 消费层缺失。
 | 神秘花园 `grantExtraMinion(restrictToBase)` 正确写入 `baseLimitedMinionQuota`，但 reducer `MINION_PLAYED` 中 `useBaseQuota = globalFull && baseQuota > 0` 要求全局额度先用完才消耗基地限定额度。玩家还有正常额度时打到花园的随从错误消耗 `minionsPlayed` | Reducer 消耗路径条件优先级错误：写入正确但消耗分支的 if 条件多了 `globalFull` 前置，导致基地限定额度在全局额度未满时被跳过 | D11+D16 | smashup |
 | 神秘花园审计只验证了"能力授予额度 ✅"和"验证层允许打出 ✅"，判定通过。未追踪到 reducer 中消耗该额度的具体分支逻辑 | 审计遗漏：只验证写入链不验证消耗链。写入正确 ≠ 消耗正确，必须追踪到 reducer 消耗分支 | D11+D12 | smashup |
 | 母星（全局 minionLimit+1）和花园（baseLimitedMinionQuota+1）同时生效时，打到花园的随从应优先消耗花园额度，但 reducer 优先消耗全局额度 | 多来源竞争：两种额度来源共存时消耗优先级未正确处理 | D13 | smashup |
+| 完成仪式描述"打出到一个你至少拥有一个随从的基地上"，但 `ActionCardDef` 无 `playConstraint` 字段，验证层和 UI 层均无打出前置条件检查，玩家可打出到空基地 | 打出约束缺失：审计 section 5 只检查 `ongoingTarget` 字段映射，未覆盖打出前置条件。描述中的条件性打出目标必须在数据定义（`playConstraint`）→ 验证层 → UI 层三层体现 | D2 | smashup |

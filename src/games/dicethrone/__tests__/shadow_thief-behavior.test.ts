@@ -12,6 +12,8 @@ import type { CustomActionContext } from '../domain/effects';
 import { initializeCustomActions } from '../domain/customActions';
 import { registerDiceDefinition } from '../domain/diceRegistry';
 import { shadowThiefDiceDefinition } from '../heroes/shadow_thief/diceConfig';
+import { resolveAttack } from '../domain/attack';
+import { reduce } from '../domain/reducer';
 
 initializeCustomActions();
 registerDiceDefinition(shadowThiefDiceDefinition);
@@ -300,9 +302,73 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // 聚宝盆
+    // 聚宝盆 I（新版：抽Card面数量牌+Shadow弃牌）
     // ========================================================================
-    describe('shadow_thief-cornucopia-discard (聚宝盆I：Shadow→弃对手牌)', () => {
+    describe('shadow_thief-cornucopia (聚宝盆I：抽Card面数量牌+Shadow弃牌)', () => {
+        it('2个Card面抽2牌', () => {
+            const dice = [5, 5, 1, 2, 3].map(v => createShadowDie(v)); // 2 card
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia', {
+                random: () => 0.5,
+            }));
+
+            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(2);
+        });
+
+        it('3个Card面抽牌（受牌库限制，最多抽2张）', () => {
+            const dice = [5, 5, 5, 1, 2].map(v => createShadowDie(v)); // 3 card
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia', {
+                random: () => 0.5,
+            }));
+
+            // 牌库只有2张，所以最多抽2张
+            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(2);
+        });
+
+        it('有Shadow面时弃对手1牌', () => {
+            const dice = [5, 5, 6, 1, 2].map(v => createShadowDie(v)); // 2 card + 1 shadow
+            const state = createState({ dice, defenderHand: [{ id: 'h1' }, { id: 'h2' }] });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia', {
+                random: () => 0,
+            }));
+
+            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(2);
+            expect(eventsOfType(events, 'CARD_DISCARDED')).toHaveLength(1);
+        });
+
+        it('无Shadow面时不弃牌', () => {
+            const dice = [5, 5, 1, 2, 3].map(v => createShadowDie(v)); // 2 card, 无 shadow
+            const state = createState({ dice, defenderHand: [{ id: 'h1' }] });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia', {
+                random: () => 0,
+            }));
+
+            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(2);
+            expect(eventsOfType(events, 'CARD_DISCARDED')).toHaveLength(0);
+        });
+
+        it('对手手牌为空时有Shadow也不弃牌', () => {
+            const dice = [5, 5, 6, 1, 2].map(v => createShadowDie(v)); // 2 card + 1 shadow
+            const state = createState({ dice, defenderHand: [] });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia', {
+                random: () => 0,
+            }));
+
+            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(2);
+            expect(eventsOfType(events, 'CARD_DISCARDED')).toHaveLength(0);
+        });
+    });
+
+    // ========================================================================
+    // 聚宝盆（旧版 handler，保留向后兼容）
+    // ========================================================================
+    describe('shadow_thief-cornucopia-discard (聚宝盆I旧版：Shadow→弃对手牌)', () => {
         it('有Shadow面时弃对手1牌', () => {
             const dice = [1, 2, 3, 4, 6].map(v => createShadowDie(v));
             const state = createState({ dice, defenderHand: [{ id: 'h1' }] });
@@ -322,6 +388,98 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
                 random: () => 0,
             }));
             expect(events).toHaveLength(0);
+        });
+    });
+
+    // ========================================================================
+    // 聚宝盆 II
+    // ========================================================================
+    describe('shadow_thief-cornucopia-2 (聚宝盆II：Card抽牌+Shadow弃牌+Bag得CP)', () => {
+        it('2个Card面抽2牌', () => {
+            const dice = [5, 5, 1, 2, 3].map(v => createShadowDie(v)); // 2 card
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia-2')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia-2', {
+                random: () => 0.5,
+            }));
+
+            const draws = eventsOfType(events, 'CARD_DRAWN');
+            expect(draws).toHaveLength(2);
+        });
+
+        it('有Shadow面时弃对手1牌', () => {
+            const dice = [5, 5, 6, 1, 2].map(v => createShadowDie(v)); // 2 card + 1 shadow
+            const state = createState({ dice, defenderHand: [{ id: 'h1' }, { id: 'h2' }] });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia-2')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia-2', {
+                random: () => 0,
+            }));
+
+            const discards = eventsOfType(events, 'CARD_DISCARDED');
+            expect(discards).toHaveLength(1);
+            expect((discards[0] as any).payload.playerId).toBe('1'); // 对手
+        });
+
+        it('无Shadow面时不弃牌', () => {
+            const dice = [5, 5, 1, 2, 3].map(v => createShadowDie(v)); // 2 card, 无 shadow
+            const state = createState({ dice, defenderHand: [{ id: 'h1' }] });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia-2')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia-2', {
+                random: () => 0,
+            }));
+
+            const discards = eventsOfType(events, 'CARD_DISCARDED');
+            expect(discards).toHaveLength(0);
+        });
+
+        it('有Bag面时获得1CP', () => {
+            const dice = [5, 5, 3, 1, 2].map(v => createShadowDie(v)); // 2 card + 1 bag
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia-2')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia-2', {
+                random: () => 0.5,
+            }));
+
+            const cpEvents = eventsOfType(events, 'CP_CHANGED');
+            expect(cpEvents).toHaveLength(1);
+            expect((cpEvents[0] as any).payload.delta).toBe(1);
+        });
+
+        it('无Bag面时不获得CP', () => {
+            const dice = [5, 5, 1, 2, 6].map(v => createShadowDie(v)); // 2 card + 1 shadow, 无 bag
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia-2')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia-2', {
+                random: () => 0,
+            }));
+
+            const cpEvents = eventsOfType(events, 'CP_CHANGED');
+            expect(cpEvents).toHaveLength(0);
+        });
+
+        it('三种效果同时触发：Card抽牌+Shadow弃牌+Bag得CP', () => {
+            const dice = [5, 5, 6, 3, 1].map(v => createShadowDie(v)); // 2 card + 1 shadow + 1 bag
+            const state = createState({ dice, defenderHand: [{ id: 'h1' }] });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia-2')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia-2', {
+                random: () => 0,
+            }));
+
+            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(2);
+            expect(eventsOfType(events, 'CARD_DISCARDED')).toHaveLength(1);
+            expect(eventsOfType(events, 'CP_CHANGED')).toHaveLength(1);
+        });
+
+        it('对手手牌为空时有Shadow也不弃牌', () => {
+            const dice = [5, 5, 6, 1, 2].map(v => createShadowDie(v)); // 2 card + 1 shadow
+            const state = createState({ dice, defenderHand: [] });
+            const handler = getCustomActionHandler('shadow_thief-cornucopia-2')!;
+            const events = handler(buildCtx(state, 'shadow_thief-cornucopia-2', {
+                random: () => 0,
+            }));
+
+            const discards = eventsOfType(events, 'CARD_DISCARDED');
+            expect(discards).toHaveLength(0);
         });
     });
 
@@ -350,31 +508,55 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
     // 防御
     // ========================================================================
     describe('shadow_thief-defense-resolve (暗影防御I)', () => {
-        it('匕首面造成伤害给原攻击者，背包面自己抽牌，暗影面自己获得护盾', () => {
-            // 骰子: dagger,dagger,bag,bag,shadow → 2匕首,2背包,1暗影（防御用4骰但这里用5骰模拟）
-            const dice = [1, 2, 3, 4, 6].map(v => createShadowDie(v));
+        it('2匕首施加毒液给原攻击者', () => {
+            const dice = [1, 2, 3, 4, 5].map(v => createShadowDie(v)); // 2 dagger, 2 bag, 1 card
             const state = createState({ dice });
             const handler = getCustomActionHandler('shadow_thief-defense-resolve')!;
-            const events = handler(buildCtx(state, 'shadow_thief-defense-resolve', {
-                asDefender: true,
-                random: () => 0.5,
-            }));
+            const events = handler(buildCtx(state, 'shadow_thief-defense-resolve', { asDefender: true }));
 
-            // 2匕首 → 2伤害，目标是原攻击者('1')
-            const dmg = eventsOfType(events, 'DAMAGE_DEALT');
-            expect(dmg).toHaveLength(1);
-            expect((dmg[0] as any).payload.amount).toBe(2);
-            expect((dmg[0] as any).payload.targetId).toBe('1'); // 原攻击者
+            const status = eventsOfType(events, 'STATUS_APPLIED');
+            expect(status).toHaveLength(1);
+            expect((status[0] as any).payload.statusId).toBe('poison');
+            expect((status[0] as any).payload.targetId).toBe('1'); // 原攻击者
+        });
 
-            // 2背包 → 抽2牌（防御者自己'0'抽）
-            const draws = eventsOfType(events, 'CARD_DRAWN');
-            expect(draws).toHaveLength(2);
+        it('1暗影获得SNEAK_ATTACK（给防御者自己）', () => {
+            const dice = [1, 3, 3, 5, 6].map(v => createShadowDie(v)); // 1 shadow
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-defense-resolve')!;
+            const events = handler(buildCtx(state, 'shadow_thief-defense-resolve', { asDefender: true }));
 
-            // 1暗影 → 1护盾（防御者自己'0'获得）
+            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
+            expect(tokens.some((t: any) => t.payload.tokenId === TOKEN_IDS.SNEAK_ATTACK)).toBe(true);
+            tokens.forEach((t: any) => {
+                expect(t.payload.targetId).toBe('0'); // 防御者自己
+            });
+        });
+
+        it('2暗影获得SNEAK+SNEAK_ATTACK+999护盾（全部给防御者自己）', () => {
+            const dice = [1, 3, 6, 6, 5].map(v => createShadowDie(v)); // 2 shadow
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-defense-resolve')!;
+            const events = handler(buildCtx(state, 'shadow_thief-defense-resolve', { asDefender: true }));
+
+            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
+            expect(tokens.length).toBeGreaterThanOrEqual(3);
+            tokens.forEach((t: any) => {
+                expect(t.payload.targetId).toBe('0'); // 防御者自己
+            });
             const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
             expect(shield).toHaveLength(1);
-            expect((shield[0] as any).payload.value).toBe(1);
+            expect((shield[0] as any).payload.value).toBe(999);
             expect((shield[0] as any).payload.targetId).toBe('0'); // 防御者自己
+        });
+
+        it('不足2匕首时不施加毒液', () => {
+            const dice = [1, 3, 3, 5, 6].map(v => createShadowDie(v)); // 1 dagger
+            const state = createState({ dice });
+            const handler = getCustomActionHandler('shadow_thief-defense-resolve')!;
+            const events = handler(buildCtx(state, 'shadow_thief-defense-resolve', { asDefender: true }));
+
+            expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(0);
         });
     });
 
@@ -462,40 +644,6 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
     // ========================================================================
     // 行动卡
     // ========================================================================
-    describe('shadow_thief-one-with-shadows (与影共生)', () => {
-        it('投出Shadow面获得SNEAK_ATTACK+2CP', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('shadow_thief-one-with-shadows')!;
-            // 与影共生是自我增益，targetId=自己('0')
-            const ctx = buildCtx(state, 'shadow_thief-one-with-shadows', {
-                random: () => 1, // d(6)→6 → shadow
-            });
-            ctx.targetId = '0' as any;
-            const events = handler(ctx);
-
-            const tokens = eventsOfType(events, 'TOKEN_GRANTED');
-            expect(tokens).toHaveLength(1);
-            expect((tokens[0] as any).payload.tokenId).toBe(TOKEN_IDS.SNEAK_ATTACK);
-
-            const cp = eventsOfType(events, 'CP_CHANGED');
-            expect(cp).toHaveLength(1);
-            expect((cp[0] as any).payload.delta).toBe(2);
-        });
-
-        it('投出非Shadow面抽1牌', () => {
-            const state = createState({});
-            const handler = getCustomActionHandler('shadow_thief-one-with-shadows')!;
-            const ctx = buildCtx(state, 'shadow_thief-one-with-shadows', {
-                random: () => 1 / 6, // d(6)→1 → dagger
-            });
-            ctx.targetId = '0' as any;
-            const events = handler(ctx);
-
-            expect(eventsOfType(events, 'TOKEN_GRANTED')).toHaveLength(0);
-            expect(eventsOfType(events, 'CARD_DRAWN')).toHaveLength(1);
-        });
-    });
-
     describe('shadow_thief-card-trick (卡牌戏法：弃对手1+抽1/2)', () => {
         it('无潜行时弃对手1牌+抽1牌', () => {
             const state = createState({ defenderHand: [{ id: 'h1' }] });
@@ -521,32 +669,17 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
     });
 
     // ========================================================================
-    // 潜行防御
+    // 潜行防御（已废弃 — 改为在攻击流程中处理）
     // ========================================================================
-    describe('shadow_thief-sneak-prevent (潜行：免除伤害)', () => {
-        it('消耗1层SNEAK并免除伤害', () => {
-            const state = createState({ attackerSneak: 2 });
-            const handler = getCustomActionHandler('shadow_thief-sneak-prevent')!;
-            const events = handler(buildCtx(state, 'shadow_thief-sneak-prevent', {
-                params: { damageAmount: 5, tokenStacks: 2 },
-            }));
-
-            const consumed = eventsOfType(events, 'TOKEN_CONSUMED');
-            expect(consumed).toHaveLength(1);
-            expect((consumed[0] as any).payload.amount).toBe(1);
-
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect(prevent).toHaveLength(1);
-            expect((prevent[0] as any).payload.amount).toBe(5);
-        });
-
-        it('无SNEAK时不生成事件', () => {
-            const state = createState({ attackerSneak: 0 });
-            const handler = getCustomActionHandler('shadow_thief-sneak-prevent')!;
-            const events = handler(buildCtx(state, 'shadow_thief-sneak-prevent', {
-                params: { damageAmount: 5, tokenStacks: 0 },
-            }));
-            expect(events).toHaveLength(0);
+    describe('shadow_thief-sneak-prevent (潜行：免除伤害) — 已废弃', () => {
+        it('潜行逻辑已移至 flowHooks.ts offensiveRoll 退出阶段', () => {
+            // shadow_thief-sneak-prevent handler 不再注册
+            const handler = getCustomActionHandler('shadow_thief-sneak-prevent');
+            expect(handler).toBeUndefined();
+            
+            // 潜行现在在攻击流程中处理（offensiveRoll 阶段退出时）
+            // 若防御方有潜行，跳过防御掷骰、免除伤害、消耗潜行
+            // 详见 flowHooks.ts 的 offensiveRoll 退出逻辑
         });
     });
 
@@ -598,5 +731,79 @@ describe('影子盗贼 Custom Action 运行时行为断言', () => {
             const events = handler(buildCtx(state, 'shadow_thief-remove-all-debuffs'));
             expect(events).toHaveLength(0);
         });
+    });
+});
+
+// ============================================================================
+// 暗影守护 II 完整攻击结算流程验证
+// ============================================================================
+describe('暗影守护 II 完整攻击结算 → token 写入 state', () => {
+    it('2暗影面时 resolveAttack 产生 SNEAK + SNEAK_ATTACK token 事件并正确 reduce', () => {
+        // 构造防御方骰子为 2 shadow + 3 其他
+        const dice = [6, 6, 1, 3, 5].map(v => createShadowDie(v)); // 2 shadow, 1 dagger, 1 bag, 1 card
+        const state = createState({ dice });
+
+        // 设置 pendingAttack 模拟攻击结算
+        state.pendingAttack = {
+            attackerId: '1',  // 原攻击者
+            defenderId: '0',  // 防御者（影子盗贼）
+            sourceAbilityId: 'dagger-strike-5',
+            defenseAbilityId: 'shadow-defense',
+            isDefendable: true,
+            damage: 5,
+            bonusDamage: 0,
+            preDefenseResolved: true,
+        } as any;
+
+        // 给防御者设置暗影守护 II 的技能定义（直接内联，避免 require 路径问题）
+        state.players['0'].abilities = [{
+            id: 'shadow-defense',
+            name: '暗影守护 II',
+            type: 'defensive',
+            description: '防御阶段（5骰）：升级版防御结算',
+            trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 5 },
+            effects: [
+                { description: '防御结算 II', action: { type: 'custom', target: 'self', customActionId: 'shadow_thief-defense-resolve-2' }, timing: 'withDamage' }
+            ]
+        }] as any;
+        state.players['0'].abilityLevels = { 'shadow-defense': 2 };
+
+        // 确保 tokenStackLimits 正确
+        state.players['0'].tokenStackLimits = {
+            [TOKEN_IDS.SNEAK]: 1,
+            [TOKEN_IDS.SNEAK_ATTACK]: 1,
+        };
+
+        const random = {
+            d: (n: number) => 1,
+            random: () => 0,
+            range: (min: number) => min,
+            shuffle: <T>(arr: T[]) => [...arr],
+        };
+
+        const events = resolveAttack(state, random, undefined, 1000);
+
+        // 验证事件中包含 TOKEN_GRANTED
+        const tokenEvents = eventsOfType(events, 'TOKEN_GRANTED');
+        expect(tokenEvents.length, '应产生 TOKEN_GRANTED 事件').toBeGreaterThanOrEqual(2);
+
+        // 验证 SNEAK token 事件
+        const sneakEvent = tokenEvents.find((e: any) => e.payload.tokenId === TOKEN_IDS.SNEAK);
+        expect(sneakEvent, '应有 SNEAK token 事件').toBeDefined();
+        expect((sneakEvent as any).payload.targetId, 'SNEAK 应给防御者').toBe('0');
+
+        // 验证 SNEAK_ATTACK token 事件
+        const sneakAttackEvent = tokenEvents.find((e: any) => e.payload.tokenId === TOKEN_IDS.SNEAK_ATTACK);
+        expect(sneakAttackEvent, '应有 SNEAK_ATTACK token 事件').toBeDefined();
+        expect((sneakAttackEvent as any).payload.targetId, 'SNEAK_ATTACK 应给防御者').toBe('0');
+
+        // 验证 reduce 后 state 中 token 正确写入
+        let reducedState = state;
+        for (const event of events) {
+            reducedState = reduce(reducedState, event as any);
+        }
+
+        expect(reducedState.players['0'].tokens[TOKEN_IDS.SNEAK], 'reduce 后 SNEAK 应为 1').toBe(1);
+        expect(reducedState.players['0'].tokens[TOKEN_IDS.SNEAK_ATTACK], 'reduce 后 SNEAK_ATTACK 应为 1').toBe(1);
     });
 });

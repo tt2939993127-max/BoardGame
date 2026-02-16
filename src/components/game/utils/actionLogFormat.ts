@@ -35,6 +35,8 @@ export const formatActionLogSegments = (segments: ActionLogSegment[] = []): stri
             }
             // breakdown segment：纯文本 fallback 只显示数值
             if (segment.type === 'breakdown') return segment.displayText;
+            // diceResult segment：纯文本 fallback 显示骰子点数
+            if (segment.type === 'diceResult') return `[${segment.dice.map(d => d.value).join(',')}]`;
             // card segment：如果有 previewTextNs，翻译 previewText
             if (segment.previewTextNs && segment.previewText) {
                 return i18n.t(`${segment.previewTextNs}:${segment.previewText}`, { defaultValue: segment.previewText });

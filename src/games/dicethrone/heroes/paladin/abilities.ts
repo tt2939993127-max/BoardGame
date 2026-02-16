@@ -4,6 +4,7 @@
  */
 
 import type { AbilityDef, AbilityEffect, EffectTiming, EffectCondition } from '../../domain/combat';
+import type { PassiveAbilityDef } from '../../domain/passiveAbility';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS as FACES } from '../../domain/ids';
 import { abilityText, abilityEffectText } from '../../../../engine/primitives/ability';
 
@@ -184,7 +185,15 @@ export const HOLY_LIGHT_2: AbilityDef = {
         heal(1, abilityEffectText('holy-light-2', 'heal1')),
         {
             description: abilityEffectText('holy-light-2', 'roll3'),
-            action: { type: 'custom', target: 'self', customActionId: 'paladin-holy-light-roll-3' },
+            action: {
+                type: 'rollDie', target: 'self', diceCount: 3,
+                conditionalEffects: [
+                    { face: FACES.SWORD, grantToken: { tokenId: TOKEN_IDS.CRIT, value: 1 } },
+                    { face: FACES.HELM, grantToken: { tokenId: TOKEN_IDS.PROTECT, value: 1 } },
+                    { face: FACES.HEART, drawCard: 1 },
+                    { face: FACES.PRAY, cp: 2 },
+                ],
+            },
             timing: 'withDamage'
         }
     ]
@@ -214,11 +223,16 @@ export const VENGEANCE_2: AbilityDef = {
             priority: 0
         },
         // 反击 II (Retribution II) - Variant 2 (3 Helm + 1 Pray)
+        // 卡牌描述："给任意玩家（包括自己）1层反击"
         {
             id: 'vengeance-2-main',
             trigger: { type: 'diceSet', faces: { [FACES.HELM]: 3, [FACES.PRAY]: 1 } },
             effects: [
-                grantToken(TOKEN_IDS.RETRIBUTION, 1, abilityEffectText('vengeance-2', 'gainRetributionToAny')), // Screenshot: "1 Player gains Retribution".
+                {
+                    description: abilityEffectText('vengeance-2', 'gainRetributionToAny'),
+                    action: { type: 'custom', target: 'self', customActionId: 'paladin-vengeance-select-player' },
+                    timing: 'preDefense'
+                },
                 cpGain(4, abilityEffectText('vengeance-2', 'gain4CP'))
             ],
             priority: 1
@@ -319,7 +333,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
         type: 'offensive',
         description: abilityText('righteous-combat', 'description'),
         sfxKey: PALADIN_SFX_HEAVY,
-        trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 3, [FACES.HELM]: 1 } },
+        trigger: { type: 'diceSet', faces: { [FACES.SWORD]: 3, [FACES.HELM]: 2 } },
         effects: [
             damage(5, abilityEffectText('righteous-combat', 'damage5')),
             {
@@ -381,7 +395,15 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
             heal(1, abilityEffectText('holy-light', 'heal1')),
             {
                 description: abilityEffectText('holy-light', 'rollEffect'),
-                action: { type: 'custom', target: 'self', customActionId: 'paladin-holy-light-roll' },
+                action: {
+                    type: 'rollDie', target: 'self', diceCount: 1,
+                    conditionalEffects: [
+                        { face: FACES.SWORD, grantToken: { tokenId: TOKEN_IDS.CRIT, value: 1 } },
+                        { face: FACES.HELM, grantToken: { tokenId: TOKEN_IDS.PROTECT, value: 1 } },
+                        { face: FACES.HEART, drawCard: 1 },
+                        { face: FACES.PRAY, cp: 2 },
+                    ],
+                },
                 timing: 'withDamage'
             }
         ]
@@ -412,7 +434,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
         effects: [
             damage(8, abilityEffectText('righteous-prayer', 'damage8')),
             grantToken(TOKEN_IDS.CRIT, 1, abilityEffectText('righteous-prayer', 'gainCrit')),
-            cpGain(2, abilityEffectText('righteous-prayer', 'gain2CP')),
+            cpGain(20, abilityEffectText('righteous-prayer', 'gain20CP')),
         ]
     },
 
@@ -448,3 +470,54 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
         ]
     }
 ];
+
+
+// ----------------------------------------------------------------------------
+// 被动能力定义（教皇税）
+// ----------------------------------------------------------------------------
+
+/** 教皇税 I（基础）：花费 1CP 重掷1骰 + 花费 3CP 抽1牌 */
+export const PALADIN_TITHES_BASE: PassiveAbilityDef = {
+    id: 'tithes',
+    nameKey: 'passive.tithes.name',
+    actions: [
+        {
+            type: 'rerollDie',
+            cpCost: 1,
+            timing: 'anytime',
+            descriptionKey: 'passive.tithes.reroll',
+        },
+        {
+            type: 'drawCard',
+            cpCost: 3,
+            timing: 'anytime',
+            descriptionKey: 'passive.tithes.draw',
+        },
+    ],
+};
+
+/** 教皇税 II（升级）：重掷不变，抽牌降为 2CP，新增祈祷触发获得 1CP */
+export const PALADIN_TITHES_UPGRADED: PassiveAbilityDef = {
+    id: 'tithes',
+    nameKey: 'passive.tithes-2.name',
+    actions: [
+        {
+            type: 'rerollDie',
+            cpCost: 1,
+            timing: 'anytime',
+            descriptionKey: 'passive.tithes-2.reroll',
+        },
+        {
+            type: 'drawCard',
+            cpCost: 2,
+            timing: 'anytime',
+            descriptionKey: 'passive.tithes-2.draw',
+        },
+    ],
+    trigger: {
+        on: 'abilityActivatedWithFace',
+        requiredFace: FACES.PRAY,
+        grantCp: 1,
+        ownOffensiveOnly: true,
+    },
+};

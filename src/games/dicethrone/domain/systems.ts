@@ -16,7 +16,12 @@ import type {
     InteractionRequestedEvent,
     TokenResponseRequestedEvent,
     BonusDiceRerollRequestedEvent,
+    CpChangedEvent,
 } from './types';
+import { getPlayerPassiveAbilities } from './passiveAbility';
+import { findPlayerAbility } from './abilityLookup';
+import { RESOURCE_IDS } from './resources';
+import { CP_MAX } from './core-types';
 
 // ============================================================================
 // DiceThrone 事件处理系统
@@ -155,6 +160,51 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                 const resolvedEvent = handlePromptResolved(event);
                 if (resolvedEvent) {
                     nextEvents.push(resolvedEvent);
+                }
+
+                // ---- 被动能力触发器：ABILITY_ACTIVATED + pray 面 → 获得 CP ----
+                if (dtEvent.type === 'ABILITY_ACTIVATED') {
+                    const { abilityId, playerId, isDefense } = dtEvent.payload;
+                    // 仅在自己的进攻阶段触发（非防御技能）
+                    const phase = newState.sys.phase as string;
+                    if (!isDefense && phase === 'offensiveRoll' && playerId === newState.core.activePlayerId) {
+                        const passives = getPlayerPassiveAbilities(newState.core, playerId);
+                        for (const passive of passives) {
+                            if (!passive.trigger || passive.trigger.on !== 'abilityActivatedWithFace') continue;
+                            // 检查激活的技能是否使用了所需骰面
+                            const match = findPlayerAbility(newState.core, playerId, abilityId);
+                            if (!match) continue;
+                            const trigger = match.variant?.trigger ?? match.ability.trigger;
+                            if (!trigger) continue;
+                            // 检查 trigger 中是否包含所需骰面
+                            let hasFace = false;
+                            if (trigger.type === 'diceSet' && trigger.faces) {
+                                hasFace = (trigger.faces[passive.trigger.requiredFace] ?? 0) > 0;
+                            } else if (trigger.type === 'allSymbolsPresent' && trigger.symbols) {
+                                hasFace = trigger.symbols.includes(passive.trigger.requiredFace);
+                            } else if (trigger.type === 'smallStraight' || trigger.type === 'largeStraight') {
+                                // 顺子不声明骰面，需要检查实际骰面中是否包含所需面
+                                const activeDice = newState.core.dice.slice(0, newState.core.rollDiceCount);
+                                hasFace = activeDice.some(d => d.symbol === passive.trigger!.requiredFace);
+                            }
+                            if (hasFace) {
+                                const player = newState.core.players[playerId];
+                                const currentCp = player?.resources[RESOURCE_IDS.CP] ?? 0;
+                                const newCp = Math.min(currentCp + passive.trigger.grantCp, CP_MAX);
+                                nextEvents.push({
+                                    type: 'CP_CHANGED',
+                                    payload: {
+                                        playerId,
+                                        delta: passive.trigger.grantCp,
+                                        newValue: newCp,
+                                        sourceAbilityId: passive.id,
+                                    },
+                                    sourceCommandType: 'PASSIVE_TRIGGER',
+                                    timestamp: typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp + 1 : 1,
+                                } as CpChangedEvent);
+                            }
+                        }
+                    }
                 }
             }
 

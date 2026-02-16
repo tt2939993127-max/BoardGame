@@ -14,13 +14,13 @@ import type { GameBoardProps } from '../../engine/transport/protocol';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import type { MatchState } from '../../engine/types';
-import type { SmashUpCore, CardInstance, ActionCardDef } from './domain/types';
+import type { SmashUpCore, CardInstance, ActionCardDef, MinionCardDef } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
 import { getScores } from './domain/index';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 import { getCardDef, getBaseDef, getMinionDef } from './data/cards';
-import { getTotalEffectivePowerOnBase, getEffectiveBreakpoint } from './domain/ongoingModifiers';
+import { getTotalEffectivePowerOnBase, getEffectiveBreakpoint, getPlayerEffectivePowerOnBase } from './domain/ongoingModifiers';
 import { isOperationRestricted } from './domain/ongoingEffects';
 import { useGameAudio, playDeniedSound } from '../../lib/audio/useGameAudio';
 import { registerCardAtlasSource } from '../../components/common/media/CardPreview';
@@ -50,9 +50,29 @@ import { useGameMode } from '../../contexts/GameModeContext';
 import { UndoProvider } from '../../contexts/UndoContext';
 import { TutorialSelectionGate } from '../../components/game/framework';
 import { LoadingScreen } from '../../components/system/LoadingScreen';
+import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { UI_Z_INDEX } from '../../core';
+import type { PlayConstraint } from './domain/types';
 
 type Props = GameBoardProps<SmashUpCore>;
+
+/** UI 层打出约束检查（与 commands.ts 的 checkPlayConstraint 对齐） */
+function checkPlayConstraintUI(
+    constraint: PlayConstraint,
+    core: SmashUpCore,
+    baseIndex: number,
+    playerId: string,
+): boolean {
+    if (constraint === 'requireOwnMinion') {
+        return core.bases[baseIndex].minions.some(m => m.owner === playerId);
+    }
+    if (typeof constraint === 'object' && constraint.type === 'requireOwnPower') {
+        const base = core.bases[baseIndex];
+        const myPower = getPlayerEffectivePowerOnBase(core, base, baseIndex, playerId);
+        return myPower >= constraint.minPower;
+    }
+    return true;
+}
 
 const getPhaseNameKey = (phase: string) => `phases.${phase}`;
 
@@ -75,17 +95,45 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
     const [selectedCardMode, setSelectedCardMode] = useState<'minion' | 'ongoing' | 'ongoing-minion' | null>(null);
     const [discardSelection, setDiscardSelection] = useState<Set<string>>(new Set());
     const [meFirstPendingCard, setMeFirstPendingCard] = useState<MeFirstPendingCard | null>(null);
-    const needDiscard = phase === 'discard' && isMyTurn && myPlayer != null && myPlayer.hand.length > HAND_LIMIT;
-    const discardCount = needDiscard ? myPlayer!.hand.length - HAND_LIMIT : 0;
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // 弃牌判断：抽牌阶段 + 是我的回合 + 手牌超限
+    // 使用 useMemo 确保使用最新的依赖值（避免时序问题）
+    const needDiscard = useMemo(() => {
+        return phase === 'draw' && isMyTurn && !!myPlayer && myPlayer.hand.length > HAND_LIMIT;
+    }, [phase, isMyTurn, myPlayer]);
+    
+    const discardCount = needDiscard && myPlayer ? myPlayer.hand.length - HAND_LIMIT : 0;
 
     // 含疯狂卡惩罚的最终分数（统一查询入口）
     const finalScores = useMemo(() => getScores(core), [core]);
 
     // 弃牌堆可打出卡牌选项（仅在出牌阶段且是自己回合时计算）
+    // 随从额度已满时，过滤掉消耗正常额度的选项（不消耗额度的额外打出仍然可用）
+    // 但需要考虑基地限定额度：如果有基地限定额度，则保留可以打到对应基地的选项
     const discardPlayOptions = useMemo(() => {
         if (!isMyTurn || phase !== 'playCards' || !playerID) return [];
-        return getDiscardPlayOptions(core, playerID);
-    }, [core, isMyTurn, phase, playerID]);
+        const all = getDiscardPlayOptions(core, playerID);
+        const globalQuotaFull = myPlayer ? myPlayer.minionsPlayed >= myPlayer.minionLimit : false;
+        if (!globalQuotaFull) return all;
+        
+        // 全局额度已满，检查基地限定额度
+        const baseQuota = myPlayer?.baseLimitedMinionQuota ?? {};
+        const hasBaseQuota = Object.values(baseQuota).some(v => v > 0);
+        
+        return all.filter(opt => {
+            // 不消耗正常额度的选项（额外打出）始终保留
+            if (!opt.consumesNormalLimit) return true;
+            // 消耗正常额度的选项：只有当有基地限定额度且可以打到对应基地时才保留
+            if (!hasBaseQuota) return false;
+            if (opt.allowedBaseIndices === 'all') {
+                // 可以打到任意基地，检查是否有任何基地有额度
+                return Object.keys(baseQuota).some(baseIdx => baseQuota[Number(baseIdx)] > 0);
+            }
+            // 只能打到特定基地，检查这些基地是否有额度
+            return opt.allowedBaseIndices.some(baseIdx => (baseQuota[baseIdx] ?? 0) > 0);
+        });
+    }, [core, isMyTurn, phase, playerID, myPlayer]);
 
     // 手牌弃牌交互检测：当前 interaction 的所有选项都对应手牌时，用手牌区直接选择
     const currentInteraction = G.sys.interaction?.current;
@@ -168,10 +216,15 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
         const data = currentInteraction?.data as Record<string, unknown> | undefined;
         if (data?.targetType === 'minion') return true;
+        // 兼容旧模式：所有选项都包含 minionUid，且不包含确认类字段（accept/confirm/returnIt/skip/done）
+        // 确认类字段说明这是"是/否"交互而非随从选择
         return currentPrompt.options.length > 0 &&
             currentPrompt.options.every(opt => {
-                const val = opt.value as { minionUid?: string } | undefined;
-                return val != null && typeof val.minionUid === 'string';
+                const val = opt.value as Record<string, unknown> | undefined;
+                if (!val || typeof val.minionUid !== 'string') return false;
+                // 排除包含确认类字段的选项（这些是是/否交互，不是随从选择）
+                if ('accept' in val || 'confirm' in val || 'returnIt' in val || 'skip' in val || 'done' in val) return false;
+                return true;
             });
     }, [currentPrompt, playerID, currentInteraction]);
 
@@ -200,6 +253,8 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         const data = currentInteraction?.data as Record<string, unknown> | undefined;
         return data?.targetType === 'discard_minion';
     }, [currentPrompt, playerID, currentInteraction]);
+
+
 
     // 弃牌堆随从选择：可选基地索引（从 interaction data 中读取）
     const discardMinionAllowedBases = useMemo<Set<number>>(() => {
@@ -237,13 +292,6 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         return [];
     }, [isDiscardMinionPrompt, currentPrompt, discardPlayOptions]);
 
-    // 弃牌堆出牌横排标题
-    const discardStripTitle = useMemo(() => {
-        if (isDiscardMinionPrompt && currentPrompt) return currentPrompt.title;
-        if (discardPlayOptions.length > 0) return t('ui.discard_play_available', { defaultValue: '可从弃牌堆打出' });
-        return '';
-    }, [isDiscardMinionPrompt, currentPrompt, discardPlayOptions, t]);
-
     // 弃牌堆出牌横排的"完成"选项（interaction 模式下的 done 选项）
     const discardStripDoneOption = useMemo(() => {
         if (!isDiscardMinionPrompt || !currentPrompt) return null;
@@ -268,14 +316,6 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         }
         return new Set(opt.allowedBaseIndices);
     }, [discardStripSelectedUid, isDiscardMinionPrompt, discardMinionAllowedBases, discardPlayOptions, core.bases]);
-
-    // 被动弃牌堆出牌面板：用户手动打开（点弃牌堆按钮），手动关闭
-    const [discardPlayStripOpen, setDiscardPlayStripOpen] = useState(false);
-
-    // discardPlayOptions 清空时自动关闭（卡牌用完了）
-    useEffect(() => {
-        if (discardPlayOptions.length === 0) setDiscardPlayStripOpen(false);
-    }, [discardPlayOptions.length]);
 
 
     // Me First! 可选基地集合（达到临界点的基地索引）
@@ -324,12 +364,27 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                 const minionDef = getMinionDef(card.defId);
                 const basePower = minionDef?.power ?? 0;
                 if (!isOperationRestricted(core, i, playerID, 'play_minion', { minionDefId: card.defId, basePower })) {
-                    indices.add(i);
+                    // 随从打出约束（数据驱动）
+                    if (minionDef?.playConstraint) {
+                        if (checkPlayConstraintUI(minionDef.playConstraint, core, i, playerID)) {
+                            indices.add(i);
+                        }
+                    } else {
+                        indices.add(i);
+                    }
                 }
             } else if (selectedCardMode === 'ongoing' || selectedCardMode === 'ongoing-minion') {
                 // 打出行动卡：检查 play_action 限制
                 if (!isOperationRestricted(core, i, playerID, 'play_action')) {
-                    indices.add(i);
+                    // playConstraint 数据驱动约束
+                    const actionDef = getCardDef(card.defId) as ActionCardDef | undefined;
+                    if (actionDef?.playConstraint) {
+                        if (checkPlayConstraintUI(actionDef.playConstraint, core, i, playerID)) {
+                            indices.add(i);
+                        }
+                    } else {
+                        indices.add(i);
+                    }
                 }
             }
         }
@@ -352,6 +407,18 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
     // 事件流消费 → 动画驱动
     const myPid = playerID || '0';
     const gameEvents = useGameEvents({ G, myPlayerId: myPid });
+
+    // 能力反馈 toast（搜索失败等提示）
+    useEffect(() => {
+        if (gameEvents.feedbacks.length === 0) return;
+        for (const fb of gameEvents.feedbacks) {
+            // 只显示给当前玩家的反馈
+            if (fb.playerId === playerID) {
+                toast(t(fb.messageKey, { defaultValue: '牌库中未找到符合条件的卡牌，已重洗牌库', ...fb.messageParams }));
+            }
+            gameEvents.removeFeedback(fb.id);
+        }
+    }, [gameEvents.feedbacks, gameEvents.removeFeedback, playerID, t]);
 
     // 音效系统
     useGameAudio({
@@ -425,7 +492,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
         setSelectedCardMode(null);
         setDiscardSelection(new Set());
         setMeFirstPendingCard(null);
-        setDiscardPlayStripOpen(false);
+        setIsSubmitting(false);
     }, [phase, currentPid]);
 
     // 卡牌图集：同步注册（硬编码尺寸），避免异步竞态导致 FactionSelection 首次渲染时 atlas 为空
@@ -576,6 +643,20 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
             return;
         }
 
+        // 手牌超限弃牌模式：toggle 选中状态
+        if (needDiscard) {
+            setDiscardSelection(prev => {
+                const next = new Set(prev);
+                if (next.has(card.uid)) {
+                    next.delete(card.uid);
+                } else if (next.size < discardCount) {
+                    next.add(card.uid);
+                }
+                return next;
+            });
+            return;
+        }
+
         // Validation for play phase / turn
         if (!isMyTurn || phase !== 'playCards') {
             playDeniedSound();
@@ -628,7 +709,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                 setSelectedCardMode('minion');
             }
         }
-    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t]);
+    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount]);
 
     /** 随从点击回调：ongoing-minion 模式下附着行动卡到随从，或交互驱动的随从选择 */
     const handleMinionSelect = useCallback((minionUid: string, baseIndex: number) => {
@@ -798,15 +879,18 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                         >
                             <button
                                 onClick={() => {
-                                    if (!isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE)) {
+                                    if (!isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting) {
                                         playDeniedSound();
                                         return;
                                     }
+                                    setIsSubmitting(true);
                                     dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
+                                    // 超时兜底：3秒后强制重置（防止命令失败导致按钮永久禁用）
+                                    setTimeout(() => setIsSubmitting(false), 3000);
                                 }}
-                                disabled={!isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE)}
+                                disabled={!isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting}
                                 className={`group w-24 h-24 rounded-full border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center transition-all text-white relative overflow-hidden ${
-                                    !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE)
+                                    !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting
                                         ? 'bg-slate-600 opacity-50 cursor-not-allowed'
                                         : 'bg-slate-900 hover:scale-110 hover:rotate-3 active:scale-95'
                                 }`}
@@ -834,39 +918,129 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                             {/* 剩余出牌额度指示器 - 绝对定位在按钮右侧 */}
                             {myPlayer && (
                                 <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 flex flex-col gap-2">
-                                    {/* 随从额度（含基地限定额度） */}
+                                    {/* 随从额度（含基地限定额度 + 力量限制 tooltip） */}
                                     {(() => {
-                                        const baseQuotaTotal = Object.values(myPlayer.baseLimitedMinionQuota ?? {}).reduce((s, v) => s + v, 0);
+                                        const baseQuota = myPlayer.baseLimitedMinionQuota ?? {};
+                                        const baseQuotaTotal = Object.values(baseQuota).reduce((s, v) => s + v, 0);
                                         const globalRemaining = Math.max(0, myPlayer.minionLimit - myPlayer.minionsPlayed);
                                         const totalRemaining = globalRemaining + baseQuotaTotal;
+                                        const hasExtra = baseQuotaTotal > 0 || myPlayer.extraMinionPowerMax !== undefined;
                                         return (
-                                            <div className={`flex items-center gap-1.5 px-2 py-1 rounded border-2 shadow-md text-xs font-black whitespace-nowrap ${
-                                                totalRemaining > 0
-                                                    ? 'bg-emerald-600 border-emerald-400 text-white'
-                                                    : 'bg-slate-700 border-slate-500 text-slate-300'
-                                            }`}>
-                                                <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 20 20">
-                                                    <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-                                                </svg>
-                                                <span>{t('ui.minion_short', { defaultValue: '随从' })}</span>
-                                                <span>{totalRemaining}</span>
+                                            <div className="relative group/minion">
+                                                <div className={`flex items-center gap-1.5 px-2 py-1 rounded border-2 shadow-md text-xs font-black whitespace-nowrap cursor-default ${
+                                                    totalRemaining > 0
+                                                        ? 'bg-emerald-600 border-emerald-400 text-white'
+                                                        : 'bg-slate-700 border-slate-500 text-slate-300'
+                                                }`}>
+                                                    <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 20 20">
+                                                        <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
+                                                    </svg>
+                                                    <span>{t('ui.minion_short', { defaultValue: '随从' })}</span>
+                                                    <span>{totalRemaining}</span>
+                                                    {hasExtra && (
+                                                        <svg className="w-3.5 h-3.5 fill-amber-300 shrink-0 drop-shadow-[0_0_2px_rgba(252,211,77,0.6)]" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                {/* Tooltip：紧凑纯文本，无图标 */}
+                                                <div className="absolute right-0 bottom-full mb-2 hidden group-hover/minion:block z-50 pointer-events-none">
+                                                    <div className="bg-slate-900/95 backdrop-blur-sm text-white text-[11px] leading-tight rounded border border-slate-600 shadow-xl px-2 py-1.5 whitespace-nowrap space-y-0.5">
+                                                        <div className="flex justify-between gap-3">
+                                                            <span className="text-slate-300">{t('ui.minion_global_quota', { defaultValue: '通用额度' })}</span>
+                                                            <span className="font-bold">{globalRemaining}/{myPlayer.minionLimit}</span>
+                                                        </div>
+                                                        {Object.entries(baseQuota).map(([baseIdx, count]) => {
+                                                            if (count <= 0) return null;
+                                                            const bDef = getBaseDef(core.bases[Number(baseIdx)]?.defId);
+                                                            const bName = bDef?.name ? t(`cards.${bDef.id}.name`, { defaultValue: bDef.name }) : `#${Number(baseIdx) + 1}`;
+                                                            return (
+                                                                <div key={baseIdx} className="text-amber-300">+{count} → {bName}</div>
+                                                            );
+                                                        })}
+                                                        {myPlayer.extraMinionPowerMax !== undefined && (
+                                                            <div className="text-orange-300 border-t border-slate-700 pt-0.5">{t('ui.minion_power_cap', { defaultValue: '力量限制 ≤{{max}}', max: myPlayer.extraMinionPowerMax })}</div>
+                                                        )}
+                                                    </div>
+                                                    <div className="absolute right-3 top-full w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-slate-600" />
+                                                </div>
                                             </div>
                                         );
                                     })()}
-                                    {/* 行动额度 */}
-                                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded border-2 shadow-md text-xs font-black whitespace-nowrap ${
-                                        myPlayer.actionsPlayed < myPlayer.actionLimit
-                                            ? 'bg-blue-600 border-blue-400 text-white'
-                                            : 'bg-slate-700 border-slate-500 text-slate-300'
-                                    }`}>
-                                        <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-                                        </svg>
-                                        <span>{t('ui.action_short', { defaultValue: '行动' })}</span>
-                                        <span>{myPlayer.actionLimit - myPlayer.actionsPlayed}</span>
-                                    </div>
+                                    {/* 行动额度（含 tooltip） */}
+                                    {(() => {
+                                        const actionRemaining = Math.max(0, myPlayer.actionLimit - myPlayer.actionsPlayed);
+                                        const hasExtraAction = myPlayer.actionLimit > 1;
+                                        return (
+                                            <div className="relative group/action">
+                                                <div className={`flex items-center gap-1.5 px-2 py-1 rounded border-2 shadow-md text-xs font-black whitespace-nowrap cursor-default ${
+                                                    actionRemaining > 0
+                                                        ? 'bg-blue-600 border-blue-400 text-white'
+                                                        : 'bg-slate-700 border-slate-500 text-slate-300'
+                                                }`}>
+                                                    <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <span>{t('ui.action_short', { defaultValue: '战术' })}</span>
+                                                    <span>{actionRemaining}</span>
+                                                    {hasExtraAction && (
+                                                        <svg className="w-3.5 h-3.5 fill-amber-300 shrink-0 drop-shadow-[0_0_2px_rgba(252,211,77,0.6)]" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                {/* Tooltip：紧凑纯文本，与随从额度 tooltip 风格一致 */}
+                                                <div className="absolute right-0 bottom-full mb-2 hidden group-hover/action:block z-50 pointer-events-none">
+                                                    <div className="bg-slate-900/95 backdrop-blur-sm text-white text-[11px] leading-tight rounded border border-slate-600 shadow-xl px-2 py-1.5 whitespace-nowrap space-y-0.5">
+                                                        <div className="flex justify-between gap-3">
+                                                            <span className="text-slate-300">{t('ui.action_global_quota', { defaultValue: '通用额度' })}</span>
+                                                            <span className="font-bold">{actionRemaining}/{myPlayer.actionLimit}</span>
+                                                        </div>
+                                                        {hasExtraAction && (
+                                                            <div className="text-amber-300">{t('ui.action_extra_hint', { defaultValue: '含额外行动额度 +{{extra}}', extra: myPlayer.actionLimit - 1 })}</div>
+                                                        )}
+                                                    </div>
+                                                    <div className="absolute right-3 top-full w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-slate-600" />
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             )}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* 弃牌模式：继续按钮（复用结束回合按钮位置） */}
+                <AnimatePresence>
+                    {needDiscard && (
+                        <motion.div
+                            initial={{ y: 100, opacity: 0, scale: 0.5 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            exit={{ y: 100, opacity: 0, scale: 0.5 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                            className="pointer-events-auto"
+                        >
+                            <button
+                                onClick={() => {
+                                    if (discardSelection.size === discardCount) {
+                                        dispatch(SU_COMMANDS.DISCARD_TO_LIMIT, { cardUids: Array.from(discardSelection) });
+                                        setDiscardSelection(new Set());
+                                    }
+                                }}
+                                disabled={discardSelection.size !== discardCount}
+                                className={`group w-24 h-24 rounded-full border-4 border-white shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center transition-all text-white relative overflow-hidden ${
+                                    discardSelection.size !== discardCount
+                                        ? 'bg-slate-600 opacity-50 cursor-not-allowed'
+                                        : 'bg-slate-900 hover:scale-110 hover:rotate-3 active:scale-95'
+                                }`}
+                            >
+                                <div className="absolute inset-0 opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/pinstriped-suit.png')]" />
+                                <span className="text-lg font-black uppercase italic leading-none tracking-tighter">
+                                    {t('ui.continue', { defaultValue: '继续' })}
+                                </span>
+                                <div className="absolute -inset-1 bg-white/5 blur-xl group-hover:bg-white/10 transition-colors" />
+                            </button>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -958,31 +1132,26 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
 
             {/* --- BOTTOM: HAND & CONTROLS --- */}
             {/* Not a bar, but floating elements */}
+
+            {/* 弃牌提示横幅（顶部，不遮挡手牌） */}
+            {myPlayer && needDiscard && (
+                <motion.div
+                    initial={{ y: -20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="fixed top-[72px] inset-x-0 z-30 flex justify-center pointer-events-none"
+                >
+                    <div className="bg-red-900/90 backdrop-blur-sm text-white px-6 py-2 rounded border border-red-500 shadow-lg">
+                        <span className="font-black text-base uppercase tracking-tight">
+                            {t('ui.discard_desc', { count: discardCount })}（{discardSelection.size}/{discardCount}）
+                        </span>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* 手牌区：z-60，在弃牌遮罩之上 */}
             {
                 myPlayer && (
-                    <div className="absolute bottom-0 inset-x-0 h-[220px] z-30 pointer-events-none">
-
-                        {/* Discard Overlay (Messy Pile) */}
-                        {needDiscard && (
-                            <div className="absolute inset-0 bg-black/60 z-50 flex flex-col items-center justify-center pointer-events-auto">
-                                <div className="bg-white p-6 rotate-1 shadow-2xl max-w-md text-center border-4 border-red-500 border-dashed">
-                                    <h2 className="text-2xl font-black text-red-600 uppercase mb-2 transform -rotate-1">{t('ui.too_many_cards')}</h2>
-                                    <p className="font-bold text-slate-700 mb-4">{t('ui.discard_desc', { count: discardCount })}</p>
-                                    <SmashUpGameButton
-                                        variant="primary"
-                                        onClick={() => {
-                                            if (discardSelection.size === discardCount) {
-                                                dispatch(SU_COMMANDS.DISCARD_TO_LIMIT, { cardUids: Array.from(discardSelection) });
-                                                setDiscardSelection(new Set());
-                                            }
-                                        }}
-                                        disabled={discardSelection.size !== discardCount}
-                                    >
-                                        {t('ui.throw_away')}
-                                    </SmashUpGameButton>
-                                </div>
-                            </div>
-                        )}
+                    <div className="absolute bottom-0 inset-x-0 h-[220px] z-60 pointer-events-none">
 
                         <HandArea
                             hand={myPlayer.hand}
@@ -1007,7 +1176,8 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                             deckCount={myPlayer.deck.length}
                             discard={myPlayer.discard}
                             isMyTurn={isMyTurn}
-                            hasPlayableFromDiscard={discardPlayOptions.length > 0}
+                            hasPlayableFromDiscard={discardPlayOptions.length > 0 || isDiscardMinionPrompt}
+                            autoOpenPanel={isDiscardMinionPrompt}
                             playableCards={discardStripCards.map(c => ({ uid: c.uid, defId: c.defId, label: c.label }))}
                             selectedUid={discardStripSelectedUid}
                             onSelectCard={setDiscardStripSelectedUid}
@@ -1016,7 +1186,7 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                                 ? (discardStripDoneOption
                                     ? () => dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: discardStripDoneOption!.id })
                                     : () => dispatch(INTERACTION_COMMANDS.CANCEL, {}))
-                                : () => { setDiscardStripSelectedUid(null); setDiscardPlayStripOpen(false); }
+                                : () => { setDiscardStripSelectedUid(null); }
                             }
                             dispatch={dispatch}
                             playerID={playerID}
@@ -1060,6 +1230,9 @@ const SmashUpBoard: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID }) =
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* DEBUG PANEL */}
+            <GameDebugPanel G={G} dispatch={dispatch} playerID={playerID} autoSwitch={isLocalMatch} />
 
             {/* PREVIEW OVERLAY */}
             <CardMagnifyOverlay target={viewingCard} onClose={() => setViewingCard(null)} />

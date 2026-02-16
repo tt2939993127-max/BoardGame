@@ -225,7 +225,6 @@ describe('CustomAction 覆盖完整性审计', () => {
         // 月精灵状态效果钩子（通过 flowHooks 中的致盲/缠绕处理调用）
         'moon_elf-blinded-check',
         'moon_elf-entangle-effect',
-        'moon_elf-targeted-removal',
         // 暗影盗贼（通过 TokenDef passiveTrigger 或 flowHooks 调用）
         'shadow_thief-steal-cp',
         'shadow_thief-sneak-attack-use',

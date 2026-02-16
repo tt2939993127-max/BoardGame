@@ -90,31 +90,37 @@ export function validateDeck(deck: DeckDraft): DeckValidationResult {
         }
     });
 
-    // 2. 普通单位数量
-    if (commonCount < REQUIRED_COMMONS) {
+    // 2. 普通单位数量（必须恰好等于要求数量）
+    if (commonCount !== REQUIRED_COMMONS) {
         errors.push({
             rule: 'commons',
-            message: `普通单位需要至少 ${REQUIRED_COMMONS} 张`,
+            message: commonCount < REQUIRED_COMMONS
+                ? `普通单位需要 ${REQUIRED_COMMONS} 张，当前 ${commonCount} 张`
+                : `普通单位最多 ${REQUIRED_COMMONS} 张，当前 ${commonCount} 张`,
             current: commonCount,
             expected: REQUIRED_COMMONS,
         });
     }
 
-    // 3. 冠军单位数量
-    if (championCount < REQUIRED_CHAMPIONS) {
+    // 3. 冠军单位数量（必须恰好等于要求数量）
+    if (championCount !== REQUIRED_CHAMPIONS) {
         errors.push({
             rule: 'champions',
-            message: `冠军单位需要 ${REQUIRED_CHAMPIONS} 个`,
+            message: championCount < REQUIRED_CHAMPIONS
+                ? `冠军单位需要 ${REQUIRED_CHAMPIONS} 个，当前 ${championCount} 个`
+                : `冠军单位最多 ${REQUIRED_CHAMPIONS} 个，当前 ${championCount} 个`,
             current: championCount,
             expected: REQUIRED_CHAMPIONS,
         });
     }
 
-    // 4. 标准事件数量
-    if (standardEventCount < REQUIRED_STANDARD_EVENTS) {
+    // 4. 标准事件数量（必须恰好等于要求数量）
+    if (standardEventCount !== REQUIRED_STANDARD_EVENTS) {
         errors.push({
             rule: 'standard_events',
-            message: `标准事件需要 ${REQUIRED_STANDARD_EVENTS} 张`,
+            message: standardEventCount < REQUIRED_STANDARD_EVENTS
+                ? `标准事件需要 ${REQUIRED_STANDARD_EVENTS} 张，当前 ${standardEventCount} 张`
+                : `标准事件最多 ${REQUIRED_STANDARD_EVENTS} 张，当前 ${standardEventCount} 张`,
             current: standardEventCount,
             expected: REQUIRED_STANDARD_EVENTS,
         });
@@ -160,15 +166,45 @@ export function canAddCard(deck: DeckDraft, card: Card): { allowed: boolean; rea
     const currentCount = existing?.count ?? 0;
 
     if (card.cardType === 'unit') {
-        if (card.unitClass === 'champion' && currentCount >= MAX_SAME_CHAMPION) {
-            return { allowed: false, reason: `同名冠军单位最多 ${MAX_SAME_CHAMPION} 个` };
+        if (card.unitClass === 'champion') {
+            if (currentCount >= MAX_SAME_CHAMPION) {
+                return { allowed: false, reason: `同名冠军单位最多 ${MAX_SAME_CHAMPION} 个` };
+            }
+            // 检查冠军总数上限
+            let totalChampions = 0;
+            deck.manualCards.forEach(({ card: c, count }) => {
+                if (c.cardType === 'unit' && c.unitClass === 'champion') totalChampions += count;
+            });
+            if (totalChampions >= REQUIRED_CHAMPIONS) {
+                return { allowed: false, reason: `冠军单位总数已达上限 ${REQUIRED_CHAMPIONS} 个` };
+            }
         }
-        if (card.unitClass === 'common' && currentCount >= MAX_SAME_COMMON) {
-            return { allowed: false, reason: `同名普通单位最多 ${MAX_SAME_COMMON} 个` };
+        if (card.unitClass === 'common') {
+            if (currentCount >= MAX_SAME_COMMON) {
+                return { allowed: false, reason: `同名普通单位最多 ${MAX_SAME_COMMON} 个` };
+            }
+            // 检查普通单位总数上限
+            let totalCommons = 0;
+            deck.manualCards.forEach(({ card: c, count }) => {
+                if (c.cardType === 'unit' && c.unitClass === 'common') totalCommons += count;
+            });
+            if (totalCommons >= REQUIRED_COMMONS) {
+                return { allowed: false, reason: `普通单位总数已达上限 ${REQUIRED_COMMONS} 张` };
+            }
         }
     } else if (card.cardType === 'event') {
-        if (card.eventType !== 'legendary' && currentCount >= MAX_SAME_STANDARD_EVENT) {
-            return { allowed: false, reason: `同名标准事件最多 ${MAX_SAME_STANDARD_EVENT} 张` };
+        if (card.eventType !== 'legendary') {
+            if (currentCount >= MAX_SAME_STANDARD_EVENT) {
+                return { allowed: false, reason: `同名标准事件最多 ${MAX_SAME_STANDARD_EVENT} 张` };
+            }
+            // 检查标准事件总数上限
+            let totalStandardEvents = 0;
+            deck.manualCards.forEach(({ card: c, count }) => {
+                if (c.cardType === 'event' && c.eventType !== 'legendary') totalStandardEvents += count;
+            });
+            if (totalStandardEvents >= REQUIRED_STANDARD_EVENTS) {
+                return { allowed: false, reason: `标准事件总数已达上限 ${REQUIRED_STANDARD_EVENTS} 张` };
+            }
         }
     }
 
