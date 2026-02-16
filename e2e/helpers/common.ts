@@ -89,16 +89,17 @@ export const getGameServerBaseURL = () => {
 /** 检查游戏服务器是否可用 */
 export const ensureGameServerAvailable = async (page: Page) => {
     const gameServerBaseURL = getGameServerBaseURL();
-    const candidates = ['/games', `${gameServerBaseURL}/games`];
-    for (const url of candidates) {
-        try {
-            const response = await page.request.get(url);
-            if (response.ok()) return true;
-        } catch {
-            /* ignore */
-        }
+    // 游戏服务器没有 /games 根路由，尝试创建一个测试房间来检查可用性
+    const testUrl = `${gameServerBaseURL}/games/smashup/create`;
+    try {
+        const response = await page.request.post(testUrl, {
+            data: { numPlayers: 2, setupData: { guestId: `test_${Date.now()}` } },
+        });
+        // 201 Created 或 200 OK 都表示服务器可用
+        return response.ok() || response.status() === 201;
+    } catch {
+        return false;
     }
-    return false;
 };
 
 /**
@@ -271,12 +272,36 @@ export const seedMatchCredentials = async (
 // 通用上下文初始化（一次性设置所有常用选项）
 // ============================================================================
 
-/** 对 BrowserContext 执行标准初始化（英文 locale + 禁音 + 拦截音频 + 跳过教学 + 重置凭证） */
+/** 拦截大厅 WebSocket 请求（防止 lobby presence 检测导致页面跳转回首页） */
+export const blockLobbySocket = async (context: BrowserContext) => {
+    // context.route 无法拦截 WebSocket 升级请求，改用 addInitScript 禁用大厅 socket
+    await context.addInitScript(() => {
+        // 标记 E2E 测试环境，阻止大厅 socket 连接
+        (window as Window & { __E2E_BLOCK_LOBBY_SOCKET__?: boolean }).__E2E_BLOCK_LOBBY_SOCKET__ = true;
+    });
+    // 同时尝试 route 拦截（对 polling 传输有效）
+    await context.route(/\/lobby-socket\//i, (route) => route.abort());
+};
+
+/**
+ * 注入 __FORCE_GAME_SERVER_URL__，让客户端直接连接游戏服务器，
+ * 绕过 Vite 代理（多 WebSocket 并发时代理不稳定）。
+ */
+export const injectDirectGameServerUrl = async (context: BrowserContext) => {
+    const gameServerUrl = getGameServerBaseURL();
+    await context.addInitScript((url) => {
+        (window as Window & { __FORCE_GAME_SERVER_URL__?: string }).__FORCE_GAME_SERVER_URL__ = url;
+    }, gameServerUrl);
+};
+
+/** 对 BrowserContext 执行标准初始化（英文 locale + 禁音 + 拦截音频 + 跳过教学 + 重置凭证 + 拦截大厅 socket + 直连游戏服务器） */
 export const initContext = async (
     context: BrowserContext,
     opts?: { storageKey?: string; skipTutorial?: boolean },
 ) => {
     await blockAudioRequests(context);
+    await blockLobbySocket(context);
+    await injectDirectGameServerUrl(context);
     await setEnglishLocale(context);
     await resetMatchStorage(context, opts?.storageKey);
     if (opts?.skipTutorial !== false) await disableTutorial(context);

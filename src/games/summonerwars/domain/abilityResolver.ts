@@ -396,6 +396,7 @@ export function resolveEffect(
             to: toPosition,
             unitId: target.instanceId,
             sourceAbilityId: abilityId,
+            path: [target.position, toPosition], // 技能移动通常是单格或传送
           },
           timestamp,
         });

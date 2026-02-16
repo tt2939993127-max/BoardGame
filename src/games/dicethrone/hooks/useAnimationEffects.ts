@@ -156,10 +156,14 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
      * 找不到技能槽时 fallback 到屏幕中心（如手牌触发的治疗）。
      * 不使用 getEffectStartPos（它查的是"对目标造成效果的来源"，
      * 治疗自己时会错误地指向对手的技能）。
+     * 
+     * 注意：即使 amount=0 也生成动画（barbarian thick-skin 在无心面时治疗0，
+     * 但仍需播放防御技能反馈），只是不冻结 HP。
      */
     const buildHealStep = useCallback((healEvent: HealAppliedEvent): AnimStep | null => {
         const { targetId, amount, sourceAbilityId } = healEvent.payload;
-        if (amount <= 0) return null;
+        // 移除 amount <= 0 过滤，允许 0 治疗量的动画（用于技能反馈）
+        // if (amount <= 0) return null;
 
         const targetPlayer = targetId === opponentId ? opponent : player;
         const bufferKey = `hp-${targetId}`;

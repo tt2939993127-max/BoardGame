@@ -15,7 +15,9 @@ import type {
     CardInstance,
 } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
-import { reduce } from '../domain/reduce';
+import { reduce } from '../domain/reducer';
+import { createInitialSystemState } from '../../../engine/pipeline';
+import { smashUpTestSystems } from './testRunner';
 
 // ============================================================================
 // 随从工厂
@@ -168,7 +170,11 @@ export function makeStateWithMadness(overrides?: Partial<SmashUpCore>): SmashUpC
 
 /** 包装为 MatchState（用于 validate/execute 测试） */
 export function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
+    const playerIds = Object.keys(core.players);
+    const sys = createInitialSystemState(playerIds, smashUpTestSystems, undefined);
+    // 测试默认在出牌阶段
+    sys.phase = 'playCards';
+    return { core, sys };
 }
 
 // ============================================================================

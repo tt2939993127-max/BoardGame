@@ -23,6 +23,19 @@ export const GAME_SERVER_URL = normalizeUrl(
     (metaEnv.VITE_GAME_SERVER_URL as string | undefined) || FALLBACK_GAME_SERVER_URL
 );
 
+/**
+ * 运行时获取游戏服务器地址。
+ * E2E 测试可通过 window.__FORCE_GAME_SERVER_URL__ 覆盖，
+ * 绕过 Vite 代理（多 WebSocket 并发时代理不稳定）。
+ */
+export const getGameServerUrl = (): string => {
+    if (typeof window !== 'undefined') {
+        const force = (window as Window & { __FORCE_GAME_SERVER_URL__?: string }).__FORCE_GAME_SERVER_URL__;
+        if (force) return normalizeUrl(force);
+    }
+    return GAME_SERVER_URL;
+};
+
 // 认证 API 地址
 const FALLBACK_AUTH_API_URL = isDev
     ? '/auth'

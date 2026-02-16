@@ -1,18 +1,18 @@
-﻿/**
- * 鍙敜甯堟垬浜?- 鐗规畩鎶€鑳戒氦浜?E2E 娴嬭瘯
+/**
+ * 召唤师战争 - 特殊技能交互 E2E 测试
  * 
- * 瑕嗙洊闇€瑕?UI 浜や簰鐨勭壒娈婃妧鑳斤細
- * - 鐏甸瓊杞Щ锛堝嚮鏉€鍚庣灛绉荤‘璁わ級
- * - 蹇冪伒鎹曡幏锛堟敾鍑诲悗鎺у埗/浼ゅ閫夋嫨锛?
- * - 蹇靛姏/楂橀樁蹇靛姏锛堟敾鍑诲悗鎺ㄦ媺鏂瑰悜閫夋嫨锛?
- * - 璇诲績浼犲康锛堟敾鍑诲悗閫夋嫨鍙嬫柟澹叺棰濆鏀诲嚮锛?
- * - 鎰熸煋锛堝嚮鏉€鍚庝粠寮冪墝鍫嗛€夋嫨鐤梾浣擄級
- * - 鎶撻檮璺熼殢锛堝弸鏂圭Щ鍔ㄥ悗閫夋嫨璺熼殢浣嶇疆锛?
- * - 鍚稿彇鐢熷懡锛堟敾鍑诲墠鐗虹壊鍙嬫柟鍗曚綅锛?
- * - 鍦ｅ厜绠紙鏀诲嚮鍓嶅純鐗屽姞鎴愶級
- * - 娌荤枟锛堟敾鍑诲墠寮冪墝骞堕€夋嫨鍙嬫柟娌荤枟鐩爣锛?
+ * 覆盖需要 UI 交互的特殊技能：
+ * - 灵魂转移（击杀后瞬移确认）
+ * - 心灵捕获（攻击后控制/伤害选择）
+ * - 念力/高阶念力（攻击后推拉方向选择）
+ * - 读心传念（攻击后选择友方士兵额外攻击）
+ * - 感染（击杀后从弃牌堆选择疫病体）
+ * - 抓附跟随（友方移动后选择跟随位置）
+ * - 吸取生命（攻击前牺牲友方单位）
+ * - 圣光箭（攻击前弃牌加成）
+ * - 治疗（攻击前弃牌并选择友方治疗目标）
  * 
- * 娉ㄦ剰锛氭敾鍑绘秹鍙婇瀛愰殢鏈猴紝閮ㄥ垎娴嬭瘯浣跨敤杞柇瑷€
+ * 注意：攻击涉及骰子随机，部分测试使用软断言
  */
 
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
@@ -20,7 +20,7 @@ import { createDeckByFactionId } from '../src/games/summonerwars/config/factions
 import { BOARD_COLS, BOARD_ROWS, HAND_SIZE } from '../src/games/summonerwars/domain/helpers';
 
 // ============================================================================
-// 閫氱敤杈呭姪鍑芥暟锛堜笌 summonerwars.e2e.ts 淇濇寔涓€鑷达級
+// 通用辅助函数（与 summonerwars.e2e.ts 保持一致）
 // ============================================================================
 
 const setEnglishLocale = async (context: BrowserContext | Page) => {
@@ -108,7 +108,7 @@ const waitForFrontendAssets = async (page: Page, timeoutMs = 30000) => {
     } catch { /* ignore */ }
     await page.waitForTimeout(500);
   }
-  throw new Error('鍓嶇璧勬簮鏈氨缁?);
+  throw new Error('前端资源未就绪');
 };
 
 const resetMatchStorage = async (context: BrowserContext | Page) => {
@@ -151,7 +151,7 @@ const blockAudioRequests = async (context: BrowserContext) => {
 };
 
 const dismissLobbyConfirmIfNeeded = async (page: Page) => {
-  const confirmButton = page.locator('button:has-text("纭")').or(page.locator('button:has-text("Confirm")'));
+  const confirmButton = page.locator('button:has-text("确认")').or(page.locator('button:has-text("Confirm")'));
   if (await confirmButton.isVisible().catch(() => false)) {
     await confirmButton.click();
     await page.waitForTimeout(1000);
@@ -169,7 +169,7 @@ const ensureSummonerWarsCard = async (page: Page) => {
   await waitForHomeGameList(page);
   let card = page.locator('[data-game-id="summonerwars"]');
   if (await card.count() === 0) {
-    const strategyTab = page.getByRole('button', { name: /Strategy|绛栫暐/i });
+    const strategyTab = page.getByRole('button', { name: /Strategy|策略/i });
     if (await strategyTab.isVisible().catch(() => false)) await strategyTab.click();
     card = page.locator('[data-game-id="summonerwars"]');
   }
@@ -180,7 +180,7 @@ const ensureSummonerWarsCard = async (page: Page) => {
 
 const ensureSummonerWarsModalOpen = async (page: Page) => {
   const modalRoot = page.locator('#modal-root');
-  const modalHeading = modalRoot.getByRole('heading', { name: /Summoner Wars|鍙敜甯堟垬浜?i });
+  const modalHeading = modalRoot.getByRole('heading', { name: /Summoner Wars|召唤师战争/i });
   try {
     await expect(modalHeading).toBeVisible({ timeout: 2000 });
   } catch {
@@ -250,7 +250,7 @@ const ensurePlayerIdInUrl = async (page: Page, playerId: string) => {
 
 const completeFactionSelection = async (hostPage: Page, guestPage: Page) => {
   const selectionHeading = (page: Page) =>
-    page.locator('h1').filter({ hasText: /閫夋嫨浣犵殑闃佃惀|Choose your faction/i });
+    page.locator('h1').filter({ hasText: /选择你的阵营|Choose your faction/i });
   await expect(selectionHeading(hostPage)).toBeVisible({ timeout: 20000 });
   await expect(selectionHeading(guestPage)).toBeVisible({ timeout: 20000 });
 
@@ -260,12 +260,12 @@ const completeFactionSelection = async (hostPage: Page, guestPage: Page) => {
   await factionCards(guestPage).nth(1).click();
   await guestPage.waitForTimeout(500);
 
-  const readyButton = guestPage.locator('button').filter({ hasText: /鍑嗗|Ready/i });
+  const readyButton = guestPage.locator('button').filter({ hasText: /准备|Ready/i });
   await expect(readyButton).toBeVisible({ timeout: 5000 });
   await readyButton.click();
   await hostPage.waitForTimeout(500);
 
-  const startButton = hostPage.locator('button').filter({ hasText: /寮€濮嬫父鎴弢Start Game/i });
+  const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game/i });
   await expect(startButton).toBeVisible({ timeout: 5000 });
   await expect(startButton).toBeEnabled({ timeout: 5000 });
   await startButton.click();
@@ -326,7 +326,7 @@ const clickBoardElement = async (page: Page, selector: string) => {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     return true;
   }, selector);
-  if (!clicked) throw new Error(`妫嬬洏鍏冪礌鏈壘鍒?${selector}`);
+  if (!clicked) throw new Error(`棋盘元素未找到: ${selector}`);
 };
 
 const cloneState = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -414,10 +414,10 @@ const buildBaseCoreState = (coreState: any) => {
 };
 
 // ============================================================================
-// 鐘舵€佹敞鍏ヨ緟鍔╁嚱鏁?
+// 状态注入辅助函数
 // ============================================================================
 
-/** 娓呯┖鎸囧畾鍖哄煙鐨勫崟浣嶅拰寤虹瓚 */
+/** 清空指定区域的单位和建筑 */
 const clearArea = (board: any[][], positions: { row: number; col: number }[]) => {
   for (const pos of positions) {
     if (board[pos.row]?.[pos.col]) {
@@ -426,7 +426,7 @@ const clearArea = (board: any[][], positions: { row: number; col: number }[]) =>
   }
 };
 
-/** 鍦ㄦ寚瀹氫綅缃斁缃崟浣?*/
+/** 在指定位置放置单位 */
 const placeUnit = (board: any[][], pos: { row: number; col: number }, unit: any) => {
   board[pos.row][pos.col] = {
     ...board[pos.row][pos.col],
@@ -434,14 +434,14 @@ const placeUnit = (board: any[][], pos: { row: number; col: number }, unit: any)
   };
 };
 
-/** 鍒涘缓鍗曚綅鏁版嵁 */
+/** 创建单位数据 */
 const makeUnit = (overrides: Record<string, any>) => ({
   cardId: overrides.cardId ?? `test-${Date.now()}`,
   card: {
     id: overrides.cardId ?? 'test-unit',
-    name: overrides.name ?? '娴嬭瘯鍗曚綅',
+    name: overrides.name ?? '测试单位',
     cardType: 'unit',
-    faction: overrides.faction ?? '鍫曡惤鐜嬪浗',
+    faction: overrides.faction ?? '堕落王国',
     cost: overrides.cost ?? 1,
     life: overrides.life ?? 2,
     strength: overrides.strength ?? 1,
@@ -460,12 +460,12 @@ const makeUnit = (overrides: Record<string, any>) => ({
   hasAttacked: overrides.hasAttacked ?? false,
 });
 
-/** 鍒涘缓鎵嬬墝鍗曚綅鍗?*/
+/** 创建手牌单位卡 */
 const makeHandUnitCard = (id: string, name: string, overrides?: Record<string, any>) => ({
   id,
   name,
   cardType: 'unit',
-  faction: overrides?.faction ?? '鍏堥攱鍐涘洟',
+  faction: overrides?.faction ?? '先锋军团',
   cost: overrides?.cost ?? 1,
   life: overrides?.life ?? 3,
   strength: overrides?.strength ?? 1,
@@ -477,8 +477,8 @@ const makeHandUnitCard = (id: string, name: string, overrides?: Record<string, a
 });
 
 /**
- * 鍑嗗鍚稿彇鐢熷懡 beforeAttack 娴嬭瘯鐘舵€?
- * 鏀诲嚮鍓嶇壓鐗?鏍煎唴鍙嬫柟鍗曚綅
+ * 准备吸取生命 beforeAttack 测试状态
+ * 攻击前牺牲格内友方单位
  */
 const prepareLifeDrainBeforeAttackState = (coreState: any) => {
   const next = buildBaseCoreState(coreState);
@@ -501,8 +501,8 @@ const prepareLifeDrainBeforeAttackState = (coreState: any) => {
 
   placeUnit(board, attackerPos, makeUnit({
     cardId: 'test-life-drainer',
-    name: '鍚稿彇鑰?,
-    faction: '鍫曡惤鐜嬪浗',
+    name: '吸取者',
+    faction: '堕落王国',
     strength: 2,
     life: 8,
     attackType: 'melee',
@@ -512,7 +512,7 @@ const prepareLifeDrainBeforeAttackState = (coreState: any) => {
 
   placeUnit(board, victimPos, makeUnit({
     cardId: 'test-life-victim',
-    name: '鐗虹壊鐩爣',
+    name: '牺牲目标',
     strength: 1,
     life: 1,
     attackType: 'melee',
@@ -521,7 +521,7 @@ const prepareLifeDrainBeforeAttackState = (coreState: any) => {
 
   placeUnit(board, targetPos, makeUnit({
     cardId: 'test-life-enemy',
-    name: '鏁屾柟鐩爣',
+    name: '敌方目标',
     strength: 1,
     life: 3,
     attackType: 'melee',
@@ -532,8 +532,8 @@ const prepareLifeDrainBeforeAttackState = (coreState: any) => {
 };
 
 /**
- * 鍑嗗鍦ｅ厜绠?beforeAttack 娴嬭瘯鐘舵€?
- * 鏀诲嚮鍓嶅純鐗屾彁鍗囨垬鍔?
+ * 准备圣光箭 beforeAttack 测试状态
+ * 攻击前弃牌提升战力
  */
 const prepareHolyArrowBeforeAttackState = (coreState: any) => {
   const next = buildBaseCoreState(coreState);
@@ -547,9 +547,11 @@ const prepareHolyArrowBeforeAttackState = (coreState: any) => {
     player.attackCount = 0;
     player.hasAttackedEnemy = false;
     player.hand = [
-      makeHandUnitCard('holy-discard-1', '鍩庡楠戝＋'),
-      makeHandUnitCard('holy-discard-2', '鍩庡鎴樺＋'),
+      makeHandUnitCard('holy-discard-1', '城堡骑士'),
+      makeHandUnitCard('holy-discard-2', '城堡战士'),
       ...player.hand,
     ];
   }
 
+  return next;
+};

@@ -45,6 +45,7 @@
     "test:api": "vitest run apps/api",
     "test:api:docker": "cross-env MONGO_URI=mongodb://localhost:27017/boardgame npm run test:api",
     "test:e2e": "npx playwright test",
+    "test:e2e:ci": "cross-env PW_START_SERVERS=true npx playwright test",
     "test:e2e:critical": "npx playwright test e2e/smashup.e2e.ts e2e/tictactoe-rematch.e2e.ts",
     "init:admin": "tsx scripts/db/init_admin.ts",
     "check:arch": "node scripts/infra/check-architecture.cjs",
@@ -55,7 +56,7 @@
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
-    "pre-commit": "npx lint-staged",
+    "pre-commit": "npx lint-staged --concurrent 1",
     "pre-push": "npm run build && npm run i18n:check && npm run test:games"
   },
   "lint-staged": {

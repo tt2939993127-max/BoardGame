@@ -5,7 +5,7 @@
 import type { GameEvent } from '../../../../engine/types';
 import type { CellCoord } from '../types';
 import { SW_EVENTS } from '../types';
-import { getUnitAt, manhattanDistance, isValidCoord, isForceMovePathClear, isInStraightLine } from '../helpers';
+import { getUnitAt, manhattanDistance, isValidCoord, isForceMovePathClear, isInStraightLine, getStraightLinePath } from '../helpers';
 import { abilityExecutorRegistry } from './registry';
 import type { SWAbilityContext } from './types';
 
@@ -109,7 +109,13 @@ abilityExecutorRegistry.register('withdraw', (ctx: SWAbilityContext) => {
     && isForceMovePathClear(core, sourcePosition, wdNewPos)) {
     events.push({
       type: SW_EVENTS.UNIT_MOVED,
-      payload: { from: sourcePosition, to: wdNewPos, unitId: sourceUnitId, reason: 'withdraw' },
+      payload: { 
+        from: sourcePosition, 
+        to: wdNewPos, 
+        unitId: sourceUnitId, 
+        reason: 'withdraw',
+        path: getStraightLinePath(sourcePosition, wdNewPos), // 直线移动
+      },
       timestamp,
     });
   }

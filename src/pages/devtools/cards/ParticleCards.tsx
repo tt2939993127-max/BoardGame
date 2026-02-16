@@ -10,7 +10,7 @@ import { SummonEffect } from '../../../components/common/animations/SummonEffect
 import { VortexShaderEffect } from '../../../components/common/animations/VortexShaderEffect';
 import { ShatterEffect } from '../../../components/common/animations/ShatterEffect';
 import { useScreenShake } from '../../../games/summonerwars/ui/BoardEffects';
-import { getOptimizedImageUrls } from '../../../core/AssetLoader';
+import { getOptimizedImageUrls, getLocalizedAssetPath } from '../../../core/AssetLoader';
 import { getSpriteAtlasStyle, CARDS_ATLAS } from '../../../games/summonerwars/ui/cardAtlas';
 import { useFxBus, FxLayer } from '../../../engine/fx';
 import { summonerWarsFxRegistry, SW_FX } from '../../../games/summonerwars/ui/fxSetup';
@@ -97,7 +97,7 @@ export const ShatterCard: React.FC<PreviewCardProps> = ({ iconColor }) => {
     fire();
   }, [fire]);
 
-  const spriteUrls = getOptimizedImageUrls('summonerwars/hero/Frost/cards');
+  const spriteUrls = getOptimizedImageUrls(getLocalizedAssetPath('summonerwars/hero/Frost/cards', 'zh-CN'));
   const spriteStyle = getSpriteAtlasStyle(0, CARDS_ATLAS);
 
   return (

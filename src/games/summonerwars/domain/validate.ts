@@ -234,9 +234,8 @@ export function validateCommand(
 
             case 'holy_arrow': {
               const discardCardIds = beforeAttack.discardCardIds as string[] | undefined;
-              if (!discardCardIds || discardCardIds.length === 0) {
-                return { valid: false, error: '必须选择要弃除的卡牌' };
-              }
+              // 圣光箭允许弃任意数量手牌（含 0）
+              if (!discardCardIds || discardCardIds.length === 0) break;
               const haPlayer = core.players[playerId];
               const names = new Set<string>();
               for (const cardId of discardCardIds) {

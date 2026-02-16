@@ -202,6 +202,24 @@ npm test -- src/games/tictactoe/__tests__/flow.test.ts  # 单文件
 
 测试文件位于 `e2e/` 目录。
 
+### 运行方式
+
+```bash
+# 开发模式（默认）：使用已运行的服务器
+# 1. 先手动启动服务
+npm run dev
+
+# 2. 在另一个终端运行测试
+npm run test:e2e
+
+# CI 模式：自动启动服务器
+npm run test:e2e:ci
+```
+
+**环境变量控制**：
+- `PW_START_SERVERS=true` — 强制启动服务器（CI 模式）
+- 默认（不设置）— 使用已运行的服务器（开发模式）
+
 ### 覆盖原则
 
 **硬性要求**：E2E 必须覆盖"交互面"而不只是"完整流程"。

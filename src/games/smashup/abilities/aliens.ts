@@ -12,11 +12,12 @@ import type {
     MinionCardDef, OngoingDetachedEvent, BaseReplacedEvent,
     CardToDeckBottomEvent,
     SmashUpCore,
+    MinionPlayedEvent,
 } from '../domain/types';
 import {
     buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower,
     grantExtraMinion, moveMinion, revealHand, shuffleBaseDeck,
-    resolveOrPrompt, buildMinionPlayedEvents,
+    resolveOrPrompt,
 } from '../domain/abilityHelpers';
 import { getBaseDef, getCardDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -65,7 +66,7 @@ function alienSupremeOverlord(ctx: AbilityContext): AbilityResult {
     const options = [
         { id: 'skip', label: '跳过（不返回随从）', value: { skip: true } },
         ...minionOptions,
-    ];
+    ] as any[];
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_supreme_overlord_${ctx.now}`, ctx.playerId,
         '你可以将一个随从返回到其拥有者的手上', options, 'alien_supreme_overlord',
@@ -88,7 +89,7 @@ function alienCollector(ctx: AbilityContext): AbilityResult {
     const options = [
         { id: 'skip', label: '跳过（不收回随从）', value: { skip: true } },
         ...buildMinionTargetOptions(minionTargets),
-    ];
+    ] as any[];
     return { events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
         `alien_collector_${ctx.now}`, ctx.playerId,
         '你可以将这个基地的一个力量≤3的随从返回其拥有者的手上', options, 'alien_collector',
@@ -720,16 +721,16 @@ export function registerAlienInteractionHandlers(): void {
         const def = getCardDef(selectedCard.defId) as MinionCardDef | undefined;
         const power = def?.power ?? 0;
 
-        const playResult = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId,
-            cardUid: selectedCard.uid, defId: selectedCard.defId,
-            baseIndex: ctx.newBaseIndex, power, random: _random, now: timestamp,
-        });
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid: selectedCard.uid, defId: selectedCard.defId, baseIndex: ctx.newBaseIndex, power },
+            timestamp,
+        };
         return {
-            state: playResult.matchState ?? state,
+            state,
             events: [
                 grantExtraMinion(playerId, 'alien_terraform', timestamp),
-                ...playResult.events,
+                playedEvt,
             ],
         };
     });

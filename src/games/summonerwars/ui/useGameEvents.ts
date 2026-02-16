@@ -69,6 +69,8 @@ export interface AbilityModeState {
   context?: AbilityActivationContext;
   /** 寒冰冲撞：建筑新位置 */
   structurePosition?: CellCoord;
+  /** 被动触发：记住攻击目标（用于确认后自动发送攻击命令） */
+  pendingAttackTarget?: CellCoord;
 }
 
 /** 灵魂转移模式状态 */

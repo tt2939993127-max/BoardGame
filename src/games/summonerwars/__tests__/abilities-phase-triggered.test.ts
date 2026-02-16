@@ -868,4 +868,70 @@ describe('D8 时序集成：阶段结束技能 halt → confirm → auto-advance
     expect(checkResult).toBeDefined();
     expect(checkResult!.autoContinue).toBe(true);
   });
+
+  /**
+   * 回归测试：ice_shards 第二次使用时阶段已推进不应失败
+   * 
+   * 场景：
+   * 1. 建造阶段结束时 ice_shards 触发，halt 阶段推进
+   * 2. 玩家第一次激活 ice_shards，消耗充能
+   * 3. 玩家再次尝试激活（或阶段推进后再次触发）
+   * 4. 此时阶段可能已经推进到 attack，但 ice_shards 不应因为 requiredPhase 检查失败
+   * 
+   * 修复方案：在 canActivateAbility 中，对 onPhaseEnd 触发的技能跳过 requiredPhase 检查
+   * 原因：onPhaseEnd 触发的技能已经由 PHASE_END_ABILITIES 配置保证在正确阶段触发
+   * 
+   * 注意：requiredPhase 仍然保留在 AbilityDef 中，用于防止玩家在错误阶段手动激活
+   * 但是 canActivateAbility（用于判断是否需要 halt 阶段推进）会跳过这个检查
+   */
+  it('[回归] ice_shards 在阶段推进后仍可正确验证（不受 requiredPhase 影响）', () => {
+    const state = createInitializedCore(['0', '1'], createTestRandom(), {
+      faction0: 'frost',
+      faction1: 'necromancer',
+    });
+    clearArea(state, [2, 3, 4, 5], [1, 2, 3, 4]);
+
+    const jamud = placeUnit(state, { row: 3, col: 2 }, {
+      cardId: 'test-jamud',
+      card: makeJamud('test-jamud'),
+      owner: '0',
+      boosts: 2, // 有2点充能，可以使用两次
+    });
+
+    placeStructure(state, { row: 4, col: 3 }, '0');
+    placeUnit(state, { row: 4, col: 4 }, {
+      cardId: 'test-enemy',
+      card: makeEnemy('test-enemy'),
+      owner: '1',
+    });
+
+    state.phase = 'build';
+    state.currentPlayer = '0';
+
+    // 第一次使用 ice_shards（在 build 阶段）
+    const { newState: state1 } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'ice_shards',
+      sourceUnitId: jamud.instanceId,
+    });
+
+    expect(state1.board[3][2].unit?.boosts).toBe(1); // 消耗1点充能
+    expect(state1.phase).toBe('build'); // 阶段还是 build
+
+    // 模拟阶段推进到 attack（这是可能发生的场景）
+    const state2 = { ...state1, phase: 'attack' as GamePhase };
+
+    // 第二次使用 ice_shards（在 attack 阶段）
+    // 修复前：这里会因为 requiredPhase: 'build' 而失败
+    // 修复后：应该成功，因为 onPhaseEnd 触发的技能不应受 requiredPhase 限制
+    const { newState: state3 } = executeAndReduce(state2, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'ice_shards',
+      sourceUnitId: state2.board[3][2].unit!.instanceId,
+    });
+
+    expect(state3.board[3][2].unit?.boosts).toBe(0); // 再消耗1点充能
+    
+    // 验证敌方单位受到伤害
+    const damageEvents = state3.board[4][4].unit?.damage ?? 0;
+    expect(damageEvents).toBeGreaterThan(0);
+  });
 });

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execute, reduce } from '../domain/reducer';
+import { reduce } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type {
     SmashUpCore,
@@ -18,8 +18,9 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { applyEvents } from './helpers';
+import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
+import { makeMatchState } from './helpers';
 
 beforeAll(() => {
     clearRegistry();
@@ -68,36 +69,29 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
     };
 }
 
-function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return {
-        core,
-        sys: { phase: 'playCards', interaction: { queue: [] } } as any,
-    } as any;
-}
-
-const defaultRandom: RandomFn = { shuffle: (arr: any[]) => [...arr], random: () => 0.5 };
+const defaultRandom: RandomFn = { shuffle: (arr: any[]) => [...arr], random: () => 0.5, d: () => 1, range: (min) => min };
 
 function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number) {
-    const matchState = makeMatchState(state);
-    const events = execute(matchState, {
+    const ms = makeMatchState(state);
+    const result = runCommand(ms, {
         type: SU_COMMANDS.PLAY_MINION,
         playerId,
         payload: { cardUid, baseIndex },
     } as any, defaultRandom);
-    return { events, matchState };
+    return { events: result.events as SmashUpEvent[], matchState: result.finalState };
 }
 
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, targetMinionUid?: string) {
-    const matchState = makeMatchState(state);
-    const events = execute(matchState, {
+    const ms = makeMatchState(state);
+    const result = runCommand(ms, {
         type: SU_COMMANDS.PLAY_ACTION,
         playerId,
         payload: { cardUid, targetBaseIndex, targetMinionUid },
     } as any, defaultRandom);
-    return { events, matchState };
+    return { events: result.events as SmashUpEvent[], matchState: result.finalState };
 }
 
-function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
+function applyEventsLocal(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
     return events.reduce((s, e) => reduce(s, e), state);
 }
 

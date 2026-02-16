@@ -36,11 +36,23 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:18000',
           changeOrigin: true,
           ws: true,
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
+              if ((err as NodeJS.ErrnoException).code === 'ECONNABORTED') return
+              console.error('[proxy /socket.io]', err.message)
+            })
+          },
         },
         '/lobby-socket': {
           target: 'http://127.0.0.1:18000',
           changeOrigin: true,
           ws: true,
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
+              if ((err as NodeJS.ErrnoException).code === 'ECONNABORTED') return
+              console.error('[proxy /lobby-socket]', err.message)
+            })
+          },
         },
         '/auth': {
           target: 'http://127.0.0.1:18001',
@@ -71,6 +83,12 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:18001',
           changeOrigin: true,
           ws: true,
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
+              if ((err as NodeJS.ErrnoException).code === 'ECONNABORTED') return
+              console.error('[proxy /social-socket]', err.message)
+            })
+          },
         },
         '/ugc': {
           target: 'http://127.0.0.1:18001',

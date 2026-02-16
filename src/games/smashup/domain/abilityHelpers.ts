@@ -338,55 +338,11 @@ export function peekDeckTop(
 // ============================================================================
 
 /**
- * 构建"打出随从"的完整事件链：MINION_PLAYED + onPlay 能力 + 基地能力 + ongoing 触发
- *
- * 所有非 PLAY_MINION 命令路径（交互 handler、能力执行器）打出随从时必须调用此函数，
- * 禁止直接构造裸 MINION_PLAYED 事件。
- *
- * PLAY_MINION 命令因需附加 sourceCommandType/discardPlaySourceId 等命令特有字段，
- * 自行构造 MINION_PLAYED 事件后调用 fireMinionPlayedTriggers 复用触发链。
- */
-export function buildMinionPlayedEvents(params: {
-    core: SmashUpCore;
-    matchState: MatchState<SmashUpCore>;
-    playerId: PlayerId;
-    cardUid: string;
-    defId: string;
-    baseIndex: number;
-    power: number;
-    random: RandomFn;
-    now: number;
-    fromDiscard?: boolean;
-    fromDeck?: boolean;
-}): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
-    const { core, playerId, cardUid, defId, baseIndex, power, now, fromDiscard, fromDeck } = params;
-    const events: SmashUpEvent[] = [];
-
-    // 1. MINION_PLAYED 事件
-    const playedEvt: MinionPlayedEvent = {
-        type: SU_EVENTS.MINION_PLAYED,
-        payload: {
-            playerId, cardUid, defId, baseIndex, power,
-            ...(fromDiscard ? { fromDiscard: true } : {}),
-            ...(fromDeck ? { fromDeck: true } : {}),
-        },
-        timestamp: now,
-    };
-    events.push(playedEvt);
-
-    // 2. 触发链（onPlay + 基地 + ongoing）
-    const triggers = fireMinionPlayedTriggers({
-        ...params, playedEvt,
-    });
-    events.push(...triggers.events);
-
-    return triggers.matchState ? { events, matchState: triggers.matchState } : { events };
-}
-
-/**
  * 打出随从后的触发链：onPlay 能力 + 基地能力 onMinionPlayed + ongoing 触发器 onMinionPlayed
  *
- * PLAY_MINION 命令和 buildMinionPlayedEvents 共用此函数。
+ * 由 postProcessSystemEvents 自动调用，处理所有 MINION_PLAYED 事件。
+ * PLAY_MINION 命令也可直接调用此函数复用触发链。
+ * 
  * 调用方需自行构造 MINION_PLAYED 事件并传入 playedEvt。
  */
 export function fireMinionPlayedTriggers(params: {
@@ -401,15 +357,25 @@ export function fireMinionPlayedTriggers(params: {
     now: number;
     playedEvt: MinionPlayedEvent;
 }): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
-    const { core, playerId, cardUid, defId, baseIndex, power, random, now, playedEvt } = params;
+    const { core, playerId, cardUid, defId, baseIndex, power, random, now } = params;
     let matchState = params.matchState;
     const events: SmashUpEvent[] = [];
+
+    // 注意：此函数被 postProcessSystemEvents 调用时，MINION_PLAYED 事件已经被 reduce 到 core 中
+    // 所以随从已经在基地上了，不需要再次 reduce
 
     // 1. onPlay 能力触发
     const executor = resolveOnPlay(defId);
     if (executor) {
         const ctx: AbilityContext = {
-            state: core, matchState, playerId, cardUid, defId, baseIndex, random, now,
+            state: core,
+            matchState,
+            playerId,
+            cardUid,
+            defId,
+            baseIndex,
+            random,
+            now,
         };
         const result = executor(ctx);
         events.push(...result.events);
@@ -419,7 +385,10 @@ export function fireMinionPlayedTriggers(params: {
     // 2. 基地能力触发 onMinionPlayed
     const minionDef = getMinionDef(defId);
     const baseResult = triggerAllBaseAbilities(
-        'onMinionPlayed', core, playerId, now,
+        'onMinionPlayed',
+        core,
+        playerId,
+        now,
         { baseIndex, minionUid: cardUid, minionDefId: defId, minionPower: minionDef?.power ?? power },
         matchState,
     );
@@ -427,9 +396,8 @@ export function fireMinionPlayedTriggers(params: {
     if (baseResult.matchState) matchState = baseResult.matchState;
 
     // 3. ongoing 触发器 onMinionPlayed
-    const coreAfterPlayed = reduce(core, playedEvt);
-    const ongoingResult = fireTriggers(coreAfterPlayed, 'onMinionPlayed', {
-        state: coreAfterPlayed, matchState,
+    const ongoingResult = fireTriggers(core, 'onMinionPlayed', {
+        state: core, matchState,
         playerId, baseIndex,
         triggerMinionUid: cardUid, triggerMinionDefId: defId,
         random, now,
@@ -777,13 +745,16 @@ export function resolveOrPrompt<T>(
         targetType: 'base' | 'minion' | 'generic';
         /** 单候选自动执行（默认 true，强制效果）；false = 可选效果，始终让玩家选 */
         autoResolveIfSingle?: boolean;
+        /** 是否自动添加取消选项（默认 false） */
+        autoCancelOption?: boolean;
     },
     resolve: (value: T) => AbilityResult,
 ): AbilityResult {
     if (options.length === 0) return { events: [] };
 
     const autoResolve = config.autoResolveIfSingle ?? true;
-    if (autoResolve && options.length === 1) {
+    if (autoResolve && options.length === 1 && !config.autoCancelOption) {
+        // 单候选且不需要取消选项时自动执行
         return resolve(options[0].value);
     }
 
@@ -795,7 +766,9 @@ export function resolveOrPrompt<T>(
             sourceId: config.sourceId,
             targetType: config.targetType,
             autoResolveIfSingle: autoResolve,
+            autoCancelOption: config.autoCancelOption,
         } as SimpleChoiceConfig,
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
+

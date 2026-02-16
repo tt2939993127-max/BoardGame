@@ -599,6 +599,19 @@ function resolveEffectAction(
                         }
                     });
                 }
+
+                // custom action 统一伤害累计入口：
+                // 只要 handler 产出 DAMAGE_DEALT，就由框架统一累加到 ctx.damageDealt，
+                // 避免各英雄 handler 手工累加导致漏算/不一致。
+                handledEvents.forEach(handledEvent => {
+                    if (handledEvent.type === 'DAMAGE_DEALT') {
+                        const dealt = (handledEvent as DamageDealtEvent).payload.actualDamage ?? 0;
+                        if (dealt > 0) {
+                            ctx.damageDealt += dealt;
+                        }
+                    }
+                });
+
                 events.push(...handledEvents);
             } else {
                 console.warn(`[DiceThrone] 未注册的 customAction: ${actionId}`);

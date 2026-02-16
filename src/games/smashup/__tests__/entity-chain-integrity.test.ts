@@ -29,6 +29,9 @@ import {
 /** 由 abilityRegistry 管理的 tag（排除 ongoing，它走 ongoingModifiers 系统） */
 const REGISTRY_MANAGED_TAGS: AbilityTag[] = ['onPlay', 'talent', 'special', 'onDestroy', 'extra'];
 
+/** abilityTag 覆盖率门槛（随开发推进可逐步提高） */
+const ABILITY_TAG_COVERAGE_THRESHOLD = 0.4;
+
 // ============================================================================
 // 辅助：从 CardDef 提取 abilityTag 引用链
 // ============================================================================
@@ -100,7 +103,7 @@ describe('AbilityTag 引用链', () => {
         expect(orphans).toEqual([]);
     });
 
-    it('abilityTag 实现覆盖率 ≥ 50%', () => {
+    it(`abilityTag 实现覆盖率 ≥ ${Math.round(ABILITY_TAG_COVERAGE_THRESHOLD * 100)}%`, () => {
         const implemented = allChains.filter(c => {
             const [defId, tag] = c.refId.split('::');
             return hasAbility(defId, tag as AbilityTag);
@@ -108,7 +111,7 @@ describe('AbilityTag 引用链', () => {
 
         const coverage = implemented.length / allChains.length;
         // 当前游戏仍在开发，随开发进度提升阈值
-        expect(coverage).toBeGreaterThanOrEqual(0.4);
+        expect(coverage).toBeGreaterThanOrEqual(ABILITY_TAG_COVERAGE_THRESHOLD);
     });
 });
 

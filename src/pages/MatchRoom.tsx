@@ -27,7 +27,7 @@ import { getOrCreateGuestId } from '../hooks/match/ownerIdentity';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { useModalStack } from '../contexts/ModalStackContext';
 import { useToast } from '../contexts/ToastContext';
-import { GAME_SERVER_URL } from '../config/server';
+import { getGameServerUrl } from '../config/server';
 import { getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
@@ -568,6 +568,8 @@ export const MatchRoom = () => {
 
     useEffect(() => {
         if (isTutorialRoute || !matchId || !lobbyPresence.isMissing) return;
+        // 自动加入过程中不检查房间是否缺失（lobby 快照可能尚未包含该房间）
+        if (shouldAutoJoin || isAutoJoining) return;
         if (handledMissingMatchRef.current === matchId) return;
         handledMissingMatchRef.current = matchId;
         clearMatchLocalState();
@@ -577,7 +579,7 @@ export const MatchRoom = () => {
             { dedupeKey: `matchRoom.missing.${matchId}` }
         );
         navigateBackToLobby();
-    }, [isTutorialRoute, matchId, lobbyPresence.isMissing, toast]);
+    }, [isTutorialRoute, matchId, lobbyPresence.isMissing, toast, shouldAutoJoin, isAutoJoining]);
 
     const handleForceExitLocal = () => {
         clearMatchLocalState();
@@ -851,7 +853,7 @@ export const MatchRoom = () => {
                                 isMultiplayer={true}
                             >
                                 <GameProvider
-                                    server={GAME_SERVER_URL}
+                                    server={getGameServerUrl()}
                                     matchId={matchId}
                                     playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
                                     credentials={credentials}
@@ -872,7 +874,7 @@ export const MatchRoom = () => {
                                 isMultiplayer={true}
                             >
                                 <GameProvider
-                                    server={GAME_SERVER_URL}
+                                    server={getGameServerUrl()}
                                     matchId={matchId}
                                     playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
                                     credentials={credentials}

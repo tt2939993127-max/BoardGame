@@ -6,9 +6,9 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, peekDeckTop, buildMinionPlayedEvents } from '../domain/abilityHelpers';
+import { grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, peekDeckTop } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { SmashUpEvent } from '../domain/types';
+import type { SmashUpEvent, MinionPlayedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
@@ -158,10 +158,11 @@ function robotTechCenter(ctx: AbilityContext): AbilityResult {
         }
     }
     if (candidates.length === 0) return { events: [] };
-    // Prompt 选择
+    // Prompt 选择（包含取消选项）
     const interaction = createSimpleChoice(
         `robot_tech_center_${ctx.now}`, ctx.playerId,
-        '选择一个基地（按该基地上你的随从数抽牌）', buildBaseTargetOptions(candidates), 'robot_tech_center',
+        '选择一个基地（按该基地上你的随从数抽牌）', buildBaseTargetOptions(candidates),
+        { sourceId: 'robot_tech_center', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -219,6 +220,9 @@ export function registerRobotInteractionHandlers(): void {
 
     // 技术中心：选择基地后按随从数抽牌
     registerInteractionHandler('robot_tech_center', (state, playerId, value, _iData, _random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { baseIndex } = value as { baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
@@ -247,13 +251,14 @@ export function registerRobotInteractionHandlers(): void {
         if (!def || def.type !== 'minion' || def.power > 2) return undefined;
         // 单基地直接打出
         if (state.core.bases.length === 1) {
-            const playResult = buildMinionPlayedEvents({
-                core: state.core, matchState: state, playerId, cardUid, defId,
-                baseIndex: 0, power: def.power, random: _random, now: timestamp,
-            });
-            return { state: playResult.matchState ?? state, events: [
+            const playedEvt: MinionPlayedEvent = {
+                type: SU_EVENTS.MINION_PLAYED,
+                payload: { playerId, cardUid, defId, baseIndex: 0, power: def.power },
+                timestamp,
+            };
+            return { state, events: [
                 grantExtraMinion(playerId, 'robot_zapbot', timestamp),
-                ...playResult.events,
+                playedEvt,
             ] };
         }
         // 多基地→链式选基地
@@ -279,13 +284,14 @@ export function registerRobotInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const ctx = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
         if (!ctx) return undefined;
-        const playResult = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid: ctx.cardUid, defId: ctx.defId,
-            baseIndex, power: ctx.power, random: _random, now: timestamp,
-        });
-        return { state: playResult.matchState ?? state, events: [
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power },
+            timestamp,
+        };
+        return { state, events: [
             grantExtraMinion(playerId, 'robot_zapbot', timestamp),
-            ...playResult.events,
+            playedEvt,
         ] };
     });
 
@@ -299,13 +305,14 @@ export function registerRobotInteractionHandlers(): void {
         if (player.deck.length === 0 || player.deck[0].uid !== cardUid) return undefined;
         // 单基地直接打出
         if (state.core.bases.length === 1) {
-            const playResult = buildMinionPlayedEvents({
-                core: state.core, matchState: state, playerId, cardUid, defId,
-                baseIndex: 0, power, random: _random, now: timestamp, fromDeck: true,
-            });
-            return { state: playResult.matchState ?? state, events: [
+            const playedEvt: MinionPlayedEvent = {
+                type: SU_EVENTS.MINION_PLAYED,
+                payload: { playerId, cardUid, defId, baseIndex: 0, power },
+                timestamp,
+            };
+            return { state, events: [
                 grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-                ...playResult.events,
+                playedEvt,
             ] };
         }
         // 多基地→链式选基地
@@ -331,13 +338,14 @@ export function registerRobotInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const ctx = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
         if (!ctx) return undefined;
-        const playResult = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid: ctx.cardUid, defId: ctx.defId,
-            baseIndex, power: ctx.power, random: _random, now: timestamp, fromDeck: true,
-        });
-        return { state: playResult.matchState ?? state, events: [
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power },
+            timestamp,
+        };
+        return { state, events: [
             grantExtraMinion(playerId, 'robot_hoverbot', timestamp),
-            ...playResult.events,
+            playedEvt,
         ] };
     });
 }

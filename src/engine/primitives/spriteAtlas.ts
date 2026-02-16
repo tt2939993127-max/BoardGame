@@ -88,6 +88,45 @@ export function computeSpriteAspectRatio(index: number, atlas: SpriteAtlasConfig
   return cardW / cardH;
 }
 
+/** 计算精灵帧的 <img> 裁切样式（用于 overflow:hidden 容器 + 缩放偏移方案） */
+export function computeSpriteImgStyle(index: number, atlas: SpriteAtlasConfig): {
+  /** img 宽度百分比（相对于容器），如 "800%" */
+  imgWidth: string;
+  /** img 高度百分比（相对于容器），如 "600%" */
+  imgHeight: string;
+  /** 帧在精灵图中的列位置百分比（用于 object-position） */
+  objectPositionX: string;
+  objectPositionY: string;
+  /** 帧宽高比 */
+  aspectRatio: number;
+} {
+  const safeIndex = index % (atlas.cols * atlas.rows);
+  const col = safeIndex % atlas.cols;
+  const row = Math.floor(safeIndex / atlas.cols);
+
+  const cardW = atlas.colWidths[col] ?? atlas.colWidths[0];
+  const cardH = atlas.rowHeights[row] ?? atlas.rowHeights[0];
+  const x = atlas.colStarts[col] ?? atlas.colStarts[0];
+  const y = atlas.rowStarts[row] ?? atlas.rowStarts[0];
+
+  // img 尺寸 = 整张精灵图相对于单帧的比例
+  const imgWidthPct = (atlas.imageW / cardW) * 100;
+  const imgHeightPct = (atlas.imageH / cardH) * 100;
+
+  // object-position 百分比：与 background-position 相同的公式
+  const xPos = atlas.imageW > cardW ? (x / (atlas.imageW - cardW)) * 100 : 0;
+  const yPos = atlas.imageH > cardH ? (y / (atlas.imageH - cardH)) * 100 : 0;
+
+  return {
+    imgWidth: `${imgWidthPct}%`,
+    imgHeight: `${imgHeightPct}%`,
+    objectPositionX: `${xPos}%`,
+    objectPositionY: `${yPos}%`,
+    aspectRatio: cardW / cardH,
+  };
+}
+
+
 /** 根据图片尺寸和行列数生成均匀网格配置 */
 export function generateUniformAtlasConfig(
   imageW: number,

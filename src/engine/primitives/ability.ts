@@ -35,6 +35,24 @@ export interface AbilityDef<TEffect = unknown, TTrigger = string> {
   trigger?: TTrigger;
   /** 触发条件（使用 engine/primitives/condition 的 ConditionNode） */
   condition?: ConditionNode;
+  /**
+   * 能力约束（推荐使用，替代游戏层手写验证逻辑）
+   * 
+   * 使用 engine/primitives/abilityConstraints 的通用约束系统。
+   * 支持行动消耗、实体状态、资源、使用次数等常见约束。
+   * 
+   * @example
+   * ```typescript
+   * constraints: {
+   *   actionCost: { type: 'move', count: 1 },
+   *   entityState: { notMoved: true },
+   *   resource: { charge: { min: 1 } },
+   * }
+   * ```
+   * 
+   * @see engine/primitives/abilityConstraints
+   */
+  constraints?: import('./abilityConstraints').AbilityConstraints;
   /** 效果列表 */
   effects: TEffect[];
   /** 标签（如 'ultimate', 'passive'） */

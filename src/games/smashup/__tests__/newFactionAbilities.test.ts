@@ -11,7 +11,6 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execute } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type {
     SmashUpCore,
@@ -25,7 +24,8 @@ import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { makeMinion, makeCard, makePlayer, makeState, makeMatchState, getInteractionsFromMS } from './helpers';
-import type { MatchState, RandomFn } from '../../../engine/types';
+import { runCommand, defaultTestRandom } from './testRunner';
+import type { MatchState } from '../../../engine/types';
 
 beforeAll(() => {
     clearRegistry();
@@ -38,18 +38,6 @@ beforeAll(() => {
 // ============================================================================
 // 辅助函数
 // ============================================================================
-
-
-
-
-
-
-const defaultRandom: RandomFn = {
-    shuffle: (arr: any[]) => [...arr],
-    random: () => 0.5,
-    d: (_max: number) => 1,
-    range: (_min: number, _max: number) => _min,
-};
 
 // ============================================================================
 // 黑熊骑兵派系
@@ -71,11 +59,11 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
-            const interactions = getInteractionsFromMS(state);
+            const interactions = getInteractionsFromMS(result.finalState);
             expect(interactions.length).toBe(1);
         });
 
@@ -93,11 +81,11 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.MINION_MOVED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.MINION_MOVED)).toBeUndefined();
         });
     });
 
@@ -116,11 +104,11 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
-            const interactions = getInteractionsFromMS(state);
+            const interactions = getInteractionsFromMS(result.finalState);
             expect(interactions.length).toBe(1);
         });
 
@@ -138,11 +126,11 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.MINION_MOVED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.MINION_MOVED)).toBeUndefined();
         });
     });
 
@@ -161,11 +149,11 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
-            const interactions = getInteractionsFromMS(state);
+            const interactions = getInteractionsFromMS(result.finalState);
             expect(interactions.length).toBe(1);
         });
 
@@ -183,11 +171,11 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.MINION_MOVED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.MINION_MOVED)).toBeUndefined();
         });
     });
 
@@ -210,11 +198,11 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
-            const interactions = getInteractionsFromMS(state);
+            const interactions = getInteractionsFromMS(result.finalState);
             expect(interactions.length).toBe(1);
         });
     });
@@ -236,12 +224,12 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
             // 多个目标时应创建 Prompt
-            const interactions = getInteractionsFromMS(state);
+            const interactions = getInteractionsFromMS(result.finalState);
             expect(interactions.length).toBe(1);
             expect(interactions[0].data.sourceId).toBe('bear_cavalry_bear_necessities');
         });
@@ -261,12 +249,12 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
             // 单目标自动执行，直接消灭随从
-            const destroyEvt = events.find(e => e.type === SU_EVENTS.MINION_DESTROYED);
+            const destroyEvt = result.events.find(e => e.type === SU_EVENTS.MINION_DESTROYED);
             expect(destroyEvt).toBeDefined();
             expect((destroyEvt as any).payload.minionUid).toBe('m1');
         });
@@ -285,12 +273,12 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
             // 单目标自动执行，直接消灭行动卡
-            const detachEvt = events.find(e => e.type === SU_EVENTS.ONGOING_DETACHED);
+            const detachEvt = result.events.find(e => e.type === SU_EVENTS.ONGOING_DETACHED);
             expect(detachEvt).toBeDefined();
             expect((detachEvt as any).payload.cardUid).toBe('oa1');
         });
@@ -308,12 +296,12 @@ describe('黑熊骑兵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBeUndefined();
-            expect(events.find(e => e.type === SU_EVENTS.ONGOING_DETACHED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.ONGOING_DETACHED)).toBeUndefined();
         });
     });
 });
@@ -344,14 +332,14 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'lib1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
             // 应有弃牌事件（弃疯狂卡）和抽牌事件
-            const discardEvt = events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED);
+            const discardEvt = result.events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED);
             expect(discardEvt).toBeDefined();
-            const drawEvt = events.find(e => e.type === SU_EVENTS.CARDS_DRAWN);
+            const drawEvt = result.events.find(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvt).toBeDefined();
         });
 
@@ -371,12 +359,12 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'lib1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
-            expect(events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
         });
     });
 
@@ -397,15 +385,15 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'prof1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
             // 应有弃牌事件（弃疯狂卡）
-            const discardEvt = events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED);
+            const discardEvt = result.events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED);
             expect(discardEvt).toBeDefined();
             // 应有额度修改事件（额外行动 + 额外随从）
-            const limitEvts = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            const limitEvts = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
             expect(limitEvts.length).toBe(2);
         });
 
@@ -424,12 +412,12 @@ describe('米斯卡塔尼克大学派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'prof1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
-            expect(events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED)).toBeUndefined();
         });
     });
 });
@@ -459,18 +447,18 @@ describe('印斯茅斯派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
             // 同名卡（dk1, dk3）应被抽到手牌
-            const drawEvt = events.find(e => e.type === SU_EVENTS.CARDS_DRAWN);
+            const drawEvt = result.events.find(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvt).toBeDefined();
             expect(drawEvt!.payload.cardUids).toEqual(['dk1', 'dk3']);
             expect(drawEvt!.payload.count).toBe(2);
 
             // 非同名卡（dk2）应放到牌库底
-            const reorderEvt = events.find(e => e.type === SU_EVENTS.DECK_REORDERED);
+            const reorderEvt = result.events.find(e => e.type === SU_EVENTS.DECK_REORDERED);
             expect(reorderEvt).toBeDefined();
             // 新牌库 = 剩余牌库（dk4）+ 放底的（dk2）
             expect(reorderEvt!.payload.deckUids).toEqual(['dk4', 'dk2']);
@@ -495,14 +483,14 @@ describe('印斯茅斯派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
             // 无同名卡，不应有抽牌事件
-            expect(events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
             // 3张全部放牌库底
-            const reorderEvt = events.find(e => e.type === SU_EVENTS.DECK_REORDERED);
+            const reorderEvt = result.events.find(e => e.type === SU_EVENTS.DECK_REORDERED);
             expect(reorderEvt).toBeDefined();
             // 新牌库 = 剩余（dk4）+ 放底的（dk1, dk2, dk3）
             expect(reorderEvt!.payload.deckUids).toEqual(['dk4', 'dk1', 'dk2', 'dk3']);
@@ -522,12 +510,12 @@ describe('印斯茅斯派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
-            expect(events.find(e => e.type === SU_EVENTS.DECK_REORDERED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.CARDS_DRAWN)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.DECK_REORDERED)).toBeUndefined();
         });
 
         it('牌库不足3张时只检查可用的牌', () => {
@@ -546,11 +534,11 @@ describe('印斯茅斯派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
-            const drawEvt = events.find(e => e.type === SU_EVENTS.CARDS_DRAWN);
+            const drawEvt = result.events.find(e => e.type === SU_EVENTS.CARDS_DRAWN);
             expect(drawEvt).toBeDefined();
             expect(drawEvt!.payload.cardUids).toEqual(['dk1']);
         });
@@ -584,12 +572,12 @@ describe('幽灵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
             // 单个可消灭目标时创建 Prompt
-            const interactions = getInteractionsFromMS(state);
+            const interactions = getInteractionsFromMS(result.finalState);
             expect(interactions.length).toBe(1);
         });
 
@@ -616,12 +604,12 @@ describe('幽灵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
             // 5张手牌（排除自身），两个目标都可消灭 → Prompt
-            const interactions = getInteractionsFromMS(state);
+            const interactions = getInteractionsFromMS(result.finalState);
             expect(interactions.length).toBe(1);
             expect(interactions[0].data.sourceId).toBe('ghost_spirit');
         });
@@ -644,13 +632,13 @@ describe('幽灵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
             // 只有1张可弃手牌，对手力量5，不够
-            expect(events.find(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBeUndefined();
-            expect(events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBeUndefined();
         });
 
         it('无对手随从时不产生事件', () => {
@@ -672,11 +660,11 @@ describe('幽灵派系能力', () => {
                 ],
             });
             const state = makeMatchState(core);
-            const events = execute(state,
+            const result = runCommand(state,
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
-                defaultRandom
+                defaultTestRandom
             );
-            expect(events.find(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBeUndefined();
+            expect(result.events.find(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBeUndefined();
         });
     });
 });

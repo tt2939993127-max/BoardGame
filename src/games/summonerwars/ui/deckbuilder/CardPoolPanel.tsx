@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Card, UnitCard } from '../../domain/types';
 import { getCardPoolByFaction, groupCardsByType } from '../../config/cardRegistry';
@@ -7,9 +7,6 @@ import { canAddCard, type DeckDraft } from '../../config/deckValidation';
 import { CardSprite } from '../CardSprite';
 import { MagnifyOverlay } from '../../../../components/common/overlays/MagnifyOverlay';
 import { resolveCardAtlasId, initSpriteAtlases } from '../cardAtlas';
-
-// 确保精灵图注册表已初始化（幂等）
-initSpriteAtlases();
 
 /** 解析卡牌的精灵图配置 */
 function resolveSprite(card: Card): { atlasId: string; frameIndex: number } {
@@ -28,8 +25,13 @@ interface CardPoolPanelProps {
 }
 
 export const CardPoolPanel: React.FC<CardPoolPanelProps> = ({ factionId, currentDeck, onAddCard, onSelectSummoner }) => {
-    const { t } = useTranslation('game-summonerwars');
+    const { t, i18n } = useTranslation('game-summonerwars');
     const [magnifiedCard, setMagnifiedCard] = useState<{ atlasId: string; frameIndex: number; name: string } | null>(null);
+
+    // 确保精灵图注册表已初始化（使用当前语言）
+    useEffect(() => {
+        initSpriteAtlases(i18n.language);
+    }, [i18n.language]);
 
     const cards = useMemo(() => {
         if (!factionId) return [];

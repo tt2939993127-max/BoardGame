@@ -16,6 +16,7 @@ import type {
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
+import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 // ============================================================================
 // 野蛮人技能处理器
@@ -23,7 +24,7 @@ import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomAc
 // ============================================================================
 
 /**
- * 压制 (Suppress)：投掷3骰，造成点数总和的伤害；若总数>14，施加脑震荡
+ * 压制 (Suppress)：投掷3骰，造成点数总和的伤害；若总数>14，施加脑震荡 【已迁移到新伤害计算管线】
  */
 function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
@@ -56,16 +57,14 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
 
     // 造成点数总和的伤害
     if (total > 0) {
-        const target = state.players[opponentId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(total, targetHp) : 0;
-        ctx.damageDealt += actualDamage;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: opponentId, amount: total, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
+        const damageCalc = createDamageCalculation({
+            source: { playerId: attackerId, abilityId: sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: total,
+            state,
             timestamp,
-        } as DamageDealtEvent);
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     // 若总数>14，施加脑震荡
@@ -90,7 +89,7 @@ function handleBarbarianSuppressRoll({ ctx, attackerId, sourceAbilityId, state, 
 }
 
 /**
- * 压制 II (Suppress II) 力量变体：投掷3骰，造成点数总和伤害；若总数>9，施加脑震荡
+ * 压制 II (Suppress II) 力量变体：投掷3骰，造成点数总和伤害；若总数>9，施加脑震荡 【已迁移到新伤害计算管线】
  */
 function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
@@ -121,16 +120,14 @@ function handleBarbarianSuppress2Roll({ ctx, attackerId, sourceAbilityId, state,
     }
 
     if (total > 0) {
-        const target = state.players[opponentId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(total, targetHp) : 0;
-        ctx.damageDealt += actualDamage;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: opponentId, amount: total, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
+        const damageCalc = createDamageCalculation({
+            source: { playerId: attackerId, abilityId: sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: total,
+            state,
             timestamp,
-        } as DamageDealtEvent);
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     // 升级版阈值降低到 >9
@@ -319,6 +316,7 @@ function handleLuckyRollHeal({ attackerId, sourceAbilityId, state, timestamp, ra
  * 再来点儿！(More Please)：投掷5骰
  * - 增加 1×剑骰面数 伤害到当前攻击
  * - 施加脑震荡
+ * 【已迁移到新伤害计算管线】
  */
 function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, timestamp, random }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
@@ -352,16 +350,14 @@ function handleMorePleaseRollDamage({ ctx, attackerId, sourceAbilityId, state, t
 
     // 直接造成剑骰面数量的伤害
     if (swordCount > 0) {
-        const target = state.players[opponentId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(swordCount, targetHp) : 0;
-        ctx.damageDealt += actualDamage;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: opponentId, amount: swordCount, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
+        const damageCalc = createDamageCalculation({
+            source: { playerId: attackerId, abilityId: sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: swordCount,
+            state,
             timestamp,
-        } as DamageDealtEvent);
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     // 对对手施加脑震荡

@@ -117,8 +117,10 @@ const RAW_WEB_ORIGINS = (process.env.WEB_ORIGINS || '')
     .filter(Boolean);
 
 const DEV_CORS_ORIGINS = [
+    'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:5174',
+    'http://127.0.0.1:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5174',
 ];
@@ -393,6 +395,15 @@ const cleanupMissingOwnerRoom = async (
 
 import Router from '@koa/router';
 const router = new Router();
+
+// GET /games — 健康检查端点（用于 E2E 测试）
+router.get('/games', async (ctx) => {
+    ctx.body = { 
+        status: 'ok', 
+        games: SUPPORTED_GAMES,
+        timestamp: Date.now()
+    };
+});
 
 // POST /games/:name/create — 创建对局
 router.post('/games/:name/create', async (ctx) => {
@@ -819,6 +830,8 @@ const fetchLobbyMatch = async (matchID: string): Promise<LobbyMatch | null> => {
     try {
         const result = await storage.fetch(matchID, { metadata: true });
         if (!result.metadata) return null;
+        // 已结束的对局不应出现在大厅列表
+        if (result.metadata.gameover) return null;
         const match = buildLobbyMatch(matchID, result.metadata);
         const game = normalizeGameName(result.metadata.gameName);
         if (game && isSupportedGame(game)) {
@@ -840,6 +853,9 @@ const fetchMatchesByGame = async (gameName: SupportedGame): Promise<LobbyMatch[]
             const result = await storage.fetch(matchID, { metadata: true });
             if (!result.metadata) continue;
             if (result.metadata.gameover) continue;
+            // 过滤无人占座的空房间（等待 cleanupEphemeralMatches 回收）
+            const players = result.metadata.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean | null }> | undefined;
+            if (!hasOccupiedPlayers(players)) continue;
             const match = buildLobbyMatch(matchID, result.metadata);
             matchGameIndex.set(matchID, gameName);
             matches.push(match);
@@ -1113,6 +1129,12 @@ async function handleMatchLeft(matchID?: string, gameNameFromUrl?: string) {
         return;
     }
     if (match) {
+        // 玩家离开后房间已空 → 从大厅列表移除（等待 cleanupEphemeralMatches 回收）
+        const hasPlayers = match.players.some(p => p.name);
+        if (!hasPlayers) {
+            emitMatchEnded(game, matchID);
+            return;
+        }
         emitMatchUpdated(game, match);
         return;
     }

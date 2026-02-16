@@ -71,8 +71,10 @@ export function validate(
             }
 
             // 正常手牌打出：全局额度 + 基地限定额度
+            // 只有当全局额度已用完且该基地也没有限定额度时才拒绝
             const baseQuota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
-            if (player.minionsPlayed >= player.minionLimit && baseQuota <= 0) {
+            const globalQuotaRemaining = player.minionLimit - player.minionsPlayed;
+            if (globalQuotaRemaining <= 0 && baseQuota <= 0) {
                 return { valid: false, error: '本回合随从额度已用完' };
             }
             const card = player.hand.find(c => c.uid === command.payload.cardUid);

@@ -117,6 +117,7 @@ function miskatonicMandatoryReading(ctx: AbilityContext): AbilityResult {
         title: '选择一位玩家抽两张疯狂卡',
         sourceId: 'miskatonic_mandatory_reading',
         targetType: 'generic',
+        autoCancelOption: true,  // 允许取消
     }, (value) => {
         const evts: SmashUpEvent[] = [];
         const madnessEvt = drawMadnessCards(value.pid, 2, ctx.state, 'miskatonic_mandatory_reading', ctx.now);
@@ -499,6 +500,9 @@ export function registerMiskatonicInteractionHandlers(): void {
 
     // 强制阅读：选择对手后给其抽疯狂卡 + 额外行动
     registerInteractionHandler('miskatonic_mandatory_reading', (state, playerId, value, _iData, _random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { pid } = value as { pid: string };
         const events: SmashUpEvent[] = [];
         const madnessEvt = drawMadnessCards(pid, 2, state.core, 'miskatonic_mandatory_reading', timestamp);

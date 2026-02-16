@@ -114,13 +114,13 @@ export const DiceTray = ({
                 {dice.map((d, i) => {
                     const selected = isSelected(d.id);
                     const isModified = modifiedDice.includes(String(d.id));
-                    // adjust 模式：选中后显示 +/- 按钮
-                    const showAdjustButtons = isInteractionMode && isAdjustMode && selected;
-                    // any 模式：已修改的骰子始终显示控件，未修改的骰子在未达到上限时显示控件（也用 +/- 按钮）
-                    const showAnyModeButtons = isInteractionMode && isAnyMode &&
+                    // adjust 模式：选中后显示 +/- 按钮（但锁定骰子不显示）
+                    const showAdjustButtons = isInteractionMode && isAdjustMode && selected && !d.isKept;
+                    // any 模式：已修改的骰子始终显示控件，未修改的骰子在未达到上限时显示控件（也用 +/- 按钮，但锁定骰子不显示）
+                    const showAnyModeButtons = isInteractionMode && isAnyMode && !d.isKept &&
                         (isModified || modifiedDice.length < maxModifyCount);
-                    // selectDie 模式下，isKept 的骰子（未参与本阶段投掷）不可选择
-                    const isInactiveDie = interaction?.type === 'selectDie' && d.isKept;
+                    // selectDie/modifyDie 模式下，isKept 的骰子（未参与本阶段投掷）不可选择/修改
+                    const isInactiveDie = (interaction?.type === 'selectDie' || interaction?.type === 'modifyDie') && d.isKept;
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
                         : canInteract;

@@ -34,6 +34,10 @@ const EXECUTOR_CONTRACTS = new Map<string, { required: string[]; optional?: stri
   ['spirit_bond', { required: ['choice'], optional: ['targetPosition'] }],
   // 洞穴地精
   ['feed_beast', { required: ['choice'], optional: ['targetPosition'] }],
+  // 欺心巫族
+  ['high_telekinesis', { required: ['targetPosition', 'newPosition'] }],
+  ['telekinesis', { required: ['targetPosition', 'newPosition'] }],
+  ['mind_transmission', { required: ['targetPosition'] }],
 ]);
 
 // ============================================================================

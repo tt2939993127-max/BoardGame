@@ -313,6 +313,28 @@ const applyCoreState = async (page: Page, coreState: unknown) => {
   await expect(input).toBeHidden({ timeout: 5000 }).catch(() => { });
 };
 
+const joinMatchAsGuest = async (page: Page, matchId: string, gameId = 'summonerwars') => {
+  const base = getGameServerBaseURL();
+  const matchResp = await page.request.get(`${base}/games/${gameId}/${matchId}`);
+  if (!matchResp.ok()) throw new Error(`获取 match 信息失败: ${matchResp.status()}`);
+  const matchData = await matchResp.json() as { players: { id: number; name?: string }[] };
+  const openSeat = matchData.players?.find((p) => !p.name);
+  if (!openSeat) throw new Error('没有空位');
+  const pid = String(openSeat.id);
+  const guestId = `e2e_guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+  const joinResp = await page.request.post(`${base}/games/${gameId}/${matchId}/join`, {
+    data: { playerID: pid, playerName: `Guest_${guestId}`, data: { guestId } },
+  });
+  if (!joinResp.ok()) throw new Error(`加入 match 失败: ${joinResp.status()}`);
+  const joinData = await joinResp.json() as { playerCredentials: string };
+  // 先导航到应用首页以获取 localStorage 访问权限
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(({ mid, pid, creds, gname }) => {
+    localStorage.setItem(`match_creds_${mid}`, JSON.stringify({ playerID: pid, credentials: creds, matchID: mid, gameName: gname }));
+  }, { mid: matchId, pid, creds: joinData.playerCredentials, gname: gameId });
+  await page.goto(`/play/${gameId}/match/${matchId}?playerID=${pid}`, { waitUntil: 'domcontentloaded' });
+};
+
 const ensureGameServerAvailable = async (page: Page) => {
   const gameServerBaseURL = getGameServerBaseURL();
   const candidates = ['/games', `${gameServerBaseURL}/games`];
@@ -334,7 +356,7 @@ const createSummonerWarsRoom = async (page: Page) => {
   await dismissLobbyConfirmIfNeeded(page);
 
   const { modalRoot } = await ensureSummonerWarsModalOpen(page);
-  let createButton = modalRoot.locator('button:visible', { hasText: /Create Room|创建房间/i }).first();
+  const createButton = modalRoot.locator('button:visible', { hasText: /Create Room|创建房间/i }).first();
   const lobbyTab = modalRoot.getByRole('button', { name: /Lobby|在线大厅/i });
   if (await lobbyTab.isVisible().catch(() => false)) {
     await lobbyTab.evaluate((node) => {
@@ -907,14 +929,13 @@ test.describe('SummonerWars', () => {
     await disableTutorial(guestContext);
     await disableSummonerWarsAutoSkip(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const preparedCore = prepareDeterministicCore(coreState);
     await applyCoreState(hostPage, preparedCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -930,7 +951,7 @@ test.describe('SummonerWars', () => {
     await expect.poll(async () => getMapTransform(hostPage)).not.toBe(initialTransform);
 
     const guestBanner = guestPage.getByTestId('sw-action-banner');
-    await expect(guestBanner).toContainText(/等待对手/);
+    await expect(guestBanner).toContainText(/等待对手|Waiting for opponent/i);
 
     await assertHandAreaVisible(hostPage, 'host');
     await assertHandAreaVisible(guestPage, 'guest');
@@ -997,8 +1018,7 @@ test.describe('SummonerWars', () => {
     await disableTutorial(guestContext);
     await disableSummonerWarsAutoSkip(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
@@ -1126,15 +1146,14 @@ test.describe('SummonerWars', () => {
     await disableTutorial(guestContext);
     await disableSummonerWarsAutoSkip(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
     // 准备测试状态：召唤阶段，召唤师有复活死灵技能，弃牌堆有亡灵单位
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const reviveTestCore = prepareReviveUndeadState(coreState);
     await applyCoreState(hostPage, reviveTestCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -1219,8 +1238,7 @@ test.describe('SummonerWars', () => {
     await disableTutorial(guestContext);
     await disableSummonerWarsAutoSkip(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
@@ -1322,15 +1340,14 @@ test.describe('SummonerWars', () => {
     await disableTutorial(guestContext);
     await disableSummonerWarsAutoSkip(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
     // 准备状态：建造阶段 + 手牌有狱火铸剑 + 场上有友方士兵
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const hellfireCore = prepareHellfireBladeState(coreState);
     await applyCoreState(hostPage, hellfireCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -1395,15 +1412,14 @@ test.describe('SummonerWars', () => {
     await disableTutorial(guestContext);
     await disableSummonerWarsAutoSkip(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
     // 准备状态：移动阶段 + 手牌有除灭 + 场上有多个友方单位
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const annihilateCore = prepareAnnihilateState(coreState);
     await applyCoreState(hostPage, annihilateCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -1498,15 +1514,14 @@ test.describe('SummonerWars', () => {
     await disableTutorial(guestContext);
     await disableSummonerWarsAutoSkip(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
     // 准备状态：召唤阶段 + 手牌有血契召唤和低费单位 + 场上有友方单位
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const bloodSummonCore = prepareBloodSummonState(coreState);
     await applyCoreState(hostPage, bloodSummonCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -1526,10 +1541,10 @@ test.describe('SummonerWars', () => {
       // 验证血契召唤模式横幅显示
       const bloodSummonBanner = hostPage.locator('[class*="bg-rose-900"]');
       await expect(bloodSummonBanner).toBeVisible({ timeout: 3000 });
-      await expect(bloodSummonBanner).toContainText(/选择.*友方单位/, { timeout: 3000 });
+      await expect(bloodSummonBanner).toContainText(/选择.*友方单位|Select.*friendly unit/i, { timeout: 3000 });
 
       // 取消操作
-      const cancelButton = hostPage.getByRole('button', { name: /取消/i });
+      const cancelButton = hostPage.getByRole('button', { name: /取消|Cancel/i });
       if (await cancelButton.isVisible().catch(() => false)) {
         await cancelButton.click();
       }
@@ -1569,15 +1584,14 @@ test.describe('SummonerWars', () => {
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
     // 准备状态：建造阶段 + 手牌只有狱火铸剑（无建筑卡）+ 场上有友方士兵
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const noStructureCore = prepareNoStructureButEventState(coreState);
     await applyCoreState(hostPage, noStructureCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -1624,15 +1638,14 @@ test.describe('SummonerWars', () => {
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
     // 注入弃牌堆有卡牌的状态
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const discardCore = prepareDiscardPileState(coreState);
     await applyCoreState(hostPage, discardCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -1691,15 +1704,14 @@ test.describe('SummonerWars', () => {
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
     // 移除玩家1的召唤师，模拟游戏结束
-    let coreState = await readCoreState(hostPage);
+    const coreState = await readCoreState(hostPage);
     const gameOverCore = removeSummonerFromCore(coreState, '1');
     await applyCoreState(hostPage, gameOverCore);
     await closeDebugPanelIfOpen(hostPage);
@@ -1746,8 +1758,7 @@ test.describe('SummonerWars', () => {
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
     const guestPage = await guestContext.newPage();
-    await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+    await joinMatchAsGuest(guestPage, matchId!);
 
     await completeFactionSelection(hostPage, guestPage);
     await waitForSummonerWarsUI(hostPage);
@@ -1764,7 +1775,7 @@ test.describe('SummonerWars', () => {
 
     // Guest 的 action banner 应显示等待对手
     const guestBanner = guestPage.getByTestId('sw-action-banner');
-    await expect(guestBanner).toContainText(/等待对手/);
+    await expect(guestBanner).toContainText(/等待对手|Waiting for opponent/i);
 
     await hostContext.close();
     await guestContext.close();

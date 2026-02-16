@@ -32,7 +32,6 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
-import { execute } from '../domain/reducer';
 import { smashUpFlowHooks } from '../domain/index';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type { SmashUpCore, SmashUpCommand, CardInstance } from '../domain/types';
@@ -46,7 +45,7 @@ import {
     makeMinion,
     getInteractionsFromMS,
 } from './helpers';
-
+import { runCommand } from './testRunner';
 // 确定性随机
 const dummyRandom: RandomFn = {
     random: () => 0.5,
@@ -69,21 +68,19 @@ beforeAll(() => {
 
 const mockCommand: Command = { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined } as any;
 
-/** 构造 PLAY_MINION 命令并通过 execute 执行 */
+/** 构造 PLAY_MINION 命令并通过 pipeline 执行 */
 function executePlayMinion(
     ms: MatchState<SmashUpCore>,
     playerId: string,
     cardUid: string,
     baseIndex: number,
-): { events: ReturnType<typeof execute>; ms: MatchState<SmashUpCore> } {
-    const cmd: SmashUpCommand = {
+): { events: any[]; ms: MatchState<SmashUpCore> } {
+    const result = runCommand(ms, {
         type: SU_COMMANDS.PLAY_MINION,
         playerId,
         payload: { cardUid, baseIndex },
-        timestamp: Date.now(),
-    } as any;
-    const events = execute(ms, cmd, dummyRandom);
-    return { events, ms };
+    } as SmashUpCommand, dummyRandom);
+    return { events: result.events, ms: result.finalState };
 }
 
 /** 构造 onPhaseEnter('startTurn') 所需的 MatchState */
@@ -152,11 +149,11 @@ describe('集成: base_haunted_house_al9000 鬼屋 (onMinionPlayed)', () => {
             },
         });
         const ms = makeMatchState(core);
-        executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(ms, 'base_haunted_house_al9000')).toBe(true);
+        const { ms: resultMs1 } = executePlayMinion(ms, '0', 'minion-1', 0);
+        expect(hasInteraction(resultMs1, 'base_haunted_house_al9000')).toBe(true);
     });
 
-    it('手牌只剩随从 → 自动弃，无 Interaction', () => {
+    it('手牌只剩随从 → 打出后手牌为空，无需弃牌，无 Interaction', () => {
         const core = makeState({
             bases: [makeBase('base_haunted_house_al9000')],
             players: {
@@ -167,9 +164,9 @@ describe('集成: base_haunted_house_al9000 鬼屋 (onMinionPlayed)', () => {
             },
         });
         const ms = makeMatchState(core);
-        const { events } = executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(events.some(e => e.type === SU_EVENTS.CARDS_DISCARDED)).toBe(true);
-        expect(hasInteraction(ms, 'base_haunted_house_al9000')).toBe(false);
+        const { events, ms: resultMs2 } = executePlayMinion(ms, '0', 'minion-1', 0);
+        // 打出唯一的随从后手牌为空，鬼屋能力无法弃牌
+        expect(hasInteraction(resultMs2, 'base_haunted_house_al9000')).toBe(false);
     });
 });
 
@@ -187,8 +184,8 @@ describe('集成: base_the_asylum 疯人院 (onMinionPlayed)', () => {
             madnessDeck: ['madness_0'],
         });
         const ms = makeMatchState(core);
-        executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(ms, 'base_the_asylum')).toBe(true);
+        const { ms: resultMs3 } = executePlayMinion(ms, '0', 'minion-1', 0);
+        expect(hasInteraction(resultMs3, 'base_the_asylum')).toBe(true);
     });
 });
 
@@ -206,8 +203,8 @@ describe('集成: base_innsmouth_base 印斯茅斯 (onMinionPlayed)', () => {
             },
         });
         const ms = makeMatchState(core);
-        executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(ms, 'base_innsmouth_base')).toBe(true);
+        const { ms: resultMs4 } = executePlayMinion(ms, '0', 'minion-1', 0);
+        expect(hasInteraction(resultMs4, 'base_innsmouth_base')).toBe(true);
     });
 });
 
@@ -224,8 +221,8 @@ describe('集成: base_plateau_of_leng 伦格高原 (onMinionPlayed)', () => {
             },
         });
         const ms = makeMatchState(core);
-        executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(ms, 'base_plateau_of_leng')).toBe(true);
+        const { ms: resultMs5 } = executePlayMinion(ms, '0', 'minion-1', 0);
+        expect(hasInteraction(resultMs5, 'base_plateau_of_leng')).toBe(true);
     });
 });
 
@@ -244,8 +241,8 @@ describe('集成: base_land_of_balance 平衡之地 (onMinionPlayed)', () => {
             },
         });
         const ms = makeMatchState(core);
-        executePlayMinion(ms, '0', 'minion-1', 0);
-        expect(hasInteraction(ms, 'base_land_of_balance')).toBe(true);
+        const { ms: resultMs6 } = executePlayMinion(ms, '0', 'minion-1', 0);
+        expect(hasInteraction(resultMs6, 'base_land_of_balance')).toBe(true);
     });
 });
 

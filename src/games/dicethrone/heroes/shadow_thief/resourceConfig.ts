@@ -7,7 +7,7 @@ export const SHADOW_THIEF_RESOURCES: ResourceDefinition[] = [
         initialValue: 2,
         min: 0,
         max: 15,
-        icon: 'assets/dicethrone/images/Common/cp-icon.png',
+        icon: '⚡',
         color: '#FFA500',
     },
     {
@@ -16,7 +16,7 @@ export const SHADOW_THIEF_RESOURCES: ResourceDefinition[] = [
         initialValue: 50,
         min: 0,
         max: 50,
-        icon: 'assets/dicethrone/images/Common/hp-icon.png',
+        icon: '❤️',
         color: '#FF0000',
     },
 ];

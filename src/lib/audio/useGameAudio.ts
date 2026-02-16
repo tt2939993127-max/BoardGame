@@ -27,6 +27,20 @@ const failedSounds = new Set<string>();
 const lastPlayedTime = new Map<string, number>();
 const SFX_THROTTLE_MS = 80;
 
+const DT_TRACE_SOUND_KEYS = new Set<string>([
+    'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none',
+    'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a',
+    'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003',
+    'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002',
+]);
+
+const DT_TRACE_EVENT_TYPES = new Set<string>([
+    'CHARACTER_SELECTED',
+    'PLAYER_READY',
+    'HOST_STARTED',
+    'SYS_PHASE_CHANGED',
+]);
+
 function getLogEntrySignature(entry: unknown): string | null {
     if (!entry || typeof entry !== 'object') return null;
     const maybeEventStreamEntry = entry as { id?: number; event?: { type?: string; timestamp?: number } };
@@ -70,6 +84,9 @@ export function playSound(key: SoundKey): void {
     const now = Date.now();
     const lastPlayed = lastPlayedTime.get(key);
     if (lastPlayed !== undefined && now - lastPlayed < SFX_THROTTLE_MS) {
+        if (DT_TRACE_SOUND_KEYS.has(key)) {
+            console.log(`[DT_AUDIO_TRACE] source=play_sound action=throttle key=${key} deltaMs=${now - lastPlayed}`);
+        }
         return;
     }
     lastPlayedTime.set(key, now);
@@ -85,6 +102,9 @@ export function playSound(key: SoundKey): void {
     }
 
     const result = AudioManager.play(key);
+    if (DT_TRACE_SOUND_KEYS.has(key)) {
+        console.log(`[DT_AUDIO_TRACE] source=play_sound action=play key=${key} result=${result ?? 'null'}`);
+    }
     
     // 仅在音效确实加载失败时标记为永久失败并回退到合成音
     // （因并发加载限制被跳过的不算失败）
@@ -351,6 +371,12 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 (category) => AudioManager.resolveCategoryKey(category)
             );
             if (!key) continue;
+            if (gameId === 'dicethrone' && DT_TRACE_EVENT_TYPES.has(event.type)) {
+                const eventId = (entry as { id?: number }).id;
+                const payload = (event as { payload?: Record<string, unknown> }).payload;
+                const eventPlayerId = payload && typeof payload.playerId === 'string' ? payload.playerId : 'none';
+                console.log(`[DT_AUDIO_TRACE] source=event_stream action=resolved eventId=${eventId ?? 'none'} type=${event.type} key=${key} eventPlayerId=${eventPlayerId} totalNewEntries=${newEntries.length}`);
+            }
             // 立即播放（去重）
             if (!playedKeys.has(key)) {
                 playedKeys.add(key);

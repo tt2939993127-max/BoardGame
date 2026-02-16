@@ -407,8 +407,9 @@ export interface DomainCore<
      * （如消灭→onDestroy 触发、移动→onMove 触发），但这些事件不经过 execute()。
      * pipeline 在每轮 afterEvents 收集完系统事件后、reduce 前调用此钩子，
      * 允许领域层追加派生事件（如 trigger 回调产生的额外事件）。
+     * 返回值可以是事件数组（向后兼容），也可以是 { events, matchState } 对象（支持状态变更）。
      */
-    postProcessSystemEvents?(state: TState, events: TEvent[], random: RandomFn): TEvent[];
+    postProcessSystemEvents?(state: TState, events: TEvent[], random: RandomFn, matchState?: MatchState<TState>): TEvent[] | { events: TEvent[]; matchState?: MatchState<TState> };
 
     /**
      * 可选：reduce 前的单事件拦截/替换

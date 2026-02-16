@@ -67,6 +67,7 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 | D18 | **否定路径** | "不应该发生"的场景是否被测试覆盖？（如：额外额度不应消耗正常额度、基地限定额度不应影响其他基地） |
 | D19 | **组合场景** | 两个独立正确的机制组合使用时是否仍然正确？（如：神秘花园额外额度 + 正常额度同时存在时的消耗行为） |
 | D20 | **状态可观测性** | 玩家能否从 UI 上区分不同来源的资源/额度？（如：正常随从额度 vs 基地额外额度在 UI 上是否可区分） |
+| D21 | **触发频率门控** | 触发型技能（`afterAttack`/`afterMove`/`onPhaseStart`/`onPhaseEnd`）是否有使用次数限制？同一效果的不同触发方式（攻击后 vs 代替攻击）是否互斥？ |
 
 ### 需要展开的关键维度
 
@@ -233,23 +234,46 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 2. **UI 是否区分展示**：UI 是否只显示一个总数，还是分别显示不同来源？
 3. **提示信息**：当操作被拒绝时，错误提示是否说明了具体原因（如"额外出牌只能打力量≤2的随从"而非笼统的"额度已用完"）？
 
+**D21 触发频率门控（强制）**（新增/修改触发型技能、或修"技能可以无限重复使用"时触发）：触发型技能是否有使用次数限制，同一效果的不同触发方式是否互斥。**核心原则：`afterAttack`/`afterMove`/`onPhaseStart`/`onPhaseEnd` 等触发型技能默认每次触发都会执行，必须显式添加 `usesPerTurn`/`usesPerPhase` 限制，否则会导致无限重复使用。** 审查方法：
+1. **识别触发型技能**：grep 所有 `trigger` 非 `activated`/`passive` 的技能定义
+2. **检查使用次数限制**：每个触发型技能是否有 `usesPerTurn`/`usesPerPhase`/`usesPerAttack` 限制？
+3. **判定标准**：
+   - `afterAttack`/`afterMove` 触发 + 无 `usesPerTurn` = ❌ 每次攻击/移动都触发，可能无限重复
+   - `onPhaseStart`/`onPhaseEnd` 触发 + 无 `usesPerPhase` = ❌ 每次进入/离开阶段都触发
+   - 纯被动光环（如 `auraStructureLife`）无需限制 = ✅
+   - 强制触发的阶段效果（无玩家选择）无需限制 = ✅
+4. **检查互斥关系**：同一效果有"攻击后触发"和"代替攻击"两个版本时，是否有互斥机制？
+   - 正确模式：`afterAttack` 版本有 `usesPerTurn: 1`，`activated` 版本有 `costsAttackAction: true`，两者共享使用次数计数器
+   - 错误模式：两个版本独立计数，玩家可以先用"代替攻击"版本再用"攻击后"版本，绕过限制
+5. **自动化检查**：在 CI 中添加 grep 检查，所有 `trigger: 'afterAttack'` 的技能必须有 `usesPerTurn` 或在白名单中
+
+**典型缺陷清单**：
+- ❌ `trigger: 'afterAttack'` 但无 `usesPerTurn` → 攻击后可以无限次推拉/抽牌/检索
+- ❌ `trigger: 'afterMove'` 但无 `usesPerTurn`（除非是 `extraMove` 类被动）
+- ❌ 同一效果有 `afterAttack` 和 `activated` 两个版本，但没有共享使用次数
+
+> **示例（SummonerWars 清风法师念力）**：`trigger: 'afterAttack'` 但无 `usesPerTurn`，攻击后可以无限次选择不同目标推拉。修复：添加 `usesPerTurn: 1`
+
+> **示例（SummonerWars 古尔壮读心传念）**：`trigger: 'afterAttack'` 但无 `usesPerTurn`，攻击后可以给所有友方士兵额外攻击。修复：添加 `usesPerTurn: 1`
+
 ### 维度选择指南
 
 | 任务 | 必选 | 推荐 |
 |------|------|------|
-| 新增技能/效果 | D1,D2,D3,D5,D7 | D6,D8,D10,D11,D18 |
-| 修"没效果" | D4,D3,D1 | D8,D10,D12 |
-| 修"触发了状态没变" | D8,D3,D9 | D1,D7,D11 |
-| 修"点了没反应" | D5,D3,D10 | D8 |
+| 新增技能/效果 | D1,D2,D3,D5,D7,D21 | D6,D8,D10,D11,D18 |
+| 修"没效果" | D4,D3,D1 | D8,D10,D12,D21 |
+| 修"触发了状态没变" | D8,D3,D9 | D1,D7,D11,D21 |
+| 修"点了没反应" | D5,D3,D10 | D8,D21 |
 | 修"激活了但没效果" | D7,D2,D3 | D1,D10,D11 |
 | 修"确认后验证失败" | D8,D7,D3 | D2,D5 |
-| 新增阶段结束技能 | D8,D5,D7,D1 | D2,D3 |
-| 修"阶段结束技能无效触发" | D8,D7,D2 | D5,D3 |
-| 新增/修改 UI 展示 | D5,D3,D15 | D1,D20 |
-| 全面审查 | D1-D20 | — |
+| 修"技能可以无限重复使用" | D21,D7,D8 | D1,D2 |
+| 新增阶段结束技能 | D8,D5,D7,D1,D21 | D2,D3 |
+| 修"阶段结束技能无效触发" | D8,D7,D2,D21 | D5,D3 |
+| 新增 UI 展示 | D5,D3,D15 | D1,D20 |
+| 全面审查 | D1-D21 | — |
 | 新增 buff/共享 | D4,D1,D6 | D10,D13,D19 |
 | 重构事件流 | D3,D8,D9 | D10,D4,D17 |
-| 新增交互能力 | D5,D3,D1 | D2,D8 |
+| 新增交互能力 | D5,D3,D1 | D2,D8,D21 |
 | 新增额度/资源机制 | D7,D11,D12,D13,D18 | D14,D15,D16,D19,D20 |
 | 修"额度/资源消耗不对" | D11,D12,D13,D16 | D7,D15,D18 |
 | 修"UI 显示不对" | D15,D3,D12 | D20,D5 |

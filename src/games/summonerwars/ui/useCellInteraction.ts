@@ -27,6 +27,8 @@ import type { AbilityModeState, SoulTransferModeState, MindCaptureModeState, Aft
 import { useToast } from '../../../contexts/ToastContext';
 import { useEventCardModes } from './useEventCardModes';
 import type { PendingBeforeAttack } from './modeTypes';
+import { abilityRegistry } from '../domain/abilities';
+import type { BoardUnit } from '../domain/types';
 
 // 从 modeTypes 重新导出类型（保持 StatusBanners 等消费方的导入路径兼容）
 export type {
@@ -34,6 +36,34 @@ export type {
   WithdrawModeState, GlacialShiftModeState, SneakModeState,
   StunModeState, HypnoticLureModeState,
 } from './modeTypes';
+
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+/**
+ * 检测单位是否有被动触发的 beforeAttack 能力
+ */
+function getPassiveBeforeAttackAbilities(
+  unit: BoardUnit,
+  core: SummonerWarsCore
+): Array<{ abilityId: string; def: import('../domain/abilities').AbilityDef }> {
+  const abilities = getUnitAbilities(unit, core);
+  const passiveAbilities: Array<{ abilityId: string; def: import('../domain/abilities').AbilityDef }> = [];
+  
+  for (const abilityId of abilities) {
+    const def = abilityRegistry.get(abilityId);
+    if (
+      def &&
+      def.trigger === 'beforeAttack' &&
+      def.ui?.activationType === 'passiveTrigger'
+    ) {
+      passiveAbilities.push({ abilityId, def });
+    }
+  }
+  
+  return passiveAbilities;
+}
 
 // ============================================================================
 // 参数
@@ -451,11 +481,26 @@ export function useCellInteraction({
         const targetUnit = core.board[gameRow]?.[gameCol]?.unit;
         if (targetUnit) {
           if (abilityMode.context === 'beforeAttack') {
-            setPendingBeforeAttack({
-              abilityId: abilityMode.abilityId as PendingBeforeAttack['abilityId'],
-              sourceUnitId: abilityMode.sourceUnitId,
-              targetUnitId: targetUnit.instanceId,
-            });
+            // ✅ 被动触发模式：选择目标后立即发送攻击命令
+            if (abilityMode.pendingAttackTarget && core.selectedUnit) {
+              dispatch(SW_COMMANDS.DECLARE_ATTACK, {
+                attacker: core.selectedUnit,
+                target: abilityMode.pendingAttackTarget,
+                beforeAttack: {
+                  abilityId: abilityMode.abilityId as PendingBeforeAttack['abilityId'],
+                  targetUnitId: targetUnit.instanceId,
+                },
+              });
+              setAbilityMode(null);
+              setPendingBeforeAttack(null);
+            } else {
+              // 旧流程：设置 pendingBeforeAttack（等待玩家点击攻击目标）
+              setPendingBeforeAttack({
+                abilityId: abilityMode.abilityId as PendingBeforeAttack['abilityId'],
+                sourceUnitId: abilityMode.sourceUnitId,
+                targetUnitId: targetUnit.instanceId,
+              });
+            }
           } else if (abilityMode.abilityId === 'illusion') {
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'illusion',
@@ -659,6 +704,40 @@ export function useCellInteraction({
         }
         const isValidAttack = validAttackPositions.some(p => p.row === gameRow && p.col === gameCol);
         if (isValidAttack) {
+          const attackerUnit = core.board[core.selectedUnit.row]?.[core.selectedUnit.col]?.unit;
+          
+          // ✅ 检测被动触发能力（仅当没有已激活的 beforeAttack 时）
+          if (attackerUnit && !activeBeforeAttack) {
+            const passiveAbilities = getPassiveBeforeAttackAbilities(attackerUnit, core);
+            
+            if (passiveAbilities.length > 0) {
+              // 自动进入被动触发模式（暂时只处理第一个能力）
+              const firstAbility = passiveAbilities[0];
+              
+              // 根据能力类型设置 abilityMode
+              if (firstAbility.abilityId === 'holy_arrow' || firstAbility.abilityId === 'healing') {
+                setAbilityMode({
+                  abilityId: firstAbility.abilityId,
+                  sourceUnitId: attackerUnit.instanceId,
+                  step: 'selectCards',
+                  context: 'beforeAttack',
+                  selectedCardIds: [],
+                  pendingAttackTarget: { row: gameRow, col: gameCol }, // ✅ 记住攻击目标
+                });
+              } else if (firstAbility.abilityId === 'life_drain') {
+                setAbilityMode({
+                  abilityId: firstAbility.abilityId,
+                  sourceUnitId: attackerUnit.instanceId,
+                  step: 'selectUnit',
+                  context: 'beforeAttack',
+                  pendingAttackTarget: { row: gameRow, col: gameCol }, // ✅ 记住攻击目标
+                });
+              }
+              return; // ✅ 不立即发送攻击命令
+            }
+          }
+          
+          // 没有被动触发能力，或已处理完毕，直接攻击
           dispatch(SW_COMMANDS.DECLARE_ATTACK, {
             attacker: core.selectedUnit,
             target: { row: gameRow, col: gameCol },
@@ -829,36 +908,73 @@ export function useCellInteraction({
   const handleConfirmBeforeAttackCards = useCallback(() => {
     if (!abilityMode || abilityMode.step !== 'selectCards') return;
     const selected = abilityMode.selectedCardIds ?? [];
+    
     if (abilityMode.abilityId === 'holy_arrow') {
-      if (selected.length === 0) {
-        showToast.warning(t('handArea.holyArrowAtLeastOne'));
-        return;
-      }
+      // ✅ 允许选择 0 张卡（跳过）
       setPendingBeforeAttack({
         abilityId: 'holy_arrow',
         sourceUnitId: abilityMode.sourceUnitId,
         discardCardIds: selected,
       });
-      setAbilityMode(null);
-      return;
-    }
-    if (abilityMode.abilityId === 'healing') {
-      if (selected.length === 0) {
-        showToast.warning(t('handArea.healingNeedsDiscard'));
+      
+      // ✅ 如果有 pendingAttackTarget，立即发送攻击命令
+      if (abilityMode.pendingAttackTarget && core.selectedUnit) {
+        dispatch(SW_COMMANDS.DECLARE_ATTACK, {
+          attacker: core.selectedUnit,
+          target: abilityMode.pendingAttackTarget,
+          beforeAttack: {
+            abilityId: 'holy_arrow',
+            discardCardIds: selected,
+          },
+        });
+        setAbilityMode(null);
+        setPendingBeforeAttack(null);
         return;
       }
+    }
+    
+    if (abilityMode.abilityId === 'healing') {
+      // ✅ 允许选择 0 张卡（跳过）
       setPendingBeforeAttack({
         abilityId: 'healing',
         sourceUnitId: abilityMode.sourceUnitId,
         targetCardId: selected[0],
       });
-      setAbilityMode(null);
+      
+      // ✅ 如果有 pendingAttackTarget，立即发送攻击命令
+      if (abilityMode.pendingAttackTarget && core.selectedUnit) {
+        dispatch(SW_COMMANDS.DECLARE_ATTACK, {
+          attacker: core.selectedUnit,
+          target: abilityMode.pendingAttackTarget,
+          beforeAttack: selected.length > 0 ? {
+            abilityId: 'healing',
+            targetCardId: selected[0],
+          } : undefined,
+        });
+        setAbilityMode(null);
+        setPendingBeforeAttack(null);
+        return;
+      }
     }
-  }, [abilityMode, showToast]);
+    
+    setAbilityMode(null);
+  }, [abilityMode, core, dispatch]);
 
   const handleCancelBeforeAttack = useCallback(() => {
+    // ✅ 如果是被动触发模式（有 pendingAttackTarget），跳过能力并直接攻击
+    if (abilityMode && abilityMode.pendingAttackTarget && core.selectedUnit) {
+      dispatch(SW_COMMANDS.DECLARE_ATTACK, {
+        attacker: core.selectedUnit,
+        target: abilityMode.pendingAttackTarget,
+      });
+      setAbilityMode(null);
+      setPendingBeforeAttack(null);
+      return;
+    }
+    
+    // 否则只是取消 pendingBeforeAttack
     setPendingBeforeAttack(null);
-  }, []);
+  }, [abilityMode, core, dispatch]);
 
   // ---------- 自动跳过 ----------
 

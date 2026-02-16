@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execute, reduce } from '../domain/reducer';
+import { reduce } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type {
     SmashUpCore,
@@ -23,7 +23,8 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
-import { applyEvents } from './helpers';
+import { applyEvents, makeMatchState as makeMatchStateFromHelpers } from './helpers';
+import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -72,7 +73,7 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
+    return makeMatchStateFromHelpers(core);
 }
 
 const defaultRandom: RandomFn = {
@@ -84,11 +85,11 @@ const defaultRandom: RandomFn = {
 
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): { events: SmashUpEvent[]; matchState: MatchState<SmashUpCore> } {
     const ms = makeMatchState(state);
-    const events = execute(ms, {
+    const result = runCommand(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
-    return { events, matchState: ms };
+    return { events: result.events as SmashUpEvent[], matchState: result.finalState };
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -408,12 +409,12 @@ describe('米斯卡塔尼克大学派系能力', () => {
             });
 
             const ms = makeMatchState(core);
-            execute(ms, {
+            const result = runCommand(ms, {
                 type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
                 payload: { cardUid: 'a1' },
             } as any, defaultRandom);
             // 多个基地有行动卡 → 创建 Prompt 让玩家选择
-            const interaction = (ms.sys as any)?.interaction;
+            const interaction = (result.finalState.sys as any)?.interaction;
             const current = interaction?.current;
             expect(current).toBeDefined();
             expect(current?.data?.sourceId).toBe('miskatonic_those_meddling_kids');
@@ -885,11 +886,11 @@ describe('克苏鲁之仆派系能力', () => {
 
             // 本地人是随从 onPlay，需要通过 PLAY_MINION 触发
             const ms = makeMatchState(state);
-            const events = execute(ms, {
+            const result = runCommand(ms, {
                 type: SU_COMMANDS.PLAY_MINION, playerId: '0',
                 payload: { cardUid: 'a1', baseIndex: 0 },
             } as any, defaultRandom);
-            const newState = applyEvents(state, events);
+            const newState = result.finalState.core;
 
             const allCardUids = [
                 ...newState.players['0'].hand.map(c => c.uid),

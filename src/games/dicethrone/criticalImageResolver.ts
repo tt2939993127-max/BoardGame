@@ -26,7 +26,7 @@ const CHARACTER_DIR_MAP: Record<SelectableCharacterId, string> = {
     pyromancer: 'pyromancer',
     shadow_thief: 'shadow_thief',
     moon_elf: 'moon_elf',
-    paladin: 'Paladin',
+    paladin: 'paladin',
     // 以下角色尚未实现完整资源
     ninja: 'ninja',
     treant: 'treant',
@@ -64,10 +64,6 @@ function getTipBoardPath(charId: SelectableCharacterId): string {
 /** 获取角色的卡牌图集路径 */
 function getAbilityCardsPath(charId: SelectableCharacterId): string {
     const dir = CHARACTER_DIR_MAP[charId];
-    // 特殊处理：monk 使用 monk-base-ability-cards
-    if (charId === 'monk') {
-        return `dicethrone/images/${dir}/monk-base-ability-cards`;
-    }
     return `dicethrone/images/${dir}/ability-cards`;
 }
 

@@ -7,7 +7,7 @@
 
 import React, { useState, useCallback, useRef } from 'react';
 import { clsx } from 'clsx';
-import { getOptimizedImageUrls } from '../../../core/AssetLoader';
+import { getOptimizedImageUrls, getLocalizedAssetPath } from '../../../core/AssetLoader';
 import { getSpriteAtlasStyle, CARDS_ATLAS } from '../../../games/summonerwars/ui/cardAtlas';
 
 // ============================================================================
@@ -232,7 +232,7 @@ export const EffectCard: React.FC<{
 
 /** 通用卡图精灵（召唤师战争冰霜法师卡） */
 export const CardSprite: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => {
-  const spriteUrls = getOptimizedImageUrls('summonerwars/hero/Frost/cards');
+  const spriteUrls = getOptimizedImageUrls(getLocalizedAssetPath('summonerwars/hero/Frost/cards', 'zh-CN'));
   const spriteStyle = getSpriteAtlasStyle(0, CARDS_ATLAS);
   return (
     <div

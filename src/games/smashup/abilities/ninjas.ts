@@ -6,9 +6,9 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, moveMinion, getMinionPower, grantExtraMinion, buildMinionTargetOptions, buildBaseTargetOptions, isSpecialLimitBlocked, emitSpecialLimitUsed, buildMinionPlayedEvents } from '../domain/abilityHelpers';
+import { destroyMinion, moveMinion, getMinionPower, grantExtraMinion, buildMinionTargetOptions, buildBaseTargetOptions, isSpecialLimitBlocked, emitSpecialLimitUsed } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { SmashUpEvent, MinionReturnedEvent, OngoingDetachedEvent } from '../domain/types';
+import type { SmashUpEvent, MinionReturnedEvent, OngoingDetachedEvent, MinionPlayedEvent } from '../domain/types';
 import { getCardDef, getBaseDef } from '../data/cards';
 import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
@@ -239,7 +239,8 @@ function ninjaDisguise(ctx: AbilityContext): AbilityResult {
 
     const interaction = createSimpleChoice(
         `ninja_disguise_base_${ctx.now}`, ctx.playerId,
-        '伪装：选择一个基地', buildBaseTargetOptions(baseCandidates), 'ninja_disguise_choose_base',
+        '伪装：选择一个基地', buildBaseTargetOptions(baseCandidates),
+        { sourceId: 'ninja_disguise_choose_base', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ctx.cardUid } } }) };
 }
@@ -296,13 +297,19 @@ function ninjaShinobi(ctx: AbilityContext): AbilityResult {
     const limitEvt = emitSpecialLimitUsed(ctx.playerId, 'ninja_shinobi', ctx.baseIndex, ctx.now);
     if (limitEvt) events.push(limitEvt);
 
-    const playResult = buildMinionPlayedEvents({
-        core: ctx.state, matchState: ctx.matchState, playerId: ctx.playerId,
-        cardUid: inHand.uid, defId: 'ninja_shinobi', baseIndex: ctx.baseIndex,
-        power: (def as MinionCardDef).power, random: ctx.random, now: ctx.now,
-    });
-    events.push(...playResult.events);
-    return playResult.matchState ? { events, matchState: playResult.matchState } : { events };
+    const playedEvt: MinionPlayedEvent = {
+        type: SU_EVENTS.MINION_PLAYED,
+        payload: {
+            playerId: ctx.playerId,
+            cardUid: inHand.uid,
+            defId: 'ninja_shinobi',
+            baseIndex: ctx.baseIndex,
+            power: (def as MinionCardDef).power,
+        },
+        timestamp: ctx.now,
+    };
+    events.push(playedEvt);
+    return { events };
 }
 
 /**
@@ -540,6 +547,9 @@ export function registerNinjaInteractionHandlers(): void {
 
     // 伪装：选择基地后，链式选择随从
     registerInteractionHandler('ninja_disguise_choose_base', (state, playerId, value, iData, _random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { baseIndex } = value as { baseIndex: number };
         const ctx = (iData as any)?.continuationContext as { cardUid: string };
         const base = state.core.bases[baseIndex];
@@ -593,12 +603,12 @@ export function registerNinjaInteractionHandlers(): void {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         const ctx = (iData as any)?.continuationContext as { baseIndex: number; returnUids: string[]; totalToPlay: number; playedUids: string[] };
         if (!ctx) return undefined;
-        const playResult = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid, defId,
-            baseIndex: ctx.baseIndex, power, random: _random, now: timestamp,
-        });
-        const events: SmashUpEvent[] = [...playResult.events];
-        const ms = playResult.matchState ?? state;
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid, defId, baseIndex: ctx.baseIndex, power },
+            timestamp,
+        };
+        const events: SmashUpEvent[] = [playedEvt];
         const playedUids = [...ctx.playedUids, cardUid];
         // 如果还需要打出第二个
         if (playedUids.length < ctx.totalToPlay) {
@@ -615,7 +625,7 @@ export function registerNinjaInteractionHandlers(): void {
                     `ninja_disguise_play2_${timestamp}`, playerId,
                     '伪装：选择第二个要打出的手牌随从', handOptions as any[], 'ninja_disguise_choose_play2',
                 );
-                return { state: queueInteraction(ms, { ...next, data: { ...next.data, continuationContext: { baseIndex: ctx.baseIndex, returnUids: ctx.returnUids } } }), events };
+                return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { baseIndex: ctx.baseIndex, returnUids: ctx.returnUids } } }), events };
             }
         }
         // 打出完毕，收回旧随从
@@ -630,7 +640,7 @@ export function registerNinjaInteractionHandlers(): void {
                 } as MinionReturnedEvent);
             }
         }
-        return { state: ms, events };
+        return { state, events };
     });
 
     // 伪装：选择第二个打出的随从后，收回旧随从
@@ -638,11 +648,12 @@ export function registerNinjaInteractionHandlers(): void {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         const ctx = (iData as any)?.continuationContext as { baseIndex: number; returnUids: string[] };
         if (!ctx) return undefined;
-        const playResult = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid, defId,
-            baseIndex: ctx.baseIndex, power, random: _random, now: timestamp,
-        });
-        const events: SmashUpEvent[] = [...playResult.events];
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid, defId, baseIndex: ctx.baseIndex, power },
+            timestamp,
+        };
+        const events: SmashUpEvent[] = [playedEvt];
         // 收回旧随从
         for (const uid of ctx.returnUids) {
             const base = state.core.bases[ctx.baseIndex];
@@ -655,7 +666,7 @@ export function registerNinjaInteractionHandlers(): void {
                 } as MinionReturnedEvent);
             }
         }
-        return { state: playResult.matchState ?? state, events };
+        return { state, events };
     });
 
     // 隐忍：选择手牌随从打出到基地
@@ -663,11 +674,12 @@ export function registerNinjaInteractionHandlers(): void {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         const baseIndex = ((iData as any)?.continuationContext as { baseIndex: number })?.baseIndex;
         if (baseIndex === undefined) return undefined;
-        const result = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid, defId,
-            baseIndex, power, random: _random, now: timestamp,
-        });
-        return { state: result.matchState ?? state, events: result.events };
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid, defId, baseIndex, power },
+            timestamp,
+        };
+        return { state, events: [playedEvt] };
     });
 
     // 渗透：选择要消灭的战术

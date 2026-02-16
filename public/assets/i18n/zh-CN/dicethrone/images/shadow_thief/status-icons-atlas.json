@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "image": "status-icons-atlas.png",
+    "size": {
+      "w": 772,
+      "h": 256
+    }
+  },
+  "frames": {
+    "poison": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      }
+    },
+    "shadow-soul": {
+      "frame": {
+        "x": 258,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      }
+    },
+    "sneak-attack": {
+      "frame": {
+        "x": 516,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      }
+    }
+  }
+}

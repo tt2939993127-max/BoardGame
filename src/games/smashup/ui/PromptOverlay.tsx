@@ -42,6 +42,8 @@ interface Props {
         onSelect?: (uid: string | null) => void;
         /** 选中卡牌后的提示文本 */
         selectHint?: string;
+        /** 可打出的卡牌类型（defId）集合 */
+        playableDefIds?: Set<string>;
     };
 }
 
@@ -89,8 +91,8 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const prompt = asSimpleChoice(interaction);
     const { t } = useTranslation('game-smashup');
     const [magnifyTarget, setMagnifyTarget] = useState<CardMagnifyTarget | null>(null);
-    const { ref: revealScrollRef, dragProps: revealDragProps } = useHorizontalDragScroll();
-    const { ref: cardScrollRef, dragProps: cardDragProps } = useHorizontalDragScroll();
+    const { ref: revealScrollRef } = useHorizontalDragScroll();
+    const { ref: cardScrollRef } = useHorizontalDragScroll();
 
     // 所有 hooks 必须在条件返回之前调用（React hooks 规则）
     const isMyPrompt = !!prompt && prompt.playerId === playerID;
@@ -134,7 +136,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
 
     // ====== 通用卡牌展示模式（弃牌堆查看等，优先级最高） ======
     if (displayCards) {
-        const { selectedUid: selUid, onSelect: onSel } = displayCards;
+        const { selectedUid: selUid, onSelect: onSel, playableDefIds } = displayCards;
         const isSelectable = !!onSel;
 
         // 选择模式（弃牌堆出牌等）：底部固定面板，不遮挡游戏区域（用户需要点击基地）
@@ -147,29 +149,46 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 80, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                        className="fixed bottom-0 inset-x-0 pointer-events-none"
+                        className="fixed bottom-0 inset-x-0"
                         style={{ zIndex: UI_Z_INDEX.overlay }}
                     >
-                        <div className="pointer-events-auto bg-gradient-to-t from-black/90 via-black/75 to-transparent pt-8 pb-4 px-4">
+                        <div 
+                            className="bg-gradient-to-t from-black/90 via-black/75 to-transparent pt-8 pb-4 px-4"
+                            onClick={(e) => e.stopPropagation()}
+                        >
                             <h2 className="text-center text-base font-black text-amber-100 uppercase tracking-tight mb-3 drop-shadow-lg">
                                 {displayCards.title}
                             </h2>
-                            <div ref={revealScrollRef} {...revealDragProps} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-2 smashup-h-scrollbar justify-center">
+                            <div ref={revealScrollRef} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-2 smashup-h-scrollbar justify-center">
                                 {displayCards.cards.map((card, idx) => {
                                     const def = getCardDef(card.defId);
                                     const name = def ? resolveCardName(def, t) : card.defId;
                                     const isSel = card.uid === selUid;
+                                    const isPlayable = playableDefIds?.has(card.defId) ?? false;
+                                    
+                                    const handleCardClick = () => {
+                                        if (isPlayable && onSel) {
+                                            onSel(isSel ? null : card.uid);
+                                        }
+                                    };
+                                    
                                     return (
                                         <motion.div
                                             key={card.uid}
                                             initial={{ y: 30, opacity: 0 }}
                                             animate={{ y: 0, opacity: 1 }}
                                             transition={{ delay: idx * 0.04, type: 'spring', stiffness: 400, damping: 25 }}
-                                            className={`flex-shrink-0 flex flex-col items-center gap-1 group relative cursor-pointer ${isSel ? 'scale-110 z-10' : 'hover:scale-105 hover:z-10'}`}
+                                            className={`flex-shrink-0 flex flex-col items-center gap-1 group relative ${isPlayable ? 'cursor-pointer' : 'cursor-default'} ${isSel ? 'scale-110 z-10' : isPlayable ? 'hover:scale-105 hover:z-10' : ''}`}
                                             style={{ transition: 'transform 200ms, box-shadow 200ms' }}
-                                            onClick={() => onSel!(isSel ? null : card.uid)}
+                                            onClick={handleCardClick}
                                         >
-                                            <div className={`rounded shadow-xl overflow-hidden ${isSel ? 'ring-3 ring-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.5)]' : 'ring-1 ring-white/20 group-hover:ring-white/50 group-hover:shadow-2xl'}`}>
+                                            <div className={`rounded shadow-xl overflow-hidden ${
+                                                isSel 
+                                                    ? 'ring-3 ring-amber-400 shadow-[0_0_16px_rgba(251,191,36,0.5)]' 
+                                                    : isPlayable 
+                                                        ? 'ring-2 ring-amber-300/80 group-hover:ring-amber-300 group-hover:shadow-2xl' 
+                                                        : 'ring-1 ring-white/20 group-hover:ring-white/50 group-hover:shadow-2xl'
+                                            }`}>
                                                 {def?.previewRef ? (
                                                     <CardPreview
                                                         previewRef={def.previewRef}
@@ -228,7 +247,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                         <h2 className="text-center text-base font-black text-amber-100 uppercase tracking-tight mb-3 drop-shadow-lg">
                             {displayCards.title}
                         </h2>
-                        <div ref={revealScrollRef} {...revealDragProps} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-2 smashup-h-scrollbar justify-center">
+                        <div ref={revealScrollRef} className="flex gap-3 overflow-x-auto max-w-[90vw] mx-auto px-4 py-2 smashup-h-scrollbar justify-center">
                             {displayCards.cards.map((card, idx) => {
                                 const def = getCardDef(card.defId);
                                 const name = def ? resolveCardName(def, t) : card.defId;
@@ -325,7 +344,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                         </div>
                     )}
                     {isViewer && cards.length > 0 ? (
-                        <div ref={revealScrollRef} {...revealDragProps} className="flex gap-4 overflow-x-auto max-w-[90vw] px-8 py-4 smashup-h-scrollbar" data-testid="reveal-cards-area">
+                        <div ref={revealScrollRef} className="flex gap-4 overflow-x-auto max-w-[90vw] px-8 py-4 smashup-h-scrollbar" data-testid="reveal-cards-area">
                             {cards.map((card, idx) => {
                                 const def = getCardDef(card.defId);
                                 const name = def ? resolveCardName(def, t) : card.defId;
@@ -492,7 +511,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                     )}
 
                     {isMyPrompt && (
-                        <div ref={cardScrollRef} {...cardDragProps} className="flex gap-4 overflow-x-auto max-w-[90vw] px-8 py-4 smashup-h-scrollbar">
+                        <div ref={cardScrollRef} className="flex gap-4 overflow-x-auto max-w-[90vw] px-8 py-4 smashup-h-scrollbar">
                             {cardOptions.map((option, idx) => {
                                 const defId = extractDefId(option.value);
                                 const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;

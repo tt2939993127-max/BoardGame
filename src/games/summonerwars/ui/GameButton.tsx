@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import { forwardRef, type ReactNode } from 'react';
+import { playSound } from '../../../lib/audio/useGameAudio';
 
 /**
  * 召唤师战争 - 游戏按钮组件
@@ -17,6 +18,8 @@ interface GameButtonProps extends Omit<HTMLMotionProps<"button">, "children"> {
     size?: 'sm' | 'md' | 'lg';
     fullWidth?: boolean;
     icon?: ReactNode;
+    /** 默认播放点击音效，传 null 关闭 */
+    clickSoundKey?: string | null;
 }
 
 export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(({
@@ -27,6 +30,8 @@ export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(({
     fullWidth = false,
     icon,
     disabled,
+    clickSoundKey,
+    onClick,
     ...props
 }, ref) => {
 
@@ -43,6 +48,17 @@ export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(({
         sm: "text-xs py-2 px-3 rounded-lg min-h-[32px]",
         md: "text-sm py-2.5 px-5 rounded-xl min-h-[40px]",
         lg: "text-base py-3 px-6 rounded-xl min-h-[48px]"
+    };
+
+    const resolvedClickSoundKey = clickSoundKey === undefined
+        ? 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none'
+        : clickSoundKey;
+
+    const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (!disabled && resolvedClickSoundKey) {
+            playSound(resolvedClickSoundKey);
+        }
+        onClick?.(event);
     };
 
     return (
@@ -62,6 +78,7 @@ export const GameButton = forwardRef<HTMLButtonElement, GameButtonProps>(({
             }}
             whileTap={{ scale: disabled ? 1 : 0.98 }}
             disabled={disabled}
+            onClick={handleClick}
             {...props}
         >
             {icon && <span className="text-[1.2em]">{icon}</span>}

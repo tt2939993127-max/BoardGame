@@ -236,31 +236,32 @@ export async function preloadCriticalImages(
     const criticalPaths = [...new Set([...staticCritical, ...resolved.critical])];
     const warmPaths = [...new Set([...staticWarm, ...resolved.warm])];
 
+    console.log(`[preloadCriticalImages] gameId=${gameId} locale=${locale} criticalCount=${criticalPaths.length} warmCount=${warmPaths.length} hasGameState=${gameState !== undefined}`);
+
     if (criticalPaths.length === 0) {
-        console.warn(`[AssetLoader] criticalPaths 为空，跳过预加载 gameId=${gameId} staticCritical=${staticCritical.length} resolved=${resolved.critical.length}`);
         return warmPaths;
     }
 
-    // DEBUG: 打印即将预加载的路径
-    console.warn(`[AssetLoader] 开始预加载 gameId=${gameId} locale=${locale} criticalPaths=`, criticalPaths);
-
-    // 预加载原始路径（保证缓存有值）
-    // localized 路径由 OptimizedImage 的 <picture> fallback 机制处理
-    // handleLoad 时通过 markImageLoaded 注册缓存，后续实例可命中
+    const effectiveLocale = locale || 'zh-CN';
     const promises = criticalPaths
         .filter(Boolean)
-        .map((p) => preloadOptimizedImage(p));
+        .map((p) => {
+            const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
+            return preloadOptimizedImage(localizedPath);
+        });
 
     // Promise.allSettled + 10s 超时竞争
+    const startTime = Date.now();
     await Promise.race([
-        Promise.allSettled(promises),
-        new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_PRELOAD_TIMEOUT_MS)),
+        Promise.allSettled(promises).then(() => {
+            console.log(`[preloadCriticalImages] all settled in ${Date.now() - startTime}ms`);
+        }),
+        new Promise<void>((resolve) => setTimeout(() => {
+            console.warn(`[preloadCriticalImages] TIMEOUT after ${CRITICAL_PRELOAD_TIMEOUT_MS}ms`);
+            resolve();
+        }, CRITICAL_PRELOAD_TIMEOUT_MS)),
     ]);
 
-    // DEBUG: 预加载完成后打印缓存状态
-    const cachedKeys = [...preloadedImages.keys()];
-    console.warn(`[AssetLoader] 预加载完成 gameId=${gameId} locale=${locale} critical=${criticalPaths.length}张 缓存总数=${cachedKeys.length}`);
-    console.warn(`[AssetLoader] 缓存keys(含player-board):`, cachedKeys.filter(k => k.includes('player-board')));
     return warmPaths;
 }
 
@@ -269,13 +270,15 @@ export async function preloadCriticalImages(
  *
  * 在空闲时执行，不阻塞主线程。
  */
-export function preloadWarmImages(paths: string[]): void {
+export function preloadWarmImages(paths: string[], locale?: string): void {
     if (paths.length === 0) return;
 
+    const effectiveLocale = locale || 'zh-CN';
     const doPreload = () => {
         for (const p of paths) {
             if (!p) continue;
-            preloadOptimizedImage(p); // fire-and-forget
+            const localizedPath = getLocalizedAssetPath(p, effectiveLocale);
+            preloadOptimizedImage(localizedPath); // fire-and-forget
         }
     };
 
@@ -309,65 +312,36 @@ export function clearGameAssetsCache(gameId: string): void {
 }
 
 /**
- * 检查 localized 路径是否已被预加载（不检查原始路径 fallback）
- * 用于判断是否应该跳过 locale 直接用原始路径
- */
-export function isLocalizedImagePreloaded(src: string, locale: string): boolean {
-    const localizedPath = getLocalizedAssetPath(src, locale);
-    const localized = getOptimizedImageUrls(localizedPath);
-    return preloadedImages.has(localized.avif) || preloadedImages.has(localized.webp);
-}
-
-/**
  * 将已加载的图片 URL 注册到缓存（供 OptimizedImage 在 onLoad 时调用）
  * 这样同一张图片的其他实例可以跳过 shimmer
  */
 export function markImageLoaded(src: string, locale?: string): void {
-    // 注册原始路径的 optimized URL
-    const { avif, webp } = getOptimizedImageUrls(src);
+    const effectiveLocale = locale || 'zh-CN';
+    const localizedPath = getLocalizedAssetPath(src, effectiveLocale);
+    const { avif, webp } = getOptimizedImageUrls(localizedPath);
     if (avif) preloadedImages.set(avif, new Image());
     if (webp && webp !== avif) preloadedImages.set(webp, new Image());
-    // 有 locale 时也注册 localized 路径
-    if (locale) {
-        const localizedPath = getLocalizedAssetPath(src, locale);
-        const localized = getOptimizedImageUrls(localizedPath);
-        if (localized.avif) preloadedImages.set(localized.avif, new Image());
-        if (localized.webp && localized.webp !== localized.avif) preloadedImages.set(localized.webp, new Image());
-    }
 }
 
 /**
  * 查询图片是否已被预加载（供渲染组件跳过 shimmer）
  * 接受原始资源路径（自动转换）或已转换的 optimized URL
- * 传入 locale 时同时检查 localized 路径是否已缓存
  */
 export function isImagePreloaded(src: string, locale?: string): boolean {
     if (preloadedImages.has(src)) return true;
+    
+    const effectiveLocale = locale || 'zh-CN';
+    const localizedPath = getLocalizedAssetPath(src, effectiveLocale);
+    
     // 如果 src 已经是 compressed/ 下的 URL，直接检查 avif/webp 变体
-    if (src.includes(`/${COMPRESSED_SUBDIR}/`)) {
-        const base = stripExtension(src);
+    if (localizedPath.includes(`/${COMPRESSED_SUBDIR}/`)) {
+        const base = stripExtension(localizedPath);
         return preloadedImages.has(`${base}.avif`) || preloadedImages.has(`${base}.webp`);
     }
 
-    // 有 locale 时优先检查 localized 路径（与 OptimizedImage 实际渲染的 URL 一致）
-    if (locale) {
-        const localizedPath = getLocalizedAssetPath(src, locale);
-        const localized = getOptimizedImageUrls(localizedPath);
-        if (preloadedImages.has(localized.avif) || preloadedImages.has(localized.webp)) {
-            return true;
-        }
-    }
-
-    // 原始路径：转换为 optimized URL 后检查
-    const { avif, webp } = getOptimizedImageUrls(src);
-    const found = preloadedImages.has(avif) || preloadedImages.has(webp);
-    // DEBUG: 未命中时打印详情（只打一次全量 key）
-    if (!found) {
-        const localizedPath = locale ? getLocalizedAssetPath(src, locale) : null;
-        const locUrls = localizedPath ? getOptimizedImageUrls(localizedPath) : null;
-        console.warn(`[isImagePreloaded] MISS src=${src} locale=${locale} locAvif=${locUrls?.avif?.slice(-60)} origAvif=${avif.slice(-60)} cacheSize=${preloadedImages.size} allKeys=`, [...preloadedImages.keys()]);
-    }
-    return found;
+    // 转换为 optimized URL 后检查
+    const { avif, webp } = getOptimizedImageUrls(localizedPath);
+    return preloadedImages.has(avif) || preloadedImages.has(webp);
 }
 
 // ============================================================================
@@ -406,8 +380,6 @@ async function preloadImageWithResult(src: string): Promise<boolean> {
 
 async function preloadOptimizedImage(src: string): Promise<void> {
     const { avif, webp } = getOptimizedImageUrls(src);
-    // DEBUG: 记录预加载的实际 URL
-    console.warn(`[preloadOptimized] src=${src} → avif=${avif.slice(-60)} webp=${webp.slice(-60)}`);
     if (!avif && !webp) return;
     if (avif === webp) {
         if (preloadedImages.has(avif)) return;
@@ -453,14 +425,16 @@ async function preloadAudioFile(src: string): Promise<void> {
 /** 判断是否为穿透源（data/blob/http），独立资源域名不算穿透 */
 const isString = (value: unknown): value is string => typeof value === 'string';
 const isHttpUrl = (src: string) => src.startsWith('http://') || src.startsWith('https://');
-const isInternalAssetsUrl = (src: string) => isHttpUrl(assetsBaseUrl) && src.startsWith(assetsBaseUrl);
+const isInternalAssetsUrl = (src: string) => {
+    if (!isHttpUrl(assetsBaseUrl)) return false;
+    return src.startsWith(assetsBaseUrl) || src.startsWith(`${assetsBaseUrl}/`);
+};
 const isPassthroughSource = (src: unknown) => {
     if (!isString(src)) return false;
-    return (
-        src.startsWith('data:')
-        || src.startsWith('blob:')
-        || (isHttpUrl(src) && !isInternalAssetsUrl(src))
-    );
+    if (src.startsWith('data:') || src.startsWith('blob:')) return true;
+    // HTTP URL 但不是内部资源域名 → 穿透
+    if (isHttpUrl(src) && !isInternalAssetsUrl(src)) return true;
+    return false;
 };
 const isSvgSource = (src: string) => /\.svg(\?|#|$)/i.test(src);
 
@@ -548,42 +522,51 @@ export function getOptimizedAudioUrl(src: string, basePath?: string): string {
 /**
  * 构建语言化资源路径（A 方案：本地语言目录）
  * 目录结构：/assets/i18n/<lang>/<relativePath>
+ * 
+ * 幂等性保证：如果路径已包含 i18n/<locale>/ 前缀，不会重复添加
  */
 export function getLocalizedAssetPath(path: string, locale?: string): string {
     if (!locale || isPassthroughSource(path)) return assetsPath(path);
     const normalized = assetsPath(path);
     const relative = stripAssetsBasePrefix(normalized);
-    return assetsPath(`${LOCALIZED_ASSETS_SUBDIR}/${locale}/${relative}`);
+    
+    // 幂等性检查：如果已经包含 i18n/<locale>/ 前缀，直接返回
+    const localizedPrefix = `${LOCALIZED_ASSETS_SUBDIR}/${locale}/`;
+    if (relative.startsWith(localizedPrefix)) {
+        return normalized;
+    }
+    
+    return assetsPath(`${localizedPrefix}${relative}`);
 }
 
 /**
  * 获取语言化图片 URL（包含回退）
  */
 export function getLocalizedImageUrls(src: string, locale?: string): LocalizedImageUrls {
-    const fallback = getOptimizedImageUrls(src);
     if (!locale || isPassthroughSource(src)) {
-        return { primary: fallback, fallback };
+        const urls = getOptimizedImageUrls(src);
+        return { primary: urls, fallback: urls };
     }
     const localizedPath = getLocalizedAssetPath(src, locale);
-    return {
-        primary: getOptimizedImageUrls(localizedPath),
-        fallback,
-    };
+    const primary = getOptimizedImageUrls(localizedPath);
+    // 原始路径已删除，fallback 也指向国际化路径
+    return { primary, fallback: primary };
 }
 
 /**
  * 构建语言化图片集（用于 CSS background-image）
- * 返回支持 image-set 的 CSS 值，并包含回退层
+ * 
+ * 所有素材已迁移到国际化目录，直接使用 webp 格式（兼容性最好）
+ * 不使用 image-set() 语法（部分浏览器不支持或行为不一致）
  */
 export function buildLocalizedImageSet(src: string, locale?: string): string {
     if (!isString(src) || !src) {
         console.warn(`[AssetLoader] invalid_src type=${typeof src} value=${String(src)}`);
         return '';
     }
-    const { primary, fallback } = getLocalizedImageUrls(src, locale);
-    const primarySet = `image-set(url("${primary.avif}") type("image/avif"), url("${primary.webp}") type("image/webp"))`;
-    const fallbackSet = `image-set(url("${fallback.avif}") type("image/avif"), url("${fallback.webp}") type("image/webp"))`;
-    return `${primarySet}, ${fallbackSet}`;
+    const { primary } = getLocalizedImageUrls(src, locale);
+    // 直接用 url() 包裹 webp 路径，不用 image-set()（兼容性最好）
+    return `url("${primary.webp}")`;
 }
 
 /**

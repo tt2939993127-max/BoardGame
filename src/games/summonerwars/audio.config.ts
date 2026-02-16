@@ -90,7 +90,7 @@ const UNIT_DESTROY_KEY = 'combat.general.fight_fury_vol_2.body_hitting_the_groun
 const STRUCTURE_DAMAGE_KEY = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.shield_impact_a';
 const STRUCTURE_DESTROY_KEY = 'magic.general.spells_variations_vol_2.stonecrash_impact.magelem_stonecrash_impact_01_krst_none';
 const MAGIC_SHOCK_KEY = 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_shock';
-const HEAL_KEY = 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_light';
+const HEAL_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.healed_a';
 const HEAL_MODE_KEY = 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_ward';
 const POSITIVE_SIGNAL_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
 const UPDATE_CHIME_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
@@ -175,8 +175,8 @@ const ABILITY_SFX_MAP: Record<string, string> = {
     life_drain: 'fantasy.dark_sword_steallife',
     soul_transfer: 'magic.general.spells_variations_vol_2.unholy_echo.magevil_unholy_echo_01_krst_none',
     infection: 'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_blight_curse_001',
-    healing: HEAL_KEY,
-    divine_shield: HEAL_MODE_KEY,
+    healing: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.healed_a',
+    divine_shield: 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_ward',
     holy_arrow: 'magic.general.simple_magic_sound_fx_pack_vol.light.holy_shock',
     frost_bolt: 'fantasy.elemental_sword_iceattack_v1',
     greater_frost_bolt: 'fantasy.elemental_sword_iceattack_v2',

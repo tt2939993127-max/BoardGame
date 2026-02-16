@@ -196,9 +196,25 @@ export interface AbilityDef {
   usesPerTurn?: number;
   /** 音效 key */
   sfxKey?: string;
-  /** 消耗一次移动行动（技能代替移动，如预备） */
+  /**
+   * @deprecated 推荐使用引擎层的通用约束系统（engine/primitives/abilityConstraints）
+   * 
+   * 迁移方式：
+   * 旧代码：costsMoveAction: true
+   * 新代码：constraints: { actionCost: { type: 'move', count: 1 }, entityState: { notMoved: true } }
+   * 
+   * 消耗一次移动行动（技能代替移动，如预备）
+   */
   costsMoveAction?: boolean;
-  /** 消耗一次攻击行动（技能代替攻击，如高阶念力） */
+  /**
+   * @deprecated 推荐使用引擎层的通用约束系统（engine/primitives/abilityConstraints）
+   * 
+   * 迁移方式：
+   * 旧代码：costsAttackAction: true
+   * 新代码：constraints: { actionCost: { type: 'attack', count: 1 } }
+   * 
+   * 消耗一次攻击行动（技能代替攻击，如高阶念力）
+   */
   costsAttackAction?: boolean;
   /** 交互链声明（多步交互技能必填，用于契约校验） */
   interactionChain?: InteractionChain;
@@ -225,8 +241,8 @@ export interface AbilityDef {
     activationStep?: AbilityActivationStep;
     /** 激活模式的上下文标记 */
     activationContext?: AbilityActivationContext;
-    /** 激活类型：'abilityMode'（默认）| 'directExecute' | 'withdrawMode' */
-    activationType?: 'abilityMode' | 'directExecute' | 'withdrawMode';
+    /** 激活类型：'abilityMode'（默认）| 'directExecute' | 'withdrawMode' | 'passiveTrigger' */
+    activationType?: 'abilityMode' | 'directExecute' | 'withdrawMode' | 'passiveTrigger';
     /** 是否使用 validate 结果控制 disabled 状态（而非隐藏） */
     useValidateForDisabled?: boolean;
     /** 额外的前置条件（如 !unit.hasMoved），返回 false 则不显示 */
@@ -416,8 +432,9 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       requiredPhase: 'attack',
       customValidator: (ctx) => {
         const targetUnitId = ctx.payload.targetUnitId as string | undefined;
+        // 允许跳过（不选择友方单位）
         if (!targetUnitId) {
-          return { valid: false, error: '必须选择要消灭的友方单位' };
+          return { valid: true }; // ✅ 允许取消
         }
         
         // 查找目标单位
@@ -449,12 +466,13 @@ export const NECROMANCER_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false, // ❌ 移除青色波纹按钮（被动触发）
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.lifeDrain',
       buttonVariant: 'secondary',
       activationStep: 'selectUnit',
       activationContext: 'beforeAttack',
+      activationType: 'passiveTrigger', // ✅ 标记为被动触发
       quickCheck: ({ core, unit, playerId }) => {
         const pos = core.selectedUnit;
         if (!pos) return false;

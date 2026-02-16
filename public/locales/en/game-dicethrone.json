@@ -1946,6 +1946,10 @@
       "name": "Card Trick!",
       "description": "Opponent discards 1. Draw 1 (2 if Sneak)."
     },
+    "action-shadow-manipulation": {
+      "name": "Shadow Manipulation!",
+      "description": "Change the value of any 1 die. If you have Shadow, change the value of any 2 dice instead."
+    },
     "upgrade-dagger-strike-2": {
       "name": "Dagger Strike II",
       "description": "Upgrade Dagger Strike to Level 2."

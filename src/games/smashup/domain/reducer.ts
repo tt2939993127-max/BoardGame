@@ -3,6 +3,26 @@
  *
  * execute: 命令 → 事件列表
  * reduce: 事件 → 新状态（确定性）
+ * 
+ * ## execute 层职责约束（Critical）
+ * 
+ * execute 函数的唯一职责：命令 → 基础事件。
+ * 
+ * ✅ 允许：
+ * - 生成基础事件（MINION_PLAYED / ACTION_PLAYED / CARDS_DRAWN 等）
+ * - 读取当前状态进行条件判断
+ * - 调用纯函数辅助（getCardDef / findUnit 等）
+ * 
+ * ❌ 禁止：
+ * - 调用触发链函数（fireMinionPlayedTriggers / triggerOnPlay 等）
+ * - 调用 reduce 模拟状态推演
+ * - 直接修改 state.sys
+ * - 创建交互（应在能力执行器中通过 queueInteraction 创建）
+ * 
+ * 所有触发链（onPlay / onMinionPlayed / ongoing triggers）必须在
+ * postProcessSystemEvents 中统一处理，避免重复触发。
+ * 
+ * 详见：docs/ai-rules/engine-systems.md「领域层职责边界」节
  */
 
 import type { MatchState, RandomFn } from '../../../engine/types';
@@ -39,7 +59,6 @@ import type { AbilityContext } from './abilityRegistry';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
 import { fireTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
 import { canPlayFromDiscard } from './discardPlayability';
-import { fireMinionPlayedTriggers } from './abilityHelpers';
 
 // ============================================================================
 // execute：命令 → 事件
@@ -79,6 +98,7 @@ export function execute(
     if (afterAffect.matchState) {
         state.sys = afterAffect.matchState.sys;
     }
+    
     return afterAffect.events;
 }
 
@@ -126,18 +146,10 @@ function executeCommand(
             };
             events.push(playedEvt);
 
-            // 触发链：onPlay + 基地能力 + ongoing（复用 fireMinionPlayedTriggers）
-            const triggers = fireMinionPlayedTriggers({
-                core, matchState: state,
-                playerId: command.playerId,
-                cardUid: card.uid, defId: card.defId,
-                baseIndex, power: minionDef?.power ?? 0,
-                random, now, playedEvt,
-            });
-            events.push(...triggers.events);
-            if (triggers.matchState) updatedState = triggers.matchState;
+            // 触发链由 postProcessSystemEvents 统一处理，避免重复触发
+            // （postProcessSystemEvents 会检测所有 MINION_PLAYED 事件并调用 fireMinionPlayedTriggers）
 
-            return updatedState ? { events, updatedState } : { events };
+            return { events };
         }
 
         case SU_COMMANDS.PLAY_ACTION: {

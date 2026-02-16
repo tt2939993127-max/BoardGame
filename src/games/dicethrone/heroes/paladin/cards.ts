@@ -53,7 +53,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-might', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 29 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 1 },
         effects: [grantToken(TOKEN_IDS.CRIT, 1, '1名玩家获得暴击')]
     },
     {
@@ -63,7 +63,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 4,
         timing: 'main',
         description: cardText('card-consecrate', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 30 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 2 },
         effects: [
             grantToken(TOKEN_IDS.PROTECT, 1, '获得守护'),
             grantToken(TOKEN_IDS.RETRIBUTION, 1, '获得神罚'),
@@ -78,7 +78,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-divine-favor', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 31 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 3 },
         effects: [{
             description: '投掷1骰：剑-抽2; 头盔-治愈3; 心-治愈4; 祈祷-3CP',
             action: { type: 'custom', target: 'self', customActionId: 'paladin-divine-favor' },
@@ -92,7 +92,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'instant',
         description: cardText('card-absolution', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 32 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 4 },
         effects: [{
             description: '被攻击后投掷1骰防御',
             action: { type: 'custom', target: 'self', customActionId: 'paladin-absolution' },
@@ -107,7 +107,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-gods-grace', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 33 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 11 },
         effects: [{
             description: '投掷1骰：祈祷-4CP; 否则-抽1',
             action: { type: 'custom', target: 'self', customActionId: 'paladin-gods-grace' },
@@ -123,7 +123,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 4,
         timing: 'main',
         description: cardText('card-holy-defense-3', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 28 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 0 },
         effects: [replaceAbility('holy-defense', HOLY_DEFENSE_3, 3, '升级神圣防御至 III 级')]
     },
     {
@@ -133,7 +133,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-holy-defense-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 27 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 5 },
         effects: [replaceAbility('holy-defense', HOLY_DEFENSE_2, 2, '升级神圣防御至 II 级')]
     },
     {
@@ -143,7 +143,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-holy-light-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 26 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 7 },
         effects: [replaceAbility('holy-light', HOLY_LIGHT_2, 2, '升级圣光至 II 级')]
     },
     {
@@ -153,7 +153,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 4,
         timing: 'main',
         description: cardText('card-righteous-combat-3', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 24 }, // PALA 24
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 8 },
         effects: [replaceAbility('righteous-combat', RIGHTEOUS_COMBAT_3, 3, '升级正义战法至 III 级')]
     },
     {
@@ -163,7 +163,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-righteous-combat-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 23 }, // PALA 23
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 10 },
         effects: [replaceAbility('righteous-combat', RIGHTEOUS_COMBAT_2, 2, '升级正义战法至 II 级')]
     },
     {
@@ -173,7 +173,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-blessing-of-might-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 25 }, // PALA 25
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 9 },
         effects: [replaceAbility('blessing-of-might', BLESSING_OF_MIGHT_2, 2, '升级力量祝福至 II 级')]
     },
     {
@@ -183,7 +183,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-holy-strike-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 21 }, // PALA 21
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 13 },
         effects: [replaceAbility('holy-strike', HOLY_STRIKE_2, 2, '升级神圣攻击至 II 级')]
     },
     {
@@ -193,7 +193,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 1, // Cheap upgrade
         timing: 'main',
         description: cardText('card-vengeance-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 20 }, // PALA 20
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 12 },
         effects: [replaceAbility('vengeance', VENGEANCE_2, 2, '升级复仇至 II 级')]
     },
     {
@@ -203,7 +203,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-righteous-prayer-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 22 }, // PALA 22? (Guess based on pattern)
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 14 },
         effects: [replaceAbility('righteous-prayer', RIGHTEOUS_PRAYER_2, 2, '升级正义祷告至 II 级')]
     },
     {
@@ -213,7 +213,7 @@ export const PALADIN_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('card-tithes-2', 'description'),
-        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 19 },
+        previewRef: { type: 'atlas', atlasId: DICETHRONE_CARD_ATLAS_IDS.PALADIN, index: 6 },
         effects: [{
             description: '升级教会税',
             action: { type: 'custom', target: 'self', customActionId: 'paladin-upgrade-tithes' },

@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DeckDraft, DeckValidationResult } from '../../config/deckValidation';
 import type { SavedDeckSummary } from './useDeckBuilder';
@@ -8,8 +8,6 @@ import { MagnifyOverlay } from '../../../../components/common/overlays/MagnifyOv
 import { GameButton } from '../GameButton';
 import { resolveCardAtlasId, initSpriteAtlases } from '../cardAtlas';
 import type { Card } from '../../domain/types';
-
-initSpriteAtlases();
 
 /** 获取卡牌的精灵图配置 */
 function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number } {
@@ -45,9 +43,14 @@ export const MyDeckPanel: React.FC<MyDeckPanelProps> = ({
     onDelete,
     onConfirm
 }) => {
-    const { t } = useTranslation('game-summonerwars');
+    const { t, i18n } = useTranslation('game-summonerwars');
     const [deckName, setDeckName] = useState('');
     const [magnifiedCard, setMagnifiedCard] = useState<{ atlasId: string; frameIndex: number } | null>(null);
+
+    // 确保精灵图注册表已初始化（使用当前语言）
+    useEffect(() => {
+        initSpriteAtlases(i18n.language);
+    }, [i18n.language]);
 
     const handleMagnify = useCallback((card: Card) => {
         setMagnifiedCard(getCardSpriteConfig(card));

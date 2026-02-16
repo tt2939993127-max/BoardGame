@@ -9,7 +9,6 @@
  */
 
 import { getActiveDice, getFaceCounts, getPlayerDieFace } from '../rules';
-import { RESOURCE_IDS } from '../resources';
 import { STATUS_IDS, TOKEN_IDS, MOON_ELF_DICE_FACE_IDS } from '../ids';
 import type {
     DiceThroneEvent,
@@ -22,6 +21,7 @@ import type {
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 const FACE = MOON_ELF_DICE_FACE_IDS;
 
@@ -51,7 +51,10 @@ function applyStatus(
     };
 }
 
-/** 造成伤害并返回事件 */
+/** 造成伤害并返回事件
+ * 
+ * 【已迁移到新伤害计算管线】
+ */
 function dealDamage(
     ctx: CustomActionContext,
     targetId: string,
@@ -59,16 +62,20 @@ function dealDamage(
     sourceAbilityId: string,
     timestamp: number
 ): DamageDealtEvent {
-    const target = ctx.state.players[targetId];
-    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-    const actualDamage = target ? Math.min(amount, targetHp) : 0;
-    ctx.ctx.damageDealt += actualDamage;
-    return {
-        type: 'DAMAGE_DEALT',
-        payload: { targetId, amount, actualDamage, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
+    // 使用新伤害计算管线
+    const damageCalc = createDamageCalculation({
+        source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+        target: { playerId: targetId },
+        baseDamage: amount,
+        state: ctx.state,
         timestamp,
-    };
+        autoCollectTokens: false,
+        autoCollectStatus: false,
+        autoCollectShields: false,
+    });
+    
+    const events = damageCalc.toEvents();
+    return events[0] as DamageDealtEvent;
 }
 
 // ============================================================================

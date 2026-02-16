@@ -1,4 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { buildLocalizedImageSet, getLocalizedImageUrls, type CardPreviewRef } from '../../../core';
 import { OptimizedImage } from './OptimizedImage';
 import { type SpriteAtlasConfig, computeSpriteStyle } from '../../../engine/primitives/spriteAtlas';
@@ -49,7 +50,7 @@ export function getCardAtlasStyle(index: number, atlas: CardAtlasConfig): CSSPro
 
 export type CardPreviewProps = {
     previewRef?: CardPreviewRef | null;
-    locale?: string;
+    locale?: string; // 可选，不传则自动从 i18next 获取当前语言
     className?: string;
     style?: CSSProperties;
     alt?: string;
@@ -64,13 +65,16 @@ export function CardPreview({
     alt = 'Card Preview',
     title,
 }: CardPreviewProps): ReactNode {
+    const { i18n } = useTranslation();
     if (!previewRef) return null;
+    // 优先使用传入的 locale，否则从 i18next 获取当前语言
+    const effectiveLocale = locale || i18n.language || 'zh-CN';
 
     if (previewRef.type === 'image') {
         return (
             <OptimizedImage
                 src={previewRef.src}
-                locale={locale}
+                locale={effectiveLocale}
                 className={className}
                 style={style}
                 alt={alt}
@@ -84,7 +88,7 @@ export function CardPreview({
             <AtlasCard
                 atlasId={previewRef.atlasId}
                 index={previewRef.index}
-                locale={locale}
+                locale={effectiveLocale}
                 className={className}
                 style={style}
                 title={title}
@@ -104,7 +108,7 @@ export function CardPreview({
 
     const renderer = getCardPreviewRenderer(previewRef.rendererId);
     if (!renderer) return null;
-    return renderer({ previewRef, locale, className, style });
+    return renderer({ previewRef, locale: effectiveLocale, className, style });
 }
 
 // ============================================================================
@@ -124,8 +128,10 @@ interface AtlasCardProps {
 }
 
 function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCardProps) {
+    const { i18n } = useTranslation();
+    const effectiveLocale = locale || i18n.language || 'zh-CN';
     const source = getCardAtlasSource(atlasId);
-    const localizedUrls = source ? getLocalizedImageUrls(source.image, locale) : null;
+    const localizedUrls = source ? getLocalizedImageUrls(source.image, effectiveLocale) : null;
     const checkUrls = localizedUrls
         ? [localizedUrls.primary.webp, localizedUrls.fallback.webp].filter(Boolean)
         : [];
@@ -146,18 +152,18 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         setLoaded(false);
         let cancelled = false;
 
-        const tryLoad = (index: number) => {
-            if (index >= checkUrls.length) {
+        const tryLoad = (idx: number) => {
+            if (idx >= checkUrls.length) {
                 if (!cancelled) setLoaded(true); // 全部失败也移除 shimmer
                 return;
             }
-            const url = checkUrls[index];
+            const url = checkUrls[idx];
             const img = new Image();
             img.onload = () => {
                 loadedAtlasCache.add(url);
                 if (!cancelled) setLoaded(true);
             };
-            img.onerror = () => tryLoad(index + 1);
+            img.onerror = () => tryLoad(idx + 1);
             img.src = url;
         };
 
@@ -165,12 +171,13 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         return () => {
             cancelled = true;
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [checkKey]);
 
     if (!source) return null;
 
-    const atlasStyle = getCardAtlasStyle(index, source.config);
-    const backgroundImage = buildLocalizedImageSet(source.image, locale);
+    const atlasStyle = computeSpriteStyle(index, source.config);
+    const backgroundImage = buildLocalizedImageSet(source.image, effectiveLocale);
 
     return (
         <div

@@ -579,7 +579,9 @@ export class GameTransportServer {
         // 更新 metadata
         if (match.metadata.players[playerID]) {
             match.metadata.players[playerID].isConnected = false;
-            void this.storage.setMetadata(match.matchID, match.metadata);
+            this.storage.setMetadata(match.matchID, match.metadata).catch((err) => {
+                console.error(`[GameTransport] setMetadata 失败（断线标记可能未持久化） matchID=${match.matchID} playerID=${playerID}`, err);
+            });
         }
 
         // 通知其他玩家

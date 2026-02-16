@@ -17,6 +17,9 @@ const DICE_ROLL_MULTI_KEYS = [
     'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_003',
     'dice.decks_and_cards_sound_fx_pack.few_dice_roll_005',
 ];
+const READY_SIGNAL_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
+const HOST_STARTED_SIGNAL_KEY = 'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003';
+const PHASE_CHANGED_KEY = 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
 
 const originalRandom = Math.random;
 
@@ -63,6 +66,80 @@ describe('DiceThrone 音效配置', () => {
             (Math.random as unknown as typeof Math.random) = vi.fn(() => 0);
             const event: AudioEvent = { type: 'DICE_ROLLED', payload: { results: [1, 2], rollerId: '0' } } as AudioEvent;
             expect(DICE_ROLL_MULTI_KEYS).toContain(resolveKey(event));
+        });
+    });
+
+    describe('选角阶段音效职责', () => {
+        const localPlayerContext = { G: {}, ctx: {}, meta: { currentPlayerId: '0' } };
+
+        it('CHARACTER_SELECTED 不应播放事件音（点击音由本地按钮负责）', () => {
+            const event: AudioEvent = {
+                type: 'CHARACTER_SELECTED',
+                payload: { playerId: '0', characterId: 'monk' },
+            } as AudioEvent;
+            expect(resolveKey(event, localPlayerContext)).toBeNull();
+        });
+
+        it('PLAYER_READY 为本地玩家时不应播放事件音（避免与按钮点击音叠加）', () => {
+            const event: AudioEvent = {
+                type: 'PLAYER_READY',
+                payload: { playerId: '0' },
+            };
+            expect(resolveKey(event, localPlayerContext)).toBeNull();
+        });
+
+        it('PLAYER_READY 为其他玩家时应播放提示音', () => {
+            const event: AudioEvent = {
+                type: 'PLAYER_READY',
+                payload: { playerId: '1' },
+            };
+            expect(resolveKey(event, localPlayerContext)).toBe(READY_SIGNAL_KEY);
+        });
+
+        it('HOST_STARTED 为本地玩家时不应播放事件音（避免与按钮点击音叠加）', () => {
+            const event: AudioEvent = {
+                type: 'HOST_STARTED',
+                payload: { playerId: '0' },
+            };
+            expect(resolveKey(event, localPlayerContext)).toBeNull();
+        });
+
+        it('HOST_STARTED 为其他玩家时应播放提示音', () => {
+            const event: AudioEvent = {
+                type: 'HOST_STARTED',
+                payload: { playerId: '1' },
+            };
+            expect(resolveKey(event, localPlayerContext)).toBe(HOST_STARTED_SIGNAL_KEY);
+        });
+
+        it('开局 setup→upkeep 的 SYS_PHASE_CHANGED 不应播放（避免与开始音叠加）', () => {
+            const event: AudioEvent = {
+                type: 'SYS_PHASE_CHANGED',
+                payload: { from: 'setup', to: 'upkeep' },
+            };
+            expect(resolveKey(event, { G: { turnNumber: 1 }, ctx: {}, meta: {} })).toBeNull();
+        });
+
+        it('开局 upkeep/income 自动连推的 SYS_PHASE_CHANGED 不应播放', () => {
+            const eventFromUpkeep: AudioEvent = {
+                type: 'SYS_PHASE_CHANGED',
+                payload: { from: 'upkeep', to: 'income' },
+            };
+            const eventFromIncome: AudioEvent = {
+                type: 'SYS_PHASE_CHANGED',
+                payload: { from: 'income', to: 'main1' },
+            };
+            const context = { G: { turnNumber: 1 }, ctx: {}, meta: {} };
+            expect(resolveKey(eventFromUpkeep, context)).toBeNull();
+            expect(resolveKey(eventFromIncome, context)).toBeNull();
+        });
+
+        it('非开局阶段切换仍应播放阶段提示音', () => {
+            const event: AudioEvent = {
+                type: 'SYS_PHASE_CHANGED',
+                payload: { from: 'main1', to: 'offensiveRoll' },
+            };
+            expect(resolveKey(event, { G: { turnNumber: 2 }, ctx: {}, meta: {} })).toBe(PHASE_CHANGED_KEY);
         });
     });
 

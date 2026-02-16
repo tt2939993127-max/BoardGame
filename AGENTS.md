@@ -76,6 +76,13 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **规则文档指代（强制）**：当我说"规则"时，默认指该游戏目录下 `rule/` 文件夹中的规则 Markdown。
 - **改游戏规则/机制前先读规则文档（强制）**：修改会影响玩法/回合/结算/效果等"规则或机制"时，必须先读 `src/games/<gameId>/rule/` 下的规则文档。
 - **Git 变更回退与暂存规范（强制）**：涉及 `git restore`/`reset --hard`/`stash` 等操作时，**必须先说明原因并获得许可**。PowerShell 恢复文件禁止用管道/Out-File，必须用 `cmd /c "git show <ref>:<file> > <file>"`。
+- **文件移动/复制规范（强制）**：
+  - **禁止使用 `robocopy /MOVE`**：移动操作会删除源文件，中途失败会导致数据丢失。
+  - **推荐做法**：
+    1. 先用 `robocopy <src> <dst> /E` 复制（不删除源）
+    2. 验证目标完整性：对比文件数量和关键文件
+    3. 确认无误后再手动删除源（如需要）
+  - **IDE 工具优先**：单文件操作优先用 `smartRelocate`（自动更新引用）或 `fsWrite`/`strReplace`。
 - **关键逻辑注释（强制）**：涉及全局状态/架构入口/默认行为必须写清晰中文注释。
 - **日志不需要开关，调试完后将移除（强制）**。日志格式用 key=value 展开关键字段。
 - **新增功能必须补充测试（强制）**：新增功能/技能/API 必须同步补充测试，覆盖正常+异常场景。详见 `docs/automated-testing.md`。
@@ -91,6 +98,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### 1.1 证据链与排查规范（修bug时强制）
 - **同名/同类函数全量排查（强制）**：定位到某个函数/类型/变量时，必须先搜索项目中是否存在**同名或同签名的其他定义**（不同文件、不同作用域、不同返回类型）。确认调用点实际 import 的是哪个定义后，才能动手修改。禁止只看到一个定义就假设它是唯一的。
+- **回归 bug 先 diff 再修（强制）**：遇到"之前好好的现在不行了"类问题，第一步必须 `git log` + `git show`/`git diff` 对比最后正常版本，找到引入问题的变更点。禁止跳过 diff 直接假设根因并重写代码。详见 `docs/ai-rules/golden-rules.md`「Bug 修复必须先 diff 原始版本」节。
 - **资源/文件归属先查消费链路（强制）**：对任何文件做出"应该提交/应该忽略/应该放 CDN/应该本地"等归属判断前，**必须先追踪该文件的实际消费链路**——运行时谁加载它、从哪个 URL/路径加载、是生成产物还是手写源码、生成脚本是什么。禁止仅凭文件名、扩展名或"看起来像元数据"就下结论。**教训**：`registry.json` 看起来是"纯 JSON 元数据应该提交到 git"，实际运行时从 R2 CDN fetch，本地副本是脚本生成产物，不该入库。
 - **事实/未知/假设**：提出方案前必须列出已知事实（来源）、未知但关键的信息、假设（含验证方法）。
 - **修 Bug 证据优先**：证据不足时不得直接改代码"试试"，只能给出最小验证步骤或临时日志方案。
@@ -119,6 +127,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - **CSS 布局（强制）**：`overflow` 会被父级覆盖，修改前必须 `grep` 检查所有父容器。
 - **遗罩/层级**：先用 `elementsFromPoint` 证明"谁在最上层"再改层级；Portal 外层必须显式 `z-index`。
 - **WebSocket**：`vite.config.ts` 中 `hmr` 严禁自定义端口；端口占用用 `taskkill /F /IM node.exe`。
+- **Bug 修复先 diff 原始版本（强制）**：修"之前好好的现在不行了"类 bug 时，必须先 `git show/diff` 对比最后正常版本，逐行找变更点。禁止在未 diff 的情况下假设根因并重写代码。
 
 ### 动画/动效（核心规则）
 
@@ -159,6 +168,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
     ```
   - **推荐做法**：优先使用 IDE 工具（`fsWrite`/`strReplace`/`editCode`）写文件，避免 PowerShell 编码陷阱。
   - **`-replace` 管道 + `Set-Content` 是典型反模式**：即使只替换英文内容，文件中的中文也会被破坏。
+  - **正则批量替换必须先备份（强制）**：使用 PowerShell `-replace` 或任何正则批量修改文件前，必须先用 `git stash` 或 `Copy-Item` 备份相关文件。正则替换容易破坏编码或产生意外匹配，无备份时禁止执行。
 
 ---
 
@@ -249,6 +259,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
   - **SummonerWars 历史债务**：`BoardUnit` 上 `tempAbilities`/`boosts`/`extraAttacks`/`healingMode`/`wasAttackedThisTurn`/`originalOwner` 为 ad-hoc 字段，未用 TagContainer，回合清理靠手动解构。`attachedCards`/`attachedUnits`/`entanglementTargets` 为结构化数据，不适合 TagContainer。**新游戏禁止模仿**。
 - **Custom Action categories 语义正确性（强制）**：注册 `registerCustomActionHandler` 时声明的 `categories` 必须与 handler 实际输出的事件类型一致。**核心规则：handler 产生 `DAMAGE_DEALT` → categories 必须包含 `'damage'`**（`playerAbilityHasDamage` 依赖此判定是否进入防御投掷阶段）。新增/修改 handler 后必须运行 `customaction-category-consistency.test.ts` 验证。详见 `docs/ai-rules/testing-audit.md`「元数据语义一致性审计」节。
 - **数值修改管线必须使用 `engine/primitives/modifier.ts`**：禁止自行实现 DamageModifier / PowerModifierFn，使用 `createModifierStack()` + `addModifier/applyModifiers/tickModifiers`。
+- **伤害计算管线必须使用 `engine/primitives/damageCalculation.ts`（新游戏强制）**：基于 `modifier.ts` 的专用包装器，提供自动收集修正 + 完整 breakdown。使用 `createDamageCalculation()` 生成 DAMAGE_DEALT 事件，禁止手动构建。**历史遗留**：DiceThrone 已迁移（26/27，96%），SummonerWars/SmashUp 保持现有实现。详见 `docs/ai-rules/engine-systems.md`「伤害计算管线」节和 `docs/damage-calculation-pipeline-migration-guide.md`。
 - **可被 buff 修改的属性必须使用 `engine/primitives/attribute.ts`**：使用 `createAttributeSet()` + `addAttributeModifier/getCurrent`。与 `resources.ts` 互补。
 - **面向百游戏设计（强制）**
   - **禁止在 core 中存放交互状态**：`pendingXxx` 等“等待玩家输入”状态必须用 `sys.interaction`（InteractionSystem），不得放在 core 上。
@@ -318,6 +329,16 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 > **新增/修改图片或音频资源引用时必须先阅读 `docs/ai-rules/asset-pipeline.md`**
 
 - **所有图片必须压缩后使用**：用 `OptimizedImage` / `getOptimizedImageUrls`，路径不含 `compressed/`（自动补全）。
+- **国际化资源架构（强制）**：
+  - **当前状态**：所有游戏图片资源已迁移到 `public/assets/i18n/zh-CN/<gameId>/` 目录。
+  - **代码行为**：`OptimizedImage` 和 `CardPreview` 会自动从 `i18next` 获取当前语言（`i18n.language`），无需手动传递 `locale` prop。路径自动转换：`dicethrone/images/foo.png` → `i18n/zh-CN/dicethrone/images/foo.png`。
+  - **无需手动传递 locale（强制）**：所有使用 `OptimizedImage`/`CardPreview` 的地方，禁止手动传递 `locale` prop（除非测试或特殊场景需要覆盖）。组件会自动从 i18next 获取当前语言。
+  - **图集加载最佳实践（强制）**：
+    - **图集配置（.atlas.json）与语言无关**：统一存放在 `/assets/atlas-configs/` 目录，`loadCardAtlasConfig` 不需要 locale 参数。SmashUp 全部使用规则网格（`defaultGrid`），不需要 JSON 配置文件。
+    - **SummonerWars 模式**：调用 `initSpriteAtlases(locale)` 时，必须在组件内通过 `useEffect` 调用并传递 `i18n.language`，因为它同时注册图片路径（需要国际化）。
+    - **核心原则**：图片资源需要国际化（路径包含 `/i18n/{locale}/`），图集配置文件不需要国际化。
+  - **未来扩展**：英文版上线时，将英文图片放入 `i18n/en/<gameId>/`，代码无需修改。
+  - **CDN 部署**：运行 `npm run assets:upload -- --sync` 同步到 CDN。
 - **音频资源架构（强制）**：
   - **通用注册表**（`public/assets/common/audio/registry.json`）：所有音效资源的唯一来源，包含 key 和物理路径映射。
   - **游戏配置**（`audio.config.ts`）：定义事件→音效的映射规则（`feedbackResolver`），使用通用注册表中的 key。
@@ -361,6 +382,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **阶段结束技能时序对齐（强制）**：阶段结束时需要玩家确认的技能（描述含"你可以"/"may"），`onPhaseExit` 必须返回 `{ halt: true }` 阻止阶段推进，UI 跳过时必须 dispatch `ADVANCE_PHASE` 恢复流程。**事件产生门控必须普适生效**：`triggerPhaseAbilities` 等循环中的门控函数（如 `canActivateAbility`）禁止用 `abilityId === 'xxx'` 限定为特定技能，必须对所有同类技能生效。详见 `docs/ai-rules/testing-audit.md`「D8 子项：引擎批处理时序与 UI 交互对齐」。
 - **"可以/可选"效果必须有交互确认（强制）**：描述中"你可以"/"may"→ 必须有确认/跳过 UI，禁止自动执行。
 - **测试必须验证状态变更（强制）**：事件发射 ≠ 状态生效，必须断言 reduce 后的最终状态。详见 `docs/ai-rules/testing-audit.md`「审计反模式清单」。
+- **DiceThrone E2E 测试禁止使用本地模式（强制）**：DiceThrone 的 `allowLocalMode=false`，英雄选择需要双人交互，本地模式无法完成。所有 DiceThrone E2E 测试必须使用 `setupOnlineMatch`（`e2e/helpers/dicethrone.ts`）创建在线双人对局，通过调试面板（`readCoreState`/`applyCoreStateDirect`/`applyDiceValues`）注入状态。禁止使用 `page.goto('/play/dicethrone/local')`、禁止假设 `window.__BG_DISPATCH__`/`window.__BG_STATE__` 等全局变量存在。
 
 ---
 

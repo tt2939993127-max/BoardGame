@@ -413,6 +413,8 @@ export const detectMatchStartState = async (
 /** 等待房间就绪（角色选择/主阶段/手牌任一出现） */
 export const waitForRoomReady = async (page: Page, timeout = 45000) => {
     const deadline = Date.now() + timeout;
+    let iteration = 0;
+    let reloaded = false;
     while (Date.now() < deadline) {
         if (await isRoomMissing(page)) throw new Error('房间不存在');
         const hasMainPhase = await page.getByText(/Main Phase \(1\)|主要阶段 \(1\)/).first().isVisible({ timeout: 500 }).catch(() => false);
@@ -424,8 +426,31 @@ export const waitForRoomReady = async (page: Page, timeout = 45000) => {
         if (hasHandCard) return;
         const hasPlayerBoard = await page.locator('[data-tutorial-id="player-board"], img[alt="Player Board"], img[alt="玩家面板"]').first().isVisible({ timeout: 500 }).catch(() => false);
         if (hasPlayerBoard) return;
+        // 检查 TURN ORDER（游戏已开始的标志）
+        const hasTurnOrder = await page.getByText(/TURN ORDER|回合顺序/i).first().isVisible({ timeout: 500 }).catch(() => false);
+        if (hasTurnOrder) return;
+        // 如果卡在 loading 超过 20 秒且还没 reload 过，尝试 reload
+        if (!reloaded && iteration > 25) {
+            const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 200)).catch(() => '');
+            if (bodyText.includes('Loading') || bodyText.includes('加载')) {
+                console.log(`[waitForRoomReady] 卡在加载中，尝试 reload`);
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                reloaded = true;
+            }
+        }
+        // 每 10 次迭代输出一次诊断
+        if (iteration % 10 === 0) {
+            const url = page.url();
+            const title = await page.title().catch(() => 'unknown');
+            console.log(`[waitForRoomReady] iteration=${iteration} url=${url} title=${title}`);
+        }
+        iteration++;
         await page.waitForTimeout(300);
     }
+    // 超时前输出最终诊断
+    const finalUrl = page.url();
+    const finalTitle = await page.title().catch(() => 'unknown');
+    console.log(`[waitForRoomReady] TIMEOUT url=${finalUrl} title=${finalTitle}`);
     throw new Error('房间未在超时内就绪');
 };
 
@@ -453,9 +478,9 @@ export const setupOnlineMatch = async (
 
     await hostPage.goto(`/play/dicethrone/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
 
-    // 客人上下文
+    // 客人上下文（独立 context，WebSocket 直连游戏服务器，不经过 Vite 代理）
     const guestContext = await browser.newContext({ baseURL });
-    await initContext(guestContext, { storageKey: '__dt_storage_reset' });
+    await initContext(guestContext, { storageKey: '__dt_storage_reset_g' });
     const guestPage = await guestContext.newPage();
 
     const guestCredentials = await joinMatchViaAPI(guestPage, GAME_NAME, matchId, '1', 'Guest-E2E');
@@ -467,9 +492,12 @@ export const setupOnlineMatch = async (
     await seedMatchCredentials(guestContext, GAME_NAME, matchId, '1', guestCredentials);
     await guestPage.goto(`/play/dicethrone/match/${matchId}?playerID=1`, { waitUntil: 'domcontentloaded' });
 
+    // 两个页面并行等待就绪（直连游戏服务器，无 Vite 代理瓶颈）
     try {
-        await waitForRoomReady(hostPage, 60000);
-        await waitForRoomReady(guestPage, 60000);
+        await Promise.all([
+            waitForRoomReady(hostPage, 60000),
+            waitForRoomReady(guestPage, 60000),
+        ]);
     } catch {
         if ((await isRoomMissing(hostPage).catch(() => false)) || (await isRoomMissing(guestPage).catch(() => false))) {
             await hostContext.close();

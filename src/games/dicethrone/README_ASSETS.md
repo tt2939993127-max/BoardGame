@@ -30,7 +30,6 @@ public/assets/dicethrone/
 │   │   ├── compressed/                  # 压缩后的资源（实际加载）
 │   │   │   ├── ability-cards.avif
 │   │   │   ├── ability-cards.webp
-│   │   │   ├── ability-cards.atlas.json  # 图集配置
 │   │   │   └── ...
 │   │   └── status-icons/                # 状态图标
 │   ├── barbarian/                # 野蛮人 (Barbarian) 专属资源
@@ -134,7 +133,7 @@ Dice Throne 使用**图集 (Atlas)** 方式管理卡牌图片，而非单独的�
 
 ### 3.2 图集配置文件格式
 
-每个英雄的 `compressed/` 目录下都有一个 `.atlas.json` 文件：
+所有英雄共享统一的图集配置文件，存放在 `/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json`（与语言无关）：
 
 ```json
 {
@@ -210,12 +209,12 @@ export const DICETHRONE_STATUS_ATLAS_IDS = {
 图集在 `Board.tsx` 中按对局英雄动态加载并注册到全局 Registry：
 
 ```typescript
-// Board.tsx (约 690-720 行)
+// Board.tsx
 React.useEffect(() => {
     if (!heroCharIds) return;
     let isActive = true;
     const loadAtlas = async (atlasId: string, imageBase: string) => {
-        const config = await loadCardAtlasConfig(imageBase, locale);
+        const config = await loadCardAtlasConfig();
         if (!isActive) return;
         registerCardAtlasSource(atlasId, { image: imageBase, config });
     };
@@ -279,7 +278,7 @@ node scripts/compress-images.js public/assets/dicethrone/images/monk
 node scripts/assets/atlas_grid_scan.js public/assets/dicethrone/images/monk/ability-cards.png
 ```
 
-**输出**：`ability-cards.atlas.json`（需复制到 `compressed/` 目录）
+**输出**：`ability-cards.atlas.json`（需复制到 `public/assets/atlas-configs/dicethrone/` 目录）
 
 ---
 
@@ -301,7 +300,7 @@ node scripts/assets/atlas_grid_scan.js public/assets/dicethrone/images/monk/abil
 - [ ] 运行 `atlas_grid_scan.js` 生成配置
 - [ ] 手动核对索引与卡牌对应关系
 - [ ] 运行 `compress-images.js` 压缩
-- [ ] 将 `.atlas.json` 复制到 `compressed/`
+- [ ] 将 `.atlas.json` 复制到 `public/assets/atlas-configs/dicethrone/`
 
 ### 6.4 代码注册
 - [ ] 在 `domain/ids.ts` 添加 `DICETHRONE_CARD_ATLAS_IDS.<HERO>`

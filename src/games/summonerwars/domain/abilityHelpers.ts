@@ -121,7 +121,10 @@ export function canActivateAbility(
   const abilityDef = abilityRegistry.get(abilityId);
   if (!abilityDef) return false;
 
-  if (abilityDef.validation?.requiredPhase && abilityDef.validation.requiredPhase !== core.phase) {
+  // 对于 onPhaseEnd 触发的技能，不检查 requiredPhase
+  // 因为它们已经由 PHASE_END_ABILITIES 配置保证在正确阶段触发
+  // 检查 requiredPhase 会导致阶段推进 halt 后第二次检查时阶段已变化而失败
+  if (abilityDef.trigger !== 'onPhaseEnd' && abilityDef.validation?.requiredPhase && abilityDef.validation.requiredPhase !== core.phase) {
     return false;
   }
 

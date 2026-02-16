@@ -18,6 +18,7 @@ import type {
 import { CP_MAX } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, createDisplayOnlySettlement, type CustomActionContext } from '../effects';
+import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 // ============================================================================
 // 圣骑士技能处理器
@@ -142,30 +143,27 @@ function handleHolyDefenseRoll({ targetId, attackerId: _attackerId, sourceAbilit
     const heartCount = faceCounts[FACES.HEART] ?? 0;
     const prayCount = faceCounts[FACES.PRAY] ?? 0;
 
-    // 1. 造成伤害 (Sword) → 反伤给原攻击者
+    // 1. 造成伤害 (Sword) → 反伤给原攻击者 【已迁移到新伤害计算管线】
     if (swordCount > 0 && originalAttackerId) {
-        const amount = swordCount;
-        const target = state.players[originalAttackerId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(amount, targetHp) : 0;
-
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: originalAttackerId, amount, actualDamage, sourceAbilityId, type: 'undefendable' },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 50
-        } as DamageDealtEvent);
+        const damageCalc = createDamageCalculation({
+            source: { playerId: targetId, abilityId: sourceAbilityId },
+            target: { playerId: originalAttackerId },
+            baseDamage: swordCount,
+            state,
+            timestamp: timestamp + 50,
+        });
+        events.push(...damageCalc.toEvents());
     }
 
-    // 2. 防止伤害 (Helm + 2*Heart)
+    // 2. 防止伤害 (Helm + 2*Heart) → 授予临时护盾（攻击结算后清理）
     const preventAmount = (helmCount * 1) + (heartCount * 2);
     if (preventAmount > 0) {
         events.push({
-            type: 'PREVENT_DAMAGE',
-            payload: { targetId, amount: preventAmount, sourceAbilityId },
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: { targetId, value: preventAmount, sourceId: sourceAbilityId, preventStatus: false },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 60
-        } as PreventDamageEvent);
+        } as DiceThroneEvent);
     }
 
     // 3. 获得 CP (Pray)
@@ -334,32 +332,31 @@ function handleAbsolution({ targetId, attackerId: _attackerId, sourceAbilityId, 
     } as BonusDieRolledEvent);
 
     if (face === FACES.SWORD && originalAttackerId) {
-        // 剑 → 对原攻击者造成 1 不可防御伤害
-        const target = state.players[originalAttackerId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(1, targetHp) : 0;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: originalAttackerId, amount: 1, actualDamage, sourceAbilityId, type: 'undefendable' },
-            sourceCommandType: 'ABILITY_EFFECT',
+        // 剑 → 对原攻击者造成 1 不可防御伤害 【已迁移到新伤害计算管线】
+        const damageCalc = createDamageCalculation({
+            source: { playerId: targetId, abilityId: sourceAbilityId },
+            target: { playerId: originalAttackerId },
+            baseDamage: 1,
+            state,
             timestamp: timestamp + 10,
-        } as DamageDealtEvent);
+        });
+        events.push(...damageCalc.toEvents());
     } else if (face === FACES.HELM) {
-        // 头盔 → 防止 1 伤害
+        // 头盔 → 防止 1 伤害（临时护盾）
         events.push({
-            type: 'PREVENT_DAMAGE',
-            payload: { targetId, amount: 1, sourceAbilityId },
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: { targetId, value: 1, sourceId: sourceAbilityId, preventStatus: false },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 10,
-        } as PreventDamageEvent);
+        } as DiceThroneEvent);
     } else if (face === FACES.HEART) {
-        // 心 → 防止 2 伤害
+        // 心 → 防止 2 伤害（临时护盾）
         events.push({
-            type: 'PREVENT_DAMAGE',
-            payload: { targetId, amount: 2, sourceAbilityId },
+            type: 'DAMAGE_SHIELD_GRANTED',
+            payload: { targetId, value: 2, sourceId: sourceAbilityId, preventStatus: false },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 10,
-        } as PreventDamageEvent);
+        } as DiceThroneEvent);
     } else if (face === FACES.PRAY) {
         // 祈祷 → 1 CP
         const currentCp = state.players[targetId]?.resources[RESOURCE_IDS.CP] ?? 0;
@@ -451,20 +448,23 @@ function handleBlessingPrevent({ targetId, state, timestamp, action }: CustomAct
     // 但由于 PREVENT_DAMAGE 已免除伤害，HP 仍为 currentHp
     // 所以需要额外扣除 currentHp - 1 使 HP = 1，再治疗 5
     // bypassShields: 此扣血是 HP 重置，不应被护盾吸收
+    // 【已迁移到新伤害计算管线】
     const hpToRemove = currentHp - 1;
     if (hpToRemove > 0) {
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: {
-                targetId,
-                amount: hpToRemove,
-                actualDamage: hpToRemove,
-                sourceAbilityId: 'paladin-blessing-prevent',
-                bypassShields: true,
-            },
-            sourceCommandType: 'ABILITY_EFFECT',
+        const damageCalc = createDamageCalculation({
+            source: { playerId: targetId, abilityId: 'paladin-blessing-prevent' },
+            target: { playerId: targetId },
+            baseDamage: hpToRemove,
+            state,
             timestamp: timestamp + 2,
-        } as DamageDealtEvent);
+            autoCollectShields: false, // bypassShields: 不收集护盾修正
+        });
+        const damageEvents = damageCalc.toEvents();
+        // 手动添加 bypassShields 标记（引擎层暂不支持）
+        if (damageEvents[0]?.type === 'DAMAGE_DEALT') {
+            (damageEvents[0].payload as any).bypassShields = true;
+        }
+        events.push(...damageEvents);
     }
 
     events.push({

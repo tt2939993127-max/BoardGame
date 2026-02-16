@@ -43,6 +43,33 @@ const getGameServerBaseURL = () => {
   return `http://localhost:${port}`;
 };
 
+const joinMatchAsGuest = async (page: Page, matchId: string, gameId = 'smashup') => {
+  const base = getGameServerBaseURL();
+  const matchResp = await page.request.get(`${base}/games/${gameId}/${matchId}`);
+  const matchData = await matchResp.json();
+  const openSeat = (matchData.players as { id: number; name?: string }[])
+    ?.sort((a: { id: number }, b: { id: number }) => b.id - a.id)
+    .find((p: { name?: string }) => !p.name);
+  if (!openSeat) throw new Error('No open seat found');
+  const pid = String(openSeat.id);
+  const guestId = `e2e_guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+  const joinResp = await page.request.post(`${base}/games/${gameId}/${matchId}/join`, {
+    data: { playerID: pid, playerName: `Guest_${guestId}`, data: { guestId } },
+  });
+  const joinData = await joinResp.json();
+  await page.goto(`/play/${gameId}/match/${matchId}?playerID=${pid}`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(
+    ({ mid, p, creds, gname }: { mid: string; p: string; creds: string; gname: string }) => {
+      localStorage.setItem(
+        `match_creds_${mid}`,
+        JSON.stringify({ playerID: p, credentials: creds, matchID: mid, gameName: gname }),
+      );
+    },
+    { mid: matchId, p: pid, creds: joinData.playerCredentials, gname: gameId },
+  );
+  return pid;
+};
+
 const ensureGameServerAvailable = async (page: Page) => {
   const gameServerBaseURL = getGameServerBaseURL();
   const candidates = ['/games', `${gameServerBaseURL}/games`];
@@ -126,18 +153,14 @@ test.describe('Smash Up Lobby E2E', () => {
     await resetMatchStorage(guestContext1);
     await disableTutorial(guestContext1);
     const guestPage1 = await guestContext1.newPage();
-    await guestPage1.goto(`/play/smashup/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage1.waitForURL(/playerID=\d/, { timeout: 20000 });
-    const guestId1 = new URL(guestPage1.url()).searchParams.get('playerID');
+    const guestId1 = await joinMatchAsGuest(guestPage1, matchId!);
 
     const guestContext2 = await browser.newContext({ baseURL });
     await setEnglishLocale(guestContext2);
     await resetMatchStorage(guestContext2);
     await disableTutorial(guestContext2);
     const guestPage2 = await guestContext2.newPage();
-    await guestPage2.goto(`/play/smashup/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-    await guestPage2.waitForURL(/playerID=\d/, { timeout: 20000 });
-    const guestId2 = new URL(guestPage2.url()).searchParams.get('playerID');
+    const guestId2 = await joinMatchAsGuest(guestPage2, matchId!);
 
     if (!guestId1 || !guestId2) {
       throw new Error('Failed to resolve guest player IDs.');

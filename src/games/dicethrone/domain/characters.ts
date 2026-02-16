@@ -157,7 +157,7 @@ export const CHARACTER_DATA_MAP: Record<SelectableCharacterId, CharacterData> = 
             'unyielding-faith': 1,
         },
         statusAtlasId: DICETHRONE_STATUS_ATLAS_IDS.PALADIN,
-        statusAtlasPath: 'dicethrone/images/Paladin/status-icons-atlas.json',
+        statusAtlasPath: 'dicethrone/images/paladin/status-icons-atlas.json',
     },
 };
 

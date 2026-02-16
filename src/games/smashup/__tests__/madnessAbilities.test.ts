@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execute, reduce } from '../domain/reducer';
+import { postProcessSystemEvents } from '../domain';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from '../domain/types';
 import type {
     SmashUpCore,
@@ -88,10 +89,13 @@ let lastMatchState: MatchState<SmashUpCore> | null = null;
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): SmashUpEvent[] {
     const ms = makeMatchState(state);
     lastMatchState = ms;
-    return execute(ms, {
+    const events = execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
+    
+    // Call postProcessSystemEvents to trigger onPlay abilities
+    return postProcessSystemEvents(state, events, random ?? defaultRandom).events;
 }
 
 /** 从最近一次 execute 的 matchState 中获取 interactions */
@@ -415,7 +419,7 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
     });
 
     describe('miskatonic_mandatory_reading（强制阅读：对手抽2疯狂卡+额外行动）', () => {
-        it('对手抽2张疯狂卡，自己获得额外行动', () => {
+        it('单对手时创建 Prompt（包含取消选项）', () => {
             const state = makeStateWithMadness({
                 players: {
                     '0': makePlayer('0', {
@@ -426,14 +430,67 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
             });
 
             const events = execPlayAction(state, '0', 'a1');
-            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            // 单对手时创建 Prompt（不自动执行）
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(1);
+            expect(interactions[0].data.sourceId).toBe('miskatonic_mandatory_reading');
+            
+            // 验证包含取消选项
+            const options = interactions[0].data.options;
+            expect(options.length).toBe(2); // 1个对手 + 1个取消
+            expect(options.some((opt: any) => opt.id === '__cancel__')).toBe(true);
+        });
+
+        it('选择取消时不执行任何效果', () => {
+            const state = makeStateWithMadness({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'miskatonic_mandatory_reading', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+
+            // 先触发能力创建 Prompt
+            execPlayAction(state, '0', 'a1');
+            
+            // 通过 handler 选择取消
+            const handler = getInteractionHandler('miskatonic_mandatory_reading');
+            expect(handler).toBeDefined();
+            const ms = makeMatchState(state);
+            const result = handler!(ms, '0', { __cancel__: true }, undefined, defaultRandom, 0);
+            
+            // 不应有疯狂卡或额外行动事件
+            expect(result.events.length).toBe(0);
+        });
+
+        it('选择对手后执行效果', () => {
+            const state = makeStateWithMadness({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'miskatonic_mandatory_reading', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+
+            // 先触发能力创建 Prompt
+            execPlayAction(state, '0', 'a1');
+            
+            // 通过 handler 选择对手
+            const handler = getInteractionHandler('miskatonic_mandatory_reading');
+            expect(handler).toBeDefined();
+            const ms = makeMatchState(state);
+            const result = handler!(ms, '0', { pid: '1' }, undefined, defaultRandom, 0);
+            
+            const madnessEvents = result.events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
-            expect((madnessEvents[0] as any).payload.playerId).toBe('1'); // 对手抽
+            expect((madnessEvents[0] as any).payload.playerId).toBe('1');
             expect((madnessEvents[0] as any).payload.count).toBe(2);
 
-            const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
             expect(limitEvents.length).toBe(1);
-            expect((limitEvents[0] as any).payload.playerId).toBe('0'); // 自己获得
+            expect((limitEvents[0] as any).payload.playerId).toBe('0');
             expect((limitEvents[0] as any).payload.limitType).toBe('action');
         });
 
@@ -448,8 +505,15 @@ describe('米斯卡塔尼克大学 - 疯狂卡能力', () => {
                 },
             });
 
-            const events = execPlayAction(state, '0', 'a1');
-            const newState = applyEvents(state, events);
+            // 先触发能力创建 Prompt
+            execPlayAction(state, '0', 'a1');
+            
+            // 通过 handler 选择对手并 apply 事件
+            const handler = getInteractionHandler('miskatonic_mandatory_reading');
+            const ms = makeMatchState(state);
+            const result = handler!(ms, '0', { pid: '1' }, undefined, defaultRandom, 0);
+            const newState = applyEvents(state, result.events);
+            
             // P1 手牌有2张疯狂卡
             expect(newState.players['1'].hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length).toBe(2);
             // P0 行动额度 +1

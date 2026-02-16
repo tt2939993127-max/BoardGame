@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execute } from '../domain/reducer';
+import { execute, reduce } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type {
     SmashUpCore,
@@ -21,6 +21,7 @@ import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { makeMinion, makeCard, makePlayer, makeState, makeMatchState, getInteractionsFromMS } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
+import { INTERACTION_COMMANDS, asSimpleChoice } from '../../../engine/systems/InteractionSystem';
 
 beforeAll(() => {
     clearRegistry();
@@ -146,7 +147,7 @@ describe('miskatonic_professor（教授 talent）', () => {
 // ============================================================================
 
 describe('cthulhu_star_spawn（星之眷族 talent）', () => {
-    it('单张疯狂卡时创建 Prompt', () => {
+    it('单张疯狂卡时创建 Prompt（包含取消选项）', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -172,9 +173,49 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        // 单张疯狂卡时创建 Interaction（不再生成 CHOICE_REQUESTED）
+        // 创建 Interaction（包含玩家选项 + 取消选项）
         const interactions = getInteractionsFromMS(ms);
         expect(interactions.length).toBe(1);
+        const prompt = asSimpleChoice(interactions[0]);
+        expect(prompt?.options.length).toBe(2); // 1个对手 + 1个取消选项
+        // 验证取消选项使用框架标准 ID 和标记
+        expect(prompt?.options.some(opt => opt.id === '__cancel__')).toBe(true);
+        expect(prompt?.options.some(opt => (opt.value as any)?.__cancel__)).toBe(true);
+        expect(types).not.toContain(SU_EVENTS.MADNESS_RETURNED);
+        expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
+    });
+
+    it('选择取消时不执行任何效果', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('mad1', MADNESS_CARD_DEF_ID, 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                { defId: 'base_a', minions: [makeMinion('m1', 'cthulhu_star_spawn', '0', 5)], ongoingActions: [] },
+            ],
+            madnessDeck: ['madness_def_1'],
+        });
+
+        const ms = makeMatchState(core);
+        // 先触发天赋创建 Prompt
+        execute(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'm1', baseIndex: 0 },
+        }, defaultRandom);
+
+        // 玩家选择取消（使用框架标准 ID）
+        const events = execute(ms, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionId: '__cancel__' },
+        }, defaultRandom);
+
+        const types = events.map(e => e.type);
+        // 不应有疯狂卡转移事件
         expect(types).not.toContain(SU_EVENTS.MADNESS_RETURNED);
         expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
     });
@@ -229,11 +270,117 @@ describe('cthulhu_star_spawn（星之眷族 talent）', () => {
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
-        // 单张疯狂卡时创建 Interaction
+        // 创建 Interaction
         const interactions2 = getInteractionsFromMS(ms2);
         expect(interactions2.length).toBe(1);
         expect(types).not.toContain(SU_EVENTS.MADNESS_RETURNED);
         expect(types).not.toContain(SU_EVENTS.MADNESS_DRAWN);
+    });
+
+    it('选择目标玩家后成功转移疯狂卡（验证 Prompt 结构）', () => {
+        const initialCore = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('mad1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('c1', 'test_card', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1', { hand: [] }),
+                '2': makePlayer('2', { hand: [] }),
+            },
+            turnOrder: ['0', '1', '2'],
+            bases: [
+                { defId: 'base_a', minions: [makeMinion('m1', 'cthulhu_star_spawn', '0', 5)], ongoingActions: [] },
+            ],
+            madnessDeck: ['madness_def_1', 'madness_def_2'],
+        });
+
+        const ms = makeMatchState(initialCore);
+        
+        // 触发天赋创建 Prompt
+        const talentEvents = execute(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'm1', baseIndex: 0 },
+        }, defaultRandom);
+
+        expect(talentEvents.map(e => e.type)).toContain(SU_EVENTS.TALENT_USED);
+        
+        // 验证 Prompt 包含 2 个对手 + 1 个取消选项
+        const interactions = getInteractionsFromMS(ms);
+        expect(interactions.length).toBe(1);
+        const prompt = asSimpleChoice(interactions[0]);
+        expect(prompt?.options.length).toBe(3); // 玩家1 + 玩家2 + 取消
+        
+        // 验证玩家1选项的结构
+        const player1Option = prompt?.options.find(opt => {
+            const val = opt.value as any;
+            return val?.targetPlayerId === '1';
+        });
+        expect(player1Option).toBeDefined();
+        expect((player1Option?.value as any)?.madnessUid).toBe('mad1');
+        // 不再检查 cancel 字段（已移除）
+        
+        // 验证玩家2选项的结构
+        const player2Option = prompt?.options.find(opt => {
+            const val = opt.value as any;
+            return val?.targetPlayerId === '2';
+        });
+        expect(player2Option).toBeDefined();
+        expect((player2Option?.value as any)?.madnessUid).toBe('mad1');
+        
+        // 验证取消选项的结构（使用框架标准标记）
+        const cancelOption = prompt?.options.find(opt => opt.id === '__cancel__');
+        expect(cancelOption).toBeDefined();
+        expect(cancelOption?.label).toBe('取消');
+        expect((cancelOption?.value as any)?.__cancel__).toBe(true);
+    });
+
+    it('多个对手时可以选择任意一个（验证 Prompt 结构）', () => {
+        const initialCore = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('mad1', MADNESS_CARD_DEF_ID, 'action', '0')],
+                }),
+                '1': makePlayer('1', { hand: [] }),
+                '2': makePlayer('2', { hand: [] }),
+                '3': makePlayer('3', { hand: [] }),
+            },
+            turnOrder: ['0', '1', '2', '3'],
+            bases: [
+                { defId: 'base_a', minions: [makeMinion('m1', 'cthulhu_star_spawn', '0', 5)], ongoingActions: [] },
+            ],
+            madnessDeck: ['madness_def_1'],
+        });
+
+        const ms = makeMatchState(initialCore);
+        
+        // 触发天赋
+        const talentEvents = execute(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'm1', baseIndex: 0 },
+        }, defaultRandom);
+
+        // 验证 Prompt 包含 3 个对手 + 1 个取消选项
+        const interactions = getInteractionsFromMS(ms);
+        const prompt = asSimpleChoice(interactions[0]);
+        expect(prompt?.options.length).toBe(4); // 玩家1 + 玩家2 + 玩家3 + 取消
+        
+        // 验证所有对手都在选项中
+        const targetPlayerIds = prompt?.options
+            .map(opt => (opt.value as any)?.targetPlayerId)
+            .filter(Boolean);
+        expect(targetPlayerIds).toContain('1');
+        expect(targetPlayerIds).toContain('2');
+        expect(targetPlayerIds).toContain('3');
+        expect(targetPlayerIds.length).toBe(3); // 3个对手选项
+        
+        // 验证取消选项存在（使用框架标准标记）
+        const cancelOption = prompt?.options.find(opt => opt.id === '__cancel__');
+        expect(cancelOption).toBeDefined();
+        expect((cancelOption?.value as any)?.__cancel__).toBe(true);
     });
 });
 

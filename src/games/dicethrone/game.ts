@@ -216,7 +216,7 @@ function formatDiceThroneActionEntry({
 
         if (event.type === 'DAMAGE_DEALT') {
             const damageEvent = event as DamageDealtEvent;
-            const { targetId, amount, actualDamage, sourceAbilityId, modifiers } = damageEvent.payload;
+            const { targetId, amount, actualDamage, sourceAbilityId, modifiers, breakdown } = damageEvent.payload;
             let actorId = targetId;
             if (attackResolved) {
                 if (targetId === attackResolved.payload.defenderId) {
@@ -234,8 +234,28 @@ function formatDiceThroneActionEntry({
 
             // 构建 breakdown 明细行（所有伤害都用 breakdown，统一虚线下划线风格）
             const breakdownLines: BreakdownLine[] = [];
-            if (modifiers && modifiers.length > 0) {
-                // 有修改器：推算基础伤害 + 各修改器
+            
+            // 优先使用新管线的 breakdown 格式
+            if (breakdown) {
+                // 新格式：基础伤害 + 修正步骤
+                breakdownLines.push({
+                    label: breakdown.base.sourceName || breakdown.base.sourceId,
+                    labelIsI18n: breakdown.base.sourceNameIsI18n ?? false,
+                    labelNs: breakdown.base.sourceNameIsI18n ? DT_NS : undefined,
+                    value: breakdown.base.value,
+                    color: 'neutral',
+                });
+                breakdown.steps.forEach(step => {
+                    breakdownLines.push({
+                        label: step.sourceName || step.sourceId,
+                        labelIsI18n: step.sourceNameIsI18n ?? false,
+                        labelNs: step.sourceNameIsI18n ? DT_NS : undefined,
+                        value: step.value,
+                        color: step.value > 0 ? 'positive' : 'negative',
+                    });
+                });
+            } else if (modifiers && modifiers.length > 0) {
+                // 旧格式（向后兼容）：推算基础伤害 + 各修改器
                 const modTotal = modifiers.reduce((sum, m) => sum + m.value, 0);
                 const baseDamage = dealt - modTotal;
                 breakdownLines.push({

@@ -136,10 +136,18 @@ export function getOngoingPowerModifier(
     if (!base) return 0;
 
     let total = 0;
+    const debug: string[] = [];
     for (const entry of modifierRegistry) {
         // 检查基地上是否有提供修正的随从（可以是任意基地，取决于修正函数自身逻辑）
         const ctx: PowerModifierContext = { state, minion, baseIndex, base };
-        total += entry.modifier(ctx);
+        const delta = entry.modifier(ctx);
+        if (delta !== 0) {
+            debug.push(`${entry.sourceDefId}: ${delta}`);
+        }
+        total += delta;
+    }
+    if (debug.length > 0) {
+        console.log(`[getOngoingPowerModifier] minion=${minion.defId} base=${baseIndex} modifiers:`, debug, `total=${total}`);
     }
     return total;
 }

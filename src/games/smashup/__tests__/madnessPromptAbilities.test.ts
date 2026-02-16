@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execute, reduce } from '../domain/reducer';
+import { postProcessSystemEvents } from '../domain';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from '../domain/types';
 import type {
     SmashUpCore,
@@ -88,10 +89,13 @@ let lastMatchState: MatchState<SmashUpCore> | null = null;
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): SmashUpEvent[] {
     const ms = makeMatchState(state);
     lastMatchState = ms;
-    return execute(ms, {
+    const events = execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
+    
+    // Call postProcessSystemEvents to trigger onPlay abilities
+    return postProcessSystemEvents(state, events, random ?? defaultRandom).events;
 }
 
 /** 从最近一次 execute 的 matchState 中获取 interactions */

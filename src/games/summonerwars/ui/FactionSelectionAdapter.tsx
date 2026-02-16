@@ -8,7 +8,7 @@
  * - 预览区与玩家状态区独立布局，互不挤压
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
@@ -24,9 +24,6 @@ import { DeckBuilderDrawer } from './DeckBuilderDrawer';
 import { UI_Z_INDEX } from '../../../core';
 import type { SerializedCustomDeck } from '../config/deckSerializer';
 import type { TFunction } from 'i18next';
-
-// 模块级初始化精灵图注册表（同步、幂等，确保首次渲染即可用）
-initSpriteAtlases();
 
 // 玩家配色
 const PLAYER_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
@@ -79,7 +76,13 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   onStart,
   onSelectCustomDeck,
 }) => {
-  const { t } = useTranslation('game-summonerwars');
+  const { t, i18n } = useTranslation('game-summonerwars');
+  
+  // 确保精灵图注册表已初始化（使用当前语言）
+  useEffect(() => {
+    initSpriteAtlases(i18n.language);
+  }, [i18n.language]);
+  
   const isHost = currentPlayerId === hostPlayerId;
   // 动态获取所有玩家 ID（从 selectedFactions 或 readyPlayers 中推断）
   const playerIds = useMemo(() => {

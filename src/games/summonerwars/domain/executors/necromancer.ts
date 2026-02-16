@@ -49,7 +49,13 @@ abilityExecutorRegistry.register('fire_sacrifice_summon', (ctx: SWAbilityContext
     }));
     events.push({
       type: SW_EVENTS.UNIT_MOVED,
-      payload: { from: sourcePosition, to: fsVictim.position, unitId: sourceUnit.instanceId, reason: 'fire_sacrifice_summon' },
+      payload: { 
+        from: sourcePosition, 
+        to: fsVictim.position, 
+        unitId: sourceUnit.instanceId, 
+        reason: 'fire_sacrifice_summon',
+        path: [sourcePosition, fsVictim.position], // 传送类移动，直接路径
+      },
       timestamp,
     });
   }
@@ -107,7 +113,13 @@ abilityExecutorRegistry.register('soul_transfer', (ctx: SWAbilityContext) => {
 
   events.push({
     type: SW_EVENTS.UNIT_MOVED,
-    payload: { from: sourcePosition, to: targetPosition, unitId: sourceUnitId, reason: 'soul_transfer' },
+    payload: { 
+      from: sourcePosition, 
+      to: targetPosition, 
+      unitId: sourceUnitId, 
+      reason: 'soul_transfer',
+      path: [sourcePosition, targetPosition], // 传送类移动
+    },
     timestamp,
   });
   return { events };

@@ -166,8 +166,13 @@ class LobbySocketService {
 
     /**
      * 连接到大厅 Socket 服务
+     * E2E 测试环境下（window.__E2E_BLOCK_LOBBY_SOCKET__）跳过连接，
+     * 防止 lobby presence 检测导致页面跳转回首页。
      */
     connect(): void {
+        if ((window as Window & { __E2E_BLOCK_LOBBY_SOCKET__?: boolean }).__E2E_BLOCK_LOBBY_SOCKET__) {
+            return;
+        }
         if (this.socket?.connected) {
             console.log('[LobbySocket]', tLobbySocket('alreadyConnected'));
             return;

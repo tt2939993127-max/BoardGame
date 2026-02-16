@@ -6,9 +6,9 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, grantExtraAction, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, recoverCardsFromDiscard, buildMinionPlayedEvents } from '../domain/abilityHelpers';
+import { grantExtraMinion, grantExtraAction, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, recoverCardsFromDiscard } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
-import type { CardsDrawnEvent, VpAwardedEvent, SmashUpEvent } from '../domain/types';
+import type { CardsDrawnEvent, VpAwardedEvent, SmashUpEvent, MinionPlayedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
 import { drawCards } from '../domain/utils';
 import { registerProtection } from '../domain/ongoingEffects';
@@ -215,11 +215,12 @@ function ghostSpirit(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [] };
-    // Prompt 选择
+    // Prompt 选择（包含取消选项）
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
     const interaction = createSimpleChoice(
         `ghost_spirit_${ctx.now}`, ctx.playerId,
-        '选择要消灭的随从（需弃等量力量的手牌）', buildMinionTargetOptions(options), 'ghost_spirit',
+        '选择要消灭的随从（需弃等量力量的手牌）', buildMinionTargetOptions(options),
+        { sourceId: 'ghost_spirit', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -272,7 +273,8 @@ function ghostAcrossTheDivide(ctx: AbilityContext): AbilityResult {
     }));
     const interaction = createSimpleChoice(
         `ghost_across_the_divide_${ctx.now}`, ctx.playerId,
-        '越过边界：选择一个卡名（取回所有同名随从）', options as any[], 'ghost_across_the_divide',
+        '越过边界：选择一个卡名（取回所有同名随从）', options as any[],
+        { sourceId: 'ghost_across_the_divide', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -296,6 +298,9 @@ export function registerGhostInteractionHandlers(): void {
 
     // 灵魂：选择目标后→链式创建弃牌确认交互（"你可以"=可跳过）
     registerInteractionHandler('ghost_spirit', (state, playerId, value, _iData, _random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
@@ -435,13 +440,14 @@ export function registerGhostInteractionHandlers(): void {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         // 只有一个基地时直接打出
         if (state.core.bases.length === 1) {
-            const playResult = buildMinionPlayedEvents({
-                core: state.core, matchState: state, playerId, cardUid, defId,
-                baseIndex: 0, power, random: _random, now: timestamp, fromDiscard: true,
-            });
-            return { state: playResult.matchState ?? state, events: [
+            const playedEvt: MinionPlayedEvent = {
+                type: SU_EVENTS.MINION_PLAYED,
+                payload: { playerId, cardUid, defId, baseIndex: 0, power, fromDiscard: true },
+                timestamp,
+            };
+            return { state, events: [
                 grantExtraMinion(playerId, 'ghost_the_dead_rise', timestamp),
-                ...playResult.events,
+                playedEvt,
             ] };
         }
         // 多个基地时让玩家选择
@@ -467,18 +473,22 @@ export function registerGhostInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const ctx = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
         if (!ctx) return undefined;
-        const playResult = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid: ctx.cardUid, defId: ctx.defId,
-            baseIndex, power: ctx.power, random: _random, now: timestamp, fromDiscard: true,
-        });
-        return { state: playResult.matchState ?? state, events: [
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power, fromDiscard: true },
+            timestamp,
+        };
+        return { state, events: [
             grantExtraMinion(playerId, 'ghost_the_dead_rise', timestamp),
-            ...playResult.events,
+            playedEvt,
         ] };
     });
 
     // 越过边界：选卡名后取回所有同名随从
     registerInteractionHandler('ghost_across_the_divide', (state, playerId, value, _iData, _random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { defId } = value as { defId: string };
         const player = state.core.players[playerId];
         const sameNameMinions = player.discard.filter(c => c.type === 'minion' && c.defId === defId);

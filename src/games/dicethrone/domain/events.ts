@@ -112,6 +112,35 @@ export interface DamageModifier {
     sourceName?: string;
 }
 
+/** 伤害明细步骤（新管线格式） */
+export interface DamageBreakdownStep {
+    /** 修正类型 */
+    type: string;
+    /** 修正值 */
+    value: number;
+    /** 来源 ID */
+    sourceId: string;
+    /** 来源名称（i18n key 或显示文本） */
+    sourceName?: string;
+    /** 是否为 i18n key */
+    sourceNameIsI18n?: boolean;
+    /** 应用后的累计值 */
+    runningTotal: number;
+}
+
+/** 伤害明细（新管线格式） */
+export interface DamageBreakdown {
+    /** 基础伤害 */
+    base: {
+        value: number;
+        sourceId: string;
+        sourceName?: string;
+        sourceNameIsI18n?: boolean;
+    };
+    /** 修正步骤列表 */
+    steps: DamageBreakdownStep[];
+}
+
 /** 伤害事件 */
 export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
     payload: {
@@ -119,8 +148,10 @@ export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
         amount: number;
         actualDamage: number;
         sourceAbilityId?: string;
-        /** 伤害修改记录（用于 ActionLog 展示完整的伤害计算过程） */
+        /** 伤害修改记录（用于 ActionLog 展示完整的伤害计算过程）【旧格式，向后兼容】 */
         modifiers?: DamageModifier[];
+        /** 伤害计算明细（新管线格式，优先使用）*/
+        breakdown?: DamageBreakdown;
         /** 跳过护盾消耗（用于 HP 重置类效果，如神圣祝福将 HP 设为 1） */
         bypassShields?: boolean;
     };

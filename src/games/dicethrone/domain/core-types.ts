@@ -169,7 +169,7 @@ export interface PendingAttack {
     };
     /** 伤害是否已通过 Token 响应结算（避免重复结算） */
     damageResolved?: boolean;
-    /** Token 响应后的最终伤害值（用于 postDamage 效果的 onHit 条件判断） */
+    /** 本次攻击对防御方造成的净掉血累计值（用于 postDamage/onHit 与 lastResolvedAttackDamage） */
     resolvedDamage?: number;
     /** 攻击方骰面计数快照（用于 postDamage 阶段的连击判定，因为防御阶段会重置骰子） */
     attackDiceFaceCounts?: Record<string, number>;

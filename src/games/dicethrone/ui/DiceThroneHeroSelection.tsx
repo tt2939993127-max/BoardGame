@@ -9,7 +9,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedAssetPath, UI_Z_INDEX } from '../../../core';
+import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
@@ -41,6 +42,8 @@ const PLAYER_LABELS: Record<string, string> = {
     '2': 'P3',
     '3': 'P4',
 };
+
+const HERO_SELECTION_CLICK_SOUND_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
 
 export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = ({
     isOpen,
@@ -80,6 +83,24 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     }, [selectedCharacters, currentPlayerId, availableCharacters]);
 
     const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
+
+    const handleSelectCharacter = (characterId: SelectableCharacterId) => {
+        console.log(`[DT_AUDIO_TRACE] source=hero_selection_ui action=click_select key=${HERO_SELECTION_CLICK_SOUND_KEY} playerId=${currentPlayerId} characterId=${characterId}`);
+        playSound(HERO_SELECTION_CLICK_SOUND_KEY);
+        onSelect(characterId);
+    };
+
+    const handleReady = () => {
+        console.log(`[DT_AUDIO_TRACE] source=hero_selection_ui action=click_ready key=${HERO_SELECTION_CLICK_SOUND_KEY} playerId=${currentPlayerId}`);
+        playSound(HERO_SELECTION_CLICK_SOUND_KEY);
+        onReady();
+    };
+
+    const handleStart = () => {
+        console.log(`[DT_AUDIO_TRACE] source=hero_selection_ui action=click_start key=${HERO_SELECTION_CLICK_SOUND_KEY} playerId=${currentPlayerId}`);
+        playSound(HERO_SELECTION_CLICK_SOUND_KEY);
+        onStart();
+    };
 
     const readyProgressDots = useMemo(() => {
         return playerIds.map(pid => {
@@ -148,7 +169,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                         ? "border-amber-400 shadow-[0_0_1.5vw_rgba(251,191,36,0.4)] z-20 scale-[1.02]"
                                         : "border-white/10 hover:border-white/30 hover:scale-[1.02]"
                                 )}
-                                onClick={() => onSelect(char.id as SelectableCharacterId)}
+                                onClick={() => handleSelectCharacter(char.id as SelectableCharacterId)}
                             >
                                 <div className={clsx(
                                     "absolute inset-0 z-0 transition-all duration-500",
@@ -193,7 +214,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                             className="relative w-full h-full flex items-center justify-center"
                         >
                             <div className="flex items-center justify-center gap-[1vw] h-full">
-                                {/* 物理面板预览 - 严格按照原版 OptimizedImage 传参 */}
+                                {/* 物理面板预览 - OptimizedImage 自动处理本地化路径 */}
                                 <div
                                     className="relative h-[85%] w-auto shadow-2xl rounded-[0.6vw] overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
                                     onClick={() => setMagnifyImage(ASSETS.PLAYER_BOARD(previewCharId as CharacterId))}
@@ -284,7 +305,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                             <motion.button
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
-                                onClick={onReady}
+                                onClick={handleReady}
                                 className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-emerald-500 text-white border-emerald-400 hover:bg-emerald-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(16,185,129,0.5)]"
                             >
                                 {t('selection.ready')}
@@ -305,7 +326,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 disabled={!everyoneReady}
-                                onClick={onStart}
+                                onClick={handleStart}
                                 className={clsx(
                                     "px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2",
                                     everyoneReady
@@ -330,13 +351,13 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             >
                 {availableCharacters.map(char => (
                     <React.Fragment key={char.id}>
-                        <OptimizedImage src={ASSETS.PLAYER_BOARD(char.id)} locale={locale} alt="" placeholder={false} />
-                        <OptimizedImage src={ASSETS.TIP_BOARD(char.id)} locale={locale} alt="" placeholder={false} />
+                        <OptimizedImage src={ASSETS.PLAYER_BOARD(char.id)} locale={locale} alt="" />
+                        <OptimizedImage src={ASSETS.TIP_BOARD(char.id)} locale={locale} alt="" />
                     </React.Fragment>
                 ))}
             </div>
 
-            {/* 放大预览弹窗 - 严格按照原版 OptimizedImage 传参 */}
+            {/* 放大预览弹窗 - OptimizedImage 自动处理本地化路径 */}
             <MagnifyOverlay
                 isOpen={!!magnifyImage}
                 onClose={() => setMagnifyImage(null)}

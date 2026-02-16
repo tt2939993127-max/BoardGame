@@ -242,7 +242,12 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
           {abilityMode.abilityId === 'vanish' && t('statusBanners.ability.vanish')}
         </span>
         {abilityMode.step === 'selectCards' && (
-          <GameButton onClick={onConfirmBeforeAttackCards} variant="primary" size="sm">{t('actions.confirmDiscard')}</GameButton>
+          <>
+            <GameButton onClick={onConfirmBeforeAttackCards} variant="primary" size="sm">{t('actions.confirmDiscard')}</GameButton>
+            {abilityMode.context === 'beforeAttack' && (
+              <GameButton onClick={onCancelBeforeAttack} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
+            )}
+          </>
         )}
         {abilityMode.abilityId === 'blood_rune' && (
           <>
@@ -287,7 +292,15 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         {abilityMode.abilityId === 'ice_ram' && abilityMode.step === 'selectPushDirection' && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skipPush', '跳过推拉')}</GameButton>
         )}
-        {!['blood_rune', 'ice_shards', 'feed_beast', 'spirit_bond', 'ancestral_bond', 'structure_shift', 'frost_axe', 'vanish', 'ice_ram'].includes(abilityMode.abilityId) && (
+        {/* life_drain 在 beforeAttack 上下文中显示"跳过"按钮 */}
+        {abilityMode.abilityId === 'life_drain' && abilityMode.context === 'beforeAttack' && abilityMode.step === 'selectUnit' && (
+          <GameButton onClick={onCancelBeforeAttack} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
+        )}
+        {!['blood_rune', 'ice_shards', 'feed_beast', 'spirit_bond', 'ancestral_bond', 'structure_shift', 'frost_axe', 'vanish', 'ice_ram', 'life_drain'].includes(abilityMode.abilityId) && (
+          <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
+        )}
+        {/* life_drain 在非 beforeAttack 上下文中显示"取消"按钮 */}
+        {abilityMode.abilityId === 'life_drain' && abilityMode.context !== 'beforeAttack' && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
         )}
       </div>

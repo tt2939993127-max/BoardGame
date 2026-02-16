@@ -132,7 +132,13 @@ abilityExecutorRegistry.register('grab', (ctx: SWAbilityContext) => {
 
   events.push({
     type: SW_EVENTS.UNIT_MOVED,
-    payload: { from: sourcePosition, to: grabTargetPos, unitId: sourceUnitId, reason: 'grab' },
+    payload: { 
+      from: sourcePosition, 
+      to: grabTargetPos, 
+      unitId: sourceUnitId, 
+      reason: 'grab',
+      path: [sourcePosition, grabTargetPos], // 单格移动
+    },
     timestamp,
   });
   return { events };

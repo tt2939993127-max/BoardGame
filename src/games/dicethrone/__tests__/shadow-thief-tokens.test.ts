@@ -72,14 +72,14 @@ describe('暗影刺客 Token 定义', () => {
 // ============================================================================
 
 describe('暗影刺客初始 Token 状态', () => {
-    it('Sneak 和 Sneak Attack 初始值为 0', () => {
+    it('Sneak、Sneak Attack 和 Poison 初始值为 0', () => {
         expect(SHADOW_THIEF_INITIAL_TOKENS[TOKEN_IDS.SNEAK]).toBe(0);
         expect(SHADOW_THIEF_INITIAL_TOKENS[TOKEN_IDS.SNEAK_ATTACK]).toBe(0);
+        expect(SHADOW_THIEF_INITIAL_TOKENS[STATUS_IDS.POISON]).toBe(0);
     });
 
-    it('初始状态键数量为 2（Poison 不在初始 Token 中，属于 statusEffects）', () => {
-        // Poison 是 debuff，通过 statusEffects 管理，不在 initialTokens 中
-        expect(Object.keys(SHADOW_THIEF_INITIAL_TOKENS)).toHaveLength(2);
+    it('初始状态键数量为 3（包含 Poison）', () => {
+        expect(Object.keys(SHADOW_THIEF_INITIAL_TOKENS)).toHaveLength(3);
     });
 });
 

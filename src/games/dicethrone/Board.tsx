@@ -8,6 +8,7 @@ import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
 import type { PendingInteraction } from './domain/types';
 import { getUsableTokensForTiming } from './domain/tokenResponse';
+import { isCardPlayableInResponseWindow } from './domain/rules';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
@@ -146,7 +147,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     useDiceThroneAudio({
         G,
         rawState: rawG,
-        currentPlayerId: rootPid,
+        currentPlayerId: playerID ?? undefined,
         currentPhase,
         isGameOver: !!isGameOver,
         isWinner,
@@ -330,6 +331,21 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const currentResponderId = responseWindow?.responderQueue[responseWindow.currentResponderIndex];
     const isResponder = isResponseWindowOpen && currentResponderId === rootPid;
 
+    // 自己的手牌永远显示
+    const handOwner = player;
+
+    // 计算响应窗口中可响应的卡牌 ID 集合（用于高亮）
+    const respondableCardIds = React.useMemo(() => {
+        if (!isResponseWindowOpen || !isResponder || !responseWindow?.windowType) return undefined;
+        const cardIds = new Set<string>();
+        for (const card of handOwner.hand) {
+            if (isCardPlayableInResponseWindow(G, rootPid, card, responseWindow.windowType, currentPhase)) {
+                cardIds.add(card.id);
+            }
+        }
+        return cardIds.size > 0 ? cardIds : undefined;
+    }, [isResponseWindowOpen, isResponder, responseWindow?.windowType, handOwner.hand, G, rootPid, currentPhase]);
+
     // 检测当前响应者是否离线，如果离线则自动跳过
     const isResponderOffline = React.useMemo(() => {
         if (!isResponseWindowOpen || !currentResponderId) return false;
@@ -362,9 +378,6 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         }, 100);
         return () => clearTimeout(timer);
     }, [gameMode?.mode, isResponseWindowOpen, currentResponderId, rootPid, engineMoves]);
-
-    // 自己的手牌永远显示
-    const handOwner = player;
     const showAdvancePhaseButton = isSelfView && !isSpectator;
     const handleCancelInteraction = React.useCallback(() => {
         if (pendingInteraction?.sourceCardId) {
@@ -544,7 +557,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         let isActive = true;
         const loadAtlas = async (atlasId: string, imageBase: string) => {
             try {
-                const config = await loadCardAtlasConfig(imageBase, locale);
+                const config = await loadCardAtlasConfig();
                 if (!isActive) return;
                 registerCardAtlasSource(atlasId, {
                     image: imageBase,
@@ -558,7 +571,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
 
         for (const charId of heroCharIds.split(',')) {
             const atlasId = `dicethrone:${charId}-cards`;
-            // imageBase 始终不带扩展名，用于 loadCardAtlasConfig 和 buildLocalizedImageSet
+            // imageBase 始终不带扩展名，用于 buildLocalizedImageSet
             const imageBase = `dicethrone/images/${charId}/ability-cards`;
             void loadAtlas(atlasId, imageBase);
         }
@@ -566,7 +579,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         return () => {
             isActive = false;
         };
-    }, [locale, heroCharIds]);
+    }, [heroCharIds]);
 
     React.useEffect(() => {
         let isActive = true;
@@ -766,7 +779,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         tokenDefinitions={G.tokenDefinitions}
                         damageFlashActive={opponentImpact.flash.isActive}
                         damageFlashDamage={opponentImpact.flash.damage}
-                        overrideHp={damageBuffer.isBuffering ? damageBuffer.get(`hp-${otherPid}`, opponent.resources[RESOURCE_IDS.HP] ?? 0) : undefined}
+                        overrideHp={damageBuffer.get(`hp-${otherPid}`, opponent.resources[RESOURCE_IDS.HP] ?? 0)}
                     />
                 )}
 
@@ -814,7 +827,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         isSelfShaking={selfImpact.shake.isShaking}
                         selfDamageFlashActive={selfImpact.flash.isActive}
                         selfDamageFlashDamage={selfImpact.flash.damage}
-                        overrideHp={damageBuffer.isBuffering ? damageBuffer.get(`hp-${rootPid}`, player.resources[RESOURCE_IDS.HP] ?? 0) : undefined}
+                        overrideHp={damageBuffer.get(`hp-${rootPid}`, player.resources[RESOURCE_IDS.HP] ?? 0)}
                     />
 
                     <CenterBoard
@@ -844,6 +857,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         locale={locale}
                         onMagnifyImage={(image) => setMagnifiedImage(image)}
                         abilityOverlaysRef={abilityOverlaysRef}
+                        playerTokens={viewPlayer.tokens}
                     />
 
                     <RightSidebar
@@ -936,6 +950,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                     engineMoves.sellCard(cardId);
                                     advanceTutorialIfNeeded('discard-pile');
                                 }}
+                                respondableCardIds={respondableCardIds}
                             />
                         </>
                     );

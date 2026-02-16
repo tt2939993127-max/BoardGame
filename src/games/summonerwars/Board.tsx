@@ -60,6 +60,9 @@ import { useCellInteraction } from './ui/useCellInteraction';
 import { StatusBanners } from './ui/StatusBanners';
 import { BoardGrid, getCellPosition } from './ui/BoardGrid';
 import { AbilityButtonsPanel } from './ui/AbilityButtonsPanel';
+import { PathTrailEffect } from './ui/PathTrailEffect';
+import { useMovementTrails } from './ui/useMovementTrails';
+import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey, resolveDamageSoundKey } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';
 
@@ -73,13 +76,14 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
 };
 
 export const SummonerWarsBoard: React.FC<Props> = ({
-  G, dispatch, playerID, reset, matchData, isMultiplayer,
+  G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
 }) => {
   const isGameOver = G.sys.gameover;
   const gameMode = useGameMode();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
   const isTutorialMode = gameMode?.mode === 'tutorial';
+  const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
 
   // 阵营选择状态
@@ -139,7 +143,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const { state: rematchState, vote: handleRematchVote } = useRematch();
 
   // 初始化精灵图
-  useEffect(() => { initSpriteAtlases(); }, []);
+  useEffect(() => { initSpriteAtlases(effectiveLocale); }, [effectiveLocale]);
 
   // 布局编辑器状态
   const [isEditingLayout, setIsEditingLayout] = useState(false);
@@ -196,6 +200,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       : { row, col };
     return getCellPosition(vc.row, vc.col, currentGrid);
   }, [shouldFlipView, currentGrid]);
+
+  // 移动轨迹效果
+  const eventStreamEntries = getEventStreamEntries(G);
+  const { trails, removeTrail } = useMovementTrails({ entries: eventStreamEntries });
 
   const myMagic = core.players[myPlayerId]?.magic ?? 0;
   const opponentMagic = core.players[opponentPlayerId]?.magic ?? 0;
@@ -725,6 +733,16 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         onMagnifyEventCard={handleMagnifyEventCard}
                         onMagnifySpriteConfig={handleMagnifySpriteConfig}
                       />
+                      {/* 移动轨迹效果层 */}
+                      {trails.map((trail) => (
+                        <PathTrailEffect
+                          key={trail.id}
+                          path={trail.path}
+                          grid={currentGrid}
+                          toViewCoord={toViewCoord}
+                          onComplete={() => removeTrail(trail.id)}
+                        />
+                      ))}
                       {/* 摧毁效果层 */}
                       <DestroyEffectsLayer
                         effects={destroyEffects}
@@ -773,11 +791,30 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     <div className="flex flex-row-reverse items-start gap-1.5" data-testid="sw-opponent-active-events">
                       {opponentActiveEvents.map((ev) => {
                         const sprite = getEventSpriteConfig(ev);
+                        const charges = ev.charges ?? 0;
                         return (
                           <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
                             <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[4.5vw] rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" />
                             <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/20 transition-colors" />
                             <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[0.6vw] text-amber-200 text-center py-0.5 rounded-b truncate px-1 border-t border-amber-500/20">{ev.name}</div>
+                            {/* 充能标记 - 右上角 */}
+                            {charges > 0 && (() => {
+                              const rows: number[][] = [];
+                              for (let i = 0; i < charges; i += 5) {
+                                rows.push(Array.from({ length: Math.min(5, charges - i) }, (_, j) => i + j));
+                              }
+                              return (
+                                <div className="absolute top-[3%] right-[3%] items-end flex flex-col gap-[2%] pointer-events-none z-10">
+                                  {rows.map((r, ri) => (
+                                    <div key={ri} className="flex gap-[3%]">
+                                      {r.map(idx => (
+                                        <div key={idx} className="w-[0.4vw] h-[0.4vw] rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]" />
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -794,11 +831,30 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                       <span className="text-[0.65vw] text-amber-400/70 font-bold tracking-tight bg-black/40 px-1.5 py-0.5 rounded border border-amber-900/30 backdrop-blur-[2px] mb-1">{t('ui.activeEvents')}</span>
                       {myActiveEvents.map((ev) => {
                         const sprite = getEventSpriteConfig(ev);
+                        const charges = ev.charges ?? 0;
                         return (
                           <div key={ev.id} className="relative cursor-pointer group" onClick={() => handleMagnifyCard(ev)}>
                             <CardSprite atlasId={sprite.atlasId} frameIndex={sprite.frameIndex} className="w-[4.5vw] rounded shadow-lg border border-amber-500/40 hover:border-amber-400 transition-all hover:scale-105" />
                             <div className="absolute inset-0 rounded bg-black/0 group-hover:bg-black/20 transition-colors" />
                             <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-[0.6vw] text-amber-200 text-center py-0.5 rounded-b truncate px-1 border-t border-amber-500/20">{ev.name}</div>
+                            {/* 充能标记 - 右上角 */}
+                            {charges > 0 && (() => {
+                              const rows: number[][] = [];
+                              for (let i = 0; i < charges; i += 5) {
+                                rows.push(Array.from({ length: Math.min(5, charges - i) }, (_, j) => i + j));
+                              }
+                              return (
+                                <div className="absolute top-[3%] right-[3%] items-end flex flex-col gap-[2%] pointer-events-none z-10">
+                                  {rows.map((r, ri) => (
+                                    <div key={ri} className="flex gap-[3%]">
+                                      {r.map(idx => (
+                                        <div key={idx} className="w-[0.4vw] h-[0.4vw] rounded-full bg-blue-400 border border-blue-200 shadow-[0_0_4px_rgba(96,165,250,0.9)]" />
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -931,6 +987,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onPlayEvent={interaction.handlePlayEvent}
                     onMagnifyCard={handleMagnifyCard}
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
+                    abilitySelectingCards={abilityMode?.step === 'selectCards'}
                   />
                 </div>
               </div>

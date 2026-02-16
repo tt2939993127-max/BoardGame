@@ -59,6 +59,24 @@ function extractStringLiteral(expr: ts.Expression | undefined): string | null {
     return null;
 }
 
+function getPropertyName(name: ts.PropertyName): string | null {
+    if (ts.isIdentifier(name)) return name.text;
+    if (ts.isStringLiteral(name)) return name.text;
+    if (ts.isNoSubstitutionTemplateLiteral(name)) return name.text;
+    return null;
+}
+
+function extractSourceIdFromConfigObject(expr: ts.Expression | undefined): string | null {
+    if (!expr || !ts.isObjectLiteralExpression(expr)) return null;
+    for (const prop of expr.properties) {
+        if (!ts.isPropertyAssignment(prop)) continue;
+        const name = getPropertyName(prop.name);
+        if (name !== 'sourceId') continue;
+        return extractStringLiteral(prop.initializer);
+    }
+    return null;
+}
+
 function pushWarning(
     warnings: InteractionAuditExtractionWarning[],
     sourceFile: ts.SourceFile,
@@ -83,7 +101,9 @@ function collectChoiceSourceIds(
     const visit = (node: ts.Node) => {
         if (ts.isCallExpression(node) && getCallIdentifierName(node) === 'createSimpleChoice') {
             const sourceArg = node.arguments[4];
-            const sourceId = extractStringLiteral(sourceArg);
+            const sourceId =
+                extractStringLiteral(sourceArg)
+                ?? extractSourceIdFromConfigObject(sourceArg);
             if (sourceId) {
                 ids.add(sourceId);
             } else {
@@ -116,6 +136,12 @@ function collectHelperProducedSourceIds(root: ts.Node): string[] {
             if (callName && HELPER_SOURCE_ARG_INDEX.has(callName)) {
                 const argIndex = HELPER_SOURCE_ARG_INDEX.get(callName)!;
                 const sourceId = extractStringLiteral(node.arguments[argIndex]);
+                if (sourceId) {
+                    ids.add(sourceId);
+                }
+            }
+            if (callName === 'resolveOrPrompt') {
+                const sourceId = extractSourceIdFromConfigObject(node.arguments[2]);
                 if (sourceId) {
                     ids.add(sourceId);
                 }

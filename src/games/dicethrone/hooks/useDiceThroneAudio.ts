@@ -17,7 +17,7 @@ export interface DiceThroneAudioConfig {
     /** 原始 MatchState（用于读取 sys.eventStream） */
     rawState: MatchState<DiceThroneCore>;
     /** 当前玩家 ID */
-    currentPlayerId: PlayerId;
+    currentPlayerId?: PlayerId;
     /** 当前阶段 */
     currentPhase: TurnPhase;
     /** 游戏是否结束 */

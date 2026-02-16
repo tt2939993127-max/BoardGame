@@ -109,10 +109,23 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
         }
     }
 
+    const hpBefore = target.resources[RESOURCE_IDS.HP] ?? 0;
     let newResources = target.resources;
     if (remainingDamage > 0) {
         const result = resourceSystem.modify(target.resources, RESOURCE_IDS.HP, -remainingDamage);
         newResources = result.pool;
+    }
+
+    const hpAfter = newResources[RESOURCE_IDS.HP] ?? 0;
+    const netHpLoss = Math.max(0, hpBefore - hpAfter);
+
+    let pendingAttack = state.pendingAttack;
+    // 统一累计“本次攻击对防御方造成的净掉血”，作为 lastResolvedAttackDamage 的单一来源。
+    if (pendingAttack && targetId === pendingAttack.defenderId) {
+        pendingAttack = {
+            ...pendingAttack,
+            resolvedDamage: (pendingAttack.resolvedDamage ?? 0) + netHpLoss,
+        };
     }
 
     return {
@@ -121,6 +134,7 @@ export const handleDamageDealt: EventHandler<Extract<DiceThroneEvent, { type: 'D
             ...state.players,
             [targetId]: { ...target, damageShields: newDamageShields, resources: newResources },
         },
+        pendingAttack,
         lastEffectSourceByPlayerId: sourceAbilityId
             ? { ...(state.lastEffectSourceByPlayerId || {}), [targetId]: sourceAbilityId }
             : state.lastEffectSourceByPlayerId,
@@ -185,6 +199,8 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
             isDefendable,
             sourceAbilityId,
             isUltimate,
+            damageResolved: false,
+            resolvedDamage: 0,
             attackDiceFaceCounts: attackFaceCounts,
         },
         lastResolvedAttackDamage: undefined,
@@ -205,14 +221,13 @@ export const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type:
     const defender = state.players[defenderId];
     let players = state.players;
 
+    // 攻击结算后清理所有护盾（包括 preventStatus 和普通护盾）
+    // 规则：护盾只在单次攻击中生效，攻击结束后全部清理
     if (defender?.damageShields?.length) {
-        const newShields = defender.damageShields.filter(shield => !shield.preventStatus);
-        if (newShields.length !== defender.damageShields.length) {
-            players = {
-                ...state.players,
-                [defenderId]: { ...defender, damageShields: newShields },
-            };
-        }
+        players = {
+            ...state.players,
+            [defenderId]: { ...defender, damageShields: [] },
+        };
     }
 
     // 同时结算收尾：将防御方 HP 钳制回上限
@@ -236,7 +251,7 @@ export const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type:
         activatingAbilityId: sourceAbilityId || defenseAbilityId,
         players,
         pendingAttack: null,
-        lastResolvedAttackDamage: event.payload.totalDamage,
+        lastResolvedAttackDamage: state.pendingAttack?.resolvedDamage ?? event.payload.totalDamage,
     };
 };
 
@@ -391,7 +406,7 @@ export const handleTokenResponseClosed: EventHandler<Extract<DiceThroneEvent, { 
     event
 ) => {
     const pendingAttack = state.pendingAttack
-        ? { ...state.pendingAttack, damageResolved: true, resolvedDamage: event.payload.finalDamage }
+        ? { ...state.pendingAttack, damageResolved: true }
         : state.pendingAttack;
 
     return { ...state, pendingDamage: undefined, pendingAttack };

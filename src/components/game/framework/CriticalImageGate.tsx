@@ -84,7 +84,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
                 console.warn(`[CriticalImageGate] preload complete, setting ready=true`);
                 lastReadyKeyRef.current = runKey;
                 setReady(true);
-                preloadWarmImages(warmPaths);
+                preloadWarmImages(warmPaths, locale);
             })
             .catch((err) => {
                 console.warn(`[CriticalImageGate] preload failed, setting ready=true anyway`, err);

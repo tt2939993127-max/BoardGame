@@ -22,6 +22,7 @@ import { registerCustomActionHandler, type CustomActionContext } from '../effect
 import { registerChoiceEffectHandler } from '../choiceEffects';
 import { resourceSystem } from '../resourceSystem';
 import { buildDrawEvents } from '../deckEvents';
+import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 // ============================================================================
 // 辅助函数
@@ -58,6 +59,8 @@ const resolveSoulBurnFM = (ctx: CustomActionContext): DiceThroneEvent[] => {
  * 所有对手造成 1x [灵魂/Fiery Soul] 伤害
  * 注意：在 defensiveRoll exit 时执行，此时骰子已被防御方覆盖，
  * 必须从 pendingAttack.attackDiceFaceCounts 读取攻击方骰面快照
+ * 
+ * 【已迁移到新伤害计算管线】
  */
 const resolveSoulBurnDamage = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
@@ -69,12 +72,18 @@ const resolveSoulBurnDamage = (ctx: CustomActionContext): DiceThroneEvent[] => {
     if (dmg > 0) {
         const opponentIds = Object.keys(ctx.state.players).filter(id => id !== ctx.attackerId);
         opponentIds.forEach((targetId, idx) => {
-            events.push({
-                type: 'DAMAGE_DEALT',
-                payload: { targetId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp: ctx.timestamp + 0.1 + (idx * 0.01)
-            } as DamageDealtEvent);
+            // 使用新伤害计算管线（基础伤害，无修正）
+            const damageCalc = createDamageCalculation({
+                source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+                target: { playerId: targetId },
+                baseDamage: dmg,
+                state: ctx.state,
+                timestamp: ctx.timestamp + 0.1 + (idx * 0.01),
+                autoCollectTokens: false,
+                autoCollectStatus: false,
+                autoCollectShields: false,
+            });
+            events.push(...damageCalc.toEvents());
         });
     }
     return events;
@@ -121,6 +130,8 @@ const resolveSoulBurn4 = (ctx: CustomActionContext): DiceThroneEvent[] => {
  * 1. 获得 2 火焰精通
  * 2. 然后造成 5 点伤害
  * 3. 每有 1 火焰精通 + 1 点伤害
+ * 
+ * 【已迁移到新伤害计算管线】
  */
 const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
@@ -140,16 +151,29 @@ const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
         timestamp
     } as TokenGrantedEvent);
 
-    const dmg = 5 + updatedFM;
-    const modifiers: import('../events').DamageModifier[] = updatedFM > 0 ? [
-        { type: 'token', value: updatedFM, sourceId: TOKEN_IDS.FIRE_MASTERY, sourceName: 'tokens.fire_mastery.name' },
-    ] : [];
-    events.push({
-        type: 'DAMAGE_DEALT',
-        payload: { targetId: opponentId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId, modifiers },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 0.1
-    } as DamageDealtEvent);
+    // 使用新伤害计算管线
+    // 注意：伤害基于授予后的 FM 数量，需要手动添加修正（因为 state 还未更新）
+    const damageCalc = createDamageCalculation({
+        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+        target: { playerId: opponentId },
+        baseDamage: 5,
+        state: ctx.state,
+        timestamp: timestamp + 0.1,
+        // 手动添加 FM 修正（基于授予后的数量）
+        additionalModifiers: updatedFM > 0 ? [{
+            id: 'fiery-combo-fm',
+            type: 'flat',
+            value: updatedFM,
+            priority: 10,
+            source: TOKEN_IDS.FIRE_MASTERY,
+            description: 'tokens.fire_mastery.name',
+        }] : [],
+        autoCollectTokens: false, // 手动处理，避免使用旧状态
+        autoCollectStatus: false,
+        autoCollectShields: false,
+    });
+    
+    events.push(...damageCalc.toEvents());
 
     return events;
 };
@@ -158,21 +182,36 @@ const resolveFieryCombo = (ctx: CustomActionContext): DiceThroneEvent[] => {
  * 炽热波纹 II (Hot Streak II) 结算
  * FM 已在 preDefense 阶段通过独立 grantToken 效果获得
  * 此处只负责伤害：造成 5 + 当前FM 点伤害
+ * 
+ * 【已迁移到新伤害计算管线】
  */
 const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
     // 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
     const opponentId = ctx.ctx.defenderId;
     const fm = getFireMasteryCount(ctx);
-    const dmg = 5 + fm;
-    const modifiers: import('../events').DamageModifier[] = fm > 0 ? [
-        { type: 'token', value: fm, sourceId: TOKEN_IDS.FIRE_MASTERY, sourceName: 'tokens.fire_mastery.name' },
-    ] : [];
-    return [{
-        type: 'DAMAGE_DEALT',
-        payload: { targetId: opponentId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId, modifiers },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: ctx.timestamp
-    } as DamageDealtEvent];
+    
+    // 使用新伤害计算管线
+    const damageCalc = createDamageCalculation({
+        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+        target: { playerId: opponentId },
+        baseDamage: 5,
+        state: ctx.state,
+        timestamp: ctx.timestamp,
+        // 手动添加 FM 修正（因为 tokenDefinitions 可能为空）
+        additionalModifiers: fm > 0 ? [{
+            id: 'fiery-combo-2-fm',
+            type: 'flat',
+            value: fm,
+            priority: 10,
+            source: TOKEN_IDS.FIRE_MASTERY,
+            description: 'tokens.fire_mastery.name',
+        }] : [],
+        autoCollectTokens: false, // 手动处理
+        autoCollectStatus: false,
+        autoCollectShields: false,
+    });
+    
+    return damageCalc.toEvents();
 };
 
 /**
@@ -180,6 +219,8 @@ const resolveFieryCombo2 = (ctx: CustomActionContext): DiceThroneEvent[] => {
  * (Stun 和 Collateral 2 在 abilities.ts 触发)
  * 1. 获得 2 火焰精通
  * 2. 然后造成 (1x FM) 不可防御伤害给对手
+ * 
+ * 【已迁移到新伤害计算管线】
  */
 const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
@@ -200,12 +241,18 @@ const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
     // FM 伤害目标是对手，不是 ctx.targetId（custom action target='self' 导致 targetId 指向自己）
     const opponentId = ctx.ctx.defenderId;
     if (updatedFM > 0) {
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: opponentId, amount: updatedFM, actualDamage: updatedFM, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 0.1
-        } as DamageDealtEvent);
+        // 使用新伤害计算管线（伤害值 = FM 数量）
+        const damageCalc = createDamageCalculation({
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: updatedFM,
+            state: ctx.state,
+            timestamp: timestamp + 0.1,
+            autoCollectTokens: false,
+            autoCollectStatus: false,
+            autoCollectShields: false,
+        });
+        events.push(...damageCalc.toEvents());
     }
     return events;
 };
@@ -214,6 +261,8 @@ const resolveMeteor = (ctx: CustomActionContext): DiceThroneEvent[] => {
  * 焚尽 (Burn Down) 结算: 根据 base-ability.png 校准
  * 1. 获得 1 火焰精通
  * 2. 激活烧毁: 最多移除 4 个精通，每个造成 3 点不可防御伤害
+ * 
+ * 【已迁移到新伤害计算管线】
  */
 const resolveBurnDown = (ctx: CustomActionContext, dmgPerToken: number, limit: number): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
@@ -241,12 +290,18 @@ const resolveBurnDown = (ctx: CustomActionContext, dmgPerToken: number, limit: n
             timestamp: timestamp + 0.1
         } as TokenConsumedEvent);
 
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: opponentId, amount: toConsume * dmgPerToken, actualDamage: toConsume * dmgPerToken, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: timestamp + 0.2
-        } as DamageDealtEvent);
+        // 使用新伤害计算管线
+        const damageCalc = createDamageCalculation({
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: toConsume * dmgPerToken,
+            state: ctx.state,
+            timestamp: timestamp + 0.2,
+            autoCollectTokens: false,
+            autoCollectStatus: false,
+            autoCollectShields: false,
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     return events;
@@ -256,6 +311,8 @@ const resolveBurnDown = (ctx: CustomActionContext, dmgPerToken: number, limit: n
  * 点燃 (Ignite) 结算: 根据 base-ability.png 校准
  * 1. 获得 2 烈焰精通
  * 2. 然后造成 4 + (2x FM) 伤害
+ * 
+ * 【已迁移到新伤害计算管线】
  */
 const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: number): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
@@ -275,17 +332,28 @@ const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: numbe
         timestamp
     } as TokenGrantedEvent);
 
-    const fmBonus = updatedFM * multiplier;
-    const dmg = base + fmBonus;
-    const modifiers: import('../events').DamageModifier[] = fmBonus > 0 ? [
-        { type: 'token', value: fmBonus, sourceId: TOKEN_IDS.FIRE_MASTERY, sourceName: 'tokens.fire_mastery.name' },
-    ] : [];
-    events.push({
-        type: 'DAMAGE_DEALT',
-        payload: { targetId: opponentId, amount: dmg, actualDamage: dmg, sourceAbilityId: ctx.sourceAbilityId, modifiers },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp: timestamp + 0.1
-    } as DamageDealtEvent);
+    // 使用新伤害计算管线，添加乘法修正
+    const damageCalc = createDamageCalculation({
+        source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+        target: { playerId: opponentId },
+        baseDamage: base,
+        state: ctx.state,
+        timestamp: timestamp + 0.1,
+        // 手动添加 FM 乘法修正（因为是 2x FM，不是 1x FM）
+        additionalModifiers: updatedFM > 0 ? [{
+            id: 'ignite-fm-multiplier',
+            type: 'flat',
+            value: updatedFM * multiplier,
+            priority: 10,
+            source: TOKEN_IDS.FIRE_MASTERY,
+            description: 'tokens.fire_mastery.name',
+        }] : [],
+        autoCollectTokens: false, // 手动处理，避免重复
+        autoCollectStatus: false,
+        autoCollectShields: false,
+    });
+    
+    events.push(...damageCalc.toEvents());
 
     return events;
 };
@@ -302,6 +370,8 @@ const resolveIgnite = (ctx: CustomActionContext, base: number, multiplier: numbe
  * 注意：不是额外投骰子，而是读取防御阶段已投的 5 颗骰子结果
  * 注意：防御上下文中 ctx.attackerId=防御者, ctx.defenderId=原攻击者
  *       伤害目标必须用 ctx.defenderId（原攻击者），不能用 ctx.targetId（target='self' 指向防御者自身）
+ * 
+ * 【已迁移到新伤害计算管线】
  */
 const resolveMagmaArmor = (ctx: CustomActionContext, _diceCount: number, dmgPerFire: number = 1): DiceThroneEvent[] => {
     const events: DiceThroneEvent[] = [];
@@ -330,12 +400,19 @@ const resolveMagmaArmor = (ctx: CustomActionContext, _diceCount: number, dmgPerF
         const totalDamage = fireCount * dmgPerFire;
         // 防御上下文：ctx.defenderId 是原攻击者（被防御技能影响的人）
         const opponentId = ctx.ctx.defenderId;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId: opponentId, amount: totalDamage, actualDamage: totalDamage, sourceAbilityId: ctx.sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
-            timestamp: ctx.timestamp + 0.1
-        } as DamageDealtEvent);
+        
+        // 使用新伤害计算管线
+        const damageCalc = createDamageCalculation({
+            source: { playerId: ctx.attackerId, abilityId: ctx.sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: totalDamage,
+            state: ctx.state,
+            timestamp: ctx.timestamp + 0.1,
+            autoCollectTokens: false,
+            autoCollectStatus: false,
+            autoCollectShields: false,
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     return events;

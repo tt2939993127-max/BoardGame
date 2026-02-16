@@ -5,6 +5,7 @@
  * - base_the_homeworld: 额外出牌时 power>2 被拒，power≤2 通过
  * - base_secret_garden: 同 homeworld 的 extraPlayMinionPowerMax 限制
  * - base_tsars_palace: power≤2 随从被拒
+ * - base_north_pole: 每回合每基地最多1个随从
  * - base_castle_of_ice: 所有随从被拒
  * - base_dread_lookout: 行动卡被拒
  */
@@ -273,6 +274,42 @@ describe('base_tsars_palace: 沙皇宫殿 power≤2 限制', () => {
         });
 
         const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 5 });
+        expect(restricted).toBe(false);
+    });
+});
+
+// ============================================================================
+// base_north_pole: 北极基地 - 每回合每基地最多1个随从
+// ============================================================================
+
+describe('base_north_pole: 每回合每基地最多1个随从', () => {
+    it('同一玩家本回合已在该基地打出1个随从后，再打出会被限制', () => {
+        const state = makeState({
+            bases: [makeBase('base_north_pole')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayedPerBase: { 0: 1 },
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 3 });
+        expect(restricted).toBe(true);
+    });
+
+    it('本回合尚未在该基地打出随从时，不受限制', () => {
+        const state = makeState({
+            bases: [makeBase('base_north_pole')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayedPerBase: { 0: 0 },
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', { basePower: 3 });
         expect(restricted).toBe(false);
     });
 });

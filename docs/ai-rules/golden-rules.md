@@ -133,3 +133,22 @@
   2. 用户手势解锁处理中，必须 `await ctx.resume()` 或 `.then()` 后再播放
   3. BGM（`html5: true`）不受 WebAudio context 状态影响，不应用 `isContextSuspended()` 拦截
   4. 单独创建的 AudioContext（如 SynthAudio）也必须等待 resume 完成后再播放
+
+
+---
+
+## Bug 修复必须先 diff 原始版本（强制）
+
+> **修 bug 时，禁止在未对比原始正常版本的情况下假设根因并重写代码。**
+
+- **教训**：精灵图不显示，AI 假设"avif 格式不兼容 CSS background-image"，花大量时间尝试 `<picture>` + `<img>` + overflow:hidden / object-fit:none / 隐藏探测等复杂方案。实际根因是 `computeSpriteStyle` 在重构时把 `backgroundPosition` 公式从 `x / (imageW - cardW)` 改成了 `-x / (imageW - cardW)`——一个负号的差异。如果第一时间 `git show` 对比原始版本，一眼就能发现。
+- **强制流程**：
+  1. **先定位"最后正常工作"的版本**：`git log --oneline -N -- <文件>` 找到相关 commit
+  2. **diff 当前代码与正常版本**：`git show <commit>:<file>` 或 `git diff <commit> -- <file>`
+  3. **逐行对比变更点**，确认哪些改动引入了问题
+  4. **只有在 diff 无法定位时**，才进入假设→验证→日志排查模式
+- **反模式**：
+  - ❌ 假设根因 → 重写整个组件 → 不行 → 换更复杂方案 → 循环
+  - ❌ 连续多次"试试"不同方案而不质疑最初的假设
+  - ✅ 先 diff → 发现变更点 → 验证变更点是否为根因 → 最小修复
+- **适用场景**：任何"之前好好的，现在不行了"类型的 bug。尤其是重构/迁移后出现的回归问题。

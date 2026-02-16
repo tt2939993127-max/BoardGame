@@ -14,6 +14,40 @@ import {
     waitForSummonerWarsUI,
 } from './helpers/summonerwars';
 
+const normalizeUrl = (url: string) => url.replace(/\/$/, '');
+const getGameServerBaseURL = () => {
+    const envUrl = process.env.PW_GAME_SERVER_URL || process.env.VITE_GAME_SERVER_URL;
+    if (envUrl) return normalizeUrl(envUrl);
+    const port = process.env.GAME_SERVER_PORT || process.env.PW_GAME_SERVER_PORT || '18000';
+    return `http://localhost:${port}`;
+};
+
+const joinMatchAsGuest = async (page: import('@playwright/test').Page, matchId: string, gameId = 'summonerwars') => {
+    const base = getGameServerBaseURL();
+    const matchResp = await page.request.get(`${base}/games/${gameId}/${matchId}`);
+    const matchData = await matchResp.json();
+    const openSeat = (matchData.players as { id: number; name?: string }[])
+        ?.sort((a, b) => b.id - a.id)
+        .find((p) => !p.name);
+    if (!openSeat) throw new Error('No open seat found');
+    const pid = String(openSeat.id);
+    const guestId = `e2e_guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const joinResp = await page.request.post(`${base}/games/${gameId}/${matchId}/join`, {
+        data: { playerID: pid, playerName: `Guest_${guestId}`, data: { guestId } },
+    });
+    const joinData = await joinResp.json();
+    await page.goto(`/play/${gameId}/match/${matchId}?playerID=${pid}`, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(
+        ({ mid, p, creds, gname }) => {
+            localStorage.setItem(
+                `match_creds_${mid}`,
+                JSON.stringify({ playerID: p, credentials: creds, matchID: mid, gameName: gname }),
+            );
+        },
+        { mid: matchId, p: pid, creds: joinData.playerCredentials, gname: gameId },
+    );
+};
+
 test.describe('SummonerWars 阵营选择流程', () => {
     test('完整联机流程：选择阵营 → 准备 → 开始 → 进入游戏', async ({ browser }, testInfo) => {
         test.setTimeout(120000);
@@ -54,8 +88,7 @@ test.describe('SummonerWars 阵营选择流程', () => {
             }
         });
 
-        await guestPage.goto(`/play/summonerwars/match/${matchId}?join=true`, { waitUntil: 'domcontentloaded' });
-        await guestPage.waitForURL(/playerID=\d/, { timeout: 20000 });
+        await joinMatchAsGuest(guestPage, matchId!);
         await waitForFactionSelection(guestPage);
 
         // ---- Host 选择阵营 ----

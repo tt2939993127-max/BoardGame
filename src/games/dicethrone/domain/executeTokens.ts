@@ -107,7 +107,6 @@ export function executeTokenCommand(
                         amount: reflectDamage,
                         actualDamage: actualReflect,
                         sourceAbilityId: 'retribution-reflect',
-                        type: 'undefendable',
                     },
                     sourceCommandType: command.type,
                     timestamp,

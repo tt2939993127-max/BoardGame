@@ -134,7 +134,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     }
 
     case SW_EVENTS.UNIT_MOVED: {
-      const { from, to } = payload as { from: CellCoord; to: CellCoord };
+      const { from, to } = payload as { from: CellCoord; to: CellCoord; path?: CellCoord[] };
       const newBoard = core.board.map(row => row.map(cell => ({ ...cell })));
       const unit = newBoard[from.row][from.col].unit;
       if (!unit) return { ...core, board: newBoard };

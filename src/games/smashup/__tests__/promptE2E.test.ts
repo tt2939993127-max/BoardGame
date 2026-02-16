@@ -13,14 +13,15 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { execute, reduce, validate } from '../domain/reducer';
+import { reduce, validate } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type { SmashUpCore, SmashUpEvent, MinionOnBase, CardInstance, BaseInPlay } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
-import { applyEvents } from './helpers';
+import { makeMatchState as makeMatchStateFromHelpers } from './helpers';
+import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 // ============================================================================
@@ -67,7 +68,7 @@ function makeState(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
+    return makeMatchStateFromHelpers(core);
 }
 
 const defaultRandom: RandomFn = {
@@ -79,11 +80,11 @@ const defaultRandom: RandomFn = {
 
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string) {
     const ms = makeMatchState(state);
-    const events = execute(ms, {
+    const result = runCommand(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid },
     } as any, defaultRandom);
-    return { events, matchState: ms };
+    return { events: result.events as SmashUpEvent[], matchState: result.finalState };
 }
 
 function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
@@ -290,13 +291,13 @@ describe('Prompt E2E: 确定性状态测试', () => {
 
             // 打出随从
             const ms = makeMatchState(state);
-            execute(ms, {
+            const result = runCommand(ms, {
                 type: SU_COMMANDS.PLAY_MINION, playerId: '0',
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
             // 迁移后直接创建 Interaction（不再生成 CHOICE_REQUESTED 事件）
-            const current = (ms.sys as any).interaction?.current;
+            const current = (result.finalState.sys as any).interaction?.current;
             expect(current).toBeDefined();
             expect(current?.data?.sourceId).toBe('zombie_grave_digger');
         });
@@ -322,13 +323,13 @@ describe('Prompt E2E: 确定性状态测试', () => {
             });
 
             const ms = makeMatchState(state);
-            execute(ms, {
+            const result = runCommand(ms, {
                 type: SU_COMMANDS.PLAY_MINION, playerId: '0',
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
             // 单张随从时也创建 Interaction
-            const current = (ms.sys as any).interaction?.current;
+            const current = (result.finalState.sys as any).interaction?.current;
             expect(current).toBeDefined();
             expect(current?.data?.sourceId).toBe('zombie_grave_digger');
         });
@@ -354,15 +355,15 @@ describe('Prompt E2E: 确定性状态测试', () => {
             });
 
             const ms = makeMatchState(state);
-            const events = execute(ms, {
+            const result = runCommand(ms, {
                 type: SU_COMMANDS.PLAY_MINION, playerId: '0',
                 payload: { cardUid: 'minion1', baseIndex: 0 },
             } as any, defaultRandom);
 
-            const recoverEvents = events.filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
+            const recoverEvents = (result.events as SmashUpEvent[]).filter(e => e.type === SU_EVENTS.CARD_RECOVERED_FROM_DISCARD);
             expect(recoverEvents.length).toBe(0);
             // 弃牌堆只有行动卡，不应创建交互
-            const interaction = (ms.sys as any).interaction;
+            const interaction = (result.finalState.sys as any).interaction;
             expect(interaction?.current).toBeUndefined();
         });
     });

@@ -396,10 +396,10 @@ function madnessOnPlay(ctx: AbilityContext): AbilityResult {
 }
 
 /**
- * 星之眷族 talent：将手中一张疑狂卡转给另一个玩家?
+ * 星之眷族 talent：将手中一张疯狂卡转给另一个玩家
  * 
- * 手中无疑狂卡时无效果
- * 只有1个对手时自动选择，多个对手时创建 Prompt
+ * 手中无疯狂卡时无效果
+ * 创建 Prompt 让玩家选择目标玩家，可以取消
  */
 function cthulhuStarSpawn(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
@@ -411,15 +411,17 @@ function cthulhuStarSpawn(ctx: AbilityContext): AbilityResult {
 
     const madnessCard = madnessInHand[0];
 
-    // Prompt 选择
+    // 使用 autoCancelOption 自动添加取消选项
     const options = opponents.map((pid, i) => ({
         id: `player-${i}`,
         label: `玩家 ${pid}`,
         value: { targetPlayerId: pid, madnessUid: madnessCard.uid },
     }));
+    
     const interaction = createSimpleChoice(
         `cthulhu_star_spawn_${ctx.now}`, ctx.playerId,
-        '选择要给予疑狂卡的玩家', options as any[], 'cthulhu_star_spawn',
+        '选择要给予疯狂卡的玩家', options as any[],
+        { sourceId: 'cthulhu_star_spawn', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -520,7 +522,14 @@ export function registerCthulhuInteractionHandlers(): void {
     });
 
     registerInteractionHandler('cthulhu_star_spawn', (state, playerId, value, _iData, _random, timestamp) => {
-        const { targetPlayerId, madnessUid } = value as { targetPlayerId: string; madnessUid: string };
+        // 检查是否取消（框架自动添加的取消选项）
+        if ((value as any).__cancel__) return { state, events: [] };
+        
+        const { targetPlayerId, madnessUid } = value as { targetPlayerId?: string; madnessUid?: string };
+        
+        // 正常执行：转移疯狂卡
+        if (!targetPlayerId || !madnessUid) return { state, events: [] };
+        
         const events: SmashUpEvent[] = [];
         events.push(returnMadnessCard(playerId, madnessUid, 'cthulhu_star_spawn', timestamp));
         const drawEvt = drawMadnessCards(targetPlayerId, 1, state.core, 'cthulhu_star_spawn', timestamp);

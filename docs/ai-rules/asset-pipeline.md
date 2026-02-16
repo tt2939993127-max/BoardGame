@@ -11,16 +11,39 @@
 
 **所有图片必须经过压缩后使用，禁止在代码中直接引用原始 `.png/.jpg` 文件。**
 
-### 资源目录结构
+### 资源目录结构（方案 B2：所有语言在 i18n/ 下）
 
 ```
-public/assets/<gameId>/
-├── <资源分类>/                  # 按业务语义分类（如 hero/、cards/、common/）
-│   ├── foo.png              # 原始图片（仅用于压缩源）
-│   └── compressed/          # 压缩输出目录
-│       ├── foo.avif         # AVIF 格式（首选）
-│       └── foo.webp         # WebP 格式（回退）
+public/assets/
+├── i18n/
+│   ├── zh-CN/                   # 中文资源（当前通过符号链接指向原始路径）
+│   │   └── <gameId>/            # 游戏资源（符号链接 → ../../<gameId>）
+│   │       └── <资源分类>/
+│   │           ├── foo.png      # 原始图片
+│   │           └── compressed/
+│   │               ├── foo.avif
+│   │               └── foo.webp
+│   └── en/                      # 英文资源（未来）
+│       └── <gameId>/
+└── <gameId>/                    # 原始资源位置（过渡期保留，通过符号链接被 i18n/zh-CN/ 引用）
+    └── <资源分类>/
+        ├── foo.png
+        └── compressed/
+            ├── foo.avif
+            └── foo.webp
 ```
+
+**当前状态（过渡期）**：
+- 物理文件仍在 `public/assets/<gameId>/`
+- `public/assets/i18n/zh-CN/<gameId>` 为符号链接（Windows junction），指向 `../../<gameId>`
+- 代码默认使用 `locale="zh-CN"`，自动访问 `i18n/zh-CN/` 路径
+- 符号链接使浏览器能正确加载 `i18n/zh-CN/` 下的资源，无需物理迁移文件
+
+**未来计划（英文版上线时）**：
+- 物理迁移中文图片到 `i18n/zh-CN/`
+- 删除原始路径 `public/assets/<gameId>/`
+- 新增英文图片到 `i18n/en/`
+- 删除符号链接
 
 > **禁止**使用无语义的 `images/` 中间目录。直接按业务含义组织：`hero/`、`cards/`、`base/`、`common/` 等。
 
@@ -34,9 +57,15 @@ public/assets/<gameId>/
 
 | 场景 | 组件/函数 | 示例 |
 |------|-----------|------|
-| `<img>` 标签 | `OptimizedImage` | `<OptimizedImage src="dicethrone/images/foo.png" />` |
+| `<img>` 标签 | `OptimizedImage` | `<OptimizedImage src="dicethrone/images/foo.png" />` （自动使用 locale="zh-CN"） |
 | CSS 背景 | `buildOptimizedImageSet` | `background: ${buildOptimizedImageSet('dicethrone/images/foo.png')}` |
 | 精灵图裁切 | `getOptimizedImageUrls` | `const { avif, webp } = getOptimizedImageUrls('dicethrone/images/foo.png')` |
+| 精灵图 CSS 背景 | `buildLocalizedImageSet` | `backgroundImage: buildLocalizedImageSet('dicethrone/images/atlas', locale)` |
+
+**locale 处理规则**：
+- `OptimizedImage` 默认 `locale="zh-CN"`，自动转换路径为 `i18n/zh-CN/dicethrone/images/foo.png`
+- 符号链接使浏览器能正确加载该路径（实际指向 `../../dicethrone/images/foo.png`）
+- 未来英文版上线时，传入 `locale="en"` 即可切换到英文资源
 
 ### 路径规则（强制）
 
@@ -45,21 +74,61 @@ public/assets/<gameId>/
 - **禁止在路径中硬编码 `compressed/` 子目录**（如 `'dicethrone/images/compressed/foo.png'`）
 - **原因**：`getOptimizedImageUrls()` 会自动插入 `compressed/`，硬编码会导致路径重复（`compressed/compressed/`）
 
+### 精灵图路径处理规范（强制）
+
+**核心原则**：精灵图 JSON 中的 `meta.image` 字段包含扩展名（如 `"status-icons-atlas.png"`），但传递给 `buildLocalizedImageSet` 的路径必须**去掉扩展名**。
+
+**原因**：`buildLocalizedImageSet` 内部会自动：
+1. 调用 `getLocalizedAssetPath` 添加 `i18n/{locale}/` 前缀
+2. 调用 `buildOptimizedImageSet` 生成 `compressed/*.avif` 和 `compressed/*.webp` 的 `image-set()`
+
+**正确流程**：
+```typescript
+// 1. 加载 JSON（路径包含 .json 扩展名）
+const jsonPath = 'dicethrone/images/paladin/status-icons-atlas.json';
+const url = getLocalizedAssetPath(jsonPath);
+const data = await fetch(url).then(r => r.json());
+
+// 2. 提取图片路径（去掉 .png 扩展名）
+const baseDir = jsonPath.substring(0, jsonPath.lastIndexOf('/') + 1);
+const imagePath = `${baseDir}${data.meta.image.replace('.png', '')}`;
+// 结果：'dicethrone/images/paladin/status-icons-atlas'
+
+// 3. 在 CSS 中使用（buildLocalizedImageSet 自动处理）
+backgroundImage: buildLocalizedImageSet(imagePath, locale)
+// 生成：image-set(
+//   url('/assets/i18n/zh-CN/dicethrone/images/paladin/compressed/status-icons-atlas.avif') type('image/avif'),
+//   url('/assets/i18n/zh-CN/dicethrone/images/paladin/compressed/status-icons-atlas.webp') type('image/webp')
+// )
+```
+
+**错误示例**：
+```typescript
+// ❌ 错误 1：保留了 .png 扩展名
+const imagePath = `${baseDir}${data.meta.image}`;
+// 结果：'dicethrone/images/paladin/status-icons-atlas.png'
+// buildLocalizedImageSet 会生成错误路径：.../compressed/status-icons-atlas.png.avif
+
+// ❌ 错误 2：没有去掉扩展名就传给 getOptimizedImageUrls
+const { avif, webp } = getOptimizedImageUrls(imagePath);
+// 结果：.../compressed/status-icons-atlas.png.avif（错误）
+```
+
 ### ✅ 正确示例
 
 ```typescript
-// manifest 配置
+// manifest 配置（路径不变，内部自动处理 locale）
 thumbnailPath: 'dicethrone/thumbnails/fengm'
 
-// ASSETS 常量
+// ASSETS 常量（路径不变）
 CARD_BG: 'dicethrone/images/Common/card-background'
 AVATAR: 'dicethrone/images/Common/character-portraits'
 
-// 组件使用
+// 组件使用（自动使用 locale="zh-CN"）
 <OptimizedImage src="dicethrone/images/Common/background" />
-<OptimizedImage 
-    src={getLocalizedAssetPath('dicethrone/images/monk/player-board', locale)}
-/>
+
+// 显式指定 locale（未来英文版）
+<OptimizedImage src="dicethrone/images/monk/player-board" locale="en" />
 ```
 
 ### ❌ 错误示例
@@ -102,6 +171,12 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 
 门禁落在 `MatchRoom`/`LocalMatchRoom` 入口层，各游戏通过 `criticalImageResolver.ts` 提供动态解析。
 
+**locale 处理**：
+- `CriticalImageGate` 从 `GameBoardProps` 提取 `locale` 参数（默认 `zh-CN`）
+- 传递给 `preloadCriticalImages` 和 `preloadWarmImages`
+- 预加载函数自动将路径转换为 `i18n/{locale}/` 格式
+- 精灵图初始化函数（如 `initSpriteAtlases`）也需要接收 `locale` 参数并传递给 `getLocalizedAssetPath`
+
 ### 强制规则
 
 1. **Board 中使用的所有图片必须出现在 criticalImageResolver 中**：要么在 `critical` 列表（首屏必需），要么在 `warm` 列表（后台预取）。
@@ -110,6 +185,10 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 4. **路径格式与图片引用一致**：相对于 `/assets/`，不含 `compressed/`（预加载 API 内部自动处理）。
 5. **解析器必须按游戏阶段动态返回**：选角/选派系阶段 vs 游戏进行阶段，关键资源不同。
 6. **phaseKey 必须稳定**：`CriticalImageGate` 依据 `phaseKey` 判断是否重新预加载，未变化时不会重复触发。
+7. **精灵图初始化**：
+   - **图集配置文件（.atlas.json）与语言无关**：统一存放在 `/assets/atlas-configs/` 目录，`loadCardAtlasConfig` 不需要 locale 参数。SmashUp 的 `loadCardAtlasConfig(path, defaultGrid)` 内部使用 `getLocalizedAssetPath()` + 固定 locale（`zh-CN`）探测图片尺寸（尺寸与语言无关，但文件只存在于 `i18n/` 目录下），不接受外部 locale 参数。
+   - **SummonerWars 的 `initSpriteAtlases(locale)` 需要传递 locale**：因为它同时注册图片路径（需要国际化），必须在组件内通过 `useEffect` 调用并监听 `i18n.language`。
+   - **图片资源需要国际化**：图片路径通过 `getLocalizedAssetPath` 或组件自动处理 `/i18n/{locale}/` 前缀。图集注册时 `image` 字段传相对路径，渲染层（`buildLocalizedImageSet`）按语言解析 URL。
 
 ### 解析器模板
 
@@ -154,6 +233,9 @@ registerCriticalImageResolver('<gameId>', <gameId>CriticalImageResolver);
 - [ ] 新资源路径已加入 `criticalImageResolver.ts` 的对应阶段
 - [ ] 选择阶段：预览图（player-board/hero/tip）在 critical 中
 - [ ] 游戏阶段：完整资源（卡牌图集/骰子/状态图标）在 critical 中
+- [ ] 精灵图初始化函数已支持 `locale` 参数（从 Board props 提取并传递）
+- [ ] 系统 A 注册时调用 `getLocalizedAssetPath` → `getOptimizedImageUrls`
+- [ ] 系统 B 注册时传递原始路径（不调用 `getLocalizedAssetPath`）
 - [ ] 运行相关单测：`npm test -- criticalImageResolver`
 
 ### 参考实现

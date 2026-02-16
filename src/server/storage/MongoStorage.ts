@@ -109,13 +109,11 @@ export class MongoStorage implements MatchStorage {
         const ttlSeconds = setupData.ttlSeconds ?? 0;
         const ownerKey = setupData.ownerKey;
         const ownerType = setupData.ownerType;
-        const isGuestOwner = setupData.ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false);
 
         // 全局单房间限制：同一 ownerKey 创建新房间时自动清理旧房间
         if (ownerKey) {
             const existingMatches = await Match.find({
                 'metadata.setupData.ownerKey': ownerKey,
-                ...(isGuestOwner ? {} : { 'metadata.gameover': null }),
             }).select('matchID').lean();
 
             if (existingMatches.length > 0) {
@@ -404,7 +402,9 @@ export class MongoStorage implements MatchStorage {
      */
     async cleanupEphemeralMatches(graceMs = 5 * 60 * 1000): Promise<number> {
         const Match = getMatchModel();
-        const ephemeralMatches = await Match.find({ ttlSeconds: 0 }).lean();
+        const ephemeralMatches = await Match.find({
+            $or: [{ ttlSeconds: 0 }, { ttlSeconds: null }, { ttlSeconds: { $exists: false } }],
+        }).lean();
         const toDelete: string[] = [];
         const now = Date.now();
 
@@ -422,7 +422,12 @@ export class MongoStorage implements MatchStorage {
             const isStaleConnected = hasConnectedPlayer && updatedAtMs < this.bootTimeMs;
 
             if (hasConnectedPlayer) {
-                if (isStaleConnected) {
+                // 强制降级阈值：isConnected=true 但长时间无更新，视为幽灵连接
+                // 可能原因：setMetadata 失败导致 isConnected 未写回 MongoDB
+                const FORCE_DISCONNECT_MS = 30 * 60 * 1000; // 30 分钟
+                const shouldForceDisconnect = isStaleConnected || idleMs >= FORCE_DISCONNECT_MS;
+
+                if (shouldForceDisconnect) {
                     const metadataWith = metadata as MatchMetadata & { disconnectedSince?: number | null };
                     const seatValues = playerValues as Array<{ isConnected?: boolean | null }>;
                     let changed = false;
@@ -439,11 +444,9 @@ export class MongoStorage implements MatchStorage {
                     if (changed) {
                         await Match.updateOne({ matchID: doc.matchID }, { metadata });
                     }
-                    console.warn(`[Cleanup] 标记重启遗留连接 matchID=${doc.matchID} connected=${connectedCount} occupied=${occupiedCount} updatedAtMs=${updatedAtMs} bootTimeMs=${this.bootTimeMs}`);
+                    const reason = isStaleConnected ? 'stale_after_restart' : 'ghost_connection';
+                    console.warn(`[Cleanup] 强制标记断线 matchID=${doc.matchID} reason=${reason} connected=${connectedCount} occupied=${occupiedCount} idleMs=${idleMs}`);
                     continue;
-                }
-                if (idleMs >= graceMs) {
-                    console.warn(`[Cleanup] 跳过临时房间 matchID=${doc.matchID} reason=connected_but_idle connected=${connectedCount} occupied=${occupiedCount} idleMs=${idleMs}`);
                 }
                 if (metadata?.disconnectedSince) {
                     delete metadata.disconnectedSince;

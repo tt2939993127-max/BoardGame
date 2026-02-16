@@ -4,7 +4,7 @@
  */
 
 import type { CSSProperties } from 'react';
-import { getOptimizedImageUrls } from '../../../core/AssetLoader';
+import { getOptimizedImageUrls, getLocalizedAssetPath } from '../../../core/AssetLoader';
 import { registerCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
 import type { FactionId } from '../domain/types';
 import { resolveFactionId } from '../config/factions';
@@ -188,10 +188,13 @@ export function resolveCardAtlasId(card: { id: string; faction?: FactionId | str
 }
 
 /** 初始化精灵图注册（所有阵营） */
-export function initSpriteAtlases(): void {
+export function initSpriteAtlases(locale?: string): void {
+  const effectiveLocale = locale || 'zh-CN';
+  
   for (const dir of ALL_FACTION_DIRS) {
     const heroBase = `summonerwars/hero/${dir}/hero`;
-    const heroUrls = getOptimizedImageUrls(heroBase);
+    const localizedHeroBase = getLocalizedAssetPath(heroBase, effectiveLocale);
+    const heroUrls = getOptimizedImageUrls(localizedHeroBase);
     registerSpriteAtlas(`sw:${dir.toLowerCase()}:hero`, {
       image: heroUrls.webp,
       config: HERO_ATLAS,
@@ -202,7 +205,8 @@ export function initSpriteAtlases(): void {
     });
 
     const cardsBase = `summonerwars/hero/${dir}/cards`;
-    const cardsUrls = getOptimizedImageUrls(cardsBase);
+    const localizedCardsBase = getLocalizedAssetPath(cardsBase, effectiveLocale);
+    const cardsUrls = getOptimizedImageUrls(localizedCardsBase);
     const cardsConfig = dir === 'Necromancer' ? NECROMANCER_CARDS_ATLAS : CARDS_ATLAS;
     registerSpriteAtlas(`sw:${dir.toLowerCase()}:cards`, {
       image: cardsUrls.webp,
@@ -216,7 +220,8 @@ export function initSpriteAtlases(): void {
 
   // 骰子精灵图
   const diceBase = 'summonerwars/common/dice';
-  const diceUrls = getOptimizedImageUrls(diceBase);
+  const localizedDiceBase = getLocalizedAssetPath(diceBase, effectiveLocale);
+  const diceUrls = getOptimizedImageUrls(localizedDiceBase);
   registerSpriteAtlas('sw:dice', {
     image: diceUrls.webp,
     config: DICE_ATLAS,
@@ -228,7 +233,8 @@ export function initSpriteAtlases(): void {
 
   // 传送门精灵图（所有阵营共用）
   const portalBase = 'summonerwars/common/Portal';
-  const portalUrls = getOptimizedImageUrls(portalBase);
+  const localizedPortalBase = getLocalizedAssetPath(portalBase, effectiveLocale);
+  const portalUrls = getOptimizedImageUrls(localizedPortalBase);
   registerSpriteAtlas('sw:portal', {
     image: portalUrls.webp,
     config: PORTAL_ATLAS,

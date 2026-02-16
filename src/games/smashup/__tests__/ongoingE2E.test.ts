@@ -7,10 +7,11 @@
  * 3. 移动触发链：cub_scout 消灭移入的弱随从（processMoveTriggers 链路）
  * 4. onMinionPlayed 触发：altar 在打出随从时给额外行动
  */
-/* eslint-disable @typescript-eslint/no-explicit-any -- 测试文件：mock MatchState 与事件 payload 断言 */
+ 
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execute, reduce } from '../domain/reducer';
+import { postProcessSystemEvents } from '../domain';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type {
     SmashUpCore, SmashUpEvent, MinionOnBase,
@@ -87,20 +88,26 @@ let lastMatchState: MatchState<SmashUpCore> | null = null;
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string): SmashUpEvent[] {
     const ms = makeMatchState(state);
     lastMatchState = ms;
-    return execute(ms, {
+    const events = execute(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid },
     } as any, defaultRandom);
+    
+    // Call postProcessSystemEvents to trigger onPlay abilities
+    return postProcessSystemEvents(state, events, defaultRandom).events;
 }
 
 /** 执行打出随从命令，返回事件列表 */
 function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number): SmashUpEvent[] {
     const ms = makeMatchState(state);
     lastMatchState = ms;
-    return execute(ms, {
+    const events = execute(ms, {
         type: SU_COMMANDS.PLAY_MINION, playerId,
         payload: { cardUid, baseIndex },
     } as any, defaultRandom);
+    
+    // Call postProcessSystemEvents to trigger onPlay abilities
+    return postProcessSystemEvents(state, events, defaultRandom).events;
 }
 
 /** 从最近一次 execute 的 matchState 中获取 interactions */

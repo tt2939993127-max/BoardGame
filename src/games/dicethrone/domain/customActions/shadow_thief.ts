@@ -24,6 +24,7 @@ import type {
     InteractionRequestedEvent,
 } from '../types';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
 
@@ -81,7 +82,7 @@ function handleDaggerStrikePoison({ targetId, sourceAbilityId, state, timestamp 
     } as StatusAppliedEvent];
 }
 
-/** 抢夺/暗影突袭：造成一半CP的伤害 */
+/** 抢夺/暗影突袭：造成一半CP的伤害 【已迁移到新伤害计算管线】 */
 function handleDamageHalfCp({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     const params = action.params as Record<string, unknown> | undefined;
@@ -92,18 +93,15 @@ function handleDamageHalfCp({ attackerId, targetId, sourceAbilityId, state, time
 
     const damageAmt = Math.ceil(totalCp / 2);
 
-    const target = state.players[targetId];
-    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-    const actualDamage = Math.min(damageAmt, targetHp);
-
-    ctx.damageDealt += actualDamage;
-
-    return [{
-        type: 'DAMAGE_DEALT',
-        payload: { targetId, amount: damageAmt, actualDamage, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
+    const damageCalc = createDamageCalculation({
+        source: { playerId: attackerId, abilityId: sourceAbilityId },
+        target: { playerId: targetId },
+        baseDamage: damageAmt,
+        state,
         timestamp,
-    } as DamageDealtEvent];
+    });
+
+    return damageCalc.toEvents();
 }
 
 /** 偷窃：获得CP (若有Shadow则偷取) */
@@ -112,7 +110,9 @@ function handleStealCp(context: CustomActionContext): DiceThroneEvent[] {
 }
 
 
-function handleStealCp2(context: CustomActionContext) { return handleStealCpWithAmount(context, 2); }
+function handleStealCp2(context: CustomActionContext) { 
+    return handleStealCpWithAmount(context, 2); 
+}
 function handleStealCp3(context: CustomActionContext) { return handleStealCpWithAmount(context, 3); }
 function handleStealCp4(context: CustomActionContext) { return handleStealCpWithAmount(context, 4); }
 // handleStealCp5 and 6 are defined later
@@ -131,12 +131,13 @@ function handleStealCpWithAmount({ targetId, attackerId, state, timestamp }: Cus
         const stolenAmount = Math.min(targetCp, stealLimit);
 
         if (stolenAmount > 0) {
-            events.push({
+            const event = {
                 type: 'CP_CHANGED',
                 payload: { playerId: targetId, delta: -stolenAmount, newValue: targetCp - stolenAmount },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
-            } as CpChangedEvent);
+            } as CpChangedEvent;
+            events.push(event);
         }
 
         // We gain full 'amount'. 'stolenAmount' came from opponent, rest from bank.
@@ -150,12 +151,13 @@ function handleStealCpWithAmount({ targetId, attackerId, state, timestamp }: Cus
     if (gained > 0) {
         const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
         const newCp = Math.min(currentCp + gained, CP_MAX);
-        events.push({
+        const event = {
             type: 'CP_CHANGED',
             payload: { playerId: attackerId, delta: gained, newValue: newCp },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 1,
-        } as CpChangedEvent);
+        } as CpChangedEvent;
+        events.push(event);
     }
 
     return events;
@@ -183,7 +185,7 @@ function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestam
     } as InteractionRequestedEvent];
 }
 
-/** 肾击：造成等同CP的伤害 (Gain passed beforehand, so use current CP + bonus) */
+/** 肾击：造成等同CP的伤害 (Gain passed beforehand, so use current CP + bonus) 【已迁移到新伤害计算管线】 */
 function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     const params = action.params as Record<string, unknown> | undefined;
@@ -192,22 +194,18 @@ function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, time
 
     if (totalCp <= 0) return [];
 
-    // Deal damage
-    const target = state.players[targetId];
-    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-    const actualDamage = Math.min(totalCp, targetHp);
-
-    ctx.damageDealt += actualDamage;
-
-    return [{
-        type: 'DAMAGE_DEALT',
-        payload: { targetId, amount: totalCp, actualDamage, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
+    const damageCalc = createDamageCalculation({
+        source: { playerId: attackerId, abilityId: sourceAbilityId },
+        target: { playerId: targetId },
+        baseDamage: totalCp,
+        state,
         timestamp,
-    } as DamageDealtEvent];
+    });
+
+    return damageCalc.toEvents();
 }
 
-/** 暗影之舞：投掷1骰造成一半伤害 */
+/** 暗影之舞：投掷1骰造成一半伤害 【已迁移到新伤害计算管线】 */
 function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, random, ctx }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
@@ -225,18 +223,15 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
     // Damage = ceil(value / 2)
     const damageAmt = Math.ceil(dieValue / 2);
     if (damageAmt > 0) {
-        const target = state.players[targetId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = Math.min(damageAmt, targetHp);
-
-        ctx.damageDealt += actualDamage;
-
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: damageAmt, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
+        const damageCalc = createDamageCalculation({
+            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+            target: { playerId: targetId },
+            baseDamage: damageAmt,
+            state,
             timestamp: timestamp + 1,
-        } as DamageDealtEvent);
+        });
+
+        events.push(...damageCalc.toEvents());
     }
 
     return events;
@@ -266,31 +261,29 @@ function handleCornucopiaDiscard({ targetId, state, timestamp, random }: CustomA
 }
 
 
-/** 终极：Shadow Shank Damage (Deal CP + 5) */
+/** 终极：Shadow Shank Damage (Deal CP + 5) 【已迁移到新伤害计算管线】 */
 function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     const params = action.params as Record<string, unknown> | undefined;
     const bonusCp = (params?.bonusCp as number) || 0;
     const damageAmt = currentCp + bonusCp + 5;
 
-    const target = state.players[targetId];
-    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-    const actualDamage = Math.min(damageAmt, targetHp);
-
-    ctx.damageDealt += actualDamage;
-
-    return [{
-        type: 'DAMAGE_DEALT',
-        payload: { targetId, amount: damageAmt, actualDamage, sourceAbilityId }, // Is ultimate usually undefendable? `isUltimate` in PendingAttack.
-        sourceCommandType: 'ABILITY_EFFECT',
+    const damageCalc = createDamageCalculation({
+        source: { playerId: attackerId, abilityId: sourceAbilityId },
+        target: { playerId: targetId },
+        baseDamage: damageAmt,
+        state,
         timestamp,
-    } as DamageDealtEvent];
+    });
+
+    return damageCalc.toEvents();
 }
 
 /** 防御：暗影守护结算
  * 防御上下文约定（来自 attack.ts）：
  *   ctx.attackerId = 防御者（使用防御技能的人）
  *   ctx.defenderId = 原攻击者（被防御技能影响的人）
+ * 【已迁移到新伤害计算管线】
  */
 function handleDefenseResolve({ sourceAbilityId, state, timestamp, ctx, random }: CustomActionContext): DiceThroneEvent[] {
     const faces = getFaceCounts(getActiveDice(state));
@@ -302,17 +295,14 @@ function handleDefenseResolve({ sourceAbilityId, state, timestamp, ctx, random }
     // 1 Dagger = 1 Dmg to opponent（原攻击者）
     const daggers = faces[FACE.DAGGER] || 0;
     if (daggers > 0) {
-        const target = state.players[opponentId];
-        if (target) {
-            const hp = target.resources[RESOURCE_IDS.HP];
-            const actual = Math.min(daggers, hp);
-            events.push({
-                type: 'DAMAGE_DEALT',
-                payload: { targetId: opponentId, amount: daggers, actualDamage: actual, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp: timestamp
-            } as DamageDealtEvent);
-        }
+        const damageCalc = createDamageCalculation({
+            source: { playerId: selfId, abilityId: sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: daggers,
+            state,
+            timestamp,
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     // 1 Bag = 抽 1 张牌（防御者自己抽）
@@ -431,7 +421,7 @@ function handleCardTrick({ targetId, attackerId, state, timestamp, random }: Cus
     return events;
 }
 
-/** 暗影之舞 II：投掷1骰造成一半伤害(真实伤害)，获得SNEAK+SNEAK_ATTACK，抽1卡 */
+/** 暗影之舞 II：投掷1骰造成一半伤害(真实伤害)，获得SNEAK+SNEAK_ATTACK，抽1卡 【已迁移到新伤害计算管线】 */
 function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, random, ctx, attackerId }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
     const events: DiceThroneEvent[] = [];
@@ -450,18 +440,15 @@ function handleShadowDanceRoll2({ targetId, sourceAbilityId, state, timestamp, r
     // 不可防御通过 AbilityDef tags: ['unblockable'] 声明，isDefendableAttack() 会自动处理
     const damageAmt = Math.ceil(dieValue / 2);
     if (damageAmt > 0) {
-        const target = state.players[targetId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = Math.min(damageAmt, targetHp);
-
-        ctx.damageDealt += actualDamage;
-
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: damageAmt, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
+        const damageCalc = createDamageCalculation({
+            source: { playerId: attackerId, abilityId: sourceAbilityId },
+            target: { playerId: targetId },
+            baseDamage: damageAmt,
+            state,
             timestamp: timestamp + 1,
-        } as DamageDealtEvent);
+        });
+
+        events.push(...damageCalc.toEvents());
     }
 
     // Gain Tokens
@@ -533,7 +520,9 @@ function handleCornucopia2({ attackerId, targetId, state, timestamp, random }: C
 
 /** 恐惧反击 I 结算 (Fearless Riposte Level 1)
  * 造成 1×匕首 伤害；若有匕首+暗影，造成毒液
- * 防御上下文：ctx.attackerId = 防御者，ctx.defenderId = 原攻击者 */
+ * 防御上下文：ctx.attackerId = 防御者，ctx.defenderId = 原攻击者
+ * 【已迁移到新伤害计算管线】
+ */
 function handleFearlessRiposte({ sourceAbilityId, state, timestamp, ctx }: CustomActionContext): DiceThroneEvent[] {
     const faces = getFaceCounts(getActiveDice(state));
     const events: DiceThroneEvent[] = [];
@@ -542,17 +531,14 @@ function handleFearlessRiposte({ sourceAbilityId, state, timestamp, ctx }: Custo
     // 造成 1 × 匕首数量 伤害
     const daggers = faces[FACE.DAGGER] || 0;
     if (daggers > 0) {
-        const target = state.players[opponentId];
-        if (target) {
-            const hp = target.resources[RESOURCE_IDS.HP];
-            const actual = Math.min(daggers, hp);
-            events.push({
-                type: 'DAMAGE_DEALT',
-                payload: { targetId: opponentId, amount: daggers, actualDamage: actual, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp: timestamp
-            } as DamageDealtEvent);
-        }
+        const damageCalc = createDamageCalculation({
+            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: daggers,
+            state,
+            timestamp,
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     // 若有匕首+暗影：造成毒液
@@ -570,7 +556,9 @@ function handleFearlessRiposte({ sourceAbilityId, state, timestamp, ctx }: Custo
 }
 
 /** 后发制人 II 结算 (Fearless Riposte II)
- * 防御上下文：ctx.attackerId = 防御者，ctx.defenderId = 原攻击者 */
+ * 防御上下文：ctx.attackerId = 防御者，ctx.defenderId = 原攻击者
+ * 【已迁移到新伤害计算管线】
+ */
 function handleFearlessRiposte2({ sourceAbilityId, state, timestamp, ctx }: CustomActionContext): DiceThroneEvent[] {
     const faces = getFaceCounts(getActiveDice(state));
     const events: DiceThroneEvent[] = [];
@@ -580,17 +568,14 @@ function handleFearlessRiposte2({ sourceAbilityId, state, timestamp, ctx }: Cust
     const daggers = faces[FACE.DAGGER] || 0;
     if (daggers > 0) {
         const damage = daggers * 2;
-        const target = state.players[opponentId];
-        if (target) {
-            const hp = target.resources[RESOURCE_IDS.HP];
-            const actual = Math.min(damage, hp);
-            events.push({
-                type: 'DAMAGE_DEALT',
-                payload: { targetId: opponentId, amount: damage, actualDamage: actual, sourceAbilityId },
-                sourceCommandType: 'ABILITY_EFFECT',
-                timestamp: timestamp
-            } as DamageDealtEvent);
-        }
+        const damageCalc = createDamageCalculation({
+            source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+            target: { playerId: opponentId },
+            baseDamage: damage,
+            state,
+            timestamp,
+        });
+        events.push(...damageCalc.toEvents());
     }
 
     // If Dagger + Shadow: Poison

@@ -48,6 +48,7 @@ coverage
 
 # 临时文件
 .tmp
+.tmp-*
 .temp
 *.tmp
 nul
@@ -58,6 +59,7 @@ nul
 # 资源与美术/音效（避免远程仓库体积膨胀；资源走对象存储/CDN）
 # - public/assets/ 默认忽略全部资源
 # - 仅允许提交 assets-manifest.json 与 public/assets/demo/ 下的少量示例资源
+# - public/assets/i18n/zh-CN/* 为符号链接（本地构建产物），不提交
 public/assets/**
 **/*.png
 public/**/*.jpg
@@ -80,6 +82,7 @@ public/**/*.webm
 !public/assets/
 !public/assets/**/
 !public/assets/**/assets-manifest.json
+!public/assets/**/*.json
 !public/assets/demo/
 !public/assets/demo/**
 !public/assets/dicethrone/thumbnails/

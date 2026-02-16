@@ -5,16 +5,21 @@ import path from 'path';
 // Load environment variables from .env file
 dotenv.config({ quiet: true });
 
-const port = process.env.PW_PORT || process.env.E2E_PORT || '5173';
+const port = process.env.PW_PORT || process.env.E2E_PORT || '3000';
 const baseURL = process.env.VITE_FRONTEND_URL || `http://localhost:${port}`;
 const gameServerPort = process.env.GAME_SERVER_PORT || process.env.PW_GAME_SERVER_PORT || '18000';
 const reuseExistingServer = true;
-const shouldStartFrontend = !process.env.PW_SKIP_FRONTEND_SERVER;
-const shouldStartGameServer = !process.env.PW_SKIP_GAME_SERVER;
-const shouldStartApiServer = !process.env.PW_SKIP_API_SERVER;
-const webServerConfig = process.env.PW_SKIP_WEB_SERVER
-    ? undefined
-    : [
+
+// 默认使用已运行的服务器（开发模式），设置 PW_START_SERVERS=true 强制启动（CI 模式）
+const shouldStartServers = process.env.PW_START_SERVERS === 'true';
+
+// 细粒度控制（向后兼容）
+const shouldStartFrontend = shouldStartServers && !process.env.PW_SKIP_FRONTEND_SERVER;
+const shouldStartGameServer = shouldStartServers && !process.env.PW_SKIP_GAME_SERVER;
+const shouldStartApiServer = shouldStartServers && !process.env.PW_SKIP_API_SERVER;
+
+const webServerConfig = shouldStartServers
+    ? [
         ...(shouldStartFrontend
             ? [
                 {
@@ -45,7 +50,8 @@ const webServerConfig = process.env.PW_SKIP_WEB_SERVER
                 },
             ]
             : []),
-    ];
+    ]
+    : undefined;
 
 export default defineConfig({
     testDir: './e2e',

@@ -320,7 +320,8 @@ function wizardSacrifice(ctx: AbilityContext): AbilityResult {
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
         `wizard_sacrifice_${ctx.now}`, ctx.playerId,
-        '选择要牺牲的随从（抽取等量力量的牌）', buildMinionTargetOptions(options), 'wizard_sacrifice',
+        '选择要牺牲的随从（抽取等量力量的牌）', buildMinionTargetOptions(options),
+        { sourceId: 'wizard_sacrifice', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -534,6 +535,9 @@ export function registerWizardInteractionHandlers(): void {
 
     // 献祭：选择随从→消灭 + 抽牌
     registerInteractionHandler('wizard_sacrifice', (state, playerId, value, _iData, random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;

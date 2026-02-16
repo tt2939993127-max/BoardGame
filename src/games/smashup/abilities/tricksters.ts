@@ -145,6 +145,9 @@ export function registerTricksterInteractionHandlers(): void {
 
     // 沉睡印记：选择对手后标记（下回合生效）
     registerInteractionHandler('trickster_mark_of_sleep', (state, _playerId, value, _iData, _random, _timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { pid } = value as { pid: string };
         // 添加沉睡标记，在对手的下一个回合开始时生效
         const currentMarked = state.core.sleepMarkedPlayers ?? [];
@@ -157,6 +160,9 @@ export function registerTricksterInteractionHandlers(): void {
 
     // 封路：选择派系后，将派系信息存入 ongoing 的 metadata
     registerInteractionHandler('trickster_block_the_path', (state, _playerId, value, iData, _random, _timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { factionId } = value as { factionId: string };
         const ctx = (iData as any)?.continuationContext as { cardUid: string; baseIndex: number };
         if (!ctx) return undefined;
@@ -233,7 +239,8 @@ function tricksterBlockThePath(ctx: AbilityContext): AbilityResult {
     }));
     const interaction = createSimpleChoice(
         `trickster_block_the_path_${ctx.now}`, ctx.playerId,
-        '封路：选择一个派系（该派系随从不能被打出到此基地）', options as any[], 'trickster_block_the_path',
+        '封路：选择一个派系（该派系随从不能被打出到此基地）', options as any[],
+        { sourceId: 'trickster_block_the_path', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, { ...interaction, data: { ...interaction.data, continuationContext: { cardUid: ctx.cardUid, baseIndex: ctx.baseIndex } } }) };
 }
@@ -247,7 +254,8 @@ function tricksterMarkOfSleep(ctx: AbilityContext): AbilityResult {
     }));
     const interaction = createSimpleChoice(
         `trickster_mark_of_sleep_${ctx.now}`, ctx.playerId,
-        '选择一个对手（其下回合不能打行动卡）', options as any[], 'trickster_mark_of_sleep',
+        '选择一个对手（其下回合不能打行动卡）', options as any[],
+        { sourceId: 'trickster_mark_of_sleep', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }

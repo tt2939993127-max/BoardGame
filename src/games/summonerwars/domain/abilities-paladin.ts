@@ -31,6 +31,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
     description: abilityText('fortress_power', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_001',
     trigger: 'afterAttack',
+    usesPerTurn: 1,
     effects: [
       { type: 'custom', actionId: 'fortress_power_retrieve' },
     ],
@@ -185,8 +186,9 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       requiredPhase: 'attack',
       customValidator: (ctx) => {
         const healDiscardId = ctx.payload.targetCardId as string | undefined;
+        // 允许跳过（不选择手牌）
         if (!healDiscardId) {
-          return { valid: false, error: '必须选择要弃除的手牌' };
+          return { valid: true }; // ✅ 允许取消
         }
         
         const healPlayer = ctx.core.players[ctx.playerId];
@@ -214,12 +216,13 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false, // ❌ 移除青色波纹按钮（被动触发）
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.healing',
       buttonVariant: 'secondary',
       activationStep: 'selectCards',
       activationContext: 'beforeAttack',
+      activationType: 'passiveTrigger', // ✅ 标记为被动触发
       quickCheck: ({ myHand }) => myHand.length > 0,
     },
   },
@@ -234,6 +237,7 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
     description: abilityText('judgment', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_005',
     trigger: 'afterAttack',
+    usesPerTurn: 1,
     effects: [
       { type: 'custom', actionId: 'judgment_draw' },
     ],
@@ -287,8 +291,10 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       requiredPhase: 'attack',
       customValidator: (ctx) => {
         const discardCardIds = ctx.payload.discardCardIds as string[] | undefined;
+        
+        // ✅ 允许跳过（选择 0 张卡）："任意数量"包括 0
         if (!discardCardIds || discardCardIds.length === 0) {
-          return { valid: false, error: '必须选择要弃除的卡牌' };
+          return { valid: true };
         }
         
         const haPlayer = ctx.core.players[ctx.playerId];
@@ -316,12 +322,13 @@ export const PALADIN_ABILITIES: AbilityDef[] = [
       },
     },
     ui: {
-      requiresButton: true,
+      requiresButton: false, // ❌ 移除青色波纹按钮（被动触发）
       buttonPhase: 'attack',
       buttonLabel: 'abilityButtons.holyArrow',
       buttonVariant: 'secondary',
       activationStep: 'selectCards',
       activationContext: 'beforeAttack',
+      activationType: 'passiveTrigger', // ✅ 标记为被动触发
       quickCheck: ({ myHand, unit }) =>
         myHand.some(card => card.cardType === 'unit' && card.name !== unit.card.name),
     },

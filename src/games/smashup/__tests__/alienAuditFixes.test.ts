@@ -13,13 +13,14 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { MatchState, RandomFn } from '../../../engine/types';
-import { execute } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { BaseInPlay, CardInstance, MinionOnBase, PlayerState, SmashUpCore } from '../domain/types';
+import { makeMatchState as makeMatchStateFromHelpers } from './helpers';
+import { runCommand } from './testRunner';
 
 function makeCard(uid: string, defId: string, type: 'minion' | 'action', owner: string): CardInstance {
   return { uid, defId, type, owner };
@@ -55,10 +56,7 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-  return {
-    core,
-    sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any,
-  } as MatchState<SmashUpCore>;
+  return makeMatchStateFromHelpers(core);
 }
 
 const dummyRandom: RandomFn = {
@@ -69,13 +67,13 @@ const dummyRandom: RandomFn = {
 };
 
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number) {
-  const matchState = makeMatchState(state);
-  const events = execute(matchState, {
+  const ms = makeMatchState(state);
+  const result = runCommand(ms, {
     type: SU_COMMANDS.PLAY_ACTION,
     playerId,
     payload: { cardUid, targetBaseIndex },
   } as any, dummyRandom);
-  return { events, matchState };
+  return { events: result.events, matchState: result.finalState };
 }
 
 beforeAll(() => {

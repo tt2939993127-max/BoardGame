@@ -37,6 +37,8 @@ interface HandAreaProps {
   onMagnifyCard?: (card: Card) => void;
   /** 血契召唤步骤2：选择手牌模式（绕过魔力检查） */
   bloodSummonSelectingCard?: boolean;
+  /** 技能选卡模式：当前正在为技能选择手牌（弃牌/选择，不是打出），绕过魔力检查 */
+  abilitySelectingCards?: boolean;
   className?: string;
 }
 
@@ -179,6 +181,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
   onPlayEvent,
   onMagnifyCard,
   bloodSummonSelectingCard = false,
+  abilitySelectingCards = false,
   className = '',
 }) => {
   const { t } = useTranslation('game-summonerwars');
@@ -252,7 +255,15 @@ export const HandArea: React.FC<HandAreaProps> = ({
       return;
     }
 
-    // 非魔力阶段：检查是否可以支付费用
+    // ✅ 技能选卡模式：正在为技能选择手牌（弃牌/选择，不是打出卡牌）
+    // 弃牌动作不消耗魔力，所以不需要检查卡牌费用
+    // 适用于所有 activationStep: 'selectCards' 的技能（圣光箭、治疗等）
+    if (abilitySelectingCards) {
+      onCardClick?.(cardId);
+      return;
+    }
+
+    // 非魔力阶段：检查是否可以支付费用（用于正常召唤/建造/事件卡）
     if (!canAfford) {
       playDeniedSound();
       showToast.warning(t('handArea.insufficientMagic', { cost, current: currentMagic }));
@@ -304,7 +315,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
     }
 
     onCardClick?.(cardId);
-  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, showToast]);
+  }, [cards, phase, isMyTurn, currentMagic, selectedCardId, onCardClick, onCardSelect, onPlayEvent, canPlayCard, bloodSummonSelectingCard, abilitySelectingCards, showToast]);
 
   if (cards.length === 0) {
     return null;

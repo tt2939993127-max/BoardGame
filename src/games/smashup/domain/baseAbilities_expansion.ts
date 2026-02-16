@@ -11,6 +11,7 @@ import type {
     MinionDestroyedEvent,
     CardsDrawnEvent,
     CardToDeckBottomEvent,
+    MinionPlayedEvent,
 } from './types';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from './types';
 import { getEffectivePower } from './ongoingModifiers';
@@ -21,7 +22,6 @@ import {
     grantExtraMinion,
     grantExtraAction,
     recoverCardsFromDiscard,
-    buildMinionPlayedEvents,
 } from './abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -621,11 +621,12 @@ export function registerExpansionBaseInteractionHandlers(): void {
         if (!ctx) return { state, events: [] };
         const mDef = getMinionDef(selected.defId!);
         const power = mDef?.power ?? 0;
-        const result = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid: selected.cardUid!, defId: selected.defId!,
-            baseIndex: ctx.baseIndex, power, random: _random, now: timestamp,
-        });
-        return { state: result.matchState ?? state, events: result.events };
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, power },
+            timestamp,
+        };
+        return { state, events: [playedEvt] };
     });
 
     registerInteractionHandler('base_greenhouse', (state, playerId, value, iData, _random, timestamp) => {
@@ -634,11 +635,12 @@ export function registerExpansionBaseInteractionHandlers(): void {
         const ctx = (iData as any)?.continuationContext as { baseIndex: number };
         if (!ctx) return { state, events: [] };
         const power = selected.power ?? (getMinionDef(selected.defId!)?.power ?? 0);
-        const result = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid: selected.cardUid!, defId: selected.defId!,
-            baseIndex: ctx.baseIndex, power, random: _random, now: timestamp,
-        });
-        return { state: result.matchState ?? state, events: result.events };
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid: selected.cardUid!, defId: selected.defId!, baseIndex: ctx.baseIndex, power },
+            timestamp,
+        };
+        return { state, events: [playedEvt] };
     });
 
     registerInteractionHandler('base_inventors_salon', (state, playerId, value, _iData, _random, timestamp) => {

@@ -43,10 +43,10 @@ const IMPACT_SFX = {
   HEAVY_HIT: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_01_krst',
   LIGHT_HIT: 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst',
   SELF_HIT: 'combat.general.mini_games_sound_effects_and_music_pack.body_hit.sfx_body_hit_generic_small_1',
-  HEAL: 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a',
+  HEAL: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.healed_c',
   STATUS_GAIN: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a',
   STATUS_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
-  TOKEN_GAIN: 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a',
+  TOKEN_GAIN: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.strengthened_a',
   TOKEN_REMOVE: 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
 } as const;
 
@@ -123,7 +123,7 @@ const DamageRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact
 
 /**
  * params:
- * - amount: number — 治疗量
+ * - amount: number — 治疗量（可以为 0，用于技能反馈）
  * - startPos: { x: number; y: number } — 起始位置（像素）
  * - endPos: { x: number; y: number } — 结束位置（像素）
  */
@@ -134,7 +134,16 @@ const HealRenderer: React.FC<FxRendererProps> = ({ event, onComplete, onImpact }
   const startPos = event.params?.startPos as { x: number; y: number } | undefined;
   const endPos = event.params?.endPos as { x: number; y: number } | undefined;
 
-  if (!amount || !startPos || !endPos) {
+  // amount 可以为 0（barbarian thick-skin 无心面时），仍需播放动画
+  if (amount === undefined || !startPos || !endPos) {
+    stableComplete();
+    return null;
+  }
+
+  // amount=0 时不显示飞行数字，只播放音效（onImpact 仍会触发）
+  if (amount === 0) {
+    // 立即触发 impact（播放音效），然后完成
+    onImpact();
     stableComplete();
     return null;
   }

@@ -234,10 +234,10 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
             expect((dmg[0] as any).payload.amount).toBe(1);
             expect((dmg[0] as any).payload.targetId).toBe('1'); // 原攻击者
 
-            // helm(1) + heart(2) → 防止3伤害
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect(prevent).toHaveLength(1);
-            expect((prevent[0] as any).payload.amount).toBe(3); // 1×1 + 1×2
+            // helm(1) + heart(2) → 授予3点护盾
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1);
+            expect((shield[0] as any).payload.value).toBe(3); // 1×1 + 1×2
         });
     });
 
@@ -354,9 +354,9 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
                 random: () => 3 / 6, // helm
             }));
 
-            const prevent = eventsOfType(events, 'PREVENT_DAMAGE');
-            expect(prevent).toHaveLength(1);
-            expect((prevent[0] as any).payload.amount).toBe(1);
+            const shield = eventsOfType(events, 'DAMAGE_SHIELD_GRANTED');
+            expect(shield).toHaveLength(1);
+            expect((shield[0] as any).payload.value).toBe(1);
         });
 
         it('心面防止2伤害', () => {
@@ -367,7 +367,7 @@ describe('圣骑士 Custom Action 运行时行为断言', () => {
                 random: () => 5 / 6, // heart
             }));
 
-            expect((eventsOfType(events, 'PREVENT_DAMAGE')[0] as any).payload.amount).toBe(2);
+            expect((eventsOfType(events, 'DAMAGE_SHIELD_GRANTED')[0] as any).payload.value).toBe(2);
         });
 
         it('祈祷面获得1CP', () => {

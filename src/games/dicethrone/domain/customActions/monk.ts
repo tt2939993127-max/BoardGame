@@ -16,6 +16,7 @@ import type {
 } from '../types';
 import { buildDrawEvents } from '../deckEvents';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
 
 
 // ============================================================================
@@ -73,20 +74,20 @@ function handleMeditation3Taiji({ targetId, sourceAbilityId, state, timestamp }:
     return events;
 }
 
-/** 冥想：根据拳骰面数量造成伤害 */
+/** 冥想：根据拳骰面数量造成伤害 【已迁移到新伤害计算管线】 */
 function handleMeditationDamage({ ctx, targetId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
     const faceCounts = getFaceCounts(getActiveDice(state));
-    const amount = faceCounts[DICE_FACE_IDS.FIST];
-    const target = state.players[targetId];
-    const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-    const actualDamage = target ? Math.min(amount, targetHp) : 0;
-    ctx.damageDealt += actualDamage;
-    return [{
-        type: 'DAMAGE_DEALT',
-        payload: { targetId, amount, actualDamage, sourceAbilityId },
-        sourceCommandType: 'ABILITY_EFFECT',
+    const baseDamage = faceCounts[DICE_FACE_IDS.FIST];
+    
+    const damageCalc = createDamageCalculation({
+        source: { playerId: ctx.attackerId, abilityId: sourceAbilityId },
+        target: { playerId: targetId },
+        baseDamage,
+        state,
         timestamp,
-    } as DamageDealtEvent];
+    });
+
+    return damageCalc.toEvents();
 }
 
 /** 一掷千金：投掷1骰子，获得½数值的CP（向上取整） */
@@ -254,17 +255,19 @@ const createThunderStrikeRollDamageEvents = (
             timestamp,
         } as BonusDiceRerollRequestedEvent);
     } else {
+        // 【已迁移到新伤害计算管线】
         const totalDamage = dice.reduce((sum, d) => sum + d.value, 0);
-        const target = state.players[targetId];
-        const targetHp = target?.resources[RESOURCE_IDS.HP] ?? 0;
-        const actualDamage = target ? Math.min(totalDamage, targetHp) : 0;
-        events.push({
-            type: 'DAMAGE_DEALT',
-            payload: { targetId, amount: totalDamage, actualDamage, sourceAbilityId },
-            sourceCommandType: 'ABILITY_EFFECT',
+        const damageCalc = createDamageCalculation({
+            source: { playerId: attackerId, abilityId: sourceAbilityId },
+            target: { playerId: targetId },
+            baseDamage: totalDamage,
+            state,
             timestamp,
-        } as DamageDealtEvent);
+        });
+        events.push(...damageCalc.toEvents());
+        
         if (config.threshold !== undefined && totalDamage >= config.threshold && config.thresholdEffect === 'knockdown') {
+            const target = state.players[targetId];
             const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
             const def = state.tokenDefinitions.find(e => e.id === STATUS_IDS.KNOCKDOWN);
             const maxStacks = def?.stackLimit || 99;

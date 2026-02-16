@@ -4,8 +4,8 @@ import {
     type SpriteAtlasConfig,
     computeSpriteStyle,
     generateUniformAtlasConfig as engineGenerateUniform,
-    isSpriteAtlasConfig,
 } from '../../../engine/primitives/spriteAtlas';
+import { SMASHUP_ATLAS_IDS } from '../domain/ids';
 
 // 向后兼容类型别名
 export type CardAtlasConfig = SpriteAtlasConfig;
@@ -40,69 +40,80 @@ const getImageSize = (src: string): Promise<{ width: number; height: number }> =
 
 /**
  * 加载卡牌图集配置
- * 图集配置文件 (.atlas.json) 存放在 compressed/ 目录下
+ * SmashUp 所有图集都是规则网格，通过图片实际尺寸 + 行列数生成配置
+ * 图片尺寸探测使用 getLocalizedAssetPath + 固定 locale，因为图片已迁移到 i18n/ 目录
+ * 像素尺寸与语言无关，但文件只存在于国际化路径下
  * @param imageBase 图片基础路径（不含扩展名），如 'smashup/base/base1'
- * @param locale 可选的语言代码，用于加载本地化版本
- * @param defaultGrid 可选的默认网格配置，当 JSON 不存在时使用
+ * @param defaultGrid 网格配置（行列数）
  */
 export const loadCardAtlasConfig = async (
     imageBase: string,
-    locale?: string,
-    defaultGrid?: UniformAtlasDefault
+    defaultGrid: UniformAtlasDefault,
 ): Promise<CardAtlasConfig> => {
-    // 从 imageBase 提取文件名和目录路径，构建 compressed/ 下的配置文件路径
     const fileName = imageBase.split('/').pop() ?? imageBase;
-    const dirPath = imageBase.substring(0, imageBase.length - fileName.length);
-    const atlasJsonPath = `${dirPath}compressed/${fileName}.atlas.json`;
+    // 固定使用 zh-CN 探测尺寸（像素尺寸与语言无关，但文件只存在于 i18n/ 目录下）
+    const PROBE_LOCALE = 'zh-CN';
 
-    // 构建候选 URL：优先本地化版本，然后是基础版本
-    const basePath = getLocalizedAssetPath(atlasJsonPath);
-    const localizedPath = locale ? getLocalizedAssetPath(atlasJsonPath, locale) : basePath;
-    const candidates = localizedPath !== basePath ? [localizedPath, basePath] : [basePath];
-
-    // 有 defaultGrid 时跳过 JSON fetch，直接从图片尺寸生成均匀网格配置，避免 404 控制台噪音
-    if (!defaultGrid) {
-        for (const url of candidates) {
-            try {
-                const response = await fetch(url);
-                if (!response.ok) continue;
-                const data: unknown = await response.json();
-                if (isSpriteAtlasConfig(data)) return data;
-            } catch {
-                // 忽略单个路径错误，继续尝试下一候选
-            }
-        }
+    // 从压缩版图片获取实际尺寸，生成均匀网格配置
+    try {
+        const compressedPath = `${imageBase.split('/').slice(0, -1).join('/')}/compressed/${fileName}.avif`;
+        const imgUrl = getLocalizedAssetPath(compressedPath, PROBE_LOCALE);
+        const { width, height } = await getImageSize(imgUrl);
+        return generateUniformAtlasConfig(width, height, defaultGrid.rows, defaultGrid.cols);
+    } catch {
+        // AVIF 失败，尝试 webp
     }
 
-    // 使用默认网格配置从图片尺寸生成
-    if (defaultGrid) {
-        try {
-            // 尝试加载压缩版图片获取尺寸（优先 webp）
-            const compressedPath = `${dirPath}compressed/${fileName}.webp`;
-            const imgUrl = getLocalizedAssetPath(compressedPath, locale);
-            const { width, height } = await getImageSize(imgUrl);
-            return generateUniformAtlasConfig(width, height, defaultGrid.rows, defaultGrid.cols);
-        } catch {
-            // 压缩版加载失败，尝试原始 PNG
-            try {
-                const pngPath = getLocalizedAssetPath(`${imageBase}.png`, locale);
-                const { width, height } = await getImageSize(pngPath);
-                return generateUniformAtlasConfig(width, height, defaultGrid.rows, defaultGrid.cols);
-            } catch {
-                // 图片也加载失败，回退到虚拟尺寸（保证图集仍可用）
-                return generateUniformAtlasConfig(
-                    defaultGrid.cols,
-                    defaultGrid.rows,
-                    defaultGrid.rows,
-                    defaultGrid.cols
-                );
-            }
-        }
+    try {
+        const webpPath = `${imageBase.split('/').slice(0, -1).join('/')}/compressed/${fileName}.webp`;
+        const imgUrl = getLocalizedAssetPath(webpPath, PROBE_LOCALE);
+        const { width, height } = await getImageSize(imgUrl);
+        return generateUniformAtlasConfig(width, height, defaultGrid.rows, defaultGrid.cols);
+    } catch {
+        // 全部失败，回退到虚拟尺寸
+        return generateUniformAtlasConfig(
+            defaultGrid.cols,
+            defaultGrid.rows,
+            defaultGrid.rows,
+            defaultGrid.cols
+        );
     }
-
-    throw new Error(`未找到卡牌图集配置: ${atlasJsonPath}`);
 };
 
 export const getCardAtlasStyle = (index: number, atlas: CardAtlasConfig) => {
     return computeSpriteStyle(index, atlas) as CSSProperties;
 };
+
+import { registerCardAtlasSource } from '../../../components/common/media/cardAtlasRegistry';
+
+/**
+ * 初始化 SmashUp 卡牌图集（模块加载时同步注册）
+ * 使用硬编码的均匀网格配置，避免运行时异步加载 JSON 导致的竞态条件
+ */
+export function initSmashUpCardAtlases() {
+    // cards1: 6x8 grid
+    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS1, {
+        image: 'smashup/cards/cards1',
+        config: generateUniformAtlasConfig(1943, 2048, 6, 8),
+    });
+
+    // cards2: 7x8 grid
+    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS2, {
+        image: 'smashup/cards/cards2',
+        config: generateUniformAtlasConfig(1666, 2048, 7, 8),
+    });
+
+    // cards3: 6x8 grid
+    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS3, {
+        image: 'smashup/cards/cards3',
+        config: generateUniformAtlasConfig(1943, 2048, 6, 8),
+    });
+
+    // cards4: 6x8 grid
+    registerCardAtlasSource(SMASHUP_ATLAS_IDS.CARDS4, {
+        image: 'smashup/cards/cards4',
+        config: generateUniformAtlasConfig(1943, 2048, 6, 8),
+    });
+
+    console.log('[initSmashUpCardAtlases] 注册完成');
+}

@@ -189,6 +189,7 @@ export const BARBARIC_ABILITIES: AbilityDef[] = [
     description: abilityText('withdraw', 'description'),
     sfxKey: 'magic.rock.35.earth_magic_whoosh_02',
     trigger: 'afterAttack',
+    usesPerTurn: 1,
     effects: [
       { type: 'custom', actionId: 'withdraw_push_pull' },
     ],

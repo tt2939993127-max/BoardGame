@@ -20,6 +20,7 @@ import type {
     BaseScoredEvent,
     BaseReplacedEvent,
     DeckReshuffledEvent,
+    MinionPlayedEvent,
 } from './types';
 import {
     PHASE_ORDER,
@@ -35,7 +36,7 @@ import { validate } from './commands';
 import { execute, reduce } from './reducer';
 import { getAllBaseDefIds, getBaseDef } from '../data/cards';
 import { drawCards } from './utils';
-import { countMadnessCards, madnessVpPenalty } from './abilityHelpers';
+import { countMadnessCards, madnessVpPenalty, fireMinionPlayedTriggers } from './abilityHelpers';
 import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
 import { openMeFirstWindow, buildBaseTargetOptions } from './abilityHelpers';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
@@ -621,21 +622,54 @@ function domainInterceptEvent(
 function postProcessSystemEvents(
     state: SmashUpCore,
     events: SmashUpEvent[],
-    random: RandomFn
-): SmashUpEvent[] {
+    random: RandomFn,
+    matchState?: MatchState<SmashUpCore>
+): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
     // 提取时间戳（取第一个事件的 timestamp）
     const now = events.length > 0 && typeof events[0].timestamp === 'number' ? events[0].timestamp : 0;
     // 当前玩家作为 trigger 的 sourcePlayerId
     const pid = getCurrentPlayerId(state);
 
-    // processDestroyTriggers / processMoveTriggers / processAffectTriggers 需要 MatchState，包装 core
-    const ms = { core: state, sys: { interaction: { current: undefined, queue: [] } } } as unknown as MatchState<SmashUpCore>;
+    // 使用 pipeline 传入的 matchState（包含真实 sys），或构造最小包装
+    let ms = matchState ?? { core: state, sys: { interaction: { current: undefined, queue: [] } } } as unknown as MatchState<SmashUpCore>;
 
     // 依次执行保护过滤 + trigger 后处理
     const afterDestroy = processDestroyTriggers(events, ms, pid, random, now);
     const afterMove = processMoveTriggers(afterDestroy.events, ms, pid, random, now);
     const afterAffect = processAffectTriggers(afterMove.events, ms, pid, random, now);
-    return afterAffect.events;
+
+    // 检测 MINION_PLAYED 事件，自动追加触发链（onPlay + 基地能力 + ongoing）
+    const derivedEvents: SmashUpEvent[] = [];
+    for (const event of afterAffect.events) {
+        if (event.type === SU_EVENTS.MINION_PLAYED) {
+            const payload = event.payload;
+            const triggers = fireMinionPlayedTriggers({
+                core: state,
+                matchState: ms,
+                playerId: payload.playerId,
+                cardUid: payload.cardUid,
+                defId: payload.defId,
+                baseIndex: payload.baseIndex,
+                power: payload.power,
+                random,
+                now: event.timestamp,
+                playedEvt: event as MinionPlayedEvent,
+            });
+            derivedEvents.push(...triggers.events);
+            if (triggers.matchState) ms = triggers.matchState;
+        }
+    }
+
+    // 对 derived events 递归执行 trigger 后处理（onPlay 产生的 MINION_DESTROYED 等需要触发 onDestroy 链）
+    let finalDerived = derivedEvents;
+    if (derivedEvents.length > 0) {
+        const afterDerivedDestroy = processDestroyTriggers(derivedEvents, ms, pid, random, now);
+        const afterDerivedMove = processMoveTriggers(afterDerivedDestroy.events, ms, pid, random, now);
+        const afterDerivedAffect = processAffectTriggers(afterDerivedMove.events, ms, pid, random, now);
+        finalDerived = afterDerivedAffect.events;
+    }
+
+    return { events: [...afterAffect.events, ...finalDerived], matchState: ms };
 }
 
 // ============================================================================
@@ -677,3 +711,6 @@ export {
     getTotalEffectivePowerOnBase,
 } from './ongoingModifiers';
 export type { PowerModifierFn, PowerModifierContext } from './ongoingModifiers';
+
+// Export postProcessSystemEvents for tests
+export { postProcessSystemEvents };

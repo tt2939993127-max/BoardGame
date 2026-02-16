@@ -32,6 +32,7 @@ import {
   getUnitAbilities,
   getUnitMoveEnhancements,
   getPassedThroughUnitPositions,
+  getMovePath,
   findUnitPositionByInstanceId,
   HAND_SIZE,
 } from './helpers';
@@ -185,7 +186,12 @@ export function executeCommand(
 
         events.push({
           type: SW_EVENTS.UNIT_MOVED,
-          payload: { from, to, unitId: unit.instanceId },
+          payload: { 
+            from, 
+            to, 
+            unitId: unit.instanceId,
+            path: getMovePath(from, to, core),
+          },
           timestamp,
         });
 

@@ -54,6 +54,7 @@ export const HandArea = ({
     onSellButtonChange,
     isDiscardMode = false,
     onDiscardCard,
+    respondableCardIds,
 }: {
     hand: AbilityCard[];
     locale?: string;
@@ -74,6 +75,8 @@ export const HandArea = ({
     isDiscardMode?: boolean;
     /** 弃牌模式下点击卡牌的回调 */
     onDiscardCard?: (cardId: string) => void;
+    /** 响应窗口中可响应的卡牌 ID 集合（用于高亮） */
+    respondableCardIds?: Set<string>;
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const [draggingCardKey, setDraggingCardKey] = React.useState<string | null>(null);
@@ -676,6 +679,7 @@ export const HandArea = ({
                                                 ${isDragging ? 'ring-4 ring-amber-400 shadow-amber-500/50' : ''}
                                                 ${canClickDiscard && isHovered ? 'ring-4 ring-red-500 shadow-red-500/50' : ''}
                                                 ${canClickDiscard && !isHovered ? 'ring-2 ring-red-500/50' : ''}
+                                                ${respondableCardIds?.has(card.id) && !isDragging && !canClickDiscard ? 'ring-4 ring-cyan-400 shadow-cyan-400/60' : ''}
                                             `}
                                             style={{ transformStyle: 'preserve-3d' }}
                                             initial={{ rotateY: isFlipped ? 0 : 180 }}

@@ -25,6 +25,8 @@ export interface CenterBoardProps {
     onMagnifyImage: (image: string) => void;
     /** ref 转发给 AbilityOverlays，供调试面板调用保存布局 */
     abilityOverlaysRef?: React.Ref<AbilityOverlaysHandle>;
+    /** 玩家的 token 状态（用于显示被动能力激活状态） */
+    playerTokens?: Record<string, number>;
 }
 
 export const CenterBoard = ({
@@ -45,6 +47,7 @@ export const CenterBoard = ({
     locale,
     onMagnifyImage,
     abilityOverlaysRef,
+    playerTokens,
 }: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
 
@@ -77,6 +80,7 @@ export const CenterBoard = ({
                         abilityLevels={abilityLevels}
                         characterId={characterId}
                         locale={locale}
+                        playerTokens={playerTokens}
                     />
                     <button
                         onClick={(e) => { e.stopPropagation(); onMagnifyImage(playerBoardPath); }}

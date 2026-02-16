@@ -8,7 +8,7 @@ import type { ValidationResult } from '../../../engine/types';
 import type { SummonerWarsCore, PlayerId, CellCoord, BoardUnit } from './types';
 import type { AbilityDef, ValidationContext } from './abilities';
 import { abilityRegistry } from './abilities';
-import { getUnitAbilities, getUnitAt, manhattanDistance, isValidCoord, isCellEmpty } from './helpers';
+import { getUnitAbilities, getUnitAt, manhattanDistance, isValidCoord, isCellEmpty, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN } from './helpers';
 import { CARD_IDS, getBaseCardId } from './ids';
 import { buildUsageKey } from './utils';
 
@@ -126,6 +126,47 @@ export function validateAbilityActivation(
         };
       }
     }
+
+    // ========================================================================
+    // 临时方案（标记为过时）：手动检查 costsMoveAction / costsAttackAction
+    // 
+    // @deprecated 推荐使用引擎层的通用约束系统（engine/primitives/abilityConstraints）
+    // 
+    // 迁移指南：
+    // 旧代码：
+    //   costsMoveAction: true,
+    //   validation: { customValidator: (ctx) => { if (ctx.sourceUnit.hasMoved) ... } }
+    // 
+    // 新代码：
+    //   constraints: {
+    //     actionCost: { type: 'move', count: 1 },
+    //     entityState: { notMoved: true },
+    //   }
+    // 
+    // 然后在验证层调用：
+    //   checkAbilityConstraints(ability.constraints, constraintContext)
+    // 
+    // 优点：
+    // - 数据驱动，无需手写验证逻辑
+    // - 可组合，支持多种约束类型
+    // - 可扩展，支持自定义约束处理器
+    // ========================================================================
+
+    // costsMoveAction：消耗移动行动的技能，移动次数用完时不可用
+    if (ability.costsMoveAction) {
+      const player = core.players[playerId];
+      if (player.moveCount >= MAX_MOVES_PER_TURN) {
+        return { valid: false, error: '本回合移动次数已用完' };
+      }
+    }
+
+    // costsAttackAction：消耗攻击行动的技能，攻击次数用完时不可用
+    if (ability.costsAttackAction) {
+      const player = core.players[playerId];
+      if (player.attackCount >= MAX_ATTACKS_PER_TURN) {
+        return { valid: false, error: '本回合攻击次数已用完' };
+      }
+    }
     
     // 自定义验证
     if (ability.validation.customValidator) {
@@ -156,6 +197,22 @@ export function canUseAbility(
     const usageCount = (ctx.core.abilityUsageCount ?? {})[usageKey] ?? 0;
     if (usageCount >= ability.usesPerTurn) {
       return { canUse: false, reason: '本回合已使用' };
+    }
+  }
+
+  // costsMoveAction：消耗移动行动的技能，移动次数用完时不可用
+  if (ability.costsMoveAction) {
+    const player = ctx.core.players[ctx.playerId];
+    if (player.moveCount >= MAX_MOVES_PER_TURN) {
+      return { canUse: false, reason: '移动次数已用完' };
+    }
+  }
+
+  // costsAttackAction：消耗攻击行动的技能，攻击次数用完时不可用
+  if (ability.costsAttackAction) {
+    const player = ctx.core.players[ctx.playerId];
+    if (player.attackCount >= MAX_ATTACKS_PER_TURN) {
+      return { canUse: false, reason: '攻击次数已用完' };
     }
   }
   

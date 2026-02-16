@@ -14,36 +14,55 @@ type Props = {
     isMyTurn: boolean;
     /** 弃牌堆中有可从弃牌堆打出的卡牌时为 true（仅用于视觉提示） */
     hasPlayableFromDiscard?: boolean;
-    /** 弃牌堆出牌选择面板正在显示时为 true，禁止打开纯查看面板（避免两个底部面板重叠） */
-    suppressViewer?: boolean;
-    /** 点击弃牌堆时打开弃牌堆出牌面板（被动弃牌堆出牌场景） */
-    onOpenDiscardPlay?: () => void;
+    /** 可从弃牌堆打出的卡牌列表（用于高亮） */
+    playableCards?: { uid: string; defId: string; label: string }[];
+    /** 当前选中的卡牌 uid */
+    selectedUid?: string | null;
+    /** 选中卡牌回调 */
+    onSelectCard?: (uid: string | null) => void;
+    /** 选中提示文本 */
+    selectHint?: string;
+    /** 关闭弃牌堆面板的回调（含清理逻辑） */
+    onClosePanel?: () => void;
     dispatch: (type: string, payload?: unknown) => void;
     playerID: string | null;
 };
 
-export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, suppressViewer, onOpenDiscardPlay, dispatch, playerID }) => {
+export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn, hasPlayableFromDiscard, playableCards, selectedUid, onSelectCard, selectHint, onClosePanel, dispatch, playerID }) => {
     const { t } = useTranslation('game-smashup');
     const [showDiscard, setShowDiscard] = useState(false);
 
-    // 弃牌堆出牌选择面板激活时，自动关闭纯查看面板
-    useEffect(() => {
-        if (suppressViewer) setShowDiscard(false);
-    }, [suppressViewer]);
     const topCard = discard.length > 0 ? discard[discard.length - 1] : null;
     const topDef = topCard ? getCardDef(topCard.defId) : null;
     const topName = resolveCardName(topDef ?? undefined, t) || topCard?.defId;
 
     // 弃牌堆卡牌列表（供 PromptOverlay displayCards 使用）
-    const handleCloseDiscard = useCallback(() => setShowDiscard(false), []);
+    // 永远显示全部弃牌堆，可打出的卡牌通过 playableDefIds 高亮
+    const handleCloseDiscard = useCallback(() => {
+        setShowDiscard(false);
+        onSelectCard?.(null);
+        onClosePanel?.();
+    }, [onSelectCard, onClosePanel]);
+
     const displayCardsData = useMemo(() => {
         if (!showDiscard || discard.length === 0) return undefined;
+
+        // 构建可打出的 defId 集合
+        const playableDefIds = new Set(playableCards?.map(c => c.defId) || []);
+
         return {
             title: `${t('ui.discard_pile', { defaultValue: '弃牌堆' })} (${discard.length})`,
             cards: discard.map(c => ({ uid: c.uid, defId: c.defId })),
             onClose: handleCloseDiscard,
+            // 有可打出的卡牌时，传递选择相关 props
+            ...(playableCards && playableCards.length > 0 && {
+                selectedUid,
+                onSelect: onSelectCard,
+                selectHint: selectHint || t('ui.click_base_to_deploy', { defaultValue: '点击基地放置随从' }),
+                playableDefIds,
+            }),
         };
-    }, [showDiscard, discard, t, handleCloseDiscard]);
+    }, [showDiscard, discard, playableCards, selectedUid, onSelectCard, selectHint, t, handleCloseDiscard]);
 
     // 点击面板外部关闭弃牌堆查看
     useEffect(() => {
@@ -87,15 +106,7 @@ export const DeckDiscardZone: React.FC<Props> = ({ deckCount, discard, isMyTurn,
             <div
                 className="flex flex-col items-center pointer-events-auto group cursor-pointer relative"
                 data-discard-toggle
-                onClick={() => {
-                    // 有可打出卡牌时，优先 toggle 弃牌堆出牌面板（即使 suppressViewer 为 true 也允许关闭）
-                    if (onOpenDiscardPlay) {
-                        onOpenDiscardPlay();
-                        return;
-                    }
-                    if (suppressViewer) return;
-                    setShowDiscard(prev => !prev);
-                }}
+                onClick={() => setShowDiscard(prev => !prev)}
             >
                 <div className="relative w-[7.5vw] aspect-[0.714]">
                     {hasPlayableFromDiscard && (

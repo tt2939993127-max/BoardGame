@@ -96,7 +96,14 @@ export function executeActivateAbility(
     events.push(...triggerAbilities('afterAttack', afterAttackCtx));
   }
 
-  // 通用机制：技能声明 costsMoveAction 时自动消耗一次移动行动
+  /**
+   * @deprecated 推荐使用引擎层的通用约束系统（engine/primitives/abilityConstraints）
+   * 
+   * 此处保留是为了支持现有技能的行动消耗机制。
+   * 新增技能应使用 constraints 字段声明约束，execute 层通过事件消耗行动。
+   * 
+   * 通用机制：技能声明 costsMoveAction 时自动消耗一次移动行动
+   */
   const abilityDef = abilityRegistry.get(abilityId);
   if (abilityDef?.costsMoveAction) {
     events.push({
@@ -105,7 +112,11 @@ export function executeActivateAbility(
       timestamp,
     });
   }
-  // 通用机制：技能声明 costsAttackAction 时自动消耗一次攻击行动
+  /**
+   * @deprecated 推荐使用引擎层的通用约束系统（engine/primitives/abilityConstraints）
+   * 
+   * 通用机制：技能声明 costsAttackAction 时自动消耗一次攻击行动
+   */
   if (abilityDef?.costsAttackAction) {
     events.push({
       type: SW_EVENTS.ATTACK_ACTION_CONSUMED,

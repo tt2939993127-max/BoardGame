@@ -8,7 +8,7 @@ import {
 
 const STATUS_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
 const STATUS_REMOVE_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
-const TOKEN_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.action_and_interaction.ready_a';
+const TOKEN_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.strengthened_a';
 const TOKEN_REMOVE_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
 
 describe('DiceThrone FX Setup', () => {

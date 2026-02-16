@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execute, reduce } from '../domain/reducer';
+import { reduce } from '../domain/reducer';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type {
     SmashUpCore,
@@ -22,7 +22,8 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
-import { applyEvents } from './helpers';
+import { applyEvents, makeMatchState as makeMatchStateFromHelpers } from './helpers';
+import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
 
 beforeAll(() => {
@@ -71,7 +72,7 @@ function makeState(overrides?: Partial<SmashUpCore>): SmashUpCore {
 }
 
 function makeMatchState(core: SmashUpCore): MatchState<SmashUpCore> {
-    return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
+    return makeMatchStateFromHelpers(core);
 }
 
 const defaultRandom: RandomFn = {
@@ -86,20 +87,22 @@ let lastMatchState: MatchState<SmashUpCore> | null = null;
 
 function execPlayMinion(state: SmashUpCore, playerId: string, cardUid: string, baseIndex: number, random?: RandomFn): SmashUpEvent[] {
     const ms = makeMatchState(state);
-    lastMatchState = ms;
-    return execute(ms, {
+    const result = runCommand(ms, {
         type: SU_COMMANDS.PLAY_MINION, playerId,
         payload: { cardUid, baseIndex },
     } as any, random ?? defaultRandom);
+    lastMatchState = result.finalState;
+    return result.events as SmashUpEvent[];
 }
 
 function execPlayAction(state: SmashUpCore, playerId: string, cardUid: string, targetBaseIndex?: number, random?: RandomFn): SmashUpEvent[] {
     const ms = makeMatchState(state);
-    lastMatchState = ms;
-    return execute(ms, {
+    const result = runCommand(ms, {
         type: SU_COMMANDS.PLAY_ACTION, playerId,
         payload: { cardUid, targetBaseIndex },
     } as any, random ?? defaultRandom);
+    lastMatchState = result.finalState;
+    return result.events as SmashUpEvent[];
 }
 
 /** 从最近一次 execute 的 matchState 中获取 interactions */

@@ -467,21 +467,21 @@ const UnitCell: React.FC<{
       data-unit-life={life}
       data-unit-damage={unit.damage}
       style={{
-        width: `${pos.width}%`, height: `${pos.height}%`,
+        left: `${pos.left}%`,
+        top: `${pos.top}%`,
+        width: `${pos.width}%`,
+        height: `${pos.height}%`,
         zIndex: isAttacker ? BOARD_GRID_Z.attacker : undefined,
       }}
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
-      initial={isNew ? { left: `${pos.left}%`, top: `${pos.top}%`, opacity: 0, scale: 1.1 } : false}
-      animate={isNew
-        ? { left: `${pos.left}%`, top: `${pos.top}%`, opacity: 1, scale: 1 }
-        : { left: `${pos.left}%`, top: `${pos.top}%` }
-      }
+      initial={isNew ? { opacity: 0, scale: 1.1 } : false}
+      animate={isNew ? { opacity: 1, scale: 1 } : undefined}
       transition={isNew ? {
         type: 'spring', stiffness: 80, damping: 15, mass: 1.2,
       } : {
-        left: { type: 'spring', stiffness: 300, damping: 30 },
-        top: { type: 'spring', stiffness: 300, damping: 30 },
+        layout: { type: 'spring', stiffness: 300, damping: 30 },
       }}
+      layout="position"
     >
       <div
         className={`relative w-[85%] group transition-[background-color,box-shadow] duration-200 rounded-lg ${!isMyUnit ? 'rotate-180' : ''} ${
@@ -648,15 +648,18 @@ const StructureCell: React.FC<{
       data-structure-damage={structure.damage}
       data-structure-gate={structure.card.isGate ? 'true' : 'false'}
       style={{
-        width: `${pos.width}%`, height: `${pos.height}%`,
+        left: `${pos.left}%`,
+        top: `${pos.top}%`,
+        width: `${pos.width}%`,
+        height: `${pos.height}%`,
       }}
-      initial={isNew ? { left: `${pos.left}%`, top: `${pos.top}%`, opacity: 0 } : false}
-      animate={{ left: `${pos.left}%`, top: `${pos.top}%`, opacity: 1 }}
+      initial={isNew ? { opacity: 0 } : false}
+      animate={isNew ? { opacity: 1 } : undefined}
       transition={{
-        left: { type: 'spring', stiffness: 300, damping: 30 },
-        top: { type: 'spring', stiffness: 300, damping: 30 },
+        layout: { type: 'spring', stiffness: 300, damping: 30 },
         opacity: { duration: 0 },
       }}
+      layout="position"
       onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
     >
       <motion.div

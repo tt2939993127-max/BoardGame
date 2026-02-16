@@ -145,21 +145,73 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         if (event.type === 'HEAL_APPLIED') return null;
 
         const type = event.type;
+        const eventPlayerId = (event as AudioEvent & { payload?: { playerId?: string } }).payload?.playerId;
+        const currentPlayerId = runtime.meta?.currentPlayerId;
+        const shouldTraceSelectionAudio =
+            type === 'CHARACTER_SELECTED'
+            || type === 'PLAYER_READY'
+            || type === 'HOST_STARTED'
+            || type === 'SYS_PHASE_CHANGED';
+
+        const traceSelectionAudio = (action: string, key: string | null, reason: string) => {
+            if (!shouldTraceSelectionAudio) return;
+            console.log(
+                `[DT_AUDIO_TRACE] source=feedback_resolver action=${action} type=${type} key=${key ?? 'null'} reason=${reason} eventPlayerId=${eventPlayerId ?? 'none'} currentPlayerId=${currentPlayerId ?? 'none'} turnNumber=${G.turnNumber}`
+            );
+        };
 
         if (type === 'CHARACTER_SELECTED') {
-            return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
+            // 角色选择点击音由本地 UI 按钮负责，避免通过事件流广播给其他客户端
+            traceSelectionAudio('skip', null, 'character_selected_local_ui');
+            return null;
         }
 
         if (type === 'PLAYER_READY') {
-            return 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
+            // 自己点击 Ready 时已在本地按钮播放点击音，事件音仅用于提示“其他玩家已准备”
+            if (!currentPlayerId) {
+                traceSelectionAudio('skip', null, 'current_player_unready');
+                return null;
+            }
+            if (eventPlayerId && currentPlayerId && eventPlayerId === currentPlayerId) {
+                traceSelectionAudio('skip', null, 'local_player_ready');
+                return null;
+            }
+            const key = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
+            traceSelectionAudio('play', key, 'other_player_ready');
+            return key;
         }
 
         if (type === 'HOST_STARTED') {
-            return 'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003';
+            // Host 自己点击开始时已在本地按钮播放点击音，事件音仅用于提示“他人已开始”
+            if (!currentPlayerId) {
+                traceSelectionAudio('skip', null, 'current_player_unready');
+                return null;
+            }
+            if (eventPlayerId && currentPlayerId && eventPlayerId === currentPlayerId) {
+                traceSelectionAudio('skip', null, 'local_player_started');
+                return null;
+            }
+            const key = 'ui.fantasy_ui_sound_fx_pack_vol.signals.signal_update_b_003';
+            traceSelectionAudio('play', key, 'other_player_started');
+            return key;
         }
 
         if (type === 'SYS_PHASE_CHANGED') {
-            return 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
+            const phasePayload = (event as AudioEvent & { payload?: { from?: string; to?: string } }).payload;
+            const phaseFrom = phasePayload?.from;
+
+            // 开局从 setup 自动连推到主阶段时，避免与“开始对局”提示音叠加造成一次点击多次响
+            if (phaseFrom === 'setup') {
+                traceSelectionAudio('skip', null, 'startup_phase_from_setup');
+                return null;
+            }
+            if (G.turnNumber === 1 && (phaseFrom === 'upkeep' || phaseFrom === 'income')) {
+                traceSelectionAudio('skip', null, 'startup_phase_autocontinue');
+                return null;
+            }
+            const key = 'fantasy.gothic_fantasy_sound_fx_pack_vol.musical.drums_of_fate_002';
+            traceSelectionAudio('play', key, 'phase_changed_default');
+            return key;
         }
 
         if (type === 'TURN_CHANGED') {

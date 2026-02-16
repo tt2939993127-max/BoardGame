@@ -225,7 +225,8 @@ function steampunkMechanic(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `steampunk_mechanic_${ctx.now}`, ctx.playerId,
-        '选择要从弃牌堆打出的行动卡', options as any[], 'steampunk_mechanic',
+        '选择要从弃牌堆打出的行动卡', options as any[],
+        { sourceId: 'steampunk_mechanic', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -383,6 +384,9 @@ export function registerSteampunkInteractionHandlers(): void {
     });
 
     registerInteractionHandler('steampunk_mechanic', (state, playerId, value, _iData, _random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { cardUid } = value as { cardUid: string };
         // 从弃牌堆取回到手牌 + 额外行动（模拟"打出弃牌堆行动卡"）
         return { state, events: [

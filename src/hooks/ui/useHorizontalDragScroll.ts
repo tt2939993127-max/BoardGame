@@ -105,7 +105,7 @@ export function useHorizontalDragScroll<T extends HTMLElement = HTMLDivElement>(
 
       const dx = (e.clientX - dragState.current.startX) * dragSensitivity;
       // 超过 3px 视为真正拖拽（区分点击）
-      if (Math.abs(dx) > 3) {
+      if (Math.abs(dx) > 3 && !dragState.current.hasMoved) {
         dragState.current.hasMoved = true;
         el.setAttribute('data-dragging', '');
       }
@@ -131,9 +131,11 @@ export function useHorizontalDragScroll<T extends HTMLElement = HTMLDivElement>(
         ev.stopPropagation();
         ev.preventDefault();
       };
-      el.addEventListener('click', suppress, { capture: true, once: true });
-      // 兜底：200ms 后移除，防止 click 没触发导致永久挂载
-      setTimeout(() => el.removeEventListener('click', suppress, { capture: true } as EventListenerOptions), 200);
+      el.addEventListener('click', suppress, { capture: true });
+      // 200ms 后强制移除，不依赖 once（避免点击 pointer-events-none 元素时监听器永久存在）
+      setTimeout(() => {
+        el.removeEventListener('click', suppress, { capture: true });
+      }, 200);
     }
   }, []);
 

@@ -170,6 +170,14 @@ export interface SimpleChoiceConfig {
     targetType?: 'base' | 'minion' | 'generic';
     /** 单候选时是否自动解决，默认 true（强制效果自动跳过） */
     autoResolveIfSingle?: boolean;
+    /**
+     * 是否自动添加取消选项，默认 false
+     * - true: 自动在选项列表末尾添加取消选项 { id: '__cancel__', label: '取消', value: { __cancel__: true } }
+     * - false: 不添加取消选项
+     * 
+     * 取消选项的 value 会包含 __cancel__: true 标记，handler 可以检查此标记来跳过执行
+     */
+    autoCancelOption?: boolean;
 }
 
 /**
@@ -188,13 +196,25 @@ export function createSimpleChoice<T>(
     const config: SimpleChoiceConfig = typeof sourceIdOrConfig === 'string'
         ? { sourceId: sourceIdOrConfig, timeout, multi }
         : { ...sourceIdOrConfig, timeout: sourceIdOrConfig?.timeout ?? timeout, multi: sourceIdOrConfig?.multi ?? multi };
+    
+    // 自动添加取消选项
+    let finalOptions = options;
+    if (config.autoCancelOption) {
+        const cancelOption: PromptOption<T> = {
+            id: '__cancel__',
+            label: '取消',
+            value: { __cancel__: true } as T,
+        };
+        finalOptions = [...options, cancelOption];
+    }
+    
     return {
         id,
         kind: 'simple-choice',
         playerId,
         data: {
             title,
-            options,
+            options: finalOptions,
             sourceId: config.sourceId,
             timeout: config.timeout,
             multi: config.multi,

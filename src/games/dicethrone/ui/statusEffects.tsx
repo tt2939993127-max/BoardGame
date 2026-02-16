@@ -63,8 +63,9 @@ export const loadStatusAtlases = async (): Promise<StatusAtlases> => {
             const data: unknown = await response.json();
             if (!isStatusIconAtlasResponse(data)) return null;
 
+            // 图片路径也需要经过 getLocalizedAssetPath 处理（去掉 .json 后缀，加上图片文件名）
             const baseDir = path.substring(0, path.lastIndexOf('/') + 1);
-            const imagePath = `${baseDir}${data.meta.image}`;
+            const imagePath = `${baseDir}${data.meta.image.replace('.png', '')}`;  // 去掉扩展名，让 buildLocalizedImageSet 处理
 
             const frames = Object.fromEntries(
                 Object.entries(data.frames).map(([key, entry]) => [key, entry.frame])

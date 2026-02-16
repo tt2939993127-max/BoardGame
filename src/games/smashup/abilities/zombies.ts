@@ -12,8 +12,9 @@ import type {
     DeckReshuffledEvent,
     SmashUpEvent,
     MinionCardDef,
+    MinionPlayedEvent,
 } from '../domain/types';
-import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions, buildMinionPlayedEvents } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions } from '../domain/abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerRestriction, registerTrigger } from '../domain/ongoingEffects';
@@ -291,18 +292,25 @@ function zombieMallCrawl(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     if (player.deck.length === 0) return { events: [] };
     // 按 defId 分组
-    const groups = new Map<string, { defId: string; uids: string[]; name: string }>();
+    const groups = new Map<string, { defId: string; uids: string[] }>();
     for (const c of player.deck) {
         if (!groups.has(c.defId)) {
-            const def = getCardDef(c.defId);
-            groups.set(c.defId, { defId: c.defId, uids: [], name: def?.name ?? c.defId });
+            groups.set(c.defId, { defId: c.defId, uids: [] });
         }
         groups.get(c.defId)!.uids.push(c.uid);
     }
     const groupList = Array.from(groups.values());
-    const options = groupList.map((g, i) => ({
-        id: `group-${i}`, label: `${g.name} (×${g.uids.length})`, value: { defId: g.defId },
-    }));
+    const options = groupList.map((g, i) => {
+        const def = getCardDef(g.defId);
+        // label 使用 i18n key，UI 层会通过 resolveI18nKeys 解析
+        const nameKey = def?.name ?? g.defId;
+        return {
+            id: `group-${i}`,
+            label: `${nameKey} (×${g.uids.length})`,
+            value: { defId: g.defId },
+            // 不设置 displayMode，让 UI 层根据 defId 和 previewRef 自动判断显示模式
+        };
+    });
     const interaction = createSimpleChoice(
         `zombie_mall_crawl_${ctx.now}`, ctx.playerId,
         '选择一个卡名，将牌库中所有同名卡放入弃牌堆', options, 'zombie_mall_crawl',
@@ -481,11 +489,12 @@ export function registerZombieInteractionHandlers(): void {
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         const contCtx = iData?.continuationContext as { targetBaseIndex: number };
         if (!contCtx) return undefined;
-        const result = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid, defId,
-            baseIndex: contCtx.targetBaseIndex, power, random: _random, now: timestamp,
-        });
-        return { state: result.matchState ?? state, events: result.events };
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid, defId, baseIndex: contCtx.targetBaseIndex, power },
+            timestamp,
+        };
+        return { state, events: [playedEvt] };
     });
 
     // 僵尸领主：选随从+选基地合并为单步交互
@@ -494,18 +503,18 @@ export function registerZombieInteractionHandlers(): void {
         if (selected.done) return { state, events: [] }; // 完成
         const { cardUid, defId, power, baseIndex } = selected as { cardUid: string; defId: string; power: number; baseIndex: number };
         const contCtx = iData?.continuationContext as { emptyBases: { baseIndex: number; label: string }[]; usedCardUids: string[]; filledBases: number[] };
-        const result = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid, defId,
-            baseIndex, power, random: _random, now: timestamp, fromDiscard: true,
-        });
-        const events: SmashUpEvent[] = [...result.events];
-        const ms = result.matchState ?? state;
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid, defId, baseIndex, power, fromDiscard: true },
+            timestamp,
+        };
+        const events: SmashUpEvent[] = [playedEvt];
         // 更新已用列表
         const usedCardUids = [...contCtx.usedCardUids, cardUid];
         const filledBases = [...contCtx.filledBases, baseIndex];
         // 检查是否还有空基地和弃牌堆随从
         const remainingBases = contCtx.emptyBases.filter(b => !filledBases.includes(b.baseIndex));
-        if (remainingBases.length === 0) return { state: ms, events };
+        if (remainingBases.length === 0) return { state, events };
         const player = state.core.players[playerId];
         const remainingMinions = player.discard.filter(c => {
             if (c.type !== 'minion') return false;
@@ -513,10 +522,10 @@ export function registerZombieInteractionHandlers(): void {
             const def = getCardDef(c.defId) as MinionCardDef | undefined;
             return def != null && def.power <= 2;
         });
-        if (remainingMinions.length === 0) return { state: ms, events };
+        if (remainingMinions.length === 0) return { state, events };
         // 继续下一轮
         const next = zombieLordBuildInteraction(playerId, remainingMinions, contCtx.emptyBases, usedCardUids, filledBases, timestamp);
-        return { state: queueInteraction(ms, next), events };
+        return { state: queueInteraction(state, next), events };
     });
 
     // 它们不断来临：选弃牌堆随从后 → 链式选择基地
@@ -530,15 +539,16 @@ export function registerZombieInteractionHandlers(): void {
         }
         if (candidates.length === 1) {
             // 只有一个基地直接打出
-            const playResult = buildMinionPlayedEvents({
-                core: state.core, matchState: state, playerId, cardUid, defId,
-                baseIndex: candidates[0].baseIndex, power, random: _random, now: timestamp, fromDiscard: true,
-            });
+            const playedEvt: MinionPlayedEvent = {
+                type: SU_EVENTS.MINION_PLAYED,
+                payload: { playerId, cardUid, defId, baseIndex: candidates[0].baseIndex, power, fromDiscard: true },
+                timestamp,
+            };
             return {
-                state: playResult.matchState ?? state,
+                state,
                 events: [
                     grantExtraMinion(playerId, 'zombie_they_keep_coming', timestamp),
-                    ...playResult.events,
+                    playedEvt,
                 ],
             };
         }
@@ -557,11 +567,12 @@ export function registerZombieInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string; power: number };
         if (!ctx) return undefined;
-        const result = buildMinionPlayedEvents({
-            core: state.core, matchState: state, playerId, cardUid: ctx.cardUid, defId: ctx.defId,
-            baseIndex, power: ctx.power, random: _random, now: timestamp, fromDiscard: true,
-        });
-        return { state: result.matchState ?? state, events: result.events };
+        const playedEvt: MinionPlayedEvent = {
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, power: ctx.power, fromDiscard: true },
+            timestamp,
+        };
+        return { state, events: [playedEvt] };
     });
 
     // （已删除旧的"它们为你而来"交互处理器——现在通过 PLAY_MINION fromDiscard 命令直接打出）

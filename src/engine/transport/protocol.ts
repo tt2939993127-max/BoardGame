@@ -92,6 +92,9 @@ export interface GameBoardProps<
     /** 是否已连接到服务端 */
     isConnected?: boolean;
 
+    /** 当前语言代码（用于本地化资源路径与 UI 文案） */
+    locale?: string;
+
     /** 重置游戏回调（用于重赛） */
     reset?: () => void;
 }

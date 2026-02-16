@@ -32,6 +32,7 @@ import { smashUpCriticalImageResolver } from './criticalImageResolver';
 // 注册所有派系能力
 initAllAbilities();
 
+
 // ============================================================================
 // 系统组装（展开 createBaseSystems，替换 ActionLogSystem 为带配置版本）
 // ============================================================================

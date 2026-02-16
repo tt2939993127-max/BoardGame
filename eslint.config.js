@@ -45,6 +45,15 @@ export default defineConfig([
       '@typescript-eslint/ban-ts-comment': 'warn',
     },
   },
+  // execute 层职责约束：禁止调用触发链函数
+  {
+    files: ['**/games/*/domain/execute.ts', '**/games/*/domain/reducer.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: ['*abilityHelpers'],
+      }],
+    },
+  },
   // 测试文件放宽规则：允许 any 和 require()，减少测试代码噪音
   {
     files: ['**/__tests__/**/*.{ts,tsx}', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],

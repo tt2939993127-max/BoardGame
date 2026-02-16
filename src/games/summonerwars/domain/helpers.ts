@@ -355,6 +355,39 @@ export function getValidMoveTargets(state: SummonerWarsCore, from: CellCoord): C
     .map(r => r.position);
 }
 
+/**
+ * 获取单位移动的完整路径（包含起点和终点）
+ * 用于 UI 层播放路径动画
+ */
+export function getMovementPath(
+  state: SummonerWarsCore,
+  from: CellCoord,
+  to: CellCoord,
+): CellCoord[] {
+  const distance = manhattanDistance(from, to);
+  if (distance <= 1) return [from, to]; // 1格移动直接返回起点和终点
+
+  // 直线移动：路径明确
+  if (from.row === to.row || from.col === to.col) {
+    return getStraightLinePath(from, to);
+  }
+
+  // 非直线移动：用引擎层 BFS 找所有最短路径，选最优的一条
+  const movingUnit = getUnitAt(state, from);
+  const enhancements = movingUnit ? getUnitMoveEnhancements(state, from) : null;
+  const maxSteps = enhancements ? MOVE_DISTANCE + enhancements.extraDistance : distance;
+  const canPass = enhancements?.canPassThrough ?? false;
+
+  const allPaths = findAllShortestGridPaths(
+    from, to, maxSteps, BOARD_ROWS, BOARD_COLS,
+    buildPassableCheck(state, canPass),
+  );
+  if (allPaths.length === 0) return [from, to]; // 降级：直接返回起点和终点
+
+  const bestPath = selectBestGridPath(allPaths, buildPathScorer(state, movingUnit?.owner));
+  return bestPath || [from, to];
+}
+
 // ============================================================================
 // 攻击验证
 // ============================================================================
@@ -633,7 +666,14 @@ import { abilityRegistry } from './abilities';
 export function getUnitBaseAbilities(unit: BoardUnit): string[] {
   const base = unit.card.abilities ?? [];
   const temp = unit.tempAbilities ?? [];
-  return temp.length > 0 ? [...base, ...temp] : [...base];
+  if (temp.length === 0) return [...base];
+  
+  // 去重：temp 中可能包含与 base 重复的技能（如力量颂歌授予已有技能）
+  const result = [...base];
+  for (const a of temp) {
+    if (!result.includes(a)) result.push(a);
+  }
+  return result;
 }
 
 /**

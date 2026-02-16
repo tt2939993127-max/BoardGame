@@ -5,6 +5,7 @@
 | 场景 / 行为 | 必须阅读的文档 | 关注重点 |
 | :--- | :--- | :--- |
 | **处理资源** (图片/音频/图集/清单) | `docs/tools.md` | 压缩指令、扫描参数、清单校验 |
+| **国际化资源架构** (i18n 路径/符号链接/locale) | `docs/i18n-asset-architecture.md` | 方案 B2 架构、符号链接设置、未来迁移计划 |
 | **修改 DiceThrone** (文案/资源) | `docs/dicethrone-i18n.md` | 翻译 Key 结构、Scheme A 取图函数 |
 | **环境配置 / 部署** (端口/同域代理) | `docs/deploy.md` | 端口映射、环境变量、Nginx 参数 |
 | **本地联机测试** (单人同步调试) | `docs/test-mode.md` | 测试模式开关及其对视角的影响 |

@@ -27,6 +27,7 @@ import { buildDrawEvents } from './deckEvents';
 import { reduce } from './reducer';
 import { getGameMode, applyEvents } from './utils';
 import type { ResponseWindowOpenedEvent } from './events';
+import { createDamageCalculation } from '../../../engine/primitives';
 
 /**
  * 检查攻击方是否有晕眩（daze）
@@ -494,23 +495,18 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // 1. 燃烧 (burn) — 每层造成 1 点伤害，然后移除 1 层
+                // 【已迁移到新伤害计算管线】
                 const burnStacks = player.statusEffects[STATUS_IDS.BURN] ?? 0;
                 if (burnStacks > 0) {
-                    const burnDamage = burnStacks; // 每层 1 点
-                    const currentHp = player.resources[RESOURCE_IDS.HP] ?? 0;
-                    const actualDamage = Math.min(burnDamage, currentHp);
-                    events.push({
-                        type: 'DAMAGE_DEALT',
-                        payload: {
-                            targetId: activeId,
-                            amount: burnDamage,
-                            actualDamage,
-                            sourceAbilityId: 'upkeep-burn',
-                            type: 'undefendable',
-                        },
-                        sourceCommandType: command.type,
+                    const damageCalc = createDamageCalculation({
+                        source: { playerId: 'system', abilityId: 'upkeep-burn' },
+                        target: { playerId: activeId },
+                        baseDamage: burnStacks,
+                        state: core,
                         timestamp,
-                    } as DiceThroneEvent);
+                    });
+                    const damageEvents = damageCalc.toEvents();
+                    events.push(...damageEvents);
                     // 移除 1 层燃烧
                     events.push({
                         type: 'STATUS_REMOVED',
@@ -521,25 +517,18 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // 2. 中毒 (poison) — 每层造成 1 点伤害，然后移除 1 层
+                // 【已迁移到新伤害计算管线】
                 const poisonStacks = player.statusEffects[STATUS_IDS.POISON] ?? 0;
                 if (poisonStacks > 0) {
-                    const poisonDamage = poisonStacks; // 每层 1 点
-                    const currentHp = player.resources[RESOURCE_IDS.HP] ?? 0;
-                    // 需要考虑 burn 已经造成的伤害
-                    const hpAfterBurn = currentHp - (burnStacks > 0 ? Math.min(burnStacks, currentHp) : 0);
-                    const actualDamage = Math.min(poisonDamage, Math.max(0, hpAfterBurn));
-                    events.push({
-                        type: 'DAMAGE_DEALT',
-                        payload: {
-                            targetId: activeId,
-                            amount: poisonDamage,
-                            actualDamage,
-                            sourceAbilityId: 'upkeep-poison',
-                            type: 'undefendable',
-                        },
-                        sourceCommandType: command.type,
+                    const damageCalc = createDamageCalculation({
+                        source: { playerId: 'system', abilityId: 'upkeep-poison' },
+                        target: { playerId: activeId },
+                        baseDamage: poisonStacks,
+                        state: core,
                         timestamp,
-                    } as DiceThroneEvent);
+                    });
+                    const damageEvents = damageCalc.toEvents();
+                    events.push(...damageEvents);
                     // 移除 1 层中毒
                     events.push({
                         type: 'STATUS_REMOVED',

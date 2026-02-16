@@ -135,7 +135,8 @@ function dinoNaturalSelection(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `dino_natural_selection_${ctx.now}`, ctx.playerId,
-        '选择你的一个随从作为参照', buildMinionTargetOptions(options), 'dino_natural_selection_choose_mine',
+        '选择你的一个随从作为参照', buildMinionTargetOptions(options),
+        { sourceId: 'dino_natural_selection_choose_mine', autoCancelOption: true },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -251,6 +252,9 @@ export function registerDinosaurInteractionHandlers(): void {
 
     // 物竞天择第一步：选择己方随从后，链式选择目标
     registerInteractionHandler('dino_natural_selection_choose_mine', (state, playerId, value, _iData, _random, timestamp) => {
+        // 检查取消标记
+        if ((value as any).__cancel__) return { state, events: [] };
+        
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;

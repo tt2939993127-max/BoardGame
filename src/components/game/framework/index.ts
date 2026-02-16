@@ -13,6 +13,8 @@ export { HandAreaSkeleton } from './HandAreaSkeleton';
 export { ActionBarSkeleton } from './ActionBarSkeleton';
 export { ResourceTraySkeleton } from './ResourceTraySkeleton';
 export { SpotlightSkeleton } from './SpotlightSkeleton';
+export { CardListOverlay } from './CardListOverlay';
+export type { CardListOverlayProps, CardListItem } from './CardListOverlay';
 export { CharacterSelectionSkeleton } from './CharacterSelectionSkeleton';
 export type { CharacterSelectionSkeletonProps } from './CharacterSelectionSkeleton';
 export { TutorialSelectionGate } from './TutorialSelectionGate';

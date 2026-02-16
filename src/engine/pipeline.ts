@@ -267,15 +267,25 @@ function runAfterEventsRounds<TCore, TCommand extends Command, TEvent extends Ga
         if (roundEvents.length > 0 && domain.postProcessSystemEvents) {
             const domainEvents = roundEvents.filter((e) => !e.type.startsWith('SYS_'));
             if (domainEvents.length > 0) {
-                const processed = domain.postProcessSystemEvents(
+                const processResult = domain.postProcessSystemEvents(
                     currentState.core,
                     domainEvents as unknown as TEvent[],
                     random,
-                ) as unknown as GameEvent[];
+                    currentState,
+                );
+                const processed = Array.isArray(processResult)
+                    ? processResult as unknown as GameEvent[]
+                    : processResult.events as unknown as GameEvent[];
+                const newMatchState = !Array.isArray(processResult) ? processResult.matchState : undefined;
+
                 if (processed.length > domainEvents.length) {
                     const extraEvents = processed.slice(domainEvents.length);
                     roundEvents.push(...extraEvents);
                     systemEventsToReduce.push(...extraEvents);
+                }
+                if (newMatchState) {
+                    currentState = { ...currentState, sys: newMatchState.sys };
+                    ctx.state = currentState;
                 }
             }
         }
@@ -456,8 +466,43 @@ export function executePipeline<
     const reduced = reduceEventsToCore(domain, currentState.core, events as unknown as GameEvent[]);
     currentState = { ...currentState, core: reduced.core };
     ctx.state = currentState;
-    ctx.events = [...preCommandEvents, ...reduced.appliedEvents];
-    allEvents.push(...reduced.appliedEvents);
+
+    // 4.5 领域层后处理（如 onPlay 触发链），在 afterEvents 前执行
+    let appliedEvents = reduced.appliedEvents;
+    if (domain.postProcessSystemEvents && appliedEvents.length > 0) {
+        const domainEvents = appliedEvents.filter((e) => !e.type.startsWith('SYS_'));
+        if (domainEvents.length > 0) {
+            const processResult = domain.postProcessSystemEvents(
+                currentState.core,
+                domainEvents as unknown as TEvent[],
+                random,
+                currentState,
+            );
+            // 兼容两种返回格式
+            const processed = Array.isArray(processResult)
+                ? processResult as unknown as GameEvent[]
+                : processResult.events as unknown as GameEvent[];
+            const newMatchState = !Array.isArray(processResult) ? processResult.matchState : undefined;
+
+            if (processed.length > domainEvents.length) {
+                const extraEvents = processed.slice(domainEvents.length);
+                const extraReduced = reduceEventsToCore(domain, currentState.core, extraEvents);
+                if (extraReduced.core !== currentState.core) {
+                    currentState = { ...currentState, core: extraReduced.core };
+                    ctx.state = currentState;
+                }
+                appliedEvents = [...appliedEvents, ...extraReduced.appliedEvents];
+            }
+            // 应用 matchState 变更（如 sys.interaction）
+            if (newMatchState) {
+                currentState = { ...currentState, sys: newMatchState.sys };
+                ctx.state = currentState;
+            }
+        }
+    }
+
+    ctx.events = [...preCommandEvents, ...appliedEvents];
+    allEvents.push(...appliedEvents);
 
     // 5. 执行 Systems.afterEvents hooks -> 更新 state.sys（多轮迭代）
     currentState = runAfterEventsRounds({

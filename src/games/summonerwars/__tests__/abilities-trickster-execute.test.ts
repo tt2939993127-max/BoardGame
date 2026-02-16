@@ -1059,6 +1059,49 @@ describe('心灵女巫 - 幻化 (illusion)', () => {
     const copyEvents = events.filter(e => e.type === SW_EVENTS.ABILITIES_COPIED);
     expect(copyEvents.length).toBe(0);
   });
+
+  it('复制的技能应去重（目标有重复技能时）', () => {
+    const state = createTricksterState();
+    clearArea(state, [3, 4, 5], [2, 3, 4, 5]);
+
+    const witch = placeUnit(state, { row: 4, col: 3 }, {
+      cardId: 'test-witch',
+      card: makeMindWitch('test-witch'),
+      owner: '0',
+    });
+
+    // 目标士兵：card.abilities=['ranged']，tempAbilities=['ranged', 'charge']
+    // 模拟通过力量颂歌获得了自己已有的技能
+    const target = placeUnit(state, { row: 4, col: 5 }, {
+      cardId: 'test-target',
+      card: makeEnemy('test-target', { abilities: ['ranged'] }),
+      owner: '1',
+    });
+    target.tempAbilities = ['ranged', 'charge']; // 包含重复的 ranged
+
+    state.phase = 'move';
+    state.currentPlayer = '0';
+
+    const { newState, events } = executeAndReduce(state, SW_COMMANDS.ACTIVATE_ABILITY, {
+      abilityId: 'illusion',
+      sourceUnitId: witch.instanceId,
+      targetPosition: { row: 4, col: 5 },
+    });
+
+    // 应有 ABILITIES_COPIED 事件
+    const copyEvents = events.filter(e => e.type === SW_EVENTS.ABILITIES_COPIED);
+    expect(copyEvents.length).toBe(1);
+    
+    // copiedAbilities 应去重：['ranged', 'charge']，不应有两个 ranged
+    const copiedAbilities = (copyEvents[0].payload as any).copiedAbilities as string[];
+    expect(copiedAbilities).toEqual(['ranged', 'charge']);
+    expect(copiedAbilities.filter(a => a === 'ranged').length).toBe(1); // 只有一个 ranged
+
+    // 心灵女巫的 tempAbilities 也应去重
+    const updatedWitch = newState.board[4][3].unit!;
+    expect(updatedWitch.tempAbilities).toEqual(['ranged', 'charge']);
+    expect(updatedWitch.tempAbilities!.filter(a => a === 'ranged').length).toBe(1);
+  });
 });
 
 

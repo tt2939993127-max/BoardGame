@@ -5,6 +5,7 @@ import { saveDiceThroneAbilityLayout } from '../../../api/layout';
 import { UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import { TOKEN_IDS } from '../domain/ids';
 import type { CardPreviewRef } from '../../../core';
 import type { AbilityCard } from '../types';
 // 导入所有英雄的卡牌定义
@@ -23,6 +24,17 @@ const HERO_CARDS_MAP: Record<string, AbilityCard[]> = {
     paladin: PALADIN_CARDS,
     moon_elf: MOON_ELF_CARDS,
     shadow_thief: SHADOW_THIEF_CARDS,
+};
+
+// 被动能力配置（按角色）
+const PASSIVE_ABILITIES: Record<string, { slotId: string; cardId: string; tokenId?: string }[]> = {
+    paladin: [
+        {
+            slotId: 'fist',  // 使用 fist 槽位（左上角）
+            cardId: 'card-tithes-2',  // 对应的升级卡
+            tokenId: TOKEN_IDS.TITHES_UPGRADED,  // 关联的 token（用于判断是否已升级）
+        }
+    ],
 };
 
 
@@ -170,6 +182,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         abilityLevels?: Record<string, number>;
         characterId?: string;
         locale?: string;
+        playerTokens?: Record<string, number>;  // 新增：玩家的 token 状态（用于显示被动能力激活状态）
     }
 
     export const AbilityOverlays = React.forwardRef<AbilityOverlaysHandle, AbilityOverlaysProps>(({
@@ -184,6 +197,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         abilityLevels,
         characterId = 'monk', // 用于查找对应角色的升级卡定义
         locale,
+        playerTokens,
     }, ref) => {
         const { t } = useTranslation('game-dicethrone');
 
@@ -261,6 +275,61 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                 data-tutorial-id="ability-slots"
             >
                 {slots.map((slot) => {
+                    // 检查是否是被动能力槽位
+                    const passiveAbility = PASSIVE_ABILITIES[characterId]?.find(p => p.slotId === slot.id);
+                    
+                    if (passiveAbility) {
+                        // 渲染被动能力
+                        const heroCards = HERO_CARDS_MAP[characterId];
+                        const passiveCard = heroCards?.find(c => c.id === passiveAbility.cardId);
+                        const isUpgraded = passiveAbility.tokenId 
+                            ? (playerTokens?.[passiveAbility.tokenId] ?? 0) > 0 
+                            : false;
+                        const mapping = ABILITY_SLOT_MAP[slot.id];
+                        const slotLabel = mapping ? t(mapping.labelKey) : slot.id;
+                        
+                        return (
+                            <div
+                                key={slot.id}
+                                data-ability-slot={slot.id}
+                                data-passive-ability="true"
+                                onMouseDown={(e) => isEditing ? handleMouseDown(e, slot.id, 'move') : undefined}
+                                className={`
+                                    absolute transition-all duration-200 rounded-lg
+                                    ${isEditing ? 'pointer-events-auto cursor-move border border-amber-500/30' : 'pointer-events-none'}
+                                    ${isEditing && editingId === slot.id ? 'border-2 border-green-500 z-50 bg-green-500/10' : ''}
+                                `}
+                                style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
+                            >
+                                {/* 只有升级后才叠加升级卡图片，未升级时玩家面板底图已有基础被动图案 */}
+                                {isUpgraded && passiveCard?.previewRef && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <CardPreview
+                                            previewRef={passiveCard.previewRef}
+                                            locale={locale}
+                                            className="h-full aspect-[0.61] rounded-lg"
+                                        />
+                                    </div>
+                                )}
+                                {/* 如果已升级，显示激活状态 */}
+                                {isUpgraded && !isEditing && (
+                                    <div className="absolute inset-0 rounded-lg border-2 border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.6)]" />
+                                )}
+                                {isEditing && (
+                                    <>
+                                        <div className="absolute -top-3 left-0 bg-black/80 text-[8px] text-white px-1 rounded whitespace-nowrap pointer-events-none">
+                                            {slotLabel} (被动) {slot.x.toFixed(2)}% {slot.y.toFixed(2)}% ({slot.w.toFixed(2)}×{slot.h.toFixed(2)})
+                                        </div>
+                                        <div
+                                            onMouseDown={(e) => handleMouseDown(e, slot.id, 'resize')}
+                                            className="absolute -right-1 -bottom-1 w-3 h-3 bg-amber-400 border border-amber-600 rounded-sm cursor-nwse-resize pointer-events-auto z-50"
+                                        />
+                                    </>
+                                )}
+                            </div>
+                        );
+                    }
+                    
                     // 方案 A：不再需要计算精灵图位置（col, row, bgX, bgY），玩家面板已包含基础技能
                     const isResolved = resolveAbilityId(slot.id);
                     const baseAbilityId = getSlotAbilityId(characterId, slot.id);

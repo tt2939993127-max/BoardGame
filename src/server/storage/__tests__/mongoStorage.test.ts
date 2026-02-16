@@ -296,6 +296,65 @@ describe('MongoStorage 行为', () => {
         expect(remainingIds).not.toContain('legacy-empty');
     });
 
+    it('同一 ownerKey 创建新房间时也清理已结束的旧房间', async () => {
+        // 先创建一个已结束的房间
+        await mongoStorage.createMatch('match-gameover', buildCreateData('user:1', { winner: '0' }));
+        // 再创建新房间
+        await expect(mongoStorage.createMatch('match-new', buildCreateData('user:1')))
+            .resolves.toBeUndefined();
+
+        const Match = mongoose.model('Match');
+        const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
+        expect(remaining).toHaveLength(1);
+        expect(remaining[0].matchID).toBe('match-new');
+    });
+
+    it('cleanupEphemeralMatches 强制清理幽灵连接（长时间无更新但 isConnected=true）', async () => {
+        const Match = mongoose.model('Match');
+        const now = Date.now();
+        // 31 分钟前更新，超过 30 分钟强制降级阈值
+        const staleUpdatedAt = new Date(now - 31 * 60 * 1000);
+
+        await Match.create({
+            matchID: 'ghost-conn',
+            gameName: 'tictactoe',
+            state: null,
+            initialState: null,
+            metadata: {
+                gameName: 'tictactoe',
+                players: {
+                    0: { id: 0, isConnected: true },
+                    1: { id: 1, isConnected: false },
+                },
+                setupData: { ownerKey: 'user:ghost' },
+                createdAt: now,
+                updatedAt: now,
+            },
+            ttlSeconds: 0,
+            updatedAt: staleUpdatedAt,
+        });
+
+        await Match.collection.updateOne(
+            { matchID: 'ghost-conn' },
+            { $set: { updatedAt: staleUpdatedAt } }
+        );
+
+        // bootTimeMs 设为很早以前，确保不走 isStaleConnected 分支
+        (mongoStorage as unknown as { bootTimeMs: number }).bootTimeMs = now - 60 * 60 * 1000;
+
+        const cleaned = await mongoStorage.cleanupEphemeralMatches();
+        // 第一次只标记断线，不删除
+        expect(cleaned).toBe(0);
+
+        const doc = await Match.findOne({ matchID: 'ghost-conn' }).lean<{
+            metadata?: { players?: Record<string, { isConnected?: boolean }>; disconnectedSince?: number | null } | null;
+        }>();
+        expect(doc).toBeTruthy();
+        const players = doc?.metadata?.players ?? {};
+        expect(players['0']?.isConnected).toBe(false);
+        expect(typeof doc?.metadata?.disconnectedSince).toBe('number');
+    });
+
     it('createMatch 设置 1 天游留存时写入 TTL 与 expiresAt', async () => {
         const start = Date.now();
         await mongoStorage.createMatch('ttl-1day', buildCreateData('user:ttl', undefined, 86400));

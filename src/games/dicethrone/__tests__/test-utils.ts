@@ -146,6 +146,51 @@ export const createSetupWithHand = (
 };
 
 /**
+ * 创建指定英雄对战的 setup 函数
+ * 用于跨英雄交互测试，支持自定义状态修改
+ *
+ * @param hero0 玩家 0 的英雄 ID
+ * @param hero1 玩家 1 的英雄 ID
+ * @param mutate 可选的状态修改回调函数
+ */
+export const createHeroMatchup = (
+    hero0: string,
+    hero1: string,
+    mutate?: (core: DiceThroneCore) => void
+) => {
+    return (playerIds: PlayerId[], random: RandomFn): MatchState<DiceThroneCore> => {
+        const core = DiceThroneDomain.setup(playerIds, random);
+        const sys = createInitialSystemState(playerIds, testSystems, undefined);
+        let state: MatchState<DiceThroneCore> = { sys, core };
+
+        const setupCmds = [
+            { type: 'SELECT_CHARACTER', playerId: '0', payload: { characterId: hero0 } },
+            { type: 'SELECT_CHARACTER', playerId: '1', payload: { characterId: hero1 } },
+            { type: 'PLAYER_READY', playerId: '1', payload: {} },
+            { type: 'HOST_START_GAME', playerId: '0', payload: {} },
+        ];
+
+        const cfg = { domain: DiceThroneDomain, systems: testSystems };
+        for (const c of setupCmds) {
+            const r = executePipeline(cfg, state, { ...c, timestamp: Date.now() } as any, random, playerIds);
+            if (r.success) state = r.state as MatchState<DiceThroneCore>;
+        }
+
+        // 将手牌移到牌库避免响应窗口干扰
+        for (const pid of playerIds) {
+            const player = state.core.players[pid];
+            if (player) {
+                player.deck = [...player.deck, ...player.hand];
+                player.hand = [];
+            }
+        }
+
+        mutate?.(state.core);
+        return state;
+    };
+};
+
+/**
  * 创建无响应窗口卡牌的 setup 函数
  * 用于攻击结算测试，避免 instant/roll 卡牌触发响应窗口
  */

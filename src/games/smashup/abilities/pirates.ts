@@ -61,7 +61,7 @@ function pirateSaucyWench(ctx: AbilityContext): AbilityResult {
     const allOptions = [
         { id: 'skip', label: '跳过（不消灭随从）', value: { skip: true } },
         ...buildMinionTargetOptions(options),
-    ];
+    ] as any[];
     const interaction = createSimpleChoice(
         `pirate_saucy_wench_${ctx.now}`, ctx.playerId,
         '你可以消灭本基地一个力量≤2的随从', allOptions, 'pirate_saucy_wench',
@@ -361,7 +361,7 @@ function pirateFirstMateAfterScoring(ctx: TriggerContext): SmashUpEvent[] | Trig
         const allOptions = [
             { id: 'skip', label: '跳过（不移动随从）', value: { skip: true } },
             ...buildMinionTargetOptions(options),
-        ];
+        ] as any[];
         const interaction = createSimpleChoice(
             `pirate_first_mate_choose_first_${mate.uid}_${ctx.now}`, controllerId,
             '大副：你可以移动至多两个随从到其他基地（选择第1个）', allOptions, 'pirate_first_mate_choose_first',
@@ -568,7 +568,7 @@ export function registerPirateInteractionHandlers(): void {
             [
                 { id: 'skip', label: '跳过（不消灭第二个）', value: { skip: true } },
                 ...buildMinionTargetOptions(remaining),
-            ],
+            ] as any[],
             'pirate_cannon_choose_second',
         );
         return { state: queueInteraction(state, next), events };
@@ -723,7 +723,7 @@ export function registerPirateInteractionHandlers(): void {
             [
                 { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } },
                 ...buildMinionTargetOptions(remaining),
-            ],
+            ] as any[],
             'pirate_dinghy_choose_second',
         );
         return { state: queueInteraction(state, next), events };
@@ -899,7 +899,7 @@ export function registerPirateInteractionHandlers(): void {
         const allOptions = [
             { id: 'skip', label: '跳过（不移动第二个）', value: { skip: true } },
             ...buildMinionTargetOptions(options),
-        ];
+        ] as any[];
         const interaction = createSimpleChoice(
             `pirate_first_mate_choose_second_${timestamp}`, playerId,
             '大副：选择第2个要移动的随从（可选）', allOptions, 'pirate_first_mate_choose_first',

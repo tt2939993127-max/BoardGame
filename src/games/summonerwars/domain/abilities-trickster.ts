@@ -99,6 +99,7 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
     description: abilityText('high_telekinesis', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_002',
     trigger: 'afterAttack',
+    usesPerTurn: 1,
     effects: [
       { type: 'pushPull', target: { unitId: 'selectedTarget' }, distance: 1, direction: 'choice' },
     ],
@@ -107,6 +108,15 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       type: 'unit',
       filter: { type: 'isInRange', target: 'self', range: 3 },
       count: 1,
+    },
+    interactionChain: {
+      steps: [
+        { step: 'selectTarget', inputType: 'position', producesField: 'targetPosition' },
+        { step: 'selectDirection', inputType: 'direction', producesField: 'newPosition' },
+      ],
+      payloadContract: {
+        required: ['targetPosition', 'newPosition'],
+      },
     },
     validation: {
       requiredPhase: 'attack',
@@ -145,8 +155,8 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
   // 高阶念力（代替攻击）：独立的主动技能，消耗一次攻击行动
   {
     id: 'high_telekinesis_instead',
-    name: abilityText('high_telekinesis', 'name'),
-    description: abilityText('high_telekinesis', 'description'),
+    name: abilityText('high_telekinesis_instead', 'name'),
+    description: abilityText('high_telekinesis_instead', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_002',
     trigger: 'activated',
     costsAttackAction: true,
@@ -227,6 +237,7 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
     description: abilityText('mind_transmission', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_arcane_ripple_004',
     trigger: 'afterAttack',
+    usesPerTurn: 1,
     effects: [
       { type: 'grantExtraAttack', target: { unitId: 'selectedTarget' } },
     ],
@@ -242,6 +253,14 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
         ],
       },
       count: 1,
+    },
+    interactionChain: {
+      steps: [
+        { step: 'selectTarget', inputType: 'position', producesField: 'targetPosition' },
+      ],
+      payloadContract: {
+        required: ['targetPosition'],
+      },
     },
     validation: {
       requiredPhase: 'attack',
@@ -319,6 +338,7 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
     description: abilityText('telekinesis', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_001',
     trigger: 'afterAttack',
+    usesPerTurn: 1,
     effects: [
       { type: 'pushPull', target: { unitId: 'selectedTarget' }, distance: 1, direction: 'choice' },
     ],
@@ -327,6 +347,15 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
       type: 'unit',
       filter: { type: 'isInRange', target: 'self', range: 2 },
       count: 1,
+    },
+    interactionChain: {
+      steps: [
+        { step: 'selectTarget', inputType: 'position', producesField: 'targetPosition' },
+        { step: 'selectDirection', inputType: 'direction', producesField: 'newPosition' },
+      ],
+      payloadContract: {
+        required: ['targetPosition', 'newPosition'],
+      },
     },
     validation: {
       requiredPhase: 'attack',
@@ -365,8 +394,8 @@ export const TRICKSTER_ABILITIES: AbilityDef[] = [
   // 念力（代替攻击）：独立的主动技能，消耗一次攻击行动
   {
     id: 'telekinesis_instead',
-    name: abilityText('telekinesis', 'name'),
-    description: abilityText('telekinesis', 'description'),
+    name: abilityText('telekinesis_instead', 'name'),
+    description: abilityText('telekinesis_instead', 'description'),
     sfxKey: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_001',
     trigger: 'activated',
     costsAttackAction: true,
