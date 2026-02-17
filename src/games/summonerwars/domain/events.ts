@@ -43,6 +43,11 @@ const ACTION_CONSUME_KEY = 'ui.general.modern_ui_sound_fx_pack_vol.menu_navigati
 const SUMMON_REQUEST_KEY = 'ui.fantasy_ui_sound_fx_pack_vol.notifications_pop_ups.popup_a_001';
 const CONTROL_TRANSFER_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_teleport_001';
 
+// UI 交互音效 key
+const FACTION_SELECT_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
+const PLAYER_READY_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
+const HOST_START_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
+
 /**
  * 召唤师战争事件音频配置
  * 
@@ -54,9 +59,9 @@ const CONTROL_TRANSFER_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcan
  */
 export const SW_EVENTS = defineEvents({
   // ========== UI 交互（本地播放）==========
-  FACTION_SELECTED: 'ui',        // 选择阵营（UI 层播放）
-  PLAYER_READY: 'ui',            // 玩家准备（UI 层播放）
-  HOST_STARTED: 'ui',            // 房主开始（UI 层播放）
+  FACTION_SELECTED: { audio: 'ui', sound: FACTION_SELECT_KEY },
+  PLAYER_READY: { audio: 'ui', sound: PLAYER_READY_KEY },
+  HOST_STARTED: { audio: 'ui', sound: HOST_START_KEY },
 
   // ========== 即时反馈（EventStream）==========
   UNIT_SUMMONED: { audio: 'immediate', sound: UNIT_SUMMON_KEY },
