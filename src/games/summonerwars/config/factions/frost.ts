@@ -221,7 +221,7 @@ export const EVENT_CARDS_FROST: EventCard[] = [
     cost: 0,
     playPhase: 'build',
     effect: '指定你的召唤师3个区格以内至多三个友方建筑为目标。将每个目标推拉1至2个区格。',
-    deckSymbols: [DECK_SYMBOLS.DROPLET], // 💧 (图片确认)
+    deckSymbols: [DECK_SYMBOLS.DROPLET], // 💧
     spriteIndex: SPRITE_INDEX_FROST.EVENT_GLACIAL_SHIFT,
     spriteAtlas: 'cards',
   },
@@ -235,9 +235,24 @@ export const EVENT_CARDS_FROST: EventCard[] = [
     cost: 0,
     playPhase: 'move',
     effect: '从每个友方建筑上移除2点伤害。',
-    deckSymbols: [DECK_SYMBOLS.SNOWFLAKE, DECK_SYMBOLS.DROPLET], // ❄️💧 (图片确认顺序: 左雪花右水滴? Wait, let me check image 2 bottom right again. Left: Snowflake? Right: Droplet?
-    // Image 2 bottom right: 寒冰修补 cost 0. Top Right Symbols: Left is Snowflake (White Hexagon). Right is Droplet (Blue Drop).
+    deckSymbols: [DECK_SYMBOLS.SNOWFLAKE, DECK_SYMBOLS.DROPLET], // ❄️💧
     spriteIndex: SPRITE_INDEX_FROST.EVENT_ICE_REPAIR,
+    spriteAtlas: 'cards',
+  },
+  // 护城墙 - 普通事件（建筑类型）
+  {
+    id: 'frost-parapet',
+    cardType: 'event',
+    faction: 'frost',
+    name: '护城墙',
+    eventType: 'common',
+    cost: 0,
+    playPhase: 'build',
+    effect: '友方单位的攻击可以穿过本卡牌。',
+    isActive: true,
+    life: 5, // 作为建筑类事件卡，有生命值
+    deckSymbols: [DECK_SYMBOLS.SNOWFLAKE], // ❄️
+    spriteIndex: SPRITE_INDEX_FROST.STRUCTURE_PARAPET,
     spriteAtlas: 'cards',
   },
 ];
@@ -274,19 +289,6 @@ export const STRUCTURE_CARDS_FROST: StructureCard[] = [
     spriteIndex: 1,  // Portal.png 帧1（5HP传送门）
     spriteAtlas: 'portal',
   },
-  // 护城墙（作为建筑卡，在牌组中）
-  {
-    id: 'frost-parapet',
-    cardType: 'structure',
-    faction: 'frost',
-    name: '护城墙',
-    cost: 0,
-    life: 5,
-    isGate: false,
-    deckSymbols: [DECK_SYMBOLS.SNOWFLAKE], // ❄️ (图片确认，原为DROPLET错误)Wait, looking at Image 3 Top Left. 护城墙 (Parapet). Top Left: 0Cost. Top Right: Snowflake Symbol.
-    spriteIndex: SPRITE_INDEX_FROST.STRUCTURE_PARAPET,
-    spriteAtlas: 'cards',
-  }
 ];
 
 // ============================================================================
@@ -319,14 +321,6 @@ export function createFrostDeck(): {
     const copies = event.eventType === 'legendary' ? 2 : 2;
     for (let i = 0; i < copies; i++) {
       deck.push({ ...event, id: `${event.id}-${i}` });
-    }
-  }
-
-  // 添加护城墙（作为建筑卡混入牌组，2张）
-  const parapet = STRUCTURE_CARDS_FROST.find(s => s.id === 'frost-parapet');
-  if (parapet) {
-    for (let i = 0; i < 2; i++) {
-      deck.push({ ...parapet, id: `frost-parapet-${i}` });
     }
   }
 

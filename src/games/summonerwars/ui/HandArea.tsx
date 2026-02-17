@@ -244,7 +244,6 @@ export const HandArea: React.FC<HandAreaProps> = ({
     // 事件卡会在 useCellInteraction 中进入选择模式（打出或弃牌）
     // 其他卡牌用于弃牌换魔力
     if (phase === 'magic' && isMyTurn) {
-      console.log('[HandArea] Magic phase detected, calling onCardClick', { cardId, phase, isMyTurn });
       onCardClick?.(cardId);
       return;
     }

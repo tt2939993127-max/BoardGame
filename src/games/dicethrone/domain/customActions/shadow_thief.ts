@@ -234,7 +234,7 @@ function handleShadowDanceRoll({ targetId, sourceAbilityId, state, timestamp, ra
     return events;
 }
 
-/** 聚宝盆 I：抽 1 张牌，若有Shadow弃对手1牌 */
+/** 聚宝盆 I：抽 1×Card面 牌，若有Shadow弃对手1牌 */
 function handleCornucopia({ attackerId, sourceAbilityId, state, timestamp, random, ctx }: CustomActionContext): DiceThroneEvent[] {
     const events: DiceThroneEvent[] = [];
     const faceCounts = getFaceCounts(getActiveDice(state));
@@ -242,9 +242,9 @@ function handleCornucopia({ attackerId, sourceAbilityId, state, timestamp, rando
     const cardCount = faceCounts[FACE.CARD] || 0;
     const hasShadow = (faceCounts[FACE.SHADOW] || 0) > 0;
 
-    // 抽 1 张牌（Level I 固定抽 1 张，Level II 才是每有 Card 面抽 1）
+    // 抽 1×Card面 牌（2个Card面 → 抽2张，3个Card面 → 抽3张）
     if (cardCount > 0 && random) {
-        events.push(...buildDrawEvents(state, attackerId, 1, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
+        events.push(...buildDrawEvents(state, attackerId, cardCount, random, 'ABILITY_EFFECT', timestamp, sourceAbilityId));
     }
 
     // 若有 Shadow，弃对手1牌（使用 ctx.defenderId 获取对手 ID）

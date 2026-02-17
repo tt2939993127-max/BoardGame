@@ -118,20 +118,24 @@ export const resolveAttack = (
         };
 
         // withDamage 时机的效果（包括 rollDie 和 damage）统一通过效果系统处理
-        attackEvents.push(...resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
+        const withDamageEvents = resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
             bonusDamage,
             bonusDamageOnce: true,
             random,
-        }));
+        });
         
-        // 如果有 Token 响应请求，提前返回，不生成 ATTACK_RESOLVED 事件
-        // 等待 Token 响应完成后再继续攻击结算
-        const hasTokenResponse = [...events, ...attackEvents].some((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
-        if (hasTokenResponse) {
+        // 如果有 Token 响应请求，只返回到 TOKEN_RESPONSE_REQUESTED 为止的事件
+        // DAMAGE_DEALT 等后续事件应该在 Token 响应完成后再生成
+        const tokenResponseIndex = withDamageEvents.findIndex((event) => event.type === 'TOKEN_RESPONSE_REQUESTED');
+        if (tokenResponseIndex !== -1) {
+            // 只推入 TOKEN_RESPONSE_REQUESTED 及之前的事件（不包含 DAMAGE_DEALT）
+            attackEvents.push(...withDamageEvents.slice(0, tokenResponseIndex + 1));
             events.push(...attackEvents);
             return events;
         }
         
+        // 没有 Token 响应，正常推入所有事件
+        attackEvents.push(...withDamageEvents);
         attackEvents.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
         totalDamage = attackCtx.damageDealt;
     }

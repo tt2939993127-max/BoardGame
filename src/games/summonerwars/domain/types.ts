@@ -92,6 +92,7 @@ export interface EventCard {
   charges?: number;      // 充能计数（殉葬火堆等主动事件使用）
   targetUnitId?: string; // 目标单位 ID（催眠引诱等需要追踪目标的主动事件）
   entanglementTargets?: [string, string]; // 交缠颂歌：两个目标单位的 instanceId
+  life?: number;         // 生命值（建筑类事件卡使用，如护城墙）
   deckSymbols: string[];
   spriteIndex?: number;  // 精灵图索引
   spriteAtlas?: 'hero' | 'cards' | 'portal';

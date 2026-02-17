@@ -6,7 +6,16 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { setupDTOnlineMatch, selectCharacter, waitForGameBoard, readyAndStartGame } from './helpers/dicethrone';
+import { 
+    setupDTOnlineMatch, 
+    selectCharacter, 
+    waitForGameBoard, 
+    readyAndStartGame,
+    setPlayerResource,
+    setPlayerToken,
+    applyDiceValues,
+    readCoreState,
+} from './helpers/dicethrone';
 
 /** 推进到攻击掷骰阶段 */
 const advanceToOffensiveRoll = async (page: import('@playwright/test').Page) => {
@@ -60,32 +69,9 @@ test.describe('DiceThrone Paladin E2E', () => {
         await waitForGameBoard(hostPage);
         await waitForGameBoard(guestPage);
 
-        // 使用作弊命令设置圣骑士状态（玩家1）
-        await hostPage.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                // 设置 HP 为 1
-                dispatch({
-                    type: 'SYS_CHEAT_SET_RESOURCE',
-                    payload: {
-                        playerId: '1',
-                        resourceId: 'hp',
-                        value: 1,
-                    },
-                });
-                
-                // 添加神圣祝福 token
-                dispatch({
-                    type: 'SYS_CHEAT_SET_TOKEN',
-                    payload: {
-                        playerId: '1',
-                        tokenId: 'blessing-of-divinity',
-                        amount: 1,
-                    },
-                });
-            }
-        });
-
+        // 使用调试面板设置圣骑士状态（玩家1）
+        await setPlayerResource(hostPage, '1', 'hp', 1);
+        await setPlayerToken(hostPage, '1', 'blessing-of-divinity', 1);
         await hostPage.waitForTimeout(500);
 
         // 推进到攻击掷骰阶段
@@ -102,26 +88,13 @@ test.describe('DiceThrone Paladin E2E', () => {
         const rollButton = hostPage.locator('[data-tutorial-id="dice-roll-button"]');
         await expect(rollButton).toBeEnabled({ timeout: 5000 });
         await rollButton.click();
-        // 等待投掷完成 - 检查 rollCount 是否增加
-        await hostPage.waitForFunction(() => {
-            const state = (window as any).__BG_STATE__;
-            return state?.core?.rollCount > 0;
-        }, { timeout: 5000 });
-        await hostPage.waitForTimeout(500); // 额外等待动画完成
+        
+        // 等待投掷完成
+        await hostPage.waitForTimeout(1000);
 
-        // 使用作弊命令设置骰子值
-        await hostPage.evaluate(() => {
-            const dispatch = (window as any).__BG_DISPATCH__;
-            if (dispatch) {
-                dispatch({
-                    type: 'SYS_CHEAT_SET_DICE',
-                    payload: {
-                        diceValues: [6, 6, 6, 6, 1],
-                    },
-                });
-            }
-        });
-        await hostPage.waitForTimeout(500); // 等待骰子值更新
+        // 使用调试面板设置骰子值
+        await applyDiceValues(hostPage, [6, 6, 6, 6, 1]);
+        await hostPage.waitForTimeout(500);
 
         // 确认骰子
         const confirmButton = hostPage.locator('[data-tutorial-id="dice-confirm-button"]');
@@ -145,17 +118,11 @@ test.describe('DiceThrone Paladin E2E', () => {
         await expect(hostPage.getByText(/Main Phase \(2\)|主要阶段 \(2\)/)).toBeVisible({ timeout: 15000 });
 
         // 验证圣骑士 HP 和 token
-        const finalState = await hostPage.evaluate(() => {
-            const state = (window as any).__BG_STATE__;
-            const paladin = state?.players?.['1'];
-            return {
-                hp: paladin?.resources?.hp ?? 0,
-                blessingToken: paladin?.tokens?.['blessing-of-divinity'] ?? 0,
-            };
-        });
-
-        expect(finalState.hp).toBe(6); // 1 + 5 回复
-        expect(finalState.blessingToken).toBe(0); // token 被消耗
+        const finalState = await readCoreState(hostPage);
+        const paladin = finalState.players?.['1'];
+        
+        expect(paladin?.resources?.hp ?? 0).toBe(6); // 1 + 5 回复
+        expect(paladin?.tokens?.['blessing-of-divinity'] ?? 0).toBe(0); // token 被消耗
 
         await hostPage.screenshot({ path: testInfo.outputPath('paladin-blessing-prevent.png'), fullPage: false });
         await guestContext.close();

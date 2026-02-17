@@ -88,6 +88,7 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 | D19 | **组合场景** | 两个独立正确的机制组合使用时是否仍然正确？（如：神秘花园额外额度 + 正常额度同时存在时的消耗行为） |
 | D20 | **状态可观测性** | 玩家能否从 UI 上区分不同来源的资源/额度？（如：正常随从额度 vs 基地额外额度在 UI 上是否可区分） |
 | D21 | **触发频率门控** | 触发型技能（`afterAttack`/`afterMove`/`onPhaseStart`/`onPhaseEnd`）是否有使用次数限制？同一效果的不同触发方式（攻击后 vs 代替攻击）是否互斥？ |
+| D22 | **伤害计算管线配置** | 使用 `createDamageCalculation` 时配置项是否正确？`autoCollectStatus`/`autoCollectTokens`/`autoCollectShields` 是否根据业务需求启用？伤害来源和目标是否正确？ |
 
 ### 需要展开的关键维度
 
@@ -146,13 +147,50 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 
 **D10 元数据一致 — 深入审计**（新增/修改 handler 时触发）：mock 调用每个 handler，检查输出事件类型与 categories 声明一致。**核心原则：handler 的元数据声明必须与实际运行时行为一致，否则下游依赖元数据做分支决策的逻辑会被跳过。** 典型：handler 产生伤害事件 → categories 必须含 'damage'，否则依赖此标记的下游阶段（如防御阶段）被跳过。
 
-**D10 子项：Custom Action target 间接引用审计（强制）**：当框架层根据效果定义的 `target` 字段自动设置 handler 上下文中的 `targetId` 时，handler 如果盲目使用该 `targetId` 作为伤害/状态目标，可能导致目标错误。**核心原则：框架自动设置的 target 上下文反映的是效果定义的声明目标，但 handler 的实际业务目标可能与声明目标不同。handler 必须根据业务语义自行选择正确的目标 ID。** 审查方法：
-- 遍历所有 custom action handler，检查每个产生伤害/状态变更事件的 handler
-- 确认 handler 中的 `targetId` 来源：是框架自动设置的上下文目标（受 `action.target` 控制）还是显式获取的对手 ID
-- **判定标准**：进攻技能的伤害/debuff 目标应为对手 → 必须显式使用对手 ID；自我增益（如获得增益状态）→ 使用上下文目标（此时 `target:'self'` 语义正确）
-- **典型错误**：同一个 handler 既要给自己加 buff（`target:'self'` 正确）又要对对手造伤害（上下文 `targetId` 错误指向自己），handler 内必须区分两个目标
+**D10 子项：Custom Action target 间接引用审计（强制）**：当框架层根据效果定义的 `target` 字段自动设置 handler 上下文中的 `targetId` 时，handler 如果盲目使用该 `targetId` 作为所有操作的目标，可能导致目标错误。**核心原则：框架自动设置的 target 上下文反映的是效果定义的声明目标（通常是主要效果的目标），但 handler 内部可能包含多个不同目标的操作。handler 必须根据每个操作的业务语义自行选择正确的目标 ID。** 审查方法：
+**审查触发条件**：
+- 新增/修改任何 custom action handler
+- 修复"伤害打到错误目标"/"弃牌弃错人"/"buff 给错人"类 bug
+- handler 内包含 2 种以上不同性质的操作（如既抽牌又弃牌、既 buff 自己又 debuff 对手）
 
-> **示例（DiceThrone）**：`EffectAction` 声明 `target: 'self'` 时，`resolveEffectAction` 将 `CustomActionContext.targetId` 设为 `attackerId`。Barbarian 的 `handleBarbarianSuppressRoll` 用 `ctx.targetId` 作为 `DAMAGE_DEALT.targetId` → 进攻技能伤害打到自己。修复：用 `ctx.ctx.defenderId` 获取对手 ID
+**审查方法**：
+1. **列出 handler 内所有操作及其业务目标**：
+   - 抽牌 → 自己
+   - 弃牌 → 对手（进攻技能）或自己（代价）
+   - 伤害 → 对手（进攻）或自己（反噬）
+   - buff → 自己
+   - debuff → 对手
+   - 获得资源 → 自己
+   - 消耗资源 → 对手（进攻）或自己（代价）
+2. **确认每个操作的 `targetId`/`playerId` 来源**：
+   - 是框架自动设置的上下文目标（`ctx.targetId`）？
+   - 还是显式获取的对手 ID（`ctx.ctx.defenderId`）？
+   - 还是攻击者自己（`ctx.attackerId`）？
+3. **判定标准**：
+   - **进攻技能的伤害/debuff/弃牌目标应为对手** → 必须显式使用 `ctx.ctx.defenderId`（注意双层 ctx）
+   - **自我增益（抽牌/buff/获得资源）** → 使用 `ctx.attackerId` 或上下文 `ctx.targetId`（当 `action.target='self'` 时两者相同）
+   - **混合目标场景（强制）**：同一 handler 既有自我增益又有对手惩罚 → 必须分别处理，禁止用同一个 `targetId` 变量覆盖两种目标
+   - **防御反击场景**：防御技能中 `ctx.attackerId` 是防御者、`ctx.defenderId` 是原攻击者，反击伤害应打 `ctx.defenderId`
+
+**典型错误模式**：
+1. **单一伤害目标错误**：`action.target='self'` + handler 用 `ctx.targetId` 作为伤害目标 → 伤害打到自己
+2. **混合目标未区分**：`action.target='self'`（因为主效果是抽牌）+ handler 用 `ctx.targetId` 作为弃牌目标 → 弃自己的牌而非对手
+3. **防御反击目标混淆**：防御技能中 `ctx.attackerId` 是防御者、`ctx.defenderId` 是原攻击者，反击伤害应打 `ctx.defenderId`
+4. **变量复用错误**：声明 `const targetId = ctx.targetId`，然后在所有操作中复用该变量 → 混合目标场景下必然有一半操作目标错误
+
+**审查输出格式**：
+```
+Handler: handleXxx
+操作清单：
+  1. 抽牌 → 目标=自己 → 使用 ctx.attackerId ✅
+  2. 弃牌 → 目标=对手 → 使用 ctx.ctx.defenderId ✅
+  3. 伤害 → 目标=对手 → 使用 ctx.ctx.defenderId ✅
+判定：✅ 所有操作目标正确
+```
+
+> **示例 1（DiceThrone Barbarian）**：`EffectAction` 声明 `target: 'self'` 时，`resolveEffectAction` 将 `CustomActionContext.targetId` 设为 `attackerId`。Barbarian 的 `handleBarbarianSuppressRoll` 用 `ctx.targetId` 作为 `DAMAGE_DEALT.targetId` → 进攻技能伤害打到自己。修复：用 `ctx.ctx.defenderId` 获取对手 ID
+
+> **示例 2（DiceThrone 聚宝盆）**：`action.target='self'`（因为主效果是抽牌），handler 内既抽牌（目标=自己）又弃牌（目标=对手）。原实现用 `targetId` 作为弃牌目标 → 弃自己的牌。修复：抽牌用 `attackerId`，弃牌用 `ctx.defenderId`
 
 **D7 子项：验证层有效性门控（强制）**（新增/修改有代价的技能或 `directExecute` 类型能力时触发）：有资源消耗的操作，验证层必须确保操作至少能产生一个有意义的效果，否则拒绝激活。**核心原则：禁止让玩家花费代价换取零效果。** 审查方法：
 1. **识别有代价操作**：grep 所有资源消耗字段（如 `cost`、充能/魔力/增益点等游戏特定资源），以及 `customValidator` 中检查资源的技能
@@ -285,22 +323,96 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 
 > **示例（SummonerWars 古尔壮读心传念）**：`trigger: 'afterAttack'` 但无 `usesPerTurn`，攻击后可以给所有友方士兵额外攻击。修复：添加 `usesPerTurn: 1`
 
+**D22 伤害计算管线配置（强制）**（使用 `createDamageCalculation` 或修"伤害加成/减免不生效"时触发）：使用伤害计算管线时配置项是否正确，伤害来源和目标是否正确。**核心原则：`createDamageCalculation` 提供自动收集修正的能力（Token/状态/护盾），但默认配置可能不适合所有场景。必须根据业务需求显式配置 `autoCollectStatus`/`autoCollectTokens`/`autoCollectShields`，并确认伤害来源和目标正确。** 审查方法：
+
+**审查触发条件**：
+- 新增/修改任何使用 `createDamageCalculation` 的代码
+- 修复"伤害加成/减免不生效"/"锁定 buff 没效果"/"护盾没抵挡"类 bug
+- 新增英雄/游戏的伤害计算逻辑
+
+**审查方法**：
+1. **检查配置项完整性**：
+   - `autoCollectStatus`：是否需要自动收集目标的状态修正（如锁定 +2 伤害、护甲减伤）？
+     - ✅ 正确：攻击/技能伤害应启用（`true`），自动收集目标的 debuff/buff
+     - ❌ 错误：设为 `false` 导致锁定等 debuff 不生效
+   - `autoCollectTokens`：是否需要自动收集攻击方的 Token 加成（如火焰精通）？
+     - ✅ 正确：根据游戏是否有"攻击方 Token 增加伤害"机制决定
+     - ❌ 错误：游戏有 Token 加伤但设为 `false`
+   - `autoCollectShields`：是否需要自动收集目标的护盾减免？
+     - ✅ 正确：根据游戏是否有护盾机制决定
+     - ❌ 错误：游戏有护盾但设为 `false`
+2. **检查伤害来源和目标**：
+   - `source.playerId`：伤害来源玩家 ID 是否正确？
+     - 进攻技能 → `ctx.attackerId`
+     - 防御反击 → `ctx.attackerId`（防御者）
+     - 自伤/反噬 → `ctx.attackerId`
+   - `source.abilityId`：伤害来源技能 ID 是否正确？用于日志和 breakdown
+   - `target.playerId`：伤害目标玩家 ID 是否正确？
+     - 进攻技能 → `ctx.ctx.defenderId`（注意双层 ctx）
+     - 防御反击 → `ctx.ctx.defenderId`（原攻击者）
+     - 自伤/反噬 → `ctx.attackerId`
+3. **检查状态修正机制兼容性**：
+   - 游戏使用 `passiveTrigger.timing === 'onDamageReceived'` 机制？→ 必须启用 `autoCollectStatus: true`
+   - 游戏使用旧的 `damageReduction` 字段？→ `autoCollectStatus: true` 也会自动收集
+   - 游戏使用 `applyOnDamageReceivedTriggers` 手动处理？→ 可以设为 `false`，但推荐迁移到新管线
+4. **检查默认值假设**：
+   - 不传配置项时，默认值是什么？（当前：`autoCollectStatus` 默认 `true`）
+   - 代码是否依赖了错误的默认值假设？
+5. **检查历史债务**：
+   - 游戏是否有混用新旧伤害计算方式的情况？（如部分技能用 `createDamageCalculation`，部分手动构建 `DAMAGE_DEALT`）
+   - 迁移到新管线时是否遗漏了某些伤害来源？
+
+**典型缺陷清单**：
+- ❌ `autoCollectStatus: false` 导致锁定/护甲等状态修正不生效
+- ❌ 进攻技能用 `ctx.targetId` 作为伤害目标，但 `action.target='self'` 导致伤害打到自己
+- ❌ 防御反击用 `ctx.attackerId` 作为伤害目标，应该用 `ctx.ctx.defenderId`（原攻击者）
+- ❌ 混合目标场景（既抽牌又伤害）用同一个 `targetId` 变量，导致伤害目标错误
+- ❌ 游戏有 Token 加伤机制但 `autoCollectTokens: false`
+- ❌ 游戏有护盾机制但 `autoCollectShields: false`
+
+**审查输出格式**：
+```
+文件: src/games/xxx/domain/customActions/yyy.ts
+函数: dealDamage / handleXxxResolve
+配置检查：
+  - autoCollectStatus: false ❌ 应为 true（游戏有锁定 debuff）
+  - autoCollectTokens: false ✅ 游戏无 Token 加伤机制
+  - autoCollectShields: false ✅ 游戏无护盾机制
+目标检查：
+  - source.playerId: ctx.attackerId ✅
+  - target.playerId: ctx.targetId ❌ 应为 ctx.ctx.defenderId（进攻技能）
+修复方案：
+  1. 将 autoCollectStatus 改为 true
+  2. 将 target.playerId 改为 ctx.ctx.defenderId
+```
+
+> **示例（DiceThrone 月精灵迷影步）**：`dealDamage` 函数设置 `autoCollectStatus: false`，导致锁定 buff 的 `passiveTrigger.timing === 'onDamageReceived'` 机制不生效。修复：改为 `autoCollectStatus: true`
+
+> **示例（DiceThrone Barbarian 压制）**：`action.target='self'` + handler 用 `ctx.targetId` 作为伤害目标 → 进攻技能伤害打到自己。修复：用 `ctx.ctx.defenderId` 获取对手 ID
+
+**关联维度**：
+- D1（语义保真）：伤害目标是否与描述一致？
+- D10（元数据一致）：handler categories 是否包含 'damage'？
+- D3（数据流闭环）：伤害事件是否被 reducer 正确消费？
+
 ### 维度选择指南
 
 | 任务 | 必选 | 推荐 |
 |------|------|------|
-| 新增技能/效果 | D1,D2,D3,D5,D7,D21 | D6,D8,D10,D11,D18 |
-| 修"没效果" | D4,D3,D1 | D8,D10,D12,D21 |
+| 新增技能/效果 | D1,D2,D3,D5,D7,D21,D22 | D6,D8,D10,D11,D18 |
+| 修"没效果" | D4,D3,D1,D22 | D8,D10,D12,D21 |
 | 修"触发了状态没变" | D8,D3,D9 | D1,D7,D11,D21 |
 | 修"点了没反应" | D5,D3,D10 | D8,D21 |
 | 修"激活了但没效果" | D7,D2,D3 | D1,D10,D11 |
 | 修"确认后验证失败" | D8,D7,D3 | D2,D5 |
 | 修"技能可以无限重复使用" | D21,D7,D8 | D1,D2 |
+| 修"伤害加成/减免不生效" | D22,D1,D3 | D4,D10 |
+| 修"锁定/护甲没效果" | D22,D4,D3 | D1,D10 |
 | 新增阶段结束技能 | D8,D5,D7,D1,D21 | D2,D3 |
 | 修"阶段结束技能无效触发" | D8,D7,D2,D21 | D5,D3 |
 | 新增 UI 展示 | D5,D3,D15 | D1,D20 |
-| 全面审查 | D1-D21 | — |
-| 新增 buff/共享 | D4,D1,D6 | D10,D13,D19 |
+| 全面审查 | D1-D22 | — |
+| 新增 buff/共享 | D4,D1,D6,D22 | D10,D13,D19 |
 | 重构事件流 | D3,D8,D9 | D10,D4,D17 |
 | 新增交互能力 | D5,D3,D1 | D2,D8,D21 |
 | 新增额度/资源机制 | D7,D11,D12,D13,D18 | D14,D15,D16,D19,D20 |
@@ -309,6 +421,8 @@ PR 必跑：`typecheck` → `test:games` → `i18n:check` → `test:e2e:critical
 | 修"上回合效果残留" | D14,D8,D9 | D17 |
 | 修改 reducer 分支逻辑 | D16,D11,D12 | D18,D19 |
 | 新增临时状态字段 | D14,D12,D15 | D18 |
+| 新增英雄/游戏伤害计算 | D22,D1,D3 | D10,D4 |
+| 迁移到新伤害计算管线 | D22,D3,D10 | D1,D4 |
 
 ### 输出格式
 
@@ -438,7 +552,8 @@ ID 只出现在定义+注册 = 消费层缺失。
 | 测试按错误理解编写恰好通过 | 测试语义错误 | D9 | 通用 |
 | 防御阶段测试攻击者/防御者搞反 | 角色反转 | D9 | dicethrone |
 | categories 未声明 'damage' 致防御阶段跳过 | 元数据缺失 | D10 | dicethrone |
-| custom action handler 用 `ctx.targetId` 致进攻技能伤害打到自己 | target 间接引用：框架自动设置的 targetId 与 handler 实际业务目标不一致 | D10+D1 | dicethrone |
+| custom action handler 用 `ctx.targetId` 致进攻技能伤害打到自己 | target 间接引用：框架自动设置的 targetId 与 handler 实际业务目标不一致（单一伤害目标错误） | D10+D1 | dicethrone |
+| 聚宝盆 `action.target='self'`（主效果抽牌），handler 用 `targetId` 作为弃牌目标 → 弃自己的牌而非对手 | target 间接引用：混合目标场景未区分，同一 handler 内抽牌（自己）和弃牌（对手）用了同一个 `targetId` | D10+D1 | dicethrone |
 | 重构后旧 handler 未清理 | 孤儿 handler | D10 | dicethrone |
 | 交缠颂歌写入 `cardId`（`target-1`）但读取匹配 `instanceId`（`target-1#1`），永远匹配不上，功能完全失效但不报错 | 写入→读取 ID 类型不一致 | D3 | summonerwars |
 | 交缠颂歌共享 `card.abilities + tempAbilities`，但规则定义"基础能力 = 单位卡上印刷的能力，不包括其他卡牌添加的能力"。函数名 `getUnitBaseAbilities` 误导审查者跳过验证 | 规则术语语义偏差 + 函数名误导 | D1 | summonerwars |

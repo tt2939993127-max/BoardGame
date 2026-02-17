@@ -362,6 +362,71 @@ await page.waitForTimeout(500);
 await endPhaseBtn.click(); // 第二次点击：确认并推进阶段
 ```
 
+### E2E 测试选择器多语言支持（强制）
+
+**问题**：E2E 测试环境的语言可能与手动操作时不同，导致基于文本的选择器失败。
+
+**规则**：所有 E2E 测试选择器必须支持多语言环境，不得依赖特定语言的文本内容。
+
+**错误做法**：
+```typescript
+// ❌ 错误：只支持中文，测试环境是英文时会失败
+const banner = page.locator('.bg-purple-900\\/95', { 
+  hasText: '选择：打出事件卡或弃牌换魔力' 
+});
+
+const playButton = banner.locator('button', { hasText: '打出' });
+```
+
+**正确做法**：
+```typescript
+// ✅ 正确：使用 CSS 类 + 正则表达式，支持中英文
+const banner = page.locator('.bg-purple-900\\/95').filter({ 
+  hasText: /Choose|选择/ 
+});
+
+const playButton = banner.locator('button').filter({ 
+  hasText: /Play|打出/ 
+});
+
+const discardButton = banner.locator('button').filter({ 
+  hasText: /Discard|弃牌/ 
+});
+
+const cancelButton = banner.locator('button').filter({ 
+  hasText: /Cancel|取消/ 
+});
+```
+
+**最佳实践**：
+1. **优先使用 `data-testid`**：不依赖文本和样式，最稳定
+   ```typescript
+   const button = page.getByTestId('play-event-button');
+   ```
+
+2. **使用 CSS 类选择器**：不依赖文本内容
+   ```typescript
+   const banner = page.locator('.magic-event-choice-banner');
+   ```
+
+3. **使用正则表达式匹配多语言**：当必须依赖文本时
+   ```typescript
+   const button = page.locator('button').filter({ hasText: /Play|打出/ });
+   ```
+
+4. **避免硬编码文本**：禁止使用 `{ hasText: '打出' }` 或 `getByText('打出')`
+
+**为什么会出现语言不一致**：
+- 手动操作时浏览器可能加载中文（根据系统语言或用户设置）
+- E2E 测试环境可能加载英文（Playwright 默认语言或 CI 环境语言）
+- i18next 根据 `navigator.language` 或 localStorage 自动选择语言
+
+**教训案例**：
+- 问题：`e2e/summonerwars-magic-event-choice.e2e.ts` 测试失败，横幅文本未找到
+- 原因：代码渲染了英文横幅 "Choose: Play event card or discard for magic"，但测试查找中文 "选择：打出事件卡或弃牌换魔力"
+- 解决：使用正则表达式 `/Choose|选择/` 同时匹配中英文
+- 参考：`e2e/summonerwars-magic-event-choice.e2e.ts`
+
 ### 运行方式
 
 ```bash

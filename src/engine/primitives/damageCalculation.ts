@@ -238,23 +238,46 @@ export class DamageCalculation {
     const targetPlayer = coreState?.players?.[target.playerId];
     if (!targetPlayer?.statusEffects) return;
     
-    // 从 tokenDefinitions 查找有 damageReduction 的状态
+    // 从 tokenDefinitions 查找有 damageReduction 或 passiveTrigger 的状态
     const tokenDefs = coreState?.tokenDefinitions || [];
     
     Object.entries(targetPlayer.statusEffects).forEach(([statusId, stacks]) => {
       if (typeof stacks !== 'number' || stacks <= 0) return;
       
       const statusDef = tokenDefs.find((t: any) => t.id === statusId);
-      if (!statusDef?.damageReduction) return;
+      if (!statusDef) return;
       
-      this.modifierStack = addModifier(this.modifierStack, {
-        id: `status-${statusId}`,
-        type: 'flat',
-        value: -statusDef.damageReduction * stacks,
-        priority: 20,
-        source: statusId,
-        description: `Status: ${statusDef.name || statusId}`,
-      });
+      // 处理 damageReduction 字段（旧机制）
+      if (statusDef.damageReduction) {
+        this.modifierStack = addModifier(this.modifierStack, {
+          id: `status-${statusId}`,
+          type: 'flat',
+          value: -statusDef.damageReduction * stacks,
+          priority: 20,
+          source: statusId,
+          description: `Status: ${statusDef.name || statusId}`,
+        });
+      }
+      
+      // 处理 passiveTrigger.timing === 'onDamageReceived' 的状态（新机制）
+      if (statusDef.passiveTrigger?.timing === 'onDamageReceived') {
+        const actions = statusDef.passiveTrigger.actions || [];
+        for (const action of actions) {
+          if (action.type === 'modifyStat' && typeof action.value === 'number') {
+            const value = action.value * stacks;
+            if (value !== 0) {
+              this.modifierStack = addModifier(this.modifierStack, {
+                id: `status-${statusId}-passive`,
+                type: 'flat',
+                value,
+                priority: 20,
+                source: statusId,
+                description: `Status: ${statusDef.name || statusId}`,
+              });
+            }
+          }
+        }
+      }
     });
   }
   

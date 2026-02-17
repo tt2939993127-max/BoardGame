@@ -200,24 +200,8 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
 }) => {
   const { t } = useTranslation('game-summonerwars');
 
-  // 调试日志（详细输出所有模式状态）
-  console.log('[StatusBanners] Render:', {
-    magicEventChoiceMode,
-    abilityMode: abilityMode?.abilityId,
-    pendingBeforeAttack: pendingBeforeAttack?.abilityId,
-    bloodSummonMode: bloodSummonMode?.step,
-    currentPhase,
-    isMyTurn,
-  });
-
-  // 监听 magicEventChoiceMode 变化
-  React.useEffect(() => {
-    console.log('[StatusBanners] magicEventChoiceMode changed:', magicEventChoiceMode);
-  }, [magicEventChoiceMode]);
-
   // 魔力阶段事件卡选择模式优先级最高
   if (magicEventChoiceMode) {
-    console.log('[StatusBanners] Rendering magic event choice banner');
     return (
       <div className="bg-purple-900/95 px-4 py-2 rounded-lg border border-purple-500/40 flex items-center gap-3 shadow-lg">
         <span className="text-purple-200 text-sm font-bold">

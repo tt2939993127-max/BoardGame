@@ -33,7 +33,7 @@ function createShadowThiefState(playerIds: PlayerId[], random: RandomFn): MatchS
 }
 
 describe('聚宝盆弃牌效果端到端测试', () => {
-    it('聚宝盆 I 级：2 Card + 1 Shadow → 抽1牌 + 对手弃1牌', () => {
+    it('聚宝盆 I 级：2 Card + 1 Shadow → 抽2牌 + 对手弃1牌', () => {
         // 骰子序列：进攻掷骰 5 次 → [5,5,6,1,2] = 2 Card + 1 Shadow + 2 Dagger
         const queuedRandom = createQueuedRandom([5, 5, 6, 1, 2]);
         
@@ -69,8 +69,8 @@ describe('聚宝盆弃牌效果端到端测试', () => {
                 turnPhase: 'main2',
                 players: {
                     '0': {
-                        // 玩家0应该抽了1张牌（Level I 固定抽 1 张）
-                        handCount: 1,
+                        // 玩家0应该抽了2张牌（1×2个Card面 = 2张）
+                        handCount: 2,
                     },
                     '1': {
                         // 玩家1应该弃了1张牌（1个Shadow面）
@@ -90,7 +90,7 @@ describe('聚宝盆弃牌效果端到端测试', () => {
         console.log(`CARD_DRAWN 事件数: ${cardDrawnEvents.length}`);
         console.log(`CARD_DISCARDED 事件数: ${cardDiscardedEvents.length}`);
 
-        expect(cardDrawnEvents.length).toBe(1); // 抽1张牌（Level I 固定）
+        expect(cardDrawnEvents.length).toBe(2); // 抽2张牌（1×2个Card面）
         expect(cardDiscardedEvents.length).toBe(1); // 弃1张牌
 
         // 验证弃牌事件的 playerId 是玩家1
@@ -100,7 +100,7 @@ describe('聚宝盆弃牌效果端到端测试', () => {
         console.log(`✅ 聚宝盆弃牌效果正常工作`);
     });
 
-    it('聚宝盆 I 级：2 Card + 0 Shadow → 抽1牌 + 不弃牌', () => {
+    it('聚宝盆 I 级：2 Card + 0 Shadow → 抽2牌 + 不弃牌', () => {
         // 骰子序列：进攻掷骰 5 次 → [5,5,1,2,3] = 2 Card + 0 Shadow + 3 其他
         const queuedRandom = createQueuedRandom([5, 5, 1, 2, 3]);
         
@@ -133,7 +133,7 @@ describe('聚宝盆弃牌效果端到端测试', () => {
             expect: {
                 turnPhase: 'main2',
                 players: {
-                    '0': { handCount: 1 }, // Level I 固定抽 1 张
+                    '0': { handCount: 2 }, // 1×2个Card面 = 2张
                     '1': { handCount: player1InitialHandCount }, // 手牌数不变
                 },
             },

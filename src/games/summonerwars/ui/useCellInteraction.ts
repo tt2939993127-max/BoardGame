@@ -793,23 +793,18 @@ export function useCellInteraction({
 
   // 手牌点击（魔力阶段弃牌多选/攻击前弃牌）
   const handleCardClick = useCallback((cardId: string) => {
-    console.log('[useCellInteraction] handleCardClick called:', { cardId, currentPhase, isMyTurn });
     setEndPhaseConfirmPending(false);
 
     // 魔力阶段事件卡选择模式：点击事件卡进入选择模式
     if (currentPhase === 'magic' && isMyTurn) {
-      console.log('[useCellInteraction] Magic phase detected');
       const card = myHand.find(c => c.id === cardId);
-      console.log('[useCellInteraction] Found card:', card ? { name: card.name, cardType: card.cardType } : 'not found');
       if (card && card.cardType === 'event') {
         const event = card as import('../domain/types').EventCard;
         const cost = event.cost;
         const currentMagic = core.players[myPlayerId as '0' | '1'].magic;
         const canAfford = cost <= currentMagic;
-        console.log('[useCellInteraction] Event card check:', { eventName: event.name, playPhase: event.playPhase, cost, currentMagic, canAfford });
         if ((event.playPhase === 'magic' || event.playPhase === 'any') && canAfford) {
           // 进入选择模式：打出或弃牌
-          console.log('[useCellInteraction] Setting magicEventChoiceMode');
           setMagicEventChoiceMode({ cardId });
           return;
         }

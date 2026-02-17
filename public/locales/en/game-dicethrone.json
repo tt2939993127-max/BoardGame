@@ -822,7 +822,7 @@
     },
     "cornucopia": {
       "name": "Cornucopia",
-      "description": "2 Card: Draw 1 card; if Shadow face present, opponent discards 1"
+      "description": "2 Card: Draw 1×Card face cards; if Shadow face present, opponent discards 1 (random)"
     },
     "shadow-shank": {
       "name": "Shadow Shank",

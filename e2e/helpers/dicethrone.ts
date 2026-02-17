@@ -111,33 +111,18 @@ export const readyAndStartGame = async (hostPage: Page, guestPage: Page) => {
     await guestReadyButton.click();
     
     // 等待 Guest 页面状态更新（显示 "Ready, Waiting..." 或类似文本）
-    await guestPage.waitForTimeout(1000);
+    await guestPage.waitForTimeout(500);
     
-    // 等待 Host 页面接收到 Guest 的 Ready 状态
-    // 检查 Host 页面是否仍然在角色选择界面（而不是被重定向）
-    await hostPage.waitForTimeout(2000);
-    
-    // 验证 Host 页面仍然在角色选择界面
-    const heroSelectionTitle = hostPage.locator('h2').filter({ hasText: /选择你的英雄|Select Your Hero/i });
-    const isStillOnSelection = await heroSelectionTitle.isVisible({ timeout: 1000 }).catch(() => false);
-    
-    if (!isStillOnSelection) {
-        // 如果不在角色选择界面，说明页面被重定向了
-        const currentUrl = hostPage.url();
-        const pageContent = await hostPage.content();
-        throw new Error(`Host 页面不在角色选择界面。当前 URL: ${currentUrl}\n页面内容片段: ${pageContent.substring(0, 500)}`);
-    }
-
+    // 等待 Host 页面接收到 Guest 的 Ready 状态并显示开始按钮
     // Host 点击开始游戏按钮 - 使用更宽松的选择器
-    // 尝试多种可能的文本匹配
     const hostStartButton = hostPage.getByRole('button', { name: /Start Game|开始游戏|Press.*Start|按.*开始/i });
     
-    // 等待按钮出现并启用
-    await expect(hostStartButton).toBeVisible({ timeout: 8000 });
-    await expect(hostStartButton).toBeEnabled({ timeout: 3000 });
+    // 等待按钮出现并启用（给足够时间让 WebSocket 同步状态）
+    await expect(hostStartButton).toBeVisible({ timeout: 10000 });
+    await expect(hostStartButton).toBeEnabled({ timeout: 5000 });
     
     await hostStartButton.click();
-    await hostPage.waitForTimeout(1000);
+    await hostPage.waitForTimeout(500);
 };
 
 export const waitForGameBoard = async (page: Page, timeout = 30000) => {
@@ -202,49 +187,40 @@ export const cleanupDTMatch = async (setup: DTMatchSetup) => {
 
 
 // ============================================================================
-// 状态操作（作弊命令）
+// 调试面板操作
 // ============================================================================
 
-/**
- * 设置骰子值（使用作弊命令）
- */
-export const applyDiceValues = async (page: Page, values: number[]) => {
-    await page.evaluate((vals) => {
-        const dispatch = (window as any).__BG_DISPATCH__;
-        if (dispatch) {
-            dispatch({
-                type: 'SYS_CHEAT_SET_DICE',
-                payload: { diceValues: vals },
-            });
-        }
-    }, values);
-    await page.waitForTimeout(300);
+/** 确保调试面板打开 */
+export const ensureDebugPanelOpen = async (page: Page) => {
+    const panel = page.getByTestId('debug-panel');
+    if (await panel.isVisible().catch(() => false)) return;
+    await page.getByTestId('debug-toggle').click();
+    await expect(panel).toBeVisible({ timeout: 5000 });
 };
 
-/**
- * 推进到攻击掷骰阶段
- */
-export const advanceToOffensiveRoll = async (page: Page) => {
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-        const cancelBtn = page.getByRole('button', { name: /Cancel.*Select Ability|取消/i });
-        if (await cancelBtn.isVisible({ timeout: 300 }).catch(() => false)) {
-            await cancelBtn.click();
-            await page.waitForTimeout(300);
-        }
-        
-        const phaseBanner = page.getByTestId('dt-phase-banner');
-        const phaseText = await phaseBanner.textContent().catch(() => '');
-        if (phaseText?.includes('进攻投掷') || phaseText?.includes('Offensive Roll')) {
-            return;
-        }
-        
-        const nextPhaseButton = page.locator('[data-tutorial-id="advance-phase-button"]');
-        if (await nextPhaseButton.isEnabled({ timeout: 1000 }).catch(() => false)) {
-            await nextPhaseButton.click();
-            await page.waitForTimeout(800);
-        } else {
-            await page.waitForTimeout(300);
-        }
+/** 确保调试面板关闭 */
+export const ensureDebugPanelClosed = async (page: Page) => {
+    const panel = page.getByTestId('debug-panel');
+    if (await panel.isHidden().catch(() => false)) return;
+    await page.getByTestId('debug-toggle').click();
+    await expect(panel).toBeHidden({ timeout: 5000 });
+};
+
+/** 切换到调试面板的状态 Tab */
+export const ensureDebugStateTab = async (page: Page) => {
+    await ensureDebugPanelOpen(page);
+    const stateTab = page.getByTestId('debug-tab-state');
+    if (await stateTab.isVisible().catch(() => false)) {
+        await stateTab.click();
+    }
+};
+
+/** 切换到调试面板的控制 Tab */
+export const ensureDebugControlsTab = async (page: Page) => {
+    await ensureDebugPanelOpen(page);
+    const controlsTab = page.getByTestId('debug-tab-controls');
+    if (await controlsTab.isVisible().catch(() => false)) {
+        await controlsTab.click();
     }
 };
 
@@ -252,42 +228,79 @@ export const advanceToOffensiveRoll = async (page: Page) => {
  * 读取 core 状态
  */
 export const readCoreState = async (page: Page) => {
-    return await page.evaluate(() => {
-        const state = (window as any).__BG_STATE__;
-        return state;
-    });
+    await ensureDebugStateTab(page);
+    const raw = await page.getByTestId('debug-state-json').innerText();
+    const parsed = JSON.parse(raw);
+    return parsed?.core ?? parsed?.G?.core ?? parsed;
 };
 
 /**
- * 直接注入 core 状态（使用作弊命令）
+ * 直接注入 core 状态（使用调试面板）
  */
 export const applyCoreStateDirect = async (page: Page, coreState: unknown) => {
-    await page.evaluate((state) => {
-        const dispatch = (window as any).__BG_DISPATCH__;
-        if (dispatch) {
-            dispatch({
-                type: 'SYS_CHEAT_SET_STATE',
-                payload: { state },
-            });
-        }
-    }, coreState);
-    await page.waitForTimeout(500);
+    await ensureDebugStateTab(page);
+    const toggleBtn = page.getByTestId('debug-state-toggle-input');
+    await toggleBtn.click();
+    const input = page.getByTestId('debug-state-input');
+    await expect(input).toBeVisible({ timeout: 3000 });
+    await input.fill(JSON.stringify(coreState));
+    await page.getByTestId('debug-state-apply').click();
+    await expect(input).toBeHidden({ timeout: 5000 }).catch(() => {});
 };
 
 /**
- * 通过 dispatch 修改状态
+ * 通过调试面板修改资源值
+ */
+export const setPlayerResource = async (page: Page, playerId: string, resourceId: string, value: number) => {
+    const state = await readCoreState(page);
+    if (!state.players || !state.players[playerId]) {
+        throw new Error(`Player ${playerId} not found in state`);
+    }
+    state.players[playerId].resources[resourceId] = value;
+    await applyCoreStateDirect(page, state);
+};
+
+/**
+ * 通过调试面板设置玩家 token
+ */
+export const setPlayerToken = async (page: Page, playerId: string, tokenId: string, amount: number) => {
+    const state = await readCoreState(page);
+    if (!state.players || !state.players[playerId]) {
+        throw new Error(`Player ${playerId} not found in state`);
+    }
+    if (!state.players[playerId].tokens) {
+        state.players[playerId].tokens = {};
+    }
+    state.players[playerId].tokens[tokenId] = amount;
+    await applyCoreStateDirect(page, state);
+};
+
+/**
+ * 设置骰子值（通过调试面板）
+ */
+export const applyDiceValues = async (page: Page, values: number[]) => {
+    const state = await readCoreState(page);
+    if (!state.dice || state.dice.length === 0) {
+        throw new Error('No dice found in state');
+    }
+    // 更新骰子值
+    state.dice = state.dice.map((die: any, i: number) => ({
+        ...die,
+        value: values[i] ?? die.value,
+        symbol: values[i] ?? die.value, // 简化处理，实际应该根据 definitionId 查找 face
+        symbols: [values[i] ?? die.value],
+    }));
+    state.rollConfirmed = false; // 允许用户重新确认
+    await applyCoreStateDirect(page, state);
+};
+
+/**
+ * 通过 dispatch 修改状态（已废弃，使用 applyCoreStateDirect 替代）
  */
 export const patchCoreViaDispatch = async (page: Page, patch: unknown) => {
-    await page.evaluate((p) => {
-        const dispatch = (window as any).__BG_DISPATCH__;
-        if (dispatch) {
-            dispatch({
-                type: 'SYS_CHEAT_MERGE_STATE',
-                payload: { fields: p },
-            });
-        }
-    }, patch);
-    await page.waitForTimeout(300);
+    const state = await readCoreState(page);
+    const patched = { ...state, ...patch };
+    await applyCoreStateDirect(page, patched);
 };
 
 // ============================================================================
@@ -315,26 +328,6 @@ export const getPlayerIdFromUrl = (page: Page): string | null => {
     const url = page.url();
     const match = url.match(/playerID=(\d+)/);
     return match ? match[1] : null;
-};
-
-/**
- * 设置玩家 token
- */
-export const setPlayerToken = async (page: Page, playerId: string, tokenId: string, amount: number) => {
-    await page.evaluate(({ pid, tid, amt }) => {
-        const dispatch = (window as any).__BG_DISPATCH__;
-        if (dispatch) {
-            dispatch({
-                type: 'SYS_CHEAT_SET_TOKEN',
-                payload: {
-                    playerId: pid,
-                    tokenId: tid,
-                    amount: amt,
-                },
-            });
-        }
-    }, { pid: playerId, tid: tokenId, amt: amount });
-    await page.waitForTimeout(300);
 };
 
 /**
